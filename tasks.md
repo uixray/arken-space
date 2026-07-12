@@ -1,6 +1,6 @@
 # Delivery tasks
 
-Local implementation status as of 2026-07-12: core code is ready for review; production deployment and the real multi-client game-night test still require server access.
+Status as of 2026-07-13: production is deployed; the isolated multiplayer browser smoke test passes. The full seven-client game-night and recovery gates remain open.
 
 - [x] [UIX-196 — Workspace, rules contract and architecture](https://linear.app/uixraydesign/issue/UIX-196/arken-space-workspace-rules-contract-and-architecture)
 - [x] [UIX-197 — Campaign access and PostgreSQL foundation](https://linear.app/uixraydesign/issue/UIX-197/arken-space-campaign-access-and-postgresql-foundation) — code complete, runtime review pending
@@ -19,8 +19,8 @@ Local implementation status as of 2026-07-12: core code is ready for review; pro
 
 ## Playtest backlog — 2026-07-13
 
-- [ ] **P0:** reproduce and prevent a player moving another player's token.
-- [ ] Allow one player membership to own multiple tokens; keep ownerless enemy/NPC tokens GM-only.
+- [x] **P0:** prevent a player moving another player's token at the API and Socket.IO boundaries.
+- [x] Allow one player membership to own multiple tokens; keep ownerless enemy/NPC tokens GM-only.
 - [ ] Add rectangular fog re-covering; keep it separate from undo latest reveal.
 - [ ] Add token image assignment.
 - [ ] Add character portrait assignment.

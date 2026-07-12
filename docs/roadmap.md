@@ -17,6 +17,7 @@ Implemented locally:
 - database-aware health, authenticated diagnostics and sanitized browser logs;
 - tested HTTP Range parsing and restic restore of both PostgreSQL and media;
 - typecheck, lint, build, 14 local tests, migration execution in PGlite and a mocked concept E2E.
+- isolated Docker/Playwright multiplayer smoke test with clean GM/player browser contexts, real PostgreSQL and nginx.
 
 This baseline is not production-ready until the following sessions are completed in order.
 
@@ -44,6 +45,8 @@ Work order:
 4. P2: move music into the sidebar and replace the bottom bar with an agreed token palette.
 
 No P1/P2 item may delay or obscure the P0 authorization investigation.
+
+P0 is complete. The automated smoke result is recorded in [multiplayer-smoke-2026-07-13.md](./multiplayer-smoke-2026-07-13.md); it does not replace the pending seven-client production session.
 
 ## Session 2 — production and observability
 
