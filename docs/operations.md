@@ -2,6 +2,12 @@
 
 This runbook is intentionally small. Every operation below must be rehearsed on a clean host before the first real game.
 
+Current production host paths:
+
+- application: `/home/uixray/apps/arken-space`;
+- media: `/home/uixray/apps/arken-space-data/media`;
+- local backups: `/home/uixray/apps/arken-space-data/backups`.
+
 ## Deploy and migrate
 
 1. Set production values from `.env.example`; never use the development GM or PostgreSQL secrets.

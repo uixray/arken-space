@@ -105,3 +105,29 @@ The stopped systemd units were not disabled, and the PM2 saved startup list was 
 7. Restart containers and verify persistence.
 8. Configure remote restic backup and rehearse full restore.
 9. Run the seven-client scenario before adding optional GM tools.
+
+## Deployment status — 2026-07-12
+
+`arken-space` was deployed after the initial audit.
+
+- DNS `arken.uixray.tech` resolves to `51.250.26.16`.
+- Application directory: `/home/uixray/apps/arken-space`.
+- Persistent data directory: `/home/uixray/apps/arken-space-data`.
+- Production secrets were generated on the host and stored in `.env` with mode `600`.
+- Temporary media quota and free-space floor are both 2 GiB.
+- PostgreSQL 17, Fastify server and nginx web containers are running with `unless-stopped` restart policy.
+- Drizzle migrations completed against real PostgreSQL.
+- Public `/healthz` reports database `ok`, build `0.2.0` and schema `2`.
+- HTTP redirects to HTTPS; the TLS certificate is valid through 2026-10-10 and Certbot renewal is scheduled.
+- Public frontend, Socket.IO polling/upgrade advertisement and authenticated diagnostics passed smoke checks.
+- Production cookies were verified as `HttpOnly`, `Secure` and `SameSite=Strict`.
+- PostgreSQL, server and web survived a Compose restart; campaign, membership and scene counts were preserved.
+- `restic` and PostgreSQL client tools were installed.
+- Initial local database dump: `/home/uixray/apps/arken-space-data/backups/initial-production.dump`, mode `600`.
+
+Still pending:
+
+- configure an external restic/S3-compatible repository and perform a clean restore rehearsal;
+- expand the disk before using the original 5 GiB media allowance;
+- run the seven-client game/security scenario;
+- reboot into the pending Ubuntu kernel update and re-check services. The deliberately stopped Jellyfin, AI Design Ops, Redis and portfolio units may return after reboot because their autostart was not disabled.
