@@ -19,15 +19,21 @@ const ids = {
   campaign: "10000000-0000-4000-8000-000000000001",
   gm: "10000000-0000-4000-8000-000000000002",
   player: "10000000-0000-4000-8000-000000000003",
+  otherPlayer: "10000000-0000-4000-8000-000000000006",
   scene: "10000000-0000-4000-8000-000000000004",
   token: "10000000-0000-4000-8000-000000000005",
+  otherToken: "10000000-0000-4000-8000-000000000007",
+  extraOwnedToken: "10000000-0000-4000-8000-000000000008",
+  enemyToken: "10000000-0000-4000-8000-000000000009",
 };
 
 const sessionToken = "realtime-test-session-token";
+const otherSessionToken = "realtime-other-session-token";
 let database: PGlite;
 let httpServer: HttpServer;
 let ioServer: Server<ClientToServerEvents, ServerToClientEvents>;
 let client: Socket<ServerToClientEvents, ClientToServerEvents>;
+let otherClient: Socket<ServerToClientEvents, ClientToServerEvents>;
 
 async function migrate(database: PGlite) {
   const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
@@ -55,6 +61,7 @@ function move(
     revision: number;
     x: number;
     y: number;
+    tokenId?: string;
   },
 ) {
   return new Promise<CommandAck<TokenDto>>((resolve) => {
@@ -62,7 +69,7 @@ function move(
       "token:moved",
       {
         ...input,
-        tokenId: ids.token,
+        tokenId: input.tokenId ?? ids.token,
         z: 0,
         levelId: null,
       },
@@ -78,14 +85,19 @@ beforeEach(async () => {
     insert into campaigns (id, name) values ('${ids.campaign}', 'Realtime');
     insert into memberships (id, campaign_id, role, display_name) values
       ('${ids.gm}', '${ids.campaign}', 'GM', 'GM'),
-      ('${ids.player}', '${ids.campaign}', 'PLAYER', 'Player');
+      ('${ids.player}', '${ids.campaign}', 'PLAYER', 'Player'),
+      ('${ids.otherPlayer}', '${ids.campaign}', 'PLAYER', 'Other player');
     insert into scenes (id, campaign_id, name, grid) values
       ('${ids.scene}', '${ids.campaign}', 'Active', '{"enabled":true,"size":64,"offsetX":0,"offsetY":0,"color":"#fff","opacity":0.2}');
     update campaigns set active_scene_id = '${ids.scene}' where id = '${ids.campaign}';
     insert into tokens (id, scene_id, owner_membership_id, name, x, y, visible) values
-      ('${ids.token}', '${ids.scene}', '${ids.player}', 'Player token', 0, 0, true);
+      ('${ids.token}', '${ids.scene}', '${ids.player}', 'Player token', 0, 0, true),
+      ('${ids.otherToken}', '${ids.scene}', '${ids.otherPlayer}', 'Other token', 128, 128, true),
+      ('${ids.extraOwnedToken}', '${ids.scene}', '${ids.player}', 'Extra owned token', 192, 192, true),
+      ('${ids.enemyToken}', '${ids.scene}', null, 'Enemy token', 256, 256, true);
     insert into sessions (membership_id, token_hash, expires_at) values
-      ('${ids.player}', '${hashToken(sessionToken)}', now() + interval '1 day');
+      ('${ids.player}', '${hashToken(sessionToken)}', now() + interval '1 day'),
+      ('${ids.otherPlayer}', '${hashToken(otherSessionToken)}', now() + interval '1 day');
   `);
 
   const db = drizzle(database, { schema });
@@ -106,11 +118,19 @@ beforeEach(async () => {
     transports: ["websocket"],
     extraHeaders: { Cookie: `arken_session=${sessionToken}` },
   });
-  await waitForConnection(client);
+  otherClient = createClient(`http://127.0.0.1:${address.port}`, {
+    transports: ["websocket"],
+    extraHeaders: { Cookie: `arken_session=${otherSessionToken}` },
+  });
+  await Promise.all([
+    waitForConnection(client),
+    waitForConnection(otherClient),
+  ]);
 });
 
 afterEach(async () => {
   client.disconnect();
+  otherClient.disconnect();
   await new Promise<void>((resolve) => ioServer.close(() => resolve()));
   await new Promise<void>((resolve, reject) =>
     httpServer.close((error) => (error ? reject(error) : resolve())),
@@ -182,6 +202,72 @@ describe("durable realtime token commands", () => {
       y: 64,
     });
     expect(result).toMatchObject({
+      ok: false,
+      status: "FORBIDDEN",
+      reason: "TOKEN_FORBIDDEN",
+    });
+  });
+
+  it("rejects durable and ephemeral movement of another player's token", async () => {
+    let leakedPreview = false;
+    client.on("token:moving", (movement) => {
+      if (movement.tokenId === ids.token) leakedPreview = true;
+    });
+    otherClient.emit("token:moving", {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.token,
+      x: 512,
+      y: 512,
+      z: 0,
+      levelId: null,
+      revision: 0,
+    });
+
+    const result = await move(otherClient, {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.token,
+      revision: 0,
+      x: 512,
+      y: 512,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      status: "FORBIDDEN",
+      reason: "TOKEN_FORBIDDEN",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(leakedPreview).toBe(false);
+
+    const rows = await database.query<{
+      x: number;
+      y: number;
+      revision: number;
+    }>(`select x, y, revision from tokens where id = '${ids.token}'`);
+    expect(rows.rows).toEqual([{ x: 0, y: 0, revision: 0 }]);
+  });
+
+  it("allows multiple owned tokens but keeps an ownerless enemy GM-only", async () => {
+    const extraOwned = await move(client, {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.extraOwnedToken,
+      revision: 0,
+      x: 320,
+      y: 320,
+    });
+    expect(extraOwned).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { id: ids.extraOwnedToken, x: 320, y: 320, revision: 1 },
+    });
+
+    const enemy = await move(client, {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.enemyToken,
+      revision: 0,
+      x: 384,
+      y: 384,
+    });
+    expect(enemy).toMatchObject({
       ok: false,
       status: "FORBIDDEN",
       reason: "TOKEN_FORBIDDEN",

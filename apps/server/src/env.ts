@@ -8,6 +8,7 @@ export const env = z
       .enum(["development", "test", "production"])
       .default("development"),
     APP_VERSION: z.string().default("0.2.0-dev"),
+    BUILD_REVISION: z.string().trim().min(1).max(64).default("development"),
     SCHEMA_VERSION: z.coerce.number().int().positive().default(2),
     PORT: z.coerce.number().int().min(1).max(65535).default(4100),
     WEB_ORIGIN: z.string().url().default("http://localhost:5173"),

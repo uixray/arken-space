@@ -20,6 +20,7 @@ Local implementation status as of 2026-07-12: core code is ready for review; pro
 ## Playtest backlog — 2026-07-13
 
 - [ ] **P0:** reproduce and prevent a player moving another player's token.
+- [ ] Allow one player membership to own multiple tokens; keep ownerless enemy/NPC tokens GM-only.
 - [ ] Add rectangular fog re-covering; keep it separate from undo latest reveal.
 - [ ] Add token image assignment.
 - [ ] Add character portrait assignment.

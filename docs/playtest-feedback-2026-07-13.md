@@ -12,12 +12,16 @@ Observed: after joining as a player, the player could move both their own token 
 
 Expected:
 
-- a player can start, preview and commit movement only for a token explicitly assigned to their membership;
+- a player can start, preview and commit movement only for tokens explicitly assigned to their membership;
+- one membership may own and control multiple tokens;
+- enemy/NPC tokens have no player owner and can be controlled only by the GM;
 - direct Socket.IO commands for another, hidden, locked or inactive-scene token return `FORBIDDEN`;
 - rejected optimistic movement immediately returns to the authoritative server position;
 - the test uses genuinely separate browser profiles and verifies membership IDs, character ownership and token ownership in PostgreSQL.
 
 This blocks the first real game and must be investigated before usability changes.
+
+Ownership invariant: `token.ownerMembershipId` is the authoritative movement permission. A character-linked token inherits the character owner by default, while the GM may later assign additional tokens to the same membership. A null owner means GM-only, not "available to every player".
 
 ## P1 — core game usability
 

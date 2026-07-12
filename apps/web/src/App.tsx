@@ -276,9 +276,10 @@ export function App() {
             </button>
           )}
           <span
-            title={`Схема ${snapshot.schemaVersion}, сборка ${snapshot.buildVersion}`}
+            title={`Схема ${snapshot.schemaVersion}, сборка ${snapshot.buildVersion}, Git ${snapshot.buildRevision ?? "unknown"}`}
           >
-            v{snapshot.snapshotVersion}
+            v{snapshot.snapshotVersion} ·{" "}
+            {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
           </span>
           <span>
             {previewSnapshot

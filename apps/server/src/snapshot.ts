@@ -230,6 +230,7 @@ export async function buildSnapshot(
     snapshotVersion,
     schemaVersion: env.SCHEMA_VERSION,
     buildVersion: env.APP_VERSION,
+    buildRevision: env.BUILD_REVISION,
     serverTime: new Date().toISOString(),
   };
 }

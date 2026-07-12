@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   audioStates,
   campaigns,
@@ -9,6 +9,17 @@ import {
 import { createStarterCharacter } from "@arken/system";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
+
+export async function reconcileTokenOwnership(db: Database) {
+  await db.execute(sql`
+    update tokens as token
+    set owner_membership_id = character.owner_membership_id,
+        updated_at = now()
+    from characters as character
+    where token.character_id = character.id
+      and token.owner_membership_id is distinct from character.owner_membership_id
+  `);
+}
 
 export async function ensureSeed(db: Database) {
   let [campaign] = await db.select().from(campaigns).limit(1);
@@ -76,5 +87,6 @@ export async function ensureSeed(db: Database) {
     .insert(audioStates)
     .values({ campaignId: campaign.id })
     .onConflictDoNothing();
+  await reconcileTokenOwnership(db);
   return { campaign, gm };
 }

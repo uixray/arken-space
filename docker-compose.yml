@@ -21,6 +21,7 @@ services:
     environment:
       NODE_ENV: production
       APP_VERSION: ${APP_VERSION:-0.2.0}
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
       SCHEMA_VERSION: 2
       PORT: 4100
       WEB_ORIGIN: ${WEB_ORIGIN:-https://arken.uixray.tech}

@@ -114,6 +114,10 @@ const snapshot: GameSnapshot = {
     startedAt: null,
     updatedAt: new Date().toISOString(),
   },
+  snapshotVersion: 0,
+  schemaVersion: 2,
+  buildVersion: "test",
+  buildRevision: "test-revision",
   serverTime: new Date().toISOString(),
 };
 

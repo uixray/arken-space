@@ -87,6 +87,44 @@ async function findAction(db: Database, campaignId: string, actionId: string) {
   return event ?? null;
 }
 
+export async function claimInviteOwnership(
+  db: Database,
+  invite: typeof invites.$inferSelect,
+  displayName: string,
+) {
+  return db.transaction(async (tx) => {
+    const [member] = await tx
+      .insert(memberships)
+      .values({
+        campaignId: invite.campaignId,
+        role: "PLAYER",
+        displayName,
+      })
+      .returning();
+    if (!member) throw new Error("MEMBER_CREATE_FAILED");
+    await tx
+      .update(characters)
+      .set({ ownerMembershipId: member.id, updatedAt: new Date() })
+      .where(
+        and(
+          eq(characters.id, invite.characterId),
+          eq(characters.campaignId, invite.campaignId),
+        ),
+      );
+    await tx
+      .update(tokens)
+      .set({ ownerMembershipId: member.id, updatedAt: new Date() })
+      .where(eq(tokens.characterId, invite.characterId));
+    const [claimed] = await tx
+      .update(invites)
+      .set({ claimedAt: new Date(), claimedByMembershipId: member.id })
+      .where(and(eq(invites.id, invite.id), isNull(invites.claimedAt)))
+      .returning();
+    if (!claimed) throw new Error("INVITE_ALREADY_CLAIMED");
+    return member;
+  });
+}
+
 export function registerRoutes(
   app: FastifyInstance,
   db: Database,
@@ -99,6 +137,7 @@ export function registerRoutes(
         status: "ok",
         database: "ok",
         buildVersion: env.APP_VERSION,
+        buildRevision: env.BUILD_REVISION,
         schemaVersion: env.SCHEMA_VERSION,
         time: new Date().toISOString(),
       };
@@ -142,33 +181,7 @@ export function registerRoutes(
       .limit(1);
     if (!invite) return reply.code(410).send({ error: "INVITE_EXPIRED" });
 
-    const result = await db.transaction(async (tx) => {
-      const [member] = await tx
-        .insert(memberships)
-        .values({
-          campaignId: invite.campaignId,
-          role: "PLAYER",
-          displayName: body.displayName,
-        })
-        .returning();
-      if (!member) throw new Error("MEMBER_CREATE_FAILED");
-      await tx
-        .update(characters)
-        .set({ ownerMembershipId: member.id, updatedAt: new Date() })
-        .where(
-          and(
-            eq(characters.id, invite.characterId),
-            eq(characters.campaignId, invite.campaignId),
-          ),
-        );
-      const [claimed] = await tx
-        .update(invites)
-        .set({ claimedAt: new Date(), claimedByMembershipId: member.id })
-        .where(and(eq(invites.id, invite.id), isNull(invites.claimedAt)))
-        .returning();
-      if (!claimed) throw new Error("INVITE_ALREADY_CLAIMED");
-      return member;
-    });
+    const result = await claimInviteOwnership(db, invite, body.displayName);
     await createSession(db, reply, result.id);
     return { ok: true };
   });
@@ -195,6 +208,7 @@ export function registerRoutes(
       status: "ok",
       requestId: request.id,
       buildVersion: snapshot.buildVersion,
+      buildRevision: snapshot.buildRevision,
       schemaVersion: snapshot.schemaVersion,
       snapshotVersion: snapshot.snapshotVersion,
       serverTime: snapshot.serverTime,
@@ -520,6 +534,34 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    let tokenOwnerMembershipId = body.ownerMembershipId ?? null;
+    if (body.characterId) {
+      const [character] = await db
+        .select({ ownerMembershipId: characters.ownerMembershipId })
+        .from(characters)
+        .where(
+          and(
+            eq(characters.id, body.characterId),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!character)
+        return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+      tokenOwnerMembershipId = character.ownerMembershipId;
+    } else if (tokenOwnerMembershipId) {
+      const [owner] = await db
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.id, tokenOwnerMembershipId),
+            eq(memberships.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!owner) return reply.code(404).send({ error: "OWNER_NOT_FOUND" });
+    }
     const { actionId, ...tokenInput } = body;
     const token = await db.transaction(async (tx) => {
       const [created] = await tx
@@ -527,7 +569,7 @@ export function registerRoutes(
         .values({
           ...tokenInput,
           characterId: body.characterId ?? null,
-          ownerMembershipId: body.ownerMembershipId ?? null,
+          ownerMembershipId: tokenOwnerMembershipId,
           assetId: body.assetId ?? null,
         })
         .returning();

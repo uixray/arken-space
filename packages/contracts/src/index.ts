@@ -291,6 +291,7 @@ export interface GameSnapshot {
   snapshotVersion: number;
   schemaVersion: number;
   buildVersion: string;
+  buildRevision: string;
   serverTime: string;
 }
 
