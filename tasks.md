@@ -16,3 +16,14 @@ Local implementation status as of 2026-07-12: core code is ready for review; pro
 - [ ] Run the full seven-client game and adversarial security scenario.
 - [ ] Expand the production disk and review media limits.
 - [ ] Reboot into the pending kernel update and verify container/service recovery.
+
+## Playtest backlog — 2026-07-13
+
+- [ ] **P0:** reproduce and prevent a player moving another player's token.
+- [ ] Add rectangular fog re-covering; keep it separate from undo latest reveal.
+- [ ] Add token image assignment.
+- [ ] Add character portrait assignment.
+- [ ] Move token label with its token and show it only on hover/focus.
+- [ ] Add chat quick-roll buttons: d2, d4, d8, d12, d20.
+- [ ] Move music controls into a sidebar tab.
+- [ ] Define and implement the available-token bottom palette.

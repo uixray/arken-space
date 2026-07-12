@@ -32,6 +32,19 @@ The following production tasks are deliberately deferred while core development 
 
 These tasks are postponed, not cancelled. The two-hour session cannot be marked ready until they pass.
 
+## Current stability iteration — playtest findings
+
+The first production walkthrough produced a prioritized backlog in [playtest-feedback-2026-07-13.md](./playtest-feedback-2026-07-13.md).
+
+Work order:
+
+1. P0: reproduce and fix a player moving another player's token.
+2. Confirm authoritative rollback, reconnect and production build identity.
+3. P1: fog re-covering, token image assignment, character portraits, grouped hover labels and chat quick dice.
+4. P2: move music into the sidebar and replace the bottom bar with an agreed token palette.
+
+No P1/P2 item may delay or obscure the P0 authorization investigation.
+
 ## Session 2 — production and observability
 
 Goal: prove that production matches the local architecture and leaves enough evidence to diagnose failures.
