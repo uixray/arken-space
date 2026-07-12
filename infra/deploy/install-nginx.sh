@@ -13,7 +13,7 @@ sudo -n mkdir -p "$WEBROOT"
 
 if ! sudo -n grep -q "^[[:space:]]*$DOMAIN[[:space:]]\+127\.0\.0\.1:4430;" "$NGINX_CONFIG"; then
   sudo -n cp "$NGINX_CONFIG" "$BACKUP"
-  sudo -n sed -i "/map \\$ssl_preread_server_name \\$backend {/a\\        $DOMAIN 127.0.0.1:4430;" "$NGINX_CONFIG"
+  sudo -n sed -i '/map \$ssl_preread_server_name \$backend {/a\        arken.uixray.tech 127.0.0.1:4430;' "$NGINX_CONFIG"
 fi
 
 cat > /tmp/arken-http.conf <<EOF
