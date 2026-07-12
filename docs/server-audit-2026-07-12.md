@@ -119,6 +119,7 @@ The stopped systemd units were not disabled, and the PM2 saved startup list was 
 - Drizzle migrations completed against real PostgreSQL.
 - Public `/healthz` reports database `ok`, build `0.2.0` and schema `2`.
 - HTTP redirects to HTTPS; the TLS certificate is valid through 2026-10-10 and Certbot renewal is scheduled.
+- Certbot simulated renewal completed successfully with `--dry-run --no-random-sleep-on-renew`.
 - Public frontend, Socket.IO polling/upgrade advertisement and authenticated diagnostics passed smoke checks.
 - Production cookies were verified as `HttpOnly`, `Secure` and `SameSite=Strict`.
 - PostgreSQL, server and web survived a Compose restart; campaign, membership and scene counts were preserved.
