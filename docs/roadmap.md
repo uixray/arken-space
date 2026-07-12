@@ -20,6 +20,18 @@ Implemented locally:
 
 This baseline is not production-ready until the following sessions are completed in order.
 
+## Deferred but mandatory before the first full game
+
+The following production tasks are deliberately deferred while core development continues. They remain release gates and must not disappear from planning:
+
+- configure a remote S3-compatible restic repository;
+- restore PostgreSQL and the complete media directory into a clean environment;
+- run the seven-independent-client scenario and record concrete defects;
+- expand the server disk before restoring the original 5 GiB media allowance;
+- perform the pending kernel reboot, confirm arken auto-recovery and verify that deliberately stopped Jellyfin, portfolio, AI Design Ops and Redis services stay in the intended state.
+
+These tasks are postponed, not cancelled. The two-hour session cannot be marked ready until they pass.
+
 ## Session 2 — production and observability
 
 Goal: prove that production matches the local architecture and leaves enough evidence to diagnose failures.

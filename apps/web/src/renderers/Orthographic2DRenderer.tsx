@@ -164,6 +164,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     setFogDraft(null);
   };
 
+  const handleClick = () => {
+    if (props.tool !== "PING") return;
+    const point = pointerInWorld();
+    if (point) props.onPing(point);
+  };
+
   const assetUrl = (assetId: string | null) =>
     props.assets.find((asset) => asset.id === assetId)?.url;
   const snap = (value: number) =>
@@ -190,6 +196,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onMouseDown={handleFogDown}
         onMouseMove={handleFogMove}
         onMouseUp={handleFogUp}
+        onClick={handleClick}
       >
         <Layer listening={false}>
           <Rect
@@ -214,6 +221,27 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         </Layer>
 
         <Layer>
+          {props.pings.map((ping) => (
+            <Group
+              key={`${ping.membershipId}-${ping.createdAt}`}
+              listening={false}
+            >
+              <Circle
+                x={ping.x}
+                y={ping.y}
+                radius={22 / scale}
+                stroke="#f0c75e"
+                strokeWidth={3 / scale}
+              />
+              <Text
+                x={ping.x + 28 / scale}
+                y={ping.y - 8 / scale}
+                text={ping.displayName}
+                fill="#f0c75e"
+                fontSize={14 / scale}
+              />
+            </Group>
+          ))}
           {props.tokens
             .filter((token) => token.visible || props.role === "GM")
             .map((token) => {

@@ -41,6 +41,12 @@ importers:
       prettier:
         specifier: latest
         version: 3.9.5
+      socket.io:
+        specifier: ^4.8.3
+        version: 4.8.3
+      socket.io-client:
+        specifier: ^4.8.3
+        version: 4.8.3
       tsx:
         specifier: latest
         version: 4.23.0

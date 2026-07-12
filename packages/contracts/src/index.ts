@@ -104,6 +104,11 @@ export const createFogRevealSchema = z.object({
   height: z.number().positive().max(16384),
 });
 
+export const undoFogRevealSchema = z.object({
+  actionId: actionIdSchema,
+  sceneId: z.string().uuid(),
+});
+
 export const characterUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   portraitAssetId: z.string().uuid().nullable().optional(),

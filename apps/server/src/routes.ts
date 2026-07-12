@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { and, eq, gt, isNull, sql, sum } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql, sum } from "drizzle-orm";
 import { z } from "zod";
 import {
   activateSceneSchema,
@@ -16,6 +16,7 @@ import {
   diceRequestSchema,
   gmLoginSchema,
   inviteClaimSchema,
+  undoFogRevealSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@arken/contracts";
@@ -198,6 +199,34 @@ export function registerRoutes(
       snapshotVersion: snapshot.snapshotVersion,
       serverTime: snapshot.serverTime,
     };
+  });
+
+  app.get("/api/preview/:membershipId", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { membershipId } = z
+      .object({ membershipId: z.string().uuid() })
+      .parse(request.params);
+    const [target] = await db
+      .select()
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.id, membershipId),
+          eq(memberships.campaignId, auth.campaignId),
+          eq(memberships.role, "PLAYER"),
+        ),
+      )
+      .limit(1);
+    if (!target) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
+    return buildSnapshot(db, {
+      membershipId: target.id,
+      campaignId: target.campaignId,
+      role: target.role,
+      displayName: target.displayName,
+    });
   });
 
   app.post("/api/client-logs", async (request, reply) => {
@@ -570,6 +599,64 @@ export function registerRoutes(
       });
     }
     return reply.code(201).send(reveal);
+  });
+
+  app.delete("/api/fog-reveals/latest", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = undoFogRevealSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return { ok: true, duplicate: true };
+    const [scene] = await db
+      .select({ id: scenes.id })
+      .from(scenes)
+      .where(
+        and(
+          eq(scenes.id, body.sceneId),
+          eq(scenes.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+
+    const result = await db.transaction(async (tx) => {
+      const [latest] = await tx
+        .select()
+        .from(fogReveals)
+        .where(eq(fogReveals.sceneId, scene.id))
+        .orderBy(desc(fogReveals.createdAt), desc(fogReveals.id))
+        .limit(1);
+      if (!latest) return null;
+      await tx.delete(fogReveals).where(eq(fogReveals.id, latest.id));
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "fog.removed",
+          entityType: "fog",
+          entityId: latest.id,
+          payload: { fogRevealId: latest.id, sceneId: latest.sceneId },
+        })
+        .returning();
+      if (!event) throw new Error("EVENT_RECORD_FAILED");
+      return { latest, event };
+    });
+    if (!result) return reply.code(404).send({ error: "FOG_REVEAL_NOT_FOUND" });
+    const data = {
+      fogRevealId: result.latest.id,
+      sceneId: result.latest.sceneId,
+    };
+    io.to(campaignRoom(auth.campaignId)).emit("fog:removed", {
+      sequence: Number(result.event.sequence),
+      actionId: body.actionId,
+      emittedAt: result.event.createdAt.toISOString(),
+      data,
+    });
+    return { ok: true, ...data };
   });
 
   app.post("/api/chat", async (request, reply) => {

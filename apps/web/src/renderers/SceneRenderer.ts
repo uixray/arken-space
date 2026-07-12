@@ -1,6 +1,7 @@
 import type {
   AssetDto,
   FogRevealDto,
+  MapPing,
   Role,
   SceneDto,
   TokenDto,
@@ -15,13 +16,15 @@ export interface SceneRendererProps {
   role: Role;
   membershipId: string;
   socket: GameSocket | null;
-  tool: "PAN" | "FOG";
+  tool: "PAN" | "FOG" | "PING";
+  pings: MapPing[];
   onFogCreate: (rect: {
     x: number;
     y: number;
     width: number;
     height: number;
   }) => Promise<void>;
+  onPing: (point: { x: number; y: number }) => void;
 }
 
 export type SceneRendererComponent = React.ComponentType<SceneRendererProps>;

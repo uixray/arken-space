@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type {
   AssetKind,
   GameSnapshot,
+  MapPing,
   MessageVisibility,
 } from "@arken/contracts";
 import { api, ApiError, reportClientEvent } from "./api";
@@ -23,7 +24,11 @@ export function App() {
   const [connection, setConnection] = useState<
     "CONNECTING" | "ONLINE" | "RECONNECTING" | "RESYNCING" | "OFFLINE"
   >("CONNECTING");
-  const [tool, setTool] = useState<"PAN" | "FOG">("PAN");
+  const [tool, setTool] = useState<"PAN" | "FOG" | "PING">("PAN");
+  const [pings, setPings] = useState<MapPing[]>([]);
+  const [previewSnapshot, setPreviewSnapshot] = useState<GameSnapshot | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const campaignId = snapshot?.campaign.id;
 
@@ -144,6 +149,29 @@ export function App() {
           : current,
       ),
     );
+    next.on("fog:removed", (event) =>
+      setSnapshot((current) =>
+        current && event.sequence > current.snapshotVersion
+          ? {
+              ...current,
+              snapshotVersion: event.sequence,
+              fogReveals: current.fogReveals.filter(
+                (fog) => fog.id !== event.data.fogRevealId,
+              ),
+            }
+          : current,
+      ),
+    );
+    next.on("map:ping", (ping) => {
+      setPings((current) => [...current.slice(-7), ping]);
+      window.setTimeout(
+        () =>
+          setPings((current) =>
+            current.filter((item) => item.createdAt !== ping.createdAt),
+          ),
+        3500,
+      );
+    });
     next.on("chat:created", (event) =>
       setSnapshot((current) =>
         current &&
@@ -207,13 +235,14 @@ export function App() {
       </main>
     );
 
+  const viewSnapshot = previewSnapshot ?? snapshot;
   const activeScene =
-    snapshot.scenes.find((scene) => scene.active) ?? snapshot.scenes[0];
+    viewSnapshot.scenes.find((scene) => scene.active) ?? viewSnapshot.scenes[0];
   const activeTokens = activeScene
-    ? snapshot.tokens.filter((token) => token.sceneId === activeScene.id)
+    ? viewSnapshot.tokens.filter((token) => token.sceneId === activeScene.id)
     : [];
   const activeFog = activeScene
-    ? snapshot.fogReveals.filter((fog) => fog.sceneId === activeScene.id)
+    ? viewSnapshot.fogReveals.filter((fog) => fog.sceneId === activeScene.id)
     : [];
 
   return (
@@ -221,7 +250,7 @@ export function App() {
       <header className="topbar">
         <div className="brand">
           <strong>arken-space</strong>
-          <span>{snapshot.campaign.name}</span>
+          <span>{viewSnapshot.campaign.name}</span>
         </div>
         <div className="scene-title">{activeScene?.name ?? "Нет сцены"}</div>
         <div className="status-line">
@@ -252,8 +281,15 @@ export function App() {
             v{snapshot.snapshotVersion}
           </span>
           <span>
-            {snapshot.me.displayName} · {snapshot.me.role}
+            {previewSnapshot
+              ? `Просмотр: ${viewSnapshot.me.displayName}`
+              : `${snapshot.me.displayName} · ${snapshot.me.role}`}
           </span>
+          {previewSnapshot && (
+            <button onClick={() => setPreviewSnapshot(null)}>
+              Вернуться к мастеру
+            </button>
+          )}
           <button
             onClick={async () => {
               await api("/api/auth/logout", { method: "POST" });
@@ -273,12 +309,38 @@ export function App() {
             >
               Панорама
             </button>
-            {snapshot.me.role === "GM" && (
+            {!previewSnapshot && snapshot.me.role === "GM" && (
+              <>
+                <button
+                  aria-pressed={tool === "FOG"}
+                  onClick={() => setTool("FOG")}
+                >
+                  Открыть туман
+                </button>
+                <button
+                  disabled={!activeFog.length}
+                  onClick={() =>
+                    run(() =>
+                      api("/api/fog-reveals/latest", {
+                        method: "DELETE",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          sceneId: activeScene?.id,
+                        }),
+                      }),
+                    )
+                  }
+                >
+                  Отменить туман
+                </button>
+              </>
+            )}
+            {!previewSnapshot && (
               <button
-                aria-pressed={tool === "FOG"}
-                onClick={() => setTool("FOG")}
+                aria-pressed={tool === "PING"}
+                onClick={() => setTool("PING")}
               >
-                Открыть туман
+                Ping
               </button>
             )}
             <span>{activeTokens.length} токенов</span>
@@ -291,11 +353,12 @@ export function App() {
                 scene={activeScene}
                 tokens={activeTokens}
                 fogReveals={activeFog}
-                assets={snapshot.assets}
-                role={snapshot.me.role}
-                membershipId={snapshot.me.id}
+                assets={viewSnapshot.assets}
+                role={viewSnapshot.me.role}
+                membershipId={viewSnapshot.me.id}
                 socket={socket}
                 tool={tool}
+                pings={pings.filter((ping) => ping.sceneId === activeScene.id)}
                 onFogCreate={async (rect) => {
                   await run(() =>
                     api("/api/fog-reveals", {
@@ -309,151 +372,189 @@ export function App() {
                   );
                   setTool("PAN");
                 }}
+                onPing={(point) => {
+                  socket?.emit("map:ping", {
+                    sceneId: activeScene.id,
+                    ...point,
+                  });
+                  setTool("PAN");
+                }}
               />
             </Suspense>
           ) : (
             <div className="empty-map">Мастер ещё не создал сцену.</div>
           )}
         </main>
-        <Sidebar
-          snapshot={snapshot}
-          onPatchCharacter={async (id, patch) =>
-            run(() =>
-              api(`/api/characters/${id}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  ...patch,
-                  actionId: crypto.randomUUID(),
-                }),
-              }),
-            )
-          }
-          onChat={async (body, visibility) =>
-            run(() =>
-              api("/api/chat", {
-                method: "POST",
-                body: JSON.stringify({
-                  actionId: crypto.randomUUID(),
-                  body,
-                  visibility,
-                  characterId: snapshot.me.characterId,
-                }),
-              }),
-            )
-          }
-          onRoll={async (
-            formula,
-            label,
-            visibility = "PUBLIC" as MessageVisibility,
-            characterId = null,
-          ) =>
-            run(() =>
-              api("/api/dice", {
-                method: "POST",
-                body: JSON.stringify({
-                  actionId: crypto.randomUUID(),
-                  formula,
-                  label,
-                  visibility,
-                  characterId,
-                }),
-              }),
-            )
-          }
-          onCreateCharacter={async (name) =>
-            run(
-              () =>
-                api("/api/characters", {
-                  method: "POST",
-                  body: JSON.stringify({ name, actionId: crypto.randomUUID() }),
-                }),
-              true,
-            )
-          }
-          onCreateInvite={async (characterId, label) => {
-            const result = await api<{ url: string }>("/api/invites", {
-              method: "POST",
-              body: JSON.stringify({
-                characterId,
-                label,
-                expiresInHours: 168,
-                actionId: crypto.randomUUID(),
-              }),
-            });
-            return result.url;
-          }}
-          onCreateScene={async (name) =>
-            run(
-              () =>
-                api("/api/scenes", {
-                  method: "POST",
-                  body: JSON.stringify({ name, actionId: crypto.randomUUID() }),
-                }),
-              true,
-            )
-          }
-          onActivateScene={async (sceneId) =>
-            run(() =>
-              api("/api/scenes/activate", {
-                method: "POST",
-                body: JSON.stringify({
-                  sceneId,
-                  actionId: crypto.randomUUID(),
-                }),
-              }),
-            )
-          }
-          onAssignMap={async (sceneId, mapAssetId) =>
-            run(
-              () =>
-                api(`/api/scenes/${sceneId}`, {
+        {previewSnapshot ? (
+          <aside className="sidebar">
+            <div className="panel-scroll">
+              <section className="panel-section">
+                <span className="eyebrow">Режим мастера</span>
+                <h2>Глазами игрока</h2>
+                <p>
+                  Сейчас показаны только активная сцена, видимые токены и файлы,
+                  доступные игроку {viewSnapshot.me.displayName}.
+                </p>
+                <button onClick={() => setPreviewSnapshot(null)}>
+                  Завершить просмотр
+                </button>
+              </section>
+            </div>
+          </aside>
+        ) : (
+          <Sidebar
+            snapshot={snapshot}
+            onPatchCharacter={async (id, patch) =>
+              run(() =>
+                api(`/api/characters/${id}`, {
                   method: "PATCH",
                   body: JSON.stringify({
-                    mapAssetId,
+                    ...patch,
                     actionId: crypto.randomUUID(),
                   }),
                 }),
-              true,
-            )
-          }
-          onCreateToken={async (characterId) => {
-            const character = snapshot.characters.find(
-              (item) => item.id === characterId,
-            );
-            if (!activeScene || !character) return;
-            await run(
-              () =>
-                api("/api/tokens", {
+              )
+            }
+            onChat={async (body, visibility) =>
+              run(() =>
+                api("/api/chat", {
                   method: "POST",
                   body: JSON.stringify({
                     actionId: crypto.randomUUID(),
-                    sceneId: activeScene.id,
-                    characterId,
-                    ownerMembershipId: character.ownerMembershipId,
-                    name: character.name,
-                    x: activeScene.width / 2,
-                    y: activeScene.height / 2,
-                    width: activeScene.grid.size,
-                    height: activeScene.grid.size,
+                    body,
+                    visibility,
+                    characterId: snapshot.me.characterId,
                   }),
                 }),
-              true,
-            );
-          }}
-          onUpload={async (file, kind: AssetKind) => {
-            const form = new FormData();
-            form.append("file", file);
-            await run(
-              () =>
-                api(`/api/assets?kind=${kind}`, {
+              )
+            }
+            onRoll={async (
+              formula,
+              label,
+              visibility = "PUBLIC" as MessageVisibility,
+              characterId = null,
+            ) =>
+              run(() =>
+                api("/api/dice", {
                   method: "POST",
-                  headers: { "x-action-id": crypto.randomUUID() },
-                  body: form,
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    formula,
+                    label,
+                    visibility,
+                    characterId,
+                  }),
                 }),
-              true,
-            );
-          }}
-        />
+              )
+            }
+            onCreateCharacter={async (name) =>
+              run(
+                () =>
+                  api("/api/characters", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      name,
+                      actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
+            onCreateInvite={async (characterId, label) => {
+              const result = await api<{ url: string }>("/api/invites", {
+                method: "POST",
+                body: JSON.stringify({
+                  characterId,
+                  label,
+                  expiresInHours: 168,
+                  actionId: crypto.randomUUID(),
+                }),
+              });
+              return result.url;
+            }}
+            onCreateScene={async (name) =>
+              run(
+                () =>
+                  api("/api/scenes", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      name,
+                      actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
+            onActivateScene={async (sceneId) =>
+              run(() =>
+                api("/api/scenes/activate", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    sceneId,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onAssignMap={async (sceneId, mapAssetId) =>
+              run(
+                () =>
+                  api(`/api/scenes/${sceneId}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      mapAssetId,
+                      actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
+            onCreateToken={async (characterId) => {
+              const character = snapshot.characters.find(
+                (item) => item.id === characterId,
+              );
+              if (!activeScene || !character) return;
+              await run(
+                () =>
+                  api("/api/tokens", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      sceneId: activeScene.id,
+                      characterId,
+                      ownerMembershipId: character.ownerMembershipId,
+                      name: character.name,
+                      x: activeScene.width / 2,
+                      y: activeScene.height / 2,
+                      width: activeScene.grid.size,
+                      height: activeScene.grid.size,
+                    }),
+                  }),
+                true,
+              );
+            }}
+            onUpload={async (file, kind: AssetKind) => {
+              const form = new FormData();
+              form.append("file", file);
+              await run(
+                () =>
+                  api(`/api/assets?kind=${kind}`, {
+                    method: "POST",
+                    headers: { "x-action-id": crypto.randomUUID() },
+                    body: form,
+                  }),
+                true,
+              );
+            }}
+            onPreviewPlayer={async (membershipId) => {
+              const playerView = await api<GameSnapshot>(
+                `/api/preview/${membershipId}`,
+              );
+              setTool("PAN");
+              setPreviewSnapshot(playerView);
+            }}
+          />
+        )}
       </div>
       <MusicBar
         audio={snapshot.audio}

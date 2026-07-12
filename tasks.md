@@ -8,3 +8,11 @@ Local implementation status as of 2026-07-12: core code is ready for review; pro
 - [x] [UIX-199 — Character sheets, chat and dice](https://linear.app/uixraydesign/issue/UIX-199/arken-space-character-sheets-chat-and-dice)
 - [x] [UIX-200 — Media library and synchronized music](https://linear.app/uixraydesign/issue/UIX-200/arken-space-media-library-and-synchronized-music) — browser/server integration review pending
 - [ ] [UIX-201 — Hardening, deployment and game-night verification](https://linear.app/uixraydesign/issue/UIX-201/arken-space-hardening-deployment-and-game-night-verification)
+
+## Deferred production gates
+
+- [ ] Configure remote S3/restic backup storage.
+- [ ] Restore database and media into a clean environment.
+- [ ] Run the full seven-client game and adversarial security scenario.
+- [ ] Expand the production disk and review media limits.
+- [ ] Reboot into the pending kernel update and verify container/service recovery.

@@ -24,6 +24,7 @@ type Props = {
   onAssignMap: (sceneId: string, assetId: string | null) => Promise<void>;
   onCreateToken: (characterId: string) => Promise<void>;
   onUpload: (file: File, kind: AssetKind) => Promise<void>;
+  onPreviewPlayer: (membershipId: string) => Promise<void>;
 };
 
 export function Sidebar(props: Props) {
@@ -331,6 +332,9 @@ function SetupPanel(props: Props) {
     props.snapshot.characters[0]?.id ?? "",
   );
   const [inviteUrl, setInviteUrl] = useState("");
+  const [previewMembership, setPreviewMembership] = useState(
+    props.snapshot.members.find((member) => member.role === "PLAYER")?.id ?? "",
+  );
   const activeScene = props.snapshot.scenes.find((scene) => scene.active);
   const maps = props.snapshot.assets.filter((asset) => asset.kind === "MAP");
   return (
@@ -340,6 +344,31 @@ function SetupPanel(props: Props) {
           <span className="eyebrow">Мастер</span>
           <h2>Подготовка</h2>
         </div>
+      </div>
+      <div className="subsection">
+        <h3>Проверка видимости</h3>
+        <label className="field">
+          Игрок
+          <select
+            value={previewMembership}
+            onChange={(event) => setPreviewMembership(event.target.value)}
+          >
+            <option value="">Выберите игрока</option>
+            {props.snapshot.members
+              .filter((member) => member.role === "PLAYER")
+              .map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.displayName}
+                </option>
+              ))}
+          </select>
+        </label>
+        <button
+          disabled={!previewMembership}
+          onClick={() => props.onPreviewPlayer(previewMembership)}
+        >
+          Посмотреть глазами игрока
+        </button>
       </div>
       <div className="subsection">
         <h3>Сцены</h3>
