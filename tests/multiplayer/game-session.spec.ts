@@ -202,22 +202,20 @@ test("GM and two clean players keep permissions through chat, scene switch and r
       status: "ACCEPTED",
     });
 
-    await Promise.all([
-      expectOk(
-        await playerOne.request.post(`${baseUrl}/api/chat`, {
-          data: {
-            actionId: actionId(),
-            body: "one-online",
-            visibility: "PUBLIC",
-          },
-        }),
-      ),
-      expectOk(
-        await playerTwo.request.post(`${baseUrl}/api/dice`, {
-          data: { actionId: actionId(), formula: "1d20", visibility: "PUBLIC" },
-        }),
-      ),
+    const [chatResponse, diceResponse] = await Promise.all([
+      playerOne.request.post(`${baseUrl}/api/chat`, {
+        data: {
+          actionId: actionId(),
+          body: "one-online",
+          visibility: "PUBLIC",
+        },
+      }),
+      playerTwo.request.post(`${baseUrl}/api/dice`, {
+        data: { actionId: actionId(), formula: "1d20", visibility: "PUBLIC" },
+      }),
     ]);
+    await Promise.all([expectOk(chatResponse), expectOk(diceResponse)]);
+    await gmPage.getByRole("button", { name: /Чат/ }).click();
     await expect(gmPage.getByText("one-online")).toBeVisible();
 
     const [createdScene] = await Promise.all([
