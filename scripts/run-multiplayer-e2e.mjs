@@ -35,5 +35,12 @@ try {
     process.exitCode = status;
   }
 } finally {
-  run("docker", [...compose, "down", "--volumes", "--remove-orphans"]);
+  run("docker", [
+    ...compose,
+    "down",
+    "--volumes",
+    "--remove-orphans",
+    "--rmi",
+    "local",
+  ]);
 }
