@@ -7,6 +7,7 @@ ARCHIVE=/home/uixray/arken-space-deploy.tar.gz
 
 mkdir -p "$APP" "$DATA/media"
 tar -xzf "$ARCHIVE" -C "$APP"
+find "$APP/infra" -type f -name '*.sh' -exec sed -i 's/\r$//' {} +
 
 if [ ! -f "$APP/.env" ]; then
   umask 077
