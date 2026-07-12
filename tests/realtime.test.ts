@@ -29,11 +29,40 @@ const ids = {
 
 const sessionToken = "realtime-test-session-token";
 const otherSessionToken = "realtime-other-session-token";
+const gmSessionToken = "realtime-gm-session-token";
+const extraPlayers = [
+  [
+    "10000000-0000-4000-8000-000000000010",
+    "10000000-0000-4000-8000-000000000011",
+    "realtime-session-3",
+  ],
+  [
+    "10000000-0000-4000-8000-000000000012",
+    "10000000-0000-4000-8000-000000000013",
+    "realtime-session-4",
+  ],
+  [
+    "10000000-0000-4000-8000-000000000014",
+    "10000000-0000-4000-8000-000000000015",
+    "realtime-session-5",
+  ],
+  [
+    "10000000-0000-4000-8000-000000000016",
+    "10000000-0000-4000-8000-000000000017",
+    "realtime-session-6",
+  ],
+].map(([membershipId, tokenId, session]) => ({
+  membershipId: membershipId!,
+  tokenId: tokenId!,
+  session: session!,
+}));
 let database: PGlite;
 let httpServer: HttpServer;
 let ioServer: Server<ClientToServerEvents, ServerToClientEvents>;
 let client: Socket<ServerToClientEvents, ClientToServerEvents>;
 let otherClient: Socket<ServerToClientEvents, ClientToServerEvents>;
+let gmClient: Socket<ServerToClientEvents, ClientToServerEvents>;
+let extraClients: Array<Socket<ServerToClientEvents, ClientToServerEvents>>;
 
 async function migrate(database: PGlite) {
   const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
@@ -97,8 +126,19 @@ beforeEach(async () => {
       ('${ids.enemyToken}', '${ids.scene}', null, 'Enemy token', 256, 256, true);
     insert into sessions (membership_id, token_hash, expires_at) values
       ('${ids.player}', '${hashToken(sessionToken)}', now() + interval '1 day'),
-      ('${ids.otherPlayer}', '${hashToken(otherSessionToken)}', now() + interval '1 day');
+      ('${ids.otherPlayer}', '${hashToken(otherSessionToken)}', now() + interval '1 day'),
+      ('${ids.gm}', '${hashToken(gmSessionToken)}', now() + interval '1 day');
   `);
+  for (const [index, player] of extraPlayers.entries()) {
+    await database.exec(`
+      insert into memberships (id, campaign_id, role, display_name)
+      values ('${player.membershipId}', '${ids.campaign}', 'PLAYER', 'Player ${index + 3}');
+      insert into tokens (id, scene_id, owner_membership_id, name, x, y, visible)
+      values ('${player.tokenId}', '${ids.scene}', '${player.membershipId}', 'Token ${index + 3}', ${320 + index * 64}, 128, true);
+      insert into sessions (membership_id, token_hash, expires_at)
+      values ('${player.membershipId}', '${hashToken(player.session)}', now() + interval '1 day');
+    `);
+  }
 
   const db = drizzle(database, { schema });
   httpServer = createServer();
@@ -122,15 +162,29 @@ beforeEach(async () => {
     transports: ["websocket"],
     extraHeaders: { Cookie: `arken_session=${otherSessionToken}` },
   });
+  gmClient = createClient(`http://127.0.0.1:${address.port}`, {
+    transports: ["websocket"],
+    extraHeaders: { Cookie: `arken_session=${gmSessionToken}` },
+  });
+  extraClients = extraPlayers.map((player) =>
+    createClient(`http://127.0.0.1:${address.port}`, {
+      transports: ["websocket"],
+      extraHeaders: { Cookie: `arken_session=${player.session}` },
+    }),
+  );
   await Promise.all([
     waitForConnection(client),
     waitForConnection(otherClient),
+    waitForConnection(gmClient),
+    ...extraClients.map(waitForConnection),
   ]);
 });
 
 afterEach(async () => {
   client.disconnect();
   otherClient.disconnect();
+  gmClient.disconnect();
+  for (const socket of extraClients) socket.disconnect();
   await new Promise<void>((resolve) => ioServer.close(() => resolve()));
   await new Promise<void>((resolve, reject) =>
     httpServer.close((error) => (error ? reject(error) : resolve())),
@@ -272,5 +326,69 @@ describe("durable realtime token commands", () => {
       status: "FORBIDDEN",
       reason: "TOKEN_FORBIDDEN",
     });
+  });
+
+  it("keeps six simultaneous players authoritative through reconnect and resync", async () => {
+    const players = [
+      { socket: client, tokenId: ids.token },
+      { socket: otherClient, tokenId: ids.otherToken },
+      ...extraPlayers.map((player, index) => ({
+        socket: extraClients[index]!,
+        tokenId: player.tokenId,
+      })),
+    ];
+    const accepted = await Promise.all([
+      ...players.map(({ socket, tokenId }, index) =>
+        move(socket, {
+          actionId: crypto.randomUUID(),
+          tokenId,
+          revision: 0,
+          x: 640 + index * 64,
+          y: 384,
+        }),
+      ),
+      move(gmClient, {
+        actionId: crypto.randomUUID(),
+        tokenId: ids.enemyToken,
+        revision: 0,
+        x: 1024,
+        y: 512,
+      }),
+    ]);
+    expect(accepted.every((result) => result.status === "ACCEPTED")).toBe(true);
+
+    const forbidden = await move(extraClients[0]!, {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.otherToken,
+      revision: 1,
+      x: 999,
+      y: 999,
+    });
+    expect(forbidden).toMatchObject({ ok: false, status: "FORBIDDEN" });
+
+    const reconnecting = extraClients[1]!;
+    reconnecting.disconnect();
+    const snapshotAfterReconnect = new Promise<
+      Parameters<ServerToClientEvents["game:snapshot"]>[0]
+    >((resolve) => reconnecting.once("game:snapshot", resolve));
+    const reconnected = waitForConnection(reconnecting);
+    reconnecting.connect();
+    await reconnected;
+    const snapshot = await snapshotAfterReconnect;
+    expect(
+      snapshot.tokens.find((token) => token.id === extraPlayers[1]!.tokenId),
+    ).toMatchObject({ y: 384, revision: 1 });
+
+    const resynced = new Promise<
+      Parameters<ServerToClientEvents["game:snapshot"]>[0]
+    >((resolve) => reconnecting.once("game:snapshot", resolve));
+    reconnecting.emit("game:resync", 0);
+    const fullSnapshot = await resynced;
+    expect(fullSnapshot.snapshotVersion).toBeGreaterThanOrEqual(7);
+
+    const rows = await database.query<{ count: number }>(
+      "select count(*)::int as count from game_events where type = 'TOKEN_MOVED'",
+    );
+    expect(rows.rows[0]?.count).toBe(7);
   });
 });

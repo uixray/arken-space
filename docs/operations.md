@@ -61,3 +61,9 @@ The restore script replaces the target database and synchronizes the media direc
 - affected membership ID, action ID, snapshot version and approximate time.
 
 Server logs must never contain session cookies, invitation tokens or uploaded file contents.
+
+## Isolated multiplayer test
+
+`corepack pnpm test:multiplayer` must never point at the production campaign. It creates the `arken-e2e` Compose project on localhost port `14180`, uses isolated database/media volumes and removes them in a `finally` cleanup step.
+
+The browser story covers separate GM/player cookies, invitations, token ownership, an ownerless enemy, chat, dice, scene activation and reconnect. The Vitest realtime story covers all seven simultaneous Socket.IO clients and full resync.

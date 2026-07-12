@@ -24,6 +24,16 @@ corepack pnpm dev
 
 Open `http://localhost:5173/gm/<GM_ACCESS_TOKEN>`. The server exchanges the token for an HttpOnly session and removes it from the address bar.
 
+## Multiplayer verification
+
+With Docker Engine running, execute the isolated multiplayer story:
+
+```powershell
+corepack pnpm test:multiplayer
+```
+
+The command builds a temporary `arken-e2e` Compose project with separate PostgreSQL and media volumes, runs Playwright with one GM and two clean player browser contexts, then removes the complete test stack. The regular Vitest suite additionally exercises one GM and six simultaneous Socket.IO players.
+
 ## Workspace rule
 
 All implementation, generated code and commits for arken-space must stay inside this directory. External projects listed in `dependencies.md` are reference-only.

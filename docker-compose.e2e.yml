@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: arken
+      POSTGRES_USER: arken
+      POSTGRES_PASSWORD: arken-e2e-password
+    volumes:
+      - postgres-e2e:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arken -d arken"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      NODE_ENV: test
+      APP_VERSION: e2e
+      BUILD_REVISION: multiplayer-test
+      SCHEMA_VERSION: 2
+      PORT: 4100
+      WEB_ORIGIN: http://127.0.0.1:14180
+      PUBLIC_URL: http://127.0.0.1:14180
+      DATABASE_URL: postgres://arken:arken-e2e-password@postgres:5432/arken
+      SESSION_COOKIE_NAME: arken_session
+      SESSION_TTL_DAYS: 1
+      GM_ACCESS_TOKEN: multiplayer-master-token-1234567890
+      MEDIA_ROOT: /srv/arken-space/media
+      MEDIA_QUOTA_BYTES: 10485760
+      MIN_FREE_DISK_BYTES: 1048576
+    volumes:
+      - media-e2e:/srv/arken-space/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4100/healthz').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    depends_on:
+      server:
+        condition: service_healthy
+
+  edge:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./infra/nginx/e2e-edge.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:14180:80"
+    depends_on:
+      server:
+        condition: service_healthy
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-e2e:
+  media-e2e:
