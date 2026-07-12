@@ -23,8 +23,8 @@ services:
       BUILD_REVISION: multiplayer-test
       SCHEMA_VERSION: 2
       PORT: 4100
-      WEB_ORIGIN: http://127.0.0.1:14180
-      PUBLIC_URL: http://127.0.0.1:14180
+      WEB_ORIGIN: http://edge
+      PUBLIC_URL: http://edge
       DATABASE_URL: postgres://arken:arken-e2e-password@postgres:5432/arken
       SESSION_COOKIE_NAME: arken_session
       SESSION_TTL_DAYS: 1
