@@ -12,7 +12,7 @@ set -a
 . ./.env
 set +a
 
-PAYLOAD="$(printf '{\"token\":\"%s\"}' "$GM_ACCESS_TOKEN")"
+PAYLOAD="$(printf '{"token":"%s"}' "$GM_ACCESS_TOKEN")"
 STATUS="$(curl -sS \
   --output "$BODY" \
   --dump-header "$HEADERS" \
