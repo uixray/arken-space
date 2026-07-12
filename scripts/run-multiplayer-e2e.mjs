@@ -7,6 +7,8 @@ const compose = [
   "arken-e2e",
   "--file",
   "docker-compose.e2e.yml",
+  "--profile",
+  "test",
 ];
 
 function run(command, args) {
@@ -19,16 +21,17 @@ function run(command, args) {
 }
 
 try {
-  const up = run("docker", [...compose, "up", "--detach", "--build", "--wait"]);
+  const up = run("docker", [
+    ...compose,
+    "up",
+    "--detach",
+    "--build",
+    "--wait",
+    "edge",
+  ]);
   if (up !== 0) process.exitCode = up;
   else {
-    const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-    const status = run(pnpm, [
-      "exec",
-      "playwright",
-      "test",
-      "--config=playwright.multiplayer.config.ts",
-    ]);
+    const status = run("docker", [...compose, "run", "--rm", "playwright"]);
     process.exitCode = status;
   }
 } finally {

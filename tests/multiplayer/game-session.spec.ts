@@ -13,7 +13,7 @@ import type {
   TokenDto,
 } from "../../packages/contracts/src/index.js";
 
-const baseUrl = "http://127.0.0.1:14180";
+const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:14180";
 const gmToken = "multiplayer-master-token-1234567890";
 const actionId = () => crypto.randomUUID();
 
