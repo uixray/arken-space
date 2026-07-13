@@ -1,58 +1,125 @@
 import {
   expect,
   test,
+  type APIRequestContext,
   type APIResponse,
   type BrowserContext,
+  type Page,
 } from "@playwright/test";
 import { io, type Socket } from "socket.io-client";
 import type {
+  AssetDto,
   ClientToServerEvents,
   CommandAck,
+  FogRevealDto,
   GameSnapshot,
+  SceneDto,
   ServerToClientEvents,
   TokenDto,
 } from "../../packages/contracts/src/index.js";
 
 const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:14180";
 const gmToken = "multiplayer-master-token-1234567890";
+const restartMarker = "ARKEN_E2E_BACKEND_RESTART_READY";
 const actionId = () => crypto.randomUUID();
+const privateNotes = Array.from(
+  { length: 6 },
+  (_, index) => "private-note-player-" + (index + 1),
+);
+const imageBuffer = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
+
+type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+type GameConnection = { socket: GameSocket; snapshot: GameSnapshot };
 
 async function expectOk(response: APIResponse) {
   if (!response.ok())
-    throw new Error(`${response.status()} ${await response.text()}`);
+    throw new Error(response.status() + " " + (await response.text()));
   return response;
+}
+
+async function bootstrap(context: BrowserContext) {
+  return (await (
+    await expectOk(await context.request.get(baseUrl + "/api/bootstrap"))
+  ).json()) as GameSnapshot;
 }
 
 async function cookieHeader(context: BrowserContext) {
   return (await context.cookies())
-    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .map((cookie) => cookie.name + "=" + cookie.value)
     .join("; ");
 }
 
-async function connectSocket(context: BrowserContext) {
-  const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
-    baseUrl,
-    {
-      autoConnect: false,
-      transports: ["websocket"],
-      extraHeaders: { Cookie: await cookieHeader(context) },
-    },
-  );
+function waitForSnapshot(
+  socket: GameSocket,
+  predicate: (snapshot: GameSnapshot) => boolean = () => true,
+  timeoutMs = 30_000,
+) {
+  return new Promise<GameSnapshot>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off("game:snapshot", onSnapshot);
+      reject(new Error("Timed out waiting for authoritative snapshot"));
+    }, timeoutMs);
+    const onSnapshot = (snapshot: GameSnapshot) => {
+      if (!predicate(snapshot)) return;
+      clearTimeout(timeout);
+      socket.off("game:snapshot", onSnapshot);
+      resolve(snapshot);
+    };
+    socket.on("game:snapshot", onSnapshot);
+  });
+}
+
+async function connectSocket(context: BrowserContext): Promise<GameConnection> {
+  const socket: GameSocket = io(baseUrl, {
+    autoConnect: false,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 250,
+    reconnectionDelayMax: 1_000,
+    transports: ["websocket"],
+    extraHeaders: { Cookie: await cookieHeader(context) },
+  });
   const connected = new Promise<void>((resolve, reject) => {
     socket.once("connect", resolve);
     socket.once("connect_error", reject);
   });
-  const snapshot = new Promise<GameSnapshot>((resolve) =>
-    socket.once("game:snapshot", resolve),
-  );
+  const snapshot = waitForSnapshot(socket);
   socket.connect();
   await connected;
   return { socket, snapshot: await snapshot };
 }
 
+function waitForRecovery(socket: GameSocket, timeoutMs = 120_000) {
+  return new Promise<GameSnapshot>((resolve, reject) => {
+    let disconnected = false;
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out waiting for backend recovery"));
+    }, timeoutMs);
+    const onDisconnect = () => {
+      disconnected = true;
+    };
+    const onSnapshot = (snapshot: GameSnapshot) => {
+      if (!disconnected) return;
+      cleanup();
+      resolve(snapshot);
+    };
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.off("disconnect", onDisconnect);
+      socket.off("game:snapshot", onSnapshot);
+    };
+    socket.on("disconnect", onDisconnect);
+    socket.on("game:snapshot", onSnapshot);
+  });
+}
+
 function move(
-  socket: Socket<ServerToClientEvents, ClientToServerEvents>,
-  token: TokenDto,
+  socket: GameSocket,
+  token: Pick<TokenDto, "id" | "z" | "levelId" | "revision">,
   x: number,
   y: number,
 ) {
@@ -73,38 +140,231 @@ function move(
   );
 }
 
-test("GM and two clean players keep permissions through chat, scene switch and reconnect", async ({
+function expectUniqueIds(items: Array<{ id: string }>) {
+  expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+}
+
+async function uploadImage(
+  request: APIRequestContext,
+  kind: "MAP" | "TOKEN",
+  name: string,
+) {
+  const response = await expectOk(
+    await request.post(baseUrl + "/api/assets?kind=" + kind, {
+      headers: { "x-action-id": actionId() },
+      multipart: {
+        file: {
+          name,
+          mimeType: "image/png",
+          buffer: imageBuffer,
+        },
+      },
+    }),
+  );
+  return (await response.json()) as AssetDto;
+}
+
+async function activateScene(
+  gm: BrowserContext,
+  sceneId: string,
+  connections: GameConnection[],
+) {
+  const snapshots = connections.map(({ socket }) =>
+    waitForSnapshot(socket, (snapshot) =>
+      snapshot.scenes.some((scene) => scene.id === sceneId && scene.active),
+    ),
+  );
+  await expectOk(
+    await gm.request.post(baseUrl + "/api/scenes/activate", {
+      data: { actionId: actionId(), sceneId },
+    }),
+  );
+  return Promise.all(snapshots);
+}
+
+async function claimInvite(
+  context: BrowserContext,
+  inviteUrl: string,
+  displayName: string,
+) {
+  const page = await context.newPage();
+  await page.goto(inviteUrl);
+  await page.getByLabel("Имя").fill(displayName);
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(
+    page.getByText(displayName + " · PLAYER", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("в сети", { exact: true })).toBeVisible();
+  return page;
+}
+
+async function edgeHealthy() {
+  try {
+    return (await fetch(baseUrl + "/healthz")).ok;
+  } catch {
+    return false;
+  }
+}
+
+test("GM and six isolated players recover authoritative state without security leaks", async ({
   browser,
 }) => {
   const gm = await browser.newContext();
-  const playerOne = await browser.newContext();
-  const playerTwo = await browser.newContext();
-  const sockets: Array<Socket<ServerToClientEvents, ClientToServerEvents>> = [];
+  const players = await Promise.all(
+    Array.from({ length: 6 }, () => browser.newContext()),
+  );
+  const pages: Page[] = [];
+  const connections: GameConnection[] = [];
   try {
     const gmPage = await gm.newPage();
-    await gmPage.goto(`/gm/${gmToken}`);
+    await gmPage.goto("/gm/" + gmToken);
     await gmPage.getByRole("button", { name: "Войти" }).click();
     await expect(gmPage.getByText(/Мастер · GM/)).toBeVisible();
+    await expect(gmPage.getByText("в сети", { exact: true })).toBeVisible();
 
-    for (const name of ["Player One", "Player Two"]) {
-      await expectOk(
-        await gm.request.post(`${baseUrl}/api/characters`, {
-          data: { actionId: actionId(), name },
+    const characterResponses = await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        gm.request.post(baseUrl + "/api/characters", {
+          data: {
+            actionId: actionId(),
+            name: "E2E Player " + (index + 1),
+          },
         }),
-      );
-    }
-    let gmSnapshot = (await (
-      await gm.request.get(`${baseUrl}/api/bootstrap`)
-    ).json()) as GameSnapshot;
-    const characters = gmSnapshot.characters.filter((character) =>
-      character.name.startsWith("Player "),
+      ),
     );
-    expect(characters).toHaveLength(2);
+    await Promise.all(characterResponses.map(expectOk));
+
+    let gmSnapshot = await bootstrap(gm);
+    const characters = gmSnapshot.characters
+      .filter((character) => character.name.startsWith("E2E Player "))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    expect(characters).toHaveLength(6);
+
+    const noteResponses = await Promise.all(
+      characters.map((character, index) =>
+        gm.request.patch(baseUrl + "/api/characters/" + character.id, {
+          data: {
+            actionId: actionId(),
+            notes: privateNotes[index],
+          },
+        }),
+      ),
+    );
+    await Promise.all(noteResponses.map(expectOk));
+
+    const [hiddenAsset, recoveryAsset] = await Promise.all([
+      uploadImage(gm.request, "TOKEN", "gm-hidden-token.png"),
+      uploadImage(gm.request, "MAP", "recovery-scene-map.png"),
+    ]);
+
+    gmSnapshot = await bootstrap(gm);
+    const initialScene = gmSnapshot.scenes.find((scene) => scene.active);
+    if (!initialScene) throw new Error("Initial scene not found");
+
+    const recoverySceneResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/scenes", {
+        data: {
+          actionId: actionId(),
+          name: "Recovery Scene",
+          mapAssetId: recoveryAsset.id,
+        },
+      }),
+    );
+    const recoveryScene = (await recoverySceneResponse.json()) as SceneDto;
+
+    const playerTokenResponses = await Promise.all(
+      characters.map((character, index) =>
+        gm.request.post(baseUrl + "/api/tokens", {
+          data: {
+            actionId: actionId(),
+            sceneId: initialScene.id,
+            characterId: character.id,
+            name: "Player Token " + (index + 1),
+            x: 128 + index * 96,
+            y: 128,
+          },
+        }),
+      ),
+    );
+    await Promise.all(playerTokenResponses.map(expectOk));
+    const playerTokens = (await Promise.all(
+      playerTokenResponses.map((response) => response.json()),
+    )) as TokenDto[];
+
+    const enemyResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/tokens", {
+        data: {
+          actionId: actionId(),
+          sceneId: initialScene.id,
+          name: "Ownerless Enemy",
+          x: 800,
+          y: 128,
+        },
+      }),
+    );
+    const enemy = (await enemyResponse.json()) as TokenDto;
+
+    const hiddenTokenResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/tokens", {
+        data: {
+          actionId: actionId(),
+          sceneId: initialScene.id,
+          assetId: hiddenAsset.id,
+          name: "GM Hidden Token",
+          x: 896,
+          y: 128,
+          visible: false,
+        },
+      }),
+    );
+    const hiddenToken = (await hiddenTokenResponse.json()) as TokenDto;
+
+    const recoveryTokenResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/tokens", {
+        data: {
+          actionId: actionId(),
+          sceneId: recoveryScene.id,
+          assetId: recoveryAsset.id,
+          name: "Recovery Sentinel",
+          x: 256,
+          y: 256,
+        },
+      }),
+    );
+    const recoveryToken = (await recoveryTokenResponse.json()) as TokenDto;
+
+    const initialFogResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/fog-reveals", {
+        data: {
+          actionId: actionId(),
+          sceneId: initialScene.id,
+          x: 32,
+          y: 48,
+          width: 160,
+          height: 96,
+        },
+      }),
+    );
+    const initialFog = (await initialFogResponse.json()) as FogRevealDto;
+
+    const recoveryFogResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/fog-reveals", {
+        data: {
+          actionId: actionId(),
+          sceneId: recoveryScene.id,
+          x: 704,
+          y: 512,
+          width: 224,
+          height: 144,
+        },
+      }),
+    );
+    const recoveryFog = (await recoveryFogResponse.json()) as FogRevealDto;
 
     const inviteUrls: string[] = [];
     for (const character of characters) {
       const response = await expectOk(
-        await gm.request.post(`${baseUrl}/api/invites`, {
+        await gm.request.post(baseUrl + "/api/invites", {
           data: {
             actionId: actionId(),
             characterId: character.id,
@@ -116,142 +376,356 @@ test("GM and two clean players keep permissions through chat, scene switch and r
       inviteUrls.push(((await response.json()) as { url: string }).url);
     }
 
-    for (const [index, context] of [playerOne, playerTwo].entries()) {
-      const page = await context.newPage();
-      await page.goto(inviteUrls[index]!);
-      await page.getByLabel("Имя").fill(`Player ${index + 1}`);
-      await page.getByRole("button", { name: "Войти" }).click();
-      await expect(
-        page.getByText(new RegExp(`Player ${index + 1} · PLAYER`)),
-      ).toBeVisible();
-    }
-
-    gmSnapshot = (await (
-      await gm.request.get(`${baseUrl}/api/bootstrap`)
-    ).json()) as GameSnapshot;
-    const activeScene = gmSnapshot.scenes.find((scene) => scene.active)!;
-    const ownedCharacters = gmSnapshot.characters.filter((character) =>
-      character.name.startsWith("Player "),
-    );
-    for (const [index, character] of ownedCharacters.entries()) {
-      await expectOk(
-        await gm.request.post(`${baseUrl}/api/tokens`, {
-          data: {
-            actionId: actionId(),
-            sceneId: activeScene.id,
-            characterId: character.id,
-            name: character.name,
-            x: 128 + index * 128,
-            y: 128,
-          },
-        }),
+    for (let index = 0; index < 5; index += 1) {
+      pages[index] = await claimInvite(
+        players[index],
+        inviteUrls[index],
+        "Player " + (index + 1),
       );
     }
-    await expectOk(
-      await gm.request.post(`${baseUrl}/api/tokens`, {
-        data: {
-          actionId: actionId(),
-          sceneId: activeScene.id,
-          name: "Enemy",
-          x: 512,
-          y: 128,
-        },
-      }),
-    );
 
     const gmConnection = await connectSocket(gm);
-    const oneConnection = await connectSocket(playerOne);
-    const twoConnection = await connectSocket(playerTwo);
-    sockets.push(
-      gmConnection.socket,
-      oneConnection.socket,
-      twoConnection.socket,
+    connections.push(gmConnection);
+    for (let index = 0; index < 5; index += 1)
+      connections.push(await connectSocket(players[index]));
+
+    for (let index = 0; index < 5; index += 1) {
+      const snapshot = connections[index + 1].snapshot;
+      const serialized = JSON.stringify(snapshot);
+      expect(snapshot.scenes.map((scene) => scene.id)).toEqual([
+        initialScene.id,
+      ]);
+      expect(snapshot.fogReveals.map((fog) => fog.id)).toContain(initialFog.id);
+      expect(snapshot.fogReveals.map((fog) => fog.id)).not.toContain(
+        recoveryFog.id,
+      );
+      expect(snapshot.tokens.map((token) => token.id)).not.toContain(
+        hiddenToken.id,
+      );
+      expect(snapshot.tokens.map((token) => token.id)).not.toContain(
+        recoveryToken.id,
+      );
+      expect(snapshot.assets.map((asset) => asset.id)).not.toContain(
+        hiddenAsset.id,
+      );
+      expect(snapshot.assets.map((asset) => asset.id)).not.toContain(
+        recoveryAsset.id,
+      );
+      expect(snapshot.characters).toHaveLength(1);
+      expect(snapshot.characters[0]?.notes).toBe(privateNotes[index]);
+      for (const note of privateNotes)
+        if (note !== privateNotes[index])
+          expect(serialized).not.toContain(note);
+      expect(serialized).not.toContain("GM Hidden Token");
+      expect(serialized).not.toContain("Recovery Sentinel");
+      expect(serialized).not.toContain("preview");
+
+      const hiddenContent = await players[index].request.get(
+        baseUrl + "/api/assets/" + hiddenAsset.id + "/content",
+      );
+      const closedContent = await players[index].request.get(
+        baseUrl + "/api/assets/" + recoveryAsset.id + "/content",
+      );
+      expect(hiddenContent.status()).toBe(404);
+      expect(closedContent.status()).toBe(404);
+    }
+
+    const recoverySnapshots = await activateScene(
+      gm,
+      recoveryScene.id,
+      connections,
     );
-    const ownOne = oneConnection.snapshot.tokens.find(
-      (token) => token.ownerMembershipId === oneConnection.snapshot.me.id,
-    )!;
-    const ownTwo = twoConnection.snapshot.tokens.find(
-      (token) => token.ownerMembershipId === twoConnection.snapshot.me.id,
-    )!;
-    const enemy = gmConnection.snapshot.tokens.find(
-      (token) => token.name === "Enemy",
-    )!;
+    for (const snapshot of recoverySnapshots.slice(1)) {
+      expect(snapshot.scenes).toMatchObject([
+        { id: recoveryScene.id, active: true },
+      ]);
+      expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([
+        recoveryFog.id,
+      ]);
+      expect(snapshot.assets.map((asset) => asset.id)).toContain(
+        recoveryAsset.id,
+      );
+      expect(snapshot.assets.map((asset) => asset.id)).not.toContain(
+        hiddenAsset.id,
+      );
+    }
 
-    await expect(
-      move(oneConnection.socket, ownOne, 320, 320),
-    ).resolves.toMatchObject({
-      ok: true,
-      status: "ACCEPTED",
-    });
-    await expect(
-      move(oneConnection.socket, ownTwo, 640, 640),
-    ).resolves.toMatchObject({
-      ok: false,
-      status: "FORBIDDEN",
-    });
-    await expect(
-      move(oneConnection.socket, enemy, 640, 640),
-    ).resolves.toMatchObject({
-      ok: false,
-      status: "FORBIDDEN",
-    });
-    await expect(
-      move(gmConnection.socket, enemy, 576, 192),
-    ).resolves.toMatchObject({
-      ok: true,
-      status: "ACCEPTED",
-    });
+    pages[5] = await claimInvite(players[5], inviteUrls[5], "Player 6");
+    const lateConnection = await connectSocket(players[5]);
+    connections.push(lateConnection);
+    expect(lateConnection.snapshot.scenes).toMatchObject([
+      { id: recoveryScene.id, active: true },
+    ]);
+    expect(lateConnection.snapshot.fogReveals.map((fog) => fog.id)).toEqual([
+      recoveryFog.id,
+    ]);
+    expect(lateConnection.snapshot.characters).toMatchObject([
+      { id: characters[5].id, notes: privateNotes[5] },
+    ]);
 
-    const [chatResponse, diceResponse] = await Promise.all([
-      playerOne.request.post(`${baseUrl}/api/chat`, {
+    const initialSnapshots = await activateScene(
+      gm,
+      initialScene.id,
+      connections,
+    );
+    const gmInitialSnapshot = initialSnapshots[0];
+    const playerInitialSnapshots = initialSnapshots.slice(1);
+
+    const moveResults = await Promise.all([
+      ...playerInitialSnapshots.map((snapshot, index) => {
+        const own = snapshot.tokens.find(
+          (token) => token.ownerMembershipId === snapshot.me.id,
+        );
+        if (!own) throw new Error("Owned token not found for player");
+        return move(connections[index + 1].socket, own, 320 + index * 96, 384);
+      }),
+      move(
+        connections[0].socket,
+        gmInitialSnapshot.tokens.find((token) => token.id === enemy.id) ??
+          enemy,
+        1024,
+        512,
+      ),
+    ]);
+    for (const result of moveResults)
+      expect(result).toMatchObject({ ok: true, status: "ACCEPTED" });
+
+    const movedPlayerTokens = moveResults.slice(0, 6).map((result) => {
+      if (!result.data) throw new Error("Accepted move lacks token data");
+      return result.data;
+    });
+    const [foreignMove, enemyMove, hiddenMove] = await Promise.all([
+      move(connections[1].socket, movedPlayerTokens[1], 1400, 900),
+      move(connections[1].socket, enemy, 1400, 900),
+      move(connections[1].socket, hiddenToken, 1400, 900),
+    ]);
+    for (const result of [foreignMove, enemyMove, hiddenMove])
+      expect(result).toMatchObject({ ok: false, status: "FORBIDDEN" });
+
+    const publicMarkers = Array.from({ length: 6 }, (_, index) =>
+      index % 2 === 0
+        ? "public-chat-" + (index + 1)
+        : "public-roll-" + (index + 1),
+    );
+    const messageRequests = players.map((context, index) =>
+      index % 2 === 0
+        ? context.request.post(baseUrl + "/api/chat", {
+            data: {
+              actionId: actionId(),
+              body: publicMarkers[index],
+              visibility: "PUBLIC",
+            },
+          })
+        : context.request.post(baseUrl + "/api/dice", {
+            data: {
+              actionId: actionId(),
+              formula: "1d20",
+              label: publicMarkers[index],
+              visibility: "PUBLIC",
+            },
+          }),
+    );
+    messageRequests.push(
+      gm.request.post(baseUrl + "/api/chat", {
         data: {
           actionId: actionId(),
-          body: "one-online",
+          body: "gm-public",
           visibility: "PUBLIC",
         },
       }),
-      playerTwo.request.post(`${baseUrl}/api/dice`, {
-        data: { actionId: actionId(), formula: "1d20", visibility: "PUBLIC" },
+      gm.request.post(baseUrl + "/api/chat", {
+        data: {
+          actionId: actionId(),
+          body: "gm-only-chat",
+          visibility: "GM_ONLY",
+        },
       }),
-    ]);
-    await Promise.all([expectOk(chatResponse), expectOk(diceResponse)]);
-    await gmPage.getByRole("button", { name: /Чат/ }).click();
-    await expect(gmPage.getByText("one-online")).toBeVisible();
+      gm.request.post(baseUrl + "/api/dice", {
+        data: {
+          actionId: actionId(),
+          formula: "1d20",
+          label: "gm-only-roll",
+          visibility: "GM_ONLY",
+        },
+      }),
+    );
+    const messageResponses = await Promise.all(messageRequests);
+    await Promise.all(messageResponses.map(expectOk));
+    publicMarkers.push("gm-public");
 
-    const [createdScene] = await Promise.all([
-      gm.request.post(`${baseUrl}/api/scenes`, {
-        data: { actionId: actionId(), name: "Second scene" },
-      }),
-    ]);
-    await expectOk(createdScene);
-    const scene = (await createdScene.json()) as { id: string };
-    const switched = new Promise<GameSnapshot>((resolve) =>
-      twoConnection.socket.once("game:snapshot", resolve),
-    );
-    await expectOk(
-      await gm.request.post(`${baseUrl}/api/scenes/activate`, {
-        data: { actionId: actionId(), sceneId: scene.id },
-      }),
-    );
-    expect((await switched).scenes).toMatchObject([
-      { id: scene.id, active: true },
-    ]);
+    for (let index = 0; index < players.length; index += 1) {
+      const snapshot = await bootstrap(players[index]);
+      const serialized = JSON.stringify(snapshot);
+      expectUniqueIds(snapshot.messages);
+      for (const marker of publicMarkers)
+        expect(
+          snapshot.messages.filter((message) => message.body === marker),
+        ).toHaveLength(1);
+      expect(serialized).not.toContain("gm-only-chat");
+      expect(serialized).not.toContain("gm-only-roll");
+      expect(serialized).not.toContain(hiddenAsset.id);
+      expect(serialized).not.toContain(recoveryAsset.id);
+      expect(snapshot.characters).toHaveLength(1);
+      expect(snapshot.characters[0]?.notes).toBe(privateNotes[index]);
+      for (const note of privateNotes)
+        if (note !== privateNotes[index])
+          expect(serialized).not.toContain(note);
+    }
 
-    twoConnection.socket.disconnect();
-    const reconnected = new Promise<void>((resolve) =>
-      twoConnection.socket.once("connect", resolve),
-    );
-    const recovered = new Promise<GameSnapshot>((resolve) =>
-      twoConnection.socket.once("game:snapshot", resolve),
-    );
-    twoConnection.socket.connect();
-    await reconnected;
-    expect((await recovered).scenes[0]).toMatchObject({
-      id: scene.id,
-      active: true,
+    await pages[1].reload();
+    await expect(
+      pages[1].getByText("Player 2 · PLAYER", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      pages[1].getByText(initialScene.name, { exact: true }),
+    ).toBeVisible();
+    await expect(pages[1].getByText("в сети", { exact: true })).toBeVisible();
+
+    await players[2].setOffline(true);
+    await expect(pages[2].getByText(/переподключение|нет связи/)).toBeVisible({
+      timeout: 15_000,
     });
+    await pages[2].waitForTimeout(20_000);
+    await players[2].setOffline(false);
+    await expect(pages[2].getByText("в сети", { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await activateScene(gm, recoveryScene.id, connections);
+    for (const page of pages)
+      await expect(
+        page.getByText(recoveryScene.name, { exact: true }),
+      ).toBeVisible({ timeout: 30_000 });
+
+    const recoveryPromises = connections.map(({ socket }) =>
+      waitForRecovery(socket),
+    );
+    console.log(restartMarker);
+    await expect
+      .poll(edgeHealthy, { timeout: 30_000, intervals: [250] })
+      .toBe(false);
+    await expect
+      .poll(edgeHealthy, { timeout: 120_000, intervals: [500, 1_000] })
+      .toBe(true);
+    const recoveredSnapshots = await Promise.all(recoveryPromises);
+    for (const snapshot of recoveredSnapshots)
+      expect(
+        snapshot.scenes.some(
+          (scene) => scene.id === recoveryScene.id && scene.active,
+        ),
+      ).toBe(true);
+
+    const resyncPromises = connections.map(({ socket }) =>
+      waitForSnapshot(socket, (snapshot) =>
+        snapshot.scenes.some(
+          (scene) => scene.id === recoveryScene.id && scene.active,
+        ),
+      ),
+    );
+    for (const { socket } of connections) socket.emit("game:resync", 0);
+    const resynced = await Promise.all(resyncPromises);
+    expect(
+      new Set(resynced.map((snapshot) => snapshot.snapshotVersion)).size,
+    ).toBe(1);
+
+    const authoritativeGm = resynced[0];
+    for (const collection of [
+      authoritativeGm.members,
+      authoritativeGm.characters,
+      authoritativeGm.scenes,
+      authoritativeGm.tokens,
+      authoritativeGm.fogReveals,
+      authoritativeGm.messages,
+      authoritativeGm.assets,
+    ])
+      expectUniqueIds(collection);
+    for (let index = 0; index < movedPlayerTokens.length; index += 1)
+      expect(
+        authoritativeGm.tokens.find(
+          (token) => token.id === playerTokens[index].id,
+        ),
+      ).toMatchObject({
+        x: 320 + index * 96,
+        y: 384,
+        revision: 1,
+      });
+    expect(
+      authoritativeGm.tokens.find((token) => token.id === enemy.id),
+    ).toMatchObject({ x: 1024, y: 512, revision: 1 });
+    expect(
+      authoritativeGm.messages.filter(
+        (message) => message.body === "gm-only-chat",
+      ),
+    ).toHaveLength(1);
+    expect(
+      authoritativeGm.messages.filter(
+        (message) => message.body === "gm-only-roll",
+      ),
+    ).toHaveLength(1);
+
+    for (let index = 0; index < 6; index += 1) {
+      const snapshot = resynced[index + 1];
+      const serialized = JSON.stringify(snapshot);
+      expect(snapshot.scenes).toMatchObject([
+        { id: recoveryScene.id, active: true },
+      ]);
+      expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([
+        recoveryFog.id,
+      ]);
+      expect(snapshot.fogReveals.map((fog) => fog.id)).not.toContain(
+        initialFog.id,
+      );
+      expect(snapshot.tokens.map((token) => token.id)).not.toContain(
+        hiddenToken.id,
+      );
+      for (const token of playerTokens)
+        expect(snapshot.tokens.map((item) => item.id)).not.toContain(token.id);
+      expect(snapshot.assets.map((asset) => asset.id)).toContain(
+        recoveryAsset.id,
+      );
+      expect(snapshot.assets.map((asset) => asset.id)).not.toContain(
+        hiddenAsset.id,
+      );
+      expect(snapshot.characters).toMatchObject([
+        { id: characters[index].id, notes: privateNotes[index] },
+      ]);
+      for (const collection of [
+        snapshot.members,
+        snapshot.characters,
+        snapshot.scenes,
+        snapshot.tokens,
+        snapshot.fogReveals,
+        snapshot.messages,
+        snapshot.assets,
+      ])
+        expectUniqueIds(collection);
+      for (const marker of publicMarkers)
+        expect(
+          snapshot.messages.filter((message) => message.body === marker),
+        ).toHaveLength(1);
+      expect(serialized).not.toContain("gm-only-chat");
+      expect(serialized).not.toContain("gm-only-roll");
+      expect(serialized).not.toContain("GM Hidden Token");
+      for (const note of privateNotes)
+        if (note !== privateNotes[index])
+          expect(serialized).not.toContain(note);
+
+      const hiddenContent = await players[index].request.get(
+        baseUrl + "/api/assets/" + hiddenAsset.id + "/content",
+      );
+      expect(hiddenContent.status()).toBe(404);
+    }
+
+    for (const page of pages) {
+      await expect(page.getByText("в сети", { exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(
+        page.getByText(recoveryScene.name, { exact: true }),
+      ).toBeVisible();
+    }
   } finally {
-    for (const socket of sockets) socket.disconnect();
-    await Promise.all([gm.close(), playerOne.close(), playerTwo.close()]);
+    for (const { socket } of connections) socket.disconnect();
+    await Promise.all([gm.close(), ...players.map((player) => player.close())]);
   }
 });

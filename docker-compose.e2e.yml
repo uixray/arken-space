@@ -20,7 +20,7 @@ services:
     environment:
       NODE_ENV: test
       APP_VERSION: e2e
-      BUILD_REVISION: multiplayer-test
+      BUILD_REVISION: ${E2E_BUILD_REVISION:-multiplayer-test}
       SCHEMA_VERSION: 2
       PORT: 4100
       WEB_ORIGIN: http://edge
@@ -81,6 +81,9 @@ services:
       dockerfile: Dockerfile.e2e
     environment:
       E2E_BASE_URL: http://edge
+      E2E_BUILD_REVISION: ${E2E_BUILD_REVISION:-multiplayer-test}
+    volumes:
+      - ./test-results/multiplayer:/app/test-results
     depends_on:
       edge:
         condition: service_healthy
