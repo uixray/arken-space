@@ -64,6 +64,8 @@ Server logs must never contain session cookies, invitation tokens or uploaded fi
 
 ## Isolated multiplayer test
 
-`corepack pnpm test:multiplayer` must never point at the production campaign. It creates the `arken-e2e` Compose project on localhost port `14180`, uses isolated database/media volumes and removes them in a `finally` cleanup step.
+corepack pnpm test:multiplayer must never point at the production campaign. It creates a unique arken-e2e-* Compose project on localhost port 14180, uses isolated database/media volumes and removes containers and volumes in a finally cleanup step. Run it from a committed Git archive and pass that SHA as E2E_BUILD_REVISION so isolated health proves the tested build identity.
 
-The browser story covers separate GM/player cookies, invitations, token ownership, an ownerless enemy, chat, dice, scene activation and reconnect. The Vitest realtime story covers all seven simultaneous Socket.IO clients and full resync.
+The runner rejects missing Docker access, less than 6 GiB free, a busy edge port, a non-healthy production endpoint or any WEB_ORIGIN/E2E_BASE_URL other than http://edge. It records JSON/JUnit plus retained failure traces under test-results/multiplayer, preserves the heavyweight Playwright image after an overall failure, removes local project images after success, verifies that no Compose containers/volumes remain, then checks production health and disk again.
+
+The browser story covers one GM and six independent player contexts, late join, simultaneous token movement, foreign/enemy authorization, fog and scene visibility, concurrent chat/dice, reload, a 20-second browser network outage, backend restart and authoritative resync without duplicate entities. The Vitest realtime story separately covers all seven simultaneous Socket.IO clients and full resync.

@@ -32,7 +32,7 @@ With Docker Engine running, execute the isolated multiplayer story:
 corepack pnpm test:multiplayer
 ```
 
-The command builds a temporary `arken-e2e` Compose project with separate PostgreSQL and media volumes, runs Playwright with one GM and two clean player browser contexts, then removes the complete test stack. The regular Vitest suite additionally exercises one GM and six simultaneous Socket.IO players.
+The command builds a uniquely named temporary arken-e2e-* Compose project with separate PostgreSQL and media volumes, runs Playwright with one GM and six clean player browser contexts through visibility, network-loss and backend-restart recovery assertions, then removes the complete test stack. The regular Vitest suite additionally exercises one GM and six simultaneous Socket.IO players.
 
 ## Workspace rule
 

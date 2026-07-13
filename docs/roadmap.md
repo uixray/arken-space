@@ -17,7 +17,7 @@ Implemented locally:
 - database-aware health, authenticated diagnostics and sanitized browser logs;
 - tested HTTP Range parsing and restic restore of both PostgreSQL and media;
 - typecheck, lint, build, 14 local tests, migration execution in PGlite and a mocked concept E2E.
-- isolated Docker/Playwright multiplayer smoke test with clean GM/player browser contexts, real PostgreSQL and nginx.
+- isolated Docker/Playwright multiplayer scenario with one GM and six clean player browser contexts, real PostgreSQL/nginx, adversarial visibility checks, a 20-second network outage and backend restart recovery.
 
 This baseline is not production-ready until the following sessions are completed in order.
 
@@ -27,7 +27,7 @@ The following production tasks are deliberately deferred while core development 
 
 - configure a remote S3-compatible restic repository;
 - restore PostgreSQL and the complete media directory into a clean environment;
-- run the seven-independent-client scenario and record concrete defects;
+- run a 30–45 minute human rehearsal with seven independent browser profiles and record concrete defects;
 - expand the server disk before restoring the original 5 GiB media allowance;
 - perform the pending kernel reboot, confirm arken auto-recovery and verify that deliberately stopped Jellyfin, portfolio, AI Design Ops and Redis services stay in the intended state.
 
@@ -46,7 +46,7 @@ Work order:
 
 No P1/P2 item may delay or obscure the P0 authorization investigation.
 
-P0 is complete. The automated smoke result is recorded in [multiplayer-smoke-2026-07-13.md](./multiplayer-smoke-2026-07-13.md); it does not replace the pending seven-client production session.
+P0 is complete. The narrow GM + 2 smoke is recorded in [multiplayer-smoke-2026-07-13.md](./multiplayer-smoke-2026-07-13.md). The full isolated GM + 6 security/recovery gate passed in [multiplayer-e2e-2026-07-13.md](./multiplayer-e2e-2026-07-13.md); it does not replace the pending human rehearsal.
 
 ## Session 2 — production and observability
 
@@ -68,6 +68,8 @@ Exit criterion: `arken.uixray.tech` survives restart, restores from backup and p
 ## Session 3 — seven-client game scenario and security
 
 Goal: produce a concrete defect list from a realistic session.
+
+Automated status: passed from commit 1d907b2 with no product realtime/security defect reproduced. Two harness defects were fixed before the successful run; see [multiplayer-e2e-2026-07-13.md](./multiplayer-e2e-2026-07-13.md).
 
 1. GM creates six character-bound invitations.
 2. Six independent browser profiles claim them.

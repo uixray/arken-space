@@ -1,6 +1,6 @@
 # Delivery tasks
 
-Status as of 2026-07-13: production is deployed; the isolated multiplayer browser smoke test passes. The full seven-client game-night and recovery gates remain open.
+Status as of 2026-07-13: production is deployed; the isolated GM + 6 multiplayer, adversarial visibility and backend recovery gate passes. Manual rehearsal, remote restore, disk expansion and host reboot gates remain open.
 
 - [x] [UIX-196 — Workspace, rules contract and architecture](https://linear.app/uixraydesign/issue/UIX-196/arken-space-workspace-rules-contract-and-architecture)
 - [x] [UIX-197 — Campaign access and PostgreSQL foundation](https://linear.app/uixraydesign/issue/UIX-197/arken-space-campaign-access-and-postgresql-foundation) — code complete, runtime review pending
@@ -13,7 +13,8 @@ Status as of 2026-07-13: production is deployed; the isolated multiplayer browse
 
 - [ ] Configure remote S3/restic backup storage.
 - [ ] Restore database and media into a clean environment.
-- [ ] Run the full seven-client game and adversarial security scenario.
+- [x] Run the full automated seven-client game, adversarial security and backend recovery scenario — [report](./docs/multiplayer-e2e-2026-07-13.md).
+- [ ] Run a 30–45 minute human rehearsal with six independent player profiles.
 - [ ] Expand the production disk and review media limits.
 - [ ] Reboot into the pending kernel update and verify container/service recovery.
 
