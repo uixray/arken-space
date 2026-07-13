@@ -25,6 +25,8 @@ Do not change the database schema unless a current restic snapshot exists.
 3. Wait for the server healthcheck.
 4. Reload a clean browser session and verify all noted state and uploaded media.
 
+Verified 2026-07-13 after the production disk expansion: the host booted kernel `6.8.0-134-generic`; PostgreSQL and the Arken Space server returned healthy at build `d6a224b`, schema 2; the web container and portfolio returned; the PM2 Figma/Linear integrations and backup timer returned; Jellyfin, AI Design Ops and Redis remained deliberately disabled. The root filesystem reported 39 GiB total, 27 GiB available and 31% usage. See [host-reboot-2026-07-13.md](./host-reboot-2026-07-13.md).
+
 ## Backup
 
 `infra/backup/backup.sh` reads PostgreSQL through the exact production Compose project, creates a custom-format dump, records its SHA-256 checksum, captures per-table row counts and records checksums for every media file. It sends the dump, manifests and media directory to the configured encrypted restic repository.

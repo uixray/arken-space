@@ -28,8 +28,8 @@ The following production tasks are deliberately deferred while core development 
 - completed 2026-07-13: configure an encrypted remote S3-compatible restic repository; snapshot `07bc8d52` passed retention and `restic check`, and the daily timer is active;
 - completed 2026-07-13: restore PostgreSQL and the complete media directory into a clean portless `arken-restore-*` environment with exact checksums, row counts, revision and cleanup checks;
 - run a 30–45 minute human rehearsal with seven independent browser profiles and record concrete defects;
-- expand the server disk before restoring the original 5 GiB media allowance;
-- perform the pending kernel reboot, confirm arken auto-recovery and verify that deliberately stopped Jellyfin, portfolio, AI Design Ops and Redis services stay in the intended state.
+- completed 2026-07-13: expand the server disk to 40 GB; the root filesystem reports 39 GiB total and 27 GiB available after reboot;
+- completed 2026-07-13: reboot into kernel `6.8.0-134-generic`, confirm Arken Space and portfolio recovery, confirm PM2 integrations and the backup timer recover, and confirm deliberately stopped Jellyfin, AI Design Ops and Redis remain disabled.
 
 These tasks are postponed, not cancelled. The two-hour session cannot be marked ready until they pass.
 
