@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:multiplayer": "node scripts/run-multiplayer-e2e.mjs",
+    "restore:rehearse": "node scripts/run-restore-rehearsal.mjs",
     "db:generate": "pnpm --filter @arken/db generate",
     "db:migrate": "pnpm --filter @arken/db migrate",
     "db:studio": "pnpm --filter @arken/db studio",

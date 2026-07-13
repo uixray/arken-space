@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Arken Space backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=arken-space-backup.service
+
+[Install]
+WantedBy=timers.target

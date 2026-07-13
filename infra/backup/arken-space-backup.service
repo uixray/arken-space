@@ -1,0 +1,17 @@
+[Unit]
+Description=Arken Space encrypted PostgreSQL and media backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/home/uixray/apps/arken-space
+EnvironmentFile=/etc/arken-space/restic.env
+ExecStart=/bin/sh /home/uixray/apps/arken-space/infra/backup/backup.sh
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

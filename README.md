@@ -44,4 +44,5 @@ All implementation, generated code and commits for arken-space must stay inside 
 - See [tasks.md](./tasks.md) for the delivery issues.
 - See [docs/roadmap.md](./docs/roadmap.md) for the production-first sequence leading to the first real game.
 - See [docs/operations.md](./docs/operations.md) for deployment, backup, restore and incident checks.
+- See [docs/yandex-object-storage-backup-2026-07-13.md](./docs/yandex-object-storage-backup-2026-07-13.md) for the private bucket, IAM, secret handling and current cost setup.
 - See [docs/server-audit-2026-07-12.md](./docs/server-audit-2026-07-12.md) for the current host capacity and deployment blockers.

@@ -11,8 +11,8 @@ Status as of 2026-07-13: production is deployed; the isolated GM + 6 multiplayer
 
 ## Deferred production gates
 
-- [ ] Configure remote S3/restic backup storage.
-- [ ] Restore database and media into a clean environment.
+- [ ] Configure remote S3/restic backup storage — private Yandex setup instructions, production Compose dump runner, checksums, retention and systemd templates are prepared locally; real bucket initialization is pending credentials and a committed archive.
+- [ ] Restore database and media into a clean environment — the guarded `arken-restore-*` Compose runner and integrity checks are prepared locally; the real remote snapshot rehearsal is still pending.
 - [x] Run the full automated seven-client game, adversarial security and backend recovery scenario — [report](./docs/multiplayer-e2e-2026-07-13.md).
 - [ ] Run a 30–45 minute human rehearsal with six independent player profiles.
 - [ ] Expand the production disk and review media limits.

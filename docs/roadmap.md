@@ -16,7 +16,7 @@ Implemented locally:
 - role-filtered snapshots and realtime authorization regression tests;
 - database-aware health, authenticated diagnostics and sanitized browser logs;
 - tested HTTP Range parsing and restic restore of both PostgreSQL and media;
-- typecheck, lint, build, 14 local tests, migration execution in PGlite and a mocked concept E2E.
+- typecheck, lint, build, 25 local tests, migration execution in PGlite and a mocked concept E2E.
 - isolated Docker/Playwright multiplayer scenario with one GM and six clean player browser contexts, real PostgreSQL/nginx, adversarial visibility checks, a 20-second network outage and backend restart recovery.
 
 This baseline is not production-ready until the following sessions are completed in order.
@@ -25,8 +25,8 @@ This baseline is not production-ready until the following sessions are completed
 
 The following production tasks are deliberately deferred while core development continues. They remain release gates and must not disappear from planning:
 
-- configure a remote S3-compatible restic repository;
-- restore PostgreSQL and the complete media directory into a clean environment;
+- configure a remote S3-compatible restic repository (Yandex setup guide, Compose-aware dump runner, manifests, retention and timer templates are now prepared locally; real credentials and initialization are pending);
+- restore PostgreSQL and the complete media directory into a clean environment (a guarded, portless arken-restore-* Compose runner is prepared locally; the real remote snapshot rehearsal is still pending);
 - run a 30–45 minute human rehearsal with seven independent browser profiles and record concrete defects;
 - expand the server disk before restoring the original 5 GiB media allowance;
 - perform the pending kernel reboot, confirm arken auto-recovery and verify that deliberately stopped Jellyfin, portfolio, AI Design Ops and Redis services stay in the intended state.
@@ -61,7 +61,7 @@ Goal: prove that production matches the local architecture and leaves enough evi
 - Suspend and restore a browser tab; verify reconnect or explicit full resync.
 - Emit structured server logs with request ID, membership ID, action ID, event sequence and rejection reason.
 - Accept sanitized client diagnostics and expose build/schema/snapshot versions in the UI.
-- Run a real restic backup to remote S3-compatible storage, then restore database and media into a clean environment.
+- Commit and upload the prepared backup/restore harness, run a real restic backup to remote S3-compatible storage, then restore database and media into its clean isolated Compose project.
 
 Exit criterion: `arken.uixray.tech` survives restart, restores from backup and provides actionable logs.
 

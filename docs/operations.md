@@ -27,31 +27,70 @@ Do not change the database schema unless a current restic snapshot exists.
 
 ## Backup
 
-`infra/backup/backup.sh` creates a custom-format PostgreSQL dump and sends both the dump and media directory to the configured remote restic repository.
+`infra/backup/backup.sh` reads PostgreSQL through the exact production Compose project, creates a custom-format dump, records its SHA-256 checksum, captures per-table row counts and records checksums for every media file. It sends the dump, manifests and media directory to the configured encrypted restic repository.
 
 Required environment variables:
 
-- `DATABASE_URL`
 - `RESTIC_REPOSITORY`
-- `RESTIC_PASSWORD`
+- `RESTIC_PASSWORD_FILE` or `RESTIC_PASSWORD`
+- S3 authentication variables required by the selected provider
+
+Production uses the root-owned `/etc/arken-space/restic.env` and `/etc/arken-space/restic-password`, both mode `600`. Backup credentials must not be stored in the application `.env`. Start from `infra/backup/restic.env.example`.
+
+Initialize a new repository once:
+
+```sh
+sudo sh -c 'set -a; . /etc/arken-space/restic.env; set +a; restic init'
+```
+
+Install the timer only after the first manual backup and restore rehearsal pass:
+
+```sh
+sudo install -m 644 infra/backup/arken-space-backup.service /etc/systemd/system/
+sudo install -m 644 infra/backup/arken-space-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now arken-space-backup.timer
+```
+
+The timer runs daily at 03:15 server time with up to 15 minutes randomized delay. The retention policy keeps 7 daily, 4 weekly and 6 monthly snapshots and prunes unreferenced data.
 
 Run it daily from systemd timer or cron. Alert when the command exits non-zero or when no `arken-space` snapshot was created in 26 hours.
 
+The exact Yandex bucket, IAM and current cost setup is documented in [yandex-object-storage-backup-2026-07-13.md](./yandex-object-storage-backup-2026-07-13.md).
+
 ## Restore rehearsal
 
-Restore only into an isolated clean environment during rehearsal:
+Restore only from a committed Git archive and only into the dedicated clean Compose environment:
 
 ```sh
-SNAPSHOT_ID=latest ./infra/backup/restore.sh
+set -a
+. /etc/arken-space/restic.env
+set +a
+export ARKEN_RESTORE_CONFIRM=isolated-clean-target
+export RESTORE_BUILD_REVISION=<exact-committed-sha>
+SNAPSHOT_ID=latest sh infra/backup/restore.sh
 ```
 
-The restore script replaces the target database and synchronizes the media directory to the selected restic snapshot. After restoration:
+The runner rejects any Compose project name outside the `arken-restore-*` namespace. Its Compose file:
 
-1. start the application;
-2. check `/healthz` and `/api/diagnostics`;
-3. open uploaded images and seek through a large audio file;
-4. compare campaign, character, chat, token and fog state;
-5. record snapshot ID, duration and result.
+- publishes no host ports;
+- creates a project-scoped PostgreSQL volume;
+- mounts only media restored under a new temporary directory;
+- never mounts production PostgreSQL, media or the Docker socket.
+
+The runner:
+
+1. checks production health and available disk;
+2. validates the remote restic repository and selects one exact snapshot;
+3. verifies dump and media SHA-256 manifests;
+4. restores PostgreSQL into the clean volume;
+5. compares all application table counts with the backup manifest;
+6. starts the isolated server and verifies health, schema and exact build revision;
+7. removes the Compose project, volume, local image and temporary restored data;
+8. verifies no project resources remain, then rechecks production health and disk;
+9. writes a JSON report to `test-results/restore/runner.json`.
+
+Do not run `pg_restore` manually against production during a rehearsal.
 
 ## Logs needed for an incident
 
