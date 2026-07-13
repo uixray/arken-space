@@ -100,6 +100,40 @@ describe("backup and restore safety", () => {
         buildRevision,
       }),
     ).not.toThrow();
+    const restoredProductionPath = path.join(
+      root,
+      "temporary-snapshot",
+      "home",
+      "uixray",
+      "apps",
+      "arken-space-data",
+      "media",
+    );
+    expect(() =>
+      assertIsolatedComposeConfig(
+        {
+          ...config,
+          services: {
+            ...config.services,
+            server: {
+              ...config.services.server,
+              volumes: [
+                {
+                  type: "bind",
+                  source: restoredProductionPath,
+                  target: "/srv/arken-space/media",
+                },
+              ],
+            },
+          },
+        },
+        {
+          projectName,
+          mediaSource: restoredProductionPath,
+          buildRevision,
+        },
+      ),
+    ).not.toThrow();
 
     expect(() =>
       assertIsolatedComposeConfig(

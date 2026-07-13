@@ -113,7 +113,10 @@ export function assertIsolatedComposeConfig(
     serverVolumes[0].target !== "/srv/arken-space/media"
   )
     throw new Error("Restore server must mount only restored temporary media");
-  if (/arken-space-data[\\/]media$/i.test(expectedMedia))
+  const productionMedia = path.resolve(
+    "/home/uixray/apps/arken-space-data/media",
+  );
+  if (expectedMedia === productionMedia)
     throw new Error("Restore media source points at production");
 
   const serverEnvironment = environmentObject(services.server?.environment);
