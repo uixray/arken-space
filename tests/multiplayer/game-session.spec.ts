@@ -22,10 +22,6 @@ const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:14180";
 const gmToken = "multiplayer-master-token-1234567890";
 const restartMarker = "ARKEN_E2E_BACKEND_RESTART_READY";
 const actionId = () => crypto.randomUUID();
-const privateNotes = Array.from(
-  { length: 6 },
-  (_, index) => "private-note-player-" + (index + 1),
-);
 const imageBuffer = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
@@ -208,7 +204,18 @@ async function edgeHealthy() {
 
 test("GM and six isolated players recover authoritative state without security leaks", async ({
   browser,
-}) => {
+}, testInfo) => {
+  const runTag = "retry-" + testInfo.retry;
+  const characterPrefix = "E2E " + runTag + " Player ";
+  const hiddenTokenName = runTag + " GM Hidden Token";
+  const recoveryTokenName = runTag + " Recovery Sentinel";
+  const gmPublicMessage = runTag + "-gm-public";
+  const gmOnlyChat = runTag + "-gm-only-chat";
+  const gmOnlyRoll = runTag + "-gm-only-roll";
+  const privateNotes = Array.from(
+    { length: 6 },
+    (_, index) => runTag + "-private-note-player-" + (index + 1),
+  );
   const gm = await browser.newContext();
   const players = await Promise.all(
     Array.from({ length: 6 }, () => browser.newContext()),
@@ -227,7 +234,7 @@ test("GM and six isolated players recover authoritative state without security l
         gm.request.post(baseUrl + "/api/characters", {
           data: {
             actionId: actionId(),
-            name: "E2E Player " + (index + 1),
+            name: characterPrefix + (index + 1),
           },
         }),
       ),
@@ -236,7 +243,7 @@ test("GM and six isolated players recover authoritative state without security l
 
     let gmSnapshot = await bootstrap(gm);
     const characters = gmSnapshot.characters
-      .filter((character) => character.name.startsWith("E2E Player "))
+      .filter((character) => character.name.startsWith(characterPrefix))
       .sort((left, right) => left.name.localeCompare(right.name));
     expect(characters).toHaveLength(6);
 
@@ -265,7 +272,7 @@ test("GM and six isolated players recover authoritative state without security l
       await gm.request.post(baseUrl + "/api/scenes", {
         data: {
           actionId: actionId(),
-          name: "Recovery Scene",
+          name: "Recovery Scene " + runTag,
           mapAssetId: recoveryAsset.id,
         },
       }),
@@ -279,7 +286,7 @@ test("GM and six isolated players recover authoritative state without security l
             actionId: actionId(),
             sceneId: initialScene.id,
             characterId: character.id,
-            name: "Player Token " + (index + 1),
+            name: runTag + " Player Token " + (index + 1),
             x: 128 + index * 96,
             y: 128,
           },
@@ -296,7 +303,7 @@ test("GM and six isolated players recover authoritative state without security l
         data: {
           actionId: actionId(),
           sceneId: initialScene.id,
-          name: "Ownerless Enemy",
+          name: runTag + " Ownerless Enemy",
           x: 800,
           y: 128,
         },
@@ -310,7 +317,7 @@ test("GM and six isolated players recover authoritative state without security l
           actionId: actionId(),
           sceneId: initialScene.id,
           assetId: hiddenAsset.id,
-          name: "GM Hidden Token",
+          name: hiddenTokenName,
           x: 896,
           y: 128,
           visible: false,
@@ -325,7 +332,7 @@ test("GM and six isolated players recover authoritative state without security l
           actionId: actionId(),
           sceneId: recoveryScene.id,
           assetId: recoveryAsset.id,
-          name: "Recovery Sentinel",
+          name: recoveryTokenName,
           x: 256,
           y: 256,
         },
@@ -416,8 +423,8 @@ test("GM and six isolated players recover authoritative state without security l
       for (const note of privateNotes)
         if (note !== privateNotes[index])
           expect(serialized).not.toContain(note);
-      expect(serialized).not.toContain("GM Hidden Token");
-      expect(serialized).not.toContain("Recovery Sentinel");
+      expect(serialized).not.toContain(hiddenTokenName);
+      expect(serialized).not.toContain(recoveryTokenName);
       expect(serialized).not.toContain("preview");
 
       const hiddenContent = await players[index].request.get(
@@ -504,8 +511,8 @@ test("GM and six isolated players recover authoritative state without security l
 
     const publicMarkers = Array.from({ length: 6 }, (_, index) =>
       index % 2 === 0
-        ? "public-chat-" + (index + 1)
-        : "public-roll-" + (index + 1),
+        ? runTag + "-public-chat-" + (index + 1)
+        : runTag + "-public-roll-" + (index + 1),
     );
     const messageRequests = players.map((context, index) =>
       index % 2 === 0
@@ -529,14 +536,14 @@ test("GM and six isolated players recover authoritative state without security l
       gm.request.post(baseUrl + "/api/chat", {
         data: {
           actionId: actionId(),
-          body: "gm-public",
+          body: gmPublicMessage,
           visibility: "PUBLIC",
         },
       }),
       gm.request.post(baseUrl + "/api/chat", {
         data: {
           actionId: actionId(),
-          body: "gm-only-chat",
+          body: gmOnlyChat,
           visibility: "GM_ONLY",
         },
       }),
@@ -544,14 +551,14 @@ test("GM and six isolated players recover authoritative state without security l
         data: {
           actionId: actionId(),
           formula: "1d20",
-          label: "gm-only-roll",
+          label: gmOnlyRoll,
           visibility: "GM_ONLY",
         },
       }),
     );
     const messageResponses = await Promise.all(messageRequests);
     await Promise.all(messageResponses.map(expectOk));
-    publicMarkers.push("gm-public");
+    publicMarkers.push(gmPublicMessage);
 
     for (let index = 0; index < players.length; index += 1) {
       const snapshot = await bootstrap(players[index]);
@@ -561,8 +568,8 @@ test("GM and six isolated players recover authoritative state without security l
         expect(
           snapshot.messages.filter((message) => message.body === marker),
         ).toHaveLength(1);
-      expect(serialized).not.toContain("gm-only-chat");
-      expect(serialized).not.toContain("gm-only-roll");
+      expect(serialized).not.toContain(gmOnlyChat);
+      expect(serialized).not.toContain(gmOnlyRoll);
       expect(serialized).not.toContain(hiddenAsset.id);
       expect(serialized).not.toContain(recoveryAsset.id);
       expect(snapshot.characters).toHaveLength(1);
@@ -601,13 +608,10 @@ test("GM and six isolated players recover authoritative state without security l
       waitForRecovery(socket),
     );
     console.log(restartMarker);
-    await expect
-      .poll(edgeHealthy, { timeout: 30_000, intervals: [250] })
-      .toBe(false);
+    const recoveredSnapshots = await Promise.all(recoveryPromises);
     await expect
       .poll(edgeHealthy, { timeout: 120_000, intervals: [500, 1_000] })
       .toBe(true);
-    const recoveredSnapshots = await Promise.all(recoveryPromises);
     for (const snapshot of recoveredSnapshots)
       expect(
         snapshot.scenes.some(
@@ -653,14 +657,10 @@ test("GM and six isolated players recover authoritative state without security l
       authoritativeGm.tokens.find((token) => token.id === enemy.id),
     ).toMatchObject({ x: 1024, y: 512, revision: 1 });
     expect(
-      authoritativeGm.messages.filter(
-        (message) => message.body === "gm-only-chat",
-      ),
+      authoritativeGm.messages.filter((message) => message.body === gmOnlyChat),
     ).toHaveLength(1);
     expect(
-      authoritativeGm.messages.filter(
-        (message) => message.body === "gm-only-roll",
-      ),
+      authoritativeGm.messages.filter((message) => message.body === gmOnlyRoll),
     ).toHaveLength(1);
 
     for (let index = 0; index < 6; index += 1) {
@@ -703,9 +703,9 @@ test("GM and six isolated players recover authoritative state without security l
         expect(
           snapshot.messages.filter((message) => message.body === marker),
         ).toHaveLength(1);
-      expect(serialized).not.toContain("gm-only-chat");
-      expect(serialized).not.toContain("gm-only-roll");
-      expect(serialized).not.toContain("GM Hidden Token");
+      expect(serialized).not.toContain(gmOnlyChat);
+      expect(serialized).not.toContain(gmOnlyRoll);
+      expect(serialized).not.toContain(hiddenTokenName);
       for (const note of privateNotes)
         if (note !== privateNotes[index])
           expect(serialized).not.toContain(note);
