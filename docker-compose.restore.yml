@@ -31,7 +31,7 @@ services:
       GM_ACCESS_TOKEN: restore-rehearsal-token-not-for-production
       MEDIA_ROOT: /srv/arken-space/media
       MEDIA_QUOTA_BYTES: 5368709120
-      MIN_FREE_DISK_BYTES: 0
+      MIN_FREE_DISK_BYTES: 1
     volumes:
       - type: bind
         source: ${RESTORE_MEDIA_HOST_PATH:?Set RESTORE_MEDIA_HOST_PATH}

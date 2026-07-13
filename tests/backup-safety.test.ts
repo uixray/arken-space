@@ -183,5 +183,6 @@ describe("backup and restore safety", () => {
     );
     expect(compose).not.toMatch(/^\s+ports:/m);
     expect(compose).toContain("postgres-data:/var/lib/postgresql/data");
+    expect(compose).toContain("MIN_FREE_DISK_BYTES: 1");
   });
 });
