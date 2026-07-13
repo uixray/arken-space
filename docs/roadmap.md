@@ -25,8 +25,8 @@ This baseline is not production-ready until the following sessions are completed
 
 The following production tasks are deliberately deferred while core development continues. They remain release gates and must not disappear from planning:
 
-- configure a remote S3-compatible restic repository (Yandex setup guide, Compose-aware dump runner, manifests, retention and timer templates are now prepared locally; real credentials and initialization are pending);
-- restore PostgreSQL and the complete media directory into a clean environment (a guarded, portless arken-restore-* Compose runner is prepared locally; the real remote snapshot rehearsal is still pending);
+- completed 2026-07-13: configure an encrypted remote S3-compatible restic repository; snapshot `07bc8d52` passed retention and `restic check`, and the daily timer is active;
+- completed 2026-07-13: restore PostgreSQL and the complete media directory into a clean portless `arken-restore-*` environment with exact checksums, row counts, revision and cleanup checks;
 - run a 30–45 minute human rehearsal with seven independent browser profiles and record concrete defects;
 - expand the server disk before restoring the original 5 GiB media allowance;
 - perform the pending kernel reboot, confirm arken auto-recovery and verify that deliberately stopped Jellyfin, portfolio, AI Design Ops and Redis services stay in the intended state.
@@ -61,7 +61,7 @@ Goal: prove that production matches the local architecture and leaves enough evi
 - Suspend and restore a browser tab; verify reconnect or explicit full resync.
 - Emit structured server logs with request ID, membership ID, action ID, event sequence and rejection reason.
 - Accept sanitized client diagnostics and expose build/schema/snapshot versions in the UI.
-- Commit and upload the prepared backup/restore harness, run a real restic backup to remote S3-compatible storage, then restore database and media into its clean isolated Compose project.
+- [x] Commit and upload the backup/restore harness, create remote snapshot `07bc8d52`, and restore database/media into a clean isolated Compose project at revision `5e7a42c`.
 
 Exit criterion: `arken.uixray.tech` survives restart, restores from backup and provides actionable logs.
 

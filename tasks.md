@@ -1,6 +1,6 @@
 # Delivery tasks
 
-Status as of 2026-07-13: production is deployed; the isolated GM + 6 multiplayer, adversarial visibility and backend recovery gate passes. Manual rehearsal, remote restore, disk expansion and host reboot gates remain open.
+Status as of 2026-07-13: production is deployed; the isolated GM + 6 multiplayer, adversarial visibility and backend recovery gate passes. Remote restic backup and clean restore rehearsal pass. Manual rehearsal, disk expansion and host reboot gates remain open.
 
 - [x] [UIX-196 — Workspace, rules contract and architecture](https://linear.app/uixraydesign/issue/UIX-196/arken-space-workspace-rules-contract-and-architecture)
 - [x] [UIX-197 — Campaign access and PostgreSQL foundation](https://linear.app/uixraydesign/issue/UIX-197/arken-space-campaign-access-and-postgresql-foundation) — code complete, runtime review pending
@@ -11,8 +11,8 @@ Status as of 2026-07-13: production is deployed; the isolated GM + 6 multiplayer
 
 ## Deferred production gates
 
-- [ ] Configure remote S3/restic backup storage — private Yandex setup instructions, production Compose dump runner, checksums, retention and systemd templates are prepared locally; real bucket initialization is pending credentials and a committed archive.
-- [ ] Restore database and media into a clean environment — the guarded `arken-restore-*` Compose runner and integrity checks are prepared locally; the real remote snapshot rehearsal is still pending.
+- [x] Configure remote S3/restic backup storage — encrypted Yandex repository initialized; snapshot `07bc8d52` passed retention and `restic check`; daily systemd timer is enabled and active.
+- [x] Restore database and media into a clean environment — snapshot `07bc8d52` passed dump/media checksums, exact table counts, authoritative health at commit `5e7a42c`, resource cleanup and post-run production checks.
 - [x] Run the full automated seven-client game, adversarial security and backend recovery scenario — [report](./docs/multiplayer-e2e-2026-07-13.md).
 - [ ] Run a 30–45 minute human rehearsal with six independent player profiles.
 - [ ] Expand the production disk and review media limits.

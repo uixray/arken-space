@@ -54,6 +54,8 @@ sudo systemctl enable --now arken-space-backup.timer
 
 The timer runs daily at 03:15 server time with up to 15 minutes randomized delay. The retention policy keeps 7 daily, 4 weekly and 6 monthly snapshots and prunes unreferenced data.
 
+Verified 2026-07-13: Yandex repository `e5eb7068a7` was initialized, snapshot `07bc8d52` stored 6.192 MiB, retention and `restic check` passed, and `arken-space-backup.timer` is enabled and active.
+
 Run it daily from systemd timer or cron. Alert when the command exits non-zero or when no `arken-space` snapshot was created in 26 hours.
 
 The exact Yandex bucket, IAM and current cost setup is documented in [yandex-object-storage-backup-2026-07-13.md](./yandex-object-storage-backup-2026-07-13.md).
@@ -89,6 +91,8 @@ The runner:
 7. removes the Compose project, volume, local image and temporary restored data;
 8. verifies no project resources remain, then rechecks production health and disk;
 9. writes a JSON report to `test-results/restore/runner.json`.
+
+Verified 2026-07-13: snapshot `07bc8d52` restored 8 media files and PostgreSQL into a clean isolated project. Dump/media checksums, all 12 table counts, application health at exact revision `5e7a42c`, resource cleanup, production health and disk checks passed.
 
 Do not run `pg_restore` manually against production during a rehearsal.
 
