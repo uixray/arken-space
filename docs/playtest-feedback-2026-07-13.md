@@ -115,3 +115,6 @@ The manual foundation rehearsal stopped after reproducing a player fog leak. See
 - Add map image scale/alignment controls.
 - Add zoom minus/plus buttons and a range slider while retaining wheel zoom.
 - Add role-filtered map/GM/player token layers with GM context-menu assignment.
+- Add shared drawing tools with explicit visibility and erase/clear controls.
+- Let a player edit their own display name and let the GM rename player memberships.
+- Allow map pings over covered fog as an overlay without revealing or enabling interaction with hidden map objects.

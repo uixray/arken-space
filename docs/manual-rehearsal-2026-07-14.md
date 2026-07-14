@@ -29,6 +29,10 @@ Stopped during the GM setup/walkthrough after reproducing a player fog visibilit
 - Add zoom controls: minus button, plus button and a range slider, while retaining wheel zoom.
 - Add role-filtered token layers: map, GM and players; GM-layer tokens are hidden from players, translucent to GM and movable between layers by GM context menu.
 
+## Fog recheck
+
+Production revision `f90162a` passed the six-point owner verification: GM translucency, player opacity, owned token above fog, hidden foreign/NPC tokens, visibility after reveal and no hidden-area ping. The last point was reclassified as a product correction: pings should be allowed above covered fog without revealing hidden content.
+
 ## Next action
 
 Complete the narrow fog fix, run local verification, commit before deployment, deploy the exact commit, and repeat the stopped fog section before resuming the full manual rehearsal.
