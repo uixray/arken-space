@@ -12,6 +12,7 @@ import {
 import useImage from "use-image";
 import type Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
+import { fogOpacity, isPointRevealed, isRectFullyRevealed } from "./fog";
 
 function Grid({
   width,
@@ -167,7 +168,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const handleClick = () => {
     if (props.tool !== "PING") return;
     const point = pointerInWorld();
-    if (point) props.onPing(point);
+    if (!point) return;
+    if (props.role === "PLAYER" && !isPointRevealed(point, props.fogReveals))
+      return;
+    props.onPing(point);
   };
 
   const assetUrl = (assetId: string | null) =>
@@ -177,6 +181,36 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       ? Math.round(value / props.scene.grid.size) * props.scene.grid.size
       : value;
 
+  const renderFog = () => (
+    <Layer listening={false}>
+      <Rect
+        width={props.scene.width}
+        height={props.scene.height}
+        fill="#080807"
+        opacity={fogOpacity(props.role)}
+      />
+      {props.fogReveals.map((fog) => (
+        <Rect
+          key={fog.id}
+          x={fog.x}
+          y={fog.y}
+          width={fog.width}
+          height={fog.height}
+          fill="#000"
+          globalCompositeOperation="destination-out"
+        />
+      ))}
+      {fogDraft && (
+        <Rect
+          {...fogDraft}
+          fill="#d9c07e"
+          opacity={0.35}
+          stroke="#f2dfaa"
+          strokeWidth={2 / scale}
+        />
+      )}
+    </Layer>
+  );
   return (
     <div className="map-viewport" ref={containerRef}>
       <Stage
@@ -220,30 +254,43 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           )}
         </Layer>
 
+        {props.role === "PLAYER" && renderFog()}
+
         <Layer>
-          {props.pings.map((ping) => (
-            <Group
-              key={`${ping.membershipId}-${ping.createdAt}`}
-              listening={false}
-            >
-              <Circle
-                x={ping.x}
-                y={ping.y}
-                radius={22 / scale}
-                stroke="#f0c75e"
-                strokeWidth={3 / scale}
-              />
-              <Text
-                x={ping.x + 28 / scale}
-                y={ping.y - 8 / scale}
-                text={ping.displayName}
-                fill="#f0c75e"
-                fontSize={14 / scale}
-              />
-            </Group>
-          ))}
+          {props.pings
+            .filter(
+              (ping) =>
+                props.role === "GM" || isPointRevealed(ping, props.fogReveals),
+            )
+            .map((ping) => (
+              <Group
+                key={`${ping.membershipId}-${ping.createdAt}`}
+                listening={false}
+              >
+                <Circle
+                  x={ping.x}
+                  y={ping.y}
+                  radius={22 / scale}
+                  stroke="#f0c75e"
+                  strokeWidth={3 / scale}
+                />
+                <Text
+                  x={ping.x + 28 / scale}
+                  y={ping.y - 8 / scale}
+                  text={ping.displayName}
+                  fill="#f0c75e"
+                  fontSize={14 / scale}
+                />
+              </Group>
+            ))}
           {props.tokens
             .filter((token) => token.visible || props.role === "GM")
+            .filter(
+              (token) =>
+                props.role === "GM" ||
+                token.ownerMembershipId === props.membershipId ||
+                isRectFullyRevealed(token, props.fogReveals),
+            )
             .map((token) => {
               const canMove =
                 props.tool === "PAN" &&
@@ -331,34 +378,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             })}
         </Layer>
 
-        <Layer listening={false}>
-          <Rect
-            width={props.scene.width}
-            height={props.scene.height}
-            fill="#080807"
-            opacity={props.role === "GM" ? 0.35 : 0.94}
-          />
-          {props.fogReveals.map((fog) => (
-            <Rect
-              key={fog.id}
-              x={fog.x}
-              y={fog.y}
-              width={fog.width}
-              height={fog.height}
-              fill="#000"
-              globalCompositeOperation="destination-out"
-            />
-          ))}
-          {fogDraft && (
-            <Rect
-              {...fogDraft}
-              fill="#d9c07e"
-              opacity={0.35}
-              stroke="#f2dfaa"
-              strokeWidth={2 / scale}
-            />
-          )}
-        </Layer>
+        {props.role === "GM" && renderFog()}
       </Stage>
       <div className="map-scale">{Math.round(scale * 100)}%</div>
     </div>

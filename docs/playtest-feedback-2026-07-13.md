@@ -91,3 +91,27 @@ Recommended first interpretation: GM palette of characters that do not yet have 
 5. Fix hover-only grouped token labels.
 6. Add chat quick dice.
 7. Move music and design the token palette only after the main session flow is stable.
+
+## Human rehearsal findings — 2026-07-14
+
+The manual foundation rehearsal stopped after reproducing a player fog leak. See [manual-rehearsal-2026-07-14.md](./manual-rehearsal-2026-07-14.md).
+
+### Foundation blocker
+
+- Player fog must be fully opaque.
+- Non-owned tokens, pings and map interaction under covered fog must be absent.
+- The player's owned tokens remain visible and usable above fog.
+
+### Additional backlog
+
+- Keep the chat composer fixed while only message history scrolls.
+- Add scene and character rename controls.
+- Separate character management from scene-token management and expose explicit token ownership assignment.
+- Clarify dice presentation: formula, individual results and total; move roll actions into chat and show result notifications.
+- Give players usable upload flows for permitted music, portraits and token images.
+- Add a collaborative short-effect soundpad.
+- Show the GM which players are currently online.
+- Add ruler/grid distance measurement.
+- Add map image scale/alignment controls.
+- Add zoom minus/plus buttons and a range slider while retaining wheel zoom.
+- Add role-filtered map/GM/player token layers with GM context-menu assignment.
