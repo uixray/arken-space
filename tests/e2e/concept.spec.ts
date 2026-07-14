@@ -151,3 +151,50 @@ test("concept shell keeps the map primary and exposes core tools", async ({
     fullPage: true,
   });
 });
+
+test("player fog keeps covered foreign tokens hidden while owned tokens remain visible", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  const playerId = "f53f4618-2ebc-4cf8-bce7-870097305a6b";
+  playerSnapshot.me = {
+    id: playerId,
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]?.id ?? null,
+  };
+  playerSnapshot.members = [playerSnapshot.me];
+  playerSnapshot.tokens = [
+    {
+      ...snapshot.tokens[0]!,
+      id: "45f46186-2ebc-4cf8-bce7-870097305a6b",
+      ownerMembershipId: playerId,
+      name: "Owned token",
+      x: 96,
+      y: 96,
+    },
+    {
+      ...snapshot.tokens[0]!,
+      id: "55f46186-2ebc-4cf8-bce7-870097305a6b",
+      ownerMembershipId: "a53f4618-2ebc-4cf8-bce7-870097305a6b",
+      name: "Covered foreign token",
+      x: 192,
+      y: 96,
+    },
+  ];
+  playerSnapshot.fogReveals = [];
+
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    }),
+  );
+  await page.goto("/");
+
+  await expect(page.locator(".map-viewport")).toHaveScreenshot(
+    "player-fog-opaque.png",
+    { animations: "disabled" },
+  );
+});

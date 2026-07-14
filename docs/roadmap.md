@@ -1,140 +1,209 @@
 # arken-space delivery roadmap
 
-The project remains a private VTT for one custom system and one regular group. Work is ordered by risk reduction, not by feature count. Multi-level maps, isometric rendering, 3D, a world library and additional music features remain deferred until the first real two-hour game succeeds.
+Status: approved on 2026-07-14.
 
-## Current baseline — concept vertical slice
+Arken Space remains a private desktop-first VTT for one GM and five to six players using a custom system. Work is ordered by data integrity, authorization and recovery risk rather than by visible feature count.
 
-Implemented locally:
+The source implementation plan is [implementation-plan-2026-07-14.md](./implementation-plan-2026-07-14.md). Linear is the source of truth for execution state.
 
-- browser application, GM/player sessions and one-time invitations;
-- PostgreSQL schema and migrations;
-- orthographic scenes, grid, tokens, ownership and rectangular fog;
-- character sheets, server-side dice and role-filtered chat;
-- image/audio storage constraints, synchronized music contracts;
-- Compose/nginx/backup configuration;
-- durable command journal with action IDs, atomic state/event transactions, revisions and snapshot versions;
-- role-filtered snapshots and realtime authorization regression tests;
-- database-aware health, authenticated diagnostics and sanitized browser logs;
-- tested HTTP Range parsing and restic restore of both PostgreSQL and media;
-- typecheck, lint, build, 25 local tests, migration execution in PGlite and a mocked concept E2E.
-- isolated Docker/Playwright multiplayer scenario with one GM and six clean player browser contexts, real PostgreSQL/nginx, adversarial visibility checks, a 20-second network outage and backend restart recovery.
+## Baseline
 
-This baseline is not production-ready until the following sessions are completed in order.
+The deployed concept slice already provides:
 
-## Deferred but mandatory before the first full game
+- GM/player browser sessions;
+- PostgreSQL persistence and migrations;
+- orthographic scenes, grid, tokens and rectangular reveal fog;
+- character sheets, chat and server-authoritative dice;
+- safe image/audio storage and synchronized music;
+- ordered realtime events, action IDs, revisions, resync and role-filtered snapshots;
+- backup/restore operations and isolated GM + 6 automation.
 
-The following production tasks are deliberately deferred while core development continues. They remain release gates and must not disappear from planning:
+The shortened foundation rehearsal is accepted as a partial gate. It does not mean the product is ready for the complete recurring-session workflow.
 
-- completed 2026-07-13: configure an encrypted remote S3-compatible restic repository; snapshot `07bc8d52` passed retention and `restic check`, and the daily timer is active;
-- completed 2026-07-13: restore PostgreSQL and the complete media directory into a clean portless `arken-restore-*` environment with exact checksums, row counts, revision and cleanup checks;
-- run a 30–45 minute human rehearsal with seven independent browser profiles and record concrete defects;
-- completed 2026-07-13: expand the server disk to 40 GB; the root filesystem reports 39 GiB total and 27 GiB available after reboot;
-- completed 2026-07-13: reboot into kernel `6.8.0-134-generic`, confirm Arken Space and portfolio recovery, confirm PM2 integrations and the backup timer recover, and confirm deliberately stopped Jellyfin, AI Design Ops and Redis remain disabled.
+## Product target
 
-These tasks are postponed, not cancelled. The two-hour session cannot be marked ready until they pass.
+The first full product gate must support:
 
-## Current stability iteration — playtest findings
+- reusable rotatable player access links;
+- token definitions, scene placements and several controllers per token;
+- fixed characteristics and a shared skill/ability catalog with per-character copies;
+- Hit, Damage and custom roll actions;
+- campaign day/battle lifecycle, cooldowns, mana/resources and wallet counters;
+- player-own plus GM-global canvas undo/redo;
+- MAP, PLAYER and GM token layers;
+- ordered reveal/cover fog;
+- persistent shared drawings, shared ruler and map controls;
+- role-filtered token palette and complete portrait/token asset assignment;
+- fixed chat composition, presence, rename and GM-authoritative sidebar music;
+- final GM + 6 automated and human acceptance.
 
-The first production walkthrough produced a prioritized backlog in [playtest-feedback-2026-07-13.md](./playtest-feedback-2026-07-13.md).
+## Stage 0 — foundation closure
 
-Work order:
+Linear: UIX-206
 
-1. P0: reproduce and fix a player moving another player's token.
-2. Confirm authoritative rollback, reconnect and production build identity.
-3. P1: fog re-covering, token image assignment, character portraits, grouped hover labels and chat quick dice.
-4. P2: move music into the sidebar and replace the bottom bar with an agreed token palette.
+- Include fog renderer tests in the default suite.
+- Add a current-HEAD browser regression for opaque player fog, owned-token behavior, pings and hidden interaction.
+- Synchronize the product brief and planning docs.
+- Close UIX-201 only as foundation hardening.
 
-No P1/P2 item may delay or obscure the P0 authorization investigation.
+Exit: all standard local checks pass and the remaining product debt is explicit.
 
-P0 is complete. The narrow GM + 2 smoke is recorded in [multiplayer-smoke-2026-07-13.md](./multiplayer-smoke-2026-07-13.md). The full isolated GM + 6 security/recovery gate passed in [multiplayer-e2e-2026-07-13.md](./multiplayer-e2e-2026-07-13.md); it does not replace the pending human rehearsal.
+## Stage 1 — recurring access and reset safety
 
-## Session 2 — production and observability
+Linear: UIX-207
 
-Goal: prove that production matches the local architecture and leaves enough evidence to diagnose failures.
+- Replace claim-once invitations with membership-bound reusable access grants.
+- Return a raw secret only at creation/rotation.
+- Add revoke/rotate and active-session invalidation.
+- Rehearse the approved gameplay-data reset after a fresh verified backup.
+- Preserve all media and backup repositories.
 
-- Run the actual Drizzle migration against production PostgreSQL.
-- Verify data and media persistence after container restart and host reboot.
-- Verify Socket.IO upgrade and fallback through nginx and HTTPS.
-- Inspect `Secure`, `HttpOnly` and `SameSite=Strict` cookies in a real browser.
-- Verify nginx and Fastify upload limits agree.
-- Upload and seek through a near-limit MP3/OGG using HTTP Range (`206`, `Content-Range`, invalid `416`).
-- Suspend and restore a browser tab; verify reconnect or explicit full resync.
-- Emit structured server logs with request ID, membership ID, action ID, event sequence and rejection reason.
-- Accept sanitized client diagnostics and expose build/schema/snapshot versions in the UI.
-- [x] Commit and upload the backup/restore harness, create remote snapshot `07bc8d52`, and restore database/media into a clean isolated Compose project at revision `5e7a42c`.
+Exit: a returning player uses the same link without duplicate identity; revoked secrets cannot authenticate.
 
-Exit criterion: `arken.uixray.tech` survives restart, restores from backup and provides actionable logs.
+## Stage 2 — split core domain models
 
-## Session 3 — seven-client game scenario and security
+Linear: UIX-208 and UIX-209
 
-Goal: produce a concrete defect list from a realistic session.
+Token path:
 
-Automated status: passed from commit 1d907b2 with no product realtime/security defect reproduced. Two harness defects were fixed before the successful run; see [multiplayer-e2e-2026-07-13.md](./multiplayer-e2e-2026-07-13.md).
+- reusable token definitions;
+- per-scene placements;
+- many-to-many controllers;
+- MAP, PLAYER and GM placement layer data.
 
-1. GM creates six character-bound invitations.
-2. Six independent browser profiles claim them.
-3. Several players move different tokens while the GM moves an NPC.
-4. GM edits fog and switches the active scene.
-5. Players send chat messages and rolls concurrently.
-6. One player reloads, one loses connectivity for 20–30 seconds, one joins late.
-7. Backend restarts and every client reconciles to the authoritative state.
+Character path:
 
-Security assertions use browser DevTools plus direct API/Socket.IO clients. A player must never receive:
+- eight fixed characteristics;
+- backstory, inventory, notes and optional resources;
+- shared skill/ability catalog;
+- assignment as an independent character-specific snapshot.
 
-- hidden tokens or inactive scene payloads;
-- GM-only messages or rolls;
-- another character's private sheet/notes;
-- asset records belonging only to hidden scenes;
-- unrevealed fog geometry or GM preview state.
+These two migrations may follow UIX-207 independently, but must not be combined into one unreviewed schema jump.
 
-Exit criterion: timestamped defect report with reproduction steps, expected/actual state and relevant request/action IDs.
+Exit: data ownership is explicit and role-filtered snapshots pass adversarial tests.
 
-## Session 4 — realtime correction
+## Stage 3 — game rules and campaign state
 
-Goal: fix only reproduced consistency failures.
+Linear: UIX-210 and UIX-211
 
-Foundation present before the test:
+Roll path:
 
-- monotonic server event sequence and `snapshotVersion`;
-- client-generated `actionId` for durable commands;
-- unique action receipt/idempotency guarantee;
-- object revision checked on every mutation;
-- structured acknowledgement containing accepted/rejected status, sequence and authoritative entity;
-- ephemeral drag separate from durable drag completion;
-- explicit `game:resync` and full state replacement;
-- visible states: online, reconnecting, resyncing and offline.
+- Hit, Damage and custom actions;
+- modifiers from characteristics, assigned entries, constants or constrained formulas;
+- d20 defaults, initiative plus Agility and advantage/keep-high;
+- auditable chat output with ability descriptions.
 
-Likely defects to investigate: stale token snapback, duplicate events after reconnect, stale active scene, conflicting edits, obsolete subscriptions and music drift after sleep.
+Campaign path:
 
-Exit criterion: every reproduced defect has an automated regression test or a documented reason it cannot be automated.
+- day advance and battle end;
+- daily, battle and seven-day recharge;
+- manual recharge by owner/GM;
+- mana and other optional resources;
+- gold, silver, copper and SP counters;
+- public system chat deltas for counter edits.
 
-## Session 5 — minimum GM tools
+Exit: rules are server-authoritative, deterministic and covered by unit/realtime tests.
 
-Only after sessions 2–4 pass:
+## Stage 4 — reversible canvas authority
 
-1. Preview the active scene as a selected player.
-2. Undo the latest fog reveal.
-3. Ephemeral map ping visible to the current scene.
+Linear: UIX-212
 
-Distance measurement is added only if the custom rules require exact ranges. Do not add general undo/redo, token marker systems, isometric rendering, multi-level scenes, extended libraries or new music features.
+- Add immutable before/after action records.
+- Implement conflict-safe player-own and GM-global undo/redo.
+- Integrate token movement/deletion first, then fog and drawings.
+- Preserve event ordering, idempotency and resync.
 
-## Session 6 — rehearsal and first game
+Exit: reconnect, concurrent edits, duplicate requests and backend restart do not corrupt history.
 
-- Build a real campaign with real maps, audio and six characters.
-- Run a 30–45 minute rehearsal with clean browser profiles.
-- Verify current Firefox, Chrome and Edge.
-- Fix only defects capable of blocking or corrupting the game.
-- Run the two-hour session and record preparation time, interruptions, recoveries and every external tool used.
+## Stage 5 — visibility and fog
 
-## Acceptable shortcuts before the first game
+Linear: UIX-213
 
-- modest duplication, temporary limits, rough naming and manual operational steps;
-- fixed custom-system fields and simple data models.
+- Implement MAP, PLAYER and GM render/filter rules.
+- Add GM local toggle and context-menu layer movement.
+- Replace reveal-only state with ordered REVEAL/COVER operations.
+- Preserve the approved renderer stack and ping behavior.
 
-## Unacceptable changes before the first game
+Exit: GM-layer state never leaks and fog/hit-testing behavior passes browser adversarial coverage.
 
-- framework replacement or speculative realtime rewrite;
-- broad refactor without a reproduced failure;
-- database change without a tested backup;
-- multiple new major features in the same iteration;
-- any work on multi-level, isometric or 3D rendering.
+## Stage 6 — collaborative canvas tools
+
+Linear: UIX-214
+
+- Persistent drawings with author/GM mutation rights.
+- Move, recolor, copy, delete and undo/redo.
+- Shared ruler.
+- Map scale/alignment, grid offset and explicit zoom controls.
+
+Exit: multi-client canvas tools survive reload and enforce ownership.
+
+## Stage 7 — token and asset workflows
+
+Linear: UIX-215
+
+- Full GM palette and player-controlled subset.
+- Drag/click placement.
+- Explicit remove-placement versus delete-definition actions.
+- Token image and portrait assignment.
+- Player visibility for own unassigned TOKEN/PORTRAIT uploads.
+- Grouped hover/focus labels and authorized scene/character rename.
+
+Exit: GM and player complete their token workflows without direct database preparation.
+
+## Stage 8 — session shell
+
+Linear: UIX-216
+
+- Fixed chat composer with scrolling history.
+- Roll notifications linked to chat.
+- GM online presence view.
+- Player self-rename and GM membership rename.
+- Music in a sidebar tab.
+- GM-only audio upload/control and player-local consent/volume.
+
+Exit: session shell recovers after reconnect and backend restart.
+
+## Stage 9 — full product acceptance
+
+Linear: UIX-217
+
+1. Create and verify a fresh backup.
+2. Rehearse migration/reset/restore in isolation.
+3. Deploy the exact reviewed revision.
+4. Run unit, integration, browser, GM + 6 and recovery automation.
+5. Run a 30–45 minute rehearsal with one GM and six clean profiles across Chrome, Firefox and Edge.
+6. Fix every security, persistence or game-blocking defect.
+7. Repeat affected gates and record explicit go/no-go.
+
+Exit: the group can prepare and run the approved recurring-session workflow without external workarounds.
+
+## Dependency path
+
+UIX-206 → UIX-207
+
+UIX-207 → UIX-208 → UIX-212 → UIX-213 → UIX-214
+
+UIX-207 → UIX-209 → UIX-210 and UIX-211
+
+UIX-208 + UIX-213 → UIX-215
+
+UIX-207 + UIX-210 → UIX-216
+
+UIX-210 + UIX-211 + UIX-214 + UIX-215 + UIX-216 → UIX-217
+
+## Release invariants
+
+- No production schema change without a verified backup and isolated rehearsal.
+- No issue closes without its acceptance criteria and recorded test evidence.
+- No player receives GM-layer entities.
+- No client-only durable history.
+- No raw reusable access secret is persisted.
+- No full product-ready claim before UIX-217.
+
+## Explicitly deferred
+
+- SP skill-upgrade requests and GM review.
+- Collaborative soundpad.
+- Voice/video, public registration, commerce and offline mode.
+- Mobile canvas.
+- Multi-level, isometric and 3D renderers.
