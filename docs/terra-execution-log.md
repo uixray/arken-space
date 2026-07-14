@@ -235,4 +235,28 @@ locally_verified
 
 ### Suggested next action
 
-- Close UIX-206 after the exact-commit isolated rerun, then begin UIX-207 without an intermediate review.
+## Slice UIX-207 ? Persistent player access and safe gameplay reset
+
+### Status
+
+in_progress
+
+### Plan reference
+
+- Plan file: docs/implementation-plan-2026-07-14.md, Stage 1.
+- Acceptance criteria: one-time player secret display, hashed at rest, reusable membership-bound links, revoke/rotate invalidation, no duplicate memberships, and isolated verified backup/reset/restore rehearsal without media or backup deletion.
+
+### Changes
+
+- Files changed: access routes, player_access_grants migration, operator reset scripts, backup count manifest, operations runbook and safety tests.
+- Behavior implemented: hashed membership-bound links support reuse, revoke and rotation with session/socket invalidation; reset is operator-only and refuses missing exact-snapshot rehearsal evidence.
+- Decisions made: retain legacy invite rows only as a temporary migration compatibility boundary; the new access grant owns a stable player membership and never exposes its stored credential.
+
+### Verification
+
+- Command: corepack pnpm typecheck; lint; test; build; format:check.
+- Result: passed - 30 tests, all workspace typechecks, lint, build and format checks.
+
+### Problems and difficulties
+
+- Production reset/deploy remains excluded; isolated reset transaction wiring and final exact-commit evidence are still required before closure.

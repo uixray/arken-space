@@ -8,6 +8,11 @@ import {
   resolveRestoredPath,
   validateRestoreProjectName,
 } from "../scripts/restore-rehearsal-core.mjs";
+import {
+  assertVerifiedRehearsal,
+  executeGameplayReset,
+  gameplayResetStatements,
+} from "../scripts/gameplay-reset-core.mjs";
 
 const root = process.cwd();
 
@@ -171,6 +176,11 @@ describe("backup and restore safety", () => {
       "utf8",
     );
 
+    const counts = readFileSync(
+      path.join(root, "infra", "backup", "database-counts.sql"),
+      "utf8",
+    );
+    expect(counts).toContain("'player_access_grants'");
     expect(backup).toContain('--project-name "$PRODUCTION_COMPOSE_PROJECT"');
     expect(backup).toContain("compose exec -T postgres");
     expect(backup).toContain("restic check");
@@ -185,4 +195,45 @@ describe("backup and restore safety", () => {
     expect(compose).toContain("postgres-data:/var/lib/postgresql/data");
     expect(compose).toContain("MIN_FREE_DISK_BYTES: 1");
   });
+});
+it("requires an exact fully verified rehearsal before reset", () => {
+  const names = [
+    "database-dump-checksum",
+    "media-checksums",
+    "database-counts",
+    "restored-application-health",
+    "compose-cleanup",
+    "resource-leak-check",
+    "restored-data-cleanup",
+    "production-health-after",
+  ];
+  const steps = names.map((name) => ({ name, status: "passed" }));
+  const report = { runSucceeded: true, snapshot: { id: "snap-1" }, steps };
+  expect(() => assertVerifiedRehearsal(report, "snap-1")).not.toThrow();
+  expect(() => assertVerifiedRehearsal(report, "other")).toThrow(/snapshot/);
+  expect(() =>
+    assertVerifiedRehearsal({ ...report, steps: steps.slice(1) }, "snap-1"),
+  ).toThrow(/Missing verified/);
+});
+it("keeps assets and GM membership outside the reset plan", () => {
+  const sql = gameplayResetStatements("campaign", "gm")
+    .map(([text]) => text)
+    .join("\n");
+  expect(sql).toContain("update assets set uploaded_by_membership_id");
+  expect(sql).not.toMatch(/delete from assets/);
+  expect(sql).toContain("delete from player_access_grants");
+  expect(sql).toContain(
+    "delete from memberships where campaign_id = $1 and role = 'PLAYER'",
+  );
+  expect(sql).not.toMatch(/role = 'GM'/);
+});
+it("executes the reset plan through one injected transaction", async () => {
+  const calls = [];
+  const transaction = {
+    query: async (statement, params) => calls.push([statement, params]),
+  };
+  await executeGameplayReset(transaction, "campaign", "gm");
+  expect(calls).toHaveLength(12);
+  expect(calls[0][0]).toMatch(/update assets/);
+  expect(calls.at(-1)[0]).toMatch(/delete from memberships/);
 });

@@ -15,6 +15,13 @@
       "when": 1783850771253,
       "tag": "0001_lean_carmella_unuscione",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784035796750,
+      "tag": "0002_damp_the_stranger",
+      "breakpoints": true
     }
   ]
 }

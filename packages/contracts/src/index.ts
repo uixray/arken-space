@@ -25,7 +25,7 @@ export const actionIdSchema = z.string().uuid();
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });
 export const inviteClaimSchema = z.object({
   token: z.string().min(32).max(512),
-  displayName: z.string().trim().min(1).max(40),
+  displayName: z.string().trim().min(1).max(40).optional(),
 });
 export const createInviteSchema = z.object({
   actionId: actionIdSchema,
@@ -33,6 +33,7 @@ export const createInviteSchema = z.object({
   label: z.string().trim().min(1).max(80),
   expiresInHours: z.number().int().min(1).max(720).default(168),
 });
+export const rotatePlayerAccessSchema = z.object({ actionId: actionIdSchema });
 
 export const gridSchema = z.object({
   enabled: z.boolean().default(true),

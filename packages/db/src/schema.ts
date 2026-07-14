@@ -244,6 +244,33 @@ export const invites = pgTable(
   (table) => [uniqueIndex("invites_token_hash_idx").on(table.tokenHash)],
 );
 
+export const playerAccessGrants = pgTable(
+  "player_access_grants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    membershipId: uuid("membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("player_access_grants_token_hash_idx").on(table.tokenHash),
+    uniqueIndex("player_access_grants_membership_idx").on(table.membershipId),
+    index("player_access_grants_campaign_idx").on(table.campaignId),
+  ],
+);
+
 export const sessions = pgTable(
   "sessions",
   {

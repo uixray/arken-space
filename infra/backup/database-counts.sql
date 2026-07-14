@@ -7,6 +7,7 @@ UNION ALL SELECT 'fog_reveals', count(*)::bigint FROM fog_reveals
 UNION ALL SELECT 'game_events', count(*)::bigint FROM game_events
 UNION ALL SELECT 'invites', count(*)::bigint FROM invites
 UNION ALL SELECT 'memberships', count(*)::bigint FROM memberships
+UNION ALL SELECT 'player_access_grants', count(*)::bigint FROM player_access_grants
 UNION ALL SELECT 'scenes', count(*)::bigint FROM scenes
 UNION ALL SELECT 'sessions', count(*)::bigint FROM sessions
 UNION ALL SELECT 'tokens', count(*)::bigint FROM tokens

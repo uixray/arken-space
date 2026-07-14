@@ -98,6 +98,14 @@ Verified 2026-07-13: snapshot `07bc8d52` restored 8 media files and PostgreSQL i
 
 Do not run `pg_restore` manually against production during a rehearsal.
 
+## Operator-only gameplay reset
+
+Gameplay reset is never available through the browser or application API. Use `pnpm gameplay:reset:safe` only on the trusted operator host with an exact `SNAPSHOT_ID`, `ARKEN_RESET_CAMPAIGN_ID`, and `ARKEN_RESET_CONFIRM=<campaign-id>:<snapshot-id>`.
+
+The command refuses `latest`, missing confirmation, a mismatched rehearsal report, or any missing checksum/count/health/cleanup evidence. The exact snapshot must first pass `restore:rehearse` and produce `test-results/restore/runner.json`.
+
+Production reset remains a separate go/no-go point. Do not run the destructive transaction or deploy from Pool A without a fresh backup and explicit approval.
+
 ## Logs needed for an incident
 
 - nginx access and error logs;
