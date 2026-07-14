@@ -100,9 +100,11 @@ Do not run `pg_restore` manually against production during a rehearsal.
 
 ## Operator-only gameplay reset
 
-Gameplay reset is never available through the browser or application API. Use `pnpm gameplay:reset:safe` only on the trusted operator host with an exact `SNAPSHOT_ID`, `ARKEN_RESET_CAMPAIGN_ID`, and `ARKEN_RESET_CONFIRM=<campaign-id>:<snapshot-id>`.
+Gameplay reset is never available through the browser or application API. Use `pnpm gameplay:reset:safe` only on the trusted operator host. Set `ARKEN_RESET_CAMPAIGN_ID`, `ARKEN_RESET_GM_MEMBERSHIP_ID`, `ARKEN_RESET_BUILD_REVISION`, `ARKEN_RESET_SCHEMA_VERSION`, and `ARKEN_RESET_EXECUTE=operator-approved`. After backup and rehearsal, the command interactively requires the exact `<campaign-id>:<snapshot-id>` string; `ARKEN_RESET_CONFIRM` is reserved for equally trusted non-interactive operator automation.
 
-The command refuses `latest`, missing confirmation, a mismatched rehearsal report, or any missing checksum/count/health/cleanup evidence. The exact snapshot must first pass `restore:rehearse` and produce `test-results/restore/runner.json`.
+One invocation verifies production health/build, creates a fresh backup, resolves its exact restic snapshot, runs `restore:rehearse` against that snapshot, hashes and validates `test-results/restore/runner.json`, and checks the typed confirmation and execute flag before stopping application writes. It then validates the retained campaign GM and performs the approved reset in one PostgreSQL transaction, restarts the server, verifies health/build plus empty gameplay and preserved asset counts, and writes a mode-0600 non-authorizing receipt under `test-results/gameplay-reset/`.
+
+Any build, backup, rehearsal, evidence, confirmation or go/no-go failure occurs before maintenance and mutation. A failure before transaction completion restarts the application service. If post-reset verification fails, treat it as an incident and restore the exact snapshot recorded by the invocation; the audit receipt is evidence only and can never authorize another reset.
 
 Production reset remains a separate go/no-go point. Do not run the destructive transaction or deploy from Pool A without a fresh backup and explicit approval.
 

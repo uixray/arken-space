@@ -21,12 +21,16 @@ DUMP_FILE="$BACKUP_ROOT/$PREFIX.dump"
 DUMP_CHECKSUM="$DUMP_FILE.sha256"
 DATABASE_COUNTS="$BACKUP_ROOT/$PREFIX.database-counts.txt"
 MEDIA_CHECKSUMS="$BACKUP_ROOT/$PREFIX.media-sha256.txt"
+SNAPSHOT_ARTIFACT="${BACKUP_SNAPSHOT_ARTIFACT:-$BACKUP_ROOT/$PREFIX.snapshot-id}"
+SNAPSHOT_ARTIFACT_PARTIAL="$SNAPSHOT_ARTIFACT.partial"
+INVOCATION_ID="${BACKUP_INVOCATION_ID:-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')}"
+INVOCATION_TAG="$BACKUP_TAG-invocation-$INVOCATION_ID"
 COUNTS_SQL="$APP_ROOT/infra/backup/database-counts.sql"
 PARTIAL_DUMP="$DUMP_FILE.partial"
 DOCKER_MODE=""
 
 cleanup_partial() {
-  rm -f "$PARTIAL_DUMP"
+  rm -f "$PARTIAL_DUMP" "$SNAPSHOT_ARTIFACT_PARTIAL"
 }
 trap cleanup_partial EXIT HUP INT TERM
 
@@ -118,7 +122,37 @@ restic backup \
   "$MEDIA_CHECKSUMS" \
   "$MEDIA_ROOT" \
   --host "$BACKUP_HOST" \
-  --tag "$BACKUP_TAG"
+  --tag "$BACKUP_TAG" \
+  --tag "$INVOCATION_TAG"
+
+SNAPSHOT_ID="$(
+  restic snapshots \
+    --json \
+    --host "$BACKUP_HOST" \
+    --tag "$INVOCATION_TAG" |
+    node -e '
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { input += chunk; });
+      process.stdin.on("end", () => {
+        const snapshots = JSON.parse(input);
+        if (!Array.isArray(snapshots) || snapshots.length !== 1 || !snapshots[0]?.id) {
+          process.stderr.write("Expected exactly one snapshot for backup invocation\n");
+          process.exit(1);
+        }
+        process.stdout.write(snapshots[0].id);
+      });
+    '
+)"
+case "$SNAPSHOT_ID" in
+  ""|*[!0-9a-fA-F]*)
+    echo "Restic returned an invalid snapshot ID" >&2
+    exit 1
+    ;;
+esac
+mkdir -p "$(dirname "$SNAPSHOT_ARTIFACT")"
+printf '%s\n' "$SNAPSHOT_ID" > "$SNAPSHOT_ARTIFACT_PARTIAL"
+mv "$SNAPSHOT_ARTIFACT_PARTIAL" "$SNAPSHOT_ARTIFACT"
 
 restic forget \
   --host "$BACKUP_HOST" \
@@ -133,6 +167,4 @@ if [ "$RESTIC_CHECK" = 1 ]; then
 fi
 
 find "$BACKUP_ROOT" -type f -name 'arken-*' -mtime +2 -delete
-restic snapshots --host "$BACKUP_HOST" --tag "$BACKUP_TAG" --latest 1
-
-echo "Arken Space PostgreSQL and media backup completed at $STAMP"
+echo "Arken Space PostgreSQL and media backup completed at $STAMP (snapshot $SNAPSHOT_ID)"

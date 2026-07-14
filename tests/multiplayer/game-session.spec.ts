@@ -409,6 +409,68 @@ test("GM and six isolated players recover authoritative state without security l
       );
       inviteUrls.push(((await response.json()) as { url: string }).url);
     }
+    const grantsResponse = await expectOk(
+      await gm.request.get(baseUrl + "/api/player-access"),
+    );
+    const allGrants = (await grantsResponse.json()) as Array<{
+      id: string;
+      membershipId: string;
+      characterId: string | null;
+      label: string;
+      tokenHash?: string;
+    }>;
+    const grants = allGrants.filter((grant) =>
+      grant.label.startsWith(characterPrefix),
+    );
+    expect(grants).toHaveLength(6);
+    expect(JSON.stringify(allGrants)).not.toContain("tokenHash");
+    const repeated = await expectOk(
+      await gm.request.post(baseUrl + "/api/invites", {
+        data: {
+          actionId: actionId(),
+          characterId: characters[0].id,
+          label: characters[0].name,
+          expiresInHours: 1,
+        },
+      }),
+    );
+    const repeatedAccess = (await repeated.json()) as {
+      created: boolean;
+      url: string | null;
+      grant: { id: string; membershipId: string };
+    };
+    expect(repeatedAccess).toMatchObject({ created: false, url: null });
+    expect(repeatedAccess.grant.id).toBe(
+      grants.find((grant) => grant.characterId === characters[0].id)?.id,
+    );
+    const duplicateAction = actionId();
+    const duplicateResponses = await Promise.all([
+      gm.request.post(baseUrl + "/api/invites", {
+        data: {
+          actionId: duplicateAction,
+          characterId: characters[0].id,
+          label: characters[0].name,
+          expiresInHours: 1,
+        },
+      }),
+      gm.request.post(baseUrl + "/api/invites", {
+        data: {
+          actionId: duplicateAction,
+          characterId: characters[0].id,
+          label: characters[0].name,
+          expiresInHours: 1,
+        },
+      }),
+    ]);
+    expect(duplicateResponses.filter((response) => response.ok())).toHaveLength(
+      1,
+    );
+    const grantsAfterRace = (await (
+      await expectOk(await gm.request.get(baseUrl + "/api/player-access"))
+    ).json()) as Array<{ characterId: string | null; membershipId: string }>;
+    expect(
+      grantsAfterRace.filter((grant) => grant.characterId === characters[0].id),
+    ).toHaveLength(1);
 
     for (let index = 0; index < 5; index += 1) {
       pages[index] = await claimInvite(
@@ -813,6 +875,126 @@ test("GM and six isolated players recover authoritative state without security l
         page.getByText(recoveryScene.name, { exact: true }),
       ).toBeVisible();
     }
+
+    const sixthGrant = grants.find(
+      (grant) => grant.characterId === characters[5].id,
+    );
+    if (!sixthGrant) throw new Error("Sixth player access grant not found");
+    const rotatedSocketDisconnected = new Promise<void>((resolve) =>
+      connections[6]!.socket.once("disconnect", () => resolve()),
+    );
+    const rotateResponses = await Promise.all([
+      gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
+        data: { actionId: actionId() },
+      }),
+      gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
+        data: { actionId: actionId() },
+      }),
+    ]);
+    expect(rotateResponses.filter((response) => response.ok())).toHaveLength(1);
+    expect(rotateResponses.filter((response) => !response.ok())).toHaveLength(
+      1,
+    );
+    const rotateResponse = await expectOk(
+      rotateResponses.find((response) => response.ok())!,
+    );
+    await expect(rotatedSocketDisconnected).resolves.toBeUndefined();
+    const rotated = (await rotateResponse.json()) as { url: string };
+    await expect
+      .poll(async () =>
+        (await players[5].request.get(baseUrl + "/api/bootstrap")).status(),
+      )
+      .toBe(401);
+    const oldToken = new URL(inviteUrls[5]).pathname.split("/").at(-1);
+    const oldClaim = await players[5].request.post(
+      baseUrl + "/api/auth/invite",
+      { data: { token: oldToken, displayName: "Old link" } },
+    );
+    expect(oldClaim.status()).toBe(410);
+    const replacement = await browser.newContext();
+    await claimInvite(replacement, rotated.url, "Player 6 replacement");
+    const replacementConnection = await connectSocket(replacement);
+    const revokedSocketDisconnected = new Promise<void>((resolve) =>
+      replacementConnection.socket.once("disconnect", () => resolve()),
+    );
+    await expectOk(
+      await gm.request.post(
+        baseUrl + `/api/player-access/${sixthGrant.id}/revoke`,
+        { data: { actionId: actionId() } },
+      ),
+    );
+    await expect(revokedSocketDisconnected).resolves.toBeUndefined();
+    await expect
+      .poll(async () =>
+        (await replacement.request.get(baseUrl + "/api/bootstrap")).status(),
+      )
+      .toBe(401);
+    await replacement.close();
+    replacementConnection.socket.disconnect();
+    const reactivatedResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/invites", {
+        data: {
+          actionId: actionId(),
+          characterId: characters[5].id,
+          label: characters[5].name,
+          expiresInHours: 1,
+        },
+      }),
+    );
+    const reactivated = (await reactivatedResponse.json()) as {
+      created: boolean;
+      url: string;
+      grant: { id: string; membershipId: string };
+    };
+    expect(reactivated).toMatchObject({
+      created: true,
+      grant: {
+        id: sixthGrant.id,
+        membershipId: sixthGrant.membershipId,
+      },
+    });
+    expect(reactivated.url).toContain("/join/");
+    const sameRotateAction = actionId();
+    const sameRotateResponses = await Promise.all([
+      gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
+        data: { actionId: sameRotateAction },
+      }),
+      gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
+        data: { actionId: sameRotateAction },
+      }),
+    ]);
+    expect(
+      sameRotateResponses.filter((response) => response.ok()),
+    ).toHaveLength(1);
+    const sameRotated = (await (
+      await expectOk(sameRotateResponses.find((response) => response.ok())!)
+    ).json()) as { url: string };
+    const finalPlayer = await browser.newContext();
+    await claimInvite(finalPlayer, sameRotated.url, "Player 6 final");
+    const finalConnection = await connectSocket(finalPlayer);
+    const finalDisconnect = new Promise<void>((resolve) =>
+      finalConnection.socket.once("disconnect", () => resolve()),
+    );
+    const sameRevokeAction = actionId();
+    const sameRevokeResponses = await Promise.all([
+      gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/revoke`, {
+        data: { actionId: sameRevokeAction },
+      }),
+      gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/revoke`, {
+        data: { actionId: sameRevokeAction },
+      }),
+    ]);
+    expect(
+      sameRevokeResponses.filter((response) => response.ok()),
+    ).toHaveLength(1);
+    await expect(finalDisconnect).resolves.toBeUndefined();
+    await expect
+      .poll(async () =>
+        (await finalPlayer.request.get(baseUrl + "/api/bootstrap")).status(),
+      )
+      .toBe(401);
+    finalConnection.socket.disconnect();
+    await finalPlayer.close();
   } finally {
     for (const { socket } of connections) socket.disconnect();
     await Promise.all([gm.close(), ...players.map((player) => player.close())]);

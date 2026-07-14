@@ -127,14 +127,103 @@ export async function claimInviteOwnership(
   });
 }
 
+function playerAccessDto(
+  grant: typeof playerAccessGrants.$inferSelect,
+  characterId: string | null,
+) {
+  return {
+    id: grant.id,
+    membershipId: grant.membershipId,
+    characterId,
+    label: grant.label,
+    revokedAt: grant.revokedAt?.toISOString() ?? null,
+    createdAt: grant.createdAt.toISOString(),
+    updatedAt: grant.updatedAt.toISOString(),
+  };
+}
+
 async function createPlayerAccess(
   db: Database,
   campaignId: string,
   characterId: string,
   label: string,
+  actionId: string,
+  actorMembershipId: string,
 ) {
   const token = randomToken();
   const result = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select id from characters where id = ${characterId} and campaign_id = ${campaignId} for update`,
+    );
+    const [character] = await tx
+      .select()
+      .from(characters)
+      .where(
+        and(
+          eq(characters.id, characterId),
+          eq(characters.campaignId, campaignId),
+        ),
+      )
+      .limit(1);
+    if (!character) throw new Error("CHARACTER_NOT_FOUND");
+    if (character.ownerMembershipId) {
+      const [existing] = await tx
+        .select()
+        .from(playerAccessGrants)
+        .where(
+          and(
+            eq(playerAccessGrants.campaignId, campaignId),
+            eq(playerAccessGrants.membershipId, character.ownerMembershipId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        if (existing.revokedAt) {
+          const [reactivated] = await tx
+            .update(playerAccessGrants)
+            .set({
+              label,
+              tokenHash: hashToken(token),
+              revokedAt: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(playerAccessGrants.id, existing.id))
+            .returning();
+          if (!reactivated) throw new Error("ACCESS_GRANT_CREATE_FAILED");
+          await tx
+            .delete(sessions)
+            .where(eq(sessions.membershipId, existing.membershipId));
+          await tx.insert(gameEvents).values({
+            campaignId,
+            actionId,
+            membershipId: actorMembershipId,
+            type: "player_access.reactivated",
+            entityType: "player_access",
+            entityId: existing.id,
+            payload: { characterId },
+          });
+          return {
+            grant: reactivated,
+            memberId: existing.membershipId,
+            created: true,
+          };
+        }
+        await tx.insert(gameEvents).values({
+          campaignId,
+          actionId,
+          membershipId: actorMembershipId,
+          type: "player_access.reused",
+          entityType: "player_access",
+          entityId: existing.id,
+          payload: { characterId },
+        });
+        return {
+          grant: existing,
+          memberId: existing.membershipId,
+          created: false,
+        };
+      }
+    }
     const [member] = await tx
       .insert(memberships)
       .values({ campaignId, role: "PLAYER", displayName: label })
@@ -163,9 +252,18 @@ async function createPlayerAccess(
       })
       .returning();
     if (!grant) throw new Error("ACCESS_GRANT_CREATE_FAILED");
-    return { grant, member };
+    await tx.insert(gameEvents).values({
+      campaignId,
+      actionId,
+      membershipId: actorMembershipId,
+      type: "player_access.created",
+      entityType: "player_access",
+      entityId: grant.id,
+      payload: { membershipId: member.id, characterId },
+    });
+    return { grant, memberId: member.id, created: true };
   });
-  return { ...result, token };
+  return { ...result, token: result.created ? token : null };
 }
 export function registerRoutes(
   app: FastifyInstance,
@@ -436,39 +534,48 @@ export function registerRoutes(
     const body = createInviteSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
-    const [character] = await db
-      .select()
-      .from(characters)
-      .where(
+    let access;
+    try {
+      access = await createPlayerAccess(
+        db,
+        auth.campaignId,
+        body.characterId,
+        body.label,
+        body.actionId,
+        auth.membershipId,
+      );
+    } catch (error) {
+      if (errorMessage(error).includes("CHARACTER_NOT_FOUND"))
+        return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+      throw error;
+    }
+    return reply.code(access.created ? 201 : 200).send({
+      grant: playerAccessDto(access.grant, body.characterId),
+      created: access.created,
+      url: access.token ? `${env.PUBLIC_URL}/join/${access.token}` : null,
+    });
+  });
+
+  app.get("/api/player-access", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const rows = await db
+      .select({ grant: playerAccessGrants, characterId: characters.id })
+      .from(playerAccessGrants)
+      .leftJoin(
+        characters,
         and(
-          eq(characters.id, body.characterId),
-          eq(characters.campaignId, auth.campaignId),
+          eq(characters.campaignId, playerAccessGrants.campaignId),
+          eq(characters.ownerMembershipId, playerAccessGrants.membershipId),
         ),
       )
-      .limit(1);
-    if (!character)
-      return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
-    const access = await createPlayerAccess(
-      db,
-      auth.campaignId,
-      body.characterId,
-      body.label,
+      .where(eq(playerAccessGrants.campaignId, auth.campaignId))
+      .orderBy(desc(playerAccessGrants.createdAt));
+    return rows.map(({ grant, characterId }) =>
+      playerAccessDto(grant, characterId),
     );
-    await db.insert(gameEvents).values({
-      campaignId: auth.campaignId,
-      actionId: body.actionId,
-      membershipId: auth.membershipId,
-      type: "player_access.created",
-      entityType: "player_access",
-      entityId: access.grant.id,
-      payload: {
-        membershipId: access.member.id,
-        characterId: body.characterId,
-      },
-    });
-    return reply
-      .code(201)
-      .send({ url: `${env.PUBLIC_URL}/join/${access.token}` });
   });
   app.post("/api/player-access/:id/revoke", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
@@ -477,6 +584,8 @@ export function registerRoutes(
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = rotatePlayerAccessSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
     const [grant] = await db
       .select()
       .from(playerAccessGrants)
@@ -491,10 +600,18 @@ export function registerRoutes(
     if (!grant)
       return reply.code(404).send({ error: "PLAYER_ACCESS_NOT_FOUND" });
     await db.transaction(async (tx) => {
-      await tx
+      const [revoked] = await tx
         .update(playerAccessGrants)
         .set({ revokedAt: new Date(), updatedAt: new Date() })
-        .where(eq(playerAccessGrants.id, grant.id));
+        .where(
+          and(
+            eq(playerAccessGrants.id, grant.id),
+            isNull(playerAccessGrants.revokedAt),
+            eq(playerAccessGrants.tokenHash, grant.tokenHash),
+          ),
+        )
+        .returning();
+      if (!revoked) throw new Error("PLAYER_ACCESS_CONFLICT");
       await tx
         .delete(sessions)
         .where(eq(sessions.membershipId, grant.membershipId));
@@ -518,6 +635,8 @@ export function registerRoutes(
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = rotatePlayerAccessSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
     const [grant] = await db
       .select()
       .from(playerAccessGrants)
@@ -533,10 +652,18 @@ export function registerRoutes(
       return reply.code(404).send({ error: "PLAYER_ACCESS_NOT_FOUND" });
     const token = randomToken();
     await db.transaction(async (tx) => {
-      await tx
+      const [rotated] = await tx
         .update(playerAccessGrants)
         .set({ tokenHash: hashToken(token), updatedAt: new Date() })
-        .where(eq(playerAccessGrants.id, grant.id));
+        .where(
+          and(
+            eq(playerAccessGrants.id, grant.id),
+            isNull(playerAccessGrants.revokedAt),
+            eq(playerAccessGrants.tokenHash, grant.tokenHash),
+          ),
+        )
+        .returning();
+      if (!rotated) throw new Error("PLAYER_ACCESS_CONFLICT");
       await tx
         .delete(sessions)
         .where(eq(sessions.membershipId, grant.membershipId));
@@ -550,7 +677,14 @@ export function registerRoutes(
       });
     });
     io.in(memberRoom(grant.membershipId)).disconnectSockets(true);
-    return { url: `${env.PUBLIC_URL}/join/${token}` };
+    return {
+      grant: playerAccessDto(
+        { ...grant, tokenHash: hashToken(token), updatedAt: new Date() },
+        null,
+      ),
+      created: false,
+      url: `${env.PUBLIC_URL}/join/${token}`,
+    };
   });
 
   app.post("/api/scenes", async (request, reply) => {

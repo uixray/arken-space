@@ -35,6 +35,22 @@ export const createInviteSchema = z.object({
 });
 export const rotatePlayerAccessSchema = z.object({ actionId: actionIdSchema });
 
+export interface PlayerAccessDto {
+  id: string;
+  membershipId: string;
+  characterId: string | null;
+  label: string;
+  revokedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlayerAccessSecretDto {
+  grant: PlayerAccessDto;
+  created: boolean;
+  url: string | null;
+}
+
 export const gridSchema = z.object({
   enabled: z.boolean().default(true),
   size: z.number().int().min(16).max(256).default(64),

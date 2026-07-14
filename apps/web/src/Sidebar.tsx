@@ -1,9 +1,17 @@
-import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import type {
   AssetKind,
   CharacterDto,
   GameSnapshot,
   MessageVisibility,
+  PlayerAccessDto,
+  PlayerAccessSecretDto,
 } from "@arken/contracts";
 import { arkenSystem } from "@arken/system";
 
@@ -18,7 +26,13 @@ type Props = {
     characterId?: string | null,
   ) => Promise<void>;
   onCreateCharacter: (name: string) => Promise<void>;
-  onCreateInvite: (characterId: string, label: string) => Promise<string>;
+  onCreateInvite: (
+    characterId: string,
+    label: string,
+  ) => Promise<PlayerAccessSecretDto>;
+  onListPlayerAccess: () => Promise<PlayerAccessDto[]>;
+  onRotatePlayerAccess: (id: string) => Promise<PlayerAccessSecretDto>;
+  onRevokePlayerAccess: (id: string) => Promise<void>;
   onCreateScene: (name: string) => Promise<void>;
   onActivateScene: (sceneId: string) => Promise<void>;
   onAssignMap: (sceneId: string, assetId: string | null) => Promise<void>;
@@ -332,11 +346,19 @@ function SetupPanel(props: Props) {
     props.snapshot.characters[0]?.id ?? "",
   );
   const [inviteUrl, setInviteUrl] = useState("");
+  const [playerAccess, setPlayerAccess] = useState<PlayerAccessDto[]>([]);
   const [previewMembership, setPreviewMembership] = useState(
     props.snapshot.members.find((member) => member.role === "PLAYER")?.id ?? "",
   );
   const activeScene = props.snapshot.scenes.find((scene) => scene.active);
   const maps = props.snapshot.assets.filter((asset) => asset.kind === "MAP");
+  const refreshPlayerAccess = async () =>
+    setPlayerAccess(await props.onListPlayerAccess());
+  useEffect(() => {
+    void refreshPlayerAccess();
+    // The setup panel loads once; mutations refresh the list explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <section className="panel-section">
       <div className="section-heading">
@@ -459,7 +481,7 @@ function SetupPanel(props: Props) {
         </button>
       </div>
       <div className="subsection">
-        <h3>Приглашение</h3>
+        <h3>Постоянные ссылки игроков</h3>
         <label className="field">
           Персонаж
           <select
@@ -474,19 +496,19 @@ function SetupPanel(props: Props) {
           </select>
         </label>
         <button
-          onClick={async () =>
-            setInviteUrl(
-              await props.onCreateInvite(
-                inviteCharacter,
-                props.snapshot.characters.find(
-                  (item) => item.id === inviteCharacter,
-                )?.name ?? "Игрок",
-              ),
-            )
-          }
+          onClick={async () => {
+            const result = await props.onCreateInvite(
+              inviteCharacter,
+              props.snapshot.characters.find(
+                (item) => item.id === inviteCharacter,
+              )?.name ?? "Игрок",
+            );
+            setInviteUrl(result.url ?? "");
+            await refreshPlayerAccess();
+          }}
           disabled={!inviteCharacter}
         >
-          Создать одноразовую ссылку
+          Создать постоянную ссылку
         </button>
         {inviteUrl && (
           <div className="copy-field">
@@ -494,8 +516,38 @@ function SetupPanel(props: Props) {
             <button onClick={() => navigator.clipboard.writeText(inviteUrl)}>
               Копировать
             </button>
+            <button onClick={() => setInviteUrl("")}>Скрыть</button>
           </div>
         )}
+        {playerAccess.map((grant) => (
+          <div className="inline-fields" key={grant.id}>
+            <span>
+              {grant.label} {grant.revokedAt ? "(отозвана)" : ""}
+            </span>
+            {!grant.revokedAt && (
+              <>
+                <button
+                  onClick={async () => {
+                    const result = await props.onRotatePlayerAccess(grant.id);
+                    setInviteUrl(result.url ?? "");
+                    await refreshPlayerAccess();
+                  }}
+                >
+                  Заменить ссылку
+                </button>
+                <button
+                  onClick={async () => {
+                    await props.onRevokePlayerAccess(grant.id);
+                    setInviteUrl("");
+                    await refreshPlayerAccess();
+                  }}
+                >
+                  Отозвать
+                </button>
+              </>
+            )}
+          </div>
+        ))}
       </div>
     </section>
   );

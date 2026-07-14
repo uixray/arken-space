@@ -54,13 +54,27 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
     );
   const c = "00000000-0000-0000-0000-000000000001",
     gm = "00000000-0000-0000-0000-000000000002",
-    p = "00000000-0000-0000-0000-000000000003";
+    p = "00000000-0000-0000-0000-000000000003",
+    foreign = "00000000-0000-0000-0000-000000000010",
+    foreignGm = "00000000-0000-0000-0000-000000000011",
+    scene = "00000000-0000-0000-0000-000000000005";
   await database.exec(
-    `insert into campaigns (id,name) values ('${c}','C'); insert into memberships (id,campaign_id,role,display_name) values ('${gm}','${c}','GM','GM'),('${p}','${c}','PLAYER','P'); insert into assets (id,campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values ('00000000-0000-0000-0000-000000000004','${c}','${p}','IMAGE','A','a','image/png',1); insert into player_access_grants (campaign_id,membership_id,label,token_hash) values ('${c}','${p}','P','hash');`,
+    `insert into campaigns (id,name) values ('${c}','C'),('${foreign}','Foreign');
+     insert into memberships (id,campaign_id,role,display_name) values ('${gm}','${c}','GM','GM'),('${p}','${c}','PLAYER','P'),('${foreignGm}','${foreign}','GM','Foreign GM');
+     insert into assets (id,campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values ('00000000-0000-0000-0000-000000000004','${c}','${p}','IMAGE','A','a','image/png',1),('00000000-0000-0000-0000-000000000012','${foreign}','${foreignGm}','IMAGE','F','f','image/png',1);
+     insert into scenes (id,campaign_id,name,grid) values ('${scene}','${c}','S','{}'),('00000000-0000-0000-0000-000000000013','${foreign}','Foreign S','{}');
+     update campaigns set active_scene_id='${scene}' where id='${c}';
+     insert into characters (id,campaign_id,owner_membership_id,name) values ('00000000-0000-0000-0000-000000000006','${c}','${p}','P');
+     insert into tokens (scene_id,owner_membership_id,name,x,y) values ('${scene}','${p}','T',0,0);
+     insert into fog_reveals (scene_id,x,y,width,height) values ('${scene}',0,0,1,1);
+     insert into chat_messages (campaign_id,membership_id,body) values ('${c}','${p}','hi');
+     insert into player_access_grants (campaign_id,membership_id,label,token_hash) values ('${c}','${p}','P','hash');`,
   );
+  await database.exec("begin");
   await executeGameplayReset({ query: database.query.bind(database) }, c, gm);
+  await database.exec("commit");
   const counts = await database.query(
-    "select (select count(*) from memberships) members, (select count(*) from assets) assets, (select count(*) from player_access_grants) grants",
+    `select (select count(*) from memberships where campaign_id='${c}') members, (select count(*) from assets where campaign_id='${c}') assets, (select count(*) from player_access_grants where campaign_id='${c}') grants`,
   );
   expect(counts.rows[0]).toMatchObject({
     members: 1,
@@ -68,8 +82,53 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
     grants: 0,
   });
   expect(
-    (await database.query("select uploaded_by_membership_id from assets"))
-      .rows[0],
+    (
+      await database.query(
+        `select uploaded_by_membership_id from assets where campaign_id='${c}'`,
+      )
+    ).rows[0],
   ).toMatchObject({ uploaded_by_membership_id: gm });
+  expect(
+    (
+      await database.query(
+        `select active_scene_id from campaigns where id='${c}'`,
+      )
+    ).rows[0],
+  ).toMatchObject({ active_scene_id: null });
+  const cleared = await database.query(
+    `select (select count(*) from scenes where campaign_id='${c}') scenes, (select count(*) from characters where campaign_id='${c}') characters, (select count(*) from chat_messages where campaign_id='${c}') chat`,
+  );
+  expect(cleared.rows[0]).toMatchObject({ scenes: 0, characters: 0, chat: 0 });
+  const foreignCounts = await database.query(
+    `select (select count(*) from memberships where campaign_id='${foreign}') members, (select count(*) from scenes where campaign_id='${foreign}') scenes, (select count(*) from assets where campaign_id='${foreign}') assets`,
+  );
+  expect(foreignCounts.rows[0]).toMatchObject({
+    members: 1,
+    scenes: 1,
+    assets: 1,
+  });
+  await database.close();
+});
+
+it("rejects a retained membership that is not the campaign GM", async () => {
+  const database = new PGlite();
+  const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
+  for (const file of (await readdir(migrationsUrl))
+    .filter((file) => file.endsWith(".sql"))
+    .sort())
+    await database.exec(
+      (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
+        "--> statement-breakpoint",
+        "",
+      ),
+    );
+  const c = "10000000-0000-0000-0000-000000000001";
+  const player = "10000000-0000-0000-0000-000000000002";
+  await database.exec(
+    `insert into campaigns (id,name) values ('${c}','C'); insert into memberships (id,campaign_id,role,display_name) values ('${player}','${c}','PLAYER','P');`,
+  );
+  await expect(
+    executeGameplayReset({ query: database.query.bind(database) }, c, player),
+  ).rejects.toThrow("RETAINED_GM_INVALID");
   await database.close();
 });

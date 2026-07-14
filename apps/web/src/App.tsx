@@ -462,7 +462,9 @@ export function App() {
               )
             }
             onCreateInvite={async (characterId, label) => {
-              const result = await api<{ url: string }>("/api/invites", {
+              const result = await api<
+                import("@arken/contracts").PlayerAccessSecretDto
+              >("/api/invites", {
                 method: "POST",
                 body: JSON.stringify({
                   characterId,
@@ -471,8 +473,30 @@ export function App() {
                   actionId: crypto.randomUUID(),
                 }),
               });
-              return result.url;
+              return result;
             }}
+            onListPlayerAccess={() =>
+              api<import("@arken/contracts").PlayerAccessDto[]>(
+                "/api/player-access",
+              )
+            }
+            onRotatePlayerAccess={(id) =>
+              api<import("@arken/contracts").PlayerAccessSecretDto>(
+                `/api/player-access/${id}/rotate`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({ actionId: crypto.randomUUID() }),
+                },
+              )
+            }
+            onRevokePlayerAccess={(id) =>
+              run(() =>
+                api(`/api/player-access/${id}/revoke`, {
+                  method: "POST",
+                  body: JSON.stringify({ actionId: crypto.randomUUID() }),
+                }),
+              )
+            }
             onCreateScene={async (name) =>
               run(
                 () =>

@@ -12,6 +12,7 @@ import {
   assertVerifiedRehearsal,
   executeGameplayReset,
   gameplayResetStatements,
+  orchestrateGameplayReset,
 } from "../scripts/gameplay-reset-core.mjs";
 
 const root = process.cwd();
@@ -184,6 +185,15 @@ describe("backup and restore safety", () => {
     expect(backup).toContain('--project-name "$PRODUCTION_COMPOSE_PROJECT"');
     expect(backup).toContain("compose exec -T postgres");
     expect(backup).toContain("restic check");
+    expect(backup).toContain("BACKUP_INVOCATION_ID");
+    expect(backup).toContain('--tag "$INVOCATION_TAG"');
+    expect(backup).toContain('--tag "$INVOCATION_TAG" |');
+    expect(backup).toContain(
+      'SNAPSHOT_ARTIFACT_PARTIAL="$SNAPSHOT_ARTIFACT.partial"',
+    );
+    expect(backup).toContain(
+      'mv "$SNAPSHOT_ARTIFACT_PARTIAL" "$SNAPSHOT_ARTIFACT"',
+    );
     expect(backup).not.toContain('pg_dump "$DATABASE_URL"');
     expect(restore).toContain(
       'ARKEN_RESTORE_CONFIRM:-}" != "isolated-clean-target',
@@ -194,6 +204,16 @@ describe("backup and restore safety", () => {
     expect(compose).not.toMatch(/^\s+ports:/m);
     expect(compose).toContain("postgres-data:/var/lib/postgresql/data");
     expect(compose).toContain("MIN_FREE_DISK_BYTES: 1");
+  });
+
+  it("binds reset to the snapshot artifact from the backup invocation", () => {
+    const runner = readFileSync(
+      path.join(root, "scripts", "run-gameplay-reset-safe.mjs"),
+      "utf8",
+    );
+    expect(runner).toContain("BACKUP_SNAPSHOT_ARTIFACT: artifact");
+    expect(runner).toContain('readFileSync(artifact, "utf8").trim()');
+    expect(runner).not.toContain('"--latest",\n        "1"');
   });
 });
 it("requires an exact fully verified rehearsal before reset", () => {
@@ -220,20 +240,197 @@ it("keeps assets and GM membership outside the reset plan", () => {
     .map(([text]) => text)
     .join("\n");
   expect(sql).toContain("update assets set uploaded_by_membership_id");
+  expect(sql).toContain("update campaigns set active_scene_id = null");
   expect(sql).not.toMatch(/delete from assets/);
   expect(sql).toContain("delete from player_access_grants");
   expect(sql).toContain(
     "delete from memberships where campaign_id = $1 and role = 'PLAYER'",
   );
-  expect(sql).not.toMatch(/role = 'GM'/);
+  expect(sql).not.toMatch(/delete from memberships[^\n]+role = 'GM'/);
 });
 it("executes the reset plan through one injected transaction", async () => {
   const calls = [];
   const transaction = {
-    query: async (statement, params) => calls.push([statement, params]),
+    query: async (statement, params) => {
+      calls.push([statement, params]);
+      return { rows: statement.startsWith("select id") ? [{ id: "gm" }] : [] };
+    },
   };
   await executeGameplayReset(transaction, "campaign", "gm");
-  expect(calls).toHaveLength(12);
-  expect(calls[0][0]).toMatch(/update assets/);
+  expect(calls).toHaveLength(14);
+  expect(calls[0][0]).toMatch(/select id/);
+  expect(calls[1][0]).toMatch(/update assets/);
   expect(calls.at(-1)[0]).toMatch(/delete from memberships/);
+});
+
+describe("operator gameplay reset orchestration", () => {
+  const names = [
+    "database-dump-checksum",
+    "media-checksums",
+    "database-counts",
+    "restored-application-health",
+    "compose-cleanup",
+    "resource-leak-check",
+    "restored-data-cleanup",
+    "production-health-after",
+  ];
+  function fixture(overrides = {}) {
+    const calls = [];
+    const dependencies = {
+      readCheckoutRevision: async () => "rev",
+      verifyBuild: async () => {
+        calls.push("verify-build");
+        return { buildRevision: "rev", schemaVersion: 2 };
+      },
+      createBackup: async () => {
+        calls.push("backup");
+        return "snap";
+      },
+      rehearse: async (snapshot) => calls.push(`rehearse:${snapshot}`),
+      readRehearsalEvidence: async () => ({
+        report: {
+          runSucceeded: true,
+          snapshot: { id: "snap" },
+          productionBefore: { buildRevision: "rev", schemaVersion: 2 },
+          steps: names.map((name) => ({
+            name,
+            status: "passed",
+            ...(name === "restored-application-health"
+              ? { buildRevision: "rev", schemaVersion: 2 }
+              : {}),
+          })),
+        },
+        hash: "report-hash",
+      }),
+      approveExecution: async () => {
+        calls.push("approve");
+        return true;
+      },
+      requestConfirmation: async () => "campaign:snap",
+      countState: async () => {
+        calls.push("count-before");
+        return { assets: 2 };
+      },
+      enterMaintenance: async () => calls.push("maintenance"),
+      verifyMaintenanceBuild: async () => {
+        calls.push("maintenance-health");
+        return { buildRevision: "rev", schemaVersion: 2 };
+      },
+      leaveMaintenance: async () => calls.push("leave-maintenance"),
+      resetTransaction: async () => calls.push("reset"),
+      restartApplication: async () => calls.push("restart"),
+      verifyAfter: async () => {
+        calls.push("verify-after");
+        return { assets: 2, scenes: 0 };
+      },
+      now: () => new Date("2026-07-14T00:00:00.000Z"),
+      writeReceipt: async () => calls.push("receipt"),
+      ...overrides,
+    };
+    return { calls, dependencies };
+  }
+
+  it("binds one fresh snapshot through rehearsal, mutation and receipt", async () => {
+    const { calls, dependencies } = fixture();
+    const receipt = await orchestrateGameplayReset(
+      {
+        campaignId: "campaign",
+        gmMembershipId: "gm",
+        expectedBuildRevision: "rev",
+        expectedSchemaVersion: 2,
+      },
+      dependencies,
+    );
+    expect(calls).toEqual([
+      "verify-build",
+      "backup",
+      "rehearse:snap",
+      "approve",
+      "count-before",
+      "maintenance",
+      "maintenance-health",
+      "reset",
+      "restart",
+      "verify-after",
+      "receipt",
+    ]);
+    expect(receipt).toMatchObject({
+      snapshotId: "snap",
+      reportHash: "report-hash",
+      authorizesReset: false,
+    });
+  });
+
+  it.each([
+    ["checkout", { readCheckoutRevision: async () => "other" }],
+    ["backup", { createBackup: async () => "latest" }],
+    [
+      "rehearsal",
+      {
+        readRehearsalEvidence: async () => ({
+          report: { runSucceeded: false },
+          hash: "bad",
+        }),
+      },
+    ],
+    ["approval", { approveExecution: async () => false }],
+  ])("stops before mutation when %s fails", async (_name, override) => {
+    const { calls, dependencies } = fixture(override);
+    await expect(
+      orchestrateGameplayReset(
+        {
+          campaignId: "campaign",
+          gmMembershipId: "gm",
+          expectedBuildRevision: "rev",
+          expectedSchemaVersion: 2,
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow();
+    expect(calls).not.toContain("maintenance");
+    expect(calls).not.toContain("reset");
+  });
+
+  it("recovers maintenance when restart or post-transaction flow fails", async () => {
+    const { calls, dependencies } = fixture({
+      restartApplication: async () => {
+        calls.push("restart");
+        throw new Error("restart failed");
+      },
+    });
+    await expect(
+      orchestrateGameplayReset(
+        {
+          campaignId: "campaign",
+          gmMembershipId: "gm",
+          expectedBuildRevision: "rev",
+          expectedSchemaVersion: 2,
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow("restart failed");
+    expect(calls.slice(-3)).toEqual(["reset", "restart", "leave-maintenance"]);
+  });
+
+  it("recovers maintenance without mutating when the second build check fails", async () => {
+    const { calls, dependencies } = fixture({
+      verifyMaintenanceBuild: async () => ({
+        buildRevision: "other",
+        schemaVersion: 2,
+      }),
+    });
+    await expect(
+      orchestrateGameplayReset(
+        {
+          campaignId: "campaign",
+          gmMembershipId: "gm",
+          expectedBuildRevision: "rev",
+          expectedSchemaVersion: 2,
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow(/Maintenance build/);
+    expect(calls).not.toContain("reset");
+    expect(calls.at(-1)).toBe("leave-maintenance");
+  });
 });
