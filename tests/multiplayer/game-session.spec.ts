@@ -13,6 +13,7 @@ import type {
   CommandAck,
   FogRevealDto,
   GameSnapshot,
+  MapPing,
   SceneDto,
   ServerToClientEvents,
   TokenDto,
@@ -111,6 +112,32 @@ function waitForRecovery(socket: GameSocket, timeoutMs = 120_000) {
     socket.on("disconnect", onDisconnect);
     socket.on("game:snapshot", onSnapshot);
   });
+}
+
+function waitForPing(
+  socket: GameSocket,
+  predicate: (ping: MapPing) => boolean = () => true,
+  timeoutMs = 10_000,
+) {
+  return new Promise<MapPing>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off("map:ping", onPing);
+      reject(new Error("Timed out waiting for map ping"));
+    }, timeoutMs);
+    const onPing = (ping: MapPing) => {
+      if (!predicate(ping)) return;
+      clearTimeout(timeout);
+      socket.off("map:ping", onPing);
+      resolve(ping);
+    };
+    socket.on("map:ping", onPing);
+  });
+}
+async function expectPingOverlay(page: Page, before: Buffer) {
+  const screenshot = await page.locator(".map-viewport").screenshot({
+    path: "test-results/multiplayer/live-ping-over-covered-fog.png",
+  });
+  expect(screenshot.equals(before)).toBe(false);
 }
 
 function move(
@@ -478,13 +505,75 @@ test("GM and six isolated players recover authoritative state without security l
     const gmInitialSnapshot = initialSnapshots[0];
     const playerInitialSnapshots = initialSnapshots.slice(1);
 
+    const playerOneSnapshot = playerInitialSnapshots[0];
+    if (!playerOneSnapshot) throw new Error("Player one snapshot not found");
+    const ownedToken = playerOneSnapshot.tokens.find(
+      (token) => token.ownerMembershipId === playerOneSnapshot.me.id,
+    );
+    const coveredForeignToken = playerOneSnapshot.tokens.find(
+      (token) => token.id === playerTokens[1]?.id,
+    );
+    if (!ownedToken || !coveredForeignToken)
+      throw new Error("Player fog token setup not found");
+
+    const playerTwoMap = pages[1]!.locator(".map-viewport");
+    const beforePingOverlay = await playerTwoMap.screenshot();
+    const receivedPing = waitForPing(
+      connections[2]!.socket,
+      (ping) =>
+        ping.sceneId === initialScene.id &&
+        ping.membershipId === playerOneSnapshot.me.id &&
+        ping.x === coveredForeignToken.x + coveredForeignToken.width / 2 &&
+        ping.y === coveredForeignToken.y + coveredForeignToken.height / 2,
+    );
+    connections[1]!.socket.emit("map:ping", {
+      sceneId: initialScene.id,
+      x: coveredForeignToken.x + coveredForeignToken.width / 2,
+      y: coveredForeignToken.y + coveredForeignToken.height / 2,
+    });
+    await expect(receivedPing).resolves.toMatchObject({
+      sceneId: initialScene.id,
+      membershipId: playerOneSnapshot.me.id,
+    });
+    await expectPingOverlay(pages[1]!, beforePingOverlay);
+
+    const mapViewport = pages[0]!.locator(".map-viewport");
+    const mapBounds = await mapViewport.boundingBox();
+    if (!mapBounds) throw new Error("Map viewport is not visible");
+    const dragOnCanvas = async (
+      from: Pick<TokenDto, "x" | "y" | "width" | "height">,
+      to: { x: number; y: number },
+    ) => {
+      await pages[0]!.mouse.move(
+        mapBounds.x + from.x + from.width / 2,
+        mapBounds.y + from.y + from.height / 2,
+      );
+      await pages[0]!.mouse.down();
+      await pages[0]!.mouse.move(mapBounds.x + to.x, mapBounds.y + to.y, {
+        steps: 6,
+      });
+      await pages[0]!.mouse.up();
+    };
+
+    await dragOnCanvas(coveredForeignToken, { x: 448, y: 448 });
+    await pages[0]!.waitForTimeout(200);
+    expect(
+      (await bootstrap(gm)).tokens.find(
+        (token) => token.id === coveredForeignToken.id,
+      ),
+    ).toMatchObject({
+      x: coveredForeignToken.x,
+      y: coveredForeignToken.y,
+      revision: coveredForeignToken.revision,
+    });
+
     const moveResults = await Promise.all([
       ...playerInitialSnapshots.map((snapshot, index) => {
         const own = snapshot.tokens.find(
           (token) => token.ownerMembershipId === snapshot.me.id,
         );
         if (!own) throw new Error("Owned token not found for player");
-        return move(connections[index + 1].socket, own, 320 + index * 96, 384);
+        return move(connections[index + 1]!.socket, own, 320 + index * 96, 384);
       }),
       move(
         connections[0].socket,
@@ -502,9 +591,9 @@ test("GM and six isolated players recover authoritative state without security l
       return result.data;
     });
     const [foreignMove, enemyMove, hiddenMove] = await Promise.all([
-      move(connections[1].socket, movedPlayerTokens[1], 1400, 900),
-      move(connections[1].socket, enemy, 1400, 900),
-      move(connections[1].socket, hiddenToken, 1400, 900),
+      move(connections[1]!.socket, movedPlayerTokens[1]!, 1400, 900),
+      move(connections[1]!.socket, enemy, 1400, 900),
+      move(connections[1]!.socket, hiddenToken, 1400, 900),
     ]);
     for (const result of [foreignMove, enemyMove, hiddenMove])
       expect(result).toMatchObject({ ok: false, status: "FORBIDDEN" });

@@ -180,7 +180,7 @@ Do not fill this section until UIX-217 passes.
 
 ### Status
 
-review_required
+locally_verified
 
 ### Plan reference
 
@@ -189,9 +189,9 @@ review_required
 
 ### Changes
 
-- Files changed: vitest.config.ts; tests/e2e/concept.spec.ts; tests/e2e/concept.spec.ts-snapshots/player-fog-opaque-chromium-win32.png; docs/terra-execution-log.md.
-- Behavior implemented: fog helper tests run in the default suite; a focused player visual regression covers opaque fog with an owned token above it and a covered foreign token hidden below it. It does not yet exercise a live map ping or covered-canvas hit testing.
-- Decisions made: preserve the existing uncommitted planning documents; limit source changes to the UIX-206 test configuration and focused browser coverage.
+- Files changed: vitest.config.ts; tests/e2e/concept.spec.ts; tests/e2e/concept.spec.ts-snapshots/player-fog-opaque-chromium-win32.png; tests/multiplayer/game-session.spec.ts; docs/manual-rehearsal-2026-07-14.md; .workspace/tech_debt.md; docs/terra-execution-log.md.
+- Behavior implemented: the default suite includes fog renderer coverage; the isolated real-browser GM + 6 harness emits a live player ping over covered fog, records the changed peer canvas before the 3.5-second expiry, proves a covered foreign-token drag leaves authoritative position and revision unchanged, and proves each player can move an owned token through the authoritative socket command.
+- Decisions made: pings are permitted as an ephemeral overlay above covered fog and disclose no hidden content; the shortened foundation rehearsal is accepted while the full human product rehearsal remains tracked as technical debt for UIX-217.
 
 ### Verification
 
@@ -204,14 +204,16 @@ review_required
 - Command: corepack pnpm format:check
 - Result: passed after Prettier formatted the three changed files.
 - Command: corepack pnpm exec playwright test tests/e2e/concept.spec.ts; corepack pnpm test:e2e --list
-- Result: passed - 2 focused browser tests; 3 tests listed. Coverage is partial: no live ping or hidden-canvas interaction assertion.
-- Evidence/artifact path: tests/e2e/concept.spec.ts-snapshots/player-fog-opaque-chromium-win32.png
+- Result: passed - 2 focused browser tests; 3 tests listed.
+- Command: corepack pnpm test:multiplayer
+- Result: passed - isolated GM + 6 real-browser scenario, backend restart/recovery, cleanup/resource-leak check, and before/after production health check.
+- Evidence/artifact paths: tests/e2e/concept.spec.ts-snapshots/player-fog-opaque-chromium-win32.png; test-results/multiplayer/live-ping-over-covered-fog.png; test-results/multiplayer/runner.json
 
 ### Problems and difficulties
 
-- Symptom: the current browser regression cannot observe a live Socket.IO map ping or distinguish covered-canvas hit testing from an inert click.
-- Cause: the lightweight Playwright suite stubs only HTTP bootstrap; the existing real-browser GM + 6 harness does not include a visual ping scenario.
-- Resolution or current blocker: REVIEW_REQUIRED. Extend the isolated GM + 6 browser harness with a stable ping/fog assertion, or approve a narrowly scoped client test seam.
+- Symptom: the first isolated run could not start while Docker Desktop was unavailable; a later run exposed an unavailable optional image dependency used only for bitmap comparison.
+- Cause: the isolated Docker harness requires the local Docker daemon, and sharp is not part of its test image.
+- Resolution or current blocker: Docker Desktop was started; the assertion now compares the Playwright canvas buffers directly. The final isolated run passed with no UIX-206 blocker.
 
 ### Deviations from plan
 
@@ -229,8 +231,8 @@ review_required
 
 ### Review questions for Sol
 
-- 1. Should UIX-206 extend the isolated GM + 6 Playwright harness with a live ping screenshot/assertion, or may it add a test-only Socket.IO seam to the lightweight browser suite?
+- None for this issue. Pool review is deferred until UIX-207 completes.
 
 ### Suggested next action
 
-- Sol selects the live-ping browser-test strategy; Terra then implements and reruns the UIX-206 focused gate.
+- Close UIX-206 after the exact-commit isolated rerun, then begin UIX-207 without an intermediate review.

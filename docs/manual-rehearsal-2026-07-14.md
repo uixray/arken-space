@@ -2,16 +2,16 @@
 
 ## Result
 
-Stopped during the GM setup/walkthrough after reproducing a player fog visibility and interaction foundation defect. The remaining GM + 6 recovery sequence was not run and the manual foundation gate remains open.
+Accepted as a shortened foundation rehearsal. It confirms the repaired fog behavior but is not full product acceptance; the complete GM + 6 rehearsal remains deferred to UIX-217.
 
 ## Reproduced foundation defect
 
 ### Player fog leaks the map and permits interaction through covered space
 
-- Actual: player fog is translucent, tokens are rendered below it, and the fog layer does not participate in pointer handling.
-- Expected: covered map space is fully opaque; non-owned tokens and pings under fog are absent and non-interactive; the player's owned tokens remain visible and usable above fog.
-- Code diagnosis: player opacity was 0.94 and the fog layer used `listening={false}`.
-- Status: local fix and regression tests in progress; production remains unchanged until a committed build is deployed.
+- Historical defect: player fog was translucent, tokens rendered below it, and the fog layer did not participate in pointer handling.
+- Accepted behavior: covered map space is fully opaque; non-owned tokens are absent and non-interactive; the player's owned tokens remain visible and usable above fog.
+- Ping policy: pings render above covered fog as an ephemeral overlay and reveal no hidden map content.
+- Status: fixed and deployed at revision `4153e7a02f8220bff86702c0a811f8efe5d469d0`.
 
 ## Usability and product findings
 
@@ -31,8 +31,8 @@ Stopped during the GM setup/walkthrough after reproducing a player fog visibilit
 
 ## Fog recheck
 
-Production revision `f90162a` passed the six-point owner verification: GM translucency, player opacity, owned token above fog, hidden foreign/NPC tokens, visibility after reveal and no hidden-area ping. The last point was reclassified as a product correction: pings should be allowed above covered fog without revealing hidden content.
+Production revision `4153e7a02f8220bff86702c0a811f8efe5d469d0` is the accepted foundation state: player fog is opaque, owned tokens remain usable, foreign/NPC tokens stay hidden under cover, and pings are allowed above fog without revealing hidden content.
 
 ## Next action
 
-Complete the narrow fog fix, run local verification, commit before deployment, deploy the exact commit, and repeat the stopped fog section before resuming the full manual rehearsal.
+Continue only through the approved product backlog. Run the complete 30-45 minute GM + 6 product rehearsal after UIX-206 through UIX-216 are complete.
