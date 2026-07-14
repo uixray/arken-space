@@ -206,7 +206,7 @@ locally_verified
 - Command: corepack pnpm exec playwright test tests/e2e/concept.spec.ts; corepack pnpm test:e2e --list
 - Result: passed - 2 focused browser tests; 3 tests listed.
 - Command: corepack pnpm test:multiplayer
-- Result: passed - isolated GM + 6 real-browser scenario, backend restart/recovery, cleanup/resource-leak check, and before/after production health check.
+- Result: passed at bda44b03f58c3915e808e2f9ca67167c503c96db - isolated GM + 6 real-browser scenario, backend restart/recovery, cleanup/resource-leak check, and before/after production health check.
 - Evidence/artifact paths: tests/e2e/concept.spec.ts-snapshots/player-fog-opaque-chromium-win32.png; test-results/multiplayer/live-ping-over-covered-fog.png; test-results/multiplayer/runner.json
 
 ### Problems and difficulties
@@ -221,7 +221,7 @@ locally_verified
 
 ### Production
 
-- Commit: d6a68aa098926888b3b5d7154eeb0d5ddfd0fc34
+- Commit: bda44b03f58c3915e808e2f9ca67167c503c96db
 - Uploaded exact archive: no
 - Production revision: 4153e7a02f8220bff86702c0a811f8efe5d469d0
 - Health: ok
