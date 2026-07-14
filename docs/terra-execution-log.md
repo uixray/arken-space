@@ -180,7 +180,7 @@ Do not fill this section until UIX-217 passes.
 
 ### Status
 
-locally_verified
+review_required
 
 ### Plan reference
 
@@ -190,7 +190,7 @@ locally_verified
 ### Changes
 
 - Files changed: vitest.config.ts; tests/e2e/concept.spec.ts; tests/e2e/concept.spec.ts-snapshots/player-fog-opaque-chromium-win32.png; docs/terra-execution-log.md.
-- Behavior implemented: fog helper tests run in the default suite; a focused player visual regression covers opaque fog with an owned token above it and a covered foreign token hidden below it.
+- Behavior implemented: fog helper tests run in the default suite; a focused player visual regression covers opaque fog with an owned token above it and a covered foreign token hidden below it. It does not yet exercise a live map ping or covered-canvas hit testing.
 - Decisions made: preserve the existing uncommitted planning documents; limit source changes to the UIX-206 test configuration and focused browser coverage.
 
 ### Verification
@@ -204,14 +204,14 @@ locally_verified
 - Command: corepack pnpm format:check
 - Result: passed after Prettier formatted the three changed files.
 - Command: corepack pnpm exec playwright test tests/e2e/concept.spec.ts; corepack pnpm test:e2e --list
-- Result: passed - 2 focused browser tests; 3 tests listed.
+- Result: passed - 2 focused browser tests; 3 tests listed. Coverage is partial: no live ping or hidden-canvas interaction assertion.
 - Evidence/artifact path: tests/e2e/concept.spec.ts-snapshots/player-fog-opaque-chromium-win32.png
 
 ### Problems and difficulties
 
-- Symptom: initial format check reported the newly changed files.
-- Cause: source edits had not yet been passed through Prettier.
-- Resolution or current blocker: Prettier ran successfully; all required local checks now pass.
+- Symptom: the current browser regression cannot observe a live Socket.IO map ping or distinguish covered-canvas hit testing from an inert click.
+- Cause: the lightweight Playwright suite stubs only HTTP bootstrap; the existing real-browser GM + 6 harness does not include a visual ping scenario.
+- Resolution or current blocker: REVIEW_REQUIRED. Extend the isolated GM + 6 browser harness with a stable ping/fog assertion, or approve a narrowly scoped client test seam.
 
 ### Deviations from plan
 
@@ -229,8 +229,8 @@ locally_verified
 
 ### Review questions for Sol
 
-- None.
+- 1. Should UIX-206 extend the isolated GM + 6 Playwright harness with a live ping screenshot/assertion, or may it add a test-only Socket.IO seam to the lightweight browser suite?
 
 ### Suggested next action
 
-- Request Sol review of the UIX-206 commit before starting the blocked UIX-207 access migration.
+- Sol selects the live-ping browser-test strategy; Terra then implements and reruns the UIX-206 focused gate.
