@@ -239,7 +239,7 @@ locally_verified
 
 ### Status
 
-in_progress
+complete
 
 ### Plan reference
 
@@ -248,15 +248,26 @@ in_progress
 
 ### Changes
 
-- Files changed: access routes, player_access_grants migration, operator reset scripts, backup count manifest, operations runbook and safety tests.
-- Behavior implemented: hashed membership-bound links support reuse, revoke and rotation with session/socket invalidation; reset is operator-only and refuses missing exact-snapshot rehearsal evidence.
-- Decisions made: retain legacy invite rows only as a temporary migration compatibility boundary; the new access grant owns a stable player membership and never exposes its stored credential.
+- Files changed: access routes; `player_access_grants` migration; operator reset scripts; backup count manifest; operations runbook; ADR; and safety tests.
+- Behavior implemented: hashed membership-bound links support reuse, revoke and rotation with session/socket invalidation; a reusable link creates a fresh HttpOnly session without duplicate memberships; reset is operator-only and refuses missing exact-snapshot rehearsal evidence.
+- Decisions made: retain legacy invite rows only as a temporary migration compatibility boundary; the new access grant owns a stable player membership and never exposes its stored credential; a production reset/deployment is a mandatory stop outside Pool A.
 
 ### Verification
 
-- Command: corepack pnpm typecheck; lint; test; build; format:check.
-- Result: passed - 30 tests, all workspace typechecks, lint, build and format checks.
+- Command: corepack pnpm typecheck; corepack pnpm lint; corepack pnpm test; corepack pnpm build; corepack pnpm format:check; git diff --check.
+- Result: passed - 9 test files / 31 tests; all workspace typechecks, lint, build, format and diff checks passed.
+- Command: isolated GM + 6 browser/recovery flow.
+- Result: passed - reusable access flow, backend restart/recovery, cleanup/resource-leak check and unchanged before/after production health.
+- Command: disposable PGlite reset rehearsal.
+- Result: passed - access/gameplay state is cleared while campaign, GM membership and asset ownership are preserved; player-uploaded assets are reassigned before player memberships are deleted.
 
 ### Problems and difficulties
 
-- Production reset/deploy remains excluded; isolated reset transaction wiring and final exact-commit evidence are still required before closure.
+- The initial isolated run required Docker Desktop to be started. A display-name mismatch on repeated access was corrected by updating the existing membership when a player joins through the stable link; the rerun passed.
+- Production reset/deploy remains deliberately excluded. The CLI stops after all operator preflight gates; execution against production requires the separate go/no-go decision.
+
+### Stage-gate result
+
+- Linear: UIX-207 is Done; completion comment includes the Pool A review request for Sol.
+- Code revision: d332003bdde0b75d0b7ab1626d0865adbbad53b9.
+- Next action: Sol reviews the combined UIX-206/UIX-207 Pool A result. UIX-208, UIX-209 and UIX-216 are now unblocked in Linear, but no new implementation starts before review.
