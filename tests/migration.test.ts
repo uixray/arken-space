@@ -41,6 +41,49 @@ describe("initial PostgreSQL migration", () => {
     );
     await database.close();
   });
+
+  it("upgrades the previous schema to 0008 without losing memberships", async () => {
+    const database = new PGlite();
+    const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
+    const files = (await readdir(migrationsUrl))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    for (const file of files.slice(0, -1))
+      await database.exec(
+        (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
+          "--> statement-breakpoint",
+          "",
+        ),
+      );
+    const campaignId = "20000000-0000-0000-0000-000000000001";
+    const memberId = "20000000-0000-0000-0000-000000000002";
+    await database.exec(
+      `insert into campaigns (id,name) values ('${campaignId}','Upgrade fixture');
+       insert into memberships (id,campaign_id,role,display_name) values ('${memberId}','${campaignId}','PLAYER','Retained player');`,
+    );
+    await database.exec(
+      (
+        await readFile(new URL(files.at(-1)!, migrationsUrl), "utf8")
+      ).replaceAll("--> statement-breakpoint", ""),
+    );
+    const retained = await database.query(
+      `select id,campaign_id,display_name,revision from memberships where id='${memberId}'`,
+    );
+    expect(retained.rows).toEqual([
+      {
+        id: memberId,
+        campaign_id: campaignId,
+        display_name: "Retained player",
+        revision: 0,
+      },
+    ]);
+    await expect(
+      database.exec(
+        `insert into memberships (campaign_id,role,display_name,revision) values ('${campaignId}','PLAYER','Invalid',null)`,
+      ),
+    ).rejects.toThrow();
+    await database.close();
+  });
 });
 it("preserves GM and assets in a disposable reset rehearsal", async () => {
   const database = new PGlite();

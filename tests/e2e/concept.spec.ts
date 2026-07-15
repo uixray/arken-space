@@ -39,6 +39,11 @@ const snapshot: GameSnapshot = {
         { key: "observe", name: "Наблюдение", rank: 1, formula: "2d6 + mind" },
       ],
       spells: [],
+      entries: [],
+      backstory: "",
+      inventory: [],
+      resources: {},
+      wallet: { gold: 0, silver: 0, copper: 0, sp: 0 },
       notes: "Ищет проход к нижнему уровню.",
       revision: 1,
     },
@@ -69,6 +74,7 @@ const snapshot: GameSnapshot = {
       characterId: "62668dba-d385-434a-a76c-b9e2f8e84de9",
       ownerMembershipId: null,
       assetId: null,
+      controllerMembershipIds: [],
       name: "Картограф",
       x: 384,
       y: 320,
@@ -106,6 +112,8 @@ const snapshot: GameSnapshot = {
     },
   ],
   assets: [],
+  catalogEntries: [],
+  tokenDefinitions: [],
   audio: {
     assetId: null,
     playing: false,
@@ -129,6 +137,13 @@ test("concept shell keeps the map primary and exposes core tools", async ({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
     }),
   );
   await page.goto("/");
@@ -169,6 +184,7 @@ test("player fog keeps covered foreign tokens hidden while owned tokens remain v
       ...snapshot.tokens[0]!,
       id: "45f46186-2ebc-4cf8-bce7-870097305a6b",
       ownerMembershipId: playerId,
+      controllerMembershipIds: [playerId],
       name: "Owned token",
       x: 96,
       y: 96,
@@ -177,6 +193,7 @@ test("player fog keeps covered foreign tokens hidden while owned tokens remain v
       ...snapshot.tokens[0]!,
       id: "55f46186-2ebc-4cf8-bce7-870097305a6b",
       ownerMembershipId: "a53f4618-2ebc-4cf8-bce7-870097305a6b",
+      controllerMembershipIds: ["a53f4618-2ebc-4cf8-bce7-870097305a6b"],
       name: "Covered foreign token",
       x: 192,
       y: 96,

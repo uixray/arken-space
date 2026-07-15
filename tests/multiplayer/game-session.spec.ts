@@ -480,10 +480,52 @@ test("GM and six isolated players recover authoritative state without security l
       );
     }
 
+    // Product gate: players only see their controlled definitions in the
+    // palette, can place one through the browser UI, and never receive the GM
+    // preparation/presence surface.
+    await pages[0]!.locator(".tabs > button").nth(2).click();
+    await expect(pages[0]!.locator(".token-palette")).toBeVisible();
+    await expect(pages[0]!.locator(".palette-card")).toHaveCount(1);
+    await expect(pages[0]!.locator(".palette-card strong")).toHaveText(
+      runTag + " Player Token 1",
+    );
+    const controlledDefinitionId = playerTokens[0]!.definitionId;
+    if (!controlledDefinitionId)
+      throw new Error("Controlled token definition not found");
+    const placementsBefore = (await bootstrap(players[0])).tokens.filter(
+      (token) => token.definitionId === controlledDefinitionId,
+    ).length;
+    await pages[0]!.locator(".palette-place").click();
+    await expect
+      .poll(
+        async () =>
+          (await bootstrap(players[0])).tokens.filter(
+            (token) => token.definitionId === controlledDefinitionId,
+          ).length,
+      )
+      .toBe(placementsBefore + 1);
+    await expect(pages[0]!.locator(".tabs > button")).toHaveCount(5);
+
+    // Local audio consent is deliberately per-browser and must survive a
+    // reload without changing shared playback state.
+    await pages[0]!.locator(".tabs > button").nth(3).click();
+    await expect(pages[0]!.locator(".music-bar")).toBeVisible();
+    await pages[0]!.locator(".music-bar .primary").click();
+    await expect(pages[0]!.locator(".music-bar .volume")).toBeVisible();
+    await pages[0]!.reload();
+    await pages[0]!.locator(".tabs > button").nth(3).click();
+    await expect(pages[0]!.locator(".music-bar .volume")).toBeVisible();
+
     const gmConnection = await connectSocket(gm);
     connections.push(gmConnection);
     for (let index = 0; index < 5; index += 1)
       connections.push(await connectSocket(players[index]));
+
+    await expect(
+      gmPage.locator(".stack-list button").filter({
+        hasText: "Player 1",
+      }),
+    ).toBeVisible();
 
     for (let index = 0; index < 5; index += 1) {
       const snapshot = connections[index + 1].snapshot;
@@ -710,6 +752,20 @@ test("GM and six isolated players recover authoritative state without security l
     const messageResponses = await Promise.all(messageRequests);
     await Promise.all(messageResponses.map(expectOk));
     publicMarkers.push(gmPublicMessage);
+
+    // Product gate: a roll received outside chat creates a navigable
+    // notification. Opening it focuses the exact message while the composer
+    // remains visible and usable independently of message-list scrolling.
+    await expect(
+      pages[0]!.locator(".dice-notifications button").first(),
+    ).toBeVisible();
+    await pages[0]!.locator(".dice-notifications button").first().click();
+    await expect(pages[0]!.locator(".message:focus")).toHaveCount(1);
+    await pages[0]!.locator(".message-list").evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await expect(pages[0]!.locator(".chat-compose textarea")).toBeVisible();
+    await expect(pages[0]!.locator(".chat-compose button")).toBeVisible();
 
     for (let index = 0; index < players.length; index += 1) {
       const snapshot = await bootstrap(players[index]);
