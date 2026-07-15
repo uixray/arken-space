@@ -10,6 +10,7 @@ const edgeHealthUrl = "http://127.0.0.1:14180/healthz";
 const productionHealthUrl =
   process.env.ARKEN_PRODUCTION_HEALTH_URL ??
   "https://arken.uixray.tech/healthz";
+const isolatedOnly = process.env.ARKEN_ISOLATED_ONLY === "true";
 const minimumFreeBytes = Number(
   process.env.ARKEN_E2E_MIN_FREE_BYTES ?? 6 * gibibyte,
 );
@@ -26,6 +27,7 @@ const report = {
   startedAt: new Date().toISOString(),
   productionHealthUrl,
   expectedOrigin,
+  isolatedOnly,
   steps: [],
 };
 let activeChild = null;
@@ -217,14 +219,18 @@ async function preflight(buildRevision) {
     throw new Error("E2E_BASE_URL must be exactly " + expectedOrigin);
   record("exact-origin", "passed", { origin: expectedOrigin });
 
-  const production = await fetchJson(productionHealthUrl, 20_000);
-  if (production.status !== "ok" || production.database !== "ok")
-    throw new Error("Production health preflight is not healthy");
-  report.productionBefore = production;
-  record("production-health-before", "passed", {
-    buildRevision: production.buildRevision,
-    schemaVersion: production.schemaVersion,
-  });
+  if (isolatedOnly)
+    record("production-health-before", "skipped", { reason: "isolated-only" });
+  else {
+    const production = await fetchJson(productionHealthUrl, 20_000);
+    if (production.status !== "ok" || production.database !== "ok")
+      throw new Error("Production health preflight is not healthy");
+    report.productionBefore = production;
+    record("production-health-before", "passed", {
+      buildRevision: production.buildRevision,
+      schemaVersion: production.schemaVersion,
+    });
+  }
 }
 
 async function runPlaywrightWithRestart(environment) {
@@ -389,16 +395,22 @@ try {
   }
 
   try {
-    const production = await fetchJson(productionHealthUrl, 20_000);
-    report.productionAfter = production;
-    if (production.status !== "ok" || production.database !== "ok") {
-      exitCode = 1;
-      record("production-health-after", "failed", production);
-    } else
-      record("production-health-after", "passed", {
-        buildRevision: production.buildRevision,
-        schemaVersion: production.schemaVersion,
+    if (isolatedOnly) {
+      record("production-health-after", "skipped", {
+        reason: "isolated-only",
       });
+    } else {
+      const production = await fetchJson(productionHealthUrl, 20_000);
+      report.productionAfter = production;
+      if (production.status !== "ok" || production.database !== "ok") {
+        exitCode = 1;
+        record("production-health-after", "failed", production);
+      } else
+        record("production-health-after", "passed", {
+          buildRevision: production.buildRevision,
+          schemaVersion: production.schemaVersion,
+        });
+    }
   } catch (error) {
     exitCode = 1;
     record("production-health-after", "failed", {
