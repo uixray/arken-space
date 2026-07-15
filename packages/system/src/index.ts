@@ -6,7 +6,6 @@ export interface StatDefinition {
   max: number;
   defaultValue: number;
 }
-
 export interface SystemDefinition {
   id: string;
   version: number;
@@ -27,81 +26,36 @@ export interface SystemDefinition {
   quickRolls: Array<{ key: string; label: string; formula: string }>;
 }
 
-// Starter contract. Replace labels and formulas with the final custom rules without
-// changing the database or character-sheet renderer.
+const fixedStats = [
+  ["strength", "Сила", "СИЛ"],
+  ["agility", "Ловкость", "ЛОВ"],
+  ["endurance", "Выносливость", "ВЫН"],
+  ["vitality", "Живучесть", "ЖИВ"],
+  ["knowledge", "Знания", "ЗНА"],
+  ["intelligence", "Интеллект", "ИНТ"],
+  ["willpower", "Сила воли", "ВОЛ"],
+  ["charisma", "Харизма", "ХАР"],
+] as const;
+
 export const arkenSystem: SystemDefinition = {
   id: "arken-core",
-  version: 1,
+  version: 2,
   name: "Arken Core",
-  stats: [
-    {
-      key: "might",
-      label: "Сила",
-      shortLabel: "СИЛ",
-      min: -5,
-      max: 20,
-      defaultValue: 1,
-    },
-    {
-      key: "agility",
-      label: "Ловкость",
-      shortLabel: "ЛОВ",
-      min: -5,
-      max: 20,
-      defaultValue: 1,
-    },
-    {
-      key: "mind",
-      label: "Разум",
-      shortLabel: "РАЗ",
-      min: -5,
-      max: 20,
-      defaultValue: 1,
-    },
-    {
-      key: "spirit",
-      label: "Дух",
-      shortLabel: "ДУХ",
-      min: -5,
-      max: 20,
-      defaultValue: 1,
-    },
-    {
-      key: "presence",
-      label: "Влияние",
-      shortLabel: "ВЛЯ",
-      min: -5,
-      max: 20,
-      defaultValue: 1,
-    },
-    {
-      key: "health",
-      label: "Здоровье",
-      shortLabel: "ЗДР",
-      min: 0,
-      max: 999,
-      defaultValue: 10,
-    },
-    {
-      key: "focus",
-      label: "Фокус",
-      shortLabel: "ФОК",
-      min: 0,
-      max: 999,
-      defaultValue: 6,
-    },
-  ],
-  starterSkills: [
-    { key: "observe", name: "Наблюдение", rank: 0, formula: "2d6 + mind" },
-    { key: "move", name: "Манёвр", rank: 0, formula: "2d6 + agility" },
-    { key: "endure", name: "Стойкость", rank: 0, formula: "2d6 + spirit" },
-  ],
+  stats: fixedStats.map(([key, label, shortLabel]) => ({
+    key,
+    label,
+    shortLabel,
+    min: -20,
+    max: 20,
+    defaultValue: 0,
+  })),
+  starterSkills: [],
   starterSpells: [],
-  quickRolls: [
-    { key: "might", label: "Проверка силы", formula: "2d6 + might" },
-    { key: "agility", label: "Проверка ловкости", formula: "2d6 + agility" },
-    { key: "mind", label: "Проверка разума", formula: "2d6 + mind" },
-  ],
+  quickRolls: fixedStats.map(([key, label]) => ({
+    key,
+    label,
+    formula: `1d20 + ${key}`,
+  })),
 };
 
 export function createStarterCharacter() {
@@ -109,7 +63,7 @@ export function createStarterCharacter() {
     stats: Object.fromEntries(
       arkenSystem.stats.map((stat) => [stat.key, stat.defaultValue]),
     ),
-    skills: arkenSystem.starterSkills.map((skill) => ({ ...skill })),
-    spells: arkenSystem.starterSpells.map((spell) => ({ ...spell })),
+    skills: [],
+    spells: [],
   };
 }

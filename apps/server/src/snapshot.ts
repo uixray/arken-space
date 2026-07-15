@@ -3,6 +3,8 @@ import {
   assets,
   audioStates,
   campaigns,
+  catalogEntries,
+  characterCatalogEntries,
   characters,
   chatMessages,
   fogReveals,
@@ -10,6 +12,8 @@ import {
   memberships,
   scenes,
   tokens,
+  tokenControllers,
+  tokenDefinitions,
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
 import type { GameSnapshot } from "@arken/contracts";
@@ -33,6 +37,9 @@ export async function buildSnapshot(
     characterRows,
     sceneRows,
     tokenRows,
+    controllerRows,
+    catalogRows,
+    assignedRows,
     fogRows,
     assetRows,
     messageRows,
@@ -55,10 +62,35 @@ export async function buildSnapshot(
       .where(eq(scenes.campaignId, auth.campaignId))
       .orderBy(asc(scenes.createdAt)),
     db
-      .select({ token: tokens })
+      .select({ token: tokens, definition: tokenDefinitions })
       .from(tokens)
       .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+      .innerJoin(tokenDefinitions, eq(tokens.definitionId, tokenDefinitions.id))
       .where(eq(scenes.campaignId, auth.campaignId)),
+    db
+      .select()
+      .from(tokenControllers)
+      .innerJoin(
+        tokenDefinitions,
+        eq(tokenControllers.tokenDefinitionId, tokenDefinitions.id),
+      )
+      .where(eq(tokenDefinitions.campaignId, auth.campaignId)),
+    db
+      .select()
+      .from(catalogEntries)
+      .where(eq(catalogEntries.campaignId, auth.campaignId))
+      .orderBy(asc(catalogEntries.createdAt)),
+    db
+      .select({
+        entry: characterCatalogEntries,
+        campaignId: characters.campaignId,
+      })
+      .from(characterCatalogEntries)
+      .innerJoin(
+        characters,
+        eq(characterCatalogEntries.characterId, characters.id),
+      )
+      .where(eq(characters.campaignId, auth.campaignId)),
     db
       .select({ fog: fogReveals })
       .from(fogReveals)
@@ -118,10 +150,28 @@ export async function buildSnapshot(
           (character) => character.ownerMembershipId === auth.membershipId,
         );
   const visibleTokens = tokenRows.filter(
-    ({ token }) =>
+    ({ token, definition }) =>
       visibleSceneIds.has(token.sceneId) &&
-      (auth.role === "GM" || token.visible),
+      (auth.role === "GM" || (token.visible && token.layer !== "GM")) &&
+      definition.campaignId === auth.campaignId,
   );
+  const controllersByDefinition = new Map<string, string[]>();
+  for (const row of controllerRows) {
+    const list =
+      controllersByDefinition.get(row.token_controllers.tokenDefinitionId) ??
+      [];
+    list.push(row.token_controllers.membershipId);
+    controllersByDefinition.set(row.token_controllers.tokenDefinitionId, list);
+  }
+  const entriesByCharacter = new Map<
+    string,
+    (typeof assignedRows)[number]["entry"][]
+  >();
+  for (const { entry } of assignedRows) {
+    const list = entriesByCharacter.get(entry.characterId) ?? [];
+    list.push(entry);
+    entriesByCharacter.set(entry.characterId, list);
+  }
   const visibleAssetIds = new Set<string>();
   for (const scene of visibleScenes) {
     if (scene.mapAssetId) visibleAssetIds.add(scene.mapAssetId);
@@ -162,6 +212,18 @@ export async function buildSnapshot(
       skills: character.skills,
       spells: character.spells,
       notes: character.notes,
+      backstory: character.backstory,
+      inventory: character.inventory,
+      resources: character.resources,
+      entries: (entriesByCharacter.get(character.id) ?? []).map((entry) => ({
+        id: entry.id,
+        sourceCatalogEntryId: entry.sourceCatalogEntryId,
+        kind: entry.kind,
+        name: entry.name,
+        description: entry.description,
+        data: entry.data,
+        revision: entry.revision,
+      })),
       revision: character.revision,
     })),
     scenes: visibleScenes.map((scene) => ({
@@ -174,9 +236,34 @@ export async function buildSnapshot(
       grid: scene.grid,
       active: campaign.activeSceneId === scene.id,
     })),
-    tokens: visibleTokens.map(({ token }) => {
+    catalogEntries:
+      auth.role === "GM"
+        ? catalogRows.map((entry) => ({
+            id: entry.id,
+            kind: entry.kind,
+            name: entry.name,
+            description: entry.description,
+            data: entry.data,
+            revision: entry.revision,
+          }))
+        : [],
+    tokens: visibleTokens.map(({ token, definition }) => {
       const { updatedAt: _updatedAt, ...dto } = token;
-      return dto;
+      return {
+        ...dto,
+        definitionId: definition.id,
+        characterId: definition.characterId,
+        assetId: definition.defaultAssetId,
+        name: definition.name,
+        width: definition.defaultWidth,
+        height: definition.defaultHeight,
+        controllerMembershipIds:
+          auth.role === "GM"
+            ? (controllersByDefinition.get(definition.id) ?? [])
+            : (controllersByDefinition.get(definition.id) ?? []).filter(
+                (id) => id === auth.membershipId,
+              ),
+      };
     }),
     fogReveals: fogRows
       .filter(({ fog }) => visibleSceneIds.has(fog.sceneId))

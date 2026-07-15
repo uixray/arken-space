@@ -53,7 +53,9 @@ export function gameplayResetStatements(campaignId, gmMembershipId) {
       "delete from tokens where scene_id in (select id from scenes where campaign_id = $1)",
       [campaignId],
     ],
+    ["delete from token_definitions where campaign_id = $1", [campaignId]],
     ["delete from characters where campaign_id = $1", [campaignId]],
+    ["delete from catalog_entries where campaign_id = $1", [campaignId]],
     ["delete from scenes where campaign_id = $1", [campaignId]],
     ["delete from game_events where campaign_id = $1", [campaignId]],
     [

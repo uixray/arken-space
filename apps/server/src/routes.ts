@@ -8,12 +8,16 @@ import {
   actionIdSchema,
   assetKindSchema,
   characterCommandSchema,
+  assignCatalogEntrySchema,
+  catalogEntryCommandSchema,
+  characterCatalogEntryCommandSchema,
   createChatMessageSchema,
   createFogRevealSchema,
   createInviteSchema,
   createSceneSchema,
   createTokenSchema,
   diceRequestSchema,
+  deleteTokenSchema,
   gmLoginSchema,
   inviteClaimSchema,
   rotatePlayerAccessSchema,
@@ -23,6 +27,8 @@ import {
 } from "@arken/contracts";
 import {
   assets,
+  catalogEntries,
+  characterCatalogEntries,
   campaigns,
   characters,
   chatMessages,
@@ -34,6 +40,8 @@ import {
   scenes,
   sessions,
   tokens,
+  tokenControllers,
+  tokenDefinitions,
 } from "@arken/db";
 import { createStarterCharacter } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
@@ -113,10 +121,11 @@ export async function claimInviteOwnership(
           eq(characters.campaignId, invite.campaignId),
         ),
       );
-    await tx
-      .update(tokens)
-      .set({ ownerMembershipId: member.id, updatedAt: new Date() })
-      .where(eq(tokens.characterId, invite.characterId));
+    await tx.execute(sql`insert into token_controllers (token_definition_id, membership_id)
+      select d.id, ${member.id} from token_definitions d
+      where d.character_id = ${invite.characterId} and d.campaign_id = ${invite.campaignId}
+      and not exists (select 1 from token_controllers c where c.token_definition_id = d.id)
+      on conflict do nothing`);
     const [claimed] = await tx
       .update(invites)
       .set({ claimedAt: new Date(), claimedByMembershipId: member.id })
@@ -238,10 +247,11 @@ async function createPlayerAccess(
           eq(characters.campaignId, campaignId),
         ),
       );
-    await tx
-      .update(tokens)
-      .set({ ownerMembershipId: member.id, updatedAt: new Date() })
-      .where(eq(tokens.characterId, characterId));
+    await tx.execute(sql`insert into token_controllers (token_definition_id, membership_id)
+      select d.id, ${member.id} from token_definitions d
+      where d.character_id = ${characterId} and d.campaign_id = ${campaignId}
+      and not exists (select 1 from token_controllers c where c.token_definition_id = d.id)
+      on conflict do nothing`);
     const [grant] = await tx
       .insert(playerAccessGrants)
       .values({
@@ -494,6 +504,14 @@ export function registerRoutes(
     if (auth.role !== "GM" && current.ownerMembershipId !== auth.membershipId)
       return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
     const { actionId, ...updates } = body;
+    if (
+      auth.role !== "GM" &&
+      Object.keys(updates).some(
+        (key) =>
+          !["backstory", "inventory", "notes", "resources"].includes(key),
+      )
+    )
+      return reply.code(403).send({ error: "CHARACTER_FIELD_FORBIDDEN" });
     const updated = await db.transaction(async (tx) => {
       const [next] = await tx
         .update(characters)
@@ -525,6 +543,204 @@ export function registerRoutes(
     }
     return updated;
   });
+
+  app.post("/api/catalog", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = catalogEntryCommandSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const { actionId, ...input } = body;
+    const created = await db.transaction(async (tx) => {
+      const [entry] = await tx
+        .insert(catalogEntries)
+        .values({ campaignId: auth.campaignId, ...input })
+        .returning();
+      if (!entry) throw new Error("CATALOG_CREATE_FAILED");
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId,
+        membershipId: auth.membershipId,
+        type: "catalog.created",
+        entityType: "catalog_entry",
+        entityId: entry.id,
+        entityRevision: 0,
+      });
+      return entry;
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(201).send(created);
+  });
+
+  app.patch("/api/catalog/:id", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = catalogEntryCommandSchema
+      .partial()
+      .extend({ actionId: actionIdSchema })
+      .parse(request.body);
+    const [current] = await db
+      .select()
+      .from(catalogEntries)
+      .where(
+        and(
+          eq(catalogEntries.id, id),
+          eq(catalogEntries.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CATALOG_NOT_FOUND" });
+    const { actionId, ...updates } = body;
+    const [updated] = await db
+      .update(catalogEntries)
+      .set({
+        ...updates,
+        revision: current.revision + 1,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(catalogEntries.id, id),
+          eq(catalogEntries.revision, current.revision),
+        ),
+      )
+      .returning();
+    if (!updated) return reply.code(409).send({ error: "CATALOG_CONFLICT" });
+    await db.insert(gameEvents).values({
+      campaignId: auth.campaignId,
+      actionId,
+      membershipId: auth.membershipId,
+      type: "catalog.updated",
+      entityType: "catalog_entry",
+      entityId: id,
+      entityRevision: updated.revision,
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
+  });
+
+  app.post("/api/characters/:id/catalog", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const characterId = z
+      .object({ id: z.string().uuid() })
+      .parse(request.params).id;
+    const body = assignCatalogEntrySchema.parse(request.body);
+    const [source] = await db
+      .select()
+      .from(catalogEntries)
+      .where(
+        and(
+          eq(catalogEntries.id, body.catalogEntryId),
+          eq(catalogEntries.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    const [character] = await db
+      .select()
+      .from(characters)
+      .where(
+        and(
+          eq(characters.id, characterId),
+          eq(characters.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!source || !character)
+      return reply.code(404).send({ error: "ASSIGNMENT_SOURCE_NOT_FOUND" });
+    const assigned = await db.transaction(async (tx) => {
+      const [entry] = await tx
+        .insert(characterCatalogEntries)
+        .values({
+          characterId,
+          sourceCatalogEntryId: source.id,
+          kind: source.kind,
+          name: source.name,
+          description: source.description,
+          data: source.data,
+        })
+        .returning();
+      if (!entry) throw new Error("ASSIGNMENT_CREATE_FAILED");
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "character_catalog.assigned",
+        entityType: "character_catalog_entry",
+        entityId: entry.id,
+        entityRevision: 0,
+      });
+      return entry;
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(201).send(assigned);
+  });
+
+  app.patch(
+    "/api/characters/:characterId/catalog/:id",
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      if (auth.role !== "GM")
+        return reply.code(403).send({ error: "GM_REQUIRED" });
+      const params = z
+        .object({ characterId: z.string().uuid(), id: z.string().uuid() })
+        .parse(request.params);
+      const body = characterCatalogEntryCommandSchema.parse(request.body);
+      const [current] = await db
+        .select({ entry: characterCatalogEntries })
+        .from(characterCatalogEntries)
+        .innerJoin(
+          characters,
+          eq(characterCatalogEntries.characterId, characters.id),
+        )
+        .where(
+          and(
+            eq(characterCatalogEntries.id, params.id),
+            eq(characterCatalogEntries.characterId, params.characterId),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!current)
+        return reply.code(404).send({ error: "CHARACTER_ENTRY_NOT_FOUND" });
+      const { actionId, ...updates } = body;
+      const [updated] = await db
+        .update(characterCatalogEntries)
+        .set({
+          ...updates,
+          revision: current.entry.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(characterCatalogEntries.id, params.id),
+            eq(characterCatalogEntries.revision, current.entry.revision),
+          ),
+        )
+        .returning();
+      if (!updated)
+        return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
+      await db.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId,
+        membershipId: auth.membershipId,
+        type: "character_catalog.updated",
+        entityType: "character_catalog_entry",
+        entityId: updated.id,
+        entityRevision: updated.revision,
+      });
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return updated;
+    },
+  );
 
   app.post("/api/invites", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
@@ -813,7 +1029,26 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    const [existingDefinition] = body.definitionId
+      ? await db
+          .select()
+          .from(tokenDefinitions)
+          .where(
+            and(
+              eq(tokenDefinitions.id, body.definitionId),
+              eq(tokenDefinitions.campaignId, auth.campaignId),
+            ),
+          )
+          .limit(1)
+      : [];
+    if (body.definitionId && !existingDefinition)
+      return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
+    if (existingDefinition && body.controllerMembershipIds !== undefined)
+      return reply
+        .code(400)
+        .send({ error: "CONTROLLERS_BELONG_TO_DEFINITION" });
     let tokenOwnerMembershipId = body.ownerMembershipId ?? null;
+    let seededControllerMembershipId: string | null = null;
     if (body.characterId) {
       const [character] = await db
         .select({ ownerMembershipId: characters.ownerMembershipId })
@@ -828,6 +1063,7 @@ export function registerRoutes(
       if (!character)
         return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
       tokenOwnerMembershipId = character.ownerMembershipId;
+      seededControllerMembershipId = character.ownerMembershipId;
     } else if (tokenOwnerMembershipId) {
       const [owner] = await db
         .select({ id: memberships.id })
@@ -841,15 +1077,70 @@ export function registerRoutes(
         .limit(1);
       if (!owner) return reply.code(404).send({ error: "OWNER_NOT_FOUND" });
     }
-    const { actionId, ...tokenInput } = body;
+    const {
+      actionId,
+      definitionId: _definitionId,
+      controllerMembershipIds: explicitControllers,
+      ...tokenInput
+    } = body;
+    let controllerMembershipIds =
+      explicitControllers ??
+      (seededControllerMembershipId
+        ? [seededControllerMembershipId]
+        : tokenOwnerMembershipId
+          ? [tokenOwnerMembershipId]
+          : []);
+    if (existingDefinition) {
+      controllerMembershipIds = (
+        await db
+          .select({ membershipId: tokenControllers.membershipId })
+          .from(tokenControllers)
+          .where(eq(tokenControllers.tokenDefinitionId, existingDefinition.id))
+      ).map((item) => item.membershipId);
+    }
+    if (controllerMembershipIds.length) {
+      const valid = await db
+        .select({ id: memberships.id, role: memberships.role })
+        .from(memberships)
+        .where(eq(memberships.campaignId, auth.campaignId));
+      const validIds = new Set(
+        valid
+          .filter((member) => member.role === "PLAYER")
+          .map((member) => member.id),
+      );
+      if (controllerMembershipIds.some((id) => !validIds.has(id)))
+        return reply.code(404).send({ error: "CONTROLLER_NOT_FOUND" });
+    }
     const token = await db.transaction(async (tx) => {
+      const [definition] = existingDefinition
+        ? [existingDefinition]
+        : await tx
+            .insert(tokenDefinitions)
+            .values({
+              campaignId: auth.campaignId,
+              characterId: body.characterId ?? null,
+              defaultAssetId: body.assetId ?? null,
+              name: body.name,
+              defaultWidth: body.width,
+              defaultHeight: body.height,
+            })
+            .returning();
+      if (!definition) throw new Error("TOKEN_DEFINITION_CREATE_FAILED");
+      if (!existingDefinition && controllerMembershipIds.length)
+        await tx.insert(tokenControllers).values(
+          controllerMembershipIds.map((membershipId) => ({
+            tokenDefinitionId: definition.id,
+            membershipId,
+          })),
+        );
       const [created] = await tx
         .insert(tokens)
         .values({
           ...tokenInput,
-          characterId: body.characterId ?? null,
+          definitionId: definition.id,
+          characterId: definition.characterId,
           ownerMembershipId: tokenOwnerMembershipId,
-          assetId: body.assetId ?? null,
+          assetId: definition.defaultAssetId,
         })
         .returning();
       if (!created) throw new Error("TOKEN_CREATE_FAILED");
@@ -863,10 +1154,79 @@ export function registerRoutes(
         entityRevision: created.revision,
         payload: { tokenId: created.id },
       });
-      return created;
+      return {
+        ...created,
+        definitionId: definition.id,
+        controllerMembershipIds,
+      };
     });
     await broadcastSnapshots(io, db, auth.campaignId);
     return reply.code(201).send(token);
+  });
+
+  app.delete("/api/tokens/:id", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = deleteTokenSchema.parse(request.body);
+    const [row] = await db
+      .select({
+        token: tokens,
+        definition: tokenDefinitions,
+        campaignId: scenes.campaignId,
+      })
+      .from(tokens)
+      .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+      .innerJoin(tokenDefinitions, eq(tokens.definitionId, tokenDefinitions.id))
+      .where(and(eq(tokens.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!row || row.definition.campaignId !== auth.campaignId)
+      return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
+    if (row.token.revision !== body.revision)
+      return reply.code(409).send({ error: "STALE_REVISION" });
+    if (auth.role !== "GM") {
+      const [controller] = await db
+        .select()
+        .from(tokenControllers)
+        .where(
+          and(
+            eq(tokenControllers.tokenDefinitionId, row.definition.id),
+            eq(tokenControllers.membershipId, auth.membershipId),
+          ),
+        )
+        .limit(1);
+      if (
+        !controller ||
+        row.token.locked ||
+        !row.token.visible ||
+        row.token.layer === "GM"
+      )
+        return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
+    }
+    const deleted = await db.transaction(async (tx) => {
+      const [placement] = await tx
+        .delete(tokens)
+        .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
+        .returning();
+      if (!placement) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "TOKEN_DELETED",
+        entityType: "TOKEN",
+        entityId: id,
+        entityRevision: body.revision,
+        payload: {
+          definitionId: row.definition.id,
+          sceneId: placement.sceneId,
+        },
+      });
+      return placement;
+    });
+    if (!deleted) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return { ok: true };
   });
 
   app.post("/api/fog-reveals", async (request, reply) => {

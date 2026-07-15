@@ -4,7 +4,6 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { claimInviteOwnership } from "../apps/server/src/routes.js";
-import { reconcileTokenOwnership } from "../apps/server/src/seed.js";
 
 let database: PGlite;
 
@@ -24,7 +23,7 @@ beforeEach(async () => {
 afterEach(async () => database.close());
 
 describe("invite ownership lifecycle", () => {
-  it("assigns the claimed character and every linked token to the new member", async () => {
+  it("seeds controllers for unassigned linked definitions without rewriting placements", async () => {
     const db = drizzle(database, { schema });
     const [campaign] = await db
       .insert(schema.campaigns)
@@ -96,28 +95,22 @@ describe("invite ownership lifecycle", () => {
     const member = await claimInviteOwnership(db as never, invite, "Player");
     const characters = await db.select().from(schema.characters);
     const tokens = await db.select().from(schema.tokens);
+    const controllers = await db.select().from(schema.tokenControllers);
 
     expect(
       characters.find((item) => item.id === character.id)?.ownerMembershipId,
     ).toBe(member.id);
     expect(
       tokens.find((item) => item.id === claimedToken.id)?.ownerMembershipId,
-    ).toBe(member.id);
+    ).toBeNull();
+    expect(controllers).toContainEqual(
+      expect.objectContaining({
+        tokenDefinitionId: claimedToken.definitionId,
+        membershipId: member.id,
+      }),
+    );
     expect(
       tokens.find((item) => item.id === otherToken.id)?.ownerMembershipId,
-    ).toBeNull();
-
-    await database.exec(`
-      update tokens set owner_membership_id = null where id = '${claimedToken.id}';
-      update tokens set owner_membership_id = '${member.id}' where id = '${otherToken.id}';
-    `);
-    await reconcileTokenOwnership(db as never);
-    const repaired = await db.select().from(schema.tokens);
-    expect(
-      repaired.find((item) => item.id === claimedToken.id)?.ownerMembershipId,
-    ).toBe(member.id);
-    expect(
-      repaired.find((item) => item.id === otherToken.id)?.ownerMembershipId,
     ).toBeNull();
   });
 });

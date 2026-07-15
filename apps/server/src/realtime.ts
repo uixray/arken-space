@@ -7,6 +7,8 @@ import {
   gameEvents,
   memberships,
   scenes,
+  tokenControllers,
+  tokenDefinitions,
   tokens,
 } from "@arken/db";
 import type {
@@ -30,7 +32,10 @@ const campaignRoom = (campaignId: string) => `campaign:${campaignId}`;
 const gmRoom = (campaignId: string) => `campaign:${campaignId}:gm`;
 const memberRoom = (membershipId: string) => `member:${membershipId}`;
 
-function tokenDto(token: typeof tokens.$inferSelect): TokenDto {
+type EditableToken = typeof tokens.$inferSelect & {
+  controllerMembershipIds: string[];
+};
+function tokenDto(token: EditableToken): TokenDto {
   const { updatedAt: _updatedAt, ...dto } = token;
   return dto;
 }
@@ -64,28 +69,48 @@ export async function editableToken(
       token: tokens,
       campaignId: scenes.campaignId,
       activeSceneId: campaigns.activeSceneId,
+      definition: tokenDefinitions,
     })
     .from(tokens)
     .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
     .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
+    .innerJoin(tokenDefinitions, eq(tokens.definitionId, tokenDefinitions.id))
     .where(eq(tokens.id, tokenId))
     .limit(1);
-  if (!row || row.campaignId !== auth.campaignId) return null;
+  if (
+    !row ||
+    row.campaignId !== auth.campaignId ||
+    row.definition.campaignId !== auth.campaignId
+  )
+    return null;
+  const controllers = await db
+    .select({ membershipId: tokenControllers.membershipId })
+    .from(tokenControllers)
+    .where(eq(tokenControllers.tokenDefinitionId, row.definition.id));
+  const controllerMembershipIds = controllers.map((item) => item.membershipId);
   if (
     auth.role !== "GM" &&
-    (row.token.ownerMembershipId !== auth.membershipId ||
+    (!controllerMembershipIds.includes(auth.membershipId) ||
       row.token.locked ||
       !row.token.visible ||
       row.token.sceneId !== row.activeSceneId)
   )
     return null;
-  return row.token;
+  return {
+    ...row.token,
+    characterId: row.definition.characterId,
+    assetId: row.definition.defaultAssetId,
+    name: row.definition.name,
+    width: row.definition.defaultWidth,
+    height: row.definition.defaultHeight,
+    controllerMembershipIds,
+  };
 }
 
 async function tokenAudienceRoom(
   db: Database,
   campaignId: string,
-  token: typeof tokens.$inferSelect,
+  token: EditableToken,
 ) {
   if (!token.visible) return gmRoom(campaignId);
   const [campaign] = await db
@@ -285,12 +310,14 @@ export function registerRealtime(
           ...(latest ? { data: tokenDto(latest) } : {}),
         });
       }
-      const dto = tokenDto(result.updated);
-      const audience = await tokenAudienceRoom(
-        db,
-        auth.campaignId,
-        result.updated,
-      );
+      const dto = tokenDto({
+        ...result.updated,
+        controllerMembershipIds: current.controllerMembershipIds,
+      });
+      const audience = await tokenAudienceRoom(db, auth.campaignId, {
+        ...result.updated,
+        controllerMembershipIds: current.controllerMembershipIds,
+      });
       io.to(audience).emit(
         "token:moved",
         envelope(result.event.sequence, command.actionId, dto),

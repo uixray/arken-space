@@ -21,6 +21,18 @@ export type AssetKind = z.infer<typeof assetKindSchema>;
 export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
 
 export const actionIdSchema = z.string().uuid();
+export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYERS"]);
+export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
+export const fixedCharacteristicsSchema = z.object({
+  strength: z.number().finite(),
+  agility: z.number().finite(),
+  endurance: z.number().finite(),
+  vitality: z.number().finite(),
+  knowledge: z.number().finite(),
+  intelligence: z.number().finite(),
+  willpower: z.number().finite(),
+  charisma: z.number().finite(),
+});
 
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });
 export const inviteClaimSchema = z.object({
@@ -86,6 +98,7 @@ export const activateSceneSchema = z.object({
 
 export const createTokenSchema = z.object({
   actionId: actionIdSchema,
+  definitionId: z.string().uuid().optional(),
   sceneId: z.string().uuid(),
   characterId: z.string().uuid().nullable().optional(),
   ownerMembershipId: z.string().uuid().nullable().optional(),
@@ -100,6 +113,8 @@ export const createTokenSchema = z.object({
   rotation: z.number().finite().default(0),
   visible: z.boolean().default(true),
   locked: z.boolean().default(false),
+  layer: tokenLayerSchema.default("PLAYERS"),
+  controllerMembershipIds: z.array(z.string().uuid()).max(50).optional(),
 });
 
 export const moveTokenSchema = z.object({
@@ -109,6 +124,10 @@ export const moveTokenSchema = z.object({
   y: z.number().finite(),
   z: z.number().finite().default(0),
   levelId: z.string().uuid().nullable().default(null),
+  revision: z.number().int().nonnegative(),
+});
+export const deleteTokenSchema = z.object({
+  actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
 });
 
@@ -129,7 +148,7 @@ export const undoFogRevealSchema = z.object({
 export const characterUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   portraitAssetId: z.string().uuid().nullable().optional(),
-  stats: z.record(z.string(), z.number().finite()).optional(),
+  stats: fixedCharacteristicsSchema.optional(),
   skills: z
     .array(
       z.object({
@@ -153,7 +172,35 @@ export const characterUpdateSchema = z.object({
     .max(100)
     .optional(),
   notes: z.string().max(20000).optional(),
+  backstory: z.string().max(40000).optional(),
+  inventory: z.array(z.string().trim().min(1).max(500)).max(500).optional(),
+  resources: z
+    .record(
+      z.string(),
+      z.object({
+        current: z.number().finite(),
+        maximum: z.number().finite().optional(),
+      }),
+    )
+    .optional(),
 });
+
+export const catalogEntryInputSchema = z.object({
+  kind: catalogEntryKindSchema,
+  name: z.string().trim().min(1).max(120),
+  description: z.string().max(10000).default(""),
+  data: z.record(z.string(), z.unknown()).default({}),
+});
+export const catalogEntryCommandSchema = catalogEntryInputSchema.extend({
+  actionId: actionIdSchema,
+});
+export const assignCatalogEntrySchema = z.object({
+  actionId: actionIdSchema,
+  catalogEntryId: z.string().uuid(),
+});
+export const characterCatalogEntryCommandSchema = catalogEntryInputSchema
+  .partial()
+  .extend({ actionId: actionIdSchema });
 
 export const characterCommandSchema = characterUpdateSchema.extend({
   actionId: actionIdSchema,
@@ -216,7 +263,22 @@ export interface CharacterDto {
     formula?: string;
   }>;
   notes: string;
+  backstory: string;
+  inventory: string[];
+  resources: Record<string, { current: number; maximum?: number }>;
+  entries: CharacterCatalogEntryDto[];
   revision: number;
+}
+export interface CatalogEntryDto {
+  id: string;
+  kind: "SKILL" | "ABILITY";
+  name: string;
+  description: string;
+  data: Record<string, unknown>;
+  revision: number;
+}
+export interface CharacterCatalogEntryDto extends CatalogEntryDto {
+  sourceCatalogEntryId: string | null;
 }
 
 export interface SceneDto {
@@ -232,6 +294,8 @@ export interface SceneDto {
 
 export interface TokenDto {
   id: string;
+  definitionId: string;
+  controllerMembershipIds: string[];
   sceneId: string;
   characterId: string | null;
   ownerMembershipId: string | null;
@@ -246,6 +310,7 @@ export interface TokenDto {
   rotation: number;
   visible: boolean;
   locked: boolean;
+  layer: z.infer<typeof tokenLayerSchema>;
   revision: number;
 }
 
@@ -299,6 +364,7 @@ export interface GameSnapshot {
   me: MembershipDto;
   members: MembershipDto[];
   characters: CharacterDto[];
+  catalogEntries: CatalogEntryDto[];
   scenes: SceneDto[];
   tokens: TokenDto[];
   fogReveals: FogRevealDto[];

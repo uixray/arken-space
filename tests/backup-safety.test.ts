@@ -257,7 +257,7 @@ it("executes the reset plan through one injected transaction", async () => {
     },
   };
   await executeGameplayReset(transaction, "campaign", "gm");
-  expect(calls).toHaveLength(14);
+  expect(calls).toHaveLength(16);
   expect(calls[0][0]).toMatch(/select id/);
   expect(calls[1][0]).toMatch(/update assets/);
   expect(calls.at(-1)[0]).toMatch(/delete from memberships/);

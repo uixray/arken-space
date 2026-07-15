@@ -280,7 +280,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             .filter(
               (token) =>
                 props.role === "GM" ||
-                token.ownerMembershipId === props.membershipId ||
+                token.controllerMembershipIds.includes(props.membershipId) ||
                 isRectFullyRevealed(token, props.fogReveals),
             )
             .map((token) => {
@@ -288,7 +288,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 props.tool === "PAN" &&
                 !token.locked &&
                 (props.role === "GM" ||
-                  token.ownerMembershipId === props.membershipId);
+                  token.controllerMembershipIds.includes(props.membershipId));
               const url = assetUrl(token.assetId);
               const common = {
                 x: token.x,

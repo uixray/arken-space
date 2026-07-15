@@ -158,6 +158,17 @@ function CharacterPanel({
         </div>
         <span className="revision">rev {character.revision}</span>
       </div>
+      <details className="subsection">
+        <summary>Предыстория</summary>
+        <textarea
+          defaultValue={character.backstory}
+          disabled={!editable}
+          rows={8}
+          onBlur={(event) =>
+            onPatch(character.id, { backstory: event.target.value })
+          }
+        />
+      </details>
       <div className="stats-grid">
         {arkenSystem.stats.map((stat) => (
           <label key={stat.key} className="stat-field">
@@ -230,6 +241,40 @@ function CharacterPanel({
           <p className="muted">Заклинания ещё не добавлены.</p>
         )}
       </div>
+      <div className="subsection">
+        <h3>Каталог персонажа</h3>
+        {character.entries.length ? (
+          character.entries.map((entry) => (
+            <div className="plain-row" key={entry.id}>
+              <strong>{entry.name}</strong>
+              <span className="eyebrow">
+                {entry.kind === "SKILL" ? "Навык" : "Способность"}
+              </span>
+              {entry.description && <p>{entry.description}</p>}
+            </div>
+          ))
+        ) : (
+          <p className="muted">
+            Мастер ещё не назначил навыки или способности.
+          </p>
+        )}
+      </div>
+      <label className="field">
+        Инвентарь (один предмет на строку)
+        <textarea
+          defaultValue={character.inventory.join("\n")}
+          disabled={!editable}
+          rows={5}
+          onBlur={(event) =>
+            onPatch(character.id, {
+              inventory: event.target.value
+                .split("\n")
+                .map((item) => item.trim())
+                .filter(Boolean),
+            })
+          }
+        />
+      </label>
       <label className="field">
         Заметки
         <textarea

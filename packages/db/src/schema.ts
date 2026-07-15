@@ -35,6 +35,11 @@ export const messageKindEnum = pgEnum("message_kind", [
   "DICE",
   "SYSTEM",
 ]);
+export const tokenLayerEnum = pgEnum("token_layer", ["MAP", "GM", "PLAYERS"]);
+export const catalogEntryKindEnum = pgEnum("catalog_entry_kind", [
+  "SKILL",
+  "ABILITY",
+]);
 
 export const campaigns = pgTable("campaigns", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -120,6 +125,12 @@ export const characters = pgTable(
       .notNull()
       .default([]),
     notes: text("notes").notNull().default(""),
+    backstory: text("backstory").notNull().default(""),
+    inventory: jsonb("inventory").$type<string[]>().notNull().default([]),
+    resources: jsonb("resources")
+      .$type<Record<string, { current: number; maximum?: number }>>()
+      .notNull()
+      .default({}),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -129,6 +140,54 @@ export const characters = pgTable(
       .notNull(),
   },
   (table) => [index("characters_campaign_idx").on(table.campaignId)],
+);
+
+export const catalogEntries = pgTable(
+  "catalog_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    kind: catalogEntryKindEnum("kind").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("catalog_entries_campaign_idx").on(table.campaignId)],
+);
+
+export const characterCatalogEntries = pgTable(
+  "character_catalog_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    characterId: uuid("character_id")
+      .notNull()
+      .references(() => characters.id, { onDelete: "cascade" }),
+    sourceCatalogEntryId: uuid("source_catalog_entry_id").references(
+      () => catalogEntries.id,
+      { onDelete: "set null" },
+    ),
+    kind: catalogEntryKindEnum("kind").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("character_catalog_character_idx").on(table.characterId)],
 );
 
 export const scenes = pgTable(
@@ -167,10 +226,60 @@ export const scenes = pgTable(
   (table) => [index("scenes_campaign_idx").on(table.campaignId)],
 );
 
+export const tokenDefinitions = pgTable(
+  "token_definitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    characterId: uuid("character_id").references(() => characters.id, {
+      onDelete: "set null",
+    }),
+    defaultAssetId: uuid("default_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    defaultWidth: doublePrecision("default_width").notNull().default(64),
+    defaultHeight: doublePrecision("default_height").notNull().default(64),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("token_definitions_campaign_idx").on(table.campaignId)],
+);
+
+export const tokenControllers = pgTable(
+  "token_controllers",
+  {
+    tokenDefinitionId: uuid("token_definition_id")
+      .notNull()
+      .references(() => tokenDefinitions.id, { onDelete: "cascade" }),
+    membershipId: uuid("membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("token_controllers_definition_member_idx").on(
+      table.tokenDefinitionId,
+      table.membershipId,
+    ),
+  ],
+);
+
 export const tokens = pgTable(
   "tokens",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    definitionId: uuid("definition_id")
+      .notNull()
+      .references(() => tokenDefinitions.id, { onDelete: "cascade" }),
     sceneId: uuid("scene_id")
       .notNull()
       .references(() => scenes.id, { onDelete: "cascade" }),
@@ -185,6 +294,7 @@ export const tokens = pgTable(
       onDelete: "set null",
     }),
     levelId: uuid("level_id"),
+    layer: tokenLayerEnum("layer").notNull().default("PLAYERS"),
     name: text("name").notNull(),
     x: doublePrecision("x").notNull(),
     y: doublePrecision("y").notNull(),
