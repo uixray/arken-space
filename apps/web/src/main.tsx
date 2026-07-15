@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "./random-uuid-polyfill";
 import { App } from "./App";
 import "./styles.css";
 
