@@ -827,8 +827,8 @@ test("GM and six isolated players recover authoritative state without security l
     await activateScene(gm, recoveryScene.id, connections);
     for (const page of pages)
       await expect(
-        page.getByText(recoveryScene.name, { exact: true }),
-      ).toBeVisible({ timeout: 30_000 });
+        page.getByRole("combobox", { name: "Активная сцена" }),
+      ).toHaveValue(recoveryScene.id, { timeout: 30_000 });
 
     const recoveryPromises = connections.map(({ socket }) =>
       waitForRecovery(socket),
@@ -947,8 +947,8 @@ test("GM and six isolated players recover authoritative state without security l
         timeout: 30_000,
       });
       await expect(
-        page.getByText(recoveryScene.name, { exact: true }),
-      ).toBeVisible();
+        page.getByRole("combobox", { name: "Активная сцена" }),
+      ).toHaveValue(recoveryScene.id);
     }
 
     const sixthGrant = grants.find(
