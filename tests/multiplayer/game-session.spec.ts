@@ -810,8 +810,8 @@ test("GM and six isolated players recover authoritative state without security l
       pages[1].getByText("Player 2 · PLAYER", { exact: true }),
     ).toBeVisible();
     await expect(
-      pages[1].getByText(initialScene.name, { exact: true }),
-    ).toBeVisible();
+      pages[1].getByRole("combobox", { name: "Активная сцена" }),
+    ).toHaveValue(initialScene.id);
     await expect(pages[1].getByText("в сети", { exact: true })).toBeVisible();
 
     await players[2].setOffline(true);
