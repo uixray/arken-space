@@ -57,6 +57,7 @@ type Props = {
     characterId: string,
     id: string,
     patch: {
+      kind?: "SKILL" | "ABILITY";
       name?: string;
       description?: string;
       data?: Record<string, unknown>;
@@ -300,6 +301,11 @@ function CharacterPanel({
               {snapshot.me.role === "GM" && (
                 <button
                   onClick={() => {
+                    const kind = window.prompt(
+                      "Тип: SKILL или ABILITY",
+                      entry.kind,
+                    );
+                    if (kind !== "SKILL" && kind !== "ABILITY") return;
                     const name = window.prompt("Название", entry.name);
                     if (!name?.trim()) return;
                     const description = window.prompt(
@@ -314,6 +320,7 @@ function CharacterPanel({
                     if (raw === null) return;
                     try {
                       void onUpdateEntry(character.id, entry.id, {
+                        kind,
                         name: name.trim(),
                         description,
                         data: JSON.parse(raw) as Record<string, unknown>,

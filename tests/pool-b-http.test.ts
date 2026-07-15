@@ -300,6 +300,7 @@ describe("Pool B HTTP boundaries", () => {
       headers: headers(secrets.gm),
       payload: {
         actionId: crypto.randomUUID(),
+        kind: "SKILL",
         name: "Custom",
         description: "changed",
         data: { power: 9 },
@@ -307,6 +308,7 @@ describe("Pool B HTTP boundaries", () => {
     });
     expect(edited.json()).toMatchObject({
       name: "Custom",
+      kind: "SKILL",
       data: { power: 9 },
       sourceCatalogEntryId: template.id,
     });
