@@ -34,7 +34,7 @@ beforeAll(async () => {
   const migrations = (await readdir(migrationsUrl))
     .filter((name) => name.endsWith(".sql"))
     .sort();
-  for (const file of migrations.slice(0, -1)) {
+  for (const file of migrations.filter((file) => !file.startsWith("0009_"))) {
     const sql = (
       await readFile(new URL(file, migrationsUrl), "utf8")
     ).replaceAll("--> statement-breakpoint", "");

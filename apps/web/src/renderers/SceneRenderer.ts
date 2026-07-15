@@ -45,6 +45,14 @@ export interface SceneRendererProps {
     definitionId: string,
     point?: { x: number; y: number },
   ) => Promise<void>;
+  gmFogOpacity?: number;
+  gmFogVisible?: boolean;
+  canvasEditMode?: "BACKGROUND" | "WORLD" | null;
+  onCanvasEditCancel?: () => void;
+  onCanvasPatch?: (patch: {
+    world?: { width: number; height: number };
+    backgroundFrame?: { x: number; y: number; width: number; height: number };
+  }) => Promise<void>;
 }
 
 export type SceneRendererComponent = React.ComponentType<SceneRendererProps>;

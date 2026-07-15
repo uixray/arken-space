@@ -48,7 +48,8 @@ describe("initial PostgreSQL migration", () => {
     const files = (await readdir(migrationsUrl))
       .filter((file) => file.endsWith(".sql"))
       .sort();
-    for (const file of files.slice(0, -1))
+    const target = files.findIndex((file) => file.startsWith("0008_"));
+    for (const file of files.slice(0, target))
       await database.exec(
         (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
           "--> statement-breakpoint",
@@ -63,7 +64,7 @@ describe("initial PostgreSQL migration", () => {
     );
     await database.exec(
       (
-        await readFile(new URL(files.at(-1)!, migrationsUrl), "utf8")
+        await readFile(new URL(files[target]!, migrationsUrl), "utf8")
       ).replaceAll("--> statement-breakpoint", ""),
     );
     const retained = await database.query(
@@ -91,7 +92,8 @@ describe("initial PostgreSQL migration", () => {
     const files = (await readdir(migrationsUrl))
       .filter((file) => file.endsWith(".sql"))
       .sort();
-    for (const file of files.slice(0, -1))
+    const target = files.findIndex((file) => file.startsWith("0009_"));
+    for (const file of files.slice(0, target))
       await database.exec(
         (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
           "--> statement-breakpoint",
@@ -110,7 +112,7 @@ describe("initial PostgreSQL migration", () => {
     `);
     await database.exec(
       (
-        await readFile(new URL(files.at(-1)!, migrationsUrl), "utf8")
+        await readFile(new URL(files[target]!, migrationsUrl), "utf8")
       ).replaceAll("--> statement-breakpoint", ""),
     );
     const backfilled = await database.query<{ id: string; sequence: number }>(
@@ -125,6 +127,45 @@ describe("initial PostgreSQL migration", () => {
       `insert into chat_messages (campaign_id,membership_id,body) values ('${campaign}','${member}','new') returning sequence`,
     );
     expect(inserted.rows[0]?.sequence).toBe(4);
+    await database.close();
+  });
+
+  it("backfills the scene background frame from the existing world size", async () => {
+    const database = new PGlite();
+    const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
+    const files = (await readdir(migrationsUrl))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    const target = files.findIndex((file) => file.startsWith("0010_"));
+    for (const file of files.slice(0, target))
+      await database.exec(
+        (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
+          "--> statement-breakpoint",
+          "",
+        ),
+      );
+    const campaign = "40000000-0000-0000-0000-000000000001";
+    await database.exec(`
+      insert into campaigns (id,name) values ('${campaign}','Geometry');
+      insert into scenes (campaign_id,name,width,height,grid)
+      values ('${campaign}','Wide map',4096,2048,'{"enabled":true,"size":64,"offsetX":0,"offsetY":0,"color":"#ffffff","opacity":0.2}');
+    `);
+    await database.exec(
+      (
+        await readFile(new URL(files[target]!, migrationsUrl), "utf8")
+      ).replaceAll("--> statement-breakpoint", ""),
+    );
+    const frame = await database.query(
+      `select background_x,background_y,background_width,background_height from scenes`,
+    );
+    expect(frame.rows).toEqual([
+      {
+        background_x: 0,
+        background_y: 0,
+        background_width: 4096,
+        background_height: 2048,
+      },
+    ]);
     await database.close();
   });
 });

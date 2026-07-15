@@ -221,6 +221,14 @@ export const scenes = pgTable(
     }),
     width: integer("width").notNull().default(1920),
     height: integer("height").notNull().default(1080),
+    backgroundX: doublePrecision("background_x").notNull().default(0),
+    backgroundY: doublePrecision("background_y").notNull().default(0),
+    backgroundWidth: doublePrecision("background_width")
+      .notNull()
+      .default(1920),
+    backgroundHeight: doublePrecision("background_height")
+      .notNull()
+      .default(1080),
     grid: jsonb("grid")
       .$type<{
         enabled: boolean;
