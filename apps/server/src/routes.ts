@@ -21,6 +21,7 @@ import {
   gmLoginSchema,
   inviteClaimSchema,
   rotatePlayerAccessSchema,
+  replaceTokenControllersSchema,
   undoFogRevealSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
@@ -584,6 +585,8 @@ export function registerRoutes(
       .partial()
       .extend({ actionId: actionIdSchema })
       .parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
     const [current] = await db
       .select()
       .from(catalogEntries)
@@ -596,30 +599,34 @@ export function registerRoutes(
       .limit(1);
     if (!current) return reply.code(404).send({ error: "CATALOG_NOT_FOUND" });
     const { actionId, ...updates } = body;
-    const [updated] = await db
-      .update(catalogEntries)
-      .set({
-        ...updates,
-        revision: current.revision + 1,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(catalogEntries.id, id),
-          eq(catalogEntries.revision, current.revision),
-        ),
-      )
-      .returning();
-    if (!updated) return reply.code(409).send({ error: "CATALOG_CONFLICT" });
-    await db.insert(gameEvents).values({
-      campaignId: auth.campaignId,
-      actionId,
-      membershipId: auth.membershipId,
-      type: "catalog.updated",
-      entityType: "catalog_entry",
-      entityId: id,
-      entityRevision: updated.revision,
+    const updated = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(catalogEntries)
+        .set({
+          ...updates,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(catalogEntries.id, id),
+            eq(catalogEntries.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId,
+        membershipId: auth.membershipId,
+        type: "catalog.updated",
+        entityType: "catalog_entry",
+        entityId: id,
+        entityRevision: next.revision,
+      });
+      return next;
     });
+    if (!updated) return reply.code(409).send({ error: "CATALOG_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return updated;
   });
@@ -633,6 +640,8 @@ export function registerRoutes(
       .object({ id: z.string().uuid() })
       .parse(request.params).id;
     const body = assignCatalogEntrySchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
     const [source] = await db
       .select()
       .from(catalogEntries)
@@ -694,6 +703,8 @@ export function registerRoutes(
         .object({ characterId: z.string().uuid(), id: z.string().uuid() })
         .parse(request.params);
       const body = characterCatalogEntryCommandSchema.parse(request.body);
+      if (await findAction(db, auth.campaignId, body.actionId))
+        return reply.code(200).send({ duplicate: true });
       const [current] = await db
         .select({ entry: characterCatalogEntries })
         .from(characterCatalogEntries)
@@ -712,31 +723,35 @@ export function registerRoutes(
       if (!current)
         return reply.code(404).send({ error: "CHARACTER_ENTRY_NOT_FOUND" });
       const { actionId, ...updates } = body;
-      const [updated] = await db
-        .update(characterCatalogEntries)
-        .set({
-          ...updates,
-          revision: current.entry.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(characterCatalogEntries.id, params.id),
-            eq(characterCatalogEntries.revision, current.entry.revision),
-          ),
-        )
-        .returning();
+      const updated = await db.transaction(async (tx) => {
+        const [next] = await tx
+          .update(characterCatalogEntries)
+          .set({
+            ...updates,
+            revision: current.entry.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(characterCatalogEntries.id, params.id),
+              eq(characterCatalogEntries.revision, current.entry.revision),
+            ),
+          )
+          .returning();
+        if (!next) return null;
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId,
+          membershipId: auth.membershipId,
+          type: "character_catalog.updated",
+          entityType: "character_catalog_entry",
+          entityId: next.id,
+          entityRevision: next.revision,
+        });
+        return next;
+      });
       if (!updated)
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
-      await db.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId,
-        membershipId: auth.membershipId,
-        type: "character_catalog.updated",
-        entityType: "character_catalog_entry",
-        entityId: updated.id,
-        entityRevision: updated.revision,
-      });
       await broadcastSnapshots(io, db, auth.campaignId);
       return updated;
     },
@@ -1029,6 +1044,19 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (body.assetId) {
+      const [asset] = await db
+        .select({ id: assets.id })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, body.assetId),
+            eq(assets.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!asset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+    }
     const [existingDefinition] = body.definitionId
       ? await db
           .select()
@@ -1090,6 +1118,10 @@ export function registerRoutes(
         : tokenOwnerMembershipId
           ? [tokenOwnerMembershipId]
           : []);
+    if (
+      new Set(controllerMembershipIds).size !== controllerMembershipIds.length
+    )
+      return reply.code(400).send({ error: "DUPLICATE_CONTROLLERS" });
     if (existingDefinition) {
       controllerMembershipIds = (
         await db
@@ -1169,6 +1201,8 @@ export function registerRoutes(
     if (!auth) return;
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = deleteTokenSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ ok: true, duplicate: true });
     const [row] = await db
       .select({
         token: tokens,
@@ -1227,6 +1261,96 @@ export function registerRoutes(
     if (!deleted) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return { ok: true };
+  });
+
+  app.put("/api/token-definitions/:id/controllers", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = replaceTokenControllersSchema.parse(request.body);
+    if (
+      new Set(body.controllerMembershipIds).size !==
+      body.controllerMembershipIds.length
+    )
+      return reply.code(400).send({ error: "DUPLICATE_CONTROLLERS" });
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [definition] = await db
+      .select()
+      .from(tokenDefinitions)
+      .where(
+        and(
+          eq(tokenDefinitions.id, id),
+          eq(tokenDefinitions.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!definition)
+      return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
+    if (body.controllerMembershipIds.length) {
+      const valid = await db
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.campaignId, auth.campaignId),
+            eq(memberships.role, "PLAYER"),
+          ),
+        );
+      const ids = new Set(valid.map((item) => item.id));
+      if (
+        body.controllerMembershipIds.some(
+          (membershipId) => !ids.has(membershipId),
+        )
+      )
+        return reply.code(400).send({ error: "INVALID_CONTROLLER" });
+    }
+    const replaced = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(tokenDefinitions)
+        .set({ revision: definition.revision + 1, updatedAt: new Date() })
+        .where(
+          and(
+            eq(tokenDefinitions.id, id),
+            eq(tokenDefinitions.revision, body.revision),
+          ),
+        )
+        .returning();
+      if (!updated) return null;
+      await tx
+        .delete(tokenControllers)
+        .where(eq(tokenControllers.tokenDefinitionId, id));
+      if (body.controllerMembershipIds.length)
+        await tx.insert(tokenControllers).values(
+          body.controllerMembershipIds.map((membershipId) => ({
+            tokenDefinitionId: id,
+            membershipId,
+          })),
+        );
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "token.controllers_replaced",
+        entityType: "token_definition",
+        entityId: id,
+        payload: { controllerMembershipIds: body.controllerMembershipIds },
+      });
+      return updated;
+    });
+    if (!replaced)
+      return reply.code(409).send({
+        error: "TOKEN_DEFINITION_CONFLICT",
+        revision: definition.revision,
+      });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return {
+      ok: true,
+      controllerMembershipIds: body.controllerMembershipIds,
+      revision: replaced.revision,
+    };
   });
 
   app.post("/api/fog-reveals", async (request, reply) => {

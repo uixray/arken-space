@@ -93,6 +93,7 @@ export async function editableToken(
     (!controllerMembershipIds.includes(auth.membershipId) ||
       row.token.locked ||
       !row.token.visible ||
+      row.token.layer === "GM" ||
       row.token.sceneId !== row.activeSceneId)
   )
     return null;
@@ -112,7 +113,7 @@ async function tokenAudienceRoom(
   campaignId: string,
   token: EditableToken,
 ) {
-  if (!token.visible) return gmRoom(campaignId);
+  if (!token.visible || token.layer === "GM") return gmRoom(campaignId);
   const [campaign] = await db
     .select({ activeSceneId: campaigns.activeSceneId })
     .from(campaigns)

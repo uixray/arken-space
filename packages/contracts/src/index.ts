@@ -130,6 +130,11 @@ export const deleteTokenSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
 });
+export const replaceTokenControllersSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  controllerMembershipIds: z.array(z.string().uuid()).max(50),
+});
 
 export const createFogRevealSchema = z.object({
   actionId: actionIdSchema,

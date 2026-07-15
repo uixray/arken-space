@@ -262,6 +262,57 @@ describe("durable realtime token commands", () => {
     });
   });
 
+  it("keeps GM-layer preview, commits and conflict DTOs out of player rooms", async () => {
+    await database.exec(
+      `update tokens set layer = 'GM' where id = '${ids.token}'`,
+    );
+    let leakedPreview = false;
+    let leakedCommit = false;
+    client.on("token:moving", (movement) => {
+      if (movement.tokenId === ids.token) leakedPreview = true;
+    });
+    client.on("token:moved", (event) => {
+      if (event.data.id === ids.token) leakedCommit = true;
+    });
+    gmClient.emit("token:moving", {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.token,
+      x: 40,
+      y: 40,
+      z: 0,
+      levelId: null,
+      revision: 0,
+    });
+    const playerAttempt = await move(client, {
+      actionId: crypto.randomUUID(),
+      revision: 99,
+      x: 50,
+      y: 50,
+    });
+    expect(playerAttempt).toMatchObject({
+      ok: false,
+      status: "FORBIDDEN",
+      reason: "TOKEN_FORBIDDEN",
+    });
+    expect(playerAttempt).not.toHaveProperty("data");
+    const gmCommit = await move(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      x: 60,
+      y: 60,
+    });
+    expect(gmCommit).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { layer: "GM" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect({ leakedPreview, leakedCommit }).toEqual({
+      leakedPreview: false,
+      leakedCommit: false,
+    });
+  });
+
   it("rejects durable and ephemeral movement of another player's token", async () => {
     let leakedPreview = false;
     client.on("token:moving", (movement) => {

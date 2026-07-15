@@ -7,6 +7,7 @@ import {
 } from "react";
 import type {
   AssetKind,
+  CatalogEntryDto,
   CharacterDto,
   GameSnapshot,
   MessageVisibility,
@@ -39,6 +40,24 @@ type Props = {
   onCreateToken: (characterId: string) => Promise<void>;
   onUpload: (file: File, kind: AssetKind) => Promise<void>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
+  onCreateCatalogEntry: (input: {
+    kind: "SKILL" | "ABILITY";
+    name: string;
+    description: string;
+  }) => Promise<void>;
+  onUpdateCatalogEntry: (
+    id: string,
+    patch: Partial<CatalogEntryDto>,
+  ) => Promise<void>;
+  onAssignCatalogEntry: (
+    characterId: string,
+    catalogEntryId: string,
+  ) => Promise<void>;
+  onUpdateCharacterEntry: (
+    characterId: string,
+    id: string,
+    patch: { name?: string; description?: string },
+  ) => Promise<void>;
 };
 
 export function Sidebar(props: Props) {
@@ -90,6 +109,8 @@ export function Sidebar(props: Props) {
             setSelectedId={setSelectedCharacterId}
             onPatch={props.onPatchCharacter}
             onRoll={props.onRoll}
+            onAssignEntry={props.onAssignCatalogEntry}
+            onUpdateEntry={props.onUpdateCharacterEntry}
           />
         )}
         {tab === "chat" && (
@@ -115,6 +136,8 @@ function CharacterPanel({
   setSelectedId,
   onPatch,
   onRoll,
+  onAssignEntry,
+  onUpdateEntry,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -122,6 +145,8 @@ function CharacterPanel({
   setSelectedId: (value: string) => void;
   onPatch: Props["onPatchCharacter"];
   onRoll: Props["onRoll"];
+  onAssignEntry: Props["onAssignCatalogEntry"];
+  onUpdateEntry: Props["onUpdateCharacterEntry"];
 }) {
   const editable =
     character &&
@@ -243,6 +268,23 @@ function CharacterPanel({
       </div>
       <div className="subsection">
         <h3>Каталог персонажа</h3>
+        {snapshot.me.role === "GM" && snapshot.catalogEntries.length > 0 && (
+          <select
+            defaultValue=""
+            onChange={(event) => {
+              if (event.target.value)
+                void onAssignEntry(character.id, event.target.value);
+              event.target.value = "";
+            }}
+          >
+            <option value="">Назначить из общего каталога…</option>
+            {snapshot.catalogEntries.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name}
+              </option>
+            ))}
+          </select>
+        )}
         {character.entries.length ? (
           character.entries.map((entry) => (
             <div className="plain-row" key={entry.id}>
@@ -251,6 +293,22 @@ function CharacterPanel({
                 {entry.kind === "SKILL" ? "Навык" : "Способность"}
               </span>
               {entry.description && <p>{entry.description}</p>}
+              {snapshot.me.role === "GM" && (
+                <button
+                  onClick={() => {
+                    const description = window.prompt(
+                      "Описание",
+                      entry.description,
+                    );
+                    if (description !== null)
+                      void onUpdateEntry(character.id, entry.id, {
+                        description,
+                      });
+                  }}
+                >
+                  Редактировать описание
+                </button>
+              )}
             </div>
           ))
         ) : (
@@ -273,6 +331,24 @@ function CharacterPanel({
                 .filter(Boolean),
             })
           }
+        />
+      </label>
+      <label className="field">
+        Ресурсы (JSON: имя → current/maximum)
+        <textarea
+          defaultValue={JSON.stringify(character.resources, null, 2)}
+          disabled={!editable}
+          rows={5}
+          onBlur={(event) => {
+            try {
+              const resources = JSON.parse(
+                event.target.value,
+              ) as CharacterDto["resources"];
+              void onPatch(character.id, { resources });
+            } catch {
+              event.target.value = JSON.stringify(character.resources, null, 2);
+            }
+          }}
         />
       </label>
       <label className="field">
@@ -384,6 +460,9 @@ function ChatPanel({
 function SetupPanel(props: Props) {
   const [characterName, setCharacterName] = useState("");
   const [sceneName, setSceneName] = useState("");
+  const [catalogName, setCatalogName] = useState("");
+  const [catalogDescription, setCatalogDescription] = useState("");
+  const [catalogKind, setCatalogKind] = useState<"SKILL" | "ABILITY">("SKILL");
   const [inviteCharacter, setInviteCharacter] = useState(
     props.snapshot.characters[0]?.id ?? "",
   );
@@ -411,6 +490,59 @@ function SetupPanel(props: Props) {
           <span className="eyebrow">Мастер</span>
           <h2>Подготовка</h2>
         </div>
+      </div>
+      <div className="subsection">
+        <h3>Общий каталог</h3>
+        <select
+          value={catalogKind}
+          onChange={(event) =>
+            setCatalogKind(event.target.value as "SKILL" | "ABILITY")
+          }
+        >
+          <option value="SKILL">Навык</option>
+          <option value="ABILITY">Способность</option>
+        </select>
+        <input
+          value={catalogName}
+          placeholder="Название"
+          onChange={(event) => setCatalogName(event.target.value)}
+        />
+        <textarea
+          value={catalogDescription}
+          placeholder="Описание"
+          onChange={(event) => setCatalogDescription(event.target.value)}
+        />
+        <button
+          disabled={!catalogName.trim()}
+          onClick={async () => {
+            await props.onCreateCatalogEntry({
+              kind: catalogKind,
+              name: catalogName.trim(),
+              description: catalogDescription,
+            });
+            setCatalogName("");
+            setCatalogDescription("");
+          }}
+        >
+          Добавить
+        </button>
+        {props.snapshot.catalogEntries.map((entry) => (
+          <div className="plain-row" key={entry.id}>
+            <strong>{entry.name}</strong>
+            <p>{entry.description}</p>
+            <button
+              onClick={() => {
+                const name = window.prompt("Название", entry.name);
+                if (name?.trim())
+                  void props.onUpdateCatalogEntry(entry.id, {
+                    name: name.trim(),
+                  });
+              }}
+            >
+              Переименовать
+            </button>
+          </div>
+        ))}
       </div>
       <div className="subsection">
         <h3>Проверка видимости</h3>

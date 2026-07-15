@@ -578,6 +578,59 @@ export function App() {
               setTool("PAN");
               setPreviewSnapshot(playerView);
             }}
+            onCreateCatalogEntry={(input) =>
+              run(
+                () =>
+                  api("/api/catalog", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      ...input,
+                      data: {},
+                      actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
+            onUpdateCatalogEntry={(id, patch) =>
+              run(
+                () =>
+                  api(`/api/catalog/${id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      ...patch,
+                      actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
+            onAssignCatalogEntry={(characterId, catalogEntryId) =>
+              run(
+                () =>
+                  api(`/api/characters/${characterId}/catalog`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                      catalogEntryId,
+                      actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
+            onUpdateCharacterEntry={(characterId, id, patch) =>
+              run(
+                () =>
+                  api(`/api/characters/${characterId}/catalog/${id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      ...patch,
+                      actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
           />
         )}
       </div>

@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { editableToken } from "../apps/server/src/realtime.js";
@@ -151,5 +152,35 @@ describe("direct realtime token authorization", () => {
     ).resolves.toMatchObject({
       id: ids.closedToken,
     });
+  });
+
+  it("keeps a GM-layer placement inaccessible even to its player controller", async () => {
+    const db = drizzle(database, { schema });
+    await db
+      .update(schema.tokens)
+      .set({ layer: "GM" })
+      .where(eq(schema.tokens.id, ids.publicToken));
+    const player = {
+      membershipId: ids.player,
+      campaignId: ids.campaign,
+      role: "PLAYER" as const,
+      displayName: "Player",
+    };
+    const gm = {
+      membershipId: ids.gm,
+      campaignId: ids.campaign,
+      role: "GM" as const,
+      displayName: "GM",
+    };
+    await expect(
+      editableToken(db as never, player, ids.publicToken),
+    ).resolves.toBeNull();
+    await expect(
+      editableToken(db as never, gm, ids.publicToken),
+    ).resolves.toMatchObject({ id: ids.publicToken, layer: "GM" });
+    const snapshot = await buildSnapshot(db as never, player);
+    expect(snapshot.tokens.some((token) => token.id === ids.publicToken)).toBe(
+      false,
+    );
   });
 });

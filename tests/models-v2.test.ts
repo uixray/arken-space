@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 
@@ -96,6 +96,29 @@ describe("v2 domain models", () => {
     expect(new Set(placements.map((item) => item.definitionId))).toEqual(
       new Set([definition.id]),
     );
+    const attempts = await Promise.all([
+      db
+        .update(schema.tokenDefinitions)
+        .set({ revision: 1 })
+        .where(
+          and(
+            eq(schema.tokenDefinitions.id, definition.id),
+            eq(schema.tokenDefinitions.revision, 0),
+          ),
+        )
+        .returning(),
+      db
+        .update(schema.tokenDefinitions)
+        .set({ revision: 1 })
+        .where(
+          and(
+            eq(schema.tokenDefinitions.id, definition.id),
+            eq(schema.tokenDefinitions.revision, 0),
+          ),
+        )
+        .returning(),
+    ]);
+    expect(attempts.filter((rows) => rows.length === 1)).toHaveLength(1);
   });
 
   it("copies catalog assignments so later template edits cannot mutate characters", async () => {

@@ -35,6 +35,15 @@ describe("invite ownership lifecycle", () => {
       .values({ campaignId: campaign.id, role: "GM", displayName: "GM" })
       .returning();
     if (!gm) throw new Error("GM_CREATE_FAILED");
+    const [existingPlayer] = await db
+      .insert(schema.memberships)
+      .values({
+        campaignId: campaign.id,
+        role: "PLAYER",
+        displayName: "Existing",
+      })
+      .returning();
+    if (!existingPlayer) throw new Error("PLAYER_CREATE_FAILED");
     const [character, otherCharacter] = await db
       .insert(schema.characters)
       .values([
@@ -60,7 +69,7 @@ describe("invite ownership lifecycle", () => {
       })
       .returning();
     if (!scene) throw new Error("SCENE_CREATE_FAILED");
-    const [claimedToken, otherToken] = await db
+    const [claimedToken, otherToken, explicitToken] = await db
       .insert(schema.tokens)
       .values([
         {
@@ -77,8 +86,20 @@ describe("invite ownership lifecycle", () => {
           x: 64,
           y: 64,
         },
+        {
+          sceneId: scene.id,
+          characterId: character.id,
+          name: "Explicit token",
+          x: 128,
+          y: 128,
+        },
       ])
       .returning();
+    if (!explicitToken) throw new Error("TOKEN_CREATE_FAILED");
+    await db.insert(schema.tokenControllers).values({
+      tokenDefinitionId: explicitToken.definitionId,
+      membershipId: existingPlayer.id,
+    });
     const [invite] = await db
       .insert(schema.invites)
       .values({
@@ -109,6 +130,11 @@ describe("invite ownership lifecycle", () => {
         membershipId: member.id,
       }),
     );
+    expect(
+      controllers.filter(
+        (item) => item.tokenDefinitionId === explicitToken.definitionId,
+      ),
+    ).toEqual([expect.objectContaining({ membershipId: existingPlayer.id })]);
     expect(
       tokens.find((item) => item.id === otherToken.id)?.ownerMembershipId,
     ).toBeNull();

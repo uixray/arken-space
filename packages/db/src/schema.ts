@@ -242,6 +242,7 @@ export const tokenDefinitions = pgTable(
     name: text("name").notNull(),
     defaultWidth: doublePrecision("default_width").notNull().default(64),
     defaultHeight: doublePrecision("default_height").notNull().default(64),
+    revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
