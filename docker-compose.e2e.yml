@@ -28,6 +28,7 @@ services:
       DATABASE_URL: postgres://arken:arken-e2e-password@postgres:5432/arken
       SESSION_COOKIE_NAME: arken_session
       SESSION_TTL_DAYS: 1
+      RATE_LIMIT_MAX: 5000
       GM_ACCESS_TOKEN: multiplayer-master-token-1234567890
       MEDIA_ROOT: /srv/arken-space/media
       MEDIA_QUOTA_BYTES: 10485760

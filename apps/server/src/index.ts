@@ -26,7 +26,10 @@ await app.register(multipart, {
   attachFieldsToBody: false,
   limits: { files: 1 },
 });
-await app.register(rateLimit, { max: 180, timeWindow: "1 minute" });
+await app.register(rateLimit, {
+  max: env.RATE_LIMIT_MAX,
+  timeWindow: "1 minute",
+});
 
 app.addHook("onRequest", async (request, reply) => {
   if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
