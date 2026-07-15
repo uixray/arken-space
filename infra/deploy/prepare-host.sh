@@ -23,6 +23,8 @@ if [ ! -f "$APP/.env" ]; then
     'MEDIA_HOST_PATH=/home/uixray/apps/arken-space-data/media' \
     'MEDIA_QUOTA_BYTES=2147483648' \
     'MIN_FREE_DISK_BYTES=2147483648' \
+    'MAX_IMAGE_BYTES=20971520' \
+    'MAX_AUDIO_BYTES=104857600' \
     > "$APP/.env"
 fi
 

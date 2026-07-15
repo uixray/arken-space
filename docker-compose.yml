@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: arken
       POSTGRES_USER: arken
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arken}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -20,21 +20,23 @@ services:
       dockerfile: Dockerfile.server
     environment:
       NODE_ENV: production
-      APP_VERSION: ${APP_VERSION:-0.2.0}
-      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      APP_VERSION: ${APP_VERSION:?Set APP_VERSION in .env}
+      BUILD_REVISION: ${BUILD_REVISION:?Export the exact release commit SHA}
       SCHEMA_VERSION: 2
       PORT: 4100
-      WEB_ORIGIN: ${WEB_ORIGIN:-https://arken.uixray.tech}
-      PUBLIC_URL: ${PUBLIC_URL:-https://arken.uixray.tech}
-      DATABASE_URL: postgres://arken:${POSTGRES_PASSWORD:-arken}@postgres:5432/arken
+      WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN in .env}
+      PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
+      DATABASE_URL: postgres://arken:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/arken
       SESSION_COOKIE_NAME: arken_session
       SESSION_TTL_DAYS: 30
       GM_ACCESS_TOKEN: ${GM_ACCESS_TOKEN:?Set GM_ACCESS_TOKEN in .env}
       MEDIA_ROOT: /srv/arken-space/media
       MEDIA_QUOTA_BYTES: ${MEDIA_QUOTA_BYTES:-5368709120}
       MIN_FREE_DISK_BYTES: ${MIN_FREE_DISK_BYTES:-5368709120}
+      MAX_IMAGE_BYTES: ${MAX_IMAGE_BYTES:-20971520}
+      MAX_AUDIO_BYTES: ${MAX_AUDIO_BYTES:-104857600}
     volumes:
-      - ${MEDIA_HOST_PATH:-./media}:/srv/arken-space/media
+      - ${MEDIA_HOST_PATH:?Set an absolute persistent MEDIA_HOST_PATH}:/srv/arken-space/media
     depends_on:
       postgres:
         condition: service_healthy
