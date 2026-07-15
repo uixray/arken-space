@@ -110,6 +110,43 @@ export function buildDatabaseCountsQuery(expectedCounts) {
   );
 }
 
+export function selectResticSnapshot(
+  snapshots,
+  { request, expectedHost, expectedTag },
+) {
+  if (!Array.isArray(snapshots))
+    throw new Error("Restic snapshots response must be an array");
+  if (request !== "latest" && !/^[0-9a-f]{8,64}$/i.test(request))
+    throw new Error("SNAPSHOT_ID must be latest or an 8-64 character hex ID");
+
+  const eligible = snapshots.filter(
+    (snapshot) =>
+      typeof snapshot?.id === "string" &&
+      snapshot.hostname === expectedHost &&
+      Array.isArray(snapshot.tags) &&
+      snapshot.tags.includes(expectedTag),
+  );
+  if (request !== "latest") {
+    const matches = eligible.filter(
+      (snapshot) =>
+        snapshot.id.toLowerCase().startsWith(request.toLowerCase()) ||
+        String(snapshot.short_id ?? "").toLowerCase() === request.toLowerCase(),
+    );
+    if (matches.length !== 1)
+      throw new Error("Exact requested snapshot was not uniquely found");
+    return matches[0];
+  }
+
+  if (eligible.length === 0)
+    throw new Error("No snapshot matched the expected host and tag");
+  return eligible.toSorted((left, right) => {
+    const timeOrder = String(right.time ?? "").localeCompare(
+      String(left.time ?? ""),
+    );
+    return timeOrder || right.id.localeCompare(left.id);
+  })[0];
+}
+
 export function assertIsolatedComposeConfig(
   config,
   { projectName, mediaSource, buildRevision },

@@ -24,6 +24,7 @@ import {
   compareDatabaseCounts,
   parseDatabaseCounts,
   resolveRestoredPath,
+  selectResticSnapshot,
   validateRestoreProjectName,
 } from "./restore-rehearsal-core.mjs";
 
@@ -407,24 +408,21 @@ try {
   capture("restic", ["check"]);
   record("restic-check", "passed");
 
-  const snapshots = JSON.parse(
-    capture("restic", [
-      "snapshots",
-      "--json",
-      "--latest",
-      "1",
-      "--host",
-      backupHost,
-      "--tag",
-      backupTag,
-    ]),
-  );
-  if (!Array.isArray(snapshots) || snapshots.length !== 1)
-    throw new Error("Exactly one latest arken-space snapshot was expected");
-  const selectedSnapshot =
-    snapshotRequest === "latest"
-      ? snapshots[0]
-      : { id: snapshotRequest, short_id: snapshotRequest };
+  const snapshotArguments = [
+    "snapshots",
+    "--json",
+    "--host",
+    backupHost,
+    "--tag",
+    backupTag,
+  ];
+  if (snapshotRequest !== "latest") snapshotArguments.push(snapshotRequest);
+  const snapshots = JSON.parse(capture("restic", snapshotArguments));
+  const selectedSnapshot = selectResticSnapshot(snapshots, {
+    request: snapshotRequest,
+    expectedHost: backupHost,
+    expectedTag: backupTag,
+  });
   report.snapshot = {
     id: selectedSnapshot.id,
     shortId: selectedSnapshot.short_id,
