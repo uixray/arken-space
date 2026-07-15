@@ -252,6 +252,22 @@ code {
   border-left: 1px solid var(--line);
   background: var(--surface);
 }
+.sidebar:has(.dice-notifications) {
+  grid-template-rows: 39px auto minmax(0, 1fr);
+}
+.dice-notifications {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-xs);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.dice-notifications button {
+  width: 100%;
+  color: var(--accent);
+  text-align: left;
+}
 .tabs {
   display: flex;
   overflow-x: auto;
@@ -401,6 +417,10 @@ code {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+.message:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 .message header {
   display: flex;

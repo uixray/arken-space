@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   audioStates,
   actionJournal,
+  assets,
   campaigns,
   gameEvents,
   memberships,
@@ -428,6 +429,20 @@ export function registerRealtime(
       }
 
       const result = await db.transaction(async (tx) => {
+        if (stateInput.assetId) {
+          const [asset] = await tx
+            .select({ campaignId: assets.campaignId, kind: assets.kind })
+            .from(assets)
+            .where(eq(assets.id, stateInput.assetId))
+            .limit(1);
+          if (
+            !asset ||
+            asset.campaignId !== auth.campaignId ||
+            asset.kind !== "AUDIO"
+          ) {
+            return { rejection: "ASSET_NOT_FOUND" as const };
+          }
+        }
         const [state] = await tx
           .insert(audioStates)
           .values({
@@ -464,6 +479,13 @@ export function registerRealtime(
           .returning();
         return event ? { event, state } : null;
       });
+      if (result && "rejection" in result) {
+        return ack?.({
+          ok: false,
+          status: "INVALID",
+          reason: result.rejection,
+        });
+      }
       if (!result) {
         return ack?.({
           ok: false,

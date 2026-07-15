@@ -256,6 +256,25 @@ describe("Pool B HTTP boundaries", () => {
       payload: { actionId: crypto.randomUUID(), revision: 0 },
     });
     expect(denied.statusCode).toBe(403);
+    const drawing = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        points: [1, 1, 10, 10],
+        color: "#00ff00",
+      },
+    });
+    expect(drawing.statusCode).toBe(201);
+    const tokenDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/tokens/${ids.token}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: 0 },
+    });
+    expect(tokenDelete.statusCode).toBe(200);
     const deleted = await app.inject({
       method: "DELETE",
       url: `/api/token-definitions/${ids.definition}`,
@@ -264,14 +283,100 @@ describe("Pool B HTTP boundaries", () => {
     });
     expect(deleted.statusCode).toBe(204);
     expect(await db.select().from(schema.tokens)).toHaveLength(0);
+    const tokenHistory = await db
+      .select()
+      .from(schema.actionJournal)
+      .where(eq(schema.actionJournal.targetId, ids.token));
+    expect(tokenHistory).toEqual([
+      expect.objectContaining({ type: "TOKEN_DELETE", status: "INVALIDATED" }),
+    ]);
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undo.statusCode).toBe(200);
+    expect(undo.json()).toMatchObject({ status: "UNDONE" });
+    const drawingHistory = await db
+      .select()
+      .from(schema.actionJournal)
+      .where(eq(schema.actionJournal.targetId, drawing.json().id));
+    expect(drawingHistory).toEqual([
+      expect.objectContaining({ type: "DRAWING_CREATE", status: "UNDONE" }),
+    ]);
     const events = await db.select().from(schema.gameEvents);
-    expect(events.at(-1)).toMatchObject({
+    expect(
+      events.find((event) => event.type === "token_definition.deleted"),
+    ).toMatchObject({
       type: "token_definition.deleted",
       payload: expect.objectContaining({
-        placementsRemoved: 1,
+        placementsRemoved: 0,
+        sceneIds: [],
         undoable: false,
       }),
     });
+  });
+
+  it("audits locked cascade counts and scenes and replays definition deletion idempotently", async () => {
+    const actionId = crypto.randomUUID();
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/token-definitions/${ids.definition}`,
+      headers: headers(secrets.gm),
+      payload: { actionId, revision: 0 },
+    });
+    expect(deleted.statusCode).toBe(204);
+    const [event] = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(event).toMatchObject({
+      payload: expect.objectContaining({
+        placementsRemoved: 1,
+        sceneIds: [ids.scene],
+      }),
+    });
+    const replay = await app.inject({
+      method: "DELETE",
+      url: `/api/token-definitions/${ids.definition}`,
+      headers: headers(secrets.gm),
+      payload: { actionId, revision: 0 },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ duplicate: true });
+  });
+
+  it("serializes placement against destructive definition deletion", async () => {
+    const deleteAction = crypto.randomUUID();
+    const [placement, deletion] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: `/api/token-definitions/${ids.definition}/placements`,
+        headers: headers(secrets.player),
+        payload: { actionId: crypto.randomUUID() },
+      }),
+      app.inject({
+        method: "DELETE",
+        url: `/api/token-definitions/${ids.definition}`,
+        headers: headers(secrets.gm),
+        payload: { actionId: deleteAction, revision: 0 },
+      }),
+    ]);
+    expect(deletion.statusCode).toBe(204);
+    expect([201, 404, 409]).toContain(placement.statusCode);
+    expect(await db.select().from(schema.tokenDefinitions)).toHaveLength(0);
+    expect(await db.select().from(schema.tokens)).toHaveLength(0);
+    const [event] = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, deleteAction));
+    expect(event?.payload).toEqual(
+      expect.objectContaining({
+        placementsRemoved: placement.statusCode === 201 ? 2 : 1,
+        sceneIds: [ids.scene],
+      }),
+    );
   });
 
   it("renames membership, character and scene with role checks and revision CAS", async () => {

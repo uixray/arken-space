@@ -118,6 +118,11 @@ export function Sidebar(props: Props) {
   const [tab, setTab] = useState<
     "character" | "chat" | "palette" | "music" | "setup" | "media"
   >(isGm ? "setup" : "character");
+  const knownMessageIds = useRef(
+    new Set(props.snapshot.messages.map((message) => message.id)),
+  );
+  const [unreadDiceIds, setUnreadDiceIds] = useState<string[]>([]);
+  const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const ownCharacter = props.snapshot.characters.find(
     (character) => character.ownerMembershipId === props.snapshot.me.id,
   );
@@ -129,6 +134,30 @@ export function Sidebar(props: Props) {
       (character) => character.id === selectedCharacterId,
     ) ?? ownCharacter;
 
+  useEffect(() => {
+    const newDiceIds = props.snapshot.messages
+      .filter(
+        (message) =>
+          message.kind === "DICE" && !knownMessageIds.current.has(message.id),
+      )
+      .map((message) => message.id);
+    for (const message of props.snapshot.messages) {
+      knownMessageIds.current.add(message.id);
+    }
+    if (tab !== "chat" && newDiceIds.length > 0) {
+      setUnreadDiceIds((current) => [
+        ...current,
+        ...newDiceIds.filter((id) => !current.includes(id)),
+      ]);
+    }
+  }, [props.snapshot.messages, tab]);
+
+  const openChat = (messageId?: string) => {
+    setFocusedMessageId(messageId ?? unreadDiceIds.at(-1) ?? null);
+    setUnreadDiceIds([]);
+    setTab("chat");
+  };
+
   return (
     <aside className="sidebar">
       <nav className="tabs" aria-label="Панели">
@@ -138,8 +167,13 @@ export function Sidebar(props: Props) {
         >
           Персонаж
         </button>
-        <button aria-pressed={tab === "chat"} onClick={() => setTab("chat")}>
-          Чат <span>{props.snapshot.messages.length}</span>
+        <button aria-pressed={tab === "chat"} onClick={() => openChat()}>
+          Чат{" "}
+          <span aria-label={`${unreadDiceIds.length} непросмотренных бросков`}>
+            {unreadDiceIds.length > 0
+              ? `+${unreadDiceIds.length}`
+              : props.snapshot.messages.length}
+          </span>
         </button>
         <button
           aria-pressed={tab === "palette"}
@@ -162,6 +196,15 @@ export function Sidebar(props: Props) {
           Файлы
         </button>
       </nav>
+      {tab !== "chat" && unreadDiceIds.length > 0 && (
+        <div className="dice-notifications" role="status" aria-live="polite">
+          {unreadDiceIds.map((messageId) => (
+            <button key={messageId} onClick={() => openChat(messageId)}>
+              Новый бросок — открыть в чате
+            </button>
+          ))}
+        </div>
+      )}
       <div className={`panel-scroll ${tab === "chat" ? "chat-scroll" : ""}`}>
         {tab === "character" && (
           <CharacterPanel
@@ -184,6 +227,8 @@ export function Sidebar(props: Props) {
             snapshot={props.snapshot}
             onChat={props.onChat}
             onRoll={props.onRoll}
+            focusedMessageId={focusedMessageId}
+            onMessageFocused={() => setFocusedMessageId(null)}
           />
         )}
         {tab === "palette" && <PalettePanel {...props} />}
@@ -626,10 +671,14 @@ function ChatPanel({
   snapshot,
   onChat,
   onRoll,
+  focusedMessageId,
+  onMessageFocused,
 }: {
   snapshot: GameSnapshot;
   onChat: Props["onChat"];
   onRoll: Props["onRoll"];
+  focusedMessageId: string | null;
+  onMessageFocused: () => void;
 }) {
   const [text, setText] = useState("");
   const [formula, setFormula] = useState("2d6");
@@ -639,6 +688,14 @@ function ChatPanel({
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [latestMessageId]);
+  useEffect(() => {
+    if (!focusedMessageId) return;
+    const message = document.getElementById(`chat-message-${focusedMessageId}`);
+    if (!message) return;
+    message.scrollIntoView({ block: "center" });
+    message.focus({ preventScroll: true });
+    onMessageFocused();
+  }, [focusedMessageId, onMessageFocused]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!text.trim()) return;
@@ -653,6 +710,7 @@ function ChatPanel({
             id={`chat-message-${message.id}`}
             className={`message ${message.kind.toLowerCase()}`}
             key={message.id}
+            tabIndex={-1}
           >
             <header>
               <strong>{message.displayName}</strong>

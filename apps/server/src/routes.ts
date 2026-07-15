@@ -1398,19 +1398,33 @@ export function registerRoutes(
     const x = snap(body.x ?? scene.width / 2 - definition.defaultWidth / 2);
     const y = snap(body.y ?? scene.height / 2 - definition.defaultHeight / 2);
     const placement = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select id from token_definitions where id = ${definition.id} and campaign_id = ${auth.campaignId} for update`,
+      );
+      const [lockedDefinition] = await tx
+        .select()
+        .from(tokenDefinitions)
+        .where(
+          and(
+            eq(tokenDefinitions.id, definition.id),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!lockedDefinition) return null;
       await invalidateRedoBranch(tx, auth, scene.id);
       const [created] = await tx
         .insert(tokens)
         .values({
-          definitionId: definition.id,
+          definitionId: lockedDefinition.id,
           sceneId: scene.id,
-          characterId: definition.characterId,
-          assetId: definition.defaultAssetId,
-          name: definition.name,
+          characterId: lockedDefinition.characterId,
+          assetId: lockedDefinition.defaultAssetId,
+          name: lockedDefinition.name,
           x,
           y,
-          width: definition.defaultWidth,
-          height: definition.defaultHeight,
+          width: lockedDefinition.defaultWidth,
+          height: lockedDefinition.defaultHeight,
           layer: "PLAYER",
         })
         .returning();
@@ -1440,6 +1454,8 @@ export function registerRoutes(
       });
       return created;
     });
+    if (!placement)
+      return reply.code(409).send({ error: "TOKEN_DEFINITION_DELETED" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return reply.code(201).send(placement);
   });
@@ -1742,27 +1758,45 @@ export function registerRoutes(
     const body = revisionCommandSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
-    const [current] = await db
-      .select()
-      .from(tokenDefinitions)
-      .where(
-        and(
-          eq(tokenDefinitions.id, id),
-          eq(tokenDefinitions.campaignId, auth.campaignId),
-        ),
-      )
-      .limit(1);
-    if (!current)
-      return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
-    if (current.revision !== body.revision)
-      return reply.code(409).send({ error: "TOKEN_DEFINITION_CONFLICT" });
-    const placementRows = await db
-      .select({ sceneId: tokens.sceneId })
-      .from(tokens)
-      .where(eq(tokens.definitionId, id));
-    await db.transaction(async (tx) => {
-      for (const sceneId of new Set(placementRows.map((row) => row.sceneId)))
-        await invalidateRedoBranch(tx, auth, sceneId);
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select id from token_definitions where id = ${id} and campaign_id = ${auth.campaignId} for update`,
+      );
+      const [current] = await tx
+        .select()
+        .from(tokenDefinitions)
+        .where(
+          and(
+            eq(tokenDefinitions.id, id),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!current) return { outcome: "missing" as const };
+      if (current.revision !== body.revision)
+        return { outcome: "conflict" as const };
+      await tx.execute(
+        sql`select id from tokens where definition_id = ${id} for update`,
+      );
+      const placementRows = await tx
+        .select({ id: tokens.id, sceneId: tokens.sceneId })
+        .from(tokens)
+        .where(eq(tokens.definitionId, id));
+      const sceneIds = [...new Set(placementRows.map((row) => row.sceneId))];
+      await tx
+        .update(actionJournal)
+        .set({
+          status: "INVALIDATED",
+          transitionSequence: sql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            sql`${actionJournal.status} in ('APPLIED', 'UNDONE')`,
+            sql`(${actionJournal.before}->>'definitionId' = ${id} or ${actionJournal.after}->>'definitionId' = ${id})`,
+          ),
+        );
       const [deleted] = await tx
         .delete(tokenDefinitions)
         .where(
@@ -1783,11 +1817,21 @@ export function registerRoutes(
         entityRevision: current.revision,
         payload: {
           placementsRemoved: placementRows.length,
+          sceneIds,
           undoable: false,
           reason: "destructive definition deletion cascades placements",
         },
       });
+      return {
+        outcome: "deleted" as const,
+        placementsRemoved: placementRows.length,
+        sceneIds,
+      };
     });
+    if (result.outcome === "missing")
+      return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
+    if (result.outcome === "conflict")
+      return reply.code(409).send({ error: "TOKEN_DEFINITION_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return reply.code(204).send();
   });

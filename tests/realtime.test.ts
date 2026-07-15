@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import { io as createClient, type Socket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
+  AudioStateDto,
   ClientToServerEvents,
   CommandAck,
   ServerToClientEvents,
@@ -25,6 +26,12 @@ const ids = {
   otherToken: "10000000-0000-4000-8000-000000000007",
   extraOwnedToken: "10000000-0000-4000-8000-000000000008",
   enemyToken: "10000000-0000-4000-8000-000000000009",
+  audioAsset: "20000000-0000-4000-8000-000000000001",
+  tokenAsset: "20000000-0000-4000-8000-000000000002",
+  mapAsset: "20000000-0000-4000-8000-000000000003",
+  foreignAudioAsset: "20000000-0000-4000-8000-000000000004",
+  foreignCampaign: "20000000-0000-4000-8000-000000000005",
+  foreignGm: "20000000-0000-4000-8000-000000000006",
 };
 
 const sessionToken = "realtime-test-session-token";
@@ -137,6 +144,27 @@ function move(
         tokenId: input.tokenId ?? ids.token,
         z: 0,
         levelId: null,
+      },
+      resolve,
+    );
+  });
+}
+
+function setAudio(
+  socket: typeof gmClient,
+  assetId: string | null,
+  actionId = crypto.randomUUID(),
+) {
+  return new Promise<CommandAck<AudioStateDto>>((resolve) => {
+    socket.emit(
+      "audio:set",
+      {
+        actionId,
+        assetId,
+        playing: assetId !== null,
+        positionSeconds: 0,
+        loop: false,
+        startedAt: null,
       },
       resolve,
     );
@@ -533,5 +561,66 @@ describe("durable realtime token commands", () => {
       "select count(*)::int as count from game_events where type = 'TOKEN_MOVED'",
     );
     expect(rows.rows[0]?.count).toBe(7);
+  });
+
+  it("validates audio assets transactionally without leaking rejected state", async () => {
+    await database.exec(`
+      insert into campaigns (id, name) values ('${ids.foreignCampaign}', 'Foreign');
+      insert into memberships (id, campaign_id, role, display_name)
+      values ('${ids.foreignGm}', '${ids.foreignCampaign}', 'GM', 'Foreign GM');
+      insert into assets
+        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes)
+      values
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/audio', 'audio/mpeg', 10),
+        ('${ids.tokenAsset}', '${ids.campaign}', '${ids.gm}', 'TOKEN', 'Token', 'test/token', 'image/png', 10),
+        ('${ids.mapAsset}', '${ids.campaign}', '${ids.gm}', 'MAP', 'Map', 'test/map', 'image/png', 10),
+        ('${ids.foreignAudioAsset}', '${ids.foreignCampaign}', '${ids.foreignGm}', 'AUDIO', 'Foreign', 'test/foreign-audio', 'audio/mpeg', 10);
+    `);
+
+    let broadcasts = 0;
+    client.on("audio:state", () => broadcasts++);
+
+    expect(await setAudio(gmClient, ids.foreignAudioAsset)).toMatchObject({
+      ok: false,
+      status: "INVALID",
+      reason: "ASSET_NOT_FOUND",
+    });
+    for (const id of [ids.tokenAsset, ids.mapAsset]) {
+      expect(await setAudio(gmClient, id)).toMatchObject({
+        ok: false,
+        status: "INVALID",
+        reason: "ASSET_NOT_FOUND",
+      });
+    }
+
+    const rejectedRows = await database.query<{ count: number }>(`
+      select (
+        (select count(*) from audio_states) +
+        (select count(*) from game_events where type = 'AUDIO_STATE_SET')
+      )::int as count
+    `);
+    expect(rejectedRows.rows[0]?.count).toBe(0);
+    expect(broadcasts).toBe(0);
+
+    expect(await setAudio(gmClient, ids.audioAsset)).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { assetId: ids.audioAsset, playing: true },
+    });
+    expect(await setAudio(gmClient, null)).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { assetId: null, playing: false },
+    });
+
+    const snapshotPromise = new Promise<
+      Parameters<ServerToClientEvents["game:snapshot"]>[0]
+    >((resolve) => client.once("game:snapshot", resolve));
+    client.emit("game:resync", 0);
+    const snapshot = await snapshotPromise;
+    expect(snapshot.audio?.assetId).toBeNull();
+    expect(
+      snapshot.assets.some((asset) => asset.id === ids.foreignAudioAsset),
+    ).toBe(false);
   });
 });
