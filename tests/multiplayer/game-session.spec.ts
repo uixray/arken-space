@@ -623,10 +623,15 @@ test("GM and six isolated players recover authoritative state without security l
       (token) => token.ownerMembershipId === playerOneSnapshot.me.id,
     );
     const coveredForeignToken = gmInitialSnapshot.tokens.find(
-      (token) => token.characterId === characters[1]?.id,
+      (token) => token.name === runTag + " Player Token 2",
     );
     if (!ownedToken || !coveredForeignToken)
-      throw new Error("Player fog token setup not found");
+      throw new Error(
+        "Player fog token setup not found: gm=" +
+          gmInitialSnapshot.tokens.map((token) => token.name).join(",") +
+          "; player=" +
+          playerOneSnapshot.tokens.map((token) => token.name).join(","),
+      );
     expect(playerOneSnapshot.tokens.map((token) => token.id)).not.toContain(
       coveredForeignToken.id,
     );

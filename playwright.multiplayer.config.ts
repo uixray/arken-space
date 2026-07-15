@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/multiplayer",
   timeout: 360_000,
-  retries: 1,
+  retries: 0,
   workers: 1,
   outputDir: "test-results/artifacts",
   reporter: [
