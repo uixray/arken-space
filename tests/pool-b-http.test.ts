@@ -881,6 +881,27 @@ describe("Pool B HTTP boundaries", () => {
       resources: { mana: { current: 5, maximum: 8 } },
       revision: 1,
     });
+    const countersSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(
+      countersSnapshot
+        .json()
+        .messages.find(
+          (message: { kind: string; body: string }) =>
+            message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
+        )?.body,
+    ).toContain("кошелёк: золото 0 → 1, серебро 0 → 2, медь 0 → 3, СП 0 → 4");
+    expect(
+      countersSnapshot
+        .json()
+        .messages.find(
+          (message: { kind: string; body: string }) =>
+            message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
+        )?.body,
+    ).not.toContain('{"gold"');
     const countersReplay = await app.inject({
       method: "PATCH",
       url: `/api/characters/${ids.character}/counters`,
