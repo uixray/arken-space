@@ -19,6 +19,7 @@ export const env = z
       .default("postgres://arken:arken@localhost:5432/arken"),
     SESSION_COOKIE_NAME: z.string().default("arken_session"),
     SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+    RATE_LIMIT_MAX: z.coerce.number().int().min(60).max(10_000).default(600),
     GM_ACCESS_TOKEN: z
       .string()
       .min(32)
