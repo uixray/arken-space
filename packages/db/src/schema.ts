@@ -74,6 +74,7 @@ export const memberships = pgTable(
       .references(() => campaigns.id, { onDelete: "cascade" }),
     role: roleEnum("role").notNull(),
     displayName: text("display_name").notNull(),
+    revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

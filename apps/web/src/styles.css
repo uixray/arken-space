@@ -279,6 +279,9 @@ code {
   min-height: 0;
   overflow: auto;
 }
+.panel-scroll.chat-scroll {
+  overflow: hidden;
+}
 .panel-section {
   display: flex;
   flex-direction: column;
@@ -543,11 +546,11 @@ code {
 
 .music-bar {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--space-md);
   min-width: 0;
-  padding: 0 var(--space-md);
-  border-top: 1px solid var(--line);
+  padding: var(--space-lg);
   background: var(--surface);
 }
 .music-state {
@@ -570,15 +573,72 @@ code {
   max-width: 260px;
 }
 .music-bar .primary {
-  margin-left: auto;
+  margin-left: 0;
 }
 .volume {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin-left: auto;
+  margin-left: 0;
   color: var(--muted);
   font-size: 0.8rem;
+}
+.seek {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.seek input,
+.volume input {
+  width: 100%;
+}
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+.palette-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.palette-place {
+  display: grid;
+  grid-template-rows: 72px auto;
+  gap: var(--space-xs);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.palette-place img,
+.palette-place > span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 72px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  background: #171715;
+  color: var(--accent);
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+.palette-place strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.danger-link {
+  border-color: #73463c;
+  color: #e8a18f;
+  font-size: 0.72rem;
 }
 .volume input {
   width: 140px;

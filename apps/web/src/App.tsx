@@ -7,7 +7,6 @@ import type {
 } from "@arken/contracts";
 import { api, ApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
-import { MusicBar } from "./MusicBar";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
 
@@ -21,6 +20,9 @@ export function App() {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
   const [socket, setSocket] = useState<GameSocket | null>(null);
+  const [presence, setPresence] = useState<
+    Array<{ membershipId: string; online: boolean }>
+  >([]);
   const [connection, setConnection] = useState<
     "CONNECTING" | "ONLINE" | "RECONNECTING" | "RESYNCING" | "OFFLINE"
   >("CONNECTING");
@@ -234,6 +236,7 @@ export function App() {
           : current,
       ),
     );
+    next.on("presence:updated", setPresence);
     next.on("server:error", (problem) => setError(problem.message));
     return () => {
       next.disconnect();
@@ -550,6 +553,18 @@ export function App() {
                   });
                   setTool("PAN");
                 }}
+                onPlaceTokenDefinition={async (definitionId, point) =>
+                  run(() =>
+                    api(`/api/token-definitions/${definitionId}/placements`, {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        definitionId,
+                        ...point,
+                      }),
+                    }),
+                  )
+                }
               />
             </Suspense>
           ) : (
@@ -575,6 +590,42 @@ export function App() {
         ) : (
           <Sidebar
             snapshot={snapshot}
+            socket={socket}
+            presence={presence}
+            onPlaceTokenDefinition={async (definitionId) =>
+              run(() =>
+                api(`/api/token-definitions/${definitionId}/placements`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    definitionId,
+                  }),
+                }),
+              )
+            }
+            onDeleteTokenDefinition={async (definitionId, revision) =>
+              run(() =>
+                api(`/api/token-definitions/${definitionId}`, {
+                  method: "DELETE",
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    revision,
+                  }),
+                }),
+              )
+            }
+            onPatchTokenDefinition={(definitionId, revision, patch) =>
+              run(() =>
+                api(`/api/token-definitions/${definitionId}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    ...patch,
+                    actionId: crypto.randomUUID(),
+                    revision,
+                  }),
+                }),
+              )
+            }
             onPatchCharacter={async (id, patch) =>
               run(() =>
                 api(`/api/characters/${id}`, {
@@ -702,6 +753,30 @@ export function App() {
                     }),
                   }),
                 true,
+              )
+            }
+            onRenameScene={(sceneId, revision, name) =>
+              run(() =>
+                api(`/api/scenes/${sceneId}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    revision,
+                    name,
+                  }),
+                }),
+              )
+            }
+            onRenameMembership={(membershipId, revision, name) =>
+              run(() =>
+                api(`/api/memberships/${membershipId}/name`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    revision,
+                    name,
+                  }),
+                }),
               )
             }
             onCreateToken={async (characterId) => {
@@ -865,12 +940,6 @@ export function App() {
           />
         )}
       </div>
-      <MusicBar
-        audio={snapshot.audio}
-        assets={snapshot.assets}
-        role={snapshot.me.role}
-        socket={socket}
-      />
       {error && (
         <div className="toast" role="alert">
           <span>{error}</span>

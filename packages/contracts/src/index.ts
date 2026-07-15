@@ -216,6 +216,26 @@ export const replaceTokenControllersSchema = z.object({
   revision: z.number().int().nonnegative(),
   controllerMembershipIds: z.array(z.string().uuid()).max(50),
 });
+export const placeTokenDefinitionSchema = z.object({
+  actionId: actionIdSchema,
+  definitionId: z.string().uuid(),
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+});
+export const tokenDefinitionUpdateSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  name: z.string().trim().min(1).max(80).optional(),
+  defaultAssetId: z.string().uuid().nullable().optional(),
+  characterId: z.string().uuid().nullable().optional(),
+});
+export const revisionCommandSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+});
+export const renameCommandSchema = revisionCommandSchema.extend({
+  name: z.string().trim().min(1).max(80),
+});
 
 export const createFogRevealSchema = z.object({
   actionId: actionIdSchema,
@@ -341,6 +361,7 @@ export const characterCatalogEntryCommandSchema = catalogEntryInputSchema
 
 export const characterCommandSchema = characterUpdateSchema.extend({
   actionId: actionIdSchema,
+  revision: z.number().int().nonnegative().optional(),
 });
 
 export const createChatMessageSchema = z.object({
@@ -418,6 +439,18 @@ export interface MembershipDto {
   role: Role;
   displayName: string;
   characterId: string | null;
+  revision?: number;
+}
+
+export interface TokenDefinitionDto {
+  id: string;
+  characterId: string | null;
+  defaultAssetId: string | null;
+  name: string;
+  defaultWidth: number;
+  defaultHeight: number;
+  controllerMembershipIds: string[];
+  revision: number;
 }
 
 export interface CharacterDto {
@@ -563,6 +596,7 @@ export interface GameSnapshot {
   catalogEntries: CatalogEntryDto[];
   scenes: SceneDto[];
   tokens: TokenDto[];
+  tokenDefinitions?: TokenDefinitionDto[];
   fogReveals: FogRevealDto[];
   drawings?: DrawingDto[];
   messages: ChatMessageDto[];

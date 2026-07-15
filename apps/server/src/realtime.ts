@@ -148,7 +148,7 @@ async function emitPresence(
   const online = new Set(
     sockets.map((socket) => socket.data.auth.membershipId),
   );
-  io.to(campaignRoom(campaignId)).emit(
+  io.to(gmRoom(campaignId)).emit(
     "presence:updated",
     memberRows.map((member) => ({
       membershipId: member.id,
@@ -162,6 +162,11 @@ export function registerRealtime(
   db: Database,
   log: FastifyBaseLogger,
 ) {
+  const presenceGraceMs = 750;
+  const pendingPresence = new Map<string, ReturnType<typeof setTimeout>>();
+  const presenceKey = (campaignId: string, membershipId: string) =>
+    `${campaignId}:${membershipId}`;
+
   io.use(async (socket, next) => {
     try {
       const token = cookieValue(
@@ -179,6 +184,13 @@ export function registerRealtime(
 
   io.on("connection", async (socket) => {
     const auth = socket.data.auth;
+    const pending = pendingPresence.get(
+      presenceKey(auth.campaignId, auth.membershipId),
+    );
+    if (pending) {
+      clearTimeout(pending);
+      pendingPresence.delete(presenceKey(auth.campaignId, auth.membershipId));
+    }
     await socket.join(campaignRoom(auth.campaignId));
     await socket.join(memberRoom(auth.membershipId));
     if (auth.role === "GM") await socket.join(gmRoom(auth.campaignId));
@@ -542,7 +554,7 @@ export function registerRealtime(
       });
     });
 
-    socket.on("disconnect", async (reason) => {
+    socket.on("disconnect", (reason) => {
       log.info(
         {
           membershipId: auth.membershipId,
@@ -551,7 +563,20 @@ export function registerRealtime(
         },
         "realtime.disconnected",
       );
-      await emitPresence(io, db, auth.campaignId);
+      const key = presenceKey(auth.campaignId, auth.membershipId);
+      const previous = pendingPresence.get(key);
+      if (previous) clearTimeout(previous);
+      const timer = setTimeout(() => {
+        pendingPresence.delete(key);
+        void emitPresence(io, db, auth.campaignId).catch((error) =>
+          log.warn(
+            { error, campaignId: auth.campaignId },
+            "realtime.presence_emit_failed",
+          ),
+        );
+      }, presenceGraceMs);
+      timer.unref();
+      pendingPresence.set(key, timer);
     });
   });
 

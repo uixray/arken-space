@@ -33,6 +33,10 @@ import {
   inviteClaimSchema,
   rotatePlayerAccessSchema,
   replaceTokenControllersSchema,
+  placeTokenDefinitionSchema,
+  renameCommandSchema,
+  revisionCommandSchema,
+  tokenDefinitionUpdateSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@arken/contracts";
@@ -435,6 +439,69 @@ export function registerRoutes(
     });
   });
 
+  app.patch("/api/memberships/:id/name", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = renameCommandSchema
+      .extend({
+        name: z.string().trim().min(1).max(40),
+      })
+      .parse(request.body);
+    if (auth.role !== "GM" && id !== auth.membershipId)
+      return reply.code(403).send({ error: "MEMBERSHIP_FORBIDDEN" });
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.id, id),
+          eq(memberships.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!current)
+      return reply.code(404).send({ error: "MEMBERSHIP_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "MEMBERSHIP_CONFLICT", revision: current.revision });
+    const updated = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(memberships)
+        .set({ displayName: body.name, revision: current.revision + 1 })
+        .where(
+          and(
+            eq(memberships.id, id),
+            eq(memberships.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "membership.renamed",
+        entityType: "membership",
+        entityId: next.id,
+        entityRevision: next.revision,
+        payload: { membershipId: next.id, displayName: next.displayName },
+      });
+      return next;
+    });
+    if (!updated) return reply.code(409).send({ error: "MEMBERSHIP_CONFLICT" });
+    const sockets = await io.in(campaignRoom(auth.campaignId)).fetchSockets();
+    for (const socket of sockets) {
+      if (socket.data.auth?.membershipId === id)
+        socket.data.auth.displayName = updated.displayName;
+    }
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
+  });
+
   app.post("/api/client-logs", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -517,15 +584,44 @@ export function registerRoutes(
     if (!current) return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
     if (auth.role !== "GM" && current.ownerMembershipId !== auth.membershipId)
       return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
-    const { actionId, ...updates } = body;
+    if (body.revision !== undefined && body.revision !== current.revision)
+      return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
+    const { actionId, revision: _revision, ...updates } = body;
     if (
       auth.role !== "GM" &&
       Object.keys(updates).some(
         (key) =>
-          !["backstory", "inventory", "notes", "resources"].includes(key),
+          ![
+            "name",
+            "portraitAssetId",
+            "backstory",
+            "inventory",
+            "notes",
+            "resources",
+          ].includes(key),
       )
     )
       return reply.code(403).send({ error: "CHARACTER_FIELD_FORBIDDEN" });
+    if (updates.portraitAssetId) {
+      const [portrait] = await db
+        .select()
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, updates.portraitAssetId),
+            eq(assets.campaignId, auth.campaignId),
+            eq(assets.kind, "PORTRAIT"),
+          ),
+        )
+        .limit(1);
+      if (!portrait)
+        return reply.code(400).send({ error: "INVALID_PORTRAIT_ASSET" });
+      if (
+        auth.role !== "GM" &&
+        portrait.uploadedByMembershipId !== auth.membershipId
+      )
+        return reply.code(403).send({ error: "PORTRAIT_ASSET_FORBIDDEN" });
+    }
     const updated = await db.transaction(async (tx) => {
       const [next] = await tx
         .update(characters)
@@ -978,16 +1074,31 @@ export function registerRoutes(
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const body = createSceneSchema
       .partial()
-      .extend({ actionId: actionIdSchema })
+      .extend({
+        actionId: actionIdSchema,
+        revision: z.number().int().nonnegative().optional(),
+      })
       .parse(request.body);
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) return reply.code(200).send({ duplicate: true });
-    const { actionId, ...sceneUpdates } = body;
+    const [current] = await db
+      .select()
+      .from(scenes)
+      .where(and(eq(scenes.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (body.revision !== undefined && body.revision !== current.revision)
+      return reply.code(409).send({ error: "SCENE_CONFLICT" });
+    const { actionId, revision: _revision, ...sceneUpdates } = body;
     const scene = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(scenes)
-        .set({ ...sceneUpdates, updatedAt: new Date() })
-        .where(and(eq(scenes.id, id), eq(scenes.campaignId, auth.campaignId)))
+        .set({
+          ...sceneUpdates,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(scenes.id, id), eq(scenes.revision, current.revision)))
         .returning();
       if (!updated) return null;
       await tx.insert(gameEvents).values({
@@ -1001,7 +1112,7 @@ export function registerRoutes(
       });
       return updated;
     });
-    if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (!scene) return reply.code(409).send({ error: "SCENE_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return scene;
   });
@@ -1230,6 +1341,109 @@ export function registerRoutes(
     return reply.code(201).send(token);
   });
 
+  app.post("/api/token-definitions/:id/placements", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = placeTokenDefinitionSchema.parse({
+      ...(request.body as Record<string, unknown>),
+      definitionId: id,
+    });
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [campaign] = await db
+      .select({ activeSceneId: campaigns.activeSceneId })
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!campaign?.activeSceneId)
+      return reply.code(409).send({ error: "ACTIVE_SCENE_REQUIRED" });
+    const [scene] = await db
+      .select()
+      .from(scenes)
+      .where(
+        and(
+          eq(scenes.id, campaign.activeSceneId),
+          eq(scenes.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    const [definition] = await db
+      .select()
+      .from(tokenDefinitions)
+      .where(
+        and(
+          eq(tokenDefinitions.id, id),
+          eq(tokenDefinitions.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!scene || !definition)
+      return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
+    const controllers = await db
+      .select({ membershipId: tokenControllers.membershipId })
+      .from(tokenControllers)
+      .where(eq(tokenControllers.tokenDefinitionId, definition.id));
+    if (
+      auth.role !== "GM" &&
+      !controllers.some((item) => item.membershipId === auth.membershipId)
+    )
+      return reply.code(403).send({ error: "TOKEN_DEFINITION_FORBIDDEN" });
+    const snap = (value: number) =>
+      scene.grid.enabled
+        ? Math.round((value - scene.grid.offsetX) / scene.grid.size) *
+            scene.grid.size +
+          scene.grid.offsetX
+        : value;
+    const x = snap(body.x ?? scene.width / 2 - definition.defaultWidth / 2);
+    const y = snap(body.y ?? scene.height / 2 - definition.defaultHeight / 2);
+    const placement = await db.transaction(async (tx) => {
+      await invalidateRedoBranch(tx, auth, scene.id);
+      const [created] = await tx
+        .insert(tokens)
+        .values({
+          definitionId: definition.id,
+          sceneId: scene.id,
+          characterId: definition.characterId,
+          assetId: definition.defaultAssetId,
+          name: definition.name,
+          x,
+          y,
+          width: definition.defaultWidth,
+          height: definition.defaultHeight,
+          layer: "PLAYER",
+        })
+        .returning();
+      if (!created) throw new Error("TOKEN_CREATE_FAILED");
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "token.placed",
+        entityType: "token",
+        entityId: created.id,
+        entityRevision: created.revision,
+        payload: { definitionId: definition.id, sceneId: scene.id },
+      });
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: scene.id,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        type: "TOKEN_CREATE",
+        targetType: "TOKEN",
+        targetId: created.id,
+        before: null,
+        after: created,
+        afterRevision: created.revision,
+        currentRevision: created.revision,
+      });
+      return created;
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(201).send(placement);
+  });
+
   app.delete("/api/tokens/:id", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -1411,6 +1625,171 @@ export function registerRoutes(
       controllerMembershipIds: body.controllerMembershipIds,
       revision: replaced.revision,
     };
+  });
+
+  app.patch("/api/token-definitions/:id", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = tokenDefinitionUpdateSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(tokenDefinitions)
+      .where(
+        and(
+          eq(tokenDefinitions.id, id),
+          eq(tokenDefinitions.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!current)
+      return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply.code(409).send({ error: "TOKEN_DEFINITION_CONFLICT" });
+    if (auth.role !== "GM") {
+      const [controller] = await db
+        .select()
+        .from(tokenControllers)
+        .where(
+          and(
+            eq(tokenControllers.tokenDefinitionId, id),
+            eq(tokenControllers.membershipId, auth.membershipId),
+          ),
+        )
+        .limit(1);
+      if (!controller)
+        return reply.code(403).send({ error: "TOKEN_DEFINITION_FORBIDDEN" });
+    }
+    if (body.defaultAssetId) {
+      const [asset] = await db
+        .select()
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, body.defaultAssetId),
+            eq(assets.campaignId, auth.campaignId),
+            eq(assets.kind, "TOKEN"),
+          ),
+        )
+        .limit(1);
+      if (
+        !asset ||
+        (auth.role !== "GM" &&
+          asset.uploadedByMembershipId !== auth.membershipId)
+      )
+        return reply.code(404).send({ error: "TOKEN_ASSET_NOT_FOUND" });
+    }
+    if (body.characterId) {
+      const [character] = await db
+        .select()
+        .from(characters)
+        .where(
+          and(
+            eq(characters.id, body.characterId),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (
+        !character ||
+        (auth.role !== "GM" &&
+          character.ownerMembershipId !== auth.membershipId)
+      )
+        return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+    }
+    const { actionId, revision: _revision, ...changes } = body;
+    const updated = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(tokenDefinitions)
+        .set({
+          ...changes,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(tokenDefinitions.id, id),
+            eq(tokenDefinitions.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId,
+        membershipId: auth.membershipId,
+        type: "token_definition.updated",
+        entityType: "token_definition",
+        entityId: id,
+        entityRevision: next.revision,
+      });
+      return next;
+    });
+    if (!updated)
+      return reply.code(409).send({ error: "TOKEN_DEFINITION_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
+  });
+
+  app.delete("/api/token-definitions/:id", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = revisionCommandSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(tokenDefinitions)
+      .where(
+        and(
+          eq(tokenDefinitions.id, id),
+          eq(tokenDefinitions.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!current)
+      return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply.code(409).send({ error: "TOKEN_DEFINITION_CONFLICT" });
+    const placementRows = await db
+      .select({ sceneId: tokens.sceneId })
+      .from(tokens)
+      .where(eq(tokens.definitionId, id));
+    await db.transaction(async (tx) => {
+      for (const sceneId of new Set(placementRows.map((row) => row.sceneId)))
+        await invalidateRedoBranch(tx, auth, sceneId);
+      const [deleted] = await tx
+        .delete(tokenDefinitions)
+        .where(
+          and(
+            eq(tokenDefinitions.id, id),
+            eq(tokenDefinitions.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!deleted) throw new Error("TOKEN_DEFINITION_CONFLICT");
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "token_definition.deleted",
+        entityType: "token_definition",
+        entityId: id,
+        entityRevision: current.revision,
+        payload: {
+          placementsRemoved: placementRows.length,
+          undoable: false,
+          reason: "destructive definition deletion cascades placements",
+        },
+      });
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(204).send();
   });
 
   app.post("/api/fog-reveals", async (request, reply) => {

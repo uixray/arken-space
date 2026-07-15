@@ -174,6 +174,176 @@ afterEach(async () => {
 });
 
 describe("Pool B HTTP boundaries", () => {
+  it("filters the palette, exposes own unassigned image assets and places definitions idempotently", async () => {
+    const ownToken = crypto.randomUUID();
+    const ownPortrait = crypto.randomUUID();
+    const ownAudio = crypto.randomUUID();
+    await db.insert(schema.assets).values([
+      {
+        id: ownToken,
+        campaignId: ids.campaign,
+        uploadedByMembershipId: ids.player,
+        kind: "TOKEN",
+        name: "Own token",
+        storageKey: crypto.randomUUID(),
+        mimeType: "image/webp",
+        sizeBytes: 1,
+      },
+      {
+        id: ownPortrait,
+        campaignId: ids.campaign,
+        uploadedByMembershipId: ids.player,
+        kind: "PORTRAIT",
+        name: "Own portrait",
+        storageKey: crypto.randomUUID(),
+        mimeType: "image/webp",
+        sizeBytes: 1,
+      },
+      {
+        id: ownAudio,
+        campaignId: ids.campaign,
+        uploadedByMembershipId: ids.player,
+        kind: "AUDIO",
+        name: "Hidden audio",
+        storageKey: crypto.randomUUID(),
+        mimeType: "audio/ogg",
+        sizeBytes: 1,
+      },
+    ]);
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(snapshot.json().tokenDefinitions).toEqual([
+      expect.objectContaining({ id: ids.definition }),
+    ]);
+    expect(
+      snapshot.json().assets.map((asset: { id: string }) => asset.id),
+    ).toEqual(expect.arrayContaining([ownToken, ownPortrait]));
+    expect(snapshot.json().assets).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: ownAudio })]),
+    );
+
+    const actionId = crypto.randomUUID();
+    const placed = await app.inject({
+      method: "POST",
+      url: `/api/token-definitions/${ids.definition}/placements`,
+      headers: headers(secrets.player),
+      payload: { actionId, x: 93, y: 93 },
+    });
+    expect(placed.statusCode).toBe(201);
+    expect(placed.json()).toMatchObject({
+      definitionId: ids.definition,
+      layer: "PLAYER",
+      x: 64,
+      y: 64,
+    });
+    const replay = await app.inject({
+      method: "POST",
+      url: `/api/token-definitions/${ids.definition}/placements`,
+      headers: headers(secrets.player),
+      payload: { actionId, x: 512, y: 512 },
+    });
+    expect(replay.json()).toMatchObject({ duplicate: true });
+  });
+
+  it("keeps destructive definition deletion distinct and records non-undoable cascade semantics", async () => {
+    const denied = await app.inject({
+      method: "DELETE",
+      url: `/api/token-definitions/${ids.definition}`,
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: 0 },
+    });
+    expect(denied.statusCode).toBe(403);
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/token-definitions/${ids.definition}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: 0 },
+    });
+    expect(deleted.statusCode).toBe(204);
+    expect(await db.select().from(schema.tokens)).toHaveLength(0);
+    const events = await db.select().from(schema.gameEvents);
+    expect(events.at(-1)).toMatchObject({
+      type: "token_definition.deleted",
+      payload: expect.objectContaining({
+        placementsRemoved: 1,
+        undoable: false,
+      }),
+    });
+  });
+
+  it("renames membership, character and scene with role checks and revision CAS", async () => {
+    const [memberBefore] = await db
+      .select()
+      .from(schema.memberships)
+      .where(eq(schema.memberships.id, ids.player));
+    expect(memberBefore).toBeDefined();
+    const memberRename = await app.inject({
+      method: "PATCH",
+      url: `/api/memberships/${ids.player}/name`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: memberBefore!.revision,
+        name: "Ranger",
+      },
+    });
+    expect(memberRename.json()).toMatchObject({
+      displayName: "Ranger",
+      revision: memberBefore!.revision + 1,
+    });
+    const staleMember = await app.inject({
+      method: "PATCH",
+      url: `/api/memberships/${ids.player}/name`,
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: 0, name: "Stale" },
+    });
+    expect(staleMember.statusCode).toBe(409);
+
+    const characterRename = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        name: "Elris",
+      },
+    });
+    expect(characterRename.json()).toMatchObject({
+      name: "Elris",
+      revision: 1,
+    });
+
+    const playerSceneDenied = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${ids.scene}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        name: "Forbidden",
+      },
+    });
+    expect(playerSceneDenied.statusCode).toBe(403);
+    const sceneRename = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${ids.scene}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        name: "Moonlit ruins",
+      },
+    });
+    expect(sceneRename.json()).toMatchObject({
+      name: "Moonlit ruins",
+      revision: 1,
+    });
+  });
+
   it("replaces controllers with GM auth, CAS, replay and reconnect revision", async () => {
     const playerDenied = await app.inject({
       method: "PUT",

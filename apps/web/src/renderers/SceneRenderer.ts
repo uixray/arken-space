@@ -41,6 +41,10 @@ export interface SceneRendererProps {
     color: string;
   }) => Promise<void>;
   onPing: (point: { x: number; y: number }) => void;
+  onPlaceTokenDefinition?: (
+    definitionId: string,
+    point?: { x: number; y: number },
+  ) => Promise<void>;
 }
 
 export type SceneRendererComponent = React.ComponentType<SceneRendererProps>;

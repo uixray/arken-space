@@ -57,6 +57,13 @@
       "when": 1784079730392,
       "tag": "0007_certain_network",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784084136104,
+      "tag": "0008_shallow_havok",
+      "breakpoints": true
     }
   ]
 }

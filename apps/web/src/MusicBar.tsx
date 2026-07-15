@@ -14,8 +14,15 @@ export function MusicBar({
   socket: GameSocket | null;
 }) {
   const element = useRef<HTMLAudioElement>(null);
-  const [enabled, setEnabled] = useState(false);
-  const [volume, setVolume] = useState(0.5);
+  const [enabled, setEnabled] = useState(
+    () => localStorage.getItem("arken.audio.enabled") === "true",
+  );
+  const [volume, setVolume] = useState(() => {
+    const saved = Number(localStorage.getItem("arken.audio.volume"));
+    return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 0.5;
+  });
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(audio.positionSeconds);
   const tracks = assets.filter((asset) => asset.kind === "AUDIO");
   const current = tracks.find((asset) => asset.id === audio.assetId);
 
@@ -35,6 +42,15 @@ export function MusicBar({
     else player.pause();
   }, [audio, current, enabled, volume]);
 
+  useEffect(() => {
+    localStorage.setItem("arken.audio.enabled", String(enabled));
+  }, [enabled]);
+
+  useEffect(() => {
+    localStorage.setItem("arken.audio.volume", String(volume));
+    if (element.current) element.current.volume = volume;
+  }, [volume]);
+
   const setState = (next: Partial<AudioStateDto>) =>
     socket?.emit("audio:set", {
       actionId: crypto.randomUUID(),
@@ -50,8 +66,14 @@ export function MusicBar({
     });
 
   return (
-    <footer className="music-bar">
-      <audio ref={element} src={current?.url} preload="auto" />
+    <section className="music-bar" aria-label="Музыка">
+      <audio
+        ref={element}
+        src={current?.url}
+        preload="auto"
+        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+        onTimeUpdate={(event) => setPosition(event.currentTarget.currentTime)}
+      />
       <div className="music-state">
         <span>Музыка</span>
         <strong>{current?.name ?? "Трек не выбран"}</strong>
@@ -76,6 +98,28 @@ export function MusicBar({
             </option>
           ))}
         </select>
+      )}
+      {role === "GM" && current && (
+        <label className="seek">
+          Позиция
+          <input
+            type="range"
+            min="0"
+            max={Math.max(1, duration || audio.positionSeconds + 300)}
+            step="1"
+            value={Math.min(position, duration || audio.positionSeconds + 300)}
+            onChange={(event) => {
+              const positionSeconds = Number(event.target.value);
+              setPosition(positionSeconds);
+              if (element.current)
+                element.current.currentTime = positionSeconds;
+              setState({
+                positionSeconds,
+                startedAt: audio.playing ? new Date().toISOString() : null,
+              });
+            }}
+          />
+        </label>
       )}
       {role === "GM" && (
         <button
@@ -127,6 +171,6 @@ export function MusicBar({
           />
         </label>
       )}
-    </footer>
+    </section>
   );
 }

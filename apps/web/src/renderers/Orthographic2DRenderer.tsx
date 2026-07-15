@@ -86,6 +86,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
     null,
   );
+  const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
   const [fogStart, setFogStart] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -270,7 +271,30 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     </Layer>
   );
   return (
-    <div className="map-viewport" ref={containerRef}>
+    <div
+      className="map-viewport"
+      ref={containerRef}
+      onDragOver={(event) => {
+        if (
+          event.dataTransfer.types.includes(
+            "application/x-arken-token-definition",
+          )
+        )
+          event.preventDefault();
+      }}
+      onDrop={(event) => {
+        const definitionId = event.dataTransfer.getData(
+          "application/x-arken-token-definition",
+        );
+        if (!definitionId || !props.onPlaceTokenDefinition) return;
+        event.preventDefault();
+        const rect = event.currentTarget.getBoundingClientRect();
+        void props.onPlaceTokenDefinition(definitionId, {
+          x: (event.clientX - rect.left - position.x) / scale,
+          y: (event.clientY - rect.top - position.y) / scale,
+        });
+      }}
+    >
       <Stage
         ref={stageRef}
         width={viewport.width}
@@ -415,48 +439,57 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   token.controllerMembershipIds.includes(props.membershipId));
               const url = assetUrl(token.assetId);
               const common = {
-                x: token.x,
-                y: token.y,
+                x: 0,
+                y: 0,
                 width: token.width,
                 height: token.height,
                 rotation: token.rotation,
-                draggable: canMove,
+                draggable: false,
                 opacity: token.layer === "GM" ? 0.45 : token.visible ? 1 : 0.45,
-                onDragMove: (event: Konva.KonvaEventObject<DragEvent>) =>
-                  props.socket?.emit("token:moving", {
+                onDragMove: () => undefined,
+                onDragEnd: () => undefined,
+              };
+              const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) =>
+                props.socket?.emit("token:moving", {
+                  actionId: crypto.randomUUID(),
+                  tokenId: token.id,
+                  x: event.target.x(),
+                  y: event.target.y(),
+                  z: token.z,
+                  levelId: token.levelId,
+                  revision: token.revision,
+                });
+              const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
+                const x = snap(event.target.x());
+                const y = snap(event.target.y());
+                event.target.position({ x, y });
+                props.socket?.emit(
+                  "token:moved",
+                  {
                     actionId: crypto.randomUUID(),
                     tokenId: token.id,
-                    x: event.target.x(),
-                    y: event.target.y(),
+                    x,
+                    y,
                     z: token.z,
                     levelId: token.levelId,
                     revision: token.revision,
-                  }),
-                onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => {
-                  const x = snap(event.target.x());
-                  const y = snap(event.target.y());
-                  event.target.position({ x, y });
-                  props.socket?.emit(
-                    "token:moved",
-                    {
-                      actionId: crypto.randomUUID(),
-                      tokenId: token.id,
-                      x,
-                      y,
-                      z: token.z,
-                      levelId: token.levelId,
-                      revision: token.revision,
-                    },
-                    (ack) => {
-                      if (!ack.ok)
-                        props.socket?.emit("game:resync", ack.sequence);
-                    },
-                  );
-                },
+                  },
+                  (ack) => {
+                    if (!ack.ok)
+                      props.socket?.emit("game:resync", ack.sequence);
+                  },
+                );
               };
               return (
                 <Group
                   key={token.id}
+                  x={token.x}
+                  y={token.y}
+                  draggable={canMove}
+                  onDragMove={onDragMove}
+                  onDragEnd={onDragEnd}
+                  onMouseEnter={() => setHoveredTokenId(token.id)}
+                  onMouseLeave={() => setHoveredTokenId(null)}
                   onContextMenu={(event) => {
                     event.evt.preventDefault();
                     if (props.role !== "GM") return;
@@ -499,14 +532,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     </Group>
                   )}
                   <Text
-                    x={token.x - 16}
-                    y={token.y + token.height + 5}
+                    x={-16}
+                    y={token.height + 5}
                     width={token.width + 32}
                     align="center"
                     text={token.name}
                     fill="#eee6d5"
                     fontSize={13}
                     listening={false}
+                    visible={hoveredTokenId === token.id || canMove}
                   />
                 </Group>
               );

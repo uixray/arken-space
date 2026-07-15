@@ -39,6 +39,7 @@ export async function buildSnapshot(
     sceneRows,
     tokenRows,
     controllerRows,
+    definitionRows,
     catalogRows,
     assignedRows,
     fogRows,
@@ -77,6 +78,11 @@ export async function buildSnapshot(
         eq(tokenControllers.tokenDefinitionId, tokenDefinitions.id),
       )
       .where(eq(tokenDefinitions.campaignId, auth.campaignId)),
+    db
+      .select()
+      .from(tokenDefinitions)
+      .where(eq(tokenDefinitions.campaignId, auth.campaignId))
+      .orderBy(asc(tokenDefinitions.createdAt)),
     db
       .select()
       .from(catalogEntries)
@@ -188,6 +194,16 @@ export async function buildSnapshot(
   for (const { token } of visibleTokens) {
     if (token.assetId) visibleAssetIds.add(token.assetId);
   }
+  const visibleDefinitions = definitionRows.filter(
+    (definition) =>
+      auth.role === "GM" ||
+      (controllersByDefinition.get(definition.id) ?? []).includes(
+        auth.membershipId,
+      ),
+  );
+  for (const definition of visibleDefinitions)
+    if (definition.defaultAssetId)
+      visibleAssetIds.add(definition.defaultAssetId);
   for (const character of visibleCharacters) {
     if (character.portraitAssetId)
       visibleAssetIds.add(character.portraitAssetId);
@@ -196,7 +212,12 @@ export async function buildSnapshot(
   const visibleAssets =
     auth.role === "GM"
       ? assetRows
-      : assetRows.filter((asset) => visibleAssetIds.has(asset.id));
+      : assetRows.filter(
+          (asset) =>
+            visibleAssetIds.has(asset.id) ||
+            (asset.uploadedByMembershipId === auth.membershipId &&
+              (asset.kind === "TOKEN" || asset.kind === "PORTRAIT")),
+        );
 
   return {
     campaign: {
@@ -212,12 +233,17 @@ export async function buildSnapshot(
       role: me.role,
       displayName: me.displayName,
       characterId: characterByOwner.get(me.id) ?? null,
+      revision: me.revision,
     },
-    members: memberRows.map((member) => ({
+    members: (auth.role === "GM"
+      ? memberRows
+      : memberRows.filter((member) => member.id === auth.membershipId)
+    ).map((member) => ({
       id: member.id,
       role: member.role,
       displayName: member.displayName,
       characterId: characterByOwner.get(member.id) ?? null,
+      revision: member.revision,
     })),
     characters: visibleCharacters.map((character) => ({
       id: character.id,
@@ -285,6 +311,19 @@ export async function buildSnapshot(
               ),
       };
     }),
+    tokenDefinitions: visibleDefinitions.map((definition) => ({
+      id: definition.id,
+      characterId: definition.characterId,
+      defaultAssetId: definition.defaultAssetId,
+      name: definition.name,
+      defaultWidth: definition.defaultWidth,
+      defaultHeight: definition.defaultHeight,
+      controllerMembershipIds:
+        auth.role === "GM"
+          ? (controllersByDefinition.get(definition.id) ?? [])
+          : [auth.membershipId],
+      revision: definition.revision,
+    })),
     fogReveals: fogRows
       .filter(({ fog }) => visibleSceneIds.has(fog.sceneId))
       .map(({ fog }) => ({

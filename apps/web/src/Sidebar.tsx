@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -15,9 +16,23 @@ import type {
   PlayerAccessSecretDto,
 } from "@arken/contracts";
 import { arkenSystem } from "@arken/system";
+import { MusicBar } from "./MusicBar";
+import type { GameSocket } from "./realtime";
 
 type Props = {
   snapshot: GameSnapshot;
+  socket: GameSocket | null;
+  presence: Array<{ membershipId: string; online: boolean }>;
+  onPlaceTokenDefinition: (definitionId: string) => Promise<void>;
+  onDeleteTokenDefinition: (
+    definitionId: string,
+    revision: number,
+  ) => Promise<void>;
+  onPatchTokenDefinition: (
+    definitionId: string,
+    revision: number,
+    patch: { defaultAssetId?: string | null; characterId?: string | null },
+  ) => Promise<void>;
   onPatchCharacter: (id: string, patch: Partial<CharacterDto>) => Promise<void>;
   onChat: (body: string, visibility: MessageVisibility) => Promise<void>;
   onRoll: (
@@ -37,6 +52,16 @@ type Props = {
   onCreateScene: (name: string) => Promise<void>;
   onActivateScene: (sceneId: string) => Promise<void>;
   onAssignMap: (sceneId: string, assetId: string | null) => Promise<void>;
+  onRenameScene: (
+    sceneId: string,
+    revision: number,
+    name: string,
+  ) => Promise<void>;
+  onRenameMembership: (
+    membershipId: string,
+    revision: number,
+    name: string,
+  ) => Promise<void>;
   onCreateToken: (characterId: string) => Promise<void>;
   onUpload: (file: File, kind: AssetKind) => Promise<void>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
@@ -90,9 +115,9 @@ type Props = {
 
 export function Sidebar(props: Props) {
   const isGm = props.snapshot.me.role === "GM";
-  const [tab, setTab] = useState<"character" | "chat" | "setup" | "media">(
-    isGm ? "setup" : "character",
-  );
+  const [tab, setTab] = useState<
+    "character" | "chat" | "palette" | "music" | "setup" | "media"
+  >(isGm ? "setup" : "character");
   const ownCharacter = props.snapshot.characters.find(
     (character) => character.ownerMembershipId === props.snapshot.me.id,
   );
@@ -116,6 +141,15 @@ export function Sidebar(props: Props) {
         <button aria-pressed={tab === "chat"} onClick={() => setTab("chat")}>
           Чат <span>{props.snapshot.messages.length}</span>
         </button>
+        <button
+          aria-pressed={tab === "palette"}
+          onClick={() => setTab("palette")}
+        >
+          Токены
+        </button>
+        <button aria-pressed={tab === "music"} onClick={() => setTab("music")}>
+          Музыка
+        </button>
         {isGm && (
           <button
             aria-pressed={tab === "setup"}
@@ -128,7 +162,7 @@ export function Sidebar(props: Props) {
           Файлы
         </button>
       </nav>
-      <div className="panel-scroll">
+      <div className={`panel-scroll ${tab === "chat" ? "chat-scroll" : ""}`}>
         {tab === "character" && (
           <CharacterPanel
             snapshot={props.snapshot}
@@ -152,6 +186,15 @@ export function Sidebar(props: Props) {
             onRoll={props.onRoll}
           />
         )}
+        {tab === "palette" && <PalettePanel {...props} />}
+        <div hidden={tab !== "music"}>
+          <MusicBar
+            audio={props.snapshot.audio}
+            assets={props.snapshot.assets}
+            role={props.snapshot.me.role}
+            socket={props.socket}
+          />
+        </div>
         {tab === "setup" && isGm && <SetupPanel {...props} />}
         {tab === "media" && (
           <MediaPanel snapshot={props.snapshot} onUpload={props.onUpload} />
@@ -221,8 +264,43 @@ function CharacterPanel({
           <span className="eyebrow">Карточка</span>
           <h2>{character.name}</h2>
         </div>
-        <span className="revision">rev {character.revision}</span>
+        <div className="inline-fields">
+          <button
+            onClick={() => {
+              const name = window.prompt("Новое имя персонажа", character.name);
+              if (name?.trim())
+                void onPatch(character.id, {
+                  name: name.trim(),
+                  revision: character.revision,
+                });
+            }}
+          >
+            Переименовать
+          </button>
+          <span className="revision">rev {character.revision}</span>
+        </div>
       </div>
+      <label className="field">
+        Портрет
+        <select
+          value={character.portraitAssetId ?? ""}
+          onChange={(event) =>
+            void onPatch(character.id, {
+              portraitAssetId: event.target.value || null,
+              revision: character.revision,
+            })
+          }
+        >
+          <option value="">Без портрета</option>
+          {snapshot.assets
+            .filter((asset) => asset.kind === "PORTRAIT")
+            .map((asset) => (
+              <option key={asset.id} value={asset.id}>
+                {asset.name}
+              </option>
+            ))}
+        </select>
+      </label>
       {snapshot.me.role === "GM" && (
         <div className="subsection">
           <h3>Время кампании</h3>
@@ -556,6 +634,11 @@ function ChatPanel({
   const [text, setText] = useState("");
   const [formula, setFormula] = useState("2d6");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
+  const endRef = useRef<HTMLDivElement>(null);
+  const latestMessageId = snapshot.messages.at(-1)?.id;
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [latestMessageId]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!text.trim()) return;
@@ -567,6 +650,7 @@ function ChatPanel({
       <div className="message-list" aria-live="polite">
         {snapshot.messages.map((message) => (
           <article
+            id={`chat-message-${message.id}`}
             className={`message ${message.kind.toLowerCase()}`}
             key={message.id}
           >
@@ -594,6 +678,7 @@ function ChatPanel({
             )}
           </article>
         ))}
+        <div ref={endRef} aria-hidden="true" />
       </div>
       <div className="chat-tools">
         <div className="inline-fields">
@@ -652,6 +737,106 @@ function ChatPanel({
   );
 }
 
+function PalettePanel(props: Props) {
+  const definitions = props.snapshot.tokenDefinitions ?? [];
+  if (!definitions.length)
+    return (
+      <Empty
+        title="Нет доступных токенов"
+        text="Мастер ещё не добавил токены в вашу палитру."
+      />
+    );
+  return (
+    <section className="panel-section token-palette">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Палитра</span>
+          <h2>Токены</h2>
+        </div>
+        <span className="revision">{definitions.length}</span>
+      </div>
+      <p className="muted">
+        Нажмите, чтобы поставить токен в центр карты, или перетащите его на
+        нужное место.
+      </p>
+      <div className="palette-grid">
+        {definitions.map((definition) => {
+          const asset = props.snapshot.assets.find(
+            (item) => item.id === definition.defaultAssetId,
+          );
+          return (
+            <article
+              className="palette-card"
+              key={definition.id}
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "copy";
+                event.dataTransfer.setData(
+                  "application/x-arken-token-definition",
+                  definition.id,
+                );
+              }}
+            >
+              <button
+                className="palette-place"
+                onClick={() => props.onPlaceTokenDefinition(definition.id)}
+                title="Поставить экземпляр токена на активную сцену"
+              >
+                {asset ? (
+                  <img src={asset.url} alt="" />
+                ) : (
+                  <span aria-hidden="true">
+                    {definition.name.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+                <strong>{definition.name}</strong>
+              </button>
+              <select
+                aria-label={`Изображение токена ${definition.name}`}
+                value={definition.defaultAssetId ?? ""}
+                onChange={(event) =>
+                  void props.onPatchTokenDefinition(
+                    definition.id,
+                    definition.revision,
+                    { defaultAssetId: event.target.value || null },
+                  )
+                }
+              >
+                <option value="">Без изображения</option>
+                {props.snapshot.assets
+                  .filter((item) => item.kind === "TOKEN")
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+              </select>
+              {props.snapshot.me.role === "GM" && (
+                <button
+                  className="danger-link"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Удалить определение «${definition.name}» и все его размещения на сценах? Это не удаление одного токена.`,
+                      )
+                    )
+                      void props.onDeleteTokenDefinition(
+                        definition.id,
+                        definition.revision,
+                      );
+                  }}
+                >
+                  Удалить определение и все размещения
+                </button>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function SetupPanel(props: Props) {
   const [characterName, setCharacterName] = useState("");
   const [sceneName, setSceneName] = useState("");
@@ -685,6 +870,37 @@ function SetupPanel(props: Props) {
         <div>
           <span className="eyebrow">Мастер</span>
           <h2>Подготовка</h2>
+        </div>
+      </div>
+      <div className="subsection">
+        <h3>Игроки онлайн</h3>
+        <div className="stack-list">
+          {props.snapshot.members
+            .filter((member) => member.role === "PLAYER")
+            .map((member) => {
+              const online = props.presence.find(
+                (item) => item.membershipId === member.id,
+              )?.online;
+              return (
+                <button
+                  key={member.id}
+                  onClick={() => {
+                    const name = window.prompt(
+                      "Новое имя игрока",
+                      member.displayName,
+                    );
+                    if (name?.trim())
+                      void props.onRenameMembership(
+                        member.id,
+                        member.revision ?? 0,
+                        name.trim(),
+                      );
+                  }}
+                >
+                  {online ? "●" : "○"} {member.displayName}
+                </button>
+              );
+            })}
         </div>
       </div>
       <div className="subsection">
@@ -889,6 +1105,24 @@ function SetupPanel(props: Props) {
             ))}
           </select>
         </label>
+        {activeScene && (
+          <button
+            onClick={() => {
+              const name = window.prompt(
+                "Новое название сцены",
+                activeScene.name,
+              );
+              if (name?.trim())
+                void props.onRenameScene(
+                  activeScene.id,
+                  activeScene.revision ?? 0,
+                  name.trim(),
+                );
+            }}
+          >
+            Переименовать сцену
+          </button>
+        )}
         {activeScene && (
           <label className="field">
             Фоновая карта

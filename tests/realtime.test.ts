@@ -83,6 +83,42 @@ function waitForConnection(socket: typeof client) {
   });
 }
 
+function waitForPresence(
+  socket: typeof gmClient,
+  membershipId: string,
+  online: boolean,
+) {
+  return new Promise<Parameters<ServerToClientEvents["presence:updated"]>[0]>(
+    (resolve) => {
+      const listener: ServerToClientEvents["presence:updated"] = (presence) => {
+        if (
+          presence.some(
+            (member) =>
+              member.membershipId === membershipId && member.online === online,
+          )
+        ) {
+          socket.off("presence:updated", listener);
+          resolve(presence);
+        }
+      };
+      socket.on("presence:updated", listener);
+    },
+  );
+}
+
+function newPlayerClient(token = sessionToken) {
+  const address = httpServer.address();
+  if (!address || typeof address === "string")
+    throw new Error("TEST_SERVER_ADDRESS");
+  return createClient<ServerToClientEvents, ClientToServerEvents>(
+    `http://127.0.0.1:${address.port}`,
+    {
+      transports: ["websocket"],
+      extraHeaders: { Cookie: `arken_session=${token}` },
+    },
+  );
+}
+
 function move(
   socket: typeof client,
   input: {
@@ -190,6 +226,62 @@ afterEach(async () => {
     httpServer.close((error) => (error ? reject(error) : resolve())),
   ).catch(() => undefined);
   await database.close();
+});
+
+describe("GM presence", () => {
+  it("emits the campaign presence matrix only to GM sockets", async () => {
+    let playerEvents = 0;
+    client.on("presence:updated", () => playerEvents++);
+    const gmUpdate = waitForPresence(gmClient, ids.player, true);
+    const duplicate = newPlayerClient();
+    await waitForConnection(duplicate);
+    const presence = await gmUpdate;
+
+    expect(
+      presence.find((member) => member.membershipId === ids.player),
+    ).toEqual({ membershipId: ids.player, online: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(playerEvents).toBe(0);
+    duplicate.disconnect();
+  });
+
+  it("keeps a member online while any socket remains connected", async () => {
+    const duplicate = newPlayerClient();
+    await waitForConnection(duplicate);
+
+    client.disconnect();
+    const stillOnline = await waitForPresence(gmClient, ids.player, true);
+    expect(
+      stillOnline.find((member) => member.membershipId === ids.player),
+    ).toEqual({ membershipId: ids.player, online: true });
+
+    const offline = waitForPresence(gmClient, ids.player, false);
+    duplicate.disconnect();
+    await expect(offline).resolves.toEqual(
+      expect.arrayContaining([{ membershipId: ids.player, online: false }]),
+    );
+  });
+
+  it("cancels a pending offline transition when the member reconnects", async () => {
+    let offlineEvents = 0;
+    gmClient.on("presence:updated", (presence) => {
+      if (
+        presence.some(
+          (member) => member.membershipId === ids.player && !member.online,
+        )
+      )
+        offlineEvents++;
+    });
+
+    client.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const reconnected = waitForConnection(client);
+    client.connect();
+    await reconnected;
+    await new Promise((resolve) => setTimeout(resolve, 850));
+
+    expect(offlineEvents).toBe(0);
+  });
 });
 
 describe("durable realtime token commands", () => {
