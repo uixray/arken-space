@@ -620,7 +620,9 @@ test("GM and six isolated players recover authoritative state without security l
     const playerOneSnapshot = playerInitialSnapshots[0];
     if (!playerOneSnapshot) throw new Error("Player one snapshot not found");
     const ownedToken = playerOneSnapshot.tokens.find(
-      (token) => token.ownerMembershipId === playerOneSnapshot.me.id,
+      (token) =>
+        token.controllerMembershipIds.includes(playerOneSnapshot.me.id) &&
+        token.name === runTag + " Player Token 1",
     );
     const coveredForeignToken = gmInitialSnapshot.tokens.find(
       (token) => token.name === runTag + " Player Token 2",
