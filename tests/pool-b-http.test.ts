@@ -1422,6 +1422,8 @@ describe("Pool B HTTP boundaries", () => {
         actionId: crypto.randomUUID(),
         revision: 0,
         mapScale: 2,
+        world: { width: 2560, height: 1440 },
+        backgroundFrame: { x: 120, y: 80, width: 2048, height: 1024 },
         grid: {
           enabled: true,
           size: 32,
@@ -1445,8 +1447,45 @@ describe("Pool B HTTP boundaries", () => {
     ]);
     expect(snapshot.json().scenes[0]).toMatchObject({
       mapScale: 2,
+      width: 2560,
+      height: 1440,
+      backgroundFrame: { x: 120, y: 80, width: 2048, height: 1024 },
       revision: 1,
       grid: { size: 32, offsetX: 4, offsetY: 8 },
+    });
+    const undoScene = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undoScene.statusCode).toBe(200);
+    const afterUndo = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(afterUndo.json().scenes[0]).toMatchObject({
+      width: 1920,
+      height: 1080,
+      backgroundFrame: { x: 0, y: 0, width: 1920, height: 1080 },
+    });
+    const redoScene = await app.inject({
+      method: "POST",
+      url: "/api/canvas/redo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(redoScene.statusCode).toBe(200);
+    const afterRedo = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(afterRedo.json().scenes[0]).toMatchObject({
+      width: 2560,
+      height: 1440,
+      backgroundFrame: { x: 120, y: 80, width: 2048, height: 1024 },
     });
   });
 

@@ -20,6 +20,19 @@ import { MusicBar } from "./MusicBar";
 import type { GameSocket } from "./realtime";
 import { ApiError } from "./api";
 
+function formatDiceBreakdown(dice: GameSnapshot["messages"][number]["dice"]) {
+  if (!dice) return "";
+  const terms = dice.terms.map(
+    (term) => `${term.notation} (${term.rolls.join(", ")})`,
+  );
+  const modifiers = dice.modifiers
+    .filter((modifier) => modifier.value !== 0)
+    .map((modifier) =>
+      modifier.value > 0 ? `+${modifier.value}` : String(modifier.value),
+    );
+  return [...terms, ...modifiers].join(" ");
+}
+
 type Props = {
   snapshot: GameSnapshot;
   socket: GameSocket | null;
@@ -827,12 +840,8 @@ function ChatPanel({
             </header>
             {message.kind === "DICE" && message.dice ? (
               <div className="roll-result">
-                <b>{message.dice.total}</b>
                 <div>{message.body}</div>
-                <small>
-                  {message.dice.terms.flatMap((term) => term.rolls).join(", ")}{" "}
-                  · {message.dice.resolvedFormula}
-                </small>
+                <small>{formatDiceBreakdown(message.dice)}</small>
               </div>
             ) : (
               <p>{message.body}</p>

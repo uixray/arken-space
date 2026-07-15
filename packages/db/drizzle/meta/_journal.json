@@ -71,6 +71,13 @@
       "when": 1784131101078,
       "tag": "0009_hard_ironclad",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784137357789,
+      "tag": "0010_pink_blue_shield",
+      "breakpoints": true
     }
   ]
 }

@@ -1094,6 +1094,8 @@ export function registerRoutes(
           campaignId: auth.campaignId,
           ...sceneInput,
           mapAssetId: body.mapAssetId ?? null,
+          backgroundWidth: body.width,
+          backgroundHeight: body.height,
         })
         .returning();
       if (!created) throw new Error("SCENE_CREATE_FAILED");
@@ -2545,12 +2547,30 @@ export function registerRoutes(
           const values = snapshot as {
             grid: typeof scenes.$inferSelect.grid;
             mapScale: number;
+            world?: { width: number; height: number };
+            backgroundFrame?: {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            };
           };
           const [updated] = await tx
             .update(scenes)
             .set({
               grid: values.grid,
               mapScale: values.mapScale,
+              ...(values.world
+                ? { width: values.world.width, height: values.world.height }
+                : {}),
+              ...(values.backgroundFrame
+                ? {
+                    backgroundX: values.backgroundFrame.x,
+                    backgroundY: values.backgroundFrame.y,
+                    backgroundWidth: values.backgroundFrame.width,
+                    backgroundHeight: values.backgroundFrame.height,
+                  }
+                : {}),
               revision: targetRevision + 1,
               updatedAt: new Date(),
             })
@@ -2633,6 +2653,17 @@ export function registerRoutes(
         .set({
           ...(body.grid ? { grid: body.grid } : {}),
           ...(body.mapScale !== undefined ? { mapScale: body.mapScale } : {}),
+          ...(body.world
+            ? { width: body.world.width, height: body.world.height }
+            : {}),
+          ...(body.backgroundFrame
+            ? {
+                backgroundX: body.backgroundFrame.x,
+                backgroundY: body.backgroundFrame.y,
+                backgroundWidth: body.backgroundFrame.width,
+                backgroundHeight: body.backgroundFrame.height,
+              }
+            : {}),
           revision: current.revision + 1,
           updatedAt: new Date(),
         })
@@ -2647,7 +2678,17 @@ export function registerRoutes(
         entityType: "scene",
         entityId: id,
         entityRevision: next.revision,
-        payload: { grid: next.grid, mapScale: next.mapScale },
+        payload: {
+          grid: next.grid,
+          mapScale: next.mapScale,
+          world: { width: next.width, height: next.height },
+          backgroundFrame: {
+            x: next.backgroundX,
+            y: next.backgroundY,
+            width: next.backgroundWidth,
+            height: next.backgroundHeight,
+          },
+        },
       });
       await tx.insert(actionJournal).values({
         campaignId: auth.campaignId,
@@ -2657,8 +2698,28 @@ export function registerRoutes(
         type: "SCENE_CANVAS",
         targetType: "SCENE",
         targetId: id,
-        before: { grid: current.grid, mapScale: current.mapScale },
-        after: { grid: next.grid, mapScale: next.mapScale },
+        before: {
+          grid: current.grid,
+          mapScale: current.mapScale,
+          world: { width: current.width, height: current.height },
+          backgroundFrame: {
+            x: current.backgroundX,
+            y: current.backgroundY,
+            width: current.backgroundWidth,
+            height: current.backgroundHeight,
+          },
+        },
+        after: {
+          grid: next.grid,
+          mapScale: next.mapScale,
+          world: { width: next.width, height: next.height },
+          backgroundFrame: {
+            x: next.backgroundX,
+            y: next.backgroundY,
+            width: next.backgroundWidth,
+            height: next.backgroundHeight,
+          },
+        },
         beforeRevision: current.revision,
         afterRevision: next.revision,
         currentRevision: next.revision,

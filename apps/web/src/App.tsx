@@ -25,6 +25,146 @@ const Orthographic2DRenderer = lazy(() =>
   })),
 );
 
+function CanvasHistoryControls({
+  sceneId,
+  disabled,
+  version,
+}: {
+  sceneId?: string;
+  disabled: boolean;
+  version: number;
+}) {
+  const [history, setHistory] = useState<
+    Array<{ status: "APPLIED" | "UNDONE" | "INVALIDATED" }>
+  >([]);
+  const refresh = useCallback(async () => {
+    if (!sceneId || disabled) return setHistory([]);
+    try {
+      setHistory(await api(`/api/canvas/history?sceneId=${sceneId}`));
+    } catch {
+      setHistory([]);
+    }
+  }, [sceneId, disabled]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh, version]);
+  const canUndo = history.some((item) => item.status === "APPLIED");
+  const canRedo = history.some((item) => item.status === "UNDONE");
+  const act = useCallback(
+    async (direction: "undo" | "redo") => {
+      if (!sceneId) return;
+      await api(`/api/canvas/${direction}`, {
+        method: "POST",
+        body: JSON.stringify({ actionId: crypto.randomUUID(), sceneId }),
+      });
+      await refresh();
+    },
+    [sceneId, refresh],
+  );
+  useEffect(() => {
+    if (!sceneId || disabled) return;
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z")
+        return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, select, [contenteditable=true]"))
+        return;
+      event.preventDefault();
+      const direction = event.shiftKey ? "redo" : "undo";
+      if (direction === "undo" ? canUndo : canRedo)
+        void act(direction).catch(() => undefined);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [sceneId, disabled, canUndo, canRedo, act]);
+  return (
+    <>
+      <button disabled={disabled || !canUndo} onClick={() => void act("undo")}>
+        Отменить
+      </button>
+      <button disabled={disabled || !canRedo} onClick={() => void act("redo")}>
+        Повторить
+      </button>
+    </>
+  );
+}
+
+function GridSettings({
+  scene,
+  onSave,
+  onPreview,
+}: {
+  scene: import("@arken/contracts").SceneDto;
+  onSave: (grid: import("@arken/contracts").SceneDto["grid"]) => Promise<void>;
+  onPreview: (grid: import("@arken/contracts").SceneDto["grid"] | null) => void;
+}) {
+  const [draft, setDraft] = useState(scene.grid);
+  useEffect(() => setDraft(scene.grid), [scene]);
+  return (
+    <details className="grid-settings">
+      <summary>Сетка</summary>
+      <div className="grid-settings-popover">
+        <label>
+          Шаг
+          <input
+            type="number"
+            min="16"
+            max="256"
+            value={draft.size}
+            onChange={(event) => {
+              const next = { ...draft, size: Number(event.target.value) };
+              setDraft(next);
+              onPreview(next);
+            }}
+          />
+        </label>
+        <label>
+          Сдвиг X
+          <input
+            type="number"
+            value={draft.offsetX}
+            onChange={(event) => {
+              const next = { ...draft, offsetX: Number(event.target.value) };
+              setDraft(next);
+              onPreview(next);
+            }}
+          />
+        </label>
+        <label>
+          Сдвиг Y
+          <input
+            type="number"
+            value={draft.offsetY}
+            onChange={(event) => {
+              const next = { ...draft, offsetY: Number(event.target.value) };
+              setDraft(next);
+              onPreview(next);
+            }}
+          />
+        </label>
+        <div className="inline-fields">
+          <button
+            onClick={() => {
+              void onSave(draft);
+              onPreview(null);
+            }}
+          >
+            Сохранить
+          </button>
+          <button
+            onClick={() => {
+              setDraft(scene.grid);
+              onPreview(null);
+            }}
+          >
+            Отмена
+          </button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export function App() {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
@@ -38,6 +178,17 @@ export function App() {
   const [tool, setTool] = useState<
     "PAN" | "FOG" | "COVER" | "DRAW" | "RULER" | "PING"
   >("PAN");
+  const [gmFogOpacity, setGmFogOpacity] = useState(() => {
+    const stored = Number(localStorage.getItem("arken.gmFogOpacity") ?? 0.35);
+    return Number.isFinite(stored) ? Math.min(1, Math.max(0, stored)) : 0.35;
+  });
+  const [gmFogVisible, setGmFogVisible] = useState(true);
+  const [canvasEditMode, setCanvasEditMode] = useState<
+    "BACKGROUND" | "WORLD" | null
+  >(null);
+  const [gridPreview, setGridPreview] = useState<
+    import("@arken/contracts").SceneDto["grid"] | null
+  >(null);
   const [pings, setPings] = useState<MapPing[]>([]);
   const [rulers, setRulers] = useState<
     Array<{
@@ -304,7 +455,15 @@ export function App() {
     }
   };
 
+  const renderedActiveSceneId = (previewSnapshot ?? snapshot)?.scenes.find(
+    (scene) => scene.active,
+  )?.id;
+  useEffect(() => {
+    setGridPreview(null);
+  }, [renderedActiveSceneId]);
+
   if (authRequired) return <AuthGate onAuthenticated={load} />;
+
   if (!snapshot)
     return (
       <main className="loading">
@@ -336,7 +495,60 @@ export function App() {
           <strong>arken-space</strong>
           <span>{viewSnapshot.campaign.name}</span>
         </div>
-        <div className="scene-title">{activeScene?.name ?? "Нет сцены"}</div>
+        <div className="scene-switcher">
+          <select
+            aria-label="Активная сцена"
+            value={activeScene?.id ?? ""}
+            disabled={Boolean(previewSnapshot) || snapshot.me.role !== "GM"}
+            onChange={(event) =>
+              void run(() =>
+                api("/api/scenes/activate", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    sceneId: event.target.value,
+                  }),
+                }),
+              )
+            }
+          >
+            {viewSnapshot.scenes.map((scene) => (
+              <option key={scene.id} value={scene.id}>
+                {scene.name}
+              </option>
+            ))}
+          </select>
+          {!previewSnapshot && snapshot.me.role === "GM" && (
+            <button
+              aria-label="Создать сцену"
+              onClick={() => {
+                const name = window.prompt("Название новой сцены");
+                if (!name?.trim()) return;
+                void run(async () => {
+                  const scene = await api<import("@arken/contracts").SceneDto>(
+                    "/api/scenes",
+                    {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        name: name.trim(),
+                      }),
+                    },
+                  );
+                  await api("/api/scenes/activate", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      sceneId: scene.id,
+                    }),
+                  });
+                }, true);
+              }}
+            >
+              +
+            </button>
+          )}
+        </div>
         <div className="status-line">
           <span
             className={connection === "ONLINE" ? "status online" : "status"}
@@ -388,163 +600,139 @@ export function App() {
       <div className="workbench">
         <main className="map-shell">
           <div className="map-toolbar">
-            <button
-              aria-pressed={tool === "PAN"}
-              onClick={() => setTool("PAN")}
-            >
-              Панорама
-            </button>
-            {!previewSnapshot && snapshot.me.role === "GM" && (
-              <>
-                <button
-                  aria-pressed={tool === "FOG"}
-                  onClick={() => setTool("FOG")}
-                >
-                  Открыть туман
-                </button>
-                <button
-                  aria-pressed={tool === "COVER"}
-                  onClick={() => setTool("COVER")}
-                >
-                  Закрыть туман
-                </button>
-                <label>
-                  Масштаб
-                  <input
-                    type="number"
-                    min="0.1"
-                    max="10"
-                    step="0.1"
-                    defaultValue={activeScene?.mapScale ?? 1}
-                    onBlur={(event) =>
-                      activeScene &&
+            <div className="toolbar-group">
+              <button
+                aria-pressed={tool === "PAN"}
+                onClick={() => setTool("PAN")}
+              >
+                Панорама
+              </button>
+              {!previewSnapshot && snapshot.me.role === "GM" && (
+                <>
+                  <button
+                    aria-pressed={tool === "FOG"}
+                    onClick={() => setTool("FOG")}
+                  >
+                    Открыть туман
+                  </button>
+                  <button
+                    aria-pressed={tool === "COVER"}
+                    onClick={() => setTool("COVER")}
+                  >
+                    Закрыть туман
+                  </button>
+                </>
+              )}
+              {!previewSnapshot && (
+                <CanvasHistoryControls
+                  sceneId={activeScene?.id}
+                  disabled={!activeScene}
+                  version={snapshot.snapshotVersion}
+                />
+              )}
+              {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
+                <>
+                  <GridSettings
+                    scene={activeScene}
+                    onPreview={setGridPreview}
+                    onSave={(grid) =>
                       run(() =>
                         api(`/api/scenes/${activeScene.id}/canvas`, {
                           method: "PATCH",
                           body: JSON.stringify({
                             actionId: crypto.randomUUID(),
                             revision: activeScene.revision ?? 0,
-                            mapScale: Number(event.target.value),
+                            grid,
                           }),
                         }),
                       )
                     }
                   />
-                </label>
-                {(["size", "offsetX", "offsetY"] as const).map((key) => (
-                  <label key={key}>
-                    {key}
-                    <input
-                      type="number"
-                      min={key === "size" ? 16 : undefined}
-                      max={key === "size" ? 256 : undefined}
-                      defaultValue={activeScene?.grid[key] ?? 0}
-                      onBlur={(event) =>
-                        activeScene &&
-                        run(() =>
-                          api(`/api/scenes/${activeScene.id}/canvas`, {
-                            method: "PATCH",
-                            body: JSON.stringify({
-                              actionId: crypto.randomUUID(),
-                              revision: activeScene.revision ?? 0,
-                              grid: {
-                                ...activeScene.grid,
-                                [key]: Number(event.target.value),
-                              },
-                            }),
-                          }),
-                        )
-                      }
-                    />
-                  </label>
-                ))}
-                <button
-                  onClick={() =>
-                    run(() =>
-                      api("/api/canvas/undo", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          actionId: crypto.randomUUID(),
-                          sceneId: activeScene?.id,
-                        }),
-                      }),
-                    )
-                  }
-                >
-                  Отменить
-                </button>
-                <button
-                  onClick={() =>
-                    run(() =>
-                      api("/api/canvas/redo", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          actionId: crypto.randomUUID(),
-                          sceneId: activeScene?.id,
-                        }),
-                      }),
-                    )
-                  }
-                >
-                  Повторить
-                </button>
-              </>
-            )}
+                  <details className="resize-settings">
+                    <summary>Размер карты</summary>
+                    <div className="resize-settings-popover">
+                      <button
+                        aria-pressed={canvasEditMode === "BACKGROUND"}
+                        onClick={() => {
+                          setTool("PAN");
+                          setCanvasEditMode("BACKGROUND");
+                        }}
+                      >
+                        Изображение
+                      </button>
+                      <button
+                        aria-pressed={canvasEditMode === "WORLD"}
+                        onClick={() => {
+                          setTool("PAN");
+                          setCanvasEditMode("WORLD");
+                        }}
+                      >
+                        Область
+                      </button>
+                      <button onClick={() => setCanvasEditMode(null)}>
+                        Готово
+                      </button>
+                    </div>
+                  </details>
+                </>
+              )}
+            </div>
             {!previewSnapshot && (
-              <>
-                {snapshot.me.role === "PLAYER" && (
-                  <>
-                    <button
-                      onClick={() =>
-                        run(() =>
-                          api("/api/canvas/undo", {
-                            method: "POST",
-                            body: JSON.stringify({
-                              actionId: crypto.randomUUID(),
-                              sceneId: activeScene?.id,
-                            }),
-                          }),
-                        )
-                      }
-                    >
-                      Отменить
-                    </button>
-                    <button
-                      onClick={() =>
-                        run(() =>
-                          api("/api/canvas/redo", {
-                            method: "POST",
-                            body: JSON.stringify({
-                              actionId: crypto.randomUUID(),
-                              sceneId: activeScene?.id,
-                            }),
-                          }),
-                        )
-                      }
-                    >
-                      Повторить
-                    </button>
-                  </>
-                )}
-                <button
-                  aria-pressed={tool === "DRAW"}
-                  onClick={() => setTool("DRAW")}
-                >
-                  Рисовать
-                </button>
-                <button
-                  aria-pressed={tool === "RULER"}
-                  onClick={() => setTool("RULER")}
-                >
-                  Линейка
-                </button>
-                <button
-                  aria-pressed={tool === "PING"}
-                  onClick={() => setTool("PING")}
-                >
-                  Ping
-                </button>
-              </>
+              <details className="toolbar-overflow">
+                <summary aria-label="Дополнительные инструменты">•••</summary>
+                <div className="toolbar-overflow-menu">
+                  {snapshot.me.role === "GM" && (
+                    <div className="fog-view-controls">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={gmFogVisible}
+                          onChange={(event) =>
+                            setGmFogVisible(event.target.checked)
+                          }
+                        />
+                        Показывать туман
+                      </label>
+                      <label>
+                        Прозрачность мастера
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={gmFogOpacity}
+                          onChange={(event) => {
+                            const value = Number(event.target.value);
+                            setGmFogOpacity(value);
+                            localStorage.setItem(
+                              "arken.gmFogOpacity",
+                              String(value),
+                            );
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
+                  <button
+                    aria-pressed={tool === "DRAW"}
+                    onClick={() => setTool("DRAW")}
+                  >
+                    Рисовать
+                  </button>
+                  <button
+                    aria-pressed={tool === "RULER"}
+                    onClick={() => setTool("RULER")}
+                  >
+                    Линейка
+                  </button>
+                  <button
+                    aria-pressed={tool === "PING"}
+                    onClick={() => setTool("PING")}
+                  >
+                    Ping
+                  </button>
+                </div>
+              </details>
             )}
             <span>{activeTokens.length} токенов</span>
           </div>
@@ -553,7 +741,11 @@ export function App() {
               fallback={<div className="empty-map">Загружаем карту…</div>}
             >
               <Orthographic2DRenderer
-                scene={activeScene}
+                scene={
+                  gridPreview
+                    ? { ...activeScene, grid: gridPreview }
+                    : activeScene
+                }
                 tokens={activeTokens}
                 fogReveals={activeFog}
                 drawings={activeDrawings}
@@ -566,6 +758,22 @@ export function App() {
                 rulers={rulers.filter(
                   (ruler) => ruler.sceneId === activeScene.id,
                 )}
+                gmFogOpacity={gmFogOpacity}
+                gmFogVisible={gmFogVisible}
+                canvasEditMode={canvasEditMode}
+                onCanvasEditCancel={() => setCanvasEditMode(null)}
+                onCanvasPatch={(patch) =>
+                  run(() =>
+                    api(`/api/scenes/${activeScene.id}/canvas`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision: activeScene.revision ?? 0,
+                        ...patch,
+                      }),
+                    }),
+                  )
+                }
                 onFogCreate={async (rect) => {
                   await run(() =>
                     api("/api/fog-reveals", {
@@ -652,6 +860,61 @@ export function App() {
                 </div>
               ))}
             </div>
+          )}
+          {!previewSnapshot && (
+            <details className="token-tray">
+              <summary>
+                Токены · {snapshot.tokenDefinitions?.length ?? 0}
+              </summary>
+              <div className="token-tray-list">
+                {(snapshot.tokenDefinitions?.length ?? 0) === 0 && (
+                  <p className="muted">
+                    {snapshot.me.role === "GM"
+                      ? "Создайте токен персонажа в подготовке."
+                      : "Мастер ещё не назначил вам доступные токены."}
+                  </p>
+                )}
+                {(snapshot.tokenDefinitions ?? []).map((definition) => {
+                  const asset = snapshot.assets.find(
+                    (item) => item.id === definition.defaultAssetId,
+                  );
+                  return (
+                    <button
+                      key={definition.id}
+                      draggable
+                      onDragStart={(event) =>
+                        event.dataTransfer.setData(
+                          "application/x-arken-token-definition",
+                          definition.id,
+                        )
+                      }
+                      onClick={() =>
+                        activeScene &&
+                        void run(() =>
+                          api(
+                            `/api/token-definitions/${definition.id}/placements`,
+                            {
+                              method: "POST",
+                              body: JSON.stringify({
+                                actionId: crypto.randomUUID(),
+                                definitionId: definition.id,
+                              }),
+                            },
+                          ),
+                        )
+                      }
+                    >
+                      {asset ? (
+                        <img src={asset.url} alt="" />
+                      ) : (
+                        <span>{definition.name.slice(0, 2).toUpperCase()}</span>
+                      )}
+                      <strong>{definition.name}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+            </details>
           )}
         </main>
         {previewSnapshot ? (

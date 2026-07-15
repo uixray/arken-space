@@ -13,7 +13,7 @@ import useImage from "use-image";
 import type Konva from "konva";
 import { api } from "../api";
 import type { SceneRendererProps } from "./SceneRenderer";
-import { fogOpacity, isRectFullyRevealed } from "./fog";
+import { isRectFullyRevealed } from "./fog";
 
 function Grid({
   width,
@@ -77,12 +77,18 @@ function TokenImage({
 }
 
 export function Orthographic2DRenderer(props: SceneRendererProps) {
+  const { canvasEditMode, onCanvasEditCancel } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [showGmLayer, setShowGmLayer] = useState(true);
+  const [tokenMenu, setTokenMenu] = useState<{
+    token: SceneRendererProps["tokens"][number];
+    x: number;
+    y: number;
+  } | null>(null);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
     null,
   );
@@ -97,6 +103,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     height: number;
   } | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
+  const [backgroundDraft, setBackgroundDraft] = useState(
+    props.scene.backgroundFrame,
+  );
+  const [worldDraft, setWorldDraft] = useState({
+    width: props.scene.width,
+    height: props.scene.height,
+  });
+  const [lockAspect, setLockAspect] = useState(true);
   const [rulerStart, setRulerStart] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -105,6 +119,40 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       "",
     "anonymous",
   );
+  useEffect(() => {
+    if (!tokenMenu) return;
+    const close = (event: KeyboardEvent | PointerEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      setTokenMenu(null);
+    };
+    window.addEventListener("keydown", close);
+    window.addEventListener("pointerdown", close);
+    return () => {
+      window.removeEventListener("keydown", close);
+      window.removeEventListener("pointerdown", close);
+    };
+  }, [tokenMenu]);
+  useEffect(() => {
+    setBackgroundDraft(props.scene.backgroundFrame);
+    setWorldDraft({ width: props.scene.width, height: props.scene.height });
+  }, [
+    props.scene.id,
+    props.scene.revision,
+    props.scene.backgroundFrame,
+    props.scene.width,
+    props.scene.height,
+  ]);
+  useEffect(() => {
+    if (!canvasEditMode) return;
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setBackgroundDraft(props.scene.backgroundFrame);
+      setWorldDraft({ width: props.scene.width, height: props.scene.height });
+      onCanvasEditCancel?.();
+    };
+    window.addEventListener("keydown", cancel);
+    return () => window.removeEventListener("keydown", cancel);
+  }, [canvasEditMode, props.scene, onCanvasEditCancel]);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -147,6 +195,36 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     setPosition({
       x: pointer.x - mousePoint.x * nextScale,
       y: pointer.y - mousePoint.y * nextScale,
+    });
+  };
+  const zoomAtCenter = (nextScale: number) => {
+    const bounded = Math.min(3, Math.max(0.25, nextScale));
+    const center = { x: viewport.width / 2, y: viewport.height / 2 };
+    const world = {
+      x: (center.x - position.x) / scale,
+      y: (center.y - position.y) / scale,
+    };
+    setScale(bounded);
+    setPosition({
+      x: center.x - world.x * bounded,
+      y: center.y - world.y * bounded,
+    });
+  };
+  const fitMap = () => {
+    const next = Math.min(
+      3,
+      Math.max(
+        0.25,
+        Math.min(
+          viewport.width / props.scene.width,
+          viewport.height / props.scene.height,
+        ) * 0.92,
+      ),
+    );
+    setScale(next);
+    setPosition({
+      x: (viewport.width - props.scene.width * next) / 2,
+      y: (viewport.height - props.scene.height * next) / 2,
     });
   };
 
@@ -239,12 +317,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
 
   const renderFog = () => (
-    <Layer listening={false}>
+    <Layer
+      listening={false}
+      visible={props.role === "PLAYER" || props.gmFogVisible !== false}
+      opacity={props.role === "GM" ? (props.gmFogOpacity ?? 0.35) : 1}
+    >
       <Rect
-        width={props.scene.width}
-        height={props.scene.height}
+        width={worldDraft.width}
+        height={worldDraft.height}
         fill="#080807"
-        opacity={fogOpacity(props.role)}
+        opacity={1}
       />
       {props.fogReveals.map((fog) => (
         <Rect
@@ -294,6 +376,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           y: (event.clientY - rect.top - position.y) / scale,
         });
       }}
+      onContextMenu={(event) => event.preventDefault()}
     >
       <Stage
         ref={stageRef}
@@ -316,25 +399,139 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       >
         <Layer listening={false}>
           <Rect
-            width={props.scene.width}
-            height={props.scene.height}
+            width={worldDraft.width}
+            height={worldDraft.height}
             fill="#282824"
           />
           {mapImage && (
             <Image
               image={mapImage}
-              width={props.scene.width}
-              height={props.scene.height}
+              x={backgroundDraft.x}
+              y={backgroundDraft.y}
+              width={backgroundDraft.width}
+              height={backgroundDraft.height}
             />
           )}
           {props.scene.grid.enabled && (
             <Grid
-              width={props.scene.width}
-              height={props.scene.height}
+              width={worldDraft.width}
+              height={worldDraft.height}
               {...props.scene.grid}
             />
           )}
         </Layer>
+
+        {props.role === "GM" && props.canvasEditMode && (
+          <Layer>
+            {props.canvasEditMode === "BACKGROUND" ? (
+              <Group>
+                <Rect
+                  {...backgroundDraft}
+                  stroke="#f0c75e"
+                  strokeWidth={2 / scale}
+                  dash={[8 / scale, 5 / scale]}
+                  draggable
+                  onDragMove={(event) =>
+                    setBackgroundDraft((current) => ({
+                      ...current,
+                      x: event.target.x(),
+                      y: event.target.y(),
+                    }))
+                  }
+                  onDragEnd={() =>
+                    void props.onCanvasPatch?.({
+                      backgroundFrame: backgroundDraft,
+                    })
+                  }
+                />
+                {(["nw", "ne", "sw", "se"] as const).map((corner) => {
+                  const left = corner.endsWith("w");
+                  const top = corner.startsWith("n");
+                  return (
+                    <Circle
+                      key={corner}
+                      x={
+                        left
+                          ? backgroundDraft.x
+                          : backgroundDraft.x + backgroundDraft.width
+                      }
+                      y={
+                        top
+                          ? backgroundDraft.y
+                          : backgroundDraft.y + backgroundDraft.height
+                      }
+                      radius={7 / scale}
+                      fill="#f0c75e"
+                      draggable
+                      onDragMove={(event) => {
+                        const oppositeX = left
+                          ? backgroundDraft.x + backgroundDraft.width
+                          : backgroundDraft.x;
+                        const oppositeY = top
+                          ? backgroundDraft.y + backgroundDraft.height
+                          : backgroundDraft.y;
+                        let width = Math.max(
+                          16,
+                          Math.abs(event.target.x() - oppositeX),
+                        );
+                        let height = Math.max(
+                          16,
+                          Math.abs(event.target.y() - oppositeY),
+                        );
+                        if (lockAspect) {
+                          const ratio =
+                            props.scene.backgroundFrame.width /
+                            props.scene.backgroundFrame.height;
+                          if (width / height > ratio) height = width / ratio;
+                          else width = height * ratio;
+                        }
+                        setBackgroundDraft({
+                          x: left ? oppositeX - width : oppositeX,
+                          y: top ? oppositeY - height : oppositeY,
+                          width,
+                          height,
+                        });
+                      }}
+                      onDragEnd={() =>
+                        void props.onCanvasPatch?.({
+                          backgroundFrame: backgroundDraft,
+                        })
+                      }
+                    />
+                  );
+                })}
+              </Group>
+            ) : (
+              <Group>
+                <Rect
+                  x={0}
+                  y={0}
+                  width={worldDraft.width}
+                  height={worldDraft.height}
+                  stroke="#7ee0ff"
+                  strokeWidth={2 / scale}
+                  dash={[8 / scale, 5 / scale]}
+                />
+                <Circle
+                  x={worldDraft.width}
+                  y={worldDraft.height}
+                  radius={8 / scale}
+                  fill="#7ee0ff"
+                  draggable
+                  onDragMove={(event) =>
+                    setWorldDraft({
+                      width: Math.max(320, Math.round(event.target.x())),
+                      height: Math.max(320, Math.round(event.target.y())),
+                    })
+                  }
+                  onDragEnd={() =>
+                    void props.onCanvasPatch?.({ world: worldDraft })
+                  }
+                />
+              </Group>
+            )}
+          </Layer>
+        )}
 
         <Layer>
           {props.tokens
@@ -348,22 +545,35 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 onContextMenu={(event) => {
                   event.evt.preventDefault();
                   if (props.role !== "GM") return;
-                  void api(`/api/tokens/${token.id}/layer`, {
-                    method: "PATCH",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision: token.revision,
-                      layer: "PLAYER",
-                    }),
+                  const rect = containerRef.current?.getBoundingClientRect();
+                  if (!rect) return;
+                  setTokenMenu({
+                    token,
+                    x: event.evt.clientX - rect.left,
+                    y: event.evt.clientY - rect.top,
                   });
                 }}
               >
-                <Circle
-                  radius={Math.min(token.width, token.height) / 2}
-                  x={token.width / 2}
-                  y={token.height / 2}
-                  fill="#76705f"
-                />
+                {assetUrl(token.assetId) ? (
+                  <TokenImage
+                    src={assetUrl(token.assetId)!}
+                    x={0}
+                    y={0}
+                    width={token.width}
+                    height={token.height}
+                    rotation={token.rotation}
+                    draggable={false}
+                    onDragMove={() => undefined}
+                    onDragEnd={() => undefined}
+                  />
+                ) : (
+                  <Circle
+                    radius={Math.min(token.width, token.height) / 2}
+                    x={token.width / 2}
+                    y={token.height / 2}
+                    fill="#b5623e"
+                  />
+                )}
                 <Text text={token.name} y={token.height + 4} fill="#eee6d5" />
               </Group>
             ))}
@@ -493,18 +703,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   onContextMenu={(event) => {
                     event.evt.preventDefault();
                     if (props.role !== "GM") return;
-                    const layers = ["MAP", "PLAYER", "GM"] as const;
-                    const layer =
-                      layers[
-                        (layers.indexOf(token.layer) + 1) % layers.length
-                      ]!;
-                    void api(`/api/tokens/${token.id}/layer`, {
-                      method: "PATCH",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision: token.revision,
-                        layer,
-                      }),
+                    const rect = containerRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    setTokenMenu({
+                      token,
+                      x: event.evt.clientX - rect.left,
+                      y: event.evt.clientY - rect.top,
                     });
                   }}
                 >
@@ -584,11 +788,61 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           ))}
         </Layer>
       </Stage>
+      {tokenMenu && (
+        <div
+          className="token-context-menu"
+          style={{ left: tokenMenu.x, top: tokenMenu.y }}
+          role="menu"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <strong>{tokenMenu.token.name}</strong>
+          {(
+            [
+              ["MAP", "Слой карты"],
+              ["PLAYER", "Игровой слой"],
+              ["GM", "Слой мастера"],
+            ] as const
+          ).map(([layer, label]) => (
+            <button
+              role="menuitemradio"
+              aria-checked={tokenMenu.token.layer === layer}
+              key={layer}
+              onClick={() => {
+                if (tokenMenu.token.layer !== layer)
+                  void api(`/api/tokens/${tokenMenu.token.id}/layer`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision: tokenMenu.token.revision,
+                      layer,
+                    }),
+                  });
+                setTokenMenu(null);
+              }}
+            >
+              {tokenMenu.token.layer === layer ? "✓ " : ""}
+              {label}
+            </button>
+          ))}
+          <button onClick={() => setTokenMenu(null)}>Отмена</button>
+        </div>
+      )}
+      {props.canvasEditMode === "BACKGROUND" && (
+        <label className="aspect-lock">
+          <input
+            type="checkbox"
+            checked={lockAspect}
+            onChange={(event) => setLockAspect(event.target.checked)}
+          />
+          Сохранять пропорции
+        </label>
+      )}
       <div className="map-scale">
         <button
-          onClick={() => setScale((value) => Math.max(0.25, value - 0.1))}
+          aria-label="Увеличить масштаб"
+          onClick={() => zoomAtCenter(scale + 0.1)}
         >
-          −
+          +
         </button>
         <input
           aria-label="Масштаб карты"
@@ -597,12 +851,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           max="3"
           step="0.05"
           value={scale}
-          onChange={(event) => setScale(Number(event.target.value))}
+          onChange={(event) => zoomAtCenter(Number(event.target.value))}
         />
-        <button onClick={() => setScale((value) => Math.min(3, value + 0.1))}>
-          +
+        <button
+          aria-label="Уменьшить масштаб"
+          onClick={() => zoomAtCenter(scale - 0.1)}
+        >
+          −
         </button>
-        {Math.round(scale * 100)}%
+        {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
         {props.role === "GM" && (
           <label>
             <input

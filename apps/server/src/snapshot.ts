@@ -278,6 +278,12 @@ export async function buildSnapshot(
       mapAssetId: scene.mapAssetId,
       width: scene.width,
       height: scene.height,
+      backgroundFrame: {
+        x: scene.backgroundX,
+        y: scene.backgroundY,
+        width: scene.backgroundWidth,
+        height: scene.backgroundHeight,
+      },
       grid: scene.grid,
       mapScale: scene.mapScale,
       revision: scene.revision,

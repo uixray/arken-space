@@ -293,6 +293,20 @@ export const sceneCanvasConfigSchema = z.object({
   revision: z.number().int().nonnegative(),
   grid: gridSchema.optional(),
   mapScale: z.number().finite().min(0.1).max(10).optional(),
+  world: z
+    .object({
+      width: z.number().int().min(320).max(16384),
+      height: z.number().int().min(320).max(16384),
+    })
+    .optional(),
+  backgroundFrame: z
+    .object({
+      x: z.number().finite().min(-16384).max(16384),
+      y: z.number().finite().min(-16384).max(16384),
+      width: z.number().finite().min(16).max(16384),
+      height: z.number().finite().min(16).max(16384),
+    })
+    .optional(),
 });
 export const rulerUpdateSchema = z.object({
   sceneId: z.string().uuid(),
@@ -493,6 +507,12 @@ export interface SceneDto {
   mapAssetId: string | null;
   width: number;
   height: number;
+  backgroundFrame: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
   grid: z.infer<typeof gridSchema>;
   mapScale?: number;
   revision?: number;
