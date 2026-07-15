@@ -1,0 +1,56 @@
+{
+  "name": "arken-space",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,web -c red,blue \"pnpm --filter @arken/server dev\" \"pnpm --filter @arken/web dev\"",
+    "dev:db": "docker compose up -d postgres",
+    "build": "pnpm -r --workspace-concurrency=1 build",
+    "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:multiplayer": "node scripts/run-multiplayer-e2e.mjs",
+    "restore:rehearse": "node scripts/run-restore-rehearsal.mjs",
+    "gameplay:reset:safe": "node scripts/run-gameplay-reset-safe.mjs",
+    "db:generate": "pnpm --filter @arken/db generate",
+    "db:migrate": "pnpm --filter @arken/db migrate",
+    "db:studio": "pnpm --filter @arken/db studio",
+    "lint": "eslint .",
+    "format:check": "prettier --check . --ignore-unknown"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "latest",
+    "@eslint/js": "latest",
+    "@fastify/cookie": "^11.1.1",
+    "@playwright/test": "latest",
+    "@types/node": "latest",
+    "concurrently": "latest",
+    "drizzle-orm": "^0.45.2",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "fastify": "^5.10.0",
+    "prettier": "latest",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "tsx": "latest",
+    "typescript": "5.9.3",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ],
+    "overrides": {
+      "typescript": "5.9.3"
+    }
+  }
+}

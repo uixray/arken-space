@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/playwright:v1.61.1-noble
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+WORKDIR /app
+
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/server/package.json apps/server/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/system/package.json packages/system/package.json
+COPY packages/db/package.json packages/db/package.json
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+CMD ["pnpm", "exec", "playwright", "test", "--config=playwright.multiplayer.config.ts"]

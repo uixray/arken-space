@@ -1,0 +1,20 @@
+FROM node:20-bookworm-slim
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+WORKDIR /app
+
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/server/package.json apps/server/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/system/package.json packages/system/package.json
+COPY packages/db/package.json packages/db/package.json
+RUN pnpm install --frozen-lockfile
+
+COPY apps/server apps/server
+COPY packages packages
+RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/db build && pnpm --filter @arken/server build
+
+EXPOSE 4100
+CMD ["sh", "-c", "pnpm db:migrate && node apps/server/dist/index.js"]

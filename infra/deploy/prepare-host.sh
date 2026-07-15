@@ -1,0 +1,35 @@
+#!/usr/bin/env sh
+set -eu
+
+APP=/opt/arken-space
+DATA=/srv/arken-space-data
+ARCHIVE=/tmp/arken-space-deploy.tar.gz
+
+mkdir -p "$APP" "$DATA/media"
+tar -xzf "$ARCHIVE" -C "$APP"
+find "$APP/infra" -type f -name '*.sh' -exec sed -i 's/\r$//' {} +
+
+if [ ! -f "$APP/.env" ]; then
+  umask 077
+  DB_SECRET="$(openssl rand -hex 32)"
+  GM_SECRET="$(openssl rand -hex 32)"
+  printf '%s\n' \
+    'COMPOSE_PROJECT_NAME=arken-space' \
+    'APP_VERSION=0.2.0' \
+    'WEB_ORIGIN=https://arken.uixray.tech' \
+    'PUBLIC_URL=https://arken.uixray.tech' \
+    "POSTGRES_PASSWORD=$DB_SECRET" \
+    "GM_ACCESS_TOKEN=$GM_SECRET" \
+    'MEDIA_HOST_PATH=/srv/arken-space-data/media' \
+    'MEDIA_QUOTA_BYTES=2147483648' \
+    'MIN_FREE_DISK_BYTES=2147483648' \
+    'MAX_IMAGE_BYTES=20971520' \
+    'MAX_AUDIO_BYTES=104857600' \
+    > "$APP/.env"
+fi
+
+chmod 600 "$APP/.env"
+rm -f "$ARCHIVE"
+
+echo bundle-ready
+grep -E '^(APP_VERSION|WEB_ORIGIN|PUBLIC_URL|MEDIA_HOST_PATH|MEDIA_QUOTA_BYTES|MIN_FREE_DISK_BYTES)=' "$APP/.env"

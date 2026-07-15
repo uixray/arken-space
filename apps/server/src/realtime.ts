@@ -1,0 +1,612 @@
+import type { FastifyBaseLogger } from "fastify";
+import type { Server } from "socket.io";
+import { and, eq } from "drizzle-orm";
+import { z } from "zod";
+import {
+  audioStates,
+  actionJournal,
+  assets,
+  campaigns,
+  gameEvents,
+  memberships,
+  scenes,
+  tokenControllers,
+  tokenDefinitions,
+  tokens,
+} from "@arken/db";
+import type {
+  AudioStateDto,
+  ClientToServerEvents,
+  EventEnvelope,
+  ServerToClientEvents,
+  TokenDto,
+} from "@arken/contracts";
+import {
+  audioStateUpdateSchema,
+  moveTokenSchema,
+  rulerUpdateSchema,
+} from "@arken/contracts";
+import type { AuthContext } from "./auth.js";
+import { authFromSessionToken } from "./auth.js";
+import { env } from "./env.js";
+import { buildSnapshot } from "./snapshot.js";
+import { cookieValue } from "./security.js";
+import { invalidateRedoBranch } from "./canvas-history.js";
+
+type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
+type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
+
+const campaignRoom = (campaignId: string) => `campaign:${campaignId}`;
+const gmRoom = (campaignId: string) => `campaign:${campaignId}:gm`;
+const memberRoom = (membershipId: string) => `member:${membershipId}`;
+
+type EditableToken = typeof tokens.$inferSelect & {
+  controllerMembershipIds: string[];
+  definitionRevision: number;
+};
+function tokenDto(token: EditableToken): TokenDto {
+  const { updatedAt: _updatedAt, ...dto } = token;
+  return dto;
+}
+
+function audioDto(state: typeof audioStates.$inferSelect): AudioStateDto {
+  return {
+    assetId: state.assetId,
+    playing: state.playing,
+    positionSeconds: state.positionSeconds,
+    loop: state.loop,
+    startedAt: state.startedAt?.toISOString() ?? null,
+    updatedAt: state.updatedAt.toISOString(),
+  };
+}
+
+function envelope<T>(
+  sequence: number,
+  actionId: string,
+  data: T,
+): EventEnvelope<T> {
+  return { sequence, actionId, data, emittedAt: new Date().toISOString() };
+}
+
+export async function editableToken(
+  db: Database,
+  auth: AuthContext,
+  tokenId: string,
+) {
+  const [row] = await db
+    .select({
+      token: tokens,
+      campaignId: scenes.campaignId,
+      activeSceneId: campaigns.activeSceneId,
+      definition: tokenDefinitions,
+    })
+    .from(tokens)
+    .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+    .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
+    .innerJoin(tokenDefinitions, eq(tokens.definitionId, tokenDefinitions.id))
+    .where(eq(tokens.id, tokenId))
+    .limit(1);
+  if (
+    !row ||
+    row.campaignId !== auth.campaignId ||
+    row.definition.campaignId !== auth.campaignId
+  )
+    return null;
+  const controllers = await db
+    .select({ membershipId: tokenControllers.membershipId })
+    .from(tokenControllers)
+    .where(eq(tokenControllers.tokenDefinitionId, row.definition.id));
+  const controllerMembershipIds = controllers.map((item) => item.membershipId);
+  if (
+    auth.role !== "GM" &&
+    (!controllerMembershipIds.includes(auth.membershipId) ||
+      row.token.locked ||
+      !row.token.visible ||
+      row.token.layer === "GM" ||
+      row.token.sceneId !== row.activeSceneId)
+  )
+    return null;
+  return {
+    ...row.token,
+    characterId: row.definition.characterId,
+    assetId: row.definition.defaultAssetId,
+    name: row.definition.name,
+    width: row.definition.defaultWidth,
+    height: row.definition.defaultHeight,
+    controllerMembershipIds,
+    definitionRevision: row.definition.revision,
+  };
+}
+
+async function tokenAudienceRoom(
+  db: Database,
+  campaignId: string,
+  token: EditableToken,
+) {
+  if (!token.visible || token.layer === "GM") return gmRoom(campaignId);
+  const [campaign] = await db
+    .select({ activeSceneId: campaigns.activeSceneId })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  return campaign?.activeSceneId === token.sceneId
+    ? campaignRoom(campaignId)
+    : gmRoom(campaignId);
+}
+
+async function emitPresence(
+  io: RealtimeServer,
+  db: Database,
+  campaignId: string,
+) {
+  const [memberRows, sockets] = await Promise.all([
+    db
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(eq(memberships.campaignId, campaignId)),
+    io.in(campaignRoom(campaignId)).fetchSockets(),
+  ]);
+  const online = new Set(
+    sockets.map((socket) => socket.data.auth.membershipId),
+  );
+  io.to(gmRoom(campaignId)).emit(
+    "presence:updated",
+    memberRows.map((member) => ({
+      membershipId: member.id,
+      online: online.has(member.id),
+    })),
+  );
+}
+
+export function registerRealtime(
+  io: RealtimeServer,
+  db: Database,
+  log: FastifyBaseLogger,
+) {
+  const presenceGraceMs = 750;
+  const pendingPresence = new Map<string, ReturnType<typeof setTimeout>>();
+  const presenceKey = (campaignId: string, membershipId: string) =>
+    `${campaignId}:${membershipId}`;
+
+  io.use(async (socket, next) => {
+    try {
+      const token = cookieValue(
+        socket.handshake.headers.cookie,
+        env.SESSION_COOKIE_NAME,
+      );
+      const auth = await authFromSessionToken(db, token);
+      if (!auth) return next(new Error("AUTH_REQUIRED"));
+      socket.data.auth = auth;
+      next();
+    } catch (error) {
+      next(error as Error);
+    }
+  });
+
+  io.on("connection", async (socket) => {
+    const auth = socket.data.auth;
+    const pending = pendingPresence.get(
+      presenceKey(auth.campaignId, auth.membershipId),
+    );
+    if (pending) {
+      clearTimeout(pending);
+      pendingPresence.delete(presenceKey(auth.campaignId, auth.membershipId));
+    }
+    await socket.join(campaignRoom(auth.campaignId));
+    await socket.join(memberRoom(auth.membershipId));
+    if (auth.role === "GM") await socket.join(gmRoom(auth.campaignId));
+    socket.emit("game:snapshot", await buildSnapshot(db, auth));
+    await emitPresence(io, db, auth.campaignId);
+    log.info(
+      {
+        membershipId: auth.membershipId,
+        campaignId: auth.campaignId,
+        socketId: socket.id,
+      },
+      "realtime.connected",
+    );
+
+    socket.on("game:resync", async (knownSequence) => {
+      const snapshot = await buildSnapshot(db, auth);
+      log.info(
+        {
+          membershipId: auth.membershipId,
+          campaignId: auth.campaignId,
+          knownSequence,
+          snapshotVersion: snapshot.snapshotVersion,
+        },
+        "realtime.resync",
+      );
+      socket.emit("game:snapshot", snapshot);
+    });
+
+    socket.on("token:moving", async (input) => {
+      const parsed = moveTokenSchema.safeParse(input);
+      if (!parsed.success) return;
+      const token = await editableToken(db, auth, parsed.data.tokenId);
+      if (!token) return;
+      const audience = await tokenAudienceRoom(db, auth.campaignId, token);
+      socket.to(audience).emit("token:moving", parsed.data);
+    });
+
+    socket.on("token:moved", async (input, ack) => {
+      const parsed = moveTokenSchema.safeParse(input);
+      if (!parsed.success) {
+        return ack?.({
+          ok: false,
+          status: "INVALID",
+          reason: "INVALID_COMMAND",
+        });
+      }
+      const command = parsed.data;
+      const [existing] = await db
+        .select()
+        .from(gameEvents)
+        .where(
+          and(
+            eq(gameEvents.campaignId, auth.campaignId),
+            eq(gameEvents.actionId, command.actionId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        const current = await editableToken(db, auth, command.tokenId);
+        return ack?.({
+          ok: true,
+          status: "DUPLICATE",
+          sequence: existing.sequence,
+          ...(current ? { data: tokenDto(current) } : {}),
+        });
+      }
+
+      const current = await editableToken(db, auth, command.tokenId);
+      if (!current) {
+        log.warn(
+          {
+            actionId: command.actionId,
+            membershipId: auth.membershipId,
+            tokenId: command.tokenId,
+          },
+          "command.token_move.forbidden",
+        );
+        return ack?.({
+          ok: false,
+          status: "FORBIDDEN",
+          reason: "TOKEN_FORBIDDEN",
+        });
+      }
+      if (current.revision !== command.revision) {
+        return ack?.({
+          ok: false,
+          status: "CONFLICT",
+          reason: "STALE_REVISION",
+          data: tokenDto(current),
+        });
+      }
+
+      const result = await db.transaction(async (tx) => {
+        await invalidateRedoBranch(tx, auth, current.sceneId);
+        const [updated] = await tx
+          .update(tokens)
+          .set({
+            x: command.x,
+            y: command.y,
+            z: command.z,
+            levelId: command.levelId,
+            revision: current.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(tokens.id, current.id),
+              eq(tokens.revision, current.revision),
+            ),
+          )
+          .returning();
+        if (!updated) return null;
+        const [event] = await tx
+          .insert(gameEvents)
+          .values({
+            campaignId: auth.campaignId,
+            actionId: command.actionId,
+            membershipId: auth.membershipId,
+            type: "TOKEN_MOVED",
+            entityType: "TOKEN",
+            entityId: updated.id,
+            entityRevision: updated.revision,
+            payload: {
+              x: updated.x,
+              y: updated.y,
+              z: updated.z,
+              levelId: updated.levelId,
+            },
+          })
+          .returning();
+        await tx.insert(actionJournal).values({
+          campaignId: auth.campaignId,
+          sceneId: current.sceneId,
+          actorMembershipId: auth.membershipId,
+          actionId: command.actionId,
+          scope: current.layer === "GM" ? "GM" : "PUBLIC",
+          type: "TOKEN_MOVE",
+          targetType: "TOKEN",
+          targetId: current.id,
+          before: {
+            x: current.x,
+            y: current.y,
+            z: current.z,
+            levelId: current.levelId,
+          },
+          after: {
+            x: updated.x,
+            y: updated.y,
+            z: updated.z,
+            levelId: updated.levelId,
+          },
+          beforeRevision: current.revision,
+          afterRevision: updated.revision,
+          currentRevision: updated.revision,
+        });
+        return event ? { event, updated } : null;
+      });
+
+      if (!result) {
+        const latest = await editableToken(db, auth, command.tokenId);
+        return ack?.({
+          ok: false,
+          status: "CONFLICT",
+          reason: "CONCURRENT_UPDATE",
+          ...(latest ? { data: tokenDto(latest) } : {}),
+        });
+      }
+      const dto = tokenDto({
+        ...result.updated,
+        controllerMembershipIds: current.controllerMembershipIds,
+        definitionRevision: current.definitionRevision,
+      });
+      const audience = await tokenAudienceRoom(db, auth.campaignId, {
+        ...result.updated,
+        controllerMembershipIds: current.controllerMembershipIds,
+        definitionRevision: current.definitionRevision,
+      });
+      io.to(audience).emit(
+        "token:moved",
+        envelope(result.event.sequence, command.actionId, dto),
+      );
+      log.info(
+        {
+          actionId: command.actionId,
+          sequence: result.event.sequence,
+          membershipId: auth.membershipId,
+          tokenId: dto.id,
+          revision: dto.revision,
+        },
+        "command.token_move.accepted",
+      );
+      ack?.({
+        ok: true,
+        status: "ACCEPTED",
+        sequence: result.event.sequence,
+        data: dto,
+      });
+    });
+
+    socket.on("audio:set", async (input, ack) => {
+      if (auth.role !== "GM") {
+        return ack?.({ ok: false, status: "FORBIDDEN", reason: "GM_REQUIRED" });
+      }
+      const parsed = audioStateUpdateSchema.safeParse(input);
+      if (!parsed.success) {
+        return ack?.({
+          ok: false,
+          status: "INVALID",
+          reason: "INVALID_COMMAND",
+        });
+      }
+      const { actionId, ...stateInput } = parsed.data;
+      const [existing] = await db
+        .select()
+        .from(gameEvents)
+        .where(
+          and(
+            eq(gameEvents.campaignId, auth.campaignId),
+            eq(gameEvents.actionId, actionId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        const [current] = await db
+          .select()
+          .from(audioStates)
+          .where(eq(audioStates.campaignId, auth.campaignId))
+          .limit(1);
+        return ack?.({
+          ok: true,
+          status: "DUPLICATE",
+          sequence: existing.sequence,
+          ...(current ? { data: audioDto(current) } : {}),
+        });
+      }
+
+      const result = await db.transaction(async (tx) => {
+        if (stateInput.assetId) {
+          const [asset] = await tx
+            .select({ campaignId: assets.campaignId, kind: assets.kind })
+            .from(assets)
+            .where(eq(assets.id, stateInput.assetId))
+            .limit(1);
+          if (
+            !asset ||
+            asset.campaignId !== auth.campaignId ||
+            asset.kind !== "AUDIO"
+          ) {
+            return { rejection: "ASSET_NOT_FOUND" as const };
+          }
+        }
+        const [state] = await tx
+          .insert(audioStates)
+          .values({
+            campaignId: auth.campaignId,
+            ...stateInput,
+            startedAt: stateInput.startedAt
+              ? new Date(stateInput.startedAt)
+              : null,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: audioStates.campaignId,
+            set: {
+              ...stateInput,
+              startedAt: stateInput.startedAt
+                ? new Date(stateInput.startedAt)
+                : null,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        if (!state) return null;
+        const [event] = await tx
+          .insert(gameEvents)
+          .values({
+            campaignId: auth.campaignId,
+            actionId,
+            membershipId: auth.membershipId,
+            type: "AUDIO_STATE_SET",
+            entityType: "AUDIO_STATE",
+            entityId: auth.campaignId,
+            payload: stateInput,
+          })
+          .returning();
+        return event ? { event, state } : null;
+      });
+      if (result && "rejection" in result) {
+        return ack?.({
+          ok: false,
+          status: "INVALID",
+          reason: result.rejection,
+        });
+      }
+      if (!result) {
+        return ack?.({
+          ok: false,
+          status: "CONFLICT",
+          reason: "AUDIO_UPDATE_FAILED",
+        });
+      }
+      const dto = audioDto(result.state);
+      io.to(campaignRoom(auth.campaignId)).emit(
+        "audio:state",
+        envelope(result.event.sequence, actionId, dto),
+      );
+      ack?.({
+        ok: true,
+        status: "ACCEPTED",
+        sequence: result.event.sequence,
+        data: dto,
+      });
+    });
+
+    socket.on("ruler:update", async (input) => {
+      const parsed = rulerUpdateSchema.safeParse(input);
+      if (!parsed.success) return;
+      const [scene] = await db
+        .select({ id: scenes.id, grid: scenes.grid })
+        .from(scenes)
+        .where(
+          and(
+            eq(scenes.id, parsed.data.sceneId),
+            eq(scenes.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!scene) return;
+      const dx = parsed.data.endX - parsed.data.startX;
+      const dy = parsed.data.endY - parsed.data.startY;
+      io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
+        ...parsed.data,
+        membershipId: auth.membershipId,
+        displayName: auth.displayName,
+        distance:
+          Math.hypot(dx, dy) / (scene.grid.enabled ? scene.grid.size : 1),
+      });
+    });
+
+    socket.on("ruler:clear", async (input) => {
+      const parsed = z.object({ sceneId: z.string().uuid() }).safeParse(input);
+      if (!parsed.success) return;
+      const [scene] = await db
+        .select({ id: scenes.id })
+        .from(scenes)
+        .where(
+          and(
+            eq(scenes.id, parsed.data.sceneId),
+            eq(scenes.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!scene) return;
+      io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
+        sceneId: scene.id,
+        membershipId: auth.membershipId,
+      });
+    });
+
+    socket.on("map:ping", async (input) => {
+      if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) return;
+      const [active] = await db
+        .select({ sceneId: scenes.id })
+        .from(scenes)
+        .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
+        .where(
+          and(
+            eq(scenes.id, input.sceneId),
+            eq(scenes.campaignId, auth.campaignId),
+            eq(campaigns.activeSceneId, scenes.id),
+          ),
+        )
+        .limit(1);
+      if (!active) return;
+      io.to(campaignRoom(auth.campaignId)).emit("map:ping", {
+        sceneId: active.sceneId,
+        membershipId: auth.membershipId,
+        displayName: auth.displayName,
+        x: input.x,
+        y: input.y,
+        createdAt: new Date().toISOString(),
+      });
+    });
+
+    socket.on("disconnect", (reason) => {
+      log.info(
+        {
+          membershipId: auth.membershipId,
+          campaignId: auth.campaignId,
+          reason,
+        },
+        "realtime.disconnected",
+      );
+      const key = presenceKey(auth.campaignId, auth.membershipId);
+      const previous = pendingPresence.get(key);
+      if (previous) clearTimeout(previous);
+      const timer = setTimeout(() => {
+        pendingPresence.delete(key);
+        void emitPresence(io, db, auth.campaignId).catch((error) =>
+          log.warn(
+            { error, campaignId: auth.campaignId },
+            "realtime.presence_emit_failed",
+          ),
+        );
+      }, presenceGraceMs);
+      timer.unref();
+      pendingPresence.set(key, timer);
+    });
+  });
+
+  return { campaignRoom, gmRoom, memberRoom };
+}
+
+declare module "socket.io" {
+  interface SocketData {
+    auth: AuthContext;
+  }
+}

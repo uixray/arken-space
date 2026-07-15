@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: arken
+      POSTGRES_USER: arken
+      POSTGRES_PASSWORD: ${RESTORE_POSTGRES_PASSWORD:?Set RESTORE_POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arken -d arken"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      NODE_ENV: production
+      APP_VERSION: 0.2.0-restore
+      BUILD_REVISION: ${RESTORE_BUILD_REVISION:?Set RESTORE_BUILD_REVISION}
+      SCHEMA_VERSION: 2
+      PORT: 4100
+      WEB_ORIGIN: http://restore.invalid
+      PUBLIC_URL: http://restore.invalid
+      DATABASE_URL: postgres://arken:${RESTORE_POSTGRES_PASSWORD}@postgres:5432/arken
+      SESSION_COOKIE_NAME: arken_restore_session
+      SESSION_TTL_DAYS: 1
+      GM_ACCESS_TOKEN: restore-rehearsal-token-not-for-production
+      MEDIA_ROOT: /srv/arken-space/media
+      MEDIA_QUOTA_BYTES: 5368709120
+      MIN_FREE_DISK_BYTES: 1
+    volumes:
+      - type: bind
+        source: ${RESTORE_MEDIA_HOST_PATH:?Set RESTORE_MEDIA_HOST_PATH}
+        target: /srv/arken-space/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4100/healthz').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  postgres-data:

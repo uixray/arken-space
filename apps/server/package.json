@@ -1,0 +1,29 @@
+{
+  "name": "@arken/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@arken/contracts": "workspace:*",
+    "@arken/db": "workspace:*",
+    "@arken/system": "workspace:*",
+    "@fastify/cookie": "latest",
+    "@fastify/cors": "latest",
+    "@fastify/multipart": "latest",
+    "@fastify/rate-limit": "latest",
+    "drizzle-orm": "latest",
+    "fastify": "latest",
+    "file-type": "latest",
+    "sharp": "latest",
+    "socket.io": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "tsup": "latest"
+  }
+}

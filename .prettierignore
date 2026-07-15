@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+playwright-report
+packages/db/drizzle/meta
+pnpm-lock.yaml
+.agent
+.agents
+.antigravity
+.anythingllm
+.claude
+.codex
+.cursor
+.gemini
+.kimi

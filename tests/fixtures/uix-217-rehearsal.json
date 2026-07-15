@@ -1,0 +1,68 @@
+{
+  "durationMinutes": 45,
+  "profiles": [
+    {
+      "id": "GM",
+      "role": "GM",
+      "browser": "Edge",
+      "isolatedProfile": "arken-uix217-gm"
+    },
+    {
+      "id": "P1",
+      "role": "PLAYER",
+      "browser": "Chrome",
+      "isolatedProfile": "arken-uix217-p1"
+    },
+    {
+      "id": "P2",
+      "role": "PLAYER",
+      "browser": "Firefox",
+      "isolatedProfile": "arken-uix217-p2"
+    },
+    {
+      "id": "P3",
+      "role": "PLAYER",
+      "browser": "Edge",
+      "isolatedProfile": "arken-uix217-p3"
+    },
+    {
+      "id": "P4",
+      "role": "PLAYER",
+      "browser": "Chrome",
+      "isolatedProfile": "arken-uix217-p4"
+    },
+    {
+      "id": "P5",
+      "role": "PLAYER",
+      "browser": "Firefox",
+      "isolatedProfile": "arken-uix217-p5"
+    },
+    {
+      "id": "P6",
+      "role": "PLAYER",
+      "browser": "Edge",
+      "isolatedProfile": "arken-uix217-p6"
+    }
+  ],
+  "fixtures": {
+    "scenes": ["Courtyard", "Vault"],
+    "characters": ["Elris", "P2", "P3", "P4", "P5", "P6"],
+    "sharedCatalogEntries": ["Reaction", "Stunning Strike"],
+    "tokenDefinitions": [
+      "Elris token",
+      "P2 token",
+      "P3 token",
+      "P4 token",
+      "P5 token",
+      "P6 token",
+      "NPC"
+    ],
+    "assets": [
+      "map-courtyard",
+      "map-vault",
+      "token-player",
+      "portrait-player",
+      "music-loop"
+    ]
+  }
+}

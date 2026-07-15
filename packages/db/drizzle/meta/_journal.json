@@ -1,0 +1,69 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1783811608077,
+      "tag": "0000_nasty_emma_frost",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783850771253,
+      "tag": "0001_lean_carmella_unuscione",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784035796750,
+      "tag": "0002_damp_the_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784074900659,
+      "tag": "0003_broad_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784075751623,
+      "tag": "0004_wakeful_romulus",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784076566241,
+      "tag": "0005_mature_molly_hayes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784077729893,
+      "tag": "0006_workable_vision",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784079730392,
+      "tag": "0007_certain_network",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784084136104,
+      "tag": "0008_shallow_havok",
+      "breakpoints": true
+    }
+  ]
+}
