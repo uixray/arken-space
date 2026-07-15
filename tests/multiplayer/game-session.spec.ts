@@ -611,13 +611,11 @@ test("GM and six isolated players recover authoritative state without security l
       { id: characters[5].id, notes: privateNotes[5] },
     ]);
 
-    const initialSnapshots = await activateScene(
-      gm,
-      initialScene.id,
-      connections,
+    await activateScene(gm, initialScene.id, connections);
+    const gmInitialSnapshot = await bootstrap(gm);
+    const playerInitialSnapshots = await Promise.all(
+      players.map((player) => bootstrap(player)),
     );
-    const gmInitialSnapshot = initialSnapshots[0];
-    const playerInitialSnapshots = initialSnapshots.slice(1);
 
     const playerOneSnapshot = playerInitialSnapshots[0];
     if (!playerOneSnapshot) throw new Error("Player one snapshot not found");
