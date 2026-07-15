@@ -41,9 +41,7 @@ describe("backup and restore safety", () => {
       path.join(
         root,
         "temporary-snapshot",
-        "home",
-        "uixray",
-        "apps",
+        "srv",
         "arken-space-data",
         "media",
       ),
