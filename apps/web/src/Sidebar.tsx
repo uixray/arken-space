@@ -56,7 +56,11 @@ type Props = {
   onUpdateCharacterEntry: (
     characterId: string,
     id: string,
-    patch: { name?: string; description?: string },
+    patch: {
+      name?: string;
+      description?: string;
+      data?: Record<string, unknown>;
+    },
   ) => Promise<void>;
 };
 
@@ -296,17 +300,30 @@ function CharacterPanel({
               {snapshot.me.role === "GM" && (
                 <button
                   onClick={() => {
+                    const name = window.prompt("Название", entry.name);
+                    if (!name?.trim()) return;
                     const description = window.prompt(
                       "Описание",
                       entry.description,
                     );
-                    if (description !== null)
+                    if (description === null) return;
+                    const raw = window.prompt(
+                      "Данные JSON",
+                      JSON.stringify(entry.data, null, 2),
+                    );
+                    if (raw === null) return;
+                    try {
                       void onUpdateEntry(character.id, entry.id, {
+                        name: name.trim(),
                         description,
+                        data: JSON.parse(raw) as Record<string, unknown>,
                       });
+                    } catch {
+                      window.alert("Некорректный JSON");
+                    }
                   }}
                 >
-                  Редактировать описание
+                  Редактировать запись
                 </button>
               )}
             </div>
@@ -532,14 +549,36 @@ function SetupPanel(props: Props) {
             <p>{entry.description}</p>
             <button
               onClick={() => {
+                const kind = window.prompt(
+                  "Тип: SKILL или ABILITY",
+                  entry.kind,
+                );
+                if (kind !== "SKILL" && kind !== "ABILITY") return;
                 const name = window.prompt("Название", entry.name);
-                if (name?.trim())
+                if (!name?.trim()) return;
+                const description = window.prompt(
+                  "Описание",
+                  entry.description,
+                );
+                if (description === null) return;
+                const raw = window.prompt(
+                  "Данные JSON",
+                  JSON.stringify(entry.data, null, 2),
+                );
+                if (raw === null) return;
+                try {
                   void props.onUpdateCatalogEntry(entry.id, {
+                    kind,
                     name: name.trim(),
+                    description,
+                    data: JSON.parse(raw) as Record<string, unknown>,
                   });
+                } catch {
+                  window.alert("Некорректный JSON");
+                }
               }}
             >
-              Переименовать
+              Редактировать шаблон
             </button>
           </div>
         ))}

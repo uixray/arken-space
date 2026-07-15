@@ -1340,11 +1340,22 @@ export function registerRoutes(
       });
       return updated;
     });
-    if (!replaced)
+    if (!replaced) {
+      const [latest] = await db
+        .select({ revision: tokenDefinitions.revision })
+        .from(tokenDefinitions)
+        .where(
+          and(
+            eq(tokenDefinitions.id, id),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
       return reply.code(409).send({
         error: "TOKEN_DEFINITION_CONFLICT",
-        revision: definition.revision,
+        revision: latest?.revision ?? null,
       });
+    }
     await broadcastSnapshots(io, db, auth.campaignId);
     return {
       ok: true,

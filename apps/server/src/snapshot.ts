@@ -252,6 +252,7 @@ export async function buildSnapshot(
       return {
         ...dto,
         definitionId: definition.id,
+        definitionRevision: definition.revision,
         characterId: definition.characterId,
         assetId: definition.defaultAssetId,
         name: definition.name,

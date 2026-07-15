@@ -300,6 +300,7 @@ export interface SceneDto {
 export interface TokenDto {
   id: string;
   definitionId: string;
+  definitionRevision: number;
   controllerMembershipIds: string[];
   sceneId: string;
   characterId: string | null;

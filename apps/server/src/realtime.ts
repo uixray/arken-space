@@ -34,6 +34,7 @@ const memberRoom = (membershipId: string) => `member:${membershipId}`;
 
 type EditableToken = typeof tokens.$inferSelect & {
   controllerMembershipIds: string[];
+  definitionRevision: number;
 };
 function tokenDto(token: EditableToken): TokenDto {
   const { updatedAt: _updatedAt, ...dto } = token;
@@ -105,6 +106,7 @@ export async function editableToken(
     width: row.definition.defaultWidth,
     height: row.definition.defaultHeight,
     controllerMembershipIds,
+    definitionRevision: row.definition.revision,
   };
 }
 
@@ -314,10 +316,12 @@ export function registerRealtime(
       const dto = tokenDto({
         ...result.updated,
         controllerMembershipIds: current.controllerMembershipIds,
+        definitionRevision: current.definitionRevision,
       });
       const audience = await tokenAudienceRoom(db, auth.campaignId, {
         ...result.updated,
         controllerMembershipIds: current.controllerMembershipIds,
+        definitionRevision: current.definitionRevision,
       });
       io.to(audience).emit(
         "token:moved",
