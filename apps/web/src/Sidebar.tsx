@@ -18,6 +18,7 @@ import type {
 import { arkenSystem } from "@arken/system";
 import { MusicBar } from "./MusicBar";
 import type { GameSocket } from "./realtime";
+import { ApiError } from "./api";
 
 type Props = {
   snapshot: GameSnapshot;
@@ -111,17 +112,23 @@ type Props = {
     command: "ADVANCE_DAY" | "START_BATTLE" | "END_BATTLE",
     revision: number,
   ) => Promise<void>;
+  requestedChatMessageId: string | null;
+  onRequestedChatMessageHandled: () => void;
+  onChatVisibilityChange: (visible: boolean) => void;
 };
 
 export function Sidebar(props: Props) {
+  const {
+    onChatVisibilityChange,
+    onRequestedChatMessageHandled,
+    requestedChatMessageId,
+  } = props;
   const isGm = props.snapshot.me.role === "GM";
   const [tab, setTab] = useState<
     "character" | "chat" | "palette" | "music" | "setup" | "media"
-  >(isGm ? "setup" : "character");
-  const knownMessageIds = useRef(
-    new Set(props.snapshot.messages.map((message) => message.id)),
-  );
-  const [unreadDiceIds, setUnreadDiceIds] = useState<string[]>([]);
+  >(isGm ? "setup" : "chat");
+  const [playerCharacterOpen, setPlayerCharacterOpen] = useState(false);
+  const playerCharacterButtonRef = useRef<HTMLButtonElement>(null);
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const ownCharacter = props.snapshot.characters.find(
     (character) => character.ownerMembershipId === props.snapshot.me.id,
@@ -134,46 +141,48 @@ export function Sidebar(props: Props) {
       (character) => character.id === selectedCharacterId,
     ) ?? ownCharacter;
 
-  useEffect(() => {
-    const newDiceIds = props.snapshot.messages
-      .filter(
-        (message) =>
-          message.kind === "DICE" && !knownMessageIds.current.has(message.id),
-      )
-      .map((message) => message.id);
-    for (const message of props.snapshot.messages) {
-      knownMessageIds.current.add(message.id);
-    }
-    if (tab !== "chat" && newDiceIds.length > 0) {
-      setUnreadDiceIds((current) => [
-        ...current,
-        ...newDiceIds.filter((id) => !current.includes(id)),
-      ]);
-    }
-  }, [props.snapshot.messages, tab]);
-
   const openChat = (messageId?: string) => {
-    setFocusedMessageId(messageId ?? unreadDiceIds.at(-1) ?? null);
-    setUnreadDiceIds([]);
+    setFocusedMessageId(messageId ?? null);
     setTab("chat");
   };
+  const chatVisible = tab === "chat";
+  useEffect(
+    () => onChatVisibilityChange(chatVisible),
+    [chatVisible, onChatVisibilityChange],
+  );
+  useEffect(() => {
+    if (!requestedChatMessageId) return;
+    setFocusedMessageId(requestedChatMessageId);
+    setTab("chat");
+    onRequestedChatMessageHandled();
+  }, [requestedChatMessageId, onRequestedChatMessageHandled]);
+  useEffect(() => {
+    if (!playerCharacterOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setPlayerCharacterOpen(false);
+      playerCharacterButtonRef.current?.focus();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [playerCharacterOpen]);
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${!isGm ? "player-sidebar" : ""}`}>
       <nav className="tabs" aria-label="Панели">
         <button
-          aria-pressed={tab === "character"}
-          onClick={() => setTab("character")}
+          ref={playerCharacterButtonRef}
+          aria-pressed={!isGm ? playerCharacterOpen : tab === "character"}
+          onClick={() =>
+            isGm
+              ? setTab("character")
+              : setPlayerCharacterOpen((current) => !current)
+          }
         >
           Персонаж
         </button>
         <button aria-pressed={tab === "chat"} onClick={() => openChat()}>
-          Чат{" "}
-          <span aria-label={`${unreadDiceIds.length} непросмотренных бросков`}>
-            {unreadDiceIds.length > 0
-              ? `+${unreadDiceIds.length}`
-              : props.snapshot.messages.length}
-          </span>
+          Чат <span>{props.snapshot.messages.length}</span>
         </button>
         <button
           aria-pressed={tab === "palette"}
@@ -196,15 +205,6 @@ export function Sidebar(props: Props) {
           Файлы
         </button>
       </nav>
-      {tab !== "chat" && unreadDiceIds.length > 0 && (
-        <div className="dice-notifications" role="status" aria-live="polite">
-          {unreadDiceIds.map((messageId) => (
-            <button key={messageId} onClick={() => openChat(messageId)}>
-              Новый бросок — открыть в чате
-            </button>
-          ))}
-        </div>
-      )}
       <div className={`panel-scroll ${tab === "chat" ? "chat-scroll" : ""}`}>
         {tab === "character" && (
           <CharacterPanel
@@ -245,6 +245,38 @@ export function Sidebar(props: Props) {
           <MediaPanel snapshot={props.snapshot} onUpload={props.onUpload} />
         )}
       </div>
+      {!isGm && playerCharacterOpen && (
+        <aside className="player-character-drawer" aria-label="Персонаж">
+          <div className="drawer-heading">
+            <strong>Персонаж</strong>
+            <button
+              aria-label="Закрыть персонажа"
+              onClick={() => {
+                setPlayerCharacterOpen(false);
+                playerCharacterButtonRef.current?.focus();
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <div className="panel-scroll">
+            <CharacterPanel
+              snapshot={props.snapshot}
+              character={selectedCharacter}
+              selectedId={selectedCharacterId}
+              setSelectedId={setSelectedCharacterId}
+              onPatch={props.onPatchCharacter}
+              onRoll={props.onRoll}
+              onAssignEntry={props.onAssignCatalogEntry}
+              onUpdateEntry={props.onUpdateCharacterEntry}
+              onRollEntry={props.onRollEntry}
+              onRechargeEntry={props.onRechargeEntry}
+              onUpdateCounters={props.onUpdateCounters}
+              onCampaignClock={props.onCampaignClock}
+            />
+          </div>
+        </aside>
+      )}
     </aside>
   );
 }
@@ -276,6 +308,14 @@ function CharacterPanel({
   onUpdateCounters: Props["onUpdateCounters"];
   onCampaignClock: Props["onCampaignClock"];
 }) {
+  const [countersPending, setCountersPending] = useState(false);
+  const [countersError, setCountersError] = useState("");
+  const [walletDraft, setWalletDraft] = useState(
+    () => character?.wallet ?? { gold: 0, silver: 0, copper: 0, sp: 0 },
+  );
+  useEffect(() => {
+    if (character) setWalletDraft(character.wallet);
+  }, [character]);
   const editable =
     character &&
     (snapshot.me.role === "GM" ||
@@ -287,6 +327,32 @@ function CharacterPanel({
         text="Мастер ещё не назначил вам персонажа."
       />
     );
+  const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
+    if (
+      countersPending ||
+      (Object.keys(nextWallet) as Array<keyof CharacterDto["wallet"]>).every(
+        (key) => nextWallet[key] === character.wallet[key],
+      )
+    )
+      return;
+    setWalletDraft(nextWallet);
+    setCountersPending(true);
+    setCountersError("");
+    try {
+      await onUpdateCounters(character.id, character.revision, {
+        wallet: nextWallet,
+      });
+    } catch (reason) {
+      setWalletDraft(character.wallet);
+      setCountersError(
+        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+          ? "Кошелёк уже изменён в другой сессии. Значения обновлены — повторите действие."
+          : "Не удалось сохранить кошелёк. Проверьте соединение и повторите действие.",
+      );
+    } finally {
+      setCountersPending(false);
+    }
+  };
   return (
     <section className="panel-section">
       {snapshot.me.role === "GM" && (
@@ -587,12 +653,23 @@ function CharacterPanel({
           disabled={!editable}
           rows={5}
           onBlur={(event) => {
+            const textarea = event.currentTarget;
             try {
               const resources = JSON.parse(
                 event.target.value,
               ) as CharacterDto["resources"];
+              if (
+                JSON.stringify(resources) ===
+                JSON.stringify(character.resources)
+              )
+                return;
               void onUpdateCounters(character.id, character.revision, {
                 resources,
+              }).catch(() => {
+                textarea.value = JSON.stringify(character.resources, null, 2);
+                setCountersError(
+                  "Не удалось сохранить ресурсы. Проверьте данные и соединение.",
+                );
               });
             } catch {
               event.target.value = JSON.stringify(character.resources, null, 2);
@@ -607,13 +684,12 @@ function CharacterPanel({
           <span className="inline-fields" key={key}>
             <b>{key}</b>
             <button
-              disabled={!editable || character.wallet[key] === 0}
+              disabled={!editable || countersPending || walletDraft[key] === 0}
+              onPointerDown={(event) => event.preventDefault()}
               onClick={() =>
-                onUpdateCounters(character.id, character.revision, {
-                  wallet: {
-                    ...character.wallet,
-                    [key]: character.wallet[key] - 1,
-                  },
+                void saveWallet({
+                  ...walletDraft,
+                  [key]: Math.max(0, walletDraft[key] - 1),
                 })
               }
             >
@@ -622,35 +698,36 @@ function CharacterPanel({
             <input
               type="number"
               min={0}
-              defaultValue={character.wallet[key]}
-              disabled={!editable}
-              onBlur={(event) =>
-                onUpdateCounters(character.id, character.revision, {
-                  wallet: {
-                    ...character.wallet,
-                    [key]: Math.max(
-                      0,
-                      Number.parseInt(event.target.value || "0", 10),
-                    ),
-                  },
-                })
+              value={walletDraft[key]}
+              disabled={!editable || countersPending}
+              onChange={(event) =>
+                setWalletDraft((current) => ({
+                  ...current,
+                  [key]: Math.max(
+                    0,
+                    Number.parseInt(event.target.value || "0", 10),
+                  ),
+                }))
               }
+              onBlur={() => void saveWallet(walletDraft)}
             />
             <button
-              disabled={!editable}
+              disabled={!editable || countersPending}
+              onPointerDown={(event) => event.preventDefault()}
               onClick={() =>
-                onUpdateCounters(character.id, character.revision, {
-                  wallet: {
-                    ...character.wallet,
-                    [key]: character.wallet[key] + 1,
-                  },
-                })
+                void saveWallet({ ...walletDraft, [key]: walletDraft[key] + 1 })
               }
             >
               +
             </button>
           </span>
         ))}
+        {countersPending && <span className="muted">Сохраняем…</span>}
+        {countersError && (
+          <span className="field-error" role="alert">
+            {countersError}
+          </span>
+        )}
       </label>
       <label className="field">
         Заметки
@@ -684,15 +761,31 @@ function ChatPanel({
   const [formula, setFormula] = useState("2d6");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef(true);
+  const [newMessageCount, setNewMessageCount] = useState(0);
   const latestMessageId = snapshot.messages.at(-1)?.id;
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    const list = listRef.current;
+    if (!list || !latestMessageId) return;
+    if (followRef.current) {
+      list.scrollTo({ top: list.scrollHeight });
+      setNewMessageCount(0);
+    } else {
+      setNewMessageCount((current) => current + 1);
+    }
   }, [latestMessageId]);
   useEffect(() => {
     if (!focusedMessageId) return;
     const message = document.getElementById(`chat-message-${focusedMessageId}`);
     if (!message) return;
-    message.scrollIntoView({ block: "center" });
+    const list = listRef.current;
+    if (list) {
+      list.scrollTo({
+        top:
+          message.offsetTop - list.clientHeight / 2 + message.clientHeight / 2,
+      });
+    }
     message.focus({ preventScroll: true });
     onMessageFocused();
   }, [focusedMessageId, onMessageFocused]);
@@ -704,7 +797,17 @@ function ChatPanel({
   };
   return (
     <section className="chat-panel">
-      <div className="message-list" aria-live="polite">
+      <div
+        className="message-list"
+        aria-live="polite"
+        ref={listRef}
+        onScroll={(event) => {
+          const list = event.currentTarget;
+          followRef.current =
+            list.scrollHeight - list.scrollTop - list.clientHeight < 48;
+          if (followRef.current) setNewMessageCount(0);
+        }}
+      >
         {snapshot.messages.map((message) => (
           <article
             id={`chat-message-${message.id}`}
@@ -738,6 +841,20 @@ function ChatPanel({
         ))}
         <div ref={endRef} aria-hidden="true" />
       </div>
+      {newMessageCount > 0 && (
+        <button
+          className="new-messages"
+          onClick={() => {
+            const list = listRef.current;
+            if (list)
+              list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+            followRef.current = true;
+            setNewMessageCount(0);
+          }}
+        >
+          Новые сообщения · {newMessageCount}
+        </button>
+      )}
       <div className="chat-tools">
         <div className="inline-fields">
           <input

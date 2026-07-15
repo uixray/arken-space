@@ -119,9 +119,31 @@ function formatWalletChanges(before: Wallet, after: Wallet) {
       const currency = key as keyof Wallet;
       return `${label} ${before[currency]} → ${after[currency]}`;
     });
-  return changes.length > 0
-    ? `кошелёк: ${changes.join(", ")}`
-    : "кошелёк: без изменений";
+  return changes.length > 0 ? `кошелёк: ${changes.join(", ")}` : "";
+}
+
+type Resources = Record<string, { current: number; maximum?: number }>;
+
+function formatResourceValue(value: Resources[string] | undefined) {
+  if (!value) return "удалён";
+  return value.maximum === undefined
+    ? String(value.current)
+    : `${value.current}/${value.maximum}`;
+}
+
+function formatResourceChanges(before: Resources, after: Resources) {
+  const keys = [
+    ...new Set([...Object.keys(before), ...Object.keys(after)]),
+  ].sort();
+  const changes = keys
+    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+    .map((key) => {
+      if (!before[key])
+        return `${key}: добавлен ${formatResourceValue(after[key])}`;
+      if (!after[key]) return `${key}: удалён`;
+      return `${key}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
+    });
+  return changes.length > 0 ? `ресурсы: ${changes.join(", ")}` : "";
 }
 
 async function findAction(db: Database, campaignId: string, actionId: string) {
@@ -2668,6 +2690,7 @@ export function registerRoutes(
       if (!row) throw new Error("MESSAGE_CREATE_FAILED");
       const dto = {
         id: row.id,
+        sequence: row.sequence,
         membershipId: row.membershipId,
         displayName: auth.displayName,
         characterId: row.characterId,
@@ -2818,7 +2841,10 @@ export function registerRoutes(
             membershipId: auth.membershipId,
             kind: "SYSTEM",
             visibility: "PUBLIC",
-            body: `${label}. Перезаряжено: ${recharged}.`,
+            body:
+              recharged > 0
+                ? `${label}. Перезаряжено: ${recharged}.`
+                : `${label}.`,
           })
           .returning();
         await tx.insert(gameEvents).values({
@@ -2877,7 +2903,7 @@ export function registerRoutes(
     const changes = [
       body.wallet ? formatWalletChanges(character.wallet, body.wallet) : "",
       body.resources
-        ? `ресурсы ${JSON.stringify(character.resources)} → ${JSON.stringify(body.resources)}`
+        ? formatResourceChanges(character.resources, body.resources)
         : "",
     ]
       .filter(Boolean)
@@ -2908,7 +2934,7 @@ export function registerRoutes(
           characterId: id,
           kind: "SYSTEM",
           visibility: "PUBLIC",
-          body: `${auth.displayName}: ${character.name} — ${changes}`,
+          body: `${character.name} — ${changes}`,
         })
         .returning();
       await tx.insert(gameEvents).values({
@@ -3255,6 +3281,7 @@ export function registerRoutes(
         if (!row) throw new Error("ROLL_SAVE_FAILED");
         const dto = {
           id: row.id,
+          sequence: row.sequence,
           membershipId: row.membershipId,
           displayName: auth.displayName,
           characterId: row.characterId,

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { editableToken } from "../apps/server/src/realtime.js";
 import { buildSnapshot } from "../apps/server/src/snapshot.js";
@@ -28,18 +28,38 @@ const ids = {
 
 let database: PGlite;
 
-beforeEach(async () => {
+beforeAll(async () => {
   database = new PGlite();
   const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrationsUrl))
+  const migrations = (await readdir(migrationsUrl))
     .filter((name) => name.endsWith(".sql"))
-    .sort()) {
+    .sort();
+  for (const file of migrations.slice(0, -1)) {
     const sql = (
       await readFile(new URL(file, migrationsUrl), "utf8")
     ).replaceAll("--> statement-breakpoint", "");
     await database.exec(sql);
   }
+  // The production 0009 backfill is covered by migration.test.ts. Visibility
+  // fixtures start empty, so use the equivalent final column shape without
+  // repeatedly running the expensive PGlite backfill procedure.
   await database.exec(`
+    alter table chat_messages add column sequence bigint not null;
+    create unique index chat_sequence_idx on chat_messages (sequence);
+    create index chat_campaign_sequence_idx on chat_messages (campaign_id, sequence);
+  `);
+});
+
+beforeEach(async () => {
+  await database.exec(`
+    update campaigns set active_scene_id = null;
+    delete from chat_messages;
+    delete from tokens;
+    delete from characters;
+    delete from assets;
+    delete from scenes;
+    delete from memberships;
+    delete from campaigns;
     insert into campaigns (id, name, active_scene_id) values ('${ids.campaign}', 'Test', null);
     insert into memberships (id, campaign_id, role, display_name) values
       ('${ids.gm}', '${ids.campaign}', 'GM', 'GM'),
@@ -59,14 +79,14 @@ beforeEach(async () => {
       ('${ids.publicToken}', '${ids.activeScene}', '${ids.player}', '${ids.publicAsset}', 'Public', 1, 1, true),
       ('${ids.hiddenToken}', '${ids.activeScene}', '${ids.gm}', '${ids.hiddenAsset}', 'Hidden', 2, 2, false),
       ('${ids.closedToken}', '${ids.closedScene}', '${ids.gm}', '${ids.hiddenAsset}', 'Closed', 3, 3, true);
-    insert into chat_messages (id, campaign_id, membership_id, visibility, body) values
-      ('${ids.publicMessage}', '${ids.campaign}', '${ids.gm}', 'PUBLIC', 'public'),
-      ('${ids.gmMessage}', '${ids.campaign}', '${ids.gm}', 'GM_ONLY', 'gm secret'),
-      ('${ids.ownGmMessage}', '${ids.campaign}', '${ids.player}', 'GM_ONLY', 'own secret');
+    insert into chat_messages (id, campaign_id, membership_id, visibility, body, sequence) values
+      ('${ids.publicMessage}', '${ids.campaign}', '${ids.gm}', 'PUBLIC', 'public', 1),
+      ('${ids.gmMessage}', '${ids.campaign}', '${ids.gm}', 'GM_ONLY', 'gm secret', 2),
+      ('${ids.ownGmMessage}', '${ids.campaign}', '${ids.player}', 'GM_ONLY', 'own secret', 3);
   `);
 });
 
-afterEach(async () => {
+afterAll(async () => {
   await database.close();
 });
 
@@ -107,6 +127,30 @@ describe("role-filtered snapshots", () => {
     expect(snapshot.characters).toHaveLength(2);
     expect(snapshot.messages).toHaveLength(3);
     expect(snapshot.assets).toHaveLength(2);
+  });
+
+  it("reloads the authoritative latest 200 chat messages in sequence order", async () => {
+    await database.exec(`
+      delete from chat_messages where campaign_id = '${ids.campaign}';
+      insert into chat_messages (campaign_id,membership_id,visibility,body,created_at,sequence)
+      select '${ids.campaign}','${ids.gm}','PUBLIC','message-' || value,'2026-01-01T00:00:00Z',value
+      from generate_series(1, 202) value;
+    `);
+    const latest = await database.query<{ body: string; sequence: number }>(`
+      select body, sequence from chat_messages
+      where campaign_id = '${ids.campaign}'
+      order by sequence desc
+      limit 200
+    `);
+    const messages = latest.rows.reverse();
+    expect(messages).toHaveLength(200);
+    expect(messages[0]?.body).toBe("message-3");
+    expect(messages.at(-1)?.body).toBe("message-202");
+    expect(messages.map((message) => message.sequence)).toEqual(
+      [...messages]
+        .map((message) => message.sequence)
+        .sort((left, right) => left - right),
+    );
   });
 });
 

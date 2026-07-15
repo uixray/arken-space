@@ -815,8 +815,8 @@ describe("Pool B HTTP boundaries", () => {
       0,
     );
     expect(afterDamage.json().messages.slice(-2)).toEqual([
-      expect.objectContaining({ kind: "DICE", visibility: "PUBLIC" }),
       expect.objectContaining({ kind: "SYSTEM", visibility: "PUBLIC" }),
+      expect.objectContaining({ kind: "DICE", visibility: "PUBLIC" }),
     ]);
     const replay = await app.inject({
       method: "POST",
@@ -902,6 +902,37 @@ describe("Pool B HTTP boundaries", () => {
             message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
         )?.body,
     ).not.toContain('{"gold"');
+    const counterAudit = countersSnapshot
+      .json()
+      .messages.find(
+        (message: { kind: string; body: string }) =>
+          message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
+      )?.body as string;
+    expect(counterAudit).toContain("ресурсы: mana: добавлен 5/8");
+    expect(counterAudit).not.toContain("Мастер: Мастер:");
+    expect(counterAudit).not.toContain('{"mana"');
+    const noOpCounters = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+        resources: { mana: { current: 5, maximum: 8 } },
+      },
+    });
+    expect(noOpCounters.statusCode).toBe(400);
+    expect(noOpCounters.json()).toEqual({ error: "NO_COUNTER_CHANGES" });
+    const afterNoOp = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(afterNoOp.json().characters[0].revision).toBe(1);
+    expect(afterNoOp.json().messages).toHaveLength(
+      countersSnapshot.json().messages.length,
+    );
     const countersReplay = await app.inject({
       method: "PATCH",
       url: `/api/characters/${ids.character}/counters`,

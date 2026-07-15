@@ -84,6 +84,49 @@ describe("initial PostgreSQL migration", () => {
     ).rejects.toThrow();
     await database.close();
   });
+
+  it("backfills a deterministic unique chat sequence and continues monotonically", async () => {
+    const database = new PGlite();
+    const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
+    const files = (await readdir(migrationsUrl))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    for (const file of files.slice(0, -1))
+      await database.exec(
+        (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
+          "--> statement-breakpoint",
+          "",
+        ),
+      );
+    const campaign = "30000000-0000-0000-0000-000000000001";
+    const member = "30000000-0000-0000-0000-000000000002";
+    await database.exec(`
+      insert into campaigns (id,name) values ('${campaign}','Chat order');
+      insert into memberships (id,campaign_id,role,display_name) values ('${member}','${campaign}','GM','GM');
+      insert into chat_messages (id,campaign_id,membership_id,body,created_at) values
+        ('30000000-0000-0000-0000-000000000005','${campaign}','${member}','later id, same time','2026-01-01T00:00:00Z'),
+        ('30000000-0000-0000-0000-000000000004','${campaign}','${member}','earlier id, same time','2026-01-01T00:00:00Z'),
+        ('30000000-0000-0000-0000-000000000003','${campaign}','${member}','earlier time','2025-01-01T00:00:00Z');
+    `);
+    await database.exec(
+      (
+        await readFile(new URL(files.at(-1)!, migrationsUrl), "utf8")
+      ).replaceAll("--> statement-breakpoint", ""),
+    );
+    const backfilled = await database.query<{ id: string; sequence: number }>(
+      `select id,sequence from chat_messages order by sequence`,
+    );
+    expect(backfilled.rows).toEqual([
+      { id: "30000000-0000-0000-0000-000000000003", sequence: 1 },
+      { id: "30000000-0000-0000-0000-000000000004", sequence: 2 },
+      { id: "30000000-0000-0000-0000-000000000005", sequence: 3 },
+    ]);
+    const inserted = await database.query<{ sequence: number }>(
+      `insert into chat_messages (campaign_id,membership_id,body) values ('${campaign}','${member}','new') returning sequence`,
+    );
+    expect(inserted.rows[0]?.sequence).toBe(4);
+    await database.close();
+  });
 });
 it("preserves GM and assets in a disposable reset rehearsal", async () => {
   const database = new PGlite();

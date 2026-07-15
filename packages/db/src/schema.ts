@@ -450,6 +450,7 @@ export const chatMessages = pgTable(
   "chat_messages",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    sequence: bigserial("sequence", { mode: "number" }).notNull(),
     campaignId: uuid("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onDelete: "cascade" }),
@@ -468,7 +469,8 @@ export const chatMessages = pgTable(
       .notNull(),
   },
   (table) => [
-    index("chat_campaign_created_idx").on(table.campaignId, table.createdAt),
+    uniqueIndex("chat_sequence_idx").on(table.sequence),
+    index("chat_campaign_sequence_idx").on(table.campaignId, table.sequence),
   ],
 );
 

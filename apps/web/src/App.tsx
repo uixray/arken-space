@@ -1,4 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type {
   AssetKind,
   GameSnapshot,
@@ -9,6 +16,8 @@ import { api, ApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
+import { appendChatMessage } from "./chat-state";
+import { addRollToast, removeRollToast, type RollToast } from "./toast-state";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -46,7 +55,28 @@ export function App() {
     null,
   );
   const [error, setError] = useState("");
+  const chatOpenRef = useRef(false);
+  const [requestedChatMessageId, setRequestedChatMessageId] = useState<
+    string | null
+  >(null);
+  const [rollToasts, setRollToasts] = useState<RollToast[]>([]);
+  const toastAppearanceRef = useRef(0);
+  const knownChatMessageIdsRef = useRef(new Set<string>());
+  const handleChatVisibilityChange = useCallback((visible: boolean) => {
+    chatOpenRef.current = visible;
+    if (visible)
+      setRollToasts((current) => (current.length > 0 ? [] : current));
+  }, []);
+  const handleRequestedChatMessage = useCallback(
+    () => setRequestedChatMessageId(null),
+    [],
+  );
   const campaignId = snapshot?.campaign.id;
+  useEffect(() => {
+    if (!snapshot) return;
+    for (const message of snapshot.messages)
+      knownChatMessageIdsRef.current.add(message.id);
+  }, [snapshot]);
 
   const load = useCallback(async () => {
     try {
@@ -203,19 +233,36 @@ export function App() {
         ),
       ),
     );
-    next.on("chat:created", (event) =>
+    next.on("chat:created", (event) => {
+      const unseen = !knownChatMessageIdsRef.current.has(event.data.id);
+      if (unseen) knownChatMessageIdsRef.current.add(event.data.id);
+      // Chat is append-only. It must be deduplicated by message id rather than
+      // rejected by the global entity sequence: a later snapshot can arrive
+      // before this envelope without containing this newly committed message.
       setSnapshot((current) =>
-        current &&
-        event.sequence > current.snapshotVersion &&
-        !current.messages.some((item) => item.id === event.data.id)
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              messages: [...current.messages, event.data],
-            }
+        current
+          ? appendChatMessage(current, event.data, event.sequence)
           : current,
-      ),
-    );
+      );
+      if (unseen && event.data.kind === "DICE" && !chatOpenRef.current) {
+        const appearanceId = ++toastAppearanceRef.current;
+        let added = false;
+        setRollToasts((current) => {
+          const next = addRollToast(current, {
+            message: event.data,
+            appearanceId,
+          });
+          added = next !== current;
+          return next;
+        });
+        window.setTimeout(() => {
+          if (added)
+            setRollToasts((current) =>
+              removeRollToast(current, event.data.id, appearanceId),
+            );
+        }, 5000);
+      }
+    });
     next.on("character:updated", (event) =>
       setSnapshot((current) =>
         current && event.sequence > current.snapshotVersion
@@ -570,6 +617,42 @@ export function App() {
           ) : (
             <div className="empty-map">Мастер ещё не создал сцену.</div>
           )}
+          {rollToasts.length > 0 && (
+            <div className="roll-toast-stack" aria-live="polite">
+              {rollToasts.map(({ message, appearanceId }) => (
+                <div
+                  className="roll-toast"
+                  key={`${message.id}-${appearanceId}`}
+                >
+                  <button
+                    className="roll-toast-open"
+                    onClick={() => {
+                      setRequestedChatMessageId(message.id);
+                      setRollToasts((current) =>
+                        removeRollToast(current, message.id),
+                      );
+                    }}
+                  >
+                    <strong>
+                      {message.displayName}: {message.body}
+                    </strong>
+                    <span>{message.dice?.total ?? "—"}</span>
+                  </button>
+                  <button
+                    className="roll-toast-close"
+                    aria-label="Закрыть уведомление"
+                    onClick={() =>
+                      setRollToasts((current) =>
+                        removeRollToast(current, message.id),
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </main>
         {previewSnapshot ? (
           <aside className="sidebar">
@@ -592,6 +675,9 @@ export function App() {
             snapshot={snapshot}
             socket={socket}
             presence={presence}
+            requestedChatMessageId={requestedChatMessageId}
+            onRequestedChatMessageHandled={handleRequestedChatMessage}
+            onChatVisibilityChange={handleChatVisibilityChange}
             onPlaceTokenDefinition={async (definitionId) =>
               run(() =>
                 api(`/api/token-definitions/${definitionId}/placements`, {

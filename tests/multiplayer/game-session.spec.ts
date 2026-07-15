@@ -693,8 +693,8 @@ test("GM and six isolated players recover authoritative state without security l
 
     const moveResults = await Promise.all([
       ...playerInitialSnapshots.map((snapshot, index) => {
-        const own = snapshot.tokens.find(
-          (token) => token.controllerMembershipIds.includes(snapshot.me.id),
+        const own = snapshot.tokens.find((token) =>
+          token.controllerMembershipIds.includes(snapshot.me.id),
         );
         if (!own) throw new Error("Owned token not found for player");
         return move(connections[index + 1]!.socket, own, 320 + index * 96, 384);
@@ -722,6 +722,7 @@ test("GM and six isolated players recover authoritative state without security l
     for (const result of [foreignMove, enemyMove, hiddenMove])
       expect(result).toMatchObject({ ok: false, status: "FORBIDDEN" });
 
+    await pages[0]!.getByRole("button", { name: "Токены" }).click();
     const publicMarkers = Array.from({ length: 6 }, (_, index) =>
       index % 2 === 0
         ? runTag + "-public-chat-" + (index + 1)
@@ -776,10 +777,8 @@ test("GM and six isolated players recover authoritative state without security l
     // Product gate: a roll received outside chat creates a navigable
     // notification. Opening it focuses the exact message while the composer
     // remains visible and usable independently of message-list scrolling.
-    await expect(
-      pages[0]!.locator(".dice-notifications button").first(),
-    ).toBeVisible();
-    await pages[0]!.locator(".dice-notifications button").first().click();
+    await expect(pages[0]!.locator(".roll-toast").first()).toBeVisible();
+    await pages[0]!.locator(".roll-toast-open").first().click();
     await expect(pages[0]!.locator(".message:focus")).toHaveCount(1);
     await pages[0]!.locator(".message-list").evaluate((element) => {
       element.scrollTop = 0;

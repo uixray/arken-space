@@ -126,7 +126,7 @@ code {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr) 48px;
+  grid-template-rows: 44px minmax(0, 1fr);
   height: 100%;
   background: var(--bg);
 }
@@ -246,27 +246,12 @@ code {
 }
 
 .sidebar {
+  position: relative;
   display: grid;
   grid-template-rows: 39px minmax(0, 1fr);
   min-height: 0;
   border-left: 1px solid var(--line);
   background: var(--surface);
-}
-.sidebar:has(.dice-notifications) {
-  grid-template-rows: 39px auto minmax(0, 1fr);
-}
-.dice-notifications {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: var(--space-xs);
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-2);
-}
-.dice-notifications button {
-  width: 100%;
-  color: var(--accent);
-  text-align: left;
 }
 .tabs {
   display: flex;
@@ -401,9 +386,11 @@ code {
 }
 
 .chat-panel {
+  position: relative;
   display: grid;
-  grid-template-rows: minmax(180px, 1fr) auto auto;
-  min-height: 100%;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  height: 100%;
+  min-height: 0;
 }
 .message-list {
   display: flex;
@@ -412,6 +399,7 @@ code {
   min-height: 0;
   padding: var(--space-md);
   overflow: auto;
+  overscroll-behavior: contain;
 }
 .message {
   display: flex;
@@ -482,6 +470,90 @@ code {
 }
 .chat-compose textarea {
   resize: none;
+}
+.new-messages {
+  position: absolute;
+  right: var(--space-md);
+  bottom: 164px;
+  z-index: 2;
+  min-height: 28px;
+  border-color: var(--accent);
+  background: var(--surface-3);
+}
+.roll-toast-stack {
+  position: absolute;
+  z-index: 15;
+  top: 50px;
+  right: var(--space-md);
+  display: grid;
+  gap: var(--space-sm);
+  width: min(340px, calc(100% - 24px));
+  pointer-events: none;
+}
+.roll-toast {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: 0 8px 24px #0008;
+  pointer-events: auto;
+}
+.roll-toast-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.roll-toast-open strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roll-toast-open span {
+  color: var(--accent);
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+.roll-toast-close {
+  min-width: 32px;
+  padding: 0;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+}
+.player-character-drawer {
+  position: absolute;
+  z-index: 12;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(440px, calc(100vw - 360px));
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: -12px 0 32px #0008;
+}
+.drawer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 39px;
+  padding-left: var(--space-md);
+  border-bottom: 1px solid var(--line);
+}
+.drawer-heading button {
+  min-width: 39px;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+}
+.field-error {
+  color: #f0bbb4;
+  font-size: 0.82rem;
 }
 .inline-fields,
 .copy-field,

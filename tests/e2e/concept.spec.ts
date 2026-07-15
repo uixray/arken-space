@@ -101,6 +101,7 @@ const snapshot: GameSnapshot = {
   messages: [
     {
       id: "c67832eb-f418-4712-a1fa-a5c8b90bb124",
+      sequence: 1,
       membershipId: "d21b4bb6-ae66-47b9-b719-610e0440044c",
       displayName: "Мастер",
       characterId: null,
@@ -165,6 +166,158 @@ test("concept shell keeps the map primary and exposes core tools", async ({
     path: "test-results/concept-shell.png",
     fullPage: true,
   });
+});
+
+for (const viewport of [
+  { width: 1366, height: 768 },
+  { width: 1920, height: 1080 },
+]) {
+  test(`long chat scrolls only its history at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const longSnapshot = structuredClone(snapshot);
+    longSnapshot.messages = Array.from({ length: 200 }, (_, index) => ({
+      ...snapshot.messages[0]!,
+      id: `message-${index}`,
+      sequence: index + 1,
+      body:
+        index === 100
+          ? `Длинное сообщение ${"с переносом ".repeat(60)}`
+          : `История ${index + 1}`,
+    }));
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(longSnapshot),
+      }),
+    );
+    await page.goto("/");
+    await page.getByRole("button", { name: /Чат/ }).click();
+
+    await expect(page.locator(".chat-tools")).toBeVisible();
+    await expect(page.locator(".chat-compose")).toBeVisible();
+    const dimensions = await page
+      .locator(".message-list")
+      .evaluate((element) => ({
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      }));
+    expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+    const viewportFit = await page.evaluate(() => ({
+      documentScrollHeight: document.documentElement.scrollHeight,
+      documentClientHeight: document.documentElement.clientHeight,
+      toolsBottom: document
+        .querySelector(".chat-tools")!
+        .getBoundingClientRect().bottom,
+      composerBottom: document
+        .querySelector(".chat-compose")!
+        .getBoundingClientRect().bottom,
+      viewportHeight: window.innerHeight,
+    }));
+    expect(viewportFit.documentScrollHeight).toBe(
+      viewportFit.documentClientHeight,
+    );
+    expect(viewportFit.toolsBottom).toBeLessThanOrEqual(
+      viewportFit.viewportHeight,
+    );
+    expect(viewportFit.composerBottom).toBeLessThanOrEqual(
+      viewportFit.viewportHeight,
+    );
+    const longBodyWraps = await page
+      .getByText(/^Длинное сообщение/)
+      .evaluate((element) => element.scrollWidth <= element.clientWidth);
+    expect(longBodyWraps).toBe(true);
+    await page.locator(".message-list").evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await expect(page.locator(".chat-compose textarea")).toBeVisible();
+  });
+}
+
+test("player opens the character drawer while chat remains visible", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]!.id,
+  };
+  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.members = [playerSnapshot.me];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    }),
+  );
+  await page.goto("/");
+  await expect(page.locator(".chat-compose")).toBeVisible();
+  await page.getByRole("button", { name: "Персонаж" }).click();
+  await expect(page.locator(".player-character-drawer")).toBeVisible();
+  await expect(page.locator(".chat-compose")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Наблюдение/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".player-character-drawer")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Персонаж" })).toBeFocused();
+});
+
+test("wallet draft sends one intended mutation and ignores unchanged blur", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]!.id,
+  };
+  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.members = [playerSnapshot.me];
+  const submittedGold: number[] = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    }),
+  );
+  await page.route("**/api/characters/*/counters", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      wallet: (typeof playerSnapshot.characters)[0]["wallet"];
+    };
+    submittedGold.push(payload.wallet.gold);
+    playerSnapshot.characters[0]!.wallet = payload.wallet;
+    playerSnapshot.characters[0]!.revision += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot.characters[0]),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Персонаж" }).click();
+  const goldRow = page
+    .locator(".player-character-drawer .inline-fields")
+    .filter({ hasText: /^gold/ });
+  const input = goldRow.locator('input[type="number"]');
+
+  await input.focus();
+  await page.locator(".drawer-heading strong").click();
+  expect(submittedGold).toEqual([]);
+
+  await goldRow.locator("button").last().click();
+  await expect.poll(() => submittedGold).toEqual([1]);
+  await expect(input).toHaveValue("1");
+
+  await input.fill("5");
+  await goldRow.locator("button").last().click();
+  await expect.poll(() => submittedGold).toEqual([1, 6]);
+  await expect(input).toHaveValue("6");
 });
 
 test("player fog keeps covered foreign tokens hidden while owned tokens remain visible", async ({

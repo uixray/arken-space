@@ -117,9 +117,8 @@ export async function buildSnapshot(
       .where(eq(assets.campaignId, auth.campaignId))
       .orderBy(desc(assets.createdAt)),
     db
-      .select({ message: chatMessages, displayName: memberships.displayName })
+      .select()
       .from(chatMessages)
-      .innerJoin(memberships, eq(chatMessages.membershipId, memberships.id))
       .where(
         and(
           eq(chatMessages.campaignId, auth.campaignId),
@@ -131,7 +130,7 @@ export async function buildSnapshot(
               ),
         ),
       )
-      .orderBy(desc(chatMessages.createdAt))
+      .orderBy(desc(chatMessages.sequence))
       .limit(200),
     db
       .select()
@@ -148,6 +147,9 @@ export async function buildSnapshot(
     characterRows
       .filter((item) => item.ownerMembershipId)
       .map((item) => [item.ownerMembershipId, item.id]),
+  );
+  const memberNameById = new Map(
+    memberRows.map((member) => [member.id, member.displayName]),
   );
   const me = memberRows.find((member) => member.id === auth.membershipId);
   if (!me) throw new Error("Membership not found");
@@ -349,10 +351,12 @@ export async function buildSnapshot(
         y: drawing.y,
         revision: drawing.revision,
       })),
-    messages: messageRows.reverse().map(({ message, displayName }) => ({
+    messages: messageRows.reverse().map((message) => ({
       id: message.id,
+      sequence: message.sequence,
       membershipId: message.membershipId,
-      displayName,
+      displayName:
+        memberNameById.get(message.membershipId) ?? "Неизвестный игрок",
       characterId: message.characterId,
       body: message.body,
       visibility: message.visibility,
