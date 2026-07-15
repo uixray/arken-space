@@ -24,8 +24,22 @@ export function App() {
   const [connection, setConnection] = useState<
     "CONNECTING" | "ONLINE" | "RECONNECTING" | "RESYNCING" | "OFFLINE"
   >("CONNECTING");
-  const [tool, setTool] = useState<"PAN" | "FOG" | "PING">("PAN");
+  const [tool, setTool] = useState<
+    "PAN" | "FOG" | "COVER" | "DRAW" | "RULER" | "PING"
+  >("PAN");
   const [pings, setPings] = useState<MapPing[]>([]);
+  const [rulers, setRulers] = useState<
+    Array<{
+      sceneId: string;
+      membershipId: string;
+      displayName: string;
+      startX: number;
+      startY: number;
+      endX: number;
+      endY: number;
+      distance: number;
+    }>
+  >([]);
   const [previewSnapshot, setPreviewSnapshot] = useState<GameSnapshot | null>(
     null,
   );
@@ -172,6 +186,21 @@ export function App() {
         3500,
       );
     });
+    next.on("ruler:updated", (ruler) =>
+      setRulers((current) => [
+        ...current.filter((item) => item.membershipId !== ruler.membershipId),
+        ruler,
+      ]),
+    );
+    next.on("ruler:cleared", (ruler) =>
+      setRulers((current) =>
+        current.filter(
+          (item) =>
+            item.membershipId !== ruler.membershipId ||
+            item.sceneId !== ruler.sceneId,
+        ),
+      ),
+    );
     next.on("chat:created", (event) =>
       setSnapshot((current) =>
         current &&
@@ -243,6 +272,11 @@ export function App() {
     : [];
   const activeFog = activeScene
     ? viewSnapshot.fogReveals.filter((fog) => fog.sceneId === activeScene.id)
+    : [];
+  const activeDrawings = activeScene
+    ? (viewSnapshot.drawings ?? []).filter(
+        (drawing) => drawing.sceneId === activeScene.id,
+      )
     : [];
 
   return (
@@ -319,11 +353,66 @@ export function App() {
                   Открыть туман
                 </button>
                 <button
-                  disabled={!activeFog.length}
+                  aria-pressed={tool === "COVER"}
+                  onClick={() => setTool("COVER")}
+                >
+                  Закрыть туман
+                </button>
+                <label>
+                  Масштаб
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="10"
+                    step="0.1"
+                    defaultValue={activeScene?.mapScale ?? 1}
+                    onBlur={(event) =>
+                      activeScene &&
+                      run(() =>
+                        api(`/api/scenes/${activeScene.id}/canvas`, {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            actionId: crypto.randomUUID(),
+                            revision: activeScene.revision ?? 0,
+                            mapScale: Number(event.target.value),
+                          }),
+                        }),
+                      )
+                    }
+                  />
+                </label>
+                {(["size", "offsetX", "offsetY"] as const).map((key) => (
+                  <label key={key}>
+                    {key}
+                    <input
+                      type="number"
+                      min={key === "size" ? 16 : undefined}
+                      max={key === "size" ? 256 : undefined}
+                      defaultValue={activeScene?.grid[key] ?? 0}
+                      onBlur={(event) =>
+                        activeScene &&
+                        run(() =>
+                          api(`/api/scenes/${activeScene.id}/canvas`, {
+                            method: "PATCH",
+                            body: JSON.stringify({
+                              actionId: crypto.randomUUID(),
+                              revision: activeScene.revision ?? 0,
+                              grid: {
+                                ...activeScene.grid,
+                                [key]: Number(event.target.value),
+                              },
+                            }),
+                          }),
+                        )
+                      }
+                    />
+                  </label>
+                ))}
+                <button
                   onClick={() =>
                     run(() =>
-                      api("/api/fog-reveals/latest", {
-                        method: "DELETE",
+                      api("/api/canvas/undo", {
+                        method: "POST",
                         body: JSON.stringify({
                           actionId: crypto.randomUUID(),
                           sceneId: activeScene?.id,
@@ -332,17 +421,80 @@ export function App() {
                     )
                   }
                 >
-                  Отменить туман
+                  Отменить
+                </button>
+                <button
+                  onClick={() =>
+                    run(() =>
+                      api("/api/canvas/redo", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          sceneId: activeScene?.id,
+                        }),
+                      }),
+                    )
+                  }
+                >
+                  Повторить
                 </button>
               </>
             )}
             {!previewSnapshot && (
-              <button
-                aria-pressed={tool === "PING"}
-                onClick={() => setTool("PING")}
-              >
-                Ping
-              </button>
+              <>
+                {snapshot.me.role === "PLAYER" && (
+                  <>
+                    <button
+                      onClick={() =>
+                        run(() =>
+                          api("/api/canvas/undo", {
+                            method: "POST",
+                            body: JSON.stringify({
+                              actionId: crypto.randomUUID(),
+                              sceneId: activeScene?.id,
+                            }),
+                          }),
+                        )
+                      }
+                    >
+                      Отменить
+                    </button>
+                    <button
+                      onClick={() =>
+                        run(() =>
+                          api("/api/canvas/redo", {
+                            method: "POST",
+                            body: JSON.stringify({
+                              actionId: crypto.randomUUID(),
+                              sceneId: activeScene?.id,
+                            }),
+                          }),
+                        )
+                      }
+                    >
+                      Повторить
+                    </button>
+                  </>
+                )}
+                <button
+                  aria-pressed={tool === "DRAW"}
+                  onClick={() => setTool("DRAW")}
+                >
+                  Рисовать
+                </button>
+                <button
+                  aria-pressed={tool === "RULER"}
+                  onClick={() => setTool("RULER")}
+                >
+                  Линейка
+                </button>
+                <button
+                  aria-pressed={tool === "PING"}
+                  onClick={() => setTool("PING")}
+                >
+                  Ping
+                </button>
+              </>
             )}
             <span>{activeTokens.length} токенов</span>
           </div>
@@ -354,12 +506,16 @@ export function App() {
                 scene={activeScene}
                 tokens={activeTokens}
                 fogReveals={activeFog}
+                drawings={activeDrawings}
                 assets={viewSnapshot.assets}
                 role={viewSnapshot.me.role}
                 membershipId={viewSnapshot.me.id}
                 socket={socket}
                 tool={tool}
                 pings={pings.filter((ping) => ping.sceneId === activeScene.id)}
+                rulers={rulers.filter(
+                  (ruler) => ruler.sceneId === activeScene.id,
+                )}
                 onFogCreate={async (rect) => {
                   await run(() =>
                     api("/api/fog-reveals", {
@@ -367,7 +523,21 @@ export function App() {
                       body: JSON.stringify({
                         actionId: crypto.randomUUID(),
                         sceneId: activeScene.id,
+                        operation: tool === "COVER" ? "COVER" : "REVEAL",
                         ...rect,
+                      }),
+                    }),
+                  );
+                  setTool("PAN");
+                }}
+                onDrawingCreate={async (drawing) => {
+                  await run(() =>
+                    api("/api/drawings", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        sceneId: activeScene.id,
+                        ...drawing,
                       }),
                     }),
                   );

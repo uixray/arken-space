@@ -13,6 +13,12 @@ import {
   characterCatalogEntryCommandSchema,
   createChatMessageSchema,
   createFogRevealSchema,
+  changeTokenLayerSchema,
+  createDrawingSchema,
+  drawingCommandSchema,
+  historyCommandSchema,
+  sceneCanvasConfigSchema,
+  updateDrawingSchema,
   createInviteSchema,
   createSceneSchema,
   createTokenSchema,
@@ -33,11 +39,13 @@ import {
 } from "@arken/contracts";
 import {
   assets,
+  actionJournal,
   catalogEntries,
   characterCatalogEntries,
   campaigns,
   characters,
   chatMessages,
+  drawings,
   fogReveals,
   gameEvents,
   invites,
@@ -1155,6 +1163,17 @@ export function registerRoutes(
         return reply.code(404).send({ error: "CONTROLLER_NOT_FOUND" });
     }
     const token = await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, scene.id),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
       const [definition] = existingDefinition
         ? [existingDefinition]
         : await tx
@@ -1196,6 +1215,20 @@ export function registerRoutes(
         entityId: created.id,
         entityRevision: created.revision,
         payload: { tokenId: created.id },
+      });
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: created.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId,
+        scope: created.layer === "GM" ? "GM" : "PUBLIC",
+        type: "TOKEN_CREATE",
+        targetType: "TOKEN",
+        targetId: created.id,
+        before: null,
+        after: created,
+        afterRevision: created.revision,
+        currentRevision: created.revision,
       });
       return {
         ...created,
@@ -1249,6 +1282,17 @@ export function registerRoutes(
         return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
     }
     const deleted = await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, row.token.sceneId),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
       const [placement] = await tx
         .delete(tokens)
         .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
@@ -1266,6 +1310,20 @@ export function registerRoutes(
           definitionId: row.definition.id,
           sceneId: placement.sceneId,
         },
+      });
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: placement.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        scope: placement.layer === "GM" ? "GM" : "PUBLIC",
+        type: "TOKEN_DELETE",
+        targetType: "TOKEN",
+        targetId: placement.id,
+        before: placement,
+        after: null,
+        beforeRevision: placement.revision,
+        currentRevision: placement.revision,
       });
       return placement;
     });
@@ -1396,6 +1454,17 @@ export function registerRoutes(
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
     const { actionId, ...revealInput } = body;
     const result = await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, scene.id),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
       const [reveal] = await tx
         .insert(fogReveals)
         .values(revealInput)
@@ -1414,6 +1483,19 @@ export function registerRoutes(
         })
         .returning();
       if (!event) throw new Error("EVENT_RECORD_FAILED");
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: scene.id,
+        actorMembershipId: auth.membershipId,
+        actionId,
+        type: "FOG_CREATE",
+        targetType: "FOG",
+        targetId: reveal.id,
+        before: null,
+        after: reveal,
+        afterRevision: 0,
+        currentRevision: 0,
+      });
       return { reveal, event };
     });
     const { reveal, event } = result;
@@ -1484,6 +1566,760 @@ export function registerRoutes(
       data,
     });
     return { ok: true, ...data };
+  });
+
+  app.patch("/api/tokens/:id/layer", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = changeTokenLayerSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [row] = await db
+      .select({ token: tokens })
+      .from(tokens)
+      .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+      .where(and(eq(tokens.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
+    if (row.token.revision !== body.revision)
+      return reply.code(409).send({ error: "TOKEN_CONFLICT" });
+    const saved = await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, row.token.sceneId),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
+      const [updated] = await tx
+        .update(tokens)
+        .set({
+          layer: body.layer,
+          revision: row.token.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tokens.id, id), eq(tokens.revision, row.token.revision)))
+        .returning();
+      if (!updated) return null;
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "token.layer",
+          entityType: "token",
+          entityId: id,
+          entityRevision: updated.revision,
+          payload: updated,
+        })
+        .returning();
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: updated.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        scope:
+          updated.layer === "GM" || row.token.layer === "GM" ? "GM" : "PUBLIC",
+        type: "TOKEN_LAYER",
+        targetType: "TOKEN",
+        targetId: id,
+        before: { layer: row.token.layer },
+        after: { layer: updated.layer },
+        beforeRevision: row.token.revision,
+        afterRevision: updated.revision,
+        currentRevision: updated.revision,
+      });
+      return { updated, event };
+    });
+    if (!saved) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return saved.updated;
+  });
+
+  app.post("/api/drawings", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const body = createDrawingSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [scene] = await db
+      .select({ id: scenes.id })
+      .from(scenes)
+      .where(
+        and(
+          eq(scenes.id, body.sceneId),
+          eq(scenes.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    const { actionId, ...input } = body;
+    const saved = await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, scene.id),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
+      const [drawing] = await tx
+        .insert(drawings)
+        .values({ ...input, authorMembershipId: auth.membershipId })
+        .returning();
+      if (!drawing) throw new Error("DRAWING_CREATE_FAILED");
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId,
+          membershipId: auth.membershipId,
+          type: "drawing.created",
+          entityType: "drawing",
+          entityId: drawing.id,
+          entityRevision: 0,
+          payload: drawing,
+        })
+        .returning();
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: scene.id,
+        actorMembershipId: auth.membershipId,
+        actionId,
+        type: "DRAWING_CREATE",
+        targetType: "DRAWING",
+        targetId: drawing.id,
+        before: null,
+        after: drawing,
+        afterRevision: 0,
+        currentRevision: 0,
+      });
+      return { drawing, event };
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(201).send(saved.drawing);
+  });
+
+  app.patch("/api/drawings/:id", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = updateDrawingSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [row] = await db
+      .select({ drawing: drawings })
+      .from(drawings)
+      .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
+      .where(and(eq(drawings.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (
+      !row ||
+      (auth.role !== "GM" &&
+        row.drawing.authorMembershipId !== auth.membershipId)
+    )
+      return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    if (row.drawing.revision !== body.revision)
+      return reply.code(409).send({ error: "DRAWING_CONFLICT" });
+    const { actionId, revision: _revision, ...changes } = body;
+    const saved = await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, row.drawing.sceneId),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
+      const [updated] = await tx
+        .update(drawings)
+        .set({
+          ...changes,
+          revision: row.drawing.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(drawings.id, id), eq(drawings.revision, row.drawing.revision)),
+        )
+        .returning();
+      if (!updated) return null;
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId,
+          membershipId: auth.membershipId,
+          type: "drawing.updated",
+          entityType: "drawing",
+          entityId: id,
+          entityRevision: updated.revision,
+          payload: updated,
+        })
+        .returning();
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: updated.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId,
+        type: "DRAWING_UPDATE",
+        targetType: "DRAWING",
+        targetId: id,
+        before: row.drawing,
+        after: updated,
+        beforeRevision: row.drawing.revision,
+        afterRevision: updated.revision,
+        currentRevision: updated.revision,
+      });
+      return { updated, event };
+    });
+    if (!saved) return reply.code(409).send({ error: "DRAWING_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return saved.updated;
+  });
+
+  app.post("/api/drawings/:id/copy", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = drawingCommandSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [row] = await db
+      .select({ drawing: drawings })
+      .from(drawings)
+      .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
+      .where(and(eq(drawings.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (
+      !row ||
+      (auth.role !== "GM" &&
+        row.drawing.authorMembershipId !== auth.membershipId)
+    )
+      return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    if (row.drawing.revision !== body.revision)
+      return reply.code(409).send({ error: "DRAWING_CONFLICT" });
+    const saved = await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, row.drawing.sceneId),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
+      const [copy] = await tx
+        .insert(drawings)
+        .values({
+          sceneId: row.drawing.sceneId,
+          authorMembershipId: auth.membershipId,
+          points: row.drawing.points,
+          color: row.drawing.color,
+          x: row.drawing.x + 16,
+          y: row.drawing.y + 16,
+        })
+        .returning();
+      if (!copy) throw new Error("DRAWING_COPY_FAILED");
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "drawing.copied",
+          entityType: "drawing",
+          entityId: copy.id,
+          entityRevision: 0,
+          payload: copy,
+        })
+        .returning();
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: copy.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        type: "DRAWING_CREATE",
+        targetType: "DRAWING",
+        targetId: copy.id,
+        before: null,
+        after: copy,
+        afterRevision: 0,
+        currentRevision: 0,
+      });
+      return { copy, event };
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(201).send(saved.copy);
+  });
+
+  app.delete("/api/drawings/:id", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = drawingCommandSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [row] = await db
+      .select({ drawing: drawings })
+      .from(drawings)
+      .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
+      .where(and(eq(drawings.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (
+      !row ||
+      (auth.role !== "GM" &&
+        row.drawing.authorMembershipId !== auth.membershipId)
+    )
+      return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    if (row.drawing.revision !== body.revision)
+      return reply.code(409).send({ error: "DRAWING_CONFLICT" });
+    await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, row.drawing.sceneId),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
+      const [deleted] = await tx
+        .delete(drawings)
+        .where(
+          and(eq(drawings.id, id), eq(drawings.revision, row.drawing.revision)),
+        )
+        .returning();
+      if (!deleted) throw new Error("DRAWING_CONFLICT");
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "drawing.deleted",
+        entityType: "drawing",
+        entityId: id,
+        entityRevision: row.drawing.revision,
+      });
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: row.drawing.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        type: "DRAWING_DELETE",
+        targetType: "DRAWING",
+        targetId: id,
+        before: row.drawing,
+        after: null,
+        beforeRevision: row.drawing.revision,
+        currentRevision: row.drawing.revision,
+      });
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(204).send();
+  });
+
+  app.get("/api/canvas/history", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const query = z.object({ sceneId: z.string().uuid() }).parse(request.query);
+    const [scene] = await db
+      .select({ id: scenes.id })
+      .from(scenes)
+      .where(
+        and(
+          eq(scenes.id, query.sceneId),
+          eq(scenes.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    const rows = await db
+      .select({
+        sequence: actionJournal.sequence,
+        actorMembershipId: actionJournal.actorMembershipId,
+        type: actionJournal.type,
+        targetType: actionJournal.targetType,
+        targetId: actionJournal.targetId,
+        status: actionJournal.status,
+        createdAt: actionJournal.createdAt,
+      })
+      .from(actionJournal)
+      .where(
+        and(
+          eq(actionJournal.campaignId, auth.campaignId),
+          eq(actionJournal.sceneId, scene.id),
+          auth.role === "GM"
+            ? undefined
+            : and(
+                eq(actionJournal.actorMembershipId, auth.membershipId),
+                eq(actionJournal.scope, "PUBLIC"),
+              ),
+        ),
+      )
+      .orderBy(desc(actionJournal.sequence))
+      .limit(100);
+    return rows;
+  });
+
+  for (const direction of ["undo", "redo"] as const) {
+    app.post(`/api/canvas/${direction}`, async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      const body = historyCommandSchema.parse(request.body);
+      if (await findAction(db, auth.campaignId, body.actionId))
+        return reply.code(200).send({ duplicate: true });
+      const desiredStatus = direction === "undo" ? "APPLIED" : "UNDONE";
+      const [command] = await db
+        .select()
+        .from(actionJournal)
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, body.sceneId),
+            eq(actionJournal.status, desiredStatus),
+            auth.role === "GM"
+              ? undefined
+              : and(
+                  eq(actionJournal.actorMembershipId, auth.membershipId),
+                  eq(actionJournal.scope, "PUBLIC"),
+                ),
+          ),
+        )
+        .orderBy(desc(actionJournal.sequence))
+        .limit(1);
+      if (!command)
+        return reply.code(404).send({ error: "HISTORY_ACTION_NOT_FOUND" });
+      const snapshot = direction === "undo" ? command.before : command.after;
+      const saved = await db.transaction(async (tx) => {
+        let targetRevision = command.currentRevision;
+        if (command.targetType === "DRAWING") {
+          if (snapshot === null) {
+            const [deleted] = await tx
+              .delete(drawings)
+              .where(
+                and(
+                  eq(drawings.id, command.targetId),
+                  targetRevision === null
+                    ? undefined
+                    : eq(drawings.revision, targetRevision),
+                ),
+              )
+              .returning();
+            if (!deleted) return null;
+          } else {
+            const drawing = snapshot as typeof drawings.$inferSelect;
+            const [existing] = await tx
+              .select()
+              .from(drawings)
+              .where(eq(drawings.id, command.targetId))
+              .limit(1);
+            if (existing) {
+              if (
+                targetRevision === null ||
+                existing.revision !== targetRevision
+              )
+                return null;
+              const [updated] = await tx
+                .update(drawings)
+                .set({
+                  points: drawing.points,
+                  color: drawing.color,
+                  x: drawing.x,
+                  y: drawing.y,
+                  revision: existing.revision + 1,
+                  updatedAt: new Date(),
+                })
+                .where(
+                  and(
+                    eq(drawings.id, command.targetId),
+                    eq(drawings.revision, existing.revision),
+                  ),
+                )
+                .returning();
+              if (!updated) return null;
+              targetRevision = updated.revision;
+            } else {
+              const nextRevision = (targetRevision ?? drawing.revision) + 1;
+              const [restored] = await tx
+                .insert(drawings)
+                .values({
+                  id: command.targetId,
+                  sceneId: drawing.sceneId,
+                  authorMembershipId: drawing.authorMembershipId,
+                  points: drawing.points,
+                  color: drawing.color,
+                  x: drawing.x,
+                  y: drawing.y,
+                  revision: nextRevision,
+                })
+                .returning();
+              if (!restored) return null;
+              targetRevision = restored.revision;
+            }
+          }
+        } else if (command.targetType === "TOKEN") {
+          if (snapshot === null) {
+            const [deleted] = await tx
+              .delete(tokens)
+              .where(
+                and(
+                  eq(tokens.id, command.targetId),
+                  command.currentRevision === null
+                    ? undefined
+                    : eq(tokens.revision, command.currentRevision),
+                ),
+              )
+              .returning();
+            if (!deleted) return null;
+            targetRevision = deleted.revision;
+          } else if (
+            command.type === "TOKEN_DELETE" ||
+            command.type === "TOKEN_CREATE"
+          ) {
+            const token = snapshot as typeof tokens.$inferSelect;
+            const [existing] = await tx
+              .select({ id: tokens.id })
+              .from(tokens)
+              .where(eq(tokens.id, command.targetId))
+              .limit(1);
+            if (existing) return null;
+            const nextRevision = (targetRevision ?? token.revision) + 1;
+            const [restored] = await tx
+              .insert(tokens)
+              .values({
+                id: token.id,
+                definitionId: token.definitionId,
+                sceneId: token.sceneId,
+                characterId: token.characterId,
+                ownerMembershipId: token.ownerMembershipId,
+                assetId: token.assetId,
+                levelId: token.levelId,
+                layer: token.layer,
+                name: token.name,
+                x: token.x,
+                y: token.y,
+                z: token.z,
+                width: token.width,
+                height: token.height,
+                rotation: token.rotation,
+                visible: token.visible,
+                locked: token.locked,
+                revision: nextRevision,
+              })
+              .returning();
+            if (!restored) return null;
+            targetRevision = restored.revision;
+          } else {
+            const values = snapshot as {
+              layer?: "MAP" | "GM" | "PLAYER";
+              x?: number;
+              y?: number;
+              z?: number;
+              levelId?: string | null;
+            } | null;
+            if (!values || targetRevision === null) return null;
+            const [updated] = await tx
+              .update(tokens)
+              .set({
+                ...(values.layer ? { layer: values.layer } : {}),
+                ...(values.x !== undefined ? { x: values.x } : {}),
+                ...(values.y !== undefined ? { y: values.y } : {}),
+                ...(values.z !== undefined ? { z: values.z } : {}),
+                ...(values.levelId !== undefined
+                  ? { levelId: values.levelId }
+                  : {}),
+                revision: targetRevision + 1,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(tokens.id, command.targetId),
+                  eq(tokens.revision, targetRevision),
+                ),
+              )
+              .returning();
+            if (!updated) return null;
+            targetRevision = updated.revision;
+          }
+        } else if (command.targetType === "FOG") {
+          if (snapshot === null) {
+            const [deleted] = await tx
+              .delete(fogReveals)
+              .where(eq(fogReveals.id, command.targetId))
+              .returning();
+            if (!deleted) return null;
+          } else {
+            const fog = snapshot as typeof fogReveals.$inferSelect;
+            const [restored] = await tx
+              .insert(fogReveals)
+              .values({
+                id: command.targetId,
+                sceneId: fog.sceneId,
+                x: fog.x,
+                y: fog.y,
+                width: fog.width,
+                height: fog.height,
+                operation: fog.operation,
+                revision: (targetRevision ?? fog.revision) + 1,
+              })
+              .returning();
+            if (!restored) return null;
+            targetRevision = restored.revision;
+          }
+        } else if (command.targetType === "SCENE") {
+          if (targetRevision === null || snapshot === null) return null;
+          const values = snapshot as {
+            grid: typeof scenes.$inferSelect.grid;
+            mapScale: number;
+          };
+          const [updated] = await tx
+            .update(scenes)
+            .set({
+              grid: values.grid,
+              mapScale: values.mapScale,
+              revision: targetRevision + 1,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(scenes.id, command.targetId),
+                eq(scenes.revision, targetRevision),
+                eq(scenes.campaignId, auth.campaignId),
+              ),
+            )
+            .returning();
+          if (!updated) return null;
+          targetRevision = updated.revision;
+        } else return null;
+        const nextStatus = direction === "undo" ? "UNDONE" : "APPLIED";
+        const [journal] = await tx
+          .update(actionJournal)
+          .set({
+            status: nextStatus,
+            currentRevision: targetRevision,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(actionJournal.sequence, command.sequence),
+              eq(actionJournal.status, desiredStatus),
+            ),
+          )
+          .returning();
+        if (!journal) return null;
+        const [event] = await tx
+          .insert(gameEvents)
+          .values({
+            campaignId: auth.campaignId,
+            actionId: body.actionId,
+            membershipId: auth.membershipId,
+            type: `canvas.${direction}`,
+            entityType: command.targetType.toLowerCase(),
+            entityId: command.targetId,
+            entityRevision: targetRevision,
+            payload: { journalSequence: command.sequence },
+          })
+          .returning();
+        if (!event) throw new Error("EVENT_RECORD_FAILED");
+        return { journal, event };
+      });
+      if (!saved)
+        return reply.code(409).send({ error: "HISTORY_CONFLICT_RESYNC" });
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return {
+        sequence: saved.journal.sequence,
+        status: saved.journal.status,
+        eventSequence: Number(saved.event.sequence),
+      };
+    });
+  }
+
+  app.patch("/api/scenes/:id/canvas", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = sceneCanvasConfigSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(scenes)
+      .where(and(eq(scenes.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply.code(409).send({ error: "SCENE_CONFLICT" });
+    const [updated] = await db.transaction(async (tx) => {
+      await tx
+        .update(actionJournal)
+        .set({ status: "INVALIDATED", updatedAt: new Date() })
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.sceneId, id),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.status, "UNDONE"),
+          ),
+        );
+      const [next] = await tx
+        .update(scenes)
+        .set({
+          ...(body.grid ? { grid: body.grid } : {}),
+          ...(body.mapScale !== undefined ? { mapScale: body.mapScale } : {}),
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(scenes.id, id), eq(scenes.revision, current.revision)))
+        .returning();
+      if (!next) return [];
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "scene.canvas",
+        entityType: "scene",
+        entityId: id,
+        entityRevision: next.revision,
+        payload: { grid: next.grid, mapScale: next.mapScale },
+      });
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: id,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        type: "SCENE_CANVAS",
+        targetType: "SCENE",
+        targetId: id,
+        before: { grid: current.grid, mapScale: current.mapScale },
+        after: { grid: next.grid, mapScale: next.mapScale },
+        beforeRevision: current.revision,
+        afterRevision: next.revision,
+        currentRevision: next.revision,
+      });
+      return [next];
+    });
+    if (!updated) return reply.code(409).send({ error: "SCENE_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
   });
 
   app.post("/api/chat", async (request, reply) => {

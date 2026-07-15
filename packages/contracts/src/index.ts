@@ -21,7 +21,7 @@ export type AssetKind = z.infer<typeof assetKindSchema>;
 export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
 
 export const actionIdSchema = z.string().uuid();
-export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYERS"]);
+export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
 export const rollActionKindSchema = z.enum(["HIT", "DAMAGE", "CUSTOM"]);
 export const modifierSourceSchema = z.discriminatedUnion("type", [
@@ -194,7 +194,7 @@ export const createTokenSchema = z.object({
   rotation: z.number().finite().default(0),
   visible: z.boolean().default(true),
   locked: z.boolean().default(false),
-  layer: tokenLayerSchema.default("PLAYERS"),
+  layer: tokenLayerSchema.default("PLAYER"),
   controllerMembershipIds: z.array(z.string().uuid()).max(50).optional(),
 });
 
@@ -224,11 +224,62 @@ export const createFogRevealSchema = z.object({
   y: z.number().finite(),
   width: z.number().positive().max(16384),
   height: z.number().positive().max(16384),
+  operation: z.enum(["REVEAL", "COVER"]).default("REVEAL"),
 });
 
 export const undoFogRevealSchema = z.object({
   actionId: actionIdSchema,
   sceneId: z.string().uuid(),
+});
+
+export const historyCommandSchema = z.object({
+  actionId: actionIdSchema,
+  sceneId: z.string().uuid(),
+});
+export const changeTokenLayerSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  layer: tokenLayerSchema,
+});
+export const drawingPointsSchema = z
+  .array(z.number().finite().min(-32768).max(32768))
+  .min(4)
+  .max(4096)
+  .refine((points) => points.length % 2 === 0, "points must be x/y pairs");
+export const createDrawingSchema = z.object({
+  actionId: actionIdSchema,
+  sceneId: z.string().uuid(),
+  points: drawingPointsSchema,
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  x: z.number().finite().default(0),
+  y: z.number().finite().default(0),
+});
+export const updateDrawingSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+});
+export const drawingCommandSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+});
+export const sceneCanvasConfigSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  grid: gridSchema.optional(),
+  mapScale: z.number().finite().min(0.1).max(10).optional(),
+});
+export const rulerUpdateSchema = z.object({
+  sceneId: z.string().uuid(),
+  startX: z.number().finite(),
+  startY: z.number().finite(),
+  endX: z.number().finite(),
+  endY: z.number().finite(),
 });
 
 export const characterUpdateSchema = z.object({
@@ -410,6 +461,8 @@ export interface SceneDto {
   width: number;
   height: number;
   grid: z.infer<typeof gridSchema>;
+  mapScale?: number;
+  revision?: number;
   active: boolean;
 }
 
@@ -443,6 +496,20 @@ export interface FogRevealDto {
   y: number;
   width: number;
   height: number;
+  operation?: "REVEAL" | "COVER";
+  sequence?: number;
+  revision?: number;
+}
+
+export interface DrawingDto {
+  id: string;
+  sceneId: string;
+  authorMembershipId: string;
+  points: number[];
+  color: string;
+  x: number;
+  y: number;
+  revision: number;
 }
 
 export interface ChatMessageDto {
@@ -497,6 +564,7 @@ export interface GameSnapshot {
   scenes: SceneDto[];
   tokens: TokenDto[];
   fogReveals: FogRevealDto[];
+  drawings?: DrawingDto[];
   messages: ChatMessageDto[];
   assets: AssetDto[];
   audio: AudioStateDto;
@@ -547,6 +615,14 @@ export interface ServerToClientEvents {
   "character:updated": (event: EventEnvelope<CharacterDto>) => void;
   "audio:state": (event: EventEnvelope<AudioStateDto>) => void;
   "map:ping": (ping: MapPing) => void;
+  "ruler:updated": (
+    ruler: z.infer<typeof rulerUpdateSchema> & {
+      membershipId: string;
+      displayName: string;
+      distance: number;
+    },
+  ) => void;
+  "ruler:cleared": (ruler: { sceneId: string; membershipId: string }) => void;
   "server:error": (error: { code: string; message: string }) => void;
 }
 
@@ -561,5 +637,7 @@ export interface ClientToServerEvents {
     ack?: (result: CommandAck<AudioStateDto>) => void,
   ) => void;
   "map:ping": (ping: { sceneId: string; x: number; y: number }) => void;
+  "ruler:update": (ruler: z.infer<typeof rulerUpdateSchema>) => void;
+  "ruler:clear": (ruler: { sceneId: string }) => void;
   "game:resync": (knownSequence?: number) => void;
 }

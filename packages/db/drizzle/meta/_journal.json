@@ -50,6 +50,13 @@
       "when": 1784077729893,
       "tag": "0006_workable_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784079730392,
+      "tag": "0007_certain_network",
+      "breakpoints": true
     }
   ]
 }

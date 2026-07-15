@@ -20,4 +20,21 @@ describe("player fog invariants", () => {
       isRectFullyRevealed({ x: 170, y: 250, width: 20, height: 20 }, reveals),
     ).toBe(false);
   });
+
+  it("applies reveal and cover rectangles in durable order", () => {
+    const token = { x: 10, y: 10, width: 10, height: 10 };
+    expect(
+      isRectFullyRevealed(token, [
+        { x: 0, y: 0, width: 100, height: 100, operation: "REVEAL" },
+        { x: 5, y: 5, width: 30, height: 30, operation: "COVER" },
+      ]),
+    ).toBe(false);
+    expect(
+      isRectFullyRevealed(token, [
+        { x: 0, y: 0, width: 100, height: 100, operation: "REVEAL" },
+        { x: 5, y: 5, width: 30, height: 30, operation: "COVER" },
+        { x: 8, y: 8, width: 20, height: 20, operation: "REVEAL" },
+      ]),
+    ).toBe(true);
+  });
 });

@@ -23,10 +23,12 @@ describe("initial PostgreSQL migration", () => {
     expect(result.rows.map((row) => row.table_name)).toEqual(
       expect.arrayContaining([
         "assets",
+        "action_journal",
         "audio_states",
         "campaigns",
         "characters",
         "chat_messages",
+        "drawings",
         "fog_reveals",
         "game_events",
         "invites",

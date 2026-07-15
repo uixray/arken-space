@@ -35,10 +35,16 @@ export const messageKindEnum = pgEnum("message_kind", [
   "DICE",
   "SYSTEM",
 ]);
-export const tokenLayerEnum = pgEnum("token_layer", ["MAP", "GM", "PLAYERS"]);
+export const tokenLayerEnum = pgEnum("token_layer", ["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindEnum = pgEnum("catalog_entry_kind", [
   "SKILL",
   "ABILITY",
+]);
+export const fogOperationEnum = pgEnum("fog_operation", ["REVEAL", "COVER"]);
+export const journalStatusEnum = pgEnum("journal_status", [
+  "APPLIED",
+  "UNDONE",
+  "INVALIDATED",
 ]);
 
 export const campaigns = pgTable("campaigns", {
@@ -224,6 +230,8 @@ export const scenes = pgTable(
         opacity: number;
       }>()
       .notNull(),
+    mapScale: doublePrecision("map_scale").notNull().default(1),
+    revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -303,7 +311,7 @@ export const tokens = pgTable(
       onDelete: "set null",
     }),
     levelId: uuid("level_id"),
-    layer: tokenLayerEnum("layer").notNull().default("PLAYERS"),
+    layer: tokenLayerEnum("layer").notNull().default("PLAYER"),
     name: text("name").notNull(),
     x: doublePrecision("x").notNull(),
     y: doublePrecision("y").notNull(),
@@ -332,11 +340,39 @@ export const fogReveals = pgTable(
     y: doublePrecision("y").notNull(),
     width: doublePrecision("width").notNull(),
     height: doublePrecision("height").notNull(),
+    operation: fogOperationEnum("operation").notNull().default("REVEAL"),
+    sequence: bigserial("sequence", { mode: "number" }).notNull(),
+    revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (table) => [index("fog_scene_idx").on(table.sceneId)],
+);
+
+export const drawings = pgTable(
+  "drawings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sceneId: uuid("scene_id")
+      .notNull()
+      .references(() => scenes.id, { onDelete: "cascade" }),
+    authorMembershipId: uuid("author_membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    points: jsonb("points").$type<number[]>().notNull(),
+    color: text("color").notNull().default("#ffffff"),
+    x: doublePrecision("x").notNull().default(0),
+    y: doublePrecision("y").notNull().default(0),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("drawings_scene_idx").on(table.sceneId)],
 );
 
 export const invites = pgTable(
@@ -477,6 +513,49 @@ export const gameEvents = pgTable(
       table.actionId,
     ),
     index("game_events_campaign_sequence_idx").on(
+      table.campaignId,
+      table.sequence,
+    ),
+  ],
+);
+
+export const actionJournal = pgTable(
+  "action_journal",
+  {
+    sequence: bigserial("sequence", { mode: "number" }).primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    sceneId: uuid("scene_id").references(() => scenes.id, {
+      onDelete: "cascade",
+    }),
+    actorMembershipId: uuid("actor_membership_id")
+      .notNull()
+      .references(() => memberships.id),
+    actionId: uuid("action_id").notNull(),
+    scope: text("scope").notNull().default("PUBLIC"),
+    type: text("type").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: uuid("target_id").notNull(),
+    before: jsonb("before").$type<Record<string, unknown> | null>(),
+    after: jsonb("after").$type<Record<string, unknown> | null>(),
+    beforeRevision: integer("before_revision"),
+    afterRevision: integer("after_revision"),
+    currentRevision: integer("current_revision"),
+    status: journalStatusEnum("status").notNull().default("APPLIED"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("action_journal_campaign_action_idx").on(
+      table.campaignId,
+      table.actionId,
+    ),
+    index("action_journal_campaign_sequence_idx").on(
       table.campaignId,
       table.sequence,
     ),

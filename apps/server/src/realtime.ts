@@ -1,8 +1,10 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { Server } from "socket.io";
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import {
   audioStates,
+  actionJournal,
   campaigns,
   gameEvents,
   memberships,
@@ -18,7 +20,11 @@ import type {
   ServerToClientEvents,
   TokenDto,
 } from "@arken/contracts";
-import { audioStateUpdateSchema, moveTokenSchema } from "@arken/contracts";
+import {
+  audioStateUpdateSchema,
+  moveTokenSchema,
+  rulerUpdateSchema,
+} from "@arken/contracts";
 import type { AuthContext } from "./auth.js";
 import { authFromSessionToken } from "./auth.js";
 import { env } from "./env.js";
@@ -265,6 +271,17 @@ export function registerRealtime(
       }
 
       const result = await db.transaction(async (tx) => {
+        await tx
+          .update(actionJournal)
+          .set({ status: "INVALIDATED", updatedAt: new Date() })
+          .where(
+            and(
+              eq(actionJournal.campaignId, auth.campaignId),
+              eq(actionJournal.sceneId, current.sceneId),
+              eq(actionJournal.actorMembershipId, auth.membershipId),
+              eq(actionJournal.status, "UNDONE"),
+            ),
+          );
         const [updated] = await tx
           .update(tokens)
           .set({
@@ -301,6 +318,31 @@ export function registerRealtime(
             },
           })
           .returning();
+        await tx.insert(actionJournal).values({
+          campaignId: auth.campaignId,
+          sceneId: current.sceneId,
+          actorMembershipId: auth.membershipId,
+          actionId: command.actionId,
+          scope: current.layer === "GM" ? "GM" : "PUBLIC",
+          type: "TOKEN_MOVE",
+          targetType: "TOKEN",
+          targetId: current.id,
+          before: {
+            x: current.x,
+            y: current.y,
+            z: current.z,
+            levelId: current.levelId,
+          },
+          after: {
+            x: updated.x,
+            y: updated.y,
+            z: updated.z,
+            levelId: updated.levelId,
+          },
+          beforeRevision: current.revision,
+          afterRevision: updated.revision,
+          currentRevision: updated.revision,
+        });
         return event ? { event, updated } : null;
       });
 
@@ -436,6 +478,51 @@ export function registerRealtime(
         status: "ACCEPTED",
         sequence: result.event.sequence,
         data: dto,
+      });
+    });
+
+    socket.on("ruler:update", async (input) => {
+      const parsed = rulerUpdateSchema.safeParse(input);
+      if (!parsed.success) return;
+      const [scene] = await db
+        .select({ id: scenes.id, grid: scenes.grid })
+        .from(scenes)
+        .where(
+          and(
+            eq(scenes.id, parsed.data.sceneId),
+            eq(scenes.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!scene) return;
+      const dx = parsed.data.endX - parsed.data.startX;
+      const dy = parsed.data.endY - parsed.data.startY;
+      io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
+        ...parsed.data,
+        membershipId: auth.membershipId,
+        displayName: auth.displayName,
+        distance:
+          Math.hypot(dx, dy) / (scene.grid.enabled ? scene.grid.size : 1),
+      });
+    });
+
+    socket.on("ruler:clear", async (input) => {
+      const parsed = z.object({ sceneId: z.string().uuid() }).safeParse(input);
+      if (!parsed.success) return;
+      const [scene] = await db
+        .select({ id: scenes.id })
+        .from(scenes)
+        .where(
+          and(
+            eq(scenes.id, parsed.data.sceneId),
+            eq(scenes.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!scene) return;
+      io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
+        sceneId: scene.id,
+        membershipId: auth.membershipId,
       });
     });
 

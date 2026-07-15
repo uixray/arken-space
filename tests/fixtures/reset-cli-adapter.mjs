@@ -18,6 +18,8 @@ const cleared = {
   invites: 0,
   chatMessages: 0,
   audioStates: 0,
+  actionJournal: 0,
+  drawings: 0,
   gameEvents: 0,
   tokens: 0,
   fogReveals: 0,

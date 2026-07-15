@@ -7,6 +7,7 @@ import {
   characterCatalogEntries,
   characters,
   chatMessages,
+  drawings,
   fogReveals,
   gameEvents,
   memberships,
@@ -41,6 +42,7 @@ export async function buildSnapshot(
     catalogRows,
     assignedRows,
     fogRows,
+    drawingRows,
     assetRows,
     messageRows,
     audioRows,
@@ -95,7 +97,14 @@ export async function buildSnapshot(
       .select({ fog: fogReveals })
       .from(fogReveals)
       .innerJoin(scenes, eq(fogReveals.sceneId, scenes.id))
-      .where(eq(scenes.campaignId, auth.campaignId)),
+      .where(eq(scenes.campaignId, auth.campaignId))
+      .orderBy(asc(fogReveals.sequence)),
+    db
+      .select({ drawing: drawings })
+      .from(drawings)
+      .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
+      .where(eq(scenes.campaignId, auth.campaignId))
+      .orderBy(asc(drawings.createdAt)),
     db
       .select()
       .from(assets)
@@ -242,6 +251,8 @@ export async function buildSnapshot(
       width: scene.width,
       height: scene.height,
       grid: scene.grid,
+      mapScale: scene.mapScale,
+      revision: scene.revision,
       active: campaign.activeSceneId === scene.id,
     })),
     catalogEntries:
@@ -283,6 +294,21 @@ export async function buildSnapshot(
         y: fog.y,
         width: fog.width,
         height: fog.height,
+        operation: fog.operation,
+        sequence: fog.sequence,
+        revision: fog.revision,
+      })),
+    drawings: drawingRows
+      .filter(({ drawing }) => visibleSceneIds.has(drawing.sceneId))
+      .map(({ drawing }) => ({
+        id: drawing.id,
+        sceneId: drawing.sceneId,
+        authorMembershipId: drawing.authorMembershipId,
+        points: drawing.points,
+        color: drawing.color,
+        x: drawing.x,
+        y: drawing.y,
+        revision: drawing.revision,
       })),
     messages: messageRows.reverse().map(({ message, displayName }) => ({
       id: message.id,

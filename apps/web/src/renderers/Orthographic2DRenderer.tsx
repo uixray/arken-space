@@ -11,6 +11,7 @@ import {
 } from "react-konva";
 import useImage from "use-image";
 import type Konva from "konva";
+import { api } from "../api";
 import type { SceneRendererProps } from "./SceneRenderer";
 import { fogOpacity, isRectFullyRevealed } from "./fog";
 
@@ -81,6 +82,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [showGmLayer, setShowGmLayer] = useState(true);
+  const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
+    null,
+  );
   const [fogStart, setFogStart] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -90,6 +95,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     width: number;
     height: number;
   } | null>(null);
+  const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
+  const [rulerStart, setRulerStart] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [mapImage] = useImage(
     props.assets.find((asset) => asset.id === props.scene.mapAssetId)?.url ??
       "",
@@ -141,13 +150,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
 
   const handleFogDown = () => {
-    if (props.tool !== "FOG" || props.role !== "GM") return;
+    if ((props.tool !== "FOG" && props.tool !== "COVER") || props.role !== "GM")
+      return;
     const point = pointerInWorld();
     if (point) setFogStart(point);
   };
 
   const handleFogMove = () => {
-    if (!fogStart || props.tool !== "FOG") return;
+    if (!fogStart || (props.tool !== "FOG" && props.tool !== "COVER")) return;
     const point = pointerInWorld();
     if (!point) return;
     setFogDraft({
@@ -171,12 +181,61 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (point) props.onPing(point);
   };
 
+  const handlePointerDown = () => {
+    handleFogDown();
+    const point = pointerInWorld();
+    if (!point) return;
+    if (props.tool === "DRAW") setDrawingPoints([point.x, point.y]);
+    if (props.tool === "RULER") setRulerStart(point);
+  };
+
+  const handlePointerMove = () => {
+    handleFogMove();
+    const point = pointerInWorld();
+    if (!point) return;
+    if (props.tool === "DRAW" && drawingPoints.length)
+      setDrawingPoints((current) => [...current, point.x, point.y]);
+    if (props.tool === "RULER" && rulerStart)
+      props.socket?.emit("ruler:update", {
+        sceneId: props.scene.id,
+        startX: rulerStart.x,
+        startY: rulerStart.y,
+        endX: point.x,
+        endY: point.y,
+      });
+  };
+
+  const handlePointerUp = async () => {
+    await handleFogUp();
+    if (props.tool === "DRAW" && drawingPoints.length >= 4)
+      await props.onDrawingCreate({ points: drawingPoints, color: "#f0c75e" });
+    if (props.tool === "RULER")
+      props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
+    setDrawingPoints([]);
+    setRulerStart(null);
+  };
+
   const assetUrl = (assetId: string | null) =>
     props.assets.find((asset) => asset.id === assetId)?.url;
   const snap = (value: number) =>
     props.scene.grid.enabled
       ? Math.round(value / props.scene.grid.size) * props.scene.grid.size
       : value;
+  const drawingRevealed = (points: number[], x: number, y: number) => {
+    const xs = points.filter((_, index) => index % 2 === 0);
+    const ys = points.filter((_, index) => index % 2 === 1);
+    const minX = Math.min(...xs) + x;
+    const minY = Math.min(...ys) + y;
+    return isRectFullyRevealed(
+      {
+        x: minX,
+        y: minY,
+        width: Math.max(...xs) - Math.min(...xs),
+        height: Math.max(...ys) - Math.min(...ys),
+      },
+      props.fogReveals,
+    );
+  };
 
   const renderFog = () => (
     <Layer listening={false}>
@@ -194,7 +253,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           width={fog.width}
           height={fog.height}
           fill="#000"
-          globalCompositeOperation="destination-out"
+          globalCompositeOperation={
+            fog.operation === "COVER" ? "source-over" : "destination-out"
+          }
         />
       ))}
       {fogDraft && (
@@ -224,9 +285,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             setPosition({ x: event.target.x(), y: event.target.y() });
         }}
         onWheel={handleWheel}
-        onMouseDown={handleFogDown}
-        onMouseMove={handleFogMove}
-        onMouseUp={handleFogUp}
+        onMouseDown={handlePointerDown}
+        onMouseMove={handlePointerMove}
+        onMouseUp={handlePointerUp}
         onClick={handleClick}
       >
         <Layer listening={false}>
@@ -251,37 +312,100 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           )}
         </Layer>
 
-        {props.role === "PLAYER" && renderFog()}
+        <Layer>
+          {props.tokens
+            .filter((token) => token.layer === "MAP")
+            .map((token) => (
+              <Group
+                key={token.id}
+                x={token.x}
+                y={token.y}
+                listening={props.role === "GM"}
+                onContextMenu={(event) => {
+                  event.evt.preventDefault();
+                  if (props.role !== "GM") return;
+                  void api(`/api/tokens/${token.id}/layer`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision: token.revision,
+                      layer: "PLAYER",
+                    }),
+                  });
+                }}
+              >
+                <Circle
+                  radius={Math.min(token.width, token.height) / 2}
+                  x={token.width / 2}
+                  y={token.height / 2}
+                  fill="#76705f"
+                />
+                <Text text={token.name} y={token.height + 4} fill="#eee6d5" />
+              </Group>
+            ))}
+        </Layer>
 
         <Layer>
-          {props.pings.map((ping) => (
-            <Group
-              key={`${ping.membershipId}-${ping.createdAt}`}
-              listening={false}
-            >
-              <Circle
-                x={ping.x}
-                y={ping.y}
-                radius={22 / scale}
-                stroke="#f0c75e"
-                strokeWidth={3 / scale}
-              />
-              <Text
-                x={ping.x + 28 / scale}
-                y={ping.y - 8 / scale}
-                text={ping.displayName}
-                fill="#f0c75e"
-                fontSize={14 / scale}
-              />
-            </Group>
+          {props.drawings.map((drawing) => (
+            <Line
+              key={drawing.id}
+              points={drawing.points}
+              x={drawing.x}
+              y={drawing.y}
+              stroke={drawing.color}
+              strokeWidth={3 / scale}
+              lineCap="round"
+              lineJoin="round"
+              listening={
+                props.role === "GM" ||
+                drawingRevealed(drawing.points, drawing.x, drawing.y)
+              }
+              draggable={
+                (props.role === "GM" ||
+                  drawing.authorMembershipId === props.membershipId) &&
+                (props.role === "GM" ||
+                  drawingRevealed(drawing.points, drawing.x, drawing.y))
+              }
+              onClick={() => setSelectedDrawingId(drawing.id)}
+              onDragEnd={(event) =>
+                void api(`/api/drawings/${drawing.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    revision: drawing.revision,
+                    x: event.target.x(),
+                    y: event.target.y(),
+                  }),
+                })
+              }
+            />
           ))}
+          {drawingPoints.length >= 4 && (
+            <Line
+              points={drawingPoints}
+              stroke="#f0c75e"
+              strokeWidth={3 / scale}
+              lineCap="round"
+              lineJoin="round"
+            />
+          )}
+        </Layer>
+
+        {renderFog()}
+
+        <Layer>
           {props.tokens
+            .filter((token) => token.layer !== "MAP")
+            .filter((token) => token.layer !== "GM" || showGmLayer)
             .filter((token) => token.visible || props.role === "GM")
             .filter(
               (token) =>
                 props.role === "GM" ||
                 token.controllerMembershipIds.includes(props.membershipId) ||
                 isRectFullyRevealed(token, props.fogReveals),
+            )
+            .sort((a, b) =>
+              a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
             )
             .map((token) => {
               const canMove =
@@ -297,7 +421,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 height: token.height,
                 rotation: token.rotation,
                 draggable: canMove,
-                opacity: token.visible ? 1 : 0.45,
+                opacity: token.layer === "GM" ? 0.45 : token.visible ? 1 : 0.45,
                 onDragMove: (event: Konva.KonvaEventObject<DragEvent>) =>
                   props.socket?.emit("token:moving", {
                     actionId: crypto.randomUUID(),
@@ -331,7 +455,26 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 },
               };
               return (
-                <Group key={token.id}>
+                <Group
+                  key={token.id}
+                  onContextMenu={(event) => {
+                    event.evt.preventDefault();
+                    if (props.role !== "GM") return;
+                    const layers = ["MAP", "PLAYER", "GM"] as const;
+                    const layer =
+                      layers[
+                        (layers.indexOf(token.layer) + 1) % layers.length
+                      ]!;
+                    void api(`/api/tokens/${token.id}/layer`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision: token.revision,
+                        layer,
+                      }),
+                    });
+                  }}
+                >
                   {url ? (
                     <TokenImage src={url} {...common} />
                   ) : (
@@ -370,9 +513,130 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             })}
         </Layer>
 
-        {props.role === "GM" && renderFog()}
+        <Layer listening={false}>
+          {props.rulers.map((ruler) => (
+            <Group key={ruler.membershipId}>
+              <Line
+                points={[ruler.startX, ruler.startY, ruler.endX, ruler.endY]}
+                stroke="#7ee0ff"
+                strokeWidth={2 / scale}
+              />
+              <Text
+                x={ruler.endX}
+                y={ruler.endY}
+                text={`${ruler.displayName}: ${ruler.distance.toFixed(1)}`}
+                fill="#7ee0ff"
+                fontSize={13 / scale}
+              />
+            </Group>
+          ))}
+          {props.pings.map((ping) => (
+            <Group key={`${ping.membershipId}-${ping.createdAt}`}>
+              <Circle
+                x={ping.x}
+                y={ping.y}
+                radius={22 / scale}
+                stroke="#f0c75e"
+                strokeWidth={3 / scale}
+              />
+              <Text
+                x={ping.x + 28 / scale}
+                y={ping.y - 8 / scale}
+                text={ping.displayName}
+                fill="#f0c75e"
+                fontSize={14 / scale}
+              />
+            </Group>
+          ))}
+        </Layer>
       </Stage>
-      <div className="map-scale">{Math.round(scale * 100)}%</div>
+      <div className="map-scale">
+        <button
+          onClick={() => setScale((value) => Math.max(0.25, value - 0.1))}
+        >
+          −
+        </button>
+        <input
+          aria-label="Масштаб карты"
+          type="range"
+          min="0.25"
+          max="3"
+          step="0.05"
+          value={scale}
+          onChange={(event) => setScale(Number(event.target.value))}
+        />
+        <button onClick={() => setScale((value) => Math.min(3, value + 0.1))}>
+          +
+        </button>
+        {Math.round(scale * 100)}%
+        {props.role === "GM" && (
+          <label>
+            <input
+              type="checkbox"
+              checked={showGmLayer}
+              onChange={(event) => setShowGmLayer(event.target.checked)}
+            />
+            GM
+          </label>
+        )}
+        {(() => {
+          const drawing = props.drawings.find(
+            (item) => item.id === selectedDrawingId,
+          );
+          if (
+            !drawing ||
+            (props.role !== "GM" &&
+              drawing.authorMembershipId !== props.membershipId)
+          )
+            return null;
+          return (
+            <span>
+              <button
+                onClick={() =>
+                  void api(`/api/drawings/${drawing.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision: drawing.revision,
+                      color:
+                        drawing.color === "#f0c75e" ? "#5ecbf0" : "#f0c75e",
+                    }),
+                  })
+                }
+              >
+                Цвет
+              </button>
+              <button
+                onClick={() =>
+                  void api(`/api/drawings/${drawing.id}/copy`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision: drawing.revision,
+                    }),
+                  })
+                }
+              >
+                Копировать
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedDrawingId(null);
+                  void api(`/api/drawings/${drawing.id}`, {
+                    method: "DELETE",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision: drawing.revision,
+                    }),
+                  });
+                }}
+              >
+                Удалить
+              </button>
+            </span>
+          );
+        })()}
+      </div>
     </div>
   );
 }

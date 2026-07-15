@@ -892,4 +892,178 @@ describe("Pool B HTTP boundaries", () => {
       events: 0,
     });
   });
+
+  it("persists ordered fog, drawing history, layers and scene canvas with authoritative permissions", async () => {
+    const drawingAction = crypto.randomUUID();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: drawingAction,
+        sceneId: ids.scene,
+        points: [0, 0, 16, 16],
+        color: "#ff0000",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const drawing = created.json();
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: drawingAction,
+        sceneId: ids.scene,
+        points: [2, 2, 20, 20],
+        color: "#00ff00",
+      },
+    });
+    expect(replay.json()).toEqual({ duplicate: true });
+    const foreignEdit = await app.inject({
+      method: "PATCH",
+      url: `/api/drawings/${drawing.id}`,
+      headers: headers(secrets.foreignPlayer),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        color: "#00ff00",
+      },
+    });
+    expect(foreignEdit.statusCode).toBe(403);
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undo.statusCode).toBe(200);
+    expect(undo.json()).toMatchObject({ status: "UNDONE" });
+    const empty = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(empty.json().drawings).toEqual([]);
+    const redo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/redo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(redo.statusCode).toBe(200);
+    expect(redo.json()).toMatchObject({ status: "APPLIED" });
+    const undoAgain = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undoAgain.statusCode).toBe(200);
+    const branch = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        points: [1, 1, 8, 8],
+        color: "#0000ff",
+      },
+    });
+    expect(branch.statusCode).toBe(201);
+    const invalidatedRedo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/redo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(invalidatedRedo.statusCode).toBe(404);
+    const reveal = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        operation: "REVEAL",
+      },
+    });
+    const cover = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        x: 20,
+        y: 20,
+        width: 20,
+        height: 20,
+        operation: "COVER",
+      },
+    });
+    expect(reveal.statusCode).toBe(201);
+    expect(cover.statusCode).toBe(201);
+    const layer = await app.inject({
+      method: "PATCH",
+      url: `/api/tokens/${ids.token}/layer`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        layer: "GM",
+      },
+    });
+    expect(layer.statusCode).toBe(200);
+    const playerLayer = await app.inject({
+      method: "PATCH",
+      url: `/api/tokens/${ids.token}/layer`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        layer: "PLAYER",
+      },
+    });
+    expect(playerLayer.statusCode).toBe(403);
+    const sceneConfig = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${ids.scene}/canvas`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        mapScale: 2,
+        grid: {
+          enabled: true,
+          size: 32,
+          offsetX: 4,
+          offsetY: 8,
+          color: "#ffffff",
+          opacity: 0.5,
+        },
+      },
+    });
+    expect(sceneConfig.statusCode).toBe(200);
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(snapshot.json().tokens).toEqual([]);
+    expect(snapshot.json().fogReveals).toMatchObject([
+      { operation: "REVEAL" },
+      { operation: "COVER" },
+    ]);
+    expect(snapshot.json().scenes[0]).toMatchObject({
+      mapScale: 2,
+      revision: 1,
+      grid: { size: 32, offsetX: 4, offsetY: 8 },
+    });
+  });
 });
