@@ -534,9 +534,7 @@ test("GM and six isolated players recover authoritative state without security l
       connections.push(await connectSocket(players[index]));
 
     await expect(
-      gmPage.locator(".stack-list button").filter({
-        hasText: "Player 1",
-      }),
+      gmPage.getByRole("button", { name: "● Player 1", exact: true }),
     ).toBeVisible();
 
     for (let index = 0; index < 5; index += 1) {
@@ -626,11 +624,14 @@ test("GM and six isolated players recover authoritative state without security l
     const ownedToken = playerOneSnapshot.tokens.find(
       (token) => token.ownerMembershipId === playerOneSnapshot.me.id,
     );
-    const coveredForeignToken = playerOneSnapshot.tokens.find(
+    const coveredForeignToken = gmInitialSnapshot.tokens.find(
       (token) => token.id === playerTokens[1]?.id,
     );
     if (!ownedToken || !coveredForeignToken)
       throw new Error("Player fog token setup not found");
+    expect(playerOneSnapshot.tokens.map((token) => token.id)).not.toContain(
+      coveredForeignToken.id,
+    );
 
     const playerTwoMap = pages[1]!.locator(".map-viewport");
     const beforePingOverlay = await playerTwoMap.screenshot();
