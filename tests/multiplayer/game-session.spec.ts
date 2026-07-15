@@ -694,7 +694,7 @@ test("GM and six isolated players recover authoritative state without security l
     const moveResults = await Promise.all([
       ...playerInitialSnapshots.map((snapshot, index) => {
         const own = snapshot.tokens.find(
-          (token) => token.ownerMembershipId === snapshot.me.id,
+          (token) => token.controllerMembershipIds.includes(snapshot.me.id),
         );
         if (!own) throw new Error("Owned token not found for player");
         return move(connections[index + 1]!.socket, own, 320 + index * 96, 384);
