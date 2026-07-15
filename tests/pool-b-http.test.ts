@@ -268,11 +268,37 @@ describe("Pool B HTTP boundaries", () => {
       },
     });
     expect(drawing.statusCode).toBe(201);
+    const layer = await app.inject({
+      method: "PATCH",
+      url: `/api/tokens/${ids.token}/layer`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        layer: "GM",
+      },
+    });
+    expect(layer.statusCode).toBe(200);
+    await db.insert(schema.actionJournal).values({
+      campaignId: ids.campaign,
+      sceneId: ids.scene,
+      actorMembershipId: ids.gm,
+      actionId: crypto.randomUUID(),
+      scope: "GM",
+      type: "TOKEN_MOVE",
+      targetType: "TOKEN",
+      targetId: ids.token,
+      before: { x: 0, y: 0, z: 0, levelId: null },
+      after: { x: 64, y: 64, z: 0, levelId: null },
+      beforeRevision: 1,
+      afterRevision: 2,
+      currentRevision: 2,
+    });
     const tokenDelete = await app.inject({
       method: "DELETE",
       url: `/api/tokens/${ids.token}`,
       headers: headers(secrets.gm),
-      payload: { actionId: crypto.randomUUID(), revision: 0 },
+      payload: { actionId: crypto.randomUUID(), revision: 1 },
     });
     expect(tokenDelete.statusCode).toBe(200);
     const deleted = await app.inject({
@@ -287,9 +313,17 @@ describe("Pool B HTTP boundaries", () => {
       .select()
       .from(schema.actionJournal)
       .where(eq(schema.actionJournal.targetId, ids.token));
-    expect(tokenHistory).toEqual([
-      expect.objectContaining({ type: "TOKEN_DELETE", status: "INVALIDATED" }),
-    ]);
+    expect(tokenHistory).toHaveLength(3);
+    expect(tokenHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "TOKEN_LAYER", status: "INVALIDATED" }),
+        expect.objectContaining({ type: "TOKEN_MOVE", status: "INVALIDATED" }),
+        expect.objectContaining({
+          type: "TOKEN_DELETE",
+          status: "INVALIDATED",
+        }),
+      ]),
+    );
     const undo = await app.inject({
       method: "POST",
       url: "/api/canvas/undo",
@@ -320,6 +354,20 @@ describe("Pool B HTTP boundaries", () => {
 
   it("audits locked cascade counts and scenes and replays definition deletion idempotently", async () => {
     const actionId = crypto.randomUUID();
+    await db.insert(schema.actionJournal).values({
+      campaignId: ids.campaign,
+      sceneId: ids.scene,
+      actorMembershipId: ids.gm,
+      actionId: crypto.randomUUID(),
+      type: "TOKEN_MOVE",
+      targetType: "TOKEN",
+      targetId: ids.token,
+      before: { x: 0, y: 0 },
+      after: { x: 64, y: 64 },
+      beforeRevision: 0,
+      afterRevision: 1,
+      currentRevision: 1,
+    });
     const deleted = await app.inject({
       method: "DELETE",
       url: `/api/token-definitions/${ids.definition}`,
@@ -336,6 +384,14 @@ describe("Pool B HTTP boundaries", () => {
         placementsRemoved: 1,
         sceneIds: [ids.scene],
       }),
+    });
+    const [moveHistory] = await db
+      .select()
+      .from(schema.actionJournal)
+      .where(eq(schema.actionJournal.targetId, ids.token));
+    expect(moveHistory).toMatchObject({
+      type: "TOKEN_MOVE",
+      status: "INVALIDATED",
     });
     const replay = await app.inject({
       method: "DELETE",

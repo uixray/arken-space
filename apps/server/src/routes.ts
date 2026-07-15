@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { and, desc, eq, gt, isNull, sql, sum } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, sql, sum } from "drizzle-orm";
 import { z } from "zod";
 import {
   activateSceneSchema,
@@ -1783,20 +1783,38 @@ export function registerRoutes(
         .from(tokens)
         .where(eq(tokens.definitionId, id));
       const sceneIds = [...new Set(placementRows.map((row) => row.sceneId))];
-      await tx
-        .update(actionJournal)
-        .set({
-          status: "INVALIDATED",
-          transitionSequence: sql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
-          updatedAt: new Date(),
-        })
+      const dependentJournalRows = await tx
+        .select({ targetId: actionJournal.targetId })
+        .from(actionJournal)
         .where(
           and(
             eq(actionJournal.campaignId, auth.campaignId),
-            sql`${actionJournal.status} in ('APPLIED', 'UNDONE')`,
+            eq(actionJournal.targetType, "TOKEN"),
             sql`(${actionJournal.before}->>'definitionId' = ${id} or ${actionJournal.after}->>'definitionId' = ${id})`,
           ),
         );
+      const affectedTokenIds = [
+        ...new Set([
+          ...placementRows.map((row) => row.id),
+          ...dependentJournalRows.map((row) => row.targetId),
+        ]),
+      ];
+      if (affectedTokenIds.length)
+        await tx
+          .update(actionJournal)
+          .set({
+            status: "INVALIDATED",
+            transitionSequence: sql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(actionJournal.campaignId, auth.campaignId),
+              eq(actionJournal.targetType, "TOKEN"),
+              inArray(actionJournal.targetId, affectedTokenIds),
+              sql`${actionJournal.status} in ('APPLIED', 'UNDONE')`,
+            ),
+          );
       const [deleted] = await tx
         .delete(tokenDefinitions)
         .where(
