@@ -1066,4 +1066,177 @@ describe("Pool B HTTP boundaries", () => {
       grid: { size: 32, offsetX: 4, offsetY: 8 },
     });
   });
+
+  it("replays two player undos in durable transition LIFO order across snapshot recovery", async () => {
+    const idsCreated: string[] = [];
+    for (const color of ["#111111", "#222222"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/drawings",
+        headers: headers(secrets.player),
+        payload: {
+          actionId: crypto.randomUUID(),
+          sceneId: ids.scene,
+          points: [0, 0, 10, 10],
+          color,
+        },
+      });
+      idsCreated.push(response.json().id);
+    }
+    for (let index = 0; index < 2; index++) {
+      const undo = await app.inject({
+        method: "POST",
+        url: "/api/canvas/undo",
+        headers: headers(secrets.player),
+        payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+      });
+      expect(undo.statusCode).toBe(200);
+    }
+    await app.close();
+    app = Fastify();
+    await app.register(cookie);
+    registerRoutes(
+      app,
+      db as never,
+      {
+        in: () => ({ fetchSockets: async () => [] }),
+        to: () => ({ emit() {} }),
+      } as never,
+    );
+    await app.ready();
+    const recoveredEmpty = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(recoveredEmpty.json().drawings).toEqual([]);
+    const firstRedo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/redo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(firstRedo.statusCode).toBe(200);
+    const recoveredFirst = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(
+      recoveredFirst.json().drawings.map((item: { id: string }) => item.id),
+    ).toEqual([idsCreated[0]]);
+    const secondRedo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/redo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(secondRedo.statusCode).toBe(200);
+    const recoveredAll = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(
+      recoveredAll.json().drawings.map((item: { id: string }) => item.id),
+    ).toEqual(idsCreated);
+    for (const x of [0, 20]) {
+      const fog = await app.inject({
+        method: "POST",
+        url: "/api/fog-reveals",
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          sceneId: ids.scene,
+          x,
+          y: 0,
+          width: 20,
+          height: 20,
+          operation: "REVEAL",
+        },
+      });
+      expect(fog.statusCode).toBe(201);
+    }
+    for (let index = 0; index < 2; index++) {
+      const undo = await app.inject({
+        method: "POST",
+        url: "/api/canvas/undo",
+        headers: headers(secrets.gm),
+        payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+      });
+      expect(undo.statusCode).toBe(200);
+    }
+    for (let count = 1; count <= 2; count++) {
+      const redo = await app.inject({
+        method: "POST",
+        url: "/api/canvas/redo",
+        headers: headers(secrets.gm),
+        payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+      });
+      expect(redo.statusCode).toBe(200);
+      const recovered = await app.inject({
+        method: "GET",
+        url: "/api/bootstrap",
+        headers: headers(secrets.gm),
+      });
+      expect(recovered.json().fogReveals).toHaveLength(count);
+    }
+  });
+
+  it("uses GM-global redo invalidation and retires physical legacy fog deletion", async () => {
+    const drawing = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        points: [0, 0, 10, 10],
+        color: "#abcdef",
+      },
+    });
+    expect(drawing.statusCode).toBe(201);
+    const gmUndo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(gmUndo.statusCode).toBe(200);
+    const fog = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        x: 0,
+        y: 0,
+        width: 20,
+        height: 20,
+        operation: "REVEAL",
+      },
+    });
+    expect(fog.statusCode).toBe(201);
+    const redo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/redo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(redo.statusCode).toBe(404);
+    const legacy = await app.inject({
+      method: "DELETE",
+      url: "/api/fog-reveals/latest",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(legacy.statusCode).toBe(410);
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(snapshot.json().fogReveals).toHaveLength(1);
+  });
 });

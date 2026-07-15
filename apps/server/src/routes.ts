@@ -33,7 +33,6 @@ import {
   inviteClaimSchema,
   rotatePlayerAccessSchema,
   replaceTokenControllersSchema,
-  undoFogRevealSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@arken/contracts";
@@ -63,6 +62,7 @@ import { DiceFormulaError, rollFormula } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
+import { invalidateRedoBranch } from "./canvas-history.js";
 import {
   assertStorageCapacity,
   displayNameFromUpload,
@@ -1163,17 +1163,7 @@ export function registerRoutes(
         return reply.code(404).send({ error: "CONTROLLER_NOT_FOUND" });
     }
     const token = await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, scene.id),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, scene.id);
       const [definition] = existingDefinition
         ? [existingDefinition]
         : await tx
@@ -1282,17 +1272,7 @@ export function registerRoutes(
         return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
     }
     const deleted = await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, row.token.sceneId),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [placement] = await tx
         .delete(tokens)
         .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
@@ -1454,17 +1434,7 @@ export function registerRoutes(
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
     const { actionId, ...revealInput } = body;
     const result = await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, scene.id),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, scene.id);
       const [reveal] = await tx
         .insert(fogReveals)
         .values(revealInput)
@@ -1513,59 +1483,10 @@ export function registerRoutes(
   app.delete("/api/fog-reveals/latest", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    if (auth.role !== "GM")
-      return reply.code(403).send({ error: "GM_REQUIRED" });
-    const body = undoFogRevealSchema.parse(request.body);
-    const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) return { ok: true, duplicate: true };
-    const [scene] = await db
-      .select({ id: scenes.id })
-      .from(scenes)
-      .where(
-        and(
-          eq(scenes.id, body.sceneId),
-          eq(scenes.campaignId, auth.campaignId),
-        ),
-      )
-      .limit(1);
-    if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-
-    const result = await db.transaction(async (tx) => {
-      const [latest] = await tx
-        .select()
-        .from(fogReveals)
-        .where(eq(fogReveals.sceneId, scene.id))
-        .orderBy(desc(fogReveals.createdAt), desc(fogReveals.id))
-        .limit(1);
-      if (!latest) return null;
-      await tx.delete(fogReveals).where(eq(fogReveals.id, latest.id));
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "fog.removed",
-          entityType: "fog",
-          entityId: latest.id,
-          payload: { fogRevealId: latest.id, sceneId: latest.sceneId },
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      return { latest, event };
+    return reply.code(410).send({
+      error: "LEGACY_FOG_UNDO_REMOVED",
+      replacement: "/api/canvas/undo",
     });
-    if (!result) return reply.code(404).send({ error: "FOG_REVEAL_NOT_FOUND" });
-    const data = {
-      fogRevealId: result.latest.id,
-      sceneId: result.latest.sceneId,
-    };
-    io.to(campaignRoom(auth.campaignId)).emit("fog:removed", {
-      sequence: Number(result.event.sequence),
-      actionId: body.actionId,
-      emittedAt: result.event.createdAt.toISOString(),
-      data,
-    });
-    return { ok: true, ...data };
   });
 
   app.patch("/api/tokens/:id/layer", async (request, reply) => {
@@ -1587,17 +1508,7 @@ export function registerRoutes(
     if (row.token.revision !== body.revision)
       return reply.code(409).send({ error: "TOKEN_CONFLICT" });
     const saved = await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, row.token.sceneId),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [updated] = await tx
         .update(tokens)
         .set({
@@ -1663,17 +1574,7 @@ export function registerRoutes(
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
     const { actionId, ...input } = body;
     const saved = await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, scene.id),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, scene.id);
       const [drawing] = await tx
         .insert(drawings)
         .values({ ...input, authorMembershipId: auth.membershipId })
@@ -1734,17 +1635,7 @@ export function registerRoutes(
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
     const { actionId, revision: _revision, ...changes } = body;
     const saved = await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, row.drawing.sceneId),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
       const [updated] = await tx
         .update(drawings)
         .set({
@@ -1813,17 +1704,7 @@ export function registerRoutes(
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
     const saved = await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, row.drawing.sceneId),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
       const [copy] = await tx
         .insert(drawings)
         .values({
@@ -1890,17 +1771,7 @@ export function registerRoutes(
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
     await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, row.drawing.sceneId),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
       const [deleted] = await tx
         .delete(drawings)
         .where(
@@ -2002,7 +1873,7 @@ export function registerRoutes(
                 ),
           ),
         )
-        .orderBy(desc(actionJournal.sequence))
+        .orderBy(desc(actionJournal.transitionSequence))
         .limit(1);
       if (!command)
         return reply.code(404).send({ error: "HISTORY_ACTION_NOT_FOUND" });
@@ -2214,6 +2085,7 @@ export function registerRoutes(
           .set({
             status: nextStatus,
             currentRevision: targetRevision,
+            transitionSequence: sql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
             updatedAt: new Date(),
           })
           .where(
@@ -2269,17 +2141,7 @@ export function registerRoutes(
     if (current.revision !== body.revision)
       return reply.code(409).send({ error: "SCENE_CONFLICT" });
     const [updated] = await db.transaction(async (tx) => {
-      await tx
-        .update(actionJournal)
-        .set({ status: "INVALIDATED", updatedAt: new Date() })
-        .where(
-          and(
-            eq(actionJournal.campaignId, auth.campaignId),
-            eq(actionJournal.sceneId, id),
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.status, "UNDONE"),
-          ),
-        );
+      await invalidateRedoBranch(tx, auth, id);
       const [next] = await tx
         .update(scenes)
         .set({

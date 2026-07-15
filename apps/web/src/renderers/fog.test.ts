@@ -37,4 +37,20 @@ describe("player fog invariants", () => {
       ]),
     ).toBe(true);
   });
+
+  it("uses exact union and partial-cover geometry for hit testing", () => {
+    const token = { x: 0, y: 0, width: 20, height: 20 };
+    expect(
+      isRectFullyRevealed(token, [
+        { x: 0, y: 0, width: 10, height: 20, operation: "REVEAL" },
+        { x: 10, y: 0, width: 10, height: 20, operation: "REVEAL" },
+      ]),
+    ).toBe(true);
+    expect(
+      isRectFullyRevealed(token, [
+        { x: 0, y: 0, width: 20, height: 20, operation: "REVEAL" },
+        { x: 5, y: 5, width: 2, height: 2, operation: "COVER" },
+      ]),
+    ).toBe(false);
+  });
 });

@@ -93,6 +93,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "transition_sequence": {
+          "name": "transition_sequence",
+          "type": "bigserial",
+          "primaryKey": false,
+          "notNull": true
+        },
         "status": {
           "name": "status",
           "type": "journal_status",

@@ -30,6 +30,7 @@ import { authFromSessionToken } from "./auth.js";
 import { env } from "./env.js";
 import { buildSnapshot } from "./snapshot.js";
 import { cookieValue } from "./security.js";
+import { invalidateRedoBranch } from "./canvas-history.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -271,17 +272,7 @@ export function registerRealtime(
       }
 
       const result = await db.transaction(async (tx) => {
-        await tx
-          .update(actionJournal)
-          .set({ status: "INVALIDATED", updatedAt: new Date() })
-          .where(
-            and(
-              eq(actionJournal.campaignId, auth.campaignId),
-              eq(actionJournal.sceneId, current.sceneId),
-              eq(actionJournal.actorMembershipId, auth.membershipId),
-              eq(actionJournal.status, "UNDONE"),
-            ),
-          );
+        await invalidateRedoBranch(tx, auth, current.sceneId);
         const [updated] = await tx
           .update(tokens)
           .set({

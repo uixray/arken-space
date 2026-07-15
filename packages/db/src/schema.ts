@@ -542,6 +542,9 @@ export const actionJournal = pgTable(
     beforeRevision: integer("before_revision"),
     afterRevision: integer("after_revision"),
     currentRevision: integer("current_revision"),
+    transitionSequence: bigserial("transition_sequence", {
+      mode: "number",
+    }).notNull(),
     status: journalStatusEnum("status").notNull().default("APPLIED"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

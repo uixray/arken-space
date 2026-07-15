@@ -17,6 +17,7 @@ CREATE TABLE "action_journal" (
 	"before_revision" integer,
 	"after_revision" integer,
 	"current_revision" integer,
+	"transition_sequence" bigserial NOT NULL,
 	"status" "journal_status" DEFAULT 'APPLIED' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
