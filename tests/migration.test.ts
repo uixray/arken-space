@@ -63,7 +63,7 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
      insert into memberships (id,campaign_id,role,display_name) values ('${gm}','${c}','GM','GM'),('${p}','${c}','PLAYER','P'),('${foreignGm}','${foreign}','GM','Foreign GM');
      insert into assets (id,campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values ('00000000-0000-0000-0000-000000000004','${c}','${p}','IMAGE','A','a','image/png',1),('00000000-0000-0000-0000-000000000012','${foreign}','${foreignGm}','IMAGE','F','f','image/png',1);
      insert into scenes (id,campaign_id,name,grid) values ('${scene}','${c}','S','{}'),('00000000-0000-0000-0000-000000000013','${foreign}','Foreign S','{}');
-     update campaigns set active_scene_id='${scene}' where id='${c}';
+     update campaigns set active_scene_id='${scene}',day=9,battle_active=true,battle_counter=4,revision=12 where id='${c}';
      insert into characters (id,campaign_id,owner_membership_id,name) values ('00000000-0000-0000-0000-000000000006','${c}','${p}','P');
      insert into tokens (scene_id,owner_membership_id,name,x,y) values ('${scene}','${p}','T',0,0);
      insert into fog_reveals (scene_id,x,y,width,height) values ('${scene}',0,0,1,1);
@@ -91,10 +91,16 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
   expect(
     (
       await database.query(
-        `select active_scene_id from campaigns where id='${c}'`,
+        `select active_scene_id,day,battle_active,battle_counter,revision from campaigns where id='${c}'`,
       )
     ).rows[0],
-  ).toMatchObject({ active_scene_id: null });
+  ).toMatchObject({
+    active_scene_id: null,
+    day: 1,
+    battle_active: false,
+    battle_counter: 0,
+    revision: 0,
+  });
   const cleared = await database.query(
     `select (select count(*) from scenes where campaign_id='${c}') scenes, (select count(*) from characters where campaign_id='${c}') characters, (select count(*) from chat_messages where campaign_id='${c}') chat`,
   );

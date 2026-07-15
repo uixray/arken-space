@@ -727,6 +727,7 @@ function SetupPanel(props: Props) {
                       dice: "1d20",
                       order: 0,
                       advantage: false,
+                      consumeUse: false,
                       modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
                     },
                     {
@@ -736,6 +737,7 @@ function SetupPanel(props: Props) {
                       dice: "1d8",
                       order: 1,
                       advantage: false,
+                      consumeUse: true,
                       modifiers: [{ type: "CHARACTERISTIC", key: "strength" }],
                     },
                   ],
@@ -762,6 +764,7 @@ function SetupPanel(props: Props) {
                       dice: "1d20",
                       order: 0,
                       advantage: false,
+                      consumeUse: false,
                       modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
                     },
                     {
@@ -771,6 +774,7 @@ function SetupPanel(props: Props) {
                       dice: "1d8",
                       order: 1,
                       advantage: false,
+                      consumeUse: true,
                       modifiers: [{ type: "ENTRY_VALUE", key: "magic" }],
                     },
                   ],

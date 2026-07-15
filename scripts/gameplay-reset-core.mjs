@@ -42,7 +42,7 @@ export function gameplayResetStatements(campaignId, gmMembershipId) {
     ["delete from chat_messages where campaign_id = $1", [campaignId]],
     ["delete from audio_states where campaign_id = $1", [campaignId]],
     [
-      "update campaigns set active_scene_id = null, updated_at = now() where id = $1",
+      "update campaigns set active_scene_id = null, day = 1, battle_active = false, battle_counter = 0, revision = 0, updated_at = now() where id = $1",
       [campaignId],
     ],
     [

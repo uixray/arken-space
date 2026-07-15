@@ -69,6 +69,10 @@ describe("isolated operator CLI boundary", () => {
         gmSessions: 1,
         playerAccessGrants: 0,
         activeSceneId: null,
+        campaignDay: 1,
+        battleActive: false,
+        battleCounter: 0,
+        campaignRevision: 0,
         foreignCampaigns: 1,
       },
     });
@@ -82,6 +86,10 @@ describe("isolated operator CLI boundary", () => {
     expect(sql.endsWith("\ncommit;")).toBe(true);
     expect(sql).toContain("RETAINED_GM_INVALID");
     expect(sql).toContain("active_scene_id = null");
+    expect(sql).toContain("day = 1");
+    expect(sql).toContain("battle_active = false");
+    expect(sql).toContain("battle_counter = 0");
+    expect(sql).toContain("revision = 0");
     expect(sql).not.toContain("$1");
     expect(sql).not.toContain("$2");
   });
@@ -127,17 +135,29 @@ describe("isolated operator CLI boundary", () => {
       );
     const player = "00000000-0000-0000-0000-000000000003";
     await database.exec(
-      `insert into campaigns(id,name) values('${campaign}','C'); insert into memberships(id,campaign_id,role,display_name) values('${gm}','${campaign}','GM','GM'),('${player}','${campaign}','PLAYER','P'); insert into assets(campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values('${campaign}','${player}','IMAGE','A','a','image/png',1);`,
+      `insert into campaigns(id,name,day,battle_active,battle_counter,revision) values('${campaign}','C',9,true,4,12); insert into memberships(id,campaign_id,role,display_name) values('${gm}','${campaign}','GM','GM'),('${player}','${campaign}','PLAYER','P'); insert into assets(campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values('${campaign}','${player}','IMAGE','A','a','image/png',1);`,
     );
     await database.exec(resetSql(campaign, gm));
     const result = await database.query<{
       players: number;
       assets: number;
       owner: string;
+      day: number;
+      battle_active: boolean;
+      battle_counter: number;
+      revision: number;
     }>(
-      `select (select count(*) from memberships where campaign_id='${campaign}' and role='PLAYER') players,(select count(*) from assets where campaign_id='${campaign}') assets,(select uploaded_by_membership_id from assets where campaign_id='${campaign}') owner`,
+      `select (select count(*) from memberships where campaign_id='${campaign}' and role='PLAYER') players,(select count(*) from assets where campaign_id='${campaign}') assets,(select uploaded_by_membership_id from assets where campaign_id='${campaign}') owner,day,battle_active,battle_counter,revision from campaigns where id='${campaign}'`,
     );
-    expect(result.rows[0]).toMatchObject({ players: 0, assets: 1, owner: gm });
+    expect(result.rows[0]).toMatchObject({
+      players: 0,
+      assets: 1,
+      owner: gm,
+      day: 1,
+      battle_active: false,
+      battle_counter: 0,
+      revision: 0,
+    });
     await database.close();
   });
 });

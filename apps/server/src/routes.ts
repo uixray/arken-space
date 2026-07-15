@@ -555,7 +555,10 @@ export function registerRoutes(
     if (!auth) return;
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
-    const body = catalogEntryCommandSchema.parse(request.body);
+    const parsedBody = catalogEntryCommandSchema.safeParse(request.body);
+    if (!parsedBody.success)
+      return reply.code(400).send({ error: "INVALID_CATALOG_ENTRY" });
+    const body = parsedBody.data;
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
     const { actionId, ...input } = body;
@@ -586,10 +589,13 @@ export function registerRoutes(
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
-    const body = catalogEntryCommandSchema
+    const parsedBody = catalogEntryCommandSchema
       .partial()
       .extend({ actionId: actionIdSchema })
-      .parse(request.body);
+      .safeParse(request.body);
+    if (!parsedBody.success)
+      return reply.code(400).send({ error: "INVALID_CATALOG_ENTRY" });
+    const body = parsedBody.data;
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
     const [current] = await db
@@ -1565,108 +1571,120 @@ export function registerRoutes(
     const nextDay = current.day + (body.command === "ADVANCE_DAY" ? 1 : 0);
     const nextBattle =
       current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
-    const entryRows = await db
-      .select({ entry: characterCatalogEntries })
-      .from(characterCatalogEntries)
-      .innerJoin(
-        characters,
-        eq(characterCatalogEntries.characterId, characters.id),
-      )
-      .where(eq(characters.campaignId, auth.campaignId));
-    const result = await db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(campaigns)
-        .set({
-          day: nextDay,
-          battleActive:
-            body.command === "START_BATTLE"
-              ? true
-              : body.command === "END_BATTLE"
-                ? false
-                : current.battleActive,
-          battleCounter: nextBattle,
-          revision: current.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(campaigns.id, auth.campaignId),
-            eq(campaigns.revision, current.revision),
-          ),
-        )
-        .returning();
-      if (!updated) return null;
-      let recharged = 0;
-      for (const { entry } of entryRows) {
-        const parsed = entryDataSchema.safeParse(entry.data);
-        if (!parsed.success || !parsed.data.uses) continue;
-        const uses = parsed.data.uses;
-        const due =
-          (body.command === "ADVANCE_DAY" && uses.recharge === "DAY") ||
-          (body.command === "END_BATTLE" && uses.recharge === "BATTLE") ||
-          (body.command === "ADVANCE_DAY" &&
-            uses.recharge === "WEEK" &&
-            nextDay - (uses.lastRechargeDay ?? 1) >= 7);
-        if (!due) continue;
-        const nextUses = {
-          ...uses,
-          current: uses.max,
-          ...(uses.recharge === "WEEK" || uses.recharge === "DAY"
-            ? { lastRechargeDay: nextDay }
-            : {}),
-          ...(uses.recharge === "BATTLE"
-            ? { lastBattleCounter: nextBattle }
-            : {}),
-        };
-        await tx
-          .update(characterCatalogEntries)
+    let result;
+    try {
+      result = await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(campaigns)
           .set({
-            data: { ...parsed.data, uses: nextUses },
-            revision: entry.revision + 1,
+            day: nextDay,
+            battleActive:
+              body.command === "START_BATTLE"
+                ? true
+                : body.command === "END_BATTLE"
+                  ? false
+                  : current.battleActive,
+            battleCounter: nextBattle,
+            revision: current.revision + 1,
             updatedAt: new Date(),
           })
           .where(
             and(
-              eq(characterCatalogEntries.id, entry.id),
-              eq(characterCatalogEntries.revision, entry.revision),
+              eq(campaigns.id, auth.campaignId),
+              eq(campaigns.revision, current.revision),
             ),
-          );
-        recharged++;
-      }
-      const label =
-        body.command === "ADVANCE_DAY"
-          ? `День кампании: ${nextDay}`
-          : body.command === "START_BATTLE"
-            ? `Бой #${nextBattle} начат`
-            : `Бой #${current.battleCounter} завершён`;
-      const [message] = await tx
-        .insert(chatMessages)
-        .values({
+          )
+          .returning();
+        if (!updated) throw new Error("CAMPAIGN_CONFLICT");
+        const entryRows = await tx
+          .select({ entry: characterCatalogEntries })
+          .from(characterCatalogEntries)
+          .innerJoin(
+            characters,
+            eq(characterCatalogEntries.characterId, characters.id),
+          )
+          .where(eq(characters.campaignId, auth.campaignId));
+        let recharged = 0;
+        for (const { entry } of entryRows) {
+          const parsed = entryDataSchema.safeParse(entry.data);
+          if (!parsed.success || !parsed.data.uses) continue;
+          const uses = parsed.data.uses;
+          const due =
+            (body.command === "ADVANCE_DAY" && uses.recharge === "DAY") ||
+            (body.command === "END_BATTLE" && uses.recharge === "BATTLE") ||
+            (body.command === "ADVANCE_DAY" &&
+              uses.recharge === "WEEK" &&
+              nextDay - (uses.lastRechargeDay ?? 1) >= 7);
+          if (!due) continue;
+          const nextUses = {
+            ...uses,
+            current: uses.max,
+            ...(uses.recharge === "WEEK" || uses.recharge === "DAY"
+              ? { lastRechargeDay: nextDay }
+              : {}),
+            ...(uses.recharge === "BATTLE"
+              ? { lastBattleCounter: nextBattle }
+              : {}),
+          };
+          const [rechargedEntry] = await tx
+            .update(characterCatalogEntries)
+            .set({
+              data: { ...parsed.data, uses: nextUses },
+              revision: entry.revision + 1,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(characterCatalogEntries.id, entry.id),
+                eq(characterCatalogEntries.revision, entry.revision),
+              ),
+            )
+            .returning({ id: characterCatalogEntries.id });
+          if (!rechargedEntry) throw new Error("ENTRY_CONFLICT");
+          recharged++;
+        }
+        const label =
+          body.command === "ADVANCE_DAY"
+            ? `День кампании: ${nextDay}`
+            : body.command === "START_BATTLE"
+              ? `Бой #${nextBattle} начат`
+              : `Бой #${current.battleCounter} завершён`;
+        const [message] = await tx
+          .insert(chatMessages)
+          .values({
+            campaignId: auth.campaignId,
+            membershipId: auth.membershipId,
+            kind: "SYSTEM",
+            visibility: "PUBLIC",
+            body: `${label}. Перезаряжено: ${recharged}.`,
+          })
+          .returning();
+        await tx.insert(gameEvents).values({
           campaignId: auth.campaignId,
+          actionId: body.actionId,
           membershipId: auth.membershipId,
-          kind: "SYSTEM",
-          visibility: "PUBLIC",
-          body: `${label}. Перезаряжено: ${recharged}.`,
-        })
-        .returning();
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "campaign.clock",
-        entityType: "campaign",
-        entityId: auth.campaignId,
-        entityRevision: updated.revision,
-        payload: {
-          command: body.command,
-          day: nextDay,
-          battleCounter: nextBattle,
-          recharged,
-        },
+          type: "campaign.clock",
+          entityType: "campaign",
+          entityId: auth.campaignId,
+          entityRevision: updated.revision,
+          payload: {
+            command: body.command,
+            day: nextDay,
+            battleCounter: nextBattle,
+            recharged,
+          },
+        });
+        return { updated, message };
       });
-      return { updated, message };
-    });
-    if (!result) return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message === "CAMPAIGN_CONFLICT" ||
+          error.message === "ENTRY_CONFLICT")
+      )
+        return reply.code(409).send({ error: error.message });
+      throw error;
+    }
     await broadcastSnapshots(io, db, auth.campaignId);
     return result.updated;
   });
@@ -1790,12 +1808,32 @@ export function registerRoutes(
       if (!parsed.success || !parsed.data.uses)
         return reply.code(400).send({ error: "ENTRY_HAS_NO_USES" });
       const result = await db.transaction(async (tx) => {
+        const [clock] = await tx
+          .select({
+            day: campaigns.day,
+            battleCounter: campaigns.battleCounter,
+          })
+          .from(campaigns)
+          .where(eq(campaigns.id, auth.campaignId))
+          .limit(1);
+        if (!clock) throw new Error("CAMPAIGN_NOT_FOUND");
+        const anchoredUses = {
+          ...parsed.data.uses!,
+          current: parsed.data.uses!.max,
+          ...(parsed.data.uses!.recharge === "DAY" ||
+          parsed.data.uses!.recharge === "WEEK"
+            ? { lastRechargeDay: clock.day }
+            : {}),
+          ...(parsed.data.uses!.recharge === "BATTLE"
+            ? { lastBattleCounter: clock.battleCounter }
+            : {}),
+        };
         const [updated] = await tx
           .update(characterCatalogEntries)
           .set({
             data: {
               ...parsed.data,
-              uses: { ...parsed.data.uses!, current: parsed.data.uses!.max },
+              uses: anchoredUses,
             },
             revision: row.entry.revision + 1,
             updatedAt: new Date(),
@@ -1911,10 +1949,12 @@ export function registerRoutes(
       const formula = formulaParts.join(" + ");
       const result = rollFormula(formula, values, randomInt, action.label);
       const uses = parsedData.data.uses;
-      if (uses && uses.current < 1)
+      const consumeUse = action.consumeUse;
+      if (consumeUse && (!uses || uses.current < 1))
         return reply.code(409).send({ error: "NO_ABILITY_USES" });
       const saved = await db.transaction(async (tx) => {
-        if (uses) {
+        let systemMessage = null;
+        if (consumeUse && uses) {
           const nextData = {
             ...parsedData.data,
             uses: { ...uses, current: uses.current - 1 },
@@ -1934,6 +1974,18 @@ export function registerRoutes(
             )
             .returning();
           if (!updated) return null;
+          [systemMessage] = await tx
+            .insert(chatMessages)
+            .values({
+              campaignId: auth.campaignId,
+              membershipId: auth.membershipId,
+              characterId: row.character.id,
+              kind: "SYSTEM",
+              visibility: "PUBLIC",
+              body: `${auth.displayName}: ${row.entry.name} — использования ${uses.current} → ${uses.current - 1}`,
+            })
+            .returning();
+          if (!systemMessage) throw new Error("COUNTER_AUDIT_FAILED");
         }
         const audit = {
           ...result,
@@ -1973,11 +2025,13 @@ export function registerRoutes(
             type: "entry.roll",
             entityType: "character_catalog_entry",
             entityId: row.entry.id,
-            entityRevision: uses ? row.entry.revision + 1 : row.entry.revision,
+            entityRevision: consumeUse
+              ? row.entry.revision + 1
+              : row.entry.revision,
             payload: audit,
           })
           .returning();
-        return { message, event, audit };
+        return { message, systemMessage, event, audit };
       });
       if (!saved) return reply.code(409).send({ error: "ENTRY_CONFLICT" });
       await broadcastSnapshots(io, db, auth.campaignId);

@@ -62,24 +62,48 @@ export const rollActionSchema = z.object({
   modifiers: z.array(modifierSourceSchema).max(12).default([]),
   order: z.number().int().min(0).max(1000),
   advantage: z.boolean().default(false),
+  consumeUse: z.boolean().default(false),
 });
 export const rechargePeriodSchema = z.enum(["DAY", "BATTLE", "WEEK"]);
-export const abilityUsesSchema = z.object({
-  current: z.number().int().nonnegative(),
-  max: z.number().int().positive(),
-  recharge: rechargePeriodSchema,
-  progressText: z.string().max(200).optional(),
-  lastRechargeDay: z.number().int().positive().optional(),
-  lastBattleCounter: z.number().int().nonnegative().optional(),
-});
-export const entryDataSchema = z.record(z.string(), z.unknown()).and(
-  z.object({
+export const abilityUsesSchema = z
+  .object({
+    current: z.number().int().nonnegative(),
+    max: z.number().int().positive(),
+    recharge: rechargePeriodSchema,
+    progressText: z.string().max(200).optional(),
+    lastRechargeDay: z.number().int().positive().optional(),
+    lastBattleCounter: z.number().int().nonnegative().optional(),
+  })
+  .refine((uses) => uses.current <= uses.max, {
+    message: "current must not exceed max",
+    path: ["current"],
+  });
+export const entryDataSchema = z
+  .object({
     rollActions: z.array(rollActionSchema).max(20).optional(),
     values: z.record(z.string(), z.number().finite()).optional(),
     uses: abilityUsesSchema.optional(),
     notes: z.string().max(10000).optional(),
-  }),
-);
+  })
+  .catchall(z.unknown())
+  .superRefine((data, context) => {
+    const ids = new Set<string>();
+    for (const [index, action] of (data.rollActions ?? []).entries()) {
+      if (ids.has(action.id))
+        context.addIssue({
+          code: "custom",
+          message: "roll action ids must be unique",
+          path: ["rollActions", index, "id"],
+        });
+      ids.add(action.id);
+      if (action.consumeUse && !data.uses)
+        context.addIssue({
+          code: "custom",
+          message: "consumeUse requires uses",
+          path: ["rollActions", index, "consumeUse"],
+        });
+    }
+  });
 export const fixedCharacteristicsSchema = z.object({
   strength: z.number().finite(),
   agility: z.number().finite(),

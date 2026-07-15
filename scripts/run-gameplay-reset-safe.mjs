@@ -182,6 +182,10 @@ export const productionDependencies = {
         'tokens',(select count(*) from tokens t join scenes s on s.id=t.scene_id where s.campaign_id=${c}),
         'fogReveals',(select count(*) from fog_reveals f join scenes s on s.id=f.scene_id where s.campaign_id=${c}),
         'activeSceneId',(select active_scene_id from campaigns where id=${c}),
+        'campaignDay',(select day from campaigns where id=${c}),
+        'battleActive',(select battle_active from campaigns where id=${c}),
+        'battleCounter',(select battle_counter from campaigns where id=${c}),
+        'campaignRevision',(select revision from campaigns where id=${c}),
         'foreignCampaigns',(select count(*) from campaigns where id<>${c}),
         'foreignAssets',(select count(*) from assets where campaign_id<>${c}),
         'foreignMemberships',(select count(*) from memberships where campaign_id<>${c}),
@@ -269,6 +273,10 @@ export const productionDependencies = {
       counts.assets !== before.assets ||
       counts.assetOwnershipValid !== counts.assets ||
       counts.activeSceneId !== null ||
+      counts.campaignDay !== 1 ||
+      counts.battleActive !== false ||
+      counts.battleCounter !== 0 ||
+      counts.campaignRevision !== 0 ||
       cleared.some((key) => counts[key] !== 0) ||
       foreign.some((key) => counts[key] !== before[key])
     )
