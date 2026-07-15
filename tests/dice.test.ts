@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DiceFormulaError, rollFormula } from "../apps/server/src/dice";
+import { modifierSourceSchema } from "../packages/contracts/src";
 
 describe("rollFormula", () => {
   it("rolls dice and resolves stat references on the server", () => {
@@ -23,6 +24,35 @@ describe("rollFormula", () => {
     const result = rollFormula("10 - 1d4", {}, () => 2);
     expect(result.total).toBe(7);
     expect(result.terms[0]?.subtotal).toBe(-3);
+  });
+
+  it("supports approved keep-high advantage without evaluating code", () => {
+    const rolls = [2, 17];
+    const result = rollFormula(
+      "2d20kh1 + agility",
+      { agility: 3 },
+      () => rolls.shift()! - 1,
+    );
+    expect(result).toMatchObject({
+      total: 20,
+      terms: [{ notation: "2d20kh1", rolls: [2, 17], subtotal: 17 }],
+      modifiers: [{ source: "agility", value: 3 }],
+    });
+  });
+
+  it("accepts only finite arithmetic modifier formulas and rejects code or references", () => {
+    expect(
+      modifierSourceSchema.parse({ type: "FORMULA", formula: "10-3+2" }),
+    ).toEqual({ type: "FORMULA", formula: "10-3+2" });
+    expect(() =>
+      modifierSourceSchema.parse({ type: "FORMULA", formula: "magic+1" }),
+    ).toThrow();
+    expect(() =>
+      modifierSourceSchema.parse({
+        type: "FORMULA",
+        formula: "globalThis.process.exit()",
+      }),
+    ).toThrow();
   });
 
   it("rejects unknown stats and unsafe dice sizes", () => {

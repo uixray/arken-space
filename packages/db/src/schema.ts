@@ -47,6 +47,10 @@ export const campaigns = pgTable("campaigns", {
   systemId: text("system_id").notNull().default("arken-core"),
   systemVersion: integer("system_version").notNull().default(1),
   activeSceneId: uuid("active_scene_id"),
+  day: integer("day").notNull().default(1),
+  battleActive: boolean("battle_active").notNull().default(false),
+  battleCounter: integer("battle_counter").notNull().default(0),
+  revision: integer("revision").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -131,6 +135,10 @@ export const characters = pgTable(
       .$type<Record<string, { current: number; maximum?: number }>>()
       .notNull()
       .default({}),
+    wallet: jsonb("wallet")
+      .$type<{ gold: number; silver: number; copper: number; sp: number }>()
+      .notNull()
+      .default({ gold: 0, silver: 0, copper: 0, sp: 0 }),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

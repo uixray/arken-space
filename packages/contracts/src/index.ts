@@ -23,6 +23,63 @@ export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYERS"]);
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
+export const rollActionKindSchema = z.enum(["HIT", "DAMAGE", "CUSTOM"]);
+export const modifierSourceSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("CHARACTERISTIC"),
+    key: z.enum([
+      "strength",
+      "agility",
+      "endurance",
+      "vitality",
+      "knowledge",
+      "intelligence",
+      "willpower",
+      "charisma",
+    ]),
+  }),
+  z.object({
+    type: z.literal("ENTRY_VALUE"),
+    key: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
+  }),
+  z.object({
+    type: z.literal("CONSTANT"),
+    value: z.number().int().min(-1000).max(1000),
+  }),
+  z.object({
+    type: z.literal("FORMULA"),
+    formula: z
+      .string()
+      .regex(/^[+-]?\d+(?:[+-]\d+){0,9}$/)
+      .max(80),
+  }),
+]);
+export const rollActionSchema = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+  kind: rollActionKindSchema,
+  label: z.string().trim().min(1).max(100),
+  dice: z.string().regex(/^\d{0,2}d(?:2|4|6|8|10|12|20|100)(?:kh1)?$/),
+  modifiers: z.array(modifierSourceSchema).max(12).default([]),
+  order: z.number().int().min(0).max(1000),
+  advantage: z.boolean().default(false),
+});
+export const rechargePeriodSchema = z.enum(["DAY", "BATTLE", "WEEK"]);
+export const abilityUsesSchema = z.object({
+  current: z.number().int().nonnegative(),
+  max: z.number().int().positive(),
+  recharge: rechargePeriodSchema,
+  progressText: z.string().max(200).optional(),
+  lastRechargeDay: z.number().int().positive().optional(),
+  lastBattleCounter: z.number().int().nonnegative().optional(),
+});
+export const entryDataSchema = z.record(z.string(), z.unknown()).and(
+  z.object({
+    rollActions: z.array(rollActionSchema).max(20).optional(),
+    values: z.record(z.string(), z.number().finite()).optional(),
+    uses: abilityUsesSchema.optional(),
+    notes: z.string().max(10000).optional(),
+  }),
+);
 export const fixedCharacteristicsSchema = z.object({
   strength: z.number().finite(),
   agility: z.number().finite(),
@@ -194,7 +251,7 @@ export const catalogEntryInputSchema = z.object({
   kind: catalogEntryKindSchema,
   name: z.string().trim().min(1).max(120),
   description: z.string().max(10000).default(""),
-  data: z.record(z.string(), z.unknown()).default({}),
+  data: entryDataSchema.default({}),
 });
 export const catalogEntryCommandSchema = catalogEntryInputSchema.extend({
   actionId: actionIdSchema,
@@ -234,6 +291,40 @@ export const audioStateUpdateSchema = z.object({
   loop: z.boolean(),
   startedAt: z.string().datetime().nullable(),
 });
+export const entryRollRequestSchema = z.object({
+  actionId: actionIdSchema,
+  rollActionId: z.string(),
+  visibility: messageVisibilitySchema.default("PUBLIC"),
+});
+export const campaignClockCommandSchema = z.object({
+  actionId: actionIdSchema,
+  command: z.enum(["ADVANCE_DAY", "START_BATTLE", "END_BATTLE"]),
+  revision: z.number().int().nonnegative(),
+});
+export const walletSchema = z.object({
+  gold: z.number().int().nonnegative(),
+  silver: z.number().int().nonnegative(),
+  copper: z.number().int().nonnegative(),
+  sp: z.number().int().nonnegative(),
+});
+export const characterCountersCommandSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  wallet: walletSchema.optional(),
+  resources: z
+    .record(
+      z.string(),
+      z.object({
+        current: z.number().finite().nonnegative(),
+        maximum: z.number().finite().nonnegative().optional(),
+      }),
+    )
+    .optional(),
+});
+export const rechargeEntryCommandSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+});
 
 export interface AssetDto {
   id: string;
@@ -271,6 +362,7 @@ export interface CharacterDto {
   backstory: string;
   inventory: string[];
   resources: Record<string, { current: number; maximum?: number }>;
+  wallet: z.infer<typeof walletSchema>;
   entries: CharacterCatalogEntryDto[];
   revision: number;
 }
@@ -279,7 +371,7 @@ export interface CatalogEntryDto {
   kind: "SKILL" | "ABILITY";
   name: string;
   description: string;
-  data: Record<string, unknown>;
+  data: z.infer<typeof entryDataSchema>;
   revision: number;
 }
 export interface CharacterCatalogEntryDto extends CatalogEntryDto {
@@ -366,7 +458,14 @@ export interface AudioStateDto {
 }
 
 export interface GameSnapshot {
-  campaign: { id: string; name: string };
+  campaign: {
+    id: string;
+    name: string;
+    day: number;
+    battleActive: boolean;
+    battleCounter: number;
+    revision: number;
+  };
   me: MembershipDto;
   members: MembershipDto[];
   characters: CharacterDto[];

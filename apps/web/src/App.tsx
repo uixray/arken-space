@@ -585,7 +585,7 @@ export function App() {
                     method: "POST",
                     body: JSON.stringify({
                       ...input,
-                      data: {},
+                      data: input.data ?? {},
                       actionId: crypto.randomUUID(),
                     }),
                   }),
@@ -626,6 +626,67 @@ export function App() {
                     body: JSON.stringify({
                       ...patch,
                       actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
+            onRollEntry={(characterId, entryId, rollActionId) =>
+              run(
+                () =>
+                  api(
+                    `/api/characters/${characterId}/catalog/${entryId}/roll`,
+                    {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        rollActionId,
+                        visibility: "PUBLIC",
+                      }),
+                    },
+                  ),
+                true,
+              )
+            }
+            onRechargeEntry={(characterId, entryId, revision) =>
+              run(
+                () =>
+                  api(
+                    `/api/characters/${characterId}/catalog/${entryId}/recharge`,
+                    {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision,
+                      }),
+                    },
+                  ),
+                true,
+              )
+            }
+            onUpdateCounters={(characterId, revision, patch) =>
+              run(
+                () =>
+                  api(`/api/characters/${characterId}/counters`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      ...patch,
+                      actionId: crypto.randomUUID(),
+                      revision,
+                    }),
+                  }),
+                true,
+              )
+            }
+            onCampaignClock={(command, revision) =>
+              run(
+                () =>
+                  api("/api/campaign/clock", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      command,
+                      revision,
                     }),
                   }),
                 true,

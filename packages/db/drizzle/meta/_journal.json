@@ -43,6 +43,13 @@
       "when": 1784076566241,
       "tag": "0005_mature_molly_hayes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784077729893,
+      "tag": "0006_workable_vision",
+      "breakpoints": true
     }
   ]
 }

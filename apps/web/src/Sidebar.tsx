@@ -44,6 +44,7 @@ type Props = {
     kind: "SKILL" | "ABILITY";
     name: string;
     description: string;
+    data?: Record<string, unknown>;
   }) => Promise<void>;
   onUpdateCatalogEntry: (
     id: string,
@@ -62,6 +63,28 @@ type Props = {
       description?: string;
       data?: Record<string, unknown>;
     },
+  ) => Promise<void>;
+  onRollEntry: (
+    characterId: string,
+    entryId: string,
+    rollActionId: string,
+  ) => Promise<void>;
+  onRechargeEntry: (
+    characterId: string,
+    entryId: string,
+    revision: number,
+  ) => Promise<void>;
+  onUpdateCounters: (
+    characterId: string,
+    revision: number,
+    patch: {
+      wallet?: CharacterDto["wallet"];
+      resources?: CharacterDto["resources"];
+    },
+  ) => Promise<void>;
+  onCampaignClock: (
+    command: "ADVANCE_DAY" | "START_BATTLE" | "END_BATTLE",
+    revision: number,
   ) => Promise<void>;
 };
 
@@ -116,6 +139,10 @@ export function Sidebar(props: Props) {
             onRoll={props.onRoll}
             onAssignEntry={props.onAssignCatalogEntry}
             onUpdateEntry={props.onUpdateCharacterEntry}
+            onRollEntry={props.onRollEntry}
+            onRechargeEntry={props.onRechargeEntry}
+            onUpdateCounters={props.onUpdateCounters}
+            onCampaignClock={props.onCampaignClock}
           />
         )}
         {tab === "chat" && (
@@ -143,6 +170,10 @@ function CharacterPanel({
   onRoll,
   onAssignEntry,
   onUpdateEntry,
+  onRollEntry,
+  onRechargeEntry,
+  onUpdateCounters,
+  onCampaignClock,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -152,6 +183,10 @@ function CharacterPanel({
   onRoll: Props["onRoll"];
   onAssignEntry: Props["onAssignCatalogEntry"];
   onUpdateEntry: Props["onUpdateCharacterEntry"];
+  onRollEntry: Props["onRollEntry"];
+  onRechargeEntry: Props["onRechargeEntry"];
+  onUpdateCounters: Props["onUpdateCounters"];
+  onCampaignClock: Props["onCampaignClock"];
 }) {
   const editable =
     character &&
@@ -188,6 +223,34 @@ function CharacterPanel({
         </div>
         <span className="revision">rev {character.revision}</span>
       </div>
+      {snapshot.me.role === "GM" && (
+        <div className="subsection">
+          <h3>Время кампании</h3>
+          <p>
+            День {snapshot.campaign.day} ·{" "}
+            {snapshot.campaign.battleActive
+              ? `бой #${snapshot.campaign.battleCounter}`
+              : "вне боя"}
+          </p>
+          <button
+            onClick={() =>
+              onCampaignClock("ADVANCE_DAY", snapshot.campaign.revision)
+            }
+          >
+            Следующий день
+          </button>
+          <button
+            onClick={() =>
+              onCampaignClock(
+                snapshot.campaign.battleActive ? "END_BATTLE" : "START_BATTLE",
+                snapshot.campaign.revision,
+              )
+            }
+          >
+            {snapshot.campaign.battleActive ? "Завершить бой" : "Начать бой"}
+          </button>
+        </div>
+      )}
       <details className="subsection">
         <summary>Предыстория</summary>
         <textarea
@@ -222,7 +285,7 @@ function CharacterPanel({
             <button
               disabled={!editable}
               onClick={() =>
-                onRoll(`2d6 + ${stat.key}`, stat.label, "PUBLIC", character.id)
+                onRoll(`1d20 + ${stat.key}`, stat.label, "PUBLIC", character.id)
               }
             >
               Бросок
@@ -230,6 +293,13 @@ function CharacterPanel({
           </label>
         ))}
       </div>
+      <button
+        onClick={() =>
+          onRoll("1d20 + agility", "Инициатива", "PUBLIC", character.id)
+        }
+      >
+        Инициатива (d20 + Ловкость)
+      </button>
       <div className="subsection">
         <h3>Навыки</h3>
         {character.skills.length ? (
@@ -298,6 +368,36 @@ function CharacterPanel({
                 {entry.kind === "SKILL" ? "Навык" : "Способность"}
               </span>
               {entry.description && <p>{entry.description}</p>}
+              {entry.data.uses && (
+                <p>
+                  {entry.data.uses.current}/{entry.data.uses.max} ·{" "}
+                  {entry.data.uses.recharge}
+                  {entry.data.uses.progressText
+                    ? ` · ${entry.data.uses.progressText}`
+                    : ""}
+                  <button
+                    disabled={!editable}
+                    onClick={() =>
+                      onRechargeEntry(character.id, entry.id, entry.revision)
+                    }
+                  >
+                    Перезарядить
+                  </button>
+                </p>
+              )}
+              {[...(entry.data.rollActions ?? [])]
+                .sort((a, b) => a.order - b.order)
+                .map((action) => (
+                  <button
+                    key={action.id}
+                    disabled={!editable || (entry.data.uses?.current ?? 1) < 1}
+                    onClick={() =>
+                      onRollEntry(character.id, entry.id, action.id)
+                    }
+                  >
+                    {action.label} · {action.kind}
+                  </button>
+                ))}
               {snapshot.me.role === "GM" && (
                 <button
                   onClick={() => {
@@ -368,12 +468,66 @@ function CharacterPanel({
               const resources = JSON.parse(
                 event.target.value,
               ) as CharacterDto["resources"];
-              void onPatch(character.id, { resources });
+              void onUpdateCounters(character.id, character.revision, {
+                resources,
+              });
             } catch {
               event.target.value = JSON.stringify(character.resources, null, 2);
             }
           }}
         />
+      </label>
+      <label className="field">
+        Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не
+        нормализуются)
+        {(["gold", "silver", "copper", "sp"] as const).map((key) => (
+          <span className="inline-fields" key={key}>
+            <b>{key}</b>
+            <button
+              disabled={!editable || character.wallet[key] === 0}
+              onClick={() =>
+                onUpdateCounters(character.id, character.revision, {
+                  wallet: {
+                    ...character.wallet,
+                    [key]: character.wallet[key] - 1,
+                  },
+                })
+              }
+            >
+              −
+            </button>
+            <input
+              type="number"
+              min={0}
+              defaultValue={character.wallet[key]}
+              disabled={!editable}
+              onBlur={(event) =>
+                onUpdateCounters(character.id, character.revision, {
+                  wallet: {
+                    ...character.wallet,
+                    [key]: Math.max(
+                      0,
+                      Number.parseInt(event.target.value || "0", 10),
+                    ),
+                  },
+                })
+              }
+            />
+            <button
+              disabled={!editable}
+              onClick={() =>
+                onUpdateCounters(character.id, character.revision, {
+                  wallet: {
+                    ...character.wallet,
+                    [key]: character.wallet[key] + 1,
+                  },
+                })
+              }
+            >
+              +
+            </button>
+          </span>
+        ))}
       </label>
       <label className="field">
         Заметки
@@ -456,6 +610,23 @@ function ChatPanel({
             Бросить
           </button>
         </div>
+        <div className="inline-fields">
+          {[2, 4, 8, 12, 20].map((sides) => (
+            <button
+              key={sides}
+              onClick={() =>
+                onRoll(
+                  `1d${sides}`,
+                  `d${sides}`,
+                  visibility,
+                  snapshot.me.characterId,
+                )
+              }
+            >
+              d{sides}
+            </button>
+          ))}
+        </div>
         <label className="compact-check">
           <input
             type="checkbox"
@@ -487,6 +658,7 @@ function SetupPanel(props: Props) {
   const [catalogName, setCatalogName] = useState("");
   const [catalogDescription, setCatalogDescription] = useState("");
   const [catalogKind, setCatalogKind] = useState<"SKILL" | "ABILITY">("SKILL");
+  const [catalogData, setCatalogData] = useState("{}");
   const [inviteCharacter, setInviteCharacter] = useState(
     props.snapshot.characters[0]?.id ?? "",
   );
@@ -536,13 +708,96 @@ function SetupPanel(props: Props) {
           placeholder="Описание"
           onChange={(event) => setCatalogDescription(event.target.value)}
         />
+        <textarea
+          value={catalogData}
+          onChange={(event) => setCatalogData(event.target.value)}
+          rows={8}
+          aria-label="Данные и действия JSON"
+        />
+        <button
+          onClick={() =>
+            setCatalogData(
+              JSON.stringify(
+                {
+                  rollActions: [
+                    {
+                      id: "hit",
+                      kind: "HIT",
+                      label: "Попадание",
+                      dice: "1d20",
+                      order: 0,
+                      advantage: false,
+                      modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
+                    },
+                    {
+                      id: "damage",
+                      kind: "DAMAGE",
+                      label: "Физический урон",
+                      dice: "1d8",
+                      order: 1,
+                      advantage: false,
+                      modifiers: [{ type: "CHARACTERISTIC", key: "strength" }],
+                    },
+                  ],
+                },
+                null,
+                2,
+              ),
+            )
+          }
+        >
+          Пресет: физический
+        </button>
+        <button
+          onClick={() =>
+            setCatalogData(
+              JSON.stringify(
+                {
+                  values: { magic: 0 },
+                  rollActions: [
+                    {
+                      id: "hit",
+                      kind: "HIT",
+                      label: "Попадание",
+                      dice: "1d20",
+                      order: 0,
+                      advantage: false,
+                      modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
+                    },
+                    {
+                      id: "damage",
+                      kind: "DAMAGE",
+                      label: "Магический урон",
+                      dice: "1d8",
+                      order: 1,
+                      advantage: false,
+                      modifiers: [{ type: "ENTRY_VALUE", key: "magic" }],
+                    },
+                  ],
+                },
+                null,
+                2,
+              ),
+            )
+          }
+        >
+          Пресет: магический
+        </button>
         <button
           disabled={!catalogName.trim()}
           onClick={async () => {
+            let data: Record<string, unknown>;
+            try {
+              data = JSON.parse(catalogData) as Record<string, unknown>;
+            } catch {
+              window.alert("Некорректный JSON");
+              return;
+            }
             await props.onCreateCatalogEntry({
               kind: catalogKind,
               name: catalogName.trim(),
               description: catalogDescription,
+              data,
             });
             setCatalogName("");
             setCatalogDescription("");

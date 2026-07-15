@@ -190,7 +190,14 @@ export async function buildSnapshot(
       : assetRows.filter((asset) => visibleAssetIds.has(asset.id));
 
   return {
-    campaign: { id: campaign.id, name: campaign.name },
+    campaign: {
+      id: campaign.id,
+      name: campaign.name,
+      day: campaign.day,
+      battleActive: campaign.battleActive,
+      battleCounter: campaign.battleCounter,
+      revision: campaign.revision,
+    },
     me: {
       id: me.id,
       role: me.role,
@@ -215,6 +222,7 @@ export async function buildSnapshot(
       backstory: character.backstory,
       inventory: character.inventory,
       resources: character.resources,
+      wallet: character.wallet,
       entries: (entriesByCharacter.get(character.id) ?? []).map((entry) => ({
         id: entry.id,
         sourceCatalogEntryId: entry.sourceCatalogEntryId,

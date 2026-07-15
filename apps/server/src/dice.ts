@@ -1,6 +1,7 @@
 import type { DiceResult, DiceTerm } from "@arken/contracts";
 
-const termPattern = /^(?:(\d{0,3})d(\d{1,4})|([a-zA-Z_][a-zA-Z0-9_]*)|(\d+))$/;
+const termPattern =
+  /^(?:(\d{0,3})d(\d{1,4})(kh1)?|([a-zA-Z_][a-zA-Z0-9_]*)|(\d+))$/;
 
 export class DiceFormulaError extends Error {}
 
@@ -37,21 +38,24 @@ export function rollFormula(
       if (sides < 2 || sides > 1000)
         throw new DiceFormulaError("У кости должно быть от 2 до 1000 граней");
       const rolls = Array.from({ length: count }, () => randomInt(sides) + 1);
-      const subtotal = rolls.reduce((sum, value) => sum + value, 0) * sign;
+      const kept = match[3]
+        ? Math.max(...rolls)
+        : rolls.reduce((sum, value) => sum + value, 0);
+      const subtotal = kept * sign;
       terms.push({
-        notation: `${sign < 0 ? "-" : ""}${count}d${sides}`,
+        notation: `${sign < 0 ? "-" : ""}${count}d${sides}${match[3] ?? ""}`,
         rolls,
         subtotal,
       });
       total += subtotal;
       resolved.push(
-        `${sign < 0 ? "-" : resolved.length ? "+" : ""}${count}d${sides}`,
+        `${sign < 0 ? "-" : resolved.length ? "+" : ""}${count}d${sides}${match[3] ?? ""}`,
       );
       continue;
     }
 
-    const source = match[3] ?? raw;
-    const value = match[3] ? stats[source] : Number(match[4]);
+    const source = match[4] ?? raw;
+    const value = match[4] ? stats[source] : Number(match[5]);
     if (value === undefined || !Number.isFinite(value))
       throw new DiceFormulaError(`Стат «${source}» не найден`);
     const signedValue = value * sign;

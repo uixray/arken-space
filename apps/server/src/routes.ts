@@ -17,6 +17,11 @@ import {
   createSceneSchema,
   createTokenSchema,
   diceRequestSchema,
+  entryDataSchema,
+  entryRollRequestSchema,
+  campaignClockCommandSchema,
+  characterCountersCommandSchema,
+  rechargeEntryCommandSchema,
   deleteTokenSchema,
   gmLoginSchema,
   inviteClaimSchema,
@@ -1534,6 +1539,453 @@ export function registerRoutes(
     }
     return reply.code(201).send(dto);
   });
+
+  app.post("/api/campaign/clock", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = campaignClockCommandSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    if (body.command === "START_BATTLE" && current.battleActive)
+      return reply.code(409).send({ error: "BATTLE_ALREADY_ACTIVE" });
+    if (body.command === "END_BATTLE" && !current.battleActive)
+      return reply.code(409).send({ error: "BATTLE_NOT_ACTIVE" });
+    const nextDay = current.day + (body.command === "ADVANCE_DAY" ? 1 : 0);
+    const nextBattle =
+      current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
+    const entryRows = await db
+      .select({ entry: characterCatalogEntries })
+      .from(characterCatalogEntries)
+      .innerJoin(
+        characters,
+        eq(characterCatalogEntries.characterId, characters.id),
+      )
+      .where(eq(characters.campaignId, auth.campaignId));
+    const result = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(campaigns)
+        .set({
+          day: nextDay,
+          battleActive:
+            body.command === "START_BATTLE"
+              ? true
+              : body.command === "END_BATTLE"
+                ? false
+                : current.battleActive,
+          battleCounter: nextBattle,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!updated) return null;
+      let recharged = 0;
+      for (const { entry } of entryRows) {
+        const parsed = entryDataSchema.safeParse(entry.data);
+        if (!parsed.success || !parsed.data.uses) continue;
+        const uses = parsed.data.uses;
+        const due =
+          (body.command === "ADVANCE_DAY" && uses.recharge === "DAY") ||
+          (body.command === "END_BATTLE" && uses.recharge === "BATTLE") ||
+          (body.command === "ADVANCE_DAY" &&
+            uses.recharge === "WEEK" &&
+            nextDay - (uses.lastRechargeDay ?? 1) >= 7);
+        if (!due) continue;
+        const nextUses = {
+          ...uses,
+          current: uses.max,
+          ...(uses.recharge === "WEEK" || uses.recharge === "DAY"
+            ? { lastRechargeDay: nextDay }
+            : {}),
+          ...(uses.recharge === "BATTLE"
+            ? { lastBattleCounter: nextBattle }
+            : {}),
+        };
+        await tx
+          .update(characterCatalogEntries)
+          .set({
+            data: { ...parsed.data, uses: nextUses },
+            revision: entry.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(characterCatalogEntries.id, entry.id),
+              eq(characterCatalogEntries.revision, entry.revision),
+            ),
+          );
+        recharged++;
+      }
+      const label =
+        body.command === "ADVANCE_DAY"
+          ? `День кампании: ${nextDay}`
+          : body.command === "START_BATTLE"
+            ? `Бой #${nextBattle} начат`
+            : `Бой #${current.battleCounter} завершён`;
+      const [message] = await tx
+        .insert(chatMessages)
+        .values({
+          campaignId: auth.campaignId,
+          membershipId: auth.membershipId,
+          kind: "SYSTEM",
+          visibility: "PUBLIC",
+          body: `${label}. Перезаряжено: ${recharged}.`,
+        })
+        .returning();
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.clock",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: updated.revision,
+        payload: {
+          command: body.command,
+          day: nextDay,
+          battleCounter: nextBattle,
+          recharged,
+        },
+      });
+      return { updated, message };
+    });
+    if (!result) return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return result.updated;
+  });
+
+  app.patch("/api/characters/:id/counters", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = characterCountersCommandSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [character] = await db
+      .select()
+      .from(characters)
+      .where(
+        and(eq(characters.id, id), eq(characters.campaignId, auth.campaignId)),
+      )
+      .limit(1);
+    if (
+      !character ||
+      (auth.role !== "GM" && character.ownerMembershipId !== auth.membershipId)
+    )
+      return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+    if (character.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CHARACTER_CONFLICT", revision: character.revision });
+    const changes = [
+      body.wallet
+        ? `кошелёк ${JSON.stringify(character.wallet)} → ${JSON.stringify(body.wallet)}`
+        : "",
+      body.resources
+        ? `ресурсы ${JSON.stringify(character.resources)} → ${JSON.stringify(body.resources)}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
+    if (!changes) return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
+    const result = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(characters)
+        .set({
+          ...(body.wallet ? { wallet: body.wallet } : {}),
+          ...(body.resources ? { resources: body.resources } : {}),
+          revision: character.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(characters.id, id),
+            eq(characters.revision, character.revision),
+          ),
+        )
+        .returning();
+      if (!updated) return null;
+      const [message] = await tx
+        .insert(chatMessages)
+        .values({
+          campaignId: auth.campaignId,
+          membershipId: auth.membershipId,
+          characterId: id,
+          kind: "SYSTEM",
+          visibility: "PUBLIC",
+          body: `${auth.displayName}: ${character.name} — ${changes}`,
+        })
+        .returning();
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "character.counters",
+        entityType: "character",
+        entityId: id,
+        entityRevision: updated.revision,
+        payload: { wallet: body.wallet, resources: body.resources },
+      });
+      return { updated, message };
+    });
+    if (!result) return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return result.updated;
+  });
+
+  app.post(
+    "/api/characters/:characterId/catalog/:entryId/recharge",
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      const params = z
+        .object({ characterId: z.string().uuid(), entryId: z.string().uuid() })
+        .parse(request.params);
+      const body = rechargeEntryCommandSchema.parse(request.body);
+      if (await findAction(db, auth.campaignId, body.actionId))
+        return reply.code(200).send({ duplicate: true });
+      const [row] = await db
+        .select({ character: characters, entry: characterCatalogEntries })
+        .from(characterCatalogEntries)
+        .innerJoin(
+          characters,
+          eq(characterCatalogEntries.characterId, characters.id),
+        )
+        .where(
+          and(
+            eq(characters.id, params.characterId),
+            eq(characterCatalogEntries.id, params.entryId),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (
+        !row ||
+        (auth.role !== "GM" &&
+          row.character.ownerMembershipId !== auth.membershipId)
+      )
+        return reply.code(403).send({ error: "CHARACTER_ENTRY_FORBIDDEN" });
+      if (row.entry.revision !== body.revision)
+        return reply
+          .code(409)
+          .send({ error: "ENTRY_CONFLICT", revision: row.entry.revision });
+      const parsed = entryDataSchema.safeParse(row.entry.data);
+      if (!parsed.success || !parsed.data.uses)
+        return reply.code(400).send({ error: "ENTRY_HAS_NO_USES" });
+      const result = await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(characterCatalogEntries)
+          .set({
+            data: {
+              ...parsed.data,
+              uses: { ...parsed.data.uses!, current: parsed.data.uses!.max },
+            },
+            revision: row.entry.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(characterCatalogEntries.id, row.entry.id),
+              eq(characterCatalogEntries.revision, row.entry.revision),
+            ),
+          )
+          .returning();
+        if (!updated) return null;
+        const [message] = await tx
+          .insert(chatMessages)
+          .values({
+            campaignId: auth.campaignId,
+            membershipId: auth.membershipId,
+            characterId: row.character.id,
+            kind: "SYSTEM",
+            visibility: "PUBLIC",
+            body: `${auth.displayName}: ${row.entry.name} перезаряжена (${parsed.data.uses!.max}/${parsed.data.uses!.max})`,
+          })
+          .returning();
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "entry.recharged",
+          entityType: "character_catalog_entry",
+          entityId: row.entry.id,
+          entityRevision: updated.revision,
+        });
+        return { updated, message };
+      });
+      if (!result) return reply.code(409).send({ error: "ENTRY_CONFLICT" });
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return result.updated;
+    },
+  );
+
+  app.post(
+    "/api/characters/:characterId/catalog/:entryId/roll",
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      const params = z
+        .object({ characterId: z.string().uuid(), entryId: z.string().uuid() })
+        .parse(request.params);
+      const body = entryRollRequestSchema.parse(request.body);
+      if (await findAction(db, auth.campaignId, body.actionId))
+        return reply.code(200).send({ duplicate: true });
+      const [row] = await db
+        .select({ character: characters, entry: characterCatalogEntries })
+        .from(characterCatalogEntries)
+        .innerJoin(
+          characters,
+          eq(characterCatalogEntries.characterId, characters.id),
+        )
+        .where(
+          and(
+            eq(characters.id, params.characterId),
+            eq(characterCatalogEntries.id, params.entryId),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (
+        !row ||
+        (auth.role !== "GM" &&
+          row.character.ownerMembershipId !== auth.membershipId)
+      )
+        return reply.code(403).send({ error: "CHARACTER_ENTRY_FORBIDDEN" });
+      const parsedData = entryDataSchema.safeParse(row.entry.data);
+      if (!parsedData.success)
+        return reply.code(400).send({ error: "INVALID_ENTRY_DATA" });
+      const action = parsedData.data.rollActions?.find(
+        (candidate) => candidate.id === body.rollActionId,
+      );
+      if (!action)
+        return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
+      const values: Record<string, number> = {};
+      const formulaParts = [
+        action.advantage && /^1?d20$/.test(action.dice)
+          ? "2d20kh1"
+          : action.dice,
+      ];
+      for (const [index, source] of action.modifiers.entries()) {
+        if (source.type === "CONSTANT") {
+          formulaParts.push(String(source.value));
+          continue;
+        }
+        if (source.type === "FORMULA") {
+          const terms = source.formula.match(/[+-]?\d+/g);
+          if (!terms)
+            return reply.code(400).send({ error: "INVALID_MODIFIER_FORMULA" });
+          formulaParts.push(
+            String(terms.reduce((sum, term) => sum + Number(term), 0)),
+          );
+          continue;
+        }
+        const key = `modifier_${index}`;
+        const value =
+          source.type === "CHARACTERISTIC"
+            ? row.character.stats[source.key]
+            : parsedData.data.values?.[source.key];
+        if (value === undefined || !Number.isFinite(value))
+          return reply
+            .code(400)
+            .send({ error: "MISSING_MODIFIER_SOURCE", source });
+        values[key] = value;
+        formulaParts.push(key);
+      }
+      const formula = formulaParts.join(" + ");
+      const result = rollFormula(formula, values, randomInt, action.label);
+      const uses = parsedData.data.uses;
+      if (uses && uses.current < 1)
+        return reply.code(409).send({ error: "NO_ABILITY_USES" });
+      const saved = await db.transaction(async (tx) => {
+        if (uses) {
+          const nextData = {
+            ...parsedData.data,
+            uses: { ...uses, current: uses.current - 1 },
+          };
+          const [updated] = await tx
+            .update(characterCatalogEntries)
+            .set({
+              data: nextData,
+              revision: row.entry.revision + 1,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(characterCatalogEntries.id, row.entry.id),
+                eq(characterCatalogEntries.revision, row.entry.revision),
+              ),
+            )
+            .returning();
+          if (!updated) return null;
+        }
+        const audit = {
+          ...result,
+          source: {
+            entryId: row.entry.id,
+            entryName: row.entry.name,
+            actionId: action.id,
+            actionKind: action.kind,
+          },
+          actor: {
+            membershipId: auth.membershipId,
+            displayName: auth.displayName,
+          },
+          characterId: row.character.id,
+        };
+        const [message] = await tx
+          .insert(chatMessages)
+          .values({
+            campaignId: auth.campaignId,
+            membershipId: auth.membershipId,
+            characterId: row.character.id,
+            kind: "DICE",
+            visibility: body.visibility,
+            body: [action.label, row.entry.description, parsedData.data.notes]
+              .filter(Boolean)
+              .join(" — "),
+            dice: audit,
+          })
+          .returning();
+        if (!message) throw new Error("ROLL_SAVE_FAILED");
+        const [event] = await tx
+          .insert(gameEvents)
+          .values({
+            campaignId: auth.campaignId,
+            actionId: body.actionId,
+            membershipId: auth.membershipId,
+            type: "entry.roll",
+            entityType: "character_catalog_entry",
+            entityId: row.entry.id,
+            entityRevision: uses ? row.entry.revision + 1 : row.entry.revision,
+            payload: audit,
+          })
+          .returning();
+        return { message, event, audit };
+      });
+      if (!saved) return reply.code(409).send({ error: "ENTRY_CONFLICT" });
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return reply
+        .code(201)
+        .send({ ...saved.audit, messageId: saved.message.id });
+    },
+  );
 
   app.post("/api/dice", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);

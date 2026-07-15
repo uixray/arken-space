@@ -81,6 +81,16 @@ beforeEach(async () => {
     campaignId: ids.campaign,
     ownerMembershipId: ids.player,
     name: "Hero",
+    stats: {
+      strength: 2,
+      agility: 3,
+      endurance: 0,
+      vitality: 0,
+      knowledge: 0,
+      intelligence: 0,
+      willpower: 0,
+      charisma: 0,
+    },
   });
   await db.insert(schema.scenes).values({
     id: ids.scene,
@@ -348,5 +358,201 @@ describe("Pool B HTTP boundaries", () => {
       `select count(*)::int count from game_events where action_id='${actionId}'`,
     );
     expect(receipt.rows[0]!.count).toBe(0);
+  });
+
+  it("executes authorized ordered entry rolls and audits/decrements uses atomically", async () => {
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "ABILITY",
+        name: "Stun",
+        description: "Lowers initiative",
+        data: {
+          notes: "GM note",
+          values: { magic: 4 },
+          uses: { current: 1, max: 1, recharge: "DAY" },
+          rollActions: [
+            {
+              id: "hit",
+              kind: "HIT",
+              label: "Hit",
+              dice: "1d20",
+              order: 0,
+              advantage: true,
+              modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
+            },
+            {
+              id: "damage",
+              kind: "DAMAGE",
+              label: "Damage",
+              dice: "1d8",
+              order: 1,
+              advantage: false,
+              modifiers: [{ type: "ENTRY_VALUE", key: "magic" }],
+            },
+          ],
+        },
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const template = create.json();
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), catalogEntryId: template.id },
+    });
+    const entry = assigned.json();
+    const roll = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        rollActionId: "hit",
+        visibility: "PUBLIC",
+      },
+    });
+    expect(roll.statusCode).toBe(201);
+    expect(roll.json()).toMatchObject({
+      formula: "2d20kh1 + modifier_0",
+      source: { entryName: "Stun", actionKind: "HIT" },
+      actor: { membershipId: ids.player },
+      characterId: ids.character,
+    });
+    expect(roll.json().terms[0].rolls).toHaveLength(2);
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(snapshot.json().characters[0].entries[0].data.uses.current).toBe(0);
+    expect(snapshot.json().messages.at(-1)).toMatchObject({
+      kind: "DICE",
+      body: expect.stringContaining("Lowers initiative"),
+    });
+    const exhausted = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        rollActionId: "damage",
+        visibility: "PUBLIC",
+      },
+    });
+    expect(exhausted.statusCode).toBe(409);
+  });
+
+  it("updates clock, cooldowns, resources and wallet with public system audit", async () => {
+    await db.insert(schema.characterCatalogEntries).values([
+      {
+        characterId: ids.character,
+        kind: "ABILITY",
+        name: "Weekly",
+        data: {
+          uses: { current: 0, max: 1, recharge: "WEEK", lastRechargeDay: 1 },
+        },
+      },
+      {
+        characterId: ids.character,
+        kind: "ABILITY",
+        name: "Battle",
+        data: { uses: { current: 0, max: 2, recharge: "BATTLE" } },
+      },
+    ]);
+    await database.exec(
+      `update campaigns set day = 7 where id = '${ids.campaign}'`,
+    );
+    const counters = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+        resources: { mana: { current: 5, maximum: 8 } },
+      },
+    });
+    expect(counters.statusCode).toBe(200);
+    expect(counters.json()).toMatchObject({
+      wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+      resources: { mana: { current: 5, maximum: 8 } },
+      revision: 1,
+    });
+    const advance = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "ADVANCE_DAY",
+        revision: 0,
+      },
+    });
+    expect(advance.json()).toMatchObject({ day: 8, revision: 1 });
+    const start = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "START_BATTLE",
+        revision: 1,
+      },
+    });
+    expect(start.json()).toMatchObject({
+      battleActive: true,
+      battleCounter: 1,
+      revision: 2,
+    });
+    const end = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "END_BATTLE",
+        revision: 2,
+      },
+    });
+    expect(end.json()).toMatchObject({
+      battleActive: false,
+      battleCounter: 1,
+      revision: 3,
+    });
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(snapshot.json()).toMatchObject({
+      campaign: { day: 8, battleActive: false, battleCounter: 1, revision: 3 },
+      characters: [
+        {
+          wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+          resources: { mana: { current: 5, maximum: 8 } },
+        },
+      ],
+    });
+    expect(
+      snapshot
+        .json()
+        .characters[0].entries.map(
+          (entry: { data: { uses?: { current: number } } }) =>
+            entry.data.uses?.current,
+        ),
+    ).toEqual([1, 2]);
+    expect(
+      snapshot
+        .json()
+        .messages.filter(
+          (message: { kind: string }) => message.kind === "SYSTEM",
+        ),
+    ).toHaveLength(4);
   });
 });
