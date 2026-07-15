@@ -20,21 +20,17 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   assertIsolatedComposeConfig,
+  buildDatabaseCountsQuery,
   compareDatabaseCounts,
   parseDatabaseCounts,
   resolveRestoredPath,
+  selectResticSnapshot,
   validateRestoreProjectName,
 } from "./restore-rehearsal-core.mjs";
 
 const gibibyte = 1024 ** 3;
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const composeFile = path.join(projectRoot, "docker-compose.restore.yml");
-const countsSqlPath = path.join(
-  projectRoot,
-  "infra",
-  "backup",
-  "database-counts.sql",
-);
 const reportDirectory = path.join(projectRoot, "test-results", "restore");
 const productionHealthUrl =
   process.env.ARKEN_PRODUCTION_HEALTH_URL ??
@@ -278,8 +274,8 @@ function restoreDatabase(dumpFile) {
   }
 }
 
-function readRestoredCounts() {
-  const query = readFileSync(countsSqlPath, "utf8");
+function readRestoredCounts(expectedCounts) {
+  const query = buildDatabaseCountsQuery(expectedCounts);
   const output = captureDocker(
     [
       ...composeBase(),
@@ -412,24 +408,21 @@ try {
   capture("restic", ["check"]);
   record("restic-check", "passed");
 
-  const snapshots = JSON.parse(
-    capture("restic", [
-      "snapshots",
-      "--json",
-      "--latest",
-      "1",
-      "--host",
-      backupHost,
-      "--tag",
-      backupTag,
-    ]),
-  );
-  if (!Array.isArray(snapshots) || snapshots.length !== 1)
-    throw new Error("Exactly one latest arken-space snapshot was expected");
-  const selectedSnapshot =
-    snapshotRequest === "latest"
-      ? snapshots[0]
-      : { id: snapshotRequest, short_id: snapshotRequest };
+  const snapshotArguments = [
+    "snapshots",
+    "--json",
+    "--host",
+    backupHost,
+    "--tag",
+    backupTag,
+  ];
+  if (snapshotRequest !== "latest") snapshotArguments.push(snapshotRequest);
+  const snapshots = JSON.parse(capture("restic", snapshotArguments));
+  const selectedSnapshot = selectResticSnapshot(snapshots, {
+    request: snapshotRequest,
+    expectedHost: backupHost,
+    expectedTag: backupTag,
+  });
   report.snapshot = {
     id: selectedSnapshot.id,
     shortId: selectedSnapshot.short_id,
@@ -483,7 +476,7 @@ try {
   const expectedCounts = parseDatabaseCounts(
     readFileSync(manifests.databaseCounts, "utf8"),
   );
-  const restoredCounts = readRestoredCounts();
+  const restoredCounts = readRestoredCounts(expectedCounts);
   compareDatabaseCounts(expectedCounts, restoredCounts);
   report.databaseCounts = restoredCounts;
   record("database-counts", "passed", restoredCounts);

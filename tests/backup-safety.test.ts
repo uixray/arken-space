@@ -3,9 +3,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertIsolatedComposeConfig,
+  buildDatabaseCountsQuery,
   compareDatabaseCounts,
   parseDatabaseCounts,
   resolveRestoredPath,
+  selectResticSnapshot,
   validateRestoreProjectName,
 } from "../scripts/restore-rehearsal-core.mjs";
 import {
@@ -39,7 +41,9 @@ describe("backup and restore safety", () => {
       path.join(
         root,
         "temporary-snapshot",
-        "srv",
+        "home",
+        "uixray",
+        "apps",
         "arken-space-data",
         "media",
       ),
@@ -63,6 +67,111 @@ describe("backup and restore safety", () => {
       }),
     ).toThrow(/differ from backup manifest/);
     expect(() => parseDatabaseCounts("campaigns|-1")).toThrow(/Invalid/);
+  });
+
+  it("queries exactly the tables recorded by a pre-upgrade backup", () => {
+    const oldManifest = parseDatabaseCounts(
+      "assets|2\naudio_states|1\ncampaigns|1\ncharacters|6\n" +
+        "chat_messages|12\nfog_reveals|3\ngame_events|20\ninvites|0\n" +
+        "memberships|7\nscenes|2\nsessions|7\ntokens|8\n",
+    );
+    const query = buildDatabaseCountsQuery(oldManifest);
+
+    expect(query).toContain("FROM campaigns");
+    expect(query).toContain("FROM tokens");
+    expect(query).not.toContain("FROM catalog_entries");
+    expect(query).not.toContain("FROM token_definitions");
+    expect(query).toMatch(/ORDER BY 1;\n$/);
+  });
+
+  it("rejects unknown manifest tables instead of interpolating them", () => {
+    expect(() =>
+      buildDatabaseCountsQuery({
+        campaigns: 1,
+        "campaigns; DROP TABLE campaigns; --": 1,
+      }),
+    ).toThrow(/unknown table/);
+  });
+
+  it("selects an exact snapshot from restic multi-group output", () => {
+    const snapshots = [
+      {
+        id: "aaaaaaaa11111111",
+        short_id: "aaaaaaaa",
+        hostname: "arken-production",
+        tags: ["arken-space", "invocation-one"],
+        time: "2026-07-14T03:00:00Z",
+      },
+      {
+        id: "bbbbbbbb22222222",
+        short_id: "bbbbbbbb",
+        hostname: "arken-production",
+        tags: ["arken-space", "invocation-two"],
+        time: "2026-07-15T03:00:00Z",
+      },
+    ];
+    expect(
+      selectResticSnapshot(snapshots, {
+        request: "aaaaaaaa",
+        expectedHost: "arken-production",
+        expectedTag: "arken-space",
+      }).id,
+    ).toBe("aaaaaaaa11111111");
+  });
+
+  it("rejects an unknown exact snapshot and mismatched provenance", () => {
+    const snapshots = [
+      {
+        id: "aaaaaaaa11111111",
+        short_id: "aaaaaaaa",
+        hostname: "other-host",
+        tags: ["arken-space"],
+      },
+    ];
+    expect(() =>
+      selectResticSnapshot(snapshots, {
+        request: "bbbbbbbb",
+        expectedHost: "arken-production",
+        expectedTag: "arken-space",
+      }),
+    ).toThrow(/not uniquely found/);
+    expect(() =>
+      selectResticSnapshot(snapshots, {
+        request: "aaaaaaaa",
+        expectedHost: "arken-production",
+        expectedTag: "arken-space",
+      }),
+    ).toThrow(/not uniquely found/);
+  });
+
+  it("selects latest deterministically across restic tag groups", () => {
+    const snapshots = [
+      {
+        id: "bbbbbbbb22222222",
+        hostname: "arken-production",
+        tags: ["arken-space", "invocation-two"],
+        time: "2026-07-15T03:00:00Z",
+      },
+      {
+        id: "cccccccc33333333",
+        hostname: "arken-production",
+        tags: ["arken-space", "invocation-three"],
+        time: "2026-07-15T03:00:00Z",
+      },
+      {
+        id: "dddddddd44444444",
+        hostname: "arken-production",
+        tags: ["unrelated"],
+        time: "2026-07-16T03:00:00Z",
+      },
+    ];
+    expect(
+      selectResticSnapshot(snapshots, {
+        request: "latest",
+        expectedHost: "arken-production",
+        expectedTag: "arken-space",
+      }).id,
+    ).toBe("cccccccc33333333");
   });
 
   it("rejects ports, production media and non-volume PostgreSQL storage", () => {
