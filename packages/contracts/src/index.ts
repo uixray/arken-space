@@ -547,6 +547,7 @@ export interface DrawingDto {
 
 export interface ChatMessageDto {
   id: string;
+  sequence: number;
   membershipId: string;
   displayName: string;
   characterId: string | null;

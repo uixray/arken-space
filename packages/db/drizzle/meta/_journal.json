@@ -64,6 +64,13 @@
       "when": 1784084136104,
       "tag": "0008_shallow_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784131101078,
+      "tag": "0009_hard_ironclad",
+      "breakpoints": true
     }
   ]
 }
