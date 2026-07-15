@@ -495,7 +495,19 @@ test("GM and six isolated players recover authoritative state without security l
     const placementsBefore = (await bootstrap(players[0])).tokens.filter(
       (token) => token.definitionId === controlledDefinitionId,
     ).length;
-    await pages[0]!.locator(".palette-place").click();
+    const [placementResponse] = await Promise.all([
+      pages[0]!.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response
+            .url()
+            .endsWith(
+              `/api/token-definitions/${controlledDefinitionId}/placements`,
+            ),
+      ),
+      pages[0]!.locator(".palette-place").click(),
+    ]);
+    await expectOk(placementResponse);
     await expect
       .poll(
         async () =>
