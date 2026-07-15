@@ -634,7 +634,9 @@ test("GM and six isolated players recover authoritative state without security l
           "; player=" +
           playerOneSnapshot.tokens.map((token) => token.name).join(","),
       );
-    expect(playerOneSnapshot.tokens.map((token) => token.id)).not.toContain(
+    // Bootstrap carries authoritative token state; the canvas renderer applies
+    // fog visibility while always keeping a player's controlled tokens visible.
+    expect(playerOneSnapshot.tokens.map((token) => token.id)).toContain(
       coveredForeignToken.id,
     );
 
