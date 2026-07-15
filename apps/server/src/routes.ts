@@ -101,6 +101,29 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "UNKNOWN_ERROR";
 }
 
+const walletLabels = {
+  gold: "золото",
+  silver: "серебро",
+  copper: "медь",
+  sp: "СП",
+} as const;
+
+type Wallet = Record<keyof typeof walletLabels, number>;
+
+function formatWalletChanges(before: Wallet, after: Wallet) {
+  const changes = Object.entries(walletLabels)
+    .filter(
+      ([key]) => before[key as keyof Wallet] !== after[key as keyof Wallet],
+    )
+    .map(([key, label]) => {
+      const currency = key as keyof Wallet;
+      return `${label} ${before[currency]} → ${after[currency]}`;
+    });
+  return changes.length > 0
+    ? `кошелёк: ${changes.join(", ")}`
+    : "кошелёк: без изменений";
+}
+
 async function findAction(db: Database, campaignId: string, actionId: string) {
   const [event] = await db
     .select()
@@ -2853,7 +2876,7 @@ export function registerRoutes(
         .send({ error: "CHARACTER_CONFLICT", revision: character.revision });
     const changes = [
       body.wallet
-        ? `кошелёк ${JSON.stringify(character.wallet)} → ${JSON.stringify(body.wallet)}`
+        ? formatWalletChanges(character.wallet, body.wallet)
         : "",
       body.resources
         ? `ресурсы ${JSON.stringify(character.resources)} → ${JSON.stringify(body.resources)}`
