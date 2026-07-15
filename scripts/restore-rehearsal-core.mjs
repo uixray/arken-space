@@ -2,6 +2,28 @@ import path from "node:path";
 
 const restoreProjectPattern = /^arken-restore-[a-z0-9][a-z0-9_-]*$/;
 
+const applicationCountTables = new Set([
+  "action_journal",
+  "assets",
+  "audio_states",
+  "campaigns",
+  "catalog_entries",
+  "character_catalog_entries",
+  "characters",
+  "chat_messages",
+  "drawings",
+  "fog_reveals",
+  "game_events",
+  "invites",
+  "memberships",
+  "player_access_grants",
+  "scenes",
+  "sessions",
+  "token_controllers",
+  "token_definitions",
+  "tokens",
+]);
+
 function environmentObject(value) {
   if (!value) return {};
   if (!Array.isArray(value)) return value;
@@ -67,6 +89,25 @@ export function compareDatabaseCounts(expected, actual) {
         ", got " +
         actualText,
     );
+}
+
+export function buildDatabaseCountsQuery(expectedCounts) {
+  const tables = Object.keys(expectedCounts).sort();
+  if (tables.length === 0) throw new Error("Database count manifest is empty");
+  for (const table of tables) {
+    if (!applicationCountTables.has(table))
+      throw new Error(
+        `Database count manifest contains unknown table: ${table}`,
+      );
+  }
+  return (
+    tables
+      .map(
+        (table, index) =>
+          `${index === 0 ? "SELECT" : "UNION ALL SELECT"} '${table}', count(*)::bigint FROM ${table}`,
+      )
+      .join("\n") + "\nORDER BY 1;\n"
+  );
 }
 
 export function assertIsolatedComposeConfig(

@@ -1,10 +1,12 @@
-SELECT 'assets', count(*)::bigint FROM assets
+SELECT 'action_journal', count(*)::bigint FROM action_journal
+UNION ALL SELECT 'assets', count(*)::bigint FROM assets
 UNION ALL SELECT 'audio_states', count(*)::bigint FROM audio_states
 UNION ALL SELECT 'campaigns', count(*)::bigint FROM campaigns
 UNION ALL SELECT 'catalog_entries', count(*)::bigint FROM catalog_entries
 UNION ALL SELECT 'character_catalog_entries', count(*)::bigint FROM character_catalog_entries
 UNION ALL SELECT 'characters', count(*)::bigint FROM characters
 UNION ALL SELECT 'chat_messages', count(*)::bigint FROM chat_messages
+UNION ALL SELECT 'drawings', count(*)::bigint FROM drawings
 UNION ALL SELECT 'fog_reveals', count(*)::bigint FROM fog_reveals
 UNION ALL SELECT 'game_events', count(*)::bigint FROM game_events
 UNION ALL SELECT 'invites', count(*)::bigint FROM invites

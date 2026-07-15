@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertIsolatedComposeConfig,
+  buildDatabaseCountsQuery,
   compareDatabaseCounts,
   parseDatabaseCounts,
   resolveRestoredPath,
@@ -65,6 +66,30 @@ describe("backup and restore safety", () => {
       }),
     ).toThrow(/differ from backup manifest/);
     expect(() => parseDatabaseCounts("campaigns|-1")).toThrow(/Invalid/);
+  });
+
+  it("queries exactly the tables recorded by a pre-upgrade backup", () => {
+    const oldManifest = parseDatabaseCounts(
+      "assets|2\naudio_states|1\ncampaigns|1\ncharacters|6\n" +
+        "chat_messages|12\nfog_reveals|3\ngame_events|20\ninvites|0\n" +
+        "memberships|7\nscenes|2\nsessions|7\ntokens|8\n",
+    );
+    const query = buildDatabaseCountsQuery(oldManifest);
+
+    expect(query).toContain("FROM campaigns");
+    expect(query).toContain("FROM tokens");
+    expect(query).not.toContain("FROM catalog_entries");
+    expect(query).not.toContain("FROM token_definitions");
+    expect(query).toMatch(/ORDER BY 1;\n$/);
+  });
+
+  it("rejects unknown manifest tables instead of interpolating them", () => {
+    expect(() =>
+      buildDatabaseCountsQuery({
+        campaigns: 1,
+        "campaigns; DROP TABLE campaigns; --": 1,
+      }),
+    ).toThrow(/unknown table/);
   });
 
   it("rejects ports, production media and non-volume PostgreSQL storage", () => {

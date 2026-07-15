@@ -20,6 +20,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   assertIsolatedComposeConfig,
+  buildDatabaseCountsQuery,
   compareDatabaseCounts,
   parseDatabaseCounts,
   resolveRestoredPath,
@@ -29,12 +30,6 @@ import {
 const gibibyte = 1024 ** 3;
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const composeFile = path.join(projectRoot, "docker-compose.restore.yml");
-const countsSqlPath = path.join(
-  projectRoot,
-  "infra",
-  "backup",
-  "database-counts.sql",
-);
 const reportDirectory = path.join(projectRoot, "test-results", "restore");
 const productionHealthUrl =
   process.env.ARKEN_PRODUCTION_HEALTH_URL ??
@@ -278,8 +273,8 @@ function restoreDatabase(dumpFile) {
   }
 }
 
-function readRestoredCounts() {
-  const query = readFileSync(countsSqlPath, "utf8");
+function readRestoredCounts(expectedCounts) {
+  const query = buildDatabaseCountsQuery(expectedCounts);
   const output = captureDocker(
     [
       ...composeBase(),
@@ -483,7 +478,7 @@ try {
   const expectedCounts = parseDatabaseCounts(
     readFileSync(manifests.databaseCounts, "utf8"),
   );
-  const restoredCounts = readRestoredCounts();
+  const restoredCounts = readRestoredCounts(expectedCounts);
   compareDatabaseCounts(expectedCounts, restoredCounts);
   report.databaseCounts = restoredCounts;
   record("database-counts", "passed", restoredCounts);
