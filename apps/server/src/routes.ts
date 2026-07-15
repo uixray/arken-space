@@ -2875,9 +2875,7 @@ export function registerRoutes(
         .code(409)
         .send({ error: "CHARACTER_CONFLICT", revision: character.revision });
     const changes = [
-      body.wallet
-        ? formatWalletChanges(character.wallet, body.wallet)
-        : "",
+      body.wallet ? formatWalletChanges(character.wallet, body.wallet) : "",
       body.resources
         ? `ресурсы ${JSON.stringify(character.resources)} → ${JSON.stringify(body.resources)}`
         : "",
