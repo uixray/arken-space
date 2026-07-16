@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import { fileTypeFromBuffer } from "file-type";
+import { parseBuffer, parseFile } from "music-metadata";
 import sharp from "sharp";
 import { env } from "./env.js";
 import { randomToken } from "./security.js";
@@ -9,12 +10,24 @@ import { randomToken } from "./security.js";
 const imageMimes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const audioMimes = new Set(["audio/mpeg", "audio/ogg", "application/ogg"]);
 
+function validatedAudioDuration(durationSeconds: number | undefined) {
+  if (
+    durationSeconds === undefined ||
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds <= 0 ||
+    durationSeconds > 86400
+  )
+    throw new Error("INVALID_AUDIO_DURATION");
+  return durationSeconds;
+}
+
 export interface StoredUpload {
   storageKey: string;
   mimeType: string;
   sizeBytes: number;
   width: number | null;
   height: number | null;
+  durationSeconds: number | null;
 }
 
 export function mediaRoot() {
@@ -79,12 +92,19 @@ export async function storeUpload(
       sizeBytes: output.length,
       width: metadata.width,
       height: metadata.height,
+      durationSeconds: null,
     };
   }
 
   if (!audioMimes.has(detected.mime)) throw new Error("UNSUPPORTED_AUDIO_TYPE");
   if (buffer.length > env.MAX_AUDIO_BYTES) throw new Error("AUDIO_TOO_LARGE");
   const extension = detected.mime === "audio/mpeg" ? ".mp3" : ".ogg";
+  const metadata = await parseBuffer(
+    buffer,
+    { mimeType: detected.mime, size: buffer.length },
+    { duration: true, skipCovers: true },
+  );
+  const durationSeconds = validatedAudioDuration(metadata.format.duration);
   const storageKey = `${randomToken(18)}${extension}`;
   await writeFile(resolve(mediaRoot(), storageKey), buffer, { flag: "wx" });
   return {
@@ -93,7 +113,16 @@ export async function storeUpload(
     sizeBytes: buffer.length,
     width: null,
     height: null,
+    durationSeconds,
   };
+}
+
+export async function inspectStoredAudioDuration(storageKey: string) {
+  const metadata = await parseFile(storedPath(storageKey), {
+    duration: true,
+    skipCovers: true,
+  });
+  return validatedAudioDuration(metadata.format.duration);
 }
 
 export async function openStoredFile(

@@ -11,7 +11,6 @@ import type {
 } from "@arken/contracts";
 import { arkenSystem } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
-import { MusicBar } from "./MusicBar";
 import {
   CatalogEntryForm,
   type CatalogEntryFormInput,
@@ -179,7 +178,7 @@ export function Sidebar(props: Props) {
   } = props;
   const isGm = props.snapshot.me.role === "GM";
   const [tab, setTab] = useState<
-    "character" | "chat" | "palette" | "music" | "setup" | "media" | "scenes"
+    "character" | "chat" | "palette" | "setup" | "media" | "scenes"
   >(isGm ? "setup" : "chat");
   const [playerCharacterOpen, setPlayerCharacterOpen] = useState(false);
   const playerCharacterButtonRef = useRef<HTMLButtonElement>(null);
@@ -253,13 +252,6 @@ export function Sidebar(props: Props) {
         >
           Токены
         </Button>
-        <Button
-          view="flat"
-          aria-pressed={tab === "music"}
-          onClick={() => setTab("music")}
-        >
-          Музыка
-        </Button>
         {isGm && (
           <Button
             view="flat"
@@ -331,14 +323,6 @@ export function Sidebar(props: Props) {
             <PalettePanel {...props} />
           </ArkenDialog>
         )}
-        <div hidden={tab !== "music"}>
-          <MusicBar
-            audio={props.snapshot.audio}
-            assets={props.snapshot.assets}
-            role={props.snapshot.me.role}
-            socket={props.socket}
-          />
-        </div>
         {tab === "setup" && isGm && <SetupPanel {...props} />}
         {tab === "scenes" && isGm && (
           <SceneManagerDialog

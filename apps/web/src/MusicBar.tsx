@@ -1,176 +1,353 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AssetDto, AudioStateDto, Role } from "@arken/contracts";
+import { Button, Checkbox, Loader } from "@gravity-ui/uikit";
 import type { GameSocket } from "./realtime";
+import { ArkenDialog } from "./ui/ArkenDialog";
+import { EmptyState, ErrorState } from "./ui/EntityState";
+import { notify } from "./ui/notifications";
+
+const ENABLED_KEY = "arken.audio.enabled";
+const VOLUME_KEY = "arken.audio.volume";
+const formatTime = (value: number) => {
+  const seconds = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+};
+const formatBytes = (value: number) =>
+  value < 1024 * 1024
+    ? `${Math.max(1, Math.round(value / 1024))} КБ`
+    : `${(value / 1024 / 1024).toFixed(1)} МБ`;
+
+type PendingAudio = { file: File; url: string; duration: number | null };
 
 export function MusicBar({
   audio,
   assets,
   role,
   socket,
+  onUpload,
 }: {
   audio: AudioStateDto;
   assets: AssetDto[];
   role: Role;
   socket: GameSocket | null;
+  onUpload: (file: File, kind: "AUDIO") => Promise<AssetDto>;
 }) {
   const element = useRef<HTMLAudioElement>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [enabled, setEnabled] = useState(
-    () => localStorage.getItem("arken.audio.enabled") === "true",
+    () => localStorage.getItem(ENABLED_KEY) === "true",
   );
   const [volume, setVolume] = useState(() => {
-    const saved = Number(localStorage.getItem("arken.audio.volume"));
+    const saved = Number(localStorage.getItem(VOLUME_KEY));
     return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 0.5;
   });
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(audio.positionSeconds);
-  const tracks = assets.filter((asset) => asset.kind === "AUDIO");
+  const [pending, setPending] = useState<PendingAudio | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const tracks = useMemo(
+    () => assets.filter((asset) => asset.kind === "AUDIO"),
+    [assets],
+  );
   const current = tracks.find((asset) => asset.id === audio.assetId);
 
+  const pendingUrl = pending?.url;
+  useEffect(
+    () => () => {
+      if (pendingUrl) URL.revokeObjectURL(pendingUrl);
+    },
+    [pendingUrl],
+  );
   useEffect(() => {
     const player = element.current;
-    if (!player || !enabled || !current) return;
+    if (!player) return;
     player.volume = volume;
+    player.loop = audio.loop;
     const elapsed =
       audio.playing && audio.startedAt
         ? (Date.now() - new Date(audio.startedAt).getTime()) / 1000
         : 0;
     const expected = audio.positionSeconds + Math.max(0, elapsed);
+    setPosition(expected);
+    if (!enabled || !current) {
+      player.pause();
+      return;
+    }
     if (Math.abs(player.currentTime - expected) > 0.75)
       player.currentTime = expected;
-    player.loop = audio.loop;
-    if (audio.playing) void player.play().catch(() => setEnabled(false));
+    if (audio.playing)
+      void player.play().catch(() => {
+        setEnabled(false);
+        notify({
+          title: "Браузер заблокировал звук",
+          message: "Включите звук вручную в верхней панели.",
+          tone: "warning",
+        });
+      });
     else player.pause();
   }, [audio, current, enabled, volume]);
-
+  useEffect(
+    () => localStorage.setItem(ENABLED_KEY, String(enabled)),
+    [enabled],
+  );
   useEffect(() => {
-    localStorage.setItem("arken.audio.enabled", String(enabled));
-  }, [enabled]);
-
-  useEffect(() => {
-    localStorage.setItem("arken.audio.volume", String(volume));
+    localStorage.setItem(VOLUME_KEY, String(volume));
     if (element.current) element.current.volume = volume;
   }, [volume]);
 
-  const setState = (next: Partial<AudioStateDto>) =>
-    socket?.emit("audio:set", {
-      actionId: crypto.randomUUID(),
-      assetId: next.assetId === undefined ? audio.assetId : next.assetId,
-      playing: next.playing ?? audio.playing,
-      positionSeconds:
-        next.positionSeconds ??
-        element.current?.currentTime ??
-        audio.positionSeconds,
-      loop: next.loop ?? audio.loop,
-      startedAt:
-        next.startedAt === undefined ? audio.startedAt : next.startedAt,
-    });
+  const sendCommand = (
+    command:
+      | { command: "SELECT"; assetId: string | null }
+      | { command: "PLAY" | "PAUSE" | "END" }
+      | { command: "SEEK"; positionSeconds: number }
+      | { command: "SET_LOOP"; loop: boolean },
+  ) =>
+    socket?.emit(
+      "audio:set",
+      {
+        actionId: crypto.randomUUID(),
+        revision: audio.revision,
+        ...command,
+      },
+      (result) => {
+        if (!result.ok)
+          notify({
+            title: "Не удалось изменить музыку",
+            message: result.reason ?? "Сервер отклонил команду",
+            tone: "danger",
+          });
+      },
+    );
+
+  const chooseFile = (file?: File) => {
+    if (!file) return;
+    setPending({ file, url: URL.createObjectURL(file), duration: null });
+    setUploadError(null);
+  };
+  const upload = async () => {
+    if (!pending) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const asset = await onUpload(pending.file, "AUDIO");
+      sendCommand({ command: "SELECT", assetId: asset.id });
+      setPending(null);
+      notify({ title: "Трек загружен", message: asset.name, tone: "success" });
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Не удалось загрузить файл",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+  const togglePlayback = () =>
+    sendCommand({ command: audio.playing ? "PAUSE" : "PLAY" });
 
   return (
-    <section className="music-bar" aria-label="Музыка">
+    <>
       <audio
         ref={element}
         src={current?.url}
         preload="auto"
         onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
         onTimeUpdate={(event) => setPosition(event.currentTarget.currentTime)}
+        onEnded={() => {
+          if (role === "GM" && !audio.loop) sendCommand({ command: "END" });
+        }}
       />
-      <div className="music-state">
-        <span>Музыка</span>
-        <strong>{current?.name ?? "Трек не выбран"}</strong>
-      </div>
-      {role === "GM" && (
-        <select
-          aria-label="Трек"
-          value={audio.assetId ?? ""}
-          onChange={(event) =>
-            setState({
-              assetId: event.target.value || null,
-              playing: false,
-              positionSeconds: 0,
-              startedAt: null,
-            })
-          }
+      <section className="music-topbar" aria-label="Музыка">
+        <div className="music-now-playing" title={current?.name}>
+          <span>Музыка</span>
+          <strong>{current?.name ?? "Трек не выбран"}</strong>
+        </div>
+        {role === "GM" ? (
+          <>
+            <Button size="s" disabled={!current} onClick={togglePlayback}>
+              {audio.playing ? "Пауза" : "Играть"}
+            </Button>
+            <Button size="s" view="flat" onClick={() => setLibraryOpen(true)}>
+              Библиотека
+            </Button>
+          </>
+        ) : !enabled ? (
+          <Button size="s" view="action" onClick={() => setEnabled(true)}>
+            Включить звук
+          </Button>
+        ) : null}
+        {enabled ? (
+          <>
+            <label className="music-local-volume">
+              <span className="visually-hidden">Личная громкость</span>
+              <input
+                aria-label="Личная громкость"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={volume}
+                onChange={(event) => setVolume(Number(event.target.value))}
+              />
+            </label>
+            <Button
+              size="s"
+              view="flat"
+              aria-label="Выключить звук лично для себя"
+              onClick={() => setEnabled(false)}
+            >
+              Выкл.
+            </Button>
+          </>
+        ) : role === "GM" ? (
+          <Button size="s" view="flat" onClick={() => setEnabled(true)}>
+            Включить звук
+          </Button>
+        ) : null}
+      </section>
+      {role === "GM" ? (
+        <ArkenDialog
+          open={libraryOpen}
+          footer={false}
+          title="Музыкальная библиотека"
+          onClose={() => setLibraryOpen(false)}
         >
-          <option value="">Без трека</option>
-          {tracks.map((track) => (
-            <option key={track.id} value={track.id}>
-              {track.name}
-            </option>
-          ))}
-        </select>
-      )}
-      {role === "GM" && current && (
-        <label className="seek">
-          Позиция
-          <input
-            type="range"
-            min="0"
-            max={Math.max(1, duration || audio.positionSeconds + 300)}
-            step="1"
-            value={Math.min(position, duration || audio.positionSeconds + 300)}
-            onChange={(event) => {
-              const positionSeconds = Number(event.target.value);
-              setPosition(positionSeconds);
-              if (element.current)
-                element.current.currentTime = positionSeconds;
-              setState({
-                positionSeconds,
-                startedAt: audio.playing ? new Date().toISOString() : null,
-              });
-            }}
-          />
-        </label>
-      )}
-      {role === "GM" && (
-        <button
-          disabled={!current}
-          onClick={() =>
-            setState(
-              audio.playing
-                ? {
-                    playing: false,
-                    positionSeconds: element.current?.currentTime ?? 0,
-                    startedAt: null,
+          <div className="music-library">
+            <section className="music-library-player">
+              <div>
+                <span>Сейчас играет</span>
+                <strong>{current?.name ?? "Трек не выбран"}</strong>
+              </div>
+              <div className="music-library-controls">
+                <Button disabled={!current} onClick={togglePlayback}>
+                  {audio.playing ? "Пауза" : "Играть"}
+                </Button>
+                <span>
+                  {formatTime(position)} / {formatTime(duration)}
+                </span>
+                <Checkbox
+                  checked={audio.loop}
+                  onUpdate={(checked) =>
+                    sendCommand({ command: "SET_LOOP", loop: checked })
                   }
-                : {
-                    playing: true,
-                    positionSeconds:
-                      element.current?.currentTime ?? audio.positionSeconds,
-                    startedAt: new Date().toISOString(),
-                  },
-            )
-          }
-        >
-          {audio.playing ? "Пауза" : "Играть"}
-        </button>
-      )}
-      {role === "GM" && (
-        <label className="compact-check">
-          <input
-            type="checkbox"
-            checked={audio.loop}
-            onChange={(event) => setState({ loop: event.target.checked })}
-          />{" "}
-          Повтор
-        </label>
-      )}
-      {!enabled ? (
-        <button className="primary" onClick={() => setEnabled(true)}>
-          Включить звук
-        </button>
-      ) : (
-        <label className="volume">
-          Громкость
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={volume}
-            onChange={(event) => setVolume(Number(event.target.value))}
-          />
-        </label>
-      )}
-    </section>
+                >
+                  Повторять
+                </Checkbox>
+              </div>
+              <input
+                aria-label="Позиция воспроизведения"
+                type="range"
+                min="0"
+                max={Math.max(1, duration || audio.positionSeconds + 300)}
+                step="1"
+                disabled={!current}
+                value={Math.min(
+                  position,
+                  duration || audio.positionSeconds + 300,
+                )}
+                onChange={(event) => {
+                  const positionSeconds = Number(event.target.value);
+                  setPosition(positionSeconds);
+                  if (element.current)
+                    element.current.currentTime = positionSeconds;
+                }}
+                onPointerUp={(event) =>
+                  sendCommand({
+                    command: "SEEK",
+                    positionSeconds: Number(event.currentTarget.value),
+                  })
+                }
+                onKeyUp={(event) =>
+                  sendCommand({
+                    command: "SEEK",
+                    positionSeconds: Number(event.currentTarget.value),
+                  })
+                }
+              />
+            </section>
+            <section>
+              <h3>Треки</h3>
+              {tracks.length === 0 ? (
+                <EmptyState
+                  title="Библиотека пуста"
+                  description="Загрузите MP3 или OGG, чтобы включить музыку группе."
+                />
+              ) : (
+                <div className="music-track-list">
+                  {tracks.map((track) => (
+                    <button
+                      type="button"
+                      key={track.id}
+                      className={
+                        track.id === audio.assetId
+                          ? "music-track is-selected"
+                          : "music-track"
+                      }
+                      onClick={() =>
+                        sendCommand({ command: "SELECT", assetId: track.id })
+                      }
+                    >
+                      <strong>{track.name}</strong>
+                      <span>{formatBytes(track.sizeBytes)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+            <section className="music-upload">
+              <h3>Загрузить трек</h3>
+              <input
+                aria-label="Аудиофайл"
+                type="file"
+                accept=".mp3,.ogg,audio/mpeg,audio/ogg"
+                disabled={uploading}
+                onChange={(event) => chooseFile(event.target.files?.[0])}
+              />
+              {pending ? (
+                <div className="music-upload-preview">
+                  <audio
+                    controls
+                    src={pending.url}
+                    onLoadedMetadata={(event) => {
+                      const next = event.currentTarget.duration;
+                      setPending((value) =>
+                        value ? { ...value, duration: next } : null,
+                      );
+                    }}
+                  />
+                  <div>
+                    <strong>{pending.file.name}</strong>
+                    <span>
+                      {formatBytes(pending.file.size)} ·{" "}
+                      {pending.duration == null
+                        ? "читаем длительность…"
+                        : formatTime(pending.duration)}
+                    </span>
+                  </div>
+                  <Button
+                    view="action"
+                    loading={uploading}
+                    onClick={() => void upload()}
+                  >
+                    Загрузить и выбрать
+                  </Button>
+                </div>
+              ) : uploading ? (
+                <div className="music-upload-loading">
+                  <Loader size="m" /> Загрузка…
+                </div>
+              ) : null}
+              {uploadError ? (
+                <ErrorState
+                  title="Не удалось загрузить трек"
+                  description={uploadError}
+                  onRetry={() => void upload()}
+                />
+              ) : null}
+            </section>
+          </div>
+        </ArkenDialog>
+      ) : null}
+    </>
   );
 }

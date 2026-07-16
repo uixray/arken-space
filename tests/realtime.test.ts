@@ -171,6 +171,34 @@ function setAudio(
   });
 }
 
+function audioCommand(
+  socket: typeof gmClient,
+  input:
+    | {
+        actionId: string;
+        revision: number;
+        command: "SELECT";
+        assetId: string | null;
+      }
+    | { actionId: string; revision: number; command: "PLAY" | "PAUSE" | "END" }
+    | {
+        actionId: string;
+        revision: number;
+        command: "SEEK";
+        positionSeconds: number;
+      }
+    | {
+        actionId: string;
+        revision: number;
+        command: "SET_LOOP";
+        loop: boolean;
+      },
+) {
+  return new Promise<CommandAck<AudioStateDto>>((resolve) => {
+    socket.emit("audio:set", input, resolve);
+  });
+}
+
 beforeEach(async () => {
   database = new PGlite();
   await migrate(database);
@@ -622,5 +650,305 @@ describe("durable realtime token commands", () => {
     expect(
       snapshot.assets.some((asset) => asset.id === ids.foreignAudioAsset),
     ).toBe(false);
+  });
+
+  it("applies server-authoritative audio commands with CAS and idempotency", async () => {
+    await database.exec(`
+      insert into assets
+        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+      values
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/audio-command', 'audio/mpeg', 10, 60);
+    `);
+
+    const selectActionId = crypto.randomUUID();
+    const selected = await audioCommand(gmClient, {
+      actionId: selectActionId,
+      revision: 0,
+      command: "SELECT",
+      assetId: ids.audioAsset,
+    });
+    expect(selected).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: {
+        assetId: ids.audioAsset,
+        playing: false,
+        positionSeconds: 0,
+        revision: 1,
+      },
+    });
+
+    expect(
+      await audioCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        command: "PLAY",
+      }),
+    ).toMatchObject({
+      ok: false,
+      status: "CONFLICT",
+      reason: "REVISION_CONFLICT",
+      data: { revision: 1 },
+    });
+
+    const playActionId = crypto.randomUUID();
+    const played = await audioCommand(gmClient, {
+      actionId: playActionId,
+      revision: 1,
+      command: "PLAY",
+    });
+    expect(played).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { playing: true, revision: 2 },
+    });
+    expect(played.data?.startedAt).not.toBeNull();
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const paused = await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 2,
+      command: "PAUSE",
+    });
+    expect(paused).toMatchObject({
+      ok: true,
+      data: { playing: false, revision: 3, startedAt: null },
+    });
+    expect(paused.data?.positionSeconds).toBeGreaterThan(0);
+
+    const sought = await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 3,
+      command: "SEEK",
+      positionSeconds: 12.5,
+    });
+    expect(sought).toMatchObject({
+      ok: true,
+      data: { positionSeconds: 12.5, revision: 4 },
+    });
+
+    const looped = await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 4,
+      command: "SET_LOOP",
+      loop: true,
+    });
+    expect(looped).toMatchObject({
+      ok: true,
+      data: { loop: true, revision: 5 },
+    });
+    await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 5,
+      command: "PLAY",
+    });
+    expect(
+      await audioCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        revision: 6,
+        command: "END",
+      }),
+    ).toMatchObject({
+      ok: false,
+      status: "INVALID",
+      reason: "AUDIO_END_NOT_APPLICABLE",
+    });
+
+    await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 6,
+      command: "SET_LOOP",
+      loop: false,
+    });
+    expect(
+      await audioCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        revision: 7,
+        command: "END",
+      }),
+    ).toMatchObject({ ok: true, data: { playing: false, revision: 8 } });
+
+    const duplicate = await audioCommand(gmClient, {
+      actionId: selectActionId,
+      revision: 0,
+      command: "SELECT",
+      assetId: ids.audioAsset,
+    });
+    expect(duplicate).toMatchObject({
+      ok: true,
+      status: "DUPLICATE",
+      data: { playing: false, positionSeconds: 0, revision: 1 },
+    });
+
+    expect(
+      await audioCommand(client as typeof gmClient, {
+        actionId: crypto.randomUUID(),
+        revision: 8,
+        command: "PLAY",
+      }),
+    ).toMatchObject({ ok: false, status: "FORBIDDEN", reason: "GM_REQUIRED" });
+  });
+
+  it("ignores client startedAt on the temporary legacy audio path", async () => {
+    await database.exec(`
+      insert into assets
+        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes)
+      values
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/audio-legacy', 'audio/mpeg', 10);
+    `);
+    const before = Date.now();
+    const result = await new Promise<CommandAck<AudioStateDto>>((resolve) => {
+      gmClient.emit(
+        "audio:set",
+        {
+          actionId: crypto.randomUUID(),
+          assetId: ids.audioAsset,
+          playing: true,
+          positionSeconds: 4,
+          loop: false,
+          startedAt: "2000-01-01T00:00:00.000Z",
+        },
+        resolve,
+      );
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { playing: true, positionSeconds: 4, revision: 1 },
+    });
+    expect(
+      new Date(result.data?.startedAt ?? 0).getTime(),
+    ).toBeGreaterThanOrEqual(before);
+  });
+
+  it("materializes an expired non-loop deadline when a client reconnects", async () => {
+    await database.exec(`
+      insert into assets
+        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+      values
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Short', 'test/audio-deadline', 'audio/mpeg', 10, 3);
+      insert into audio_states
+        (campaign_id, asset_id, playing, position_seconds, loop, started_at, revision)
+      values
+        ('${ids.campaign}', '${ids.audioAsset}', true, 1, false, now() - interval '10 seconds', 4);
+    `);
+
+    const snapshotPromise = new Promise<
+      Parameters<ServerToClientEvents["game:snapshot"]>[0]
+    >((resolve) => client.once("game:snapshot", resolve));
+    client.emit("game:resync", 0);
+    const snapshot = await snapshotPromise;
+    expect(snapshot.audio).toMatchObject({
+      assetId: ids.audioAsset,
+      playing: false,
+      positionSeconds: 3,
+      startedAt: null,
+      revision: 5,
+    });
+
+    const rows = await database.query<{
+      playing: boolean;
+      position_seconds: number;
+      revision: number;
+    }>(
+      `select playing, position_seconds, revision from audio_states where campaign_id = '${ids.campaign}'`,
+    );
+    expect(rows.rows[0]).toMatchObject({
+      playing: false,
+      position_seconds: 3,
+      revision: 5,
+    });
+  });
+
+  it("atomically applies the first command after a deadline and broadcasts it", async () => {
+    await database.exec(`
+      insert into assets
+        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+      values
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Short', 'test/audio-command-deadline', 'audio/mpeg', 10, 3);
+      insert into audio_states
+        (campaign_id, asset_id, playing, position_seconds, loop, started_at, revision)
+      values
+        ('${ids.campaign}', '${ids.audioAsset}', true, 1, false, now() - interval '10 seconds', 4);
+    `);
+
+    const actionId = crypto.randomUUID();
+    const broadcast = new Promise<
+      Parameters<ServerToClientEvents["audio:state"]>[0]
+    >((resolve) => client.once("audio:state", resolve));
+    const ended = await audioCommand(gmClient, {
+      actionId,
+      revision: 4,
+      command: "END",
+    });
+    expect(ended).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: {
+        playing: false,
+        positionSeconds: 3,
+        startedAt: null,
+        revision: 5,
+      },
+    });
+    await expect(broadcast).resolves.toMatchObject({
+      actionId,
+      sequence: ended.sequence,
+      data: { playing: false, positionSeconds: 3, revision: 5 },
+    });
+
+    const duplicate = await audioCommand(gmClient, {
+      actionId,
+      revision: 4,
+      command: "END",
+    });
+    expect(duplicate).toMatchObject({
+      ok: true,
+      status: "DUPLICATE",
+      sequence: ended.sequence,
+      data: { playing: false, revision: 5 },
+    });
+
+    await database.exec(`
+      update audio_states
+      set playing = true, position_seconds = 1,
+          started_at = now() - interval '10 seconds'
+      where campaign_id = '${ids.campaign}';
+    `);
+    const replayed = await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 5,
+      command: "PLAY",
+    });
+    expect(replayed).toMatchObject({
+      ok: true,
+      data: { playing: true, positionSeconds: 0, revision: 6 },
+    });
+
+    await database.exec(`
+      update audio_states
+      set playing = true, position_seconds = 1,
+          started_at = now() - interval '10 seconds'
+      where campaign_id = '${ids.campaign}';
+    `);
+    const paused = await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 6,
+      command: "PAUSE",
+    });
+    expect(paused).toMatchObject({
+      ok: true,
+      data: {
+        playing: false,
+        positionSeconds: 3,
+        startedAt: null,
+        revision: 7,
+      },
+    });
+
+    const events = await database.query<{ count: number }>(`
+      select count(*)::int as count from game_events
+      where campaign_id = '${ids.campaign}' and type = 'AUDIO_COMMAND'
+    `);
+    expect(events.rows[0]?.count).toBe(3);
   });
 });

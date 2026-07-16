@@ -1,0 +1,1 @@
+ALTER TABLE "assets" ADD COLUMN "duration_seconds" double precision;

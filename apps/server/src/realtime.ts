@@ -32,6 +32,7 @@ import { env } from "./env.js";
 import { buildSnapshot } from "./snapshot.js";
 import { cookieValue } from "./security.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
+import { effectiveAudioPosition, ensureAudioDuration } from "./audio-state.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -56,6 +57,7 @@ function audioDto(state: typeof audioStates.$inferSelect): AudioStateDto {
     positionSeconds: state.positionSeconds,
     loop: state.loop,
     startedAt: state.startedAt?.toISOString() ?? null,
+    revision: state.revision,
     updatedAt: state.updatedAt.toISOString(),
   };
 }
@@ -403,7 +405,8 @@ export function registerRealtime(
           reason: "INVALID_COMMAND",
         });
       }
-      const { actionId, ...stateInput } = parsed.data;
+      const command = parsed.data;
+      const { actionId } = command;
       const [existing] = await db
         .select()
         .from(gameEvents)
@@ -415,6 +418,7 @@ export function registerRealtime(
         )
         .limit(1);
       if (existing) {
+        const recorded = existing.payload as { result?: AudioStateDto } | null;
         const [current] = await db
           .select()
           .from(audioStates)
@@ -424,16 +428,34 @@ export function registerRealtime(
           ok: true,
           status: "DUPLICATE",
           sequence: existing.sequence,
-          ...(current ? { data: audioDto(current) } : {}),
+          ...(recorded?.result
+            ? { data: recorded.result }
+            : current
+              ? { data: audioDto(current) }
+              : {}),
         });
       }
+      const [preCommandState] = await db
+        .select({ assetId: audioStates.assetId })
+        .from(audioStates)
+        .where(eq(audioStates.campaignId, auth.campaignId))
+        .limit(1);
+      const ensuredDuration = preCommandState?.assetId
+        ? await ensureAudioDuration(db, preCommandState.assetId)
+        : null;
 
       const result = await db.transaction(async (tx) => {
-        if (stateInput.assetId) {
+        const requestedAssetId =
+          "command" in command && command.command === "SELECT"
+            ? command.assetId
+            : "command" in command
+              ? undefined
+              : command.assetId;
+        if (requestedAssetId) {
           const [asset] = await tx
             .select({ campaignId: assets.campaignId, kind: assets.kind })
             .from(assets)
-            .where(eq(assets.id, stateInput.assetId))
+            .where(eq(assets.id, requestedAssetId))
             .limit(1);
           if (
             !asset ||
@@ -443,38 +465,150 @@ export function registerRealtime(
             return { rejection: "ASSET_NOT_FOUND" as const };
           }
         }
-        const [state] = await tx
+        await tx
           .insert(audioStates)
           .values({
             campaignId: auth.campaignId,
-            ...stateInput,
-            startedAt: stateInput.startedAt
-              ? new Date(stateInput.startedAt)
-              : null,
-            updatedAt: new Date(),
+            assetId: null,
+            playing: false,
+            positionSeconds: 0,
+            loop: false,
+            startedAt: null,
+            revision: 0,
           })
-          .onConflictDoUpdate({
-            target: audioStates.campaignId,
-            set: {
-              ...stateInput,
-              startedAt: stateInput.startedAt
-                ? new Date(stateInput.startedAt)
-                : null,
-              updatedAt: new Date(),
-            },
+          .onConflictDoNothing();
+        const [current] = await tx
+          .select()
+          .from(audioStates)
+          .where(eq(audioStates.campaignId, auth.campaignId))
+          .limit(1);
+        if (!current) return null;
+
+        const expectedRevision =
+          "command" in command ? command.revision : current.revision;
+        if (current.revision !== expectedRevision) {
+          return { rejection: "REVISION_CONFLICT" as const, current };
+        }
+
+        const [selectedAsset] = current.assetId
+          ? await tx
+              .select({ durationSeconds: assets.durationSeconds })
+              .from(assets)
+              .where(eq(assets.id, current.assetId))
+              .limit(1)
+          : [];
+        const durationSeconds = current.assetId
+          ? (selectedAsset?.durationSeconds ?? ensuredDuration)
+          : null;
+        const now = new Date();
+        const effectivePosition = effectiveAudioPosition(
+          current,
+          now,
+          durationSeconds,
+        );
+        const deadlineElapsed = Boolean(
+          current.playing &&
+          !current.loop &&
+          current.startedAt &&
+          durationSeconds &&
+          effectivePosition >= durationSeconds,
+        );
+        const logicalPlaying = deadlineElapsed ? false : current.playing;
+        let next = {
+          assetId: current.assetId,
+          playing: logicalPlaying,
+          positionSeconds: effectivePosition,
+          loop: current.loop,
+          startedAt: logicalPlaying ? now : null,
+        };
+
+        if ("command" in command) {
+          switch (command.command) {
+            case "SELECT":
+              next = {
+                ...next,
+                assetId: command.assetId,
+                playing: false,
+                positionSeconds: 0,
+                startedAt: null,
+              };
+              break;
+            case "PLAY":
+              if (!current.assetId || !durationSeconds) {
+                return { rejection: "AUDIO_NOT_SELECTED" as const };
+              }
+              next = {
+                ...next,
+                playing: true,
+                positionSeconds:
+                  effectivePosition >= durationSeconds ? 0 : effectivePosition,
+                startedAt: now,
+              };
+              break;
+            case "PAUSE":
+              next = { ...next, playing: false, startedAt: null };
+              break;
+            case "SEEK":
+              next = {
+                ...next,
+                positionSeconds: durationSeconds
+                  ? Math.min(command.positionSeconds, durationSeconds)
+                  : command.positionSeconds,
+                startedAt: logicalPlaying ? now : null,
+              };
+              break;
+            case "SET_LOOP":
+              next = { ...next, loop: command.loop };
+              break;
+            case "END":
+              if (
+                !current.assetId ||
+                (!logicalPlaying && !deadlineElapsed) ||
+                current.loop
+              ) {
+                return { rejection: "AUDIO_END_NOT_APPLICABLE" as const };
+              }
+              next = { ...next, playing: false, startedAt: null };
+              break;
+          }
+        } else {
+          // Compatibility path: the client timestamp is deliberately ignored.
+          next = {
+            assetId: command.assetId,
+            playing: command.assetId ? command.playing : false,
+            positionSeconds: command.positionSeconds,
+            loop: command.loop,
+            startedAt: command.assetId && command.playing ? now : null,
+          };
+        }
+
+        const [state] = await tx
+          .update(audioStates)
+          .set({
+            ...next,
+            revision: current.revision + 1,
+            updatedAt: now,
           })
+          .where(
+            and(
+              eq(audioStates.campaignId, auth.campaignId),
+              eq(audioStates.revision, current.revision),
+            ),
+          )
           .returning();
-        if (!state) return null;
+        if (!state) {
+          return { rejection: "REVISION_CONFLICT" as const, current };
+        }
         const [event] = await tx
           .insert(gameEvents)
           .values({
             campaignId: auth.campaignId,
             actionId,
             membershipId: auth.membershipId,
-            type: "AUDIO_STATE_SET",
+            type: "AUDIO_COMMAND",
             entityType: "AUDIO_STATE",
             entityId: auth.campaignId,
-            payload: stateInput,
+            payload: { command, result: audioDto(state) },
           })
           .returning();
         return event ? { event, state } : null;
@@ -482,8 +616,12 @@ export function registerRealtime(
       if (result && "rejection" in result) {
         return ack?.({
           ok: false,
-          status: "INVALID",
+          status:
+            result.rejection === "REVISION_CONFLICT" ? "CONFLICT" : "INVALID",
           reason: result.rejection,
+          ...(result.rejection === "REVISION_CONFLICT" && result.current
+            ? { data: audioDto(result.current) }
+            : {}),
         });
       }
       if (!result) {

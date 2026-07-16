@@ -97,6 +97,7 @@ export const assets = pgTable("assets", {
   sizeBytes: integer("size_bytes").notNull(),
   width: integer("width"),
   height: integer("height"),
+  durationSeconds: doublePrecision("duration_seconds"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -499,6 +500,7 @@ export const audioStates = pgTable("audio_states", {
   positionSeconds: doublePrecision("position_seconds").notNull().default(0),
   loop: boolean("loop").notNull().default(false),
   startedAt: timestamp("started_at", { withTimezone: true }),
+  revision: integer("revision").notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

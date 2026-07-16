@@ -17,6 +17,7 @@ import { api, ApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
+import { MusicBar } from "./MusicBar";
 import { appendChatMessage } from "./chat-state";
 import { addRollToast, removeRollToast, type RollToast } from "./toast-state";
 import { notify } from "./ui/notifications";
@@ -660,6 +661,27 @@ export function App() {
           )}
         </div>
         <div className="status-line">
+          <MusicBar
+            audio={snapshot.audio}
+            assets={snapshot.assets}
+            role={snapshot.me.role}
+            socket={socket}
+            onUpload={async (file) => {
+              const form = new FormData();
+              form.append("file", file);
+              const asset = await api<AssetDto>("/api/assets?kind=AUDIO", {
+                method: "POST",
+                headers: { "x-action-id": crypto.randomUUID() },
+                body: form,
+              });
+              await load();
+              return {
+                ...asset,
+                url: `/api/assets/${asset.id}/content`,
+                createdAt: String(asset.createdAt),
+              };
+            }}
+          />
           <span
             className={connection === "ONLINE" ? "status online" : "status"}
           >

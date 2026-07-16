@@ -20,6 +20,7 @@ import type { AuthContext } from "./auth.js";
 import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import { env } from "./env.js";
 import { normalizeLegacyEntryData } from "./entry-data.js";
+import { normalizeAudioDeadline } from "./audio-state.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -27,6 +28,7 @@ export async function buildSnapshot(
   db: Database,
   auth: AuthContext,
 ): Promise<GameSnapshot> {
+  await normalizeAudioDeadline(db, auth.campaignId);
   const [campaign] = await db
     .select()
     .from(campaigns)
@@ -381,6 +383,7 @@ export async function buildSnapshot(
       sizeBytes: asset.sizeBytes,
       width: asset.width,
       height: asset.height,
+      durationSeconds: asset.durationSeconds,
       url: `/api/assets/${asset.id}/content`,
       createdAt: asset.createdAt.toISOString(),
     })),
@@ -391,6 +394,7 @@ export async function buildSnapshot(
           positionSeconds: audio.positionSeconds,
           loop: audio.loop,
           startedAt: audio.startedAt?.toISOString() ?? null,
+          revision: audio.revision,
           updatedAt: audio.updatedAt.toISOString(),
         }
       : {
@@ -399,6 +403,7 @@ export async function buildSnapshot(
           positionSeconds: 0,
           loop: false,
           startedAt: null,
+          revision: 0,
           updatedAt: new Date().toISOString(),
         },
     snapshotVersion,

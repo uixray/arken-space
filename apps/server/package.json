@@ -19,6 +19,7 @@
     "drizzle-orm": "latest",
     "fastify": "latest",
     "file-type": "latest",
+    "music-metadata": "^11.14.0",
     "sharp": "latest",
     "socket.io": "latest",
     "zod": "latest"

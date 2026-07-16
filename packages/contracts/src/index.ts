@@ -459,7 +459,34 @@ export const diceRequestSchema = z.object({
   label: z.string().trim().max(100).optional(),
 });
 
-export const audioStateUpdateSchema = z.object({
+export const audioCommandSchema = z.discriminatedUnion("command", [
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.literal("SELECT"),
+    assetId: z.string().uuid().nullable(),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.enum(["PLAY", "PAUSE", "END"]),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.literal("SEEK"),
+    positionSeconds: z.number().min(0).max(86400),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.literal("SET_LOOP"),
+    loop: z.boolean(),
+  }),
+]);
+
+/** Transitional input accepted until the music UI emits audioCommandSchema. */
+export const legacyAudioStateUpdateSchema = z.object({
   actionId: actionIdSchema,
   assetId: z.string().uuid().nullable(),
   playing: z.boolean(),
@@ -467,6 +494,10 @@ export const audioStateUpdateSchema = z.object({
   loop: z.boolean(),
   startedAt: z.string().datetime().nullable(),
 });
+export const audioStateUpdateSchema = z.union([
+  audioCommandSchema,
+  legacyAudioStateUpdateSchema,
+]);
 export const entryRollRequestSchema = z.object({
   actionId: actionIdSchema,
   rollActionId: z.string(),
@@ -510,6 +541,7 @@ export interface AssetDto {
   sizeBytes: number;
   width: number | null;
   height: number | null;
+  durationSeconds: number | null;
   url: string;
   createdAt: string;
 }
@@ -665,6 +697,7 @@ export interface AudioStateDto {
   positionSeconds: number;
   loop: boolean;
   startedAt: string | null;
+  revision: number;
   updatedAt: string;
 }
 

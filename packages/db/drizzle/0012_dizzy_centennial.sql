@@ -1,0 +1,1 @@
+ALTER TABLE "audio_states" ADD COLUMN "revision" integer DEFAULT 0 NOT NULL;

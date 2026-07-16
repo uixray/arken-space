@@ -121,6 +121,7 @@ const snapshot: GameSnapshot = {
     positionSeconds: 0,
     loop: false,
     startedAt: null,
+    revision: 0,
     updatedAt: new Date().toISOString(),
   },
   snapshotVersion: 0,
@@ -203,7 +204,7 @@ test("GM opens token and file workflows without leaving the canvas", async ({
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 
-  await tabs.nth(6).click();
+  await page.locator(".tabs").getByRole("button", { name: "Файлы" }).click();
   const filesDialog = page.getByRole("dialog");
   await expect(
     filesDialog.getByRole("heading", { name: "Файлы" }),
@@ -218,6 +219,32 @@ test("GM opens token and file workflows without leaving the canvas", async ({
     await expect(filesDialog.getByText(section, { exact: true })).toBeVisible();
   }
   await expect(page.locator("canvas").first()).toBeVisible();
+});
+
+test("GM controls music from the top bar and opens the library", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.goto("/");
+
+  const music = page.getByRole("region", { name: "Музыка" });
+  await expect(music).toContainText("Трек не выбран");
+  await music.getByRole("button", { name: "Библиотека" }).click();
+  const dialog = page.getByRole("dialog", { name: "Музыкальная библиотека" });
+  await expect(dialog.getByText("Библиотека пуста")).toBeVisible();
+  await expect(dialog.getByLabel("Аудиофайл")).toBeVisible();
+  await expect(
+    page.locator(".tabs").getByRole("button", { name: "Музыка" }),
+  ).toHaveCount(0);
 });
 
 test("GM prepares a scene locally before publishing it to players", async ({
