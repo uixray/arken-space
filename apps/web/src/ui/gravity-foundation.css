@@ -1,0 +1,115 @@
+:root {
+  --arken-ui-bg: oklch(0.17 0.008 75);
+  --arken-ui-surface: oklch(0.21 0.01 75);
+  --arken-ui-surface-raised: oklch(0.25 0.014 75);
+  --arken-ui-border: oklch(0.38 0.018 75);
+  --arken-ui-text: oklch(0.91 0.016 75);
+  --arken-ui-muted: oklch(0.7 0.018 75);
+  --arken-ui-accent: oklch(0.68 0.13 46);
+  --arken-layer-canvas: 10;
+  --arken-layer-panel: 100;
+  --arken-layer-popup: 1000;
+  --arken-layer-dialog: 2000;
+  --arken-layer-toast: 3000;
+}
+
+.gravity-preview {
+  min-height: 100%;
+  padding: 32px;
+  overflow: auto;
+  background:
+    linear-gradient(oklch(0.24 0.012 75 / 35%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.24 0.012 75 / 35%) 1px, transparent 1px),
+    var(--arken-ui-bg);
+  background-size: 32px 32px;
+  color: var(--arken-ui-text);
+}
+
+.gravity-preview__header,
+.gravity-preview__section {
+  width: min(1040px, 100%);
+  margin-inline: auto;
+}
+
+.gravity-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-block: 12px 28px;
+}
+
+.gravity-preview__header h1 {
+  margin-top: 5px;
+  font-size: 24px;
+}
+
+.gravity-preview__eyebrow {
+  color: var(--arken-ui-accent);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gravity-preview__section {
+  display: grid;
+  gap: 20px;
+  padding: 24px 0;
+  border-top: 1px solid var(--arken-ui-border);
+}
+
+.gravity-preview__section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.gravity-preview__section-heading p {
+  max-width: 60ch;
+  margin-top: 6px;
+  color: var(--arken-ui-muted);
+  line-height: 1.5;
+}
+
+.gravity-preview__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.gravity-preview__fields,
+.gravity-preview__dialog-fields,
+.gravity-preview__popup {
+  display: grid;
+  gap: 12px;
+}
+
+.gravity-preview__fields {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-items: start;
+}
+
+.gravity-preview__popup {
+  min-width: 260px;
+  padding: 16px;
+  border: 1px solid var(--arken-ui-border);
+  background: var(--arken-ui-surface-raised);
+}
+
+.arken-dialog-message {
+  max-width: 55ch;
+  color: var(--arken-ui-muted);
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .gravity-preview {
+    padding: 20px;
+  }
+
+  .gravity-preview__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
