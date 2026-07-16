@@ -214,6 +214,7 @@ export function App() {
   );
   const [error, setError] = useState("");
   const [createSceneOpen, setCreateSceneOpen] = useState(false);
+  const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
 
   useEffect(() => {
     if (!error || !snapshot) return;
@@ -652,7 +653,7 @@ export function App() {
           {!previewSnapshot && snapshot.me.role === "GM" && (
             <button
               aria-label="Создать сцену"
-              onClick={() => setCreateSceneOpen(true)}
+              onClick={() => setSceneDialogRequest((value) => value + 1)}
             >
               +
             </button>
@@ -1204,6 +1205,71 @@ export function App() {
                 }),
               )
             }
+            sceneDialogRequest={sceneDialogRequest}
+            viewedSceneId={activeScene?.id ?? null}
+            onViewScene={(sceneId) => setViewedSceneId(sceneId)}
+            onSaveScene={async (scene, draft) => {
+              if (!scene) {
+                await run(async () => {
+                  const created = await api<
+                    import("@arken/contracts").SceneDto
+                  >("/api/scenes", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      name: draft.name,
+                      mapAssetId: draft.mapAssetId,
+                      width: draft.width,
+                      height: draft.height,
+                      grid: {
+                        enabled: draft.gridEnabled,
+                        size: draft.gridSize,
+                        offsetX: draft.gridOffsetX,
+                        offsetY: draft.gridOffsetY,
+                        color: draft.gridColor,
+                        opacity: draft.gridOpacity,
+                      },
+                      backgroundFrame: {
+                        x: draft.frameX,
+                        y: draft.frameY,
+                        width: draft.frameWidth,
+                        height: draft.frameHeight,
+                      },
+                    }),
+                  });
+                  setViewedSceneId(created.id);
+                }, true);
+                return;
+              }
+              await run(
+                () =>
+                  api(`/api/scenes/${scene.id}/canvas`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision: scene.revision ?? 0,
+                      name: draft.name,
+                      mapAssetId: draft.mapAssetId,
+                      world: { width: draft.width, height: draft.height },
+                      grid: {
+                        enabled: draft.gridEnabled,
+                        size: draft.gridSize,
+                        offsetX: draft.gridOffsetX,
+                        offsetY: draft.gridOffsetY,
+                        color: draft.gridColor,
+                        opacity: draft.gridOpacity,
+                      },
+                      backgroundFrame: {
+                        x: draft.frameX,
+                        y: draft.frameY,
+                        width: draft.frameWidth,
+                        height: draft.frameHeight,
+                      },
+                    }),
+                  }),
+                true,
+              );
+            }}
             onCreateScene={async (name) =>
               run(
                 () =>

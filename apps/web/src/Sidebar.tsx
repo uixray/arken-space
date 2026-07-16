@@ -23,6 +23,7 @@ import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ImageUploadField } from "./ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
+import { SceneManagerDialog, type SceneDraft } from "./ui/SceneManagerDialog";
 
 function formatDiceBreakdown(dice: GameSnapshot["messages"][number]["dice"]) {
   if (!dice) return "";
@@ -86,14 +87,24 @@ type Props = {
   onListPlayerAccess: () => Promise<PlayerAccessDto[]>;
   onRotatePlayerAccess: (id: string) => Promise<PlayerAccessSecretDto>;
   onRevokePlayerAccess: (id: string) => Promise<void>;
-  onCreateScene: (name: string) => Promise<void>;
+  onSaveScene: (
+    scene: GameSnapshot["scenes"][number] | null,
+    draft: SceneDraft,
+  ) => Promise<void>;
   onActivateScene: (sceneId: string) => Promise<void>;
+  /** @deprecated SceneManagerDialog owns scene editing. */
+  onCreateScene: (name: string) => Promise<void>;
+  /** @deprecated SceneManagerDialog owns scene editing. */
   onAssignMap: (sceneId: string, assetId: string | null) => Promise<void>;
+  /** @deprecated SceneManagerDialog owns scene editing. */
   onRenameScene: (
     sceneId: string,
     revision: number,
     name: string,
   ) => Promise<void>;
+  onViewScene: (sceneId: string) => void;
+  viewedSceneId: string | null;
+  sceneDialogRequest: number;
   onRenameMembership: (
     membershipId: string,
     revision: number,
@@ -168,7 +179,7 @@ export function Sidebar(props: Props) {
   } = props;
   const isGm = props.snapshot.me.role === "GM";
   const [tab, setTab] = useState<
-    "character" | "chat" | "palette" | "music" | "setup" | "media"
+    "character" | "chat" | "palette" | "music" | "setup" | "media" | "scenes"
   >(isGm ? "setup" : "chat");
   const [playerCharacterOpen, setPlayerCharacterOpen] = useState(false);
   const playerCharacterButtonRef = useRef<HTMLButtonElement>(null);
@@ -199,6 +210,9 @@ export function Sidebar(props: Props) {
     setTab("chat");
     onRequestedChatMessageHandled();
   }, [requestedChatMessageId, onRequestedChatMessageHandled]);
+  useEffect(() => {
+    if (props.sceneDialogRequest > 0 && isGm) setTab("scenes");
+  }, [props.sceneDialogRequest, isGm]);
   useEffect(() => {
     if (!playerCharacterOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -246,6 +260,15 @@ export function Sidebar(props: Props) {
         >
           Музыка
         </Button>
+        {isGm && (
+          <Button
+            view="flat"
+            aria-pressed={tab === "scenes"}
+            onClick={() => setTab("scenes")}
+          >
+            Сцены
+          </Button>
+        )}
         {isGm && (
           <Button
             view="flat"
@@ -317,6 +340,18 @@ export function Sidebar(props: Props) {
           />
         </div>
         {tab === "setup" && isGm && <SetupPanel {...props} />}
+        {tab === "scenes" && isGm && (
+          <SceneManagerDialog
+            open
+            snapshot={props.snapshot}
+            viewedSceneId={props.viewedSceneId}
+            onClose={() => setTab("chat")}
+            onView={props.onViewScene}
+            onPublish={props.onActivateScene}
+            onSave={props.onSaveScene}
+            onUpload={props.onUpload}
+          />
+        )}
         {tab === "media" && (
           <ArkenDialog
             open
@@ -1699,8 +1734,8 @@ function SetupPanel(props: Props) {
           Посмотреть глазами игрока
         </Button>
       </div>
-      <div className="subsection">
-        <h3>Сцены</h3>
+      <div className="subsection" hidden aria-hidden="true">
+        <h3>Сцены (устаревшее управление)</h3>
         <label className="field">
           Активная
           <FormSelect
