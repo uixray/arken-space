@@ -39,7 +39,7 @@ export interface SceneRendererProps {
   onDrawingCreate: (drawing: {
     points: number[];
     color: string;
-  }) => Promise<void>;
+  }) => Promise<DrawingDto | void>;
   onPing: (point: { x: number; y: number }) => void;
   onPlaceTokenDefinition?: (
     definitionId: string,

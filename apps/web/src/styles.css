@@ -171,6 +171,14 @@ code {
   min-width: 32px;
   padding: 0;
 }
+.scene-token-count {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.scene-switcher .publish-scene {
+  min-width: auto;
+  padding: 0 10px;
+}
 .status-line {
   justify-content: flex-end;
   color: var(--muted);
@@ -225,6 +233,10 @@ code {
 }
 .toolbar-overflow {
   position: relative;
+}
+.toolbar-history {
+  display: flex;
+  gap: var(--space-xs);
   margin-left: auto;
 }
 .toolbar-overflow summary {

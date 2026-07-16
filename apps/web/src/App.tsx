@@ -186,6 +186,9 @@ export function App() {
   const [canvasEditMode, setCanvasEditMode] = useState<
     "BACKGROUND" | "WORLD" | null
   >(null);
+  // A GM may inspect and prepare another scene without moving the players.
+  // The server-side `active` flag remains the broadcast scene.
+  const [viewedSceneId, setViewedSceneId] = useState<string | null>(null);
   const [gridPreview, setGridPreview] = useState<
     import("@arken/contracts").SceneDto["grid"] | null
   >(null);
@@ -474,8 +477,13 @@ export function App() {
     );
 
   const viewSnapshot = previewSnapshot ?? snapshot;
-  const activeScene =
+  const broadcastScene =
     viewSnapshot.scenes.find((scene) => scene.active) ?? viewSnapshot.scenes[0];
+  const activeScene =
+    !previewSnapshot && snapshot.me.role === "GM" && viewedSceneId
+      ? (viewSnapshot.scenes.find((scene) => scene.id === viewedSceneId) ??
+        broadcastScene)
+      : broadcastScene;
   const activeTokens = activeScene
     ? viewSnapshot.tokens.filter((token) => token.sceneId === activeScene.id)
     : [];
@@ -497,20 +505,14 @@ export function App() {
         </div>
         <div className="scene-switcher">
           <select
-            aria-label="Активная сцена"
+            aria-label={
+              snapshot.me.role === "GM"
+                ? "Просматриваемая сцена"
+                : "Активная сцена"
+            }
             value={activeScene?.id ?? ""}
             disabled={Boolean(previewSnapshot) || snapshot.me.role !== "GM"}
-            onChange={(event) =>
-              void run(() =>
-                api("/api/scenes/activate", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    sceneId: event.target.value,
-                  }),
-                }),
-              )
-            }
+            onChange={(event) => setViewedSceneId(event.target.value)}
           >
             {viewSnapshot.scenes.map((scene) => (
               <option key={scene.id} value={scene.id}>
@@ -518,6 +520,32 @@ export function App() {
               </option>
             ))}
           </select>
+          {activeScene && (
+            <span className="scene-token-count">
+              {activeTokens.length} токенов
+            </span>
+          )}
+          {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
+            <button
+              className="publish-scene"
+              disabled={activeScene.id === broadcastScene?.id}
+              onClick={() =>
+                void run(() =>
+                  api("/api/scenes/activate", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      sceneId: activeScene.id,
+                    }),
+                  }),
+                )
+              }
+            >
+              {activeScene.id === broadcastScene?.id
+                ? "У игроков"
+                : "Показать игрокам"}
+            </button>
+          )}
           {!previewSnapshot && snapshot.me.role === "GM" && (
             <button
               aria-label="Создать сцену"
@@ -535,13 +563,7 @@ export function App() {
                       }),
                     },
                   );
-                  await api("/api/scenes/activate", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      sceneId: scene.id,
-                    }),
-                  });
+                  setViewedSceneId(scene.id);
                 }, true);
               }}
             >
@@ -605,7 +627,7 @@ export function App() {
                 aria-pressed={tool === "PAN"}
                 onClick={() => setTool("PAN")}
               >
-                Панорама
+                Перемещение
               </button>
               {!previewSnapshot && snapshot.me.role === "GM" && (
                 <>
@@ -623,13 +645,24 @@ export function App() {
                   </button>
                 </>
               )}
-              {!previewSnapshot && (
-                <CanvasHistoryControls
-                  sceneId={activeScene?.id}
-                  disabled={!activeScene}
-                  version={snapshot.snapshotVersion}
-                />
-              )}
+              <button
+                aria-pressed={tool === "DRAW"}
+                onClick={() => setTool("DRAW")}
+              >
+                Рисование
+              </button>
+              <button
+                aria-pressed={tool === "RULER"}
+                onClick={() => setTool("RULER")}
+              >
+                Линейка
+              </button>
+              <button
+                aria-pressed={tool === "PING"}
+                onClick={() => setTool("PING")}
+              >
+                Ping
+              </button>
               {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
                 <>
                   <GridSettings
@@ -678,6 +711,15 @@ export function App() {
               )}
             </div>
             {!previewSnapshot && (
+              <div className="toolbar-history">
+                <CanvasHistoryControls
+                  sceneId={activeScene?.id}
+                  disabled={!activeScene}
+                  version={snapshot.snapshotVersion}
+                />
+              </div>
+            )}
+            {!previewSnapshot && (
               <details className="toolbar-overflow">
                 <summary aria-label="Дополнительные инструменты">•••</summary>
                 <div className="toolbar-overflow-menu">
@@ -713,28 +755,9 @@ export function App() {
                       </label>
                     </div>
                   )}
-                  <button
-                    aria-pressed={tool === "DRAW"}
-                    onClick={() => setTool("DRAW")}
-                  >
-                    Рисовать
-                  </button>
-                  <button
-                    aria-pressed={tool === "RULER"}
-                    onClick={() => setTool("RULER")}
-                  >
-                    Линейка
-                  </button>
-                  <button
-                    aria-pressed={tool === "PING"}
-                    onClick={() => setTool("PING")}
-                  >
-                    Ping
-                  </button>
                 </div>
               </details>
             )}
-            <span>{activeTokens.length} токенов</span>
           </div>
           {activeScene ? (
             <Suspense
@@ -789,17 +812,23 @@ export function App() {
                   setTool("PAN");
                 }}
                 onDrawingCreate={async (drawing) => {
-                  await run(() =>
-                    api("/api/drawings", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        sceneId: activeScene.id,
-                        ...drawing,
-                      }),
-                    }),
-                  );
+                  let created:
+                    import("@arken/contracts").DrawingDto | undefined;
+                  await run(async () => {
+                    created = await api<import("@arken/contracts").DrawingDto>(
+                      "/api/drawings",
+                      {
+                        method: "POST",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          sceneId: activeScene.id,
+                          ...drawing,
+                        }),
+                      },
+                    );
+                  });
                   setTool("PAN");
+                  return created;
                 }}
                 onPing={(point) => {
                   socket?.emit("map:ping", {
