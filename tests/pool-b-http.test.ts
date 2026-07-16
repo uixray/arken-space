@@ -174,6 +174,52 @@ afterEach(async () => {
 });
 
 describe("Pool B HTTP boundaries", () => {
+  it("creates reusable token definitions with dimensions and controller permissions", async () => {
+    const denied = await app.inject({
+      method: "POST",
+      url: "/api/token-definitions",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        name: "Denied",
+        defaultWidth: 80,
+        defaultHeight: 96,
+      },
+    });
+    expect(denied.statusCode).toBe(403);
+
+    const actionId = crypto.randomUUID();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/token-definitions",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId,
+        name: "Scout",
+        characterId: ids.character,
+        defaultWidth: 80,
+        defaultHeight: 96,
+        controllerMembershipIds: [ids.player],
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      name: "Scout",
+      characterId: ids.character,
+      defaultWidth: 80,
+      defaultHeight: 96,
+      controllerMembershipIds: [ids.player],
+    });
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/token-definitions",
+      headers: headers(secrets.gm),
+      payload: { actionId, name: "Changed" },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().id).toBe(created.json().id);
+  });
+
   it("filters the palette, exposes own unassigned image assets and places definitions idempotently", async () => {
     const ownToken = crypto.randomUUID();
     const ownPortrait = crypto.randomUUID();
@@ -350,6 +396,27 @@ describe("Pool B HTTP boundaries", () => {
         undoable: false,
       }),
     });
+  });
+
+  it("keeps token definition sizing GM-only", async () => {
+    const denied = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${ids.definition}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        defaultWidth: 128,
+        defaultHeight: 128,
+      },
+    });
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json()).toMatchObject({ error: "TOKEN_SIZE_FORBIDDEN" });
+    const [definition] = await db
+      .select()
+      .from(schema.tokenDefinitions)
+      .where(eq(schema.tokenDefinitions.id, ids.definition));
+    expect(definition).toMatchObject({ defaultWidth: 64, defaultHeight: 64 });
   });
 
   it("audits locked cascade counts and scenes and replays definition deletion idempotently", async () => {
