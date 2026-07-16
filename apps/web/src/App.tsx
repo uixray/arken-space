@@ -216,6 +216,12 @@ export function App() {
   const [rollToasts, setRollToasts] = useState<RollToast[]>([]);
   const toastAppearanceRef = useRef(0);
   const knownChatMessageIdsRef = useRef(new Set<string>());
+  const characterMutationQueuesRef = useRef(
+    new Map<
+      string,
+      Promise<import("@arken/contracts").CharacterDto | undefined>
+    >(),
+  );
   const handleChatVisibilityChange = useCallback((visible: boolean) => {
     chatOpenRef.current = visible;
     if (visible)
@@ -456,6 +462,85 @@ export function App() {
       );
       throw reason;
     }
+  };
+
+  const patchCharacter = (
+    id: string,
+    patch: Partial<import("@arken/contracts").CharacterDto>,
+  ) => {
+    const requestedRevision =
+      patch.revision ??
+      snapshot?.characters.find((character) => character.id === id)?.revision;
+    setSnapshot((current) =>
+      current
+        ? {
+            ...current,
+            characters: current.characters.map((character) =>
+              character.id === id
+                ? {
+                    ...character,
+                    ...patch,
+                    stats: patch.stats
+                      ? { ...character.stats, ...patch.stats }
+                      : character.stats,
+                  }
+                : character,
+            ),
+          }
+        : current,
+    );
+    const previous =
+      characterMutationQueuesRef.current.get(id) ?? Promise.resolve(undefined);
+    const operation = previous.then(async (previousCharacter) => {
+      const { revision: _revision, ...updates } = patch;
+      const updated = await api<import("@arken/contracts").CharacterDto>(
+        `/api/characters/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...updates,
+            actionId: crypto.randomUUID(),
+            revision: previousCharacter?.revision ?? requestedRevision,
+          }),
+        },
+      );
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              characters: current.characters.map((character) =>
+                character.id === id ? updated : character,
+              ),
+            }
+          : current,
+      );
+      return updated;
+    });
+    // Keep the queue tail fulfilled after a failed mutation. Later local edits
+    // then rebase on the freshly loaded canonical revision instead of being
+    // skipped because an earlier promise rejected.
+    const queueTail = operation
+      .catch(async (reason) => {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Не удалось сохранить персонажа",
+        );
+        const canonical = await api<GameSnapshot>("/api/bootstrap");
+        setSnapshot(canonical);
+        return canonical.characters.find((character) => character.id === id);
+      })
+      .finally(() => {
+        if (characterMutationQueuesRef.current.get(id) === queueTail)
+          characterMutationQueuesRef.current.delete(id);
+      });
+    characterMutationQueuesRef.current.set(id, queueTail);
+    return operation
+      .then(() => undefined)
+      .catch(async (reason) => {
+        await queueTail;
+        throw reason;
+      });
   };
 
   const renderedActiveSceneId = (previewSnapshot ?? snapshot)?.scenes.find(
@@ -1004,17 +1089,7 @@ export function App() {
                 }),
               )
             }
-            onPatchCharacter={async (id, patch) =>
-              run(() =>
-                api(`/api/characters/${id}`, {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    ...patch,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
+            onPatchCharacter={patchCharacter}
             onChat={async (body, visibility) =>
               run(() =>
                 api("/api/chat", {
@@ -1228,6 +1303,19 @@ export function App() {
                 true,
               )
             }
+            onDeleteCatalogEntry={(id, revision) =>
+              run(
+                () =>
+                  api(`/api/catalog/${id}`, {
+                    method: "DELETE",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision,
+                    }),
+                  }),
+                true,
+              )
+            }
             onAssignCatalogEntry={(characterId, catalogEntryId) =>
               run(
                 () =>
@@ -1249,6 +1337,19 @@ export function App() {
                     body: JSON.stringify({
                       ...patch,
                       actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              )
+            }
+            onDeleteCharacterEntry={(characterId, id, revision) =>
+              run(
+                () =>
+                  api(`/api/characters/${characterId}/catalog/${id}`, {
+                    method: "DELETE",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision,
                     }),
                   }),
                 true,

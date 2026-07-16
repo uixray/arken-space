@@ -17,6 +17,10 @@ import type {
 } from "@arken/contracts";
 import { arkenSystem } from "@arken/system";
 import { MusicBar } from "./MusicBar";
+import {
+  CatalogEntryForm,
+  type CatalogEntryFormInput,
+} from "./CatalogEntryForm";
 import type { GameSocket } from "./realtime";
 import { ApiError } from "./api";
 
@@ -89,6 +93,7 @@ type Props = {
     id: string,
     patch: Partial<CatalogEntryDto>,
   ) => Promise<void>;
+  onDeleteCatalogEntry: (id: string, revision: number) => Promise<void>;
   onAssignCatalogEntry: (
     characterId: string,
     catalogEntryId: string,
@@ -101,7 +106,13 @@ type Props = {
       name?: string;
       description?: string;
       data?: Record<string, unknown>;
+      revision?: number;
     },
+  ) => Promise<void>;
+  onDeleteCharacterEntry: (
+    characterId: string,
+    id: string,
+    revision: number,
   ) => Promise<void>;
   onRollEntry: (
     characterId: string,
@@ -219,21 +230,40 @@ export function Sidebar(props: Props) {
         </button>
       </nav>
       <div className={`panel-scroll ${tab === "chat" ? "chat-scroll" : ""}`}>
-        {tab === "character" && (
-          <CharacterPanel
-            snapshot={props.snapshot}
-            character={selectedCharacter}
-            selectedId={selectedCharacterId}
-            setSelectedId={setSelectedCharacterId}
-            onPatch={props.onPatchCharacter}
-            onRoll={props.onRoll}
-            onAssignEntry={props.onAssignCatalogEntry}
-            onUpdateEntry={props.onUpdateCharacterEntry}
-            onRollEntry={props.onRollEntry}
-            onRechargeEntry={props.onRechargeEntry}
-            onUpdateCounters={props.onUpdateCounters}
-            onCampaignClock={props.onCampaignClock}
-          />
+        {tab === "character" && isGm && (
+          <div className="entity-modal-backdrop" role="presentation">
+            <section
+              className="entity-modal character-window"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Персонажи"
+            >
+              <div className="drawer-heading">
+                <strong>Персонажи</strong>
+                <button
+                  aria-label="Закрыть персонажей"
+                  onClick={() => setTab("chat")}
+                >
+                  ×
+                </button>
+              </div>
+              <CharacterPanel
+                snapshot={props.snapshot}
+                character={selectedCharacter}
+                selectedId={selectedCharacterId}
+                setSelectedId={setSelectedCharacterId}
+                onPatch={props.onPatchCharacter}
+                onRoll={props.onRoll}
+                onAssignEntry={props.onAssignCatalogEntry}
+                onUpdateEntry={props.onUpdateCharacterEntry}
+                onDeleteEntry={props.onDeleteCharacterEntry}
+                onRollEntry={props.onRollEntry}
+                onRechargeEntry={props.onRechargeEntry}
+                onUpdateCounters={props.onUpdateCounters}
+                onCampaignClock={props.onCampaignClock}
+              />
+            </section>
+          </div>
         )}
         {tab === "chat" && (
           <ChatPanel
@@ -282,6 +312,7 @@ export function Sidebar(props: Props) {
               onRoll={props.onRoll}
               onAssignEntry={props.onAssignCatalogEntry}
               onUpdateEntry={props.onUpdateCharacterEntry}
+              onDeleteEntry={props.onDeleteCharacterEntry}
               onRollEntry={props.onRollEntry}
               onRechargeEntry={props.onRechargeEntry}
               onUpdateCounters={props.onUpdateCounters}
@@ -303,6 +334,7 @@ function CharacterPanel({
   onRoll,
   onAssignEntry,
   onUpdateEntry,
+  onDeleteEntry,
   onRollEntry,
   onRechargeEntry,
   onUpdateCounters,
@@ -316,6 +348,7 @@ function CharacterPanel({
   onRoll: Props["onRoll"];
   onAssignEntry: Props["onAssignCatalogEntry"];
   onUpdateEntry: Props["onUpdateCharacterEntry"];
+  onDeleteEntry: Props["onDeleteCharacterEntry"];
   onRollEntry: Props["onRollEntry"];
   onRechargeEntry: Props["onRechargeEntry"];
   onUpdateCounters: Props["onUpdateCounters"];
@@ -323,6 +356,9 @@ function CharacterPanel({
 }) {
   const [countersPending, setCountersPending] = useState(false);
   const [countersError, setCountersError] = useState("");
+  const [entryEditor, setEntryEditor] = useState<
+    CharacterDto["entries"][number] | null
+  >(null);
   const [walletDraft, setWalletDraft] = useState(
     () => character?.wallet ?? { gold: 0, silver: 0, copper: 0, sp: 0 },
   );
@@ -340,6 +376,9 @@ function CharacterPanel({
         text="Мастер ещё не назначил вам персонажа."
       />
     );
+  const portrait = snapshot.assets.find(
+    (asset) => asset.id === character.portraitAssetId,
+  );
   const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
     if (
       countersPending ||
@@ -404,6 +443,13 @@ function CharacterPanel({
           <span className="revision">rev {character.revision}</span>
         </div>
       </div>
+      {portrait && (
+        <img
+          className="character-portrait"
+          src={portrait.url}
+          alt={`Портрет ${character.name}`}
+        />
+      )}
       <label className="field">
         Портрет
         <select
@@ -460,14 +506,17 @@ function CharacterPanel({
           disabled={!editable}
           rows={8}
           onBlur={(event) =>
-            onPatch(character.id, { backstory: event.target.value })
+            onPatch(character.id, {
+              backstory: event.target.value,
+              revision: character.revision,
+            })
           }
         />
       </details>
       <div className="stats-grid">
         {arkenSystem.stats.map((stat) => (
           <label key={stat.key} className="stat-field">
-            <span title={stat.label}>{stat.shortLabel}</span>
+            <span>{stat.label}</span>
             <input
               key={`${character.id}-${stat.key}-${character.revision}`}
               type="number"
@@ -477,10 +526,8 @@ function CharacterPanel({
               max={stat.max}
               onBlur={(event) =>
                 onPatch(character.id, {
-                  stats: {
-                    ...character.stats,
-                    [stat.key]: Number(event.target.value),
-                  },
+                  stats: { [stat.key]: Number(event.target.value) },
+                  revision: character.revision,
                 })
               }
             />
@@ -601,7 +648,23 @@ function CharacterPanel({
                   </button>
                 ))}
               {snapshot.me.role === "GM" && (
+                <div className="inline-fields">
+                  <button onClick={() => setEntryEditor(entry)}>
+                    Редактировать запись
+                  </button>
+                  <button
+                    className="danger-link"
+                    onClick={() =>
+                      void onDeleteEntry(character.id, entry.id, entry.revision)
+                    }
+                  >
+                    Удалить у персонажа
+                  </button>
+                </div>
+              )}
+              {snapshot.me.role === "GM" && (
                 <button
+                  hidden
                   onClick={() => {
                     const kind = window.prompt(
                       "Тип: SKILL или ABILITY",
@@ -643,6 +706,29 @@ function CharacterPanel({
           </p>
         )}
       </div>
+      {entryEditor && (
+        <div className="entity-modal-backdrop" role="presentation">
+          <section
+            className="entity-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Редактирование ${entryEditor.name}`}
+          >
+            <CatalogEntryForm
+              key={entryEditor.id}
+              existing={entryEditor}
+              onCancel={() => setEntryEditor(null)}
+              onSubmit={async (input) => {
+                await onUpdateEntry(character.id, entryEditor.id, {
+                  ...input,
+                  revision: entryEditor.revision,
+                });
+                setEntryEditor(null);
+              }}
+            />
+          </section>
+        </div>
+      )}
       <label className="field">
         Инвентарь (один предмет на строку)
         <textarea
@@ -655,6 +741,7 @@ function CharacterPanel({
                 .split("\n")
                 .map((item) => item.trim())
                 .filter(Boolean),
+              revision: character.revision,
             })
           }
         />
@@ -749,7 +836,10 @@ function CharacterPanel({
           disabled={!editable}
           rows={7}
           onBlur={(event) =>
-            onPatch(character.id, { notes: event.target.value })
+            onPatch(character.id, {
+              notes: event.target.value,
+              revision: character.revision,
+            })
           }
         />
       </label>
@@ -830,6 +920,13 @@ function ChatPanel({
           >
             <header>
               <strong>{message.displayName}</strong>
+              {message.characterId && (
+                <span className="message-character">
+                  {snapshot.characters.find(
+                    (character) => character.id === message.characterId,
+                  )?.name ?? "Персонаж"}
+                </span>
+              )}
               <time>
                 {new Date(message.createdAt).toLocaleTimeString([], {
                   hour: "2-digit",
@@ -1024,6 +1121,11 @@ function PalettePanel(props: Props) {
 function SetupPanel(props: Props) {
   const [characterName, setCharacterName] = useState("");
   const [sceneName, setSceneName] = useState("");
+  const [catalogEditor, setCatalogEditor] = useState<
+    CatalogEntryDto | "NEW" | null
+  >(null);
+  // Kept only to preserve the pre-v2 editor while the new form is mounted;
+  // the legacy JSON controls are hidden and can be removed after rollout.
   const [catalogName, setCatalogName] = useState("");
   const [catalogDescription, setCatalogDescription] = useState("");
   const [catalogKind, setCatalogKind] = useState<"SKILL" | "ABILITY">("SKILL");
@@ -1089,165 +1191,226 @@ function SetupPanel(props: Props) {
       </div>
       <div className="subsection">
         <h3>Общий каталог</h3>
-        <select
-          value={catalogKind}
-          onChange={(event) =>
-            setCatalogKind(event.target.value as "SKILL" | "ABILITY")
-          }
-        >
-          <option value="SKILL">Навык</option>
-          <option value="ABILITY">Способность</option>
-        </select>
-        <input
-          value={catalogName}
-          placeholder="Название"
-          onChange={(event) => setCatalogName(event.target.value)}
-        />
-        <textarea
-          value={catalogDescription}
-          placeholder="Описание"
-          onChange={(event) => setCatalogDescription(event.target.value)}
-        />
-        <textarea
-          value={catalogData}
-          onChange={(event) => setCatalogData(event.target.value)}
-          rows={8}
-          aria-label="Данные и действия JSON"
-        />
-        <button
-          onClick={() =>
-            setCatalogData(
-              JSON.stringify(
-                {
-                  rollActions: [
-                    {
-                      id: "hit",
-                      kind: "HIT",
-                      label: "Попадание",
-                      dice: "1d20",
-                      order: 0,
-                      advantage: false,
-                      consumeUse: false,
-                      modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
-                    },
-                    {
-                      id: "damage",
-                      kind: "DAMAGE",
-                      label: "Физический урон",
-                      dice: "1d8",
-                      order: 1,
-                      advantage: false,
-                      consumeUse: true,
-                      modifiers: [{ type: "CHARACTERISTIC", key: "strength" }],
-                    },
-                  ],
-                },
-                null,
-                2,
-              ),
-            )
-          }
-        >
-          Пресет: физический
+        <button onClick={() => setCatalogEditor("NEW")}>
+          Добавить навык или способность
         </button>
-        <button
-          onClick={() =>
-            setCatalogData(
-              JSON.stringify(
-                {
-                  values: { magic: 0 },
-                  rollActions: [
-                    {
-                      id: "hit",
-                      kind: "HIT",
-                      label: "Попадание",
-                      dice: "1d20",
-                      order: 0,
-                      advantage: false,
-                      consumeUse: false,
-                      modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
-                    },
-                    {
-                      id: "damage",
-                      kind: "DAMAGE",
-                      label: "Магический урон",
-                      dice: "1d8",
-                      order: 1,
-                      advantage: false,
-                      consumeUse: true,
-                      modifiers: [{ type: "ENTRY_VALUE", key: "magic" }],
-                    },
-                  ],
-                },
-                null,
-                2,
-              ),
-            )
-          }
-        >
-          Пресет: магический
-        </button>
-        <button
-          disabled={!catalogName.trim()}
-          onClick={async () => {
-            let data: Record<string, unknown>;
-            try {
-              data = JSON.parse(catalogData) as Record<string, unknown>;
-            } catch {
-              window.alert("Некорректный JSON");
-              return;
-            }
-            await props.onCreateCatalogEntry({
-              kind: catalogKind,
-              name: catalogName.trim(),
-              description: catalogDescription,
-              data,
-            });
-            setCatalogName("");
-            setCatalogDescription("");
-          }}
-        >
-          Добавить
-        </button>
-        {props.snapshot.catalogEntries.map((entry) => (
-          <div className="plain-row" key={entry.id}>
-            <strong>{entry.name}</strong>
-            <p>{entry.description}</p>
-            <button
-              onClick={() => {
-                const kind = window.prompt(
-                  "Тип: SKILL или ABILITY",
-                  entry.kind,
-                );
-                if (kind !== "SKILL" && kind !== "ABILITY") return;
-                const name = window.prompt("Название", entry.name);
-                if (!name?.trim()) return;
-                const description = window.prompt(
-                  "Описание",
-                  entry.description,
-                );
-                if (description === null) return;
-                const raw = window.prompt(
-                  "Данные JSON",
-                  JSON.stringify(entry.data, null, 2),
-                );
-                if (raw === null) return;
-                try {
-                  void props.onUpdateCatalogEntry(entry.id, {
-                    kind,
-                    name: name.trim(),
-                    description,
-                    data: JSON.parse(raw) as Record<string, unknown>,
-                  });
-                } catch {
-                  window.alert("Некорректный JSON");
-                }
-              }}
+        <div className="catalog-entry-list">
+          {props.snapshot.catalogEntries.map((entry) => (
+            <article className="plain-row" key={`v2-${entry.id}`}>
+              <strong>{entry.name}</strong>
+              <span className="eyebrow">
+                {entry.kind === "SKILL" ? "Навык" : "Способность"}
+              </span>
+              {entry.description && <p>{entry.description}</p>}
+              <div className="inline-fields">
+                <button onClick={() => setCatalogEditor(entry)}>
+                  Редактировать
+                </button>
+                <button
+                  className="danger-link"
+                  onClick={() =>
+                    void props.onDeleteCatalogEntry(entry.id, entry.revision)
+                  }
+                >
+                  Удалить шаблон
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+        {catalogEditor && (
+          <div className="entity-modal-backdrop" role="presentation">
+            <section
+              className="entity-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={
+                catalogEditor === "NEW"
+                  ? "Новая запись каталога"
+                  : `Редактирование ${catalogEditor.name}`
+              }
             >
-              Редактировать шаблон
-            </button>
+              <CatalogEntryForm
+                key={catalogEditor === "NEW" ? "new" : catalogEditor.id}
+                existing={catalogEditor === "NEW" ? undefined : catalogEditor}
+                onCancel={() => setCatalogEditor(null)}
+                onSubmit={async (input: CatalogEntryFormInput) => {
+                  if (catalogEditor === "NEW")
+                    await props.onCreateCatalogEntry(input);
+                  else
+                    await props.onUpdateCatalogEntry(catalogEditor.id, {
+                      ...input,
+                      revision: catalogEditor.revision,
+                    });
+                  setCatalogEditor(null);
+                }}
+              />
+            </section>
           </div>
-        ))}
+        )}
+        <div hidden aria-hidden="true">
+          <select
+            value={catalogKind}
+            onChange={(event) =>
+              setCatalogKind(event.target.value as "SKILL" | "ABILITY")
+            }
+          >
+            <option value="SKILL">Навык</option>
+            <option value="ABILITY">Способность</option>
+          </select>
+          <input
+            value={catalogName}
+            placeholder="Название"
+            onChange={(event) => setCatalogName(event.target.value)}
+          />
+          <textarea
+            value={catalogDescription}
+            placeholder="Описание"
+            onChange={(event) => setCatalogDescription(event.target.value)}
+          />
+          <textarea
+            value={catalogData}
+            onChange={(event) => setCatalogData(event.target.value)}
+            rows={8}
+            aria-label="Данные и действия JSON"
+          />
+          <button
+            onClick={() =>
+              setCatalogData(
+                JSON.stringify(
+                  {
+                    rollActions: [
+                      {
+                        id: "hit",
+                        kind: "HIT",
+                        label: "Попадание",
+                        dice: "1d20",
+                        order: 0,
+                        advantage: false,
+                        consumeUse: false,
+                        modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
+                      },
+                      {
+                        id: "damage",
+                        kind: "DAMAGE",
+                        label: "Физический урон",
+                        dice: "1d8",
+                        order: 1,
+                        advantage: false,
+                        consumeUse: true,
+                        modifiers: [
+                          { type: "CHARACTERISTIC", key: "strength" },
+                        ],
+                      },
+                    ],
+                  },
+                  null,
+                  2,
+                ),
+              )
+            }
+          >
+            Пресет: физический
+          </button>
+          <button
+            onClick={() =>
+              setCatalogData(
+                JSON.stringify(
+                  {
+                    values: { magic: 0 },
+                    rollActions: [
+                      {
+                        id: "hit",
+                        kind: "HIT",
+                        label: "Попадание",
+                        dice: "1d20",
+                        order: 0,
+                        advantage: false,
+                        consumeUse: false,
+                        modifiers: [{ type: "CHARACTERISTIC", key: "agility" }],
+                      },
+                      {
+                        id: "damage",
+                        kind: "DAMAGE",
+                        label: "Магический урон",
+                        dice: "1d8",
+                        order: 1,
+                        advantage: false,
+                        consumeUse: true,
+                        modifiers: [{ type: "ENTRY_VALUE", key: "magic" }],
+                      },
+                    ],
+                  },
+                  null,
+                  2,
+                ),
+              )
+            }
+          >
+            Пресет: магический
+          </button>
+          <button
+            disabled={!catalogName.trim()}
+            onClick={async () => {
+              let data: Record<string, unknown>;
+              try {
+                data = JSON.parse(catalogData) as Record<string, unknown>;
+              } catch {
+                window.alert("Некорректный JSON");
+                return;
+              }
+              await props.onCreateCatalogEntry({
+                kind: catalogKind,
+                name: catalogName.trim(),
+                description: catalogDescription,
+                data,
+              });
+              setCatalogName("");
+              setCatalogDescription("");
+            }}
+          >
+            Добавить
+          </button>
+          {props.snapshot.catalogEntries.map((entry) => (
+            <div className="plain-row" key={entry.id}>
+              <strong>{entry.name}</strong>
+              <p>{entry.description}</p>
+              <button
+                onClick={() => {
+                  const kind = window.prompt(
+                    "Тип: SKILL или ABILITY",
+                    entry.kind,
+                  );
+                  if (kind !== "SKILL" && kind !== "ABILITY") return;
+                  const name = window.prompt("Название", entry.name);
+                  if (!name?.trim()) return;
+                  const description = window.prompt(
+                    "Описание",
+                    entry.description,
+                  );
+                  if (description === null) return;
+                  const raw = window.prompt(
+                    "Данные JSON",
+                    JSON.stringify(entry.data, null, 2),
+                  );
+                  if (raw === null) return;
+                  try {
+                    void props.onUpdateCatalogEntry(entry.id, {
+                      kind,
+                      name: name.trim(),
+                      description,
+                      data: JSON.parse(raw) as Record<string, unknown>,
+                    });
+                  } catch {
+                    window.alert("Некорректный JSON");
+                  }
+                }}
+              >
+                Редактировать шаблон
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="subsection">
         <h3>Проверка видимости</h3>

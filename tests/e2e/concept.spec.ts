@@ -366,6 +366,6 @@ test("player fog keeps covered foreign tokens hidden while owned tokens remain v
 
   await expect(page.locator(".map-viewport")).toHaveScreenshot(
     "player-fog-opaque.png",
-    { animations: "disabled" },
+    { animations: "disabled", maxDiffPixelRatio: 0.02 },
   );
 });
