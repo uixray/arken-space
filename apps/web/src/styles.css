@@ -179,6 +179,67 @@ code {
   min-width: auto;
   padding: 0 10px;
 }
+
+.scene-manager-heading,
+.scene-manager-card,
+.scene-manager-card > div:first-child,
+.scene-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scene-manager-heading {
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.scene-manager-list {
+  display: grid;
+  gap: 12px;
+}
+
+.scene-manager-card {
+  padding: 16px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: 10px;
+  background: var(--g-color-base-generic-ultralight);
+}
+
+.scene-manager-card > div:first-child span {
+  color: var(--g-color-text-secondary);
+}
+
+.scene-manager-statuses,
+.scene-form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.scene-form-grid > label {
+  display: grid;
+  min-width: 150px;
+  flex: 1 1 180px;
+  gap: 6px;
+}
+
+.scene-editor fieldset {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: 8px;
+}
+
+.scene-map-preview {
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--g-color-base-generic);
+}
 .status-line {
   justify-content: flex-end;
   color: var(--muted);

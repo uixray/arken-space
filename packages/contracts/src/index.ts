@@ -156,21 +156,44 @@ export const gridSchema = z.object({
   opacity: z.number().min(0).max(1).default(0.22),
 });
 
-export const createSceneSchema = z.object({
-  actionId: actionIdSchema,
-  name: z.string().trim().min(1).max(100),
-  mapAssetId: z.string().uuid().nullable().optional(),
-  width: z.number().int().min(320).max(16384).default(1920),
-  height: z.number().int().min(320).max(16384).default(1080),
-  grid: gridSchema.default({
-    enabled: true,
-    size: 64,
-    offsetX: 0,
-    offsetY: 0,
-    color: "#c8b78b",
-    opacity: 0.22,
-  }),
-});
+export const createSceneSchema = z
+  .object({
+    actionId: actionIdSchema,
+    name: z.string().trim().min(1).max(100),
+    mapAssetId: z.string().uuid().nullable().optional(),
+    width: z.number().int().min(320).max(16384).default(1920),
+    height: z.number().int().min(320).max(16384).default(1080),
+    grid: gridSchema.default({
+      enabled: true,
+      size: 64,
+      offsetX: 0,
+      offsetY: 0,
+      color: "#c8b78b",
+      opacity: 0.22,
+    }),
+    backgroundFrame: z
+      .object({
+        x: z.number().finite().min(-16384).max(16384),
+        y: z.number().finite().min(-16384).max(16384),
+        width: z.number().finite().min(16).max(16384),
+        height: z.number().finite().min(16).max(16384),
+      })
+      .optional(),
+  })
+  .strict();
+
+export const updateSceneMetadataSchema = z
+  .object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    name: z.string().trim().min(1).max(100).optional(),
+    mapAssetId: z.string().uuid().nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.name !== undefined || value.mapAssetId !== undefined,
+    { message: "At least one scene metadata field is required" },
+  );
 
 export const activateSceneSchema = z.object({
   actionId: actionIdSchema,
@@ -302,6 +325,8 @@ export const drawingCommandSchema = z.object({
 export const sceneCanvasConfigSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
+  name: z.string().trim().min(1).max(100).optional(),
+  mapAssetId: z.string().uuid().nullable().optional(),
   grid: gridSchema.optional(),
   mapScale: z.number().finite().min(0.1).max(10).optional(),
   world: z

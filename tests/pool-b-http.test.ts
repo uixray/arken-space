@@ -25,6 +25,9 @@ const ids = {
   definition: crypto.randomUUID(),
   token: crypto.randomUUID(),
   foreignAsset: crypto.randomUUID(),
+  mapAsset: crypto.randomUUID(),
+  tokenAsset: crypto.randomUUID(),
+  foreignMapAsset: crypto.randomUUID(),
 };
 const secrets = {
   gm: "g".repeat(40),
@@ -142,6 +145,40 @@ beforeEach(async () => {
     mimeType: "image/webp",
     sizeBytes: 1,
   });
+  await db.insert(schema.assets).values([
+    {
+      id: ids.mapAsset,
+      campaignId: ids.campaign,
+      uploadedByMembershipId: ids.gm,
+      kind: "MAP",
+      name: "Map asset",
+      storageKey: crypto.randomUUID(),
+      mimeType: "image/webp",
+      sizeBytes: 1,
+      width: 1600,
+      height: 900,
+    },
+    {
+      id: ids.tokenAsset,
+      campaignId: ids.campaign,
+      uploadedByMembershipId: ids.gm,
+      kind: "TOKEN",
+      name: "Token asset",
+      storageKey: crypto.randomUUID(),
+      mimeType: "image/webp",
+      sizeBytes: 1,
+    },
+    {
+      id: ids.foreignMapAsset,
+      campaignId: ids.foreignCampaign,
+      uploadedByMembershipId: ids.foreignPlayer,
+      kind: "MAP",
+      name: "Foreign map",
+      storageKey: crypto.randomUUID(),
+      mimeType: "image/webp",
+      sizeBytes: 1,
+    },
+  ]);
   await db.insert(schema.tokenDefinitions).values({
     id: ids.definition,
     campaignId: ids.campaign,
@@ -174,6 +211,176 @@ afterEach(async () => {
 });
 
 describe("Pool B HTTP boundaries", () => {
+  it("creates and updates scene metadata with MAP validation, CAS and useful replay responses", async () => {
+    const playerDenied = await app.inject({
+      method: "POST",
+      url: "/api/scenes",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), name: "Forbidden" },
+    });
+    expect(playerDenied.statusCode).toBe(403);
+
+    for (const mapAssetId of [ids.tokenAsset, ids.foreignMapAsset]) {
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/api/scenes",
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          name: "Invalid map",
+          mapAssetId,
+        },
+      });
+      expect(rejected.statusCode).toBe(
+        mapAssetId === ids.tokenAsset ? 422 : 404,
+      );
+    }
+
+    const createActionId = crypto.randomUUID();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/scenes",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: createActionId,
+        name: "Forest",
+        mapAssetId: ids.mapAsset,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      name: "Forest",
+      mapAssetId: ids.mapAsset,
+      revision: 0,
+      active: false,
+      backgroundFrame: { x: 0, y: 0, width: 1920, height: 1080 },
+    });
+    const createdSceneId = created.json().id as string;
+
+    const createReplay = await app.inject({
+      method: "POST",
+      url: "/api/scenes",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: createActionId,
+        name: "Ignored replay payload",
+      },
+    });
+    expect(createReplay.statusCode).toBe(200);
+    expect(createReplay.json()).toMatchObject({
+      id: createdSceneId,
+      name: "Forest",
+      mapAssetId: ids.mapAsset,
+      revision: 0,
+    });
+
+    const missingRevision = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${createdSceneId}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), name: "No CAS" },
+    });
+    expect(missingRevision.statusCode).toBe(400);
+
+    const canvasFieldRejected = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${createdSceneId}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        width: 4096,
+      },
+    });
+    expect(canvasFieldRejected.statusCode).toBe(400);
+
+    const nonMapUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${createdSceneId}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        mapAssetId: ids.tokenAsset,
+      },
+    });
+    expect(nonMapUpdate.statusCode).toBe(422);
+
+    const foreignMapUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${createdSceneId}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        mapAssetId: ids.foreignMapAsset,
+      },
+    });
+    expect(foreignMapUpdate.statusCode).toBe(404);
+
+    const updateActionId = crypto.randomUUID();
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${createdSceneId}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: updateActionId,
+        revision: 0,
+        name: "Deep forest",
+        mapAssetId: null,
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      id: createdSceneId,
+      name: "Deep forest",
+      mapAssetId: null,
+      revision: 1,
+      backgroundFrame: { x: 0, y: 0, width: 1920, height: 1080 },
+    });
+
+    const updateReplay = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${createdSceneId}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: updateActionId,
+        revision: 0,
+        name: "Ignored replay update",
+      },
+    });
+    expect(updateReplay.statusCode).toBe(200);
+    expect(updateReplay.json()).toMatchObject({
+      id: createdSceneId,
+      name: "Deep forest",
+      revision: 1,
+    });
+
+    const stale = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${createdSceneId}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        name: "Stale",
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+
+    const playerUpdateDenied = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${createdSceneId}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        name: "Forbidden",
+      },
+    });
+    expect(playerUpdateDenied.statusCode).toBe(403);
+  });
+
   it("creates reusable token definitions with dimensions and controller permissions", async () => {
     const denied = await app.inject({
       method: "POST",

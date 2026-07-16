@@ -38,6 +38,7 @@ import {
   renameCommandSchema,
   revisionCommandSchema,
   tokenDefinitionUpdateSchema,
+  updateSceneMetadataSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@arken/contracts";
@@ -179,6 +180,40 @@ async function findAction(db: Database, campaignId: string, actionId: string) {
     )
     .limit(1);
   return event ?? null;
+}
+
+function sceneDto(
+  scene: typeof scenes.$inferSelect,
+  activeSceneId: string | null,
+) {
+  return {
+    id: scene.id,
+    name: scene.name,
+    projection: scene.projection,
+    mapAssetId: scene.mapAssetId,
+    width: scene.width,
+    height: scene.height,
+    backgroundFrame: {
+      x: scene.backgroundX,
+      y: scene.backgroundY,
+      width: scene.backgroundWidth,
+      height: scene.backgroundHeight,
+    },
+    grid: scene.grid,
+    mapScale: scene.mapScale,
+    revision: scene.revision,
+    active: activeSceneId === scene.id,
+  };
+}
+
+async function findSceneDto(db: Database, campaignId: string, sceneId: string) {
+  const [row] = await db
+    .select({ scene: scenes, activeSceneId: campaigns.activeSceneId })
+    .from(scenes)
+    .innerJoin(campaigns, eq(campaigns.id, scenes.campaignId))
+    .where(and(eq(scenes.id, sceneId), eq(scenes.campaignId, campaignId)))
+    .limit(1);
+  return row ? sceneDto(row.scene, row.activeSceneId) : null;
 }
 
 export async function claimInviteOwnership(
@@ -1277,12 +1312,19 @@ export function registerRoutes(
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const body = createSceneSchema.parse(request.body);
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) return reply.code(200).send({ duplicate: true });
+    if (duplicate) {
+      const replay = duplicate.entityId
+        ? await findSceneDto(db, auth.campaignId, duplicate.entityId)
+        : null;
+      if (replay) return reply.code(200).send(replay);
+      return reply.code(409).send({ error: "ACTION_REPLAY_UNAVAILABLE" });
+    }
     const mapAsset = body.mapAssetId
       ? (
           await db
             .select({
               id: assets.id,
+              kind: assets.kind,
               width: assets.width,
               height: assets.height,
             })
@@ -1298,13 +1340,17 @@ export function registerRoutes(
       : null;
     if (body.mapAssetId && !mapAsset)
       return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
-    const initialBackground = fitFrameToWorld(
-      mapAsset?.width,
-      mapAsset?.height,
-      body.width,
-      body.height,
-    );
-    const { actionId, ...sceneInput } = body;
+    if (mapAsset && mapAsset.kind !== "MAP")
+      return reply.code(422).send({ error: "MAP_ASSET_REQUIRED" });
+    const initialBackground =
+      body.backgroundFrame ??
+      fitFrameToWorld(
+        mapAsset?.width,
+        mapAsset?.height,
+        body.width,
+        body.height,
+      );
+    const { actionId, backgroundFrame: _backgroundFrame, ...sceneInput } = body;
     const scene = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(scenes)
@@ -1330,7 +1376,8 @@ export function registerRoutes(
       });
       return created;
     });
-    return reply.code(201).send(scene);
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(201).send(sceneDto(scene, null));
   });
 
   app.patch("/api/scenes/:id", async (request, reply) => {
@@ -1339,29 +1386,33 @@ export function registerRoutes(
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const body = createSceneSchema
-      .partial()
-      .extend({
-        actionId: actionIdSchema,
-        revision: z.number().int().nonnegative().optional(),
-      })
-      .parse(request.body);
+    const parsedBody = updateSceneMetadataSchema.safeParse(request.body);
+    if (!parsedBody.success)
+      return reply.code(400).send({
+        error: "INVALID_SCENE_METADATA",
+        issues: parsedBody.error.issues,
+      });
+    const body = parsedBody.data;
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) return reply.code(200).send({ duplicate: true });
+    if (duplicate) {
+      const replay = duplicate.entityId
+        ? await findSceneDto(db, auth.campaignId, duplicate.entityId)
+        : null;
+      if (replay) return reply.code(200).send(replay);
+      return reply.code(409).send({ error: "ACTION_REPLAY_UNAVAILABLE" });
+    }
     const [current] = await db
       .select()
       .from(scenes)
       .where(and(eq(scenes.id, id), eq(scenes.campaignId, auth.campaignId)))
       .limit(1);
     if (!current) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    if (body.revision !== undefined && body.revision !== current.revision)
+    if (body.revision !== current.revision)
       return reply.code(409).send({ error: "SCENE_CONFLICT" });
     const { actionId, revision: _revision, ...sceneUpdates } = body;
-    let mapFrame:
-      { x: number; y: number; width: number; height: number } | undefined;
     if (body.mapAssetId) {
       const [mapAsset] = await db
-        .select({ width: assets.width, height: assets.height })
+        .select({ kind: assets.kind })
         .from(assets)
         .where(
           and(
@@ -1371,27 +1422,14 @@ export function registerRoutes(
         )
         .limit(1);
       if (!mapAsset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
-      if (body.mapAssetId !== current.mapAssetId)
-        mapFrame = fitFrameToWorld(
-          mapAsset.width,
-          mapAsset.height,
-          body.width ?? current.width,
-          body.height ?? current.height,
-        );
+      if (mapAsset.kind !== "MAP")
+        return reply.code(422).send({ error: "MAP_ASSET_REQUIRED" });
     }
     const scene = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(scenes)
         .set({
           ...sceneUpdates,
-          ...(mapFrame
-            ? {
-                backgroundX: mapFrame.x,
-                backgroundY: mapFrame.y,
-                backgroundWidth: mapFrame.width,
-                backgroundHeight: mapFrame.height,
-              }
-            : {}),
           revision: current.revision + 1,
           updatedAt: new Date(),
         })
@@ -1411,7 +1449,12 @@ export function registerRoutes(
     });
     if (!scene) return reply.code(409).send({ error: "SCENE_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
-    return scene;
+    const [campaign] = await db
+      .select({ activeSceneId: campaigns.activeSceneId })
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    return sceneDto(scene, campaign?.activeSceneId ?? null);
   });
 
   app.post("/api/scenes/activate", async (request, reply) => {
@@ -2896,6 +2939,8 @@ export function registerRoutes(
         } else if (command.targetType === "SCENE") {
           if (snapshot === null) return null;
           const values = snapshot as {
+            name?: string;
+            mapAssetId?: string | null;
             grid: typeof scenes.$inferSelect.grid;
             mapScale: number;
             world?: { width: number; height: number };
@@ -2920,6 +2965,10 @@ export function registerRoutes(
           const [updated] = await tx
             .update(scenes)
             .set({
+              ...(values.name !== undefined ? { name: values.name } : {}),
+              ...(values.mapAssetId !== undefined
+                ? { mapAssetId: values.mapAssetId }
+                : {}),
               grid: values.grid,
               mapScale: values.mapScale,
               ...(values.world
@@ -3008,11 +3057,30 @@ export function registerRoutes(
     if (!current) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
     if (current.revision !== body.revision)
       return reply.code(409).send({ error: "SCENE_CONFLICT" });
+    if (body.mapAssetId) {
+      const [mapAsset] = await db
+        .select({ kind: assets.kind })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, body.mapAssetId),
+            eq(assets.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!mapAsset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+      if (mapAsset.kind !== "MAP")
+        return reply.code(422).send({ error: "MAP_ASSET_REQUIRED" });
+    }
     const [updated] = await db.transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, id);
       const [next] = await tx
         .update(scenes)
         .set({
+          ...(body.name !== undefined ? { name: body.name } : {}),
+          ...(body.mapAssetId !== undefined
+            ? { mapAssetId: body.mapAssetId }
+            : {}),
           ...(body.grid ? { grid: body.grid } : {}),
           ...(body.mapScale !== undefined ? { mapScale: body.mapScale } : {}),
           ...(body.world
@@ -3041,6 +3109,8 @@ export function registerRoutes(
         entityId: id,
         entityRevision: next.revision,
         payload: {
+          name: next.name,
+          mapAssetId: next.mapAssetId,
           grid: next.grid,
           mapScale: next.mapScale,
           world: { width: next.width, height: next.height },
@@ -3061,6 +3131,8 @@ export function registerRoutes(
         targetType: "SCENE",
         targetId: id,
         before: {
+          name: current.name,
+          mapAssetId: current.mapAssetId,
           grid: current.grid,
           mapScale: current.mapScale,
           world: { width: current.width, height: current.height },
@@ -3072,6 +3144,8 @@ export function registerRoutes(
           },
         },
         after: {
+          name: next.name,
+          mapAssetId: next.mapAssetId,
           grid: next.grid,
           mapScale: next.mapScale,
           world: { width: next.width, height: next.height },
