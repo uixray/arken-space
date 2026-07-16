@@ -222,12 +222,23 @@ export const placeTokenDefinitionSchema = z.object({
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
 });
+export const createTokenDefinitionSchema = z.object({
+  actionId: actionIdSchema,
+  name: z.string().trim().min(1).max(80),
+  characterId: z.string().uuid().nullable().default(null),
+  defaultAssetId: z.string().uuid().nullable().default(null),
+  defaultWidth: z.number().min(16).max(1024).default(64),
+  defaultHeight: z.number().min(16).max(1024).default(64),
+  controllerMembershipIds: z.array(z.string().uuid()).max(50).default([]),
+});
 export const tokenDefinitionUpdateSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
   name: z.string().trim().min(1).max(80).optional(),
   defaultAssetId: z.string().uuid().nullable().optional(),
   characterId: z.string().uuid().nullable().optional(),
+  defaultWidth: z.number().min(16).max(1024).optional(),
+  defaultHeight: z.number().min(16).max(1024).optional(),
 });
 export const revisionCommandSchema = z.object({
   actionId: actionIdSchema,

@@ -173,6 +173,53 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   });
 });
 
+test("GM opens token and file workflows without leaving the canvas", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }),
+  );
+  await page.goto("/");
+
+  const tabs = page.locator(".tabs").getByRole("button");
+  await tabs.nth(2).click();
+  const tokensDialog = page.getByRole("dialog");
+  await expect(
+    tokensDialog.getByRole("heading", { name: "Токены" }),
+  ).toBeVisible();
+  await tokensDialog.getByRole("button", { name: "Создать токен" }).click();
+  await expect(page.getByRole("dialog", { name: "Новый токен" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+
+  await tabs.nth(5).click();
+  const filesDialog = page.getByRole("dialog");
+  await expect(
+    filesDialog.getByRole("heading", { name: "Файлы" }),
+  ).toBeVisible();
+  for (const section of [
+    "Карты",
+    "Изображения токенов",
+    "Портреты персонажей",
+    "Другие изображения",
+    "Музыка и звуки",
+  ]) {
+    await expect(filesDialog.getByText(section, { exact: true })).toBeVisible();
+  }
+  await expect(page.locator("canvas").first()).toBeVisible();
+});
+
 for (const viewport of [
   { width: 1366, height: 768 },
   { width: 1920, height: 1080 },

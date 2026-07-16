@@ -22,6 +22,7 @@ import {
   createInviteSchema,
   createSceneSchema,
   createTokenSchema,
+  createTokenDefinitionSchema,
   diceRequestSchema,
   entryDataSchema,
   entryRollRequestSchema,
@@ -1637,6 +1638,105 @@ export function registerRoutes(
     return reply.code(201).send(token);
   });
 
+  app.post("/api/token-definitions", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = createTokenDefinitionSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate?.entityId) {
+      const [existing] = await db
+        .select()
+        .from(tokenDefinitions)
+        .where(
+          and(
+            eq(tokenDefinitions.id, duplicate.entityId),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (existing) return reply.code(200).send(existing);
+    }
+    if (body.defaultAssetId) {
+      const [asset] = await db
+        .select({ id: assets.id })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, body.defaultAssetId),
+            eq(assets.campaignId, auth.campaignId),
+            eq(assets.kind, "TOKEN"),
+          ),
+        )
+        .limit(1);
+      if (!asset)
+        return reply.code(404).send({ error: "TOKEN_ASSET_NOT_FOUND" });
+    }
+    if (body.characterId) {
+      const [character] = await db
+        .select({ id: characters.id })
+        .from(characters)
+        .where(
+          and(
+            eq(characters.id, body.characterId),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!character)
+        return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+    }
+    const controllerIds = [...new Set(body.controllerMembershipIds)];
+    if (controllerIds.length) {
+      const controllers = await db
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.campaignId, auth.campaignId),
+            eq(memberships.role, "PLAYER"),
+            inArray(memberships.id, controllerIds),
+          ),
+        );
+      if (controllers.length !== controllerIds.length)
+        return reply.code(404).send({ error: "CONTROLLER_NOT_FOUND" });
+    }
+    const created = await db.transaction(async (tx) => {
+      const [definition] = await tx
+        .insert(tokenDefinitions)
+        .values({
+          campaignId: auth.campaignId,
+          name: body.name,
+          characterId: body.characterId,
+          defaultAssetId: body.defaultAssetId,
+          defaultWidth: body.defaultWidth,
+          defaultHeight: body.defaultHeight,
+        })
+        .returning();
+      if (!definition) throw new Error("TOKEN_DEFINITION_CREATE_FAILED");
+      if (controllerIds.length)
+        await tx.insert(tokenControllers).values(
+          controllerIds.map((membershipId) => ({
+            tokenDefinitionId: definition.id,
+            membershipId,
+          })),
+        );
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "token_definition.created",
+        entityType: "token_definition",
+        entityId: definition.id,
+        entityRevision: definition.revision,
+      });
+      return { ...definition, controllerMembershipIds: controllerIds };
+    });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(201).send(created);
+  });
+
   app.post("/api/token-definitions/:id/placements", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -1961,6 +2061,8 @@ export function registerRoutes(
     if (current.revision !== body.revision)
       return reply.code(409).send({ error: "TOKEN_DEFINITION_CONFLICT" });
     if (auth.role !== "GM") {
+      if (body.defaultWidth !== undefined || body.defaultHeight !== undefined)
+        return reply.code(403).send({ error: "TOKEN_SIZE_FORBIDDEN" });
       const [controller] = await db
         .select()
         .from(tokenControllers)

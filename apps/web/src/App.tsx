@@ -8,6 +8,7 @@ import {
 } from "react";
 import type {
   AssetKind,
+  AssetDto,
   GameSnapshot,
   MapPing,
   MessageVisibility,
@@ -1090,6 +1091,37 @@ export function App() {
                 }),
               )
             }
+            onCreateTokenDefinition={(input) =>
+              run(
+                () =>
+                  api("/api/token-definitions", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      ...input,
+                      actionId: crypto.randomUUID(),
+                    }),
+                  }),
+                true,
+              ).then(() => undefined)
+            }
+            onReplaceTokenControllers={(
+              definitionId,
+              revision,
+              controllerMembershipIds,
+            ) =>
+              run(
+                () =>
+                  api(`/api/token-definitions/${definitionId}/controllers`, {
+                    method: "PUT",
+                    body: JSON.stringify({
+                      actionId: crypto.randomUUID(),
+                      revision,
+                      controllerMembershipIds,
+                    }),
+                  }),
+                true,
+              ).then(() => undefined)
+            }
             onPatchCharacter={patchCharacter}
             onChat={async (body, visibility) =>
               run(() =>
@@ -1260,15 +1292,17 @@ export function App() {
             onUpload={async (file, kind: AssetKind) => {
               const form = new FormData();
               form.append("file", file);
-              await run(
-                () =>
-                  api(`/api/assets?kind=${kind}`, {
-                    method: "POST",
-                    headers: { "x-action-id": crypto.randomUUID() },
-                    body: form,
-                  }),
-                true,
-              );
+              const asset = await api<AssetDto>(`/api/assets?kind=${kind}`, {
+                method: "POST",
+                headers: { "x-action-id": crypto.randomUUID() },
+                body: form,
+              });
+              await load();
+              return {
+                ...asset,
+                url: `/api/assets/${asset.id}/content`,
+                createdAt: String(asset.createdAt),
+              };
             }}
             onPreviewPlayer={async (membershipId) => {
               const playerView = await api<GameSnapshot>(

@@ -1,13 +1,7 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type FormEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
   AssetKind,
+  AssetDto,
   CatalogEntryDto,
   CharacterDto,
   GameSnapshot,
@@ -27,6 +21,7 @@ import { ApiError } from "./api";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { ImageUploadField } from "./ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 
 function formatDiceBreakdown(dice: GameSnapshot["messages"][number]["dice"]) {
@@ -54,7 +49,26 @@ type Props = {
   onPatchTokenDefinition: (
     definitionId: string,
     revision: number,
-    patch: { defaultAssetId?: string | null; characterId?: string | null },
+    patch: {
+      name?: string;
+      defaultAssetId?: string | null;
+      characterId?: string | null;
+      defaultWidth?: number;
+      defaultHeight?: number;
+    },
+  ) => Promise<void>;
+  onCreateTokenDefinition: (input: {
+    name: string;
+    characterId: string | null;
+    defaultAssetId: string | null;
+    defaultWidth: number;
+    defaultHeight: number;
+    controllerMembershipIds: string[];
+  }) => Promise<void>;
+  onReplaceTokenControllers: (
+    definitionId: string,
+    revision: number,
+    controllerMembershipIds: string[],
   ) => Promise<void>;
   onPatchCharacter: (id: string, patch: Partial<CharacterDto>) => Promise<void>;
   onChat: (body: string, visibility: MessageVisibility) => Promise<void>;
@@ -86,7 +100,7 @@ type Props = {
     name: string,
   ) => Promise<void>;
   onCreateToken: (characterId: string) => Promise<void>;
-  onUpload: (file: File, kind: AssetKind) => Promise<void>;
+  onUpload: (file: File, kind: AssetKind) => Promise<AssetDto>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
   onCreateCatalogEntry: (input: {
     kind: "SKILL" | "ABILITY";
@@ -271,6 +285,7 @@ export function Sidebar(props: Props) {
               onRechargeEntry={props.onRechargeEntry}
               onUpdateCounters={props.onUpdateCounters}
               onCampaignClock={props.onCampaignClock}
+              onUpload={props.onUpload}
             />
           </ArkenDialog>
         )}
@@ -283,7 +298,16 @@ export function Sidebar(props: Props) {
             onMessageFocused={() => setFocusedMessageId(null)}
           />
         )}
-        {tab === "palette" && <PalettePanel {...props} />}
+        {tab === "palette" && (
+          <ArkenDialog
+            open
+            footer={false}
+            title="Токены"
+            onClose={() => setTab("chat")}
+          >
+            <PalettePanel {...props} />
+          </ArkenDialog>
+        )}
         <div hidden={tab !== "music"}>
           <MusicBar
             audio={props.snapshot.audio}
@@ -294,7 +318,14 @@ export function Sidebar(props: Props) {
         </div>
         {tab === "setup" && isGm && <SetupPanel {...props} />}
         {tab === "media" && (
-          <MediaPanel snapshot={props.snapshot} onUpload={props.onUpload} />
+          <ArkenDialog
+            open
+            footer={false}
+            title="Файлы"
+            onClose={() => setTab("chat")}
+          >
+            <MediaPanel snapshot={props.snapshot} onUpload={props.onUpload} />
+          </ArkenDialog>
         )}
       </div>
       {!isGm && playerCharacterOpen && (
@@ -326,6 +357,7 @@ export function Sidebar(props: Props) {
               onRechargeEntry={props.onRechargeEntry}
               onUpdateCounters={props.onUpdateCounters}
               onCampaignClock={props.onCampaignClock}
+              onUpload={props.onUpload}
             />
           </div>
         </aside>
@@ -348,6 +380,7 @@ function CharacterPanel({
   onRechargeEntry,
   onUpdateCounters,
   onCampaignClock,
+  onUpload,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -362,6 +395,7 @@ function CharacterPanel({
   onRechargeEntry: Props["onRechargeEntry"];
   onUpdateCounters: Props["onUpdateCounters"];
   onCampaignClock: Props["onCampaignClock"];
+  onUpload: Props["onUpload"];
 }) {
   const [countersPending, setCountersPending] = useState(false);
   const [countersError, setCountersError] = useState("");
@@ -369,6 +403,7 @@ function CharacterPanel({
     CharacterDto["entries"][number] | null
   >(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [portraitUpload, setPortraitUpload] = useState<File>();
   const [walletDraft, setWalletDraft] = useState(
     () => character?.wallet ?? { gold: 0, silver: 0, copper: 0, sp: 0 },
   );
@@ -470,6 +505,25 @@ function CharacterPanel({
             ))}
         </FormSelect>
       </label>
+      <ImageUploadField
+        label="Загрузить портрет для персонажа"
+        value={portraitUpload}
+        onUpdate={setPortraitUpload}
+      />
+      <Button
+        disabled={!portraitUpload}
+        onClick={async () => {
+          if (!portraitUpload) return;
+          const asset = await onUpload(portraitUpload, "PORTRAIT");
+          await onPatch(character.id, {
+            portraitAssetId: asset.id,
+            revision: character.revision,
+          });
+          setPortraitUpload(undefined);
+        }}
+      >
+        Загрузить и назначить
+      </Button>
       {snapshot.me.role === "GM" && (
         <div className="subsection">
           <h3>Время кампании</h3>
@@ -1000,10 +1054,13 @@ function ChatPanel({
 
 function PalettePanel(props: Props) {
   const definitions = props.snapshot.tokenDefinitions ?? [];
+  const [editor, setEditor] = useState<
+    (typeof definitions)[number] | "NEW" | null
+  >(null);
   const [deleteDefinition, setDeleteDefinition] = useState<
     (typeof definitions)[number] | null
   >(null);
-  if (!definitions.length)
+  if (!definitions.length && props.snapshot.me.role !== "GM")
     return (
       <Empty
         title="Нет доступных токенов"
@@ -1019,6 +1076,11 @@ function PalettePanel(props: Props) {
         </div>
         <span className="revision">{definitions.length}</span>
       </div>
+      {props.snapshot.me.role === "GM" && (
+        <Button view="action" onClick={() => setEditor("NEW")}>
+          Создать токен
+        </Button>
+      )}
       <p className="muted">
         Нажмите, чтобы поставить токен в центр карты, или перетащите его на
         нужное место.
@@ -1075,18 +1137,42 @@ function PalettePanel(props: Props) {
                     </option>
                   ))}
               </FormSelect>
+              {props.snapshot.me.role !== "GM" && (
+                <TokenImageAssignment
+                  definition={definition}
+                  onUpload={props.onUpload}
+                  onPatch={props.onPatchTokenDefinition}
+                />
+              )}
               {props.snapshot.me.role === "GM" && (
-                <Button
-                  className="danger-link"
-                  onClick={() => setDeleteDefinition(definition)}
-                >
-                  Удалить определение и все размещения
-                </Button>
+                <div className="inline-fields">
+                  <Button onClick={() => setEditor(definition)}>
+                    Настроить
+                  </Button>
+                  <Button
+                    className="danger-link"
+                    onClick={() => setDeleteDefinition(definition)}
+                  >
+                    Удалить определение и все размещения
+                  </Button>
+                </div>
               )}
             </article>
           );
         })}
       </div>
+      {editor && (
+        <TokenDefinitionEditor
+          key={editor === "NEW" ? "new" : `${editor.id}:${editor.revision}`}
+          snapshot={props.snapshot}
+          definition={editor === "NEW" ? undefined : editor}
+          onUpload={props.onUpload}
+          onCancel={() => setEditor(null)}
+          onCreate={props.onCreateTokenDefinition}
+          onPatch={props.onPatchTokenDefinition}
+          onReplaceControllers={props.onReplaceTokenControllers}
+        />
+      )}
       <ConfirmDialog
         open={Boolean(deleteDefinition)}
         title="Удалить определение токена?"
@@ -1105,6 +1191,235 @@ function PalettePanel(props: Props) {
         }}
       />
     </section>
+  );
+}
+
+function TokenImageAssignment({
+  definition,
+  onUpload,
+  onPatch,
+}: {
+  definition: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
+  onUpload: Props["onUpload"];
+  onPatch: Props["onPatchTokenDefinition"];
+}) {
+  const [file, setFile] = useState<File>();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const assign = async () => {
+    if (!file || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const asset = await onUpload(file, "TOKEN");
+      await onPatch(definition.id, definition.revision, {
+        defaultAssetId: asset.id,
+      });
+      setFile(undefined);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось назначить изображение токену.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="direct-asset-upload">
+      <ImageUploadField
+        label={`Новое изображение для ${definition.name}`}
+        value={file}
+        accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+        hint="PNG, JPEG или WebP"
+        disabled={saving}
+        onUpdate={setFile}
+      />
+      <Button
+        view="action"
+        disabled={!file || saving}
+        loading={saving}
+        onClick={() => void assign()}
+      >
+        Загрузить и назначить
+      </Button>
+      {error && <div className="field-error">{error}</div>}
+    </div>
+  );
+}
+
+function TokenDefinitionEditor({
+  snapshot,
+  definition,
+  onUpload,
+  onCancel,
+  onCreate,
+  onPatch,
+  onReplaceControllers,
+}: {
+  snapshot: GameSnapshot;
+  definition?: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
+  onUpload: Props["onUpload"];
+  onCancel: () => void;
+  onCreate: Props["onCreateTokenDefinition"];
+  onPatch: Props["onPatchTokenDefinition"];
+  onReplaceControllers: Props["onReplaceTokenControllers"];
+}) {
+  const [name, setName] = useState(definition?.name ?? "");
+  const [characterId, setCharacterId] = useState(definition?.characterId ?? "");
+  const [assetId, setAssetId] = useState(definition?.defaultAssetId ?? "");
+  const [width, setWidth] = useState(definition?.defaultWidth ?? 64);
+  const [height, setHeight] = useState(definition?.defaultHeight ?? 64);
+  const [controllers, setControllers] = useState<string[]>(
+    definition?.controllerMembershipIds ?? [],
+  );
+  const [image, setImage] = useState<File>();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return setError("Укажите название токена.");
+    setSaving(true);
+    setError("");
+    try {
+      let selectedAssetId = assetId || null;
+      if (image) selectedAssetId = (await onUpload(image, "TOKEN")).id;
+      const input = {
+        name: name.trim(),
+        characterId: characterId || null,
+        defaultAssetId: selectedAssetId,
+        defaultWidth: width,
+        defaultHeight: height,
+        controllerMembershipIds: controllers,
+      };
+      if (!definition) await onCreate(input);
+      else {
+        await onPatch(definition.id, definition.revision, input);
+        await onReplaceControllers(
+          definition.id,
+          definition.revision + 1,
+          controllers,
+        );
+      }
+      onCancel();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось сохранить токен.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ArkenDialog
+      open
+      footer={false}
+      title={definition ? `Настройка ${definition.name}` : "Новый токен"}
+      onClose={onCancel}
+    >
+      <form className="entity-form" onSubmit={submit}>
+        <label>
+          Название
+          <FormInput
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label>
+          Персонаж
+          <FormSelect
+            value={characterId}
+            onChange={(event) => setCharacterId(event.target.value)}
+          >
+            <option value="">Без персонажа</option>
+            {snapshot.characters.map((character) => (
+              <option key={character.id} value={character.id}>
+                {character.name}
+              </option>
+            ))}
+          </FormSelect>
+        </label>
+        <label>
+          Изображение из файлов
+          <FormSelect
+            value={assetId}
+            onChange={(event) => setAssetId(event.target.value)}
+          >
+            <option value="">Без изображения</option>
+            {snapshot.assets
+              .filter((asset) => asset.kind === "TOKEN")
+              .map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.name}
+                </option>
+              ))}
+          </FormSelect>
+        </label>
+        <ImageUploadField
+          label="Загрузить новое изображение"
+          value={image}
+          onUpdate={setImage}
+          disabled={saving}
+        />
+        <div className="inline-fields">
+          <label>
+            Ширина
+            <FormInput
+              type="number"
+              min={16}
+              max={1024}
+              value={width}
+              onChange={(event) => setWidth(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            Высота
+            <FormInput
+              type="number"
+              min={16}
+              max={1024}
+              value={height}
+              onChange={(event) => setHeight(Number(event.target.value))}
+            />
+          </label>
+        </div>
+        <fieldset>
+          <legend>Управление игроками</legend>
+          {snapshot.members
+            .filter((member) => member.role === "PLAYER")
+            .map((member) => (
+              <label key={member.id} className="inline-fields">
+                <FormInput
+                  type="checkbox"
+                  checked={controllers.includes(member.id)}
+                  onChange={(event) =>
+                    setControllers((current) =>
+                      event.target.checked
+                        ? [...new Set([...current, member.id])]
+                        : current.filter((id) => id !== member.id),
+                    )
+                  }
+                />
+                {member.displayName}
+              </label>
+            ))}
+        </fieldset>
+        {error && <div className="field-error">{error}</div>}
+        <div className="dialog-actions">
+          <Button type="submit" view="action" loading={saving}>
+            Сохранить
+          </Button>
+          <Button type="button" onClick={onCancel} disabled={saving}>
+            Отмена
+          </Button>
+        </div>
+      </form>
+    </ArkenDialog>
   );
 }
 
@@ -1586,9 +1901,9 @@ function MediaPanel({
   snapshot: GameSnapshot;
   onUpload: Props["onUpload"];
 }) {
-  const [kind, setKind] = useState<AssetKind>(
-    snapshot.me.role === "GM" ? "MAP" : "PORTRAIT",
-  );
+  const [drafts, setDrafts] = useState<Partial<Record<AssetKind, File>>>({});
+  const [uploading, setUploading] = useState<AssetKind | null>(null);
+  const [error, setError] = useState("");
   const allowed = useMemo<AssetKind[]>(
     () =>
       snapshot.me.role === "GM"
@@ -1596,10 +1911,28 @@ function MediaPanel({
         : ["TOKEN", "PORTRAIT"],
     [snapshot.me.role],
   );
-  const upload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) await onUpload(file, kind);
-    event.target.value = "";
+  const labels: Record<AssetKind, string> = {
+    MAP: "Карты",
+    TOKEN: "Изображения токенов",
+    PORTRAIT: "Портреты персонажей",
+    IMAGE: "Другие изображения",
+    AUDIO: "Музыка и звуки",
+  };
+  const upload = async (kind: AssetKind) => {
+    const file = drafts[kind];
+    if (!file) return;
+    setUploading(kind);
+    setError("");
+    try {
+      await onUpload(file, kind);
+      setDrafts((current) => ({ ...current, [kind]: undefined }));
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Не удалось загрузить файл.",
+      );
+    } finally {
+      setUploading(null);
+    }
   };
   return (
     <section className="panel-section">
@@ -1610,34 +1943,43 @@ function MediaPanel({
         </div>
         <span className="revision">{snapshot.assets.length}</span>
       </div>
-      <div className="upload-row">
-        <FormSelect
-          value={kind}
-          onChange={(event) => setKind(event.target.value as AssetKind)}
-        >
-          {allowed.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </FormSelect>
-        <label className="file-button">
-          Загрузить
-          <FormInput
-            type="file"
-            accept={
-              kind === "AUDIO"
-                ? ".mp3,.ogg,audio/mpeg,audio/ogg"
-                : ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-            }
-            onChange={upload}
-          />
-        </label>
+      <div className="upload-sections">
+        {allowed.map((kind) => (
+          <section className="upload-section" key={kind}>
+            <ImageUploadField
+              label={labels[kind]}
+              value={drafts[kind]}
+              accept={
+                kind === "AUDIO"
+                  ? ".mp3,.ogg,audio/mpeg,audio/ogg"
+                  : ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+              }
+              hint={kind === "AUDIO" ? "MP3 или OGG" : "PNG, JPEG или WebP"}
+              disabled={uploading !== null}
+              onUpdate={(file) =>
+                setDrafts((current) => ({ ...current, [kind]: file }))
+              }
+            />
+            <Button
+              view="action"
+              disabled={!drafts[kind] || uploading !== null}
+              loading={uploading === kind}
+              onClick={() => void upload(kind)}
+            >
+              Загрузить
+            </Button>
+          </section>
+        ))}
       </div>
+      {error && <div className="field-error">{error}</div>}
       <div className="asset-list">
         {snapshot.assets.map((asset) => (
           <div className="asset-row" key={asset.id}>
-            <span>{asset.kind}</span>
+            {asset.kind !== "AUDIO" ? (
+              <img className="asset-thumbnail" src={asset.url} alt="" />
+            ) : (
+              <span>{asset.kind}</span>
+            )}
             <div>
               <strong>{asset.name}</strong>
               <small>{(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ</small>
