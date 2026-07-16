@@ -17,8 +17,9 @@ import {
   tokenDefinitions,
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
-import type { GameSnapshot } from "@arken/contracts";
+import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import { env } from "./env.js";
+import { normalizeLegacyEntryData } from "./entry-data.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -266,7 +267,7 @@ export async function buildSnapshot(
         kind: entry.kind,
         name: entry.name,
         description: entry.description,
-        data: entry.data,
+        data: normalizeLegacyEntryData(entry.data) as CatalogEntryDto["data"],
         revision: entry.revision,
       })),
       revision: character.revision,
@@ -296,7 +297,9 @@ export async function buildSnapshot(
             kind: entry.kind,
             name: entry.name,
             description: entry.description,
-            data: entry.data,
+            data: normalizeLegacyEntryData(
+              entry.data,
+            ) as CatalogEntryDto["data"],
             revision: entry.revision,
           }))
         : [],

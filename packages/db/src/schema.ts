@@ -202,7 +202,13 @@ export const characterCatalogEntries = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("character_catalog_character_idx").on(table.characterId)],
+  (table) => [
+    index("character_catalog_character_idx").on(table.characterId),
+    uniqueIndex("character_catalog_source_unique").on(
+      table.characterId,
+      table.sourceCatalogEntryId,
+    ),
+  ],
 );
 
 export const scenes = pgTable(

@@ -581,6 +581,64 @@ describe("Pool B HTTP boundaries", () => {
     });
   });
 
+  it("persists owner characteristic patches without replacing other stats", async () => {
+    const strength = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        stats: { strength: 4 },
+      },
+    });
+    expect(strength.statusCode).toBe(200);
+    expect(strength.json().stats).toMatchObject({ strength: 4 });
+
+    const agility = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        stats: { agility: 3 },
+      },
+    });
+    expect(agility.statusCode).toBe(200);
+    expect(agility.json().stats).toMatchObject({ strength: 4, agility: 3 });
+
+    const foreign = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.foreignCharacter}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        stats: { strength: 99 },
+      },
+    });
+    expect(foreign.statusCode).toBe(404);
+  });
+
+  it("normalizes legacy spirit formulas to willpower", async () => {
+    const roll = await app.inject({
+      method: "POST",
+      url: "/api/dice",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        formula: "1d20 + spirit",
+        label: "Legacy resilience",
+        visibility: "PUBLIC",
+        characterId: ids.character,
+      },
+    });
+    expect(roll.statusCode).toBe(201);
+    expect(roll.json()).toMatchObject({
+      characterId: ids.character,
+      kind: "DICE",
+      dice: expect.objectContaining({ label: "Legacy resilience" }),
+    });
+  });
+
   it("enforces catalog permissions, receipts, assignment snapshots and role filtering", async () => {
     const denied = await app.inject({
       method: "POST",
@@ -693,6 +751,111 @@ describe("Pool B HTTP boundaries", () => {
       `select count(*)::int count from game_events where campaign_id='${ids.campaign}'`,
     );
     expect(events.rows[0]!.count).toBe(4);
+  });
+
+  it("deletes catalog templates and character snapshots with isolated scopes", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "SKILL",
+        name: "Stealth",
+        description: "Template description",
+        data: { bonus: 2 },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const template = created.json();
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        catalogEntryId: template.id,
+      },
+    });
+    expect(assigned.statusCode).toBe(201);
+    const entry = assigned.json();
+
+    const playerTemplateDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/catalog/${template.id}`,
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: template.revision },
+    });
+    expect(playerTemplateDelete.statusCode).toBe(403);
+    const staleTemplateDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/catalog/${template.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: template.revision + 1,
+      },
+    });
+    expect(staleTemplateDelete.statusCode).toBe(409);
+
+    const deleteActionId = crypto.randomUUID();
+    const deletedTemplate = await app.inject({
+      method: "DELETE",
+      url: `/api/catalog/${template.id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: deleteActionId, revision: template.revision },
+    });
+    expect(deletedTemplate.statusCode).toBe(200);
+    const deleteReplay = await app.inject({
+      method: "DELETE",
+      url: `/api/catalog/${template.id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: deleteActionId, revision: template.revision },
+    });
+    expect(deleteReplay.json()).toMatchObject({ ok: true, duplicate: true });
+
+    const afterTemplateDelete = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(afterTemplateDelete.json().catalogEntries).toHaveLength(0);
+    expect(afterTemplateDelete.json().characters[0].entries).toContainEqual(
+      expect.objectContaining({
+        id: entry.id,
+        name: "Stealth",
+        description: "Template description",
+        sourceCatalogEntryId: null,
+      }),
+    );
+
+    const playerEntryDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}`,
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: entry.revision },
+    });
+    expect(playerEntryDelete.statusCode).toBe(403);
+    const staleEntryDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: entry.revision + 1 },
+    });
+    expect(staleEntryDelete.statusCode).toBe(409);
+    const deletedEntry = await app.inject({
+      method: "DELETE",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: entry.revision },
+    });
+    expect(deletedEntry.statusCode).toBe(200);
+    const afterEntryDelete = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(afterEntryDelete.json().characters[0].entries).toHaveLength(0);
   });
 
   it("rejects a foreign-campaign token asset without creating a receipt", async () => {

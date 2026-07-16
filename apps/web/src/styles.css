@@ -1003,6 +1003,70 @@ code {
   }
 }
 
+.entity-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: var(--space-lg);
+  background: color-mix(in oklch, var(--bg) 82%, transparent);
+}
+
+.entity-modal {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: var(--space-lg);
+}
+
+.character-window {
+  width: min(960px, 100%);
+}
+
+.character-portrait {
+  display: block;
+  width: min(220px, 45%);
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--line-strong);
+}
+
+.entity-modal form,
+.entity-modal fieldset {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.entity-modal form > fieldset {
+  margin: 0;
+  border: 1px solid var(--line);
+  padding: var(--space-md);
+}
+
+.entity-modal fieldset > fieldset {
+  margin: 0;
+  border: 1px solid var(--line);
+  padding: var(--space-sm);
+}
+
+.entity-modal label {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.catalog-entry-list {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.message-character {
+  color: var(--accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

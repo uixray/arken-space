@@ -78,6 +78,13 @@
       "when": 1784137357789,
       "tag": "0010_pink_blue_shield",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784215865463,
+      "tag": "0011_massive_the_watchers",
+      "breakpoints": true
     }
   ]
 }

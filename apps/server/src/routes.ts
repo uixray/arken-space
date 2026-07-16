@@ -67,6 +67,7 @@ import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
+import { normalizeLegacyEntryData } from "./entry-data.js";
 import {
   assertStorageCapacity,
   displayNameFromUpload,
@@ -658,6 +659,7 @@ export function registerRoutes(
           ![
             "name",
             "portraitAssetId",
+            "stats",
             "backstory",
             "inventory",
             "notes",
@@ -686,11 +688,20 @@ export function registerRoutes(
       )
         return reply.code(403).send({ error: "PORTRAIT_ASSET_FORBIDDEN" });
     }
+    const mergedUpdates = updates.stats
+      ? {
+          ...updates,
+          stats: {
+            ...(current.stats as Record<string, number>),
+            ...updates.stats,
+          },
+        }
+      : updates;
     const updated = await db.transaction(async (tx) => {
       const [next] = await tx
         .update(characters)
         .set({
-          ...updates,
+          ...mergedUpdates,
           revision: current.revision + 1,
           updatedAt: new Date(),
         })
@@ -759,7 +770,10 @@ export function registerRoutes(
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const parsedBody = catalogEntryCommandSchema
       .partial()
-      .extend({ actionId: actionIdSchema })
+      .extend({
+        actionId: actionIdSchema,
+        revision: z.number().int().nonnegative().optional(),
+      })
       .safeParse(request.body);
     if (!parsedBody.success)
       return reply.code(400).send({ error: "INVALID_CATALOG_ENTRY" });
@@ -777,7 +791,9 @@ export function registerRoutes(
       )
       .limit(1);
     if (!current) return reply.code(404).send({ error: "CATALOG_NOT_FOUND" });
-    const { actionId, ...updates } = body;
+    if (body.revision !== undefined && body.revision !== current.revision)
+      return reply.code(409).send({ error: "CATALOG_CONFLICT" });
+    const { actionId, revision: _revision, ...updates } = body;
     const updated = await db.transaction(async (tx) => {
       const [next] = await tx
         .update(catalogEntries)
@@ -808,6 +824,68 @@ export function registerRoutes(
     if (!updated) return reply.code(409).send({ error: "CATALOG_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return updated;
+  });
+
+  app.delete("/api/catalog/:id", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = revisionCommandSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ ok: true, duplicate: true });
+    const [current] = await db
+      .select()
+      .from(catalogEntries)
+      .where(
+        and(
+          eq(catalogEntries.id, id),
+          eq(catalogEntries.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CATALOG_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply.code(409).send({ error: "CATALOG_CONFLICT" });
+    let deleted;
+    try {
+      deleted = await db.transaction(async (tx) => {
+        // Assigned entries are snapshots. Removing a template only severs their
+        // provenance link; it must never remove or mutate the character copies.
+        await tx
+          .update(characterCatalogEntries)
+          .set({ sourceCatalogEntryId: null })
+          .where(eq(characterCatalogEntries.sourceCatalogEntryId, id));
+        const [entry] = await tx
+          .delete(catalogEntries)
+          .where(
+            and(
+              eq(catalogEntries.id, id),
+              eq(catalogEntries.campaignId, auth.campaignId),
+              eq(catalogEntries.revision, body.revision),
+            ),
+          )
+          .returning();
+        if (!entry) throw new Error("CATALOG_DELETE_CONFLICT");
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "catalog.deleted",
+          entityType: "catalog_entry",
+          entityId: id,
+          entityRevision: body.revision,
+        });
+        return entry;
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "CATALOG_DELETE_CONFLICT")
+        return reply.code(409).send({ error: "CATALOG_CONFLICT" });
+      throw error;
+    }
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return { ok: true, deleted };
   });
 
   app.post("/api/characters/:id/catalog", async (request, reply) => {
@@ -843,30 +921,54 @@ export function registerRoutes(
       .limit(1);
     if (!source || !character)
       return reply.code(404).send({ error: "ASSIGNMENT_SOURCE_NOT_FOUND" });
-    const assigned = await db.transaction(async (tx) => {
-      const [entry] = await tx
-        .insert(characterCatalogEntries)
-        .values({
-          characterId,
-          sourceCatalogEntryId: source.id,
-          kind: source.kind,
-          name: source.name,
-          description: source.description,
-          data: source.data,
-        })
-        .returning();
-      if (!entry) throw new Error("ASSIGNMENT_CREATE_FAILED");
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "character_catalog.assigned",
-        entityType: "character_catalog_entry",
-        entityId: entry.id,
-        entityRevision: 0,
+    const [existingAssignment] = await db
+      .select({ id: characterCatalogEntries.id })
+      .from(characterCatalogEntries)
+      .where(
+        and(
+          eq(characterCatalogEntries.characterId, characterId),
+          eq(characterCatalogEntries.sourceCatalogEntryId, source.id),
+        ),
+      )
+      .limit(1);
+    if (existingAssignment)
+      return reply.code(409).send({ error: "CATALOG_ALREADY_ASSIGNED" });
+    let assigned;
+    try {
+      assigned = await db.transaction(async (tx) => {
+        const [entry] = await tx
+          .insert(characterCatalogEntries)
+          .values({
+            characterId,
+            sourceCatalogEntryId: source.id,
+            kind: source.kind,
+            name: source.name,
+            description: source.description,
+            data: source.data,
+          })
+          .returning();
+        if (!entry) throw new Error("ASSIGNMENT_CREATE_FAILED");
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "character_catalog.assigned",
+          entityType: "character_catalog_entry",
+          entityId: entry.id,
+          entityRevision: 0,
+        });
+        return entry;
       });
-      return entry;
-    });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "23505"
+      )
+        return reply.code(409).send({ error: "CATALOG_ALREADY_ASSIGNED" });
+      throw error;
+    }
     await broadcastSnapshots(io, db, auth.campaignId);
     return reply.code(201).send(assigned);
   });
@@ -881,7 +983,9 @@ export function registerRoutes(
       const params = z
         .object({ characterId: z.string().uuid(), id: z.string().uuid() })
         .parse(request.params);
-      const body = characterCatalogEntryCommandSchema.parse(request.body);
+      const body = characterCatalogEntryCommandSchema
+        .extend({ revision: z.number().int().nonnegative().optional() })
+        .parse(request.body);
       if (await findAction(db, auth.campaignId, body.actionId))
         return reply.code(200).send({ duplicate: true });
       const [current] = await db
@@ -901,7 +1005,12 @@ export function registerRoutes(
         .limit(1);
       if (!current)
         return reply.code(404).send({ error: "CHARACTER_ENTRY_NOT_FOUND" });
-      const { actionId, ...updates } = body;
+      if (
+        body.revision !== undefined &&
+        body.revision !== current.entry.revision
+      )
+        return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
+      const { actionId, revision: _revision, ...updates } = body;
       const updated = await db.transaction(async (tx) => {
         const [next] = await tx
           .update(characterCatalogEntries)
@@ -933,6 +1042,69 @@ export function registerRoutes(
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
       await broadcastSnapshots(io, db, auth.campaignId);
       return updated;
+    },
+  );
+
+  app.delete(
+    "/api/characters/:characterId/catalog/:id",
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      if (auth.role !== "GM")
+        return reply.code(403).send({ error: "GM_REQUIRED" });
+      const params = z
+        .object({ characterId: z.string().uuid(), id: z.string().uuid() })
+        .parse(request.params);
+      const body = revisionCommandSchema.parse(request.body);
+      if (await findAction(db, auth.campaignId, body.actionId))
+        return reply.code(200).send({ ok: true, duplicate: true });
+      const [current] = await db
+        .select({ entry: characterCatalogEntries })
+        .from(characterCatalogEntries)
+        .innerJoin(
+          characters,
+          eq(characterCatalogEntries.characterId, characters.id),
+        )
+        .where(
+          and(
+            eq(characterCatalogEntries.id, params.id),
+            eq(characterCatalogEntries.characterId, params.characterId),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!current)
+        return reply.code(404).send({ error: "CHARACTER_ENTRY_NOT_FOUND" });
+      if (current.entry.revision !== body.revision)
+        return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
+      const deleted = await db.transaction(async (tx) => {
+        const [entry] = await tx
+          .delete(characterCatalogEntries)
+          .where(
+            and(
+              eq(characterCatalogEntries.id, params.id),
+              eq(characterCatalogEntries.characterId, params.characterId),
+              eq(characterCatalogEntries.revision, body.revision),
+            ),
+          )
+          .returning();
+        if (!entry) return null;
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "character_catalog.deleted",
+          entityType: "character_catalog_entry",
+          entityId: params.id,
+          entityRevision: body.revision,
+          payload: { characterId: params.characterId },
+        });
+        return entry;
+      });
+      if (!deleted)
+        return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return { ok: true };
     },
   );
 
@@ -2940,7 +3112,9 @@ export function registerRoutes(
           .where(eq(characters.campaignId, auth.campaignId));
         let recharged = 0;
         for (const { entry } of entryRows) {
-          const parsed = entryDataSchema.safeParse(entry.data);
+          const parsed = entryDataSchema.safeParse(
+            normalizeLegacyEntryData(entry.data),
+          );
           if (!parsed.success || !parsed.data.uses) continue;
           const uses = parsed.data.uses;
           const due =
@@ -3139,7 +3313,9 @@ export function registerRoutes(
         return reply
           .code(409)
           .send({ error: "ENTRY_CONFLICT", revision: row.entry.revision });
-      const parsed = entryDataSchema.safeParse(row.entry.data);
+      const parsed = entryDataSchema.safeParse(
+        normalizeLegacyEntryData(row.entry.data),
+      );
       if (!parsed.success || !parsed.data.uses)
         return reply.code(400).send({ error: "ENTRY_HAS_NO_USES" });
       const result = await db.transaction(async (tx) => {
@@ -3241,7 +3417,9 @@ export function registerRoutes(
           row.character.ownerMembershipId !== auth.membershipId)
       )
         return reply.code(403).send({ error: "CHARACTER_ENTRY_FORBIDDEN" });
-      const parsedData = entryDataSchema.safeParse(row.entry.data);
+      const parsedData = entryDataSchema.safeParse(
+        normalizeLegacyEntryData(row.entry.data),
+      );
       if (!parsedData.success)
         return reply.code(400).send({ error: "INVALID_ENTRY_DATA" });
       const action = parsedData.data.rollActions?.find(
@@ -3408,8 +3586,12 @@ export function registerRoutes(
         .limit(1);
     }
     try {
+      const normalizedFormula = body.formula.replace(
+        /\bspirit\b/gi,
+        "willpower",
+      );
       const result = rollFormula(
-        body.formula,
+        normalizedFormula,
         character?.stats ?? {},
         randomInt,
         body.label,

@@ -319,7 +319,9 @@ export const rulerUpdateSchema = z.object({
 export const characterUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   portraitAssetId: z.string().uuid().nullable().optional(),
-  stats: fixedCharacteristicsSchema.optional(),
+  // Character edits may update one characteristic at a time. The server merges
+  // this patch into the canonical fixed set instead of replacing the object.
+  stats: fixedCharacteristicsSchema.partial().optional(),
   skills: z
     .array(
       z.object({
