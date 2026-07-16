@@ -161,12 +161,63 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   await expect(page.getByRole("heading", { name: "Картограф" })).toBeVisible();
   await expect(page.getByText("Наблюдение")).toBeVisible();
 
+  await page
+    .getByRole("dialog", { name: "Персонажи" })
+    .getByRole("button", { name: "Закрыть диалоговое окно" })
+    .click();
   await page.getByRole("button", { name: /Чат/ }).click();
   await expect(page.getByText("Сцена готова.")).toBeVisible();
   await page.screenshot({
     path: "test-results/concept-shell.png",
     fullPage: true,
   });
+});
+
+test("GM opens token and file workflows without leaving the canvas", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }),
+  );
+  await page.goto("/");
+
+  const tabs = page.locator(".tabs").getByRole("button");
+  await tabs.nth(2).click();
+  const tokensDialog = page.getByRole("dialog");
+  await expect(
+    tokensDialog.getByRole("heading", { name: "Токены" }),
+  ).toBeVisible();
+  await tokensDialog.getByRole("button", { name: "Создать токен" }).click();
+  await expect(page.getByRole("dialog", { name: "Новый токен" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+
+  await tabs.nth(5).click();
+  const filesDialog = page.getByRole("dialog");
+  await expect(
+    filesDialog.getByRole("heading", { name: "Файлы" }),
+  ).toBeVisible();
+  for (const section of [
+    "Карты",
+    "Изображения токенов",
+    "Портреты персонажей",
+    "Другие изображения",
+    "Музыка и звуки",
+  ]) {
+    await expect(filesDialog.getByText(section, { exact: true })).toBeVisible();
+  }
+  await expect(page.locator("canvas").first()).toBeVisible();
 });
 
 for (const viewport of [

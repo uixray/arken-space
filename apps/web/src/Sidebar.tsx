@@ -1,13 +1,7 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type FormEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
   AssetKind,
+  AssetDto,
   CatalogEntryDto,
   CharacterDto,
   GameSnapshot,
@@ -16,6 +10,7 @@ import type {
   PlayerAccessSecretDto,
 } from "@arken/contracts";
 import { arkenSystem } from "@arken/system";
+import { Button } from "@gravity-ui/uikit";
 import { MusicBar } from "./MusicBar";
 import {
   CatalogEntryForm,
@@ -23,6 +18,11 @@ import {
 } from "./CatalogEntryForm";
 import type { GameSocket } from "./realtime";
 import { ApiError } from "./api";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { TextPromptDialog } from "./ui/TextPromptDialog";
+import { ArkenDialog } from "./ui/ArkenDialog";
+import { ImageUploadField } from "./ui/ImageUploadField";
+import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 
 function formatDiceBreakdown(dice: GameSnapshot["messages"][number]["dice"]) {
   if (!dice) return "";
@@ -49,7 +49,26 @@ type Props = {
   onPatchTokenDefinition: (
     definitionId: string,
     revision: number,
-    patch: { defaultAssetId?: string | null; characterId?: string | null },
+    patch: {
+      name?: string;
+      defaultAssetId?: string | null;
+      characterId?: string | null;
+      defaultWidth?: number;
+      defaultHeight?: number;
+    },
+  ) => Promise<void>;
+  onCreateTokenDefinition: (input: {
+    name: string;
+    characterId: string | null;
+    defaultAssetId: string | null;
+    defaultWidth: number;
+    defaultHeight: number;
+    controllerMembershipIds: string[];
+  }) => Promise<void>;
+  onReplaceTokenControllers: (
+    definitionId: string,
+    revision: number,
+    controllerMembershipIds: string[],
   ) => Promise<void>;
   onPatchCharacter: (id: string, patch: Partial<CharacterDto>) => Promise<void>;
   onChat: (body: string, visibility: MessageVisibility) => Promise<void>;
@@ -81,7 +100,7 @@ type Props = {
     name: string,
   ) => Promise<void>;
   onCreateToken: (characterId: string) => Promise<void>;
-  onUpload: (file: File, kind: AssetKind) => Promise<void>;
+  onUpload: (file: File, kind: AssetKind) => Promise<AssetDto>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
   onCreateCatalogEntry: (input: {
     kind: "SKILL" | "ABILITY";
@@ -194,7 +213,8 @@ export function Sidebar(props: Props) {
   return (
     <aside className={`sidebar ${!isGm ? "player-sidebar" : ""}`}>
       <nav className="tabs" aria-label="Панели">
-        <button
+        <Button
+          view="flat"
           ref={playerCharacterButtonRef}
           aria-pressed={!isGm ? playerCharacterOpen : tab === "character"}
           onClick={() =>
@@ -204,66 +224,70 @@ export function Sidebar(props: Props) {
           }
         >
           Персонаж
-        </button>
-        <button aria-pressed={tab === "chat"} onClick={() => openChat()}>
+        </Button>
+        <Button
+          view="flat"
+          aria-pressed={tab === "chat"}
+          onClick={() => openChat()}
+        >
           Чат <span>{props.snapshot.messages.length}</span>
-        </button>
-        <button
+        </Button>
+        <Button
+          view="flat"
           aria-pressed={tab === "palette"}
           onClick={() => setTab("palette")}
         >
           Токены
-        </button>
-        <button aria-pressed={tab === "music"} onClick={() => setTab("music")}>
+        </Button>
+        <Button
+          view="flat"
+          aria-pressed={tab === "music"}
+          onClick={() => setTab("music")}
+        >
           Музыка
-        </button>
+        </Button>
         {isGm && (
-          <button
+          <Button
+            view="flat"
             aria-pressed={tab === "setup"}
             onClick={() => setTab("setup")}
           >
             Подготовка
-          </button>
+          </Button>
         )}
-        <button aria-pressed={tab === "media"} onClick={() => setTab("media")}>
+        <Button
+          view="flat"
+          aria-pressed={tab === "media"}
+          onClick={() => setTab("media")}
+        >
           Файлы
-        </button>
+        </Button>
       </nav>
       <div className={`panel-scroll ${tab === "chat" ? "chat-scroll" : ""}`}>
         {tab === "character" && isGm && (
-          <div className="entity-modal-backdrop" role="presentation">
-            <section
-              className="entity-modal character-window"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Персонажи"
-            >
-              <div className="drawer-heading">
-                <strong>Персонажи</strong>
-                <button
-                  aria-label="Закрыть персонажей"
-                  onClick={() => setTab("chat")}
-                >
-                  ×
-                </button>
-              </div>
-              <CharacterPanel
-                snapshot={props.snapshot}
-                character={selectedCharacter}
-                selectedId={selectedCharacterId}
-                setSelectedId={setSelectedCharacterId}
-                onPatch={props.onPatchCharacter}
-                onRoll={props.onRoll}
-                onAssignEntry={props.onAssignCatalogEntry}
-                onUpdateEntry={props.onUpdateCharacterEntry}
-                onDeleteEntry={props.onDeleteCharacterEntry}
-                onRollEntry={props.onRollEntry}
-                onRechargeEntry={props.onRechargeEntry}
-                onUpdateCounters={props.onUpdateCounters}
-                onCampaignClock={props.onCampaignClock}
-              />
-            </section>
-          </div>
+          <ArkenDialog
+            open
+            footer={false}
+            title="Персонажи"
+            onClose={() => setTab("chat")}
+          >
+            <CharacterPanel
+              snapshot={props.snapshot}
+              character={selectedCharacter}
+              selectedId={selectedCharacterId}
+              setSelectedId={setSelectedCharacterId}
+              onPatch={props.onPatchCharacter}
+              onRoll={props.onRoll}
+              onAssignEntry={props.onAssignCatalogEntry}
+              onUpdateEntry={props.onUpdateCharacterEntry}
+              onDeleteEntry={props.onDeleteCharacterEntry}
+              onRollEntry={props.onRollEntry}
+              onRechargeEntry={props.onRechargeEntry}
+              onUpdateCounters={props.onUpdateCounters}
+              onCampaignClock={props.onCampaignClock}
+              onUpload={props.onUpload}
+            />
+          </ArkenDialog>
         )}
         {tab === "chat" && (
           <ChatPanel
@@ -274,7 +298,16 @@ export function Sidebar(props: Props) {
             onMessageFocused={() => setFocusedMessageId(null)}
           />
         )}
-        {tab === "palette" && <PalettePanel {...props} />}
+        {tab === "palette" && (
+          <ArkenDialog
+            open
+            footer={false}
+            title="Токены"
+            onClose={() => setTab("chat")}
+          >
+            <PalettePanel {...props} />
+          </ArkenDialog>
+        )}
         <div hidden={tab !== "music"}>
           <MusicBar
             audio={props.snapshot.audio}
@@ -285,14 +318,21 @@ export function Sidebar(props: Props) {
         </div>
         {tab === "setup" && isGm && <SetupPanel {...props} />}
         {tab === "media" && (
-          <MediaPanel snapshot={props.snapshot} onUpload={props.onUpload} />
+          <ArkenDialog
+            open
+            footer={false}
+            title="Файлы"
+            onClose={() => setTab("chat")}
+          >
+            <MediaPanel snapshot={props.snapshot} onUpload={props.onUpload} />
+          </ArkenDialog>
         )}
       </div>
       {!isGm && playerCharacterOpen && (
         <aside className="player-character-drawer" aria-label="Персонаж">
           <div className="drawer-heading">
             <strong>Персонаж</strong>
-            <button
+            <Button
               aria-label="Закрыть персонажа"
               onClick={() => {
                 setPlayerCharacterOpen(false);
@@ -300,7 +340,7 @@ export function Sidebar(props: Props) {
               }}
             >
               ×
-            </button>
+            </Button>
           </div>
           <div className="panel-scroll">
             <CharacterPanel
@@ -317,6 +357,7 @@ export function Sidebar(props: Props) {
               onRechargeEntry={props.onRechargeEntry}
               onUpdateCounters={props.onUpdateCounters}
               onCampaignClock={props.onCampaignClock}
+              onUpload={props.onUpload}
             />
           </div>
         </aside>
@@ -339,6 +380,7 @@ function CharacterPanel({
   onRechargeEntry,
   onUpdateCounters,
   onCampaignClock,
+  onUpload,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -353,12 +395,15 @@ function CharacterPanel({
   onRechargeEntry: Props["onRechargeEntry"];
   onUpdateCounters: Props["onUpdateCounters"];
   onCampaignClock: Props["onCampaignClock"];
+  onUpload: Props["onUpload"];
 }) {
   const [countersPending, setCountersPending] = useState(false);
   const [countersError, setCountersError] = useState("");
   const [entryEditor, setEntryEditor] = useState<
     CharacterDto["entries"][number] | null
   >(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [portraitUpload, setPortraitUpload] = useState<File>();
   const [walletDraft, setWalletDraft] = useState(
     () => character?.wallet ?? { gold: 0, silver: 0, copper: 0, sp: 0 },
   );
@@ -410,7 +455,7 @@ function CharacterPanel({
       {snapshot.me.role === "GM" && (
         <label className="field">
           Персонаж
-          <select
+          <FormSelect
             value={selectedId}
             onChange={(event) => setSelectedId(event.target.value)}
           >
@@ -419,7 +464,7 @@ function CharacterPanel({
                 {item.name}
               </option>
             ))}
-          </select>
+          </FormSelect>
         </label>
       )}
       <div className="section-heading">
@@ -428,18 +473,7 @@ function CharacterPanel({
           <h2>{character.name}</h2>
         </div>
         <div className="inline-fields">
-          <button
-            onClick={() => {
-              const name = window.prompt("Новое имя персонажа", character.name);
-              if (name?.trim())
-                void onPatch(character.id, {
-                  name: name.trim(),
-                  revision: character.revision,
-                });
-            }}
-          >
-            Переименовать
-          </button>
+          <Button onClick={() => setRenameOpen(true)}>Переименовать</Button>
           <span className="revision">rev {character.revision}</span>
         </div>
       </div>
@@ -452,7 +486,7 @@ function CharacterPanel({
       )}
       <label className="field">
         Портрет
-        <select
+        <FormSelect
           value={character.portraitAssetId ?? ""}
           onChange={(event) =>
             void onPatch(character.id, {
@@ -469,8 +503,27 @@ function CharacterPanel({
                 {asset.name}
               </option>
             ))}
-        </select>
+        </FormSelect>
       </label>
+      <ImageUploadField
+        label="Загрузить портрет для персонажа"
+        value={portraitUpload}
+        onUpdate={setPortraitUpload}
+      />
+      <Button
+        disabled={!portraitUpload}
+        onClick={async () => {
+          if (!portraitUpload) return;
+          const asset = await onUpload(portraitUpload, "PORTRAIT");
+          await onPatch(character.id, {
+            portraitAssetId: asset.id,
+            revision: character.revision,
+          });
+          setPortraitUpload(undefined);
+        }}
+      >
+        Загрузить и назначить
+      </Button>
       {snapshot.me.role === "GM" && (
         <div className="subsection">
           <h3>Время кампании</h3>
@@ -480,14 +533,14 @@ function CharacterPanel({
               ? `бой #${snapshot.campaign.battleCounter}`
               : "вне боя"}
           </p>
-          <button
+          <Button
             onClick={() =>
               onCampaignClock("ADVANCE_DAY", snapshot.campaign.revision)
             }
           >
             Следующий день
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() =>
               onCampaignClock(
                 snapshot.campaign.battleActive ? "END_BATTLE" : "START_BATTLE",
@@ -496,12 +549,12 @@ function CharacterPanel({
             }
           >
             {snapshot.campaign.battleActive ? "Завершить бой" : "Начать бой"}
-          </button>
+          </Button>
         </div>
       )}
       <details className="subsection">
         <summary>Предыстория</summary>
-        <textarea
+        <FormTextArea
           defaultValue={character.backstory}
           disabled={!editable}
           rows={8}
@@ -517,7 +570,7 @@ function CharacterPanel({
         {arkenSystem.stats.map((stat) => (
           <label key={stat.key} className="stat-field">
             <span>{stat.label}</span>
-            <input
+            <FormInput
               key={`${character.id}-${stat.key}-${character.revision}`}
               type="number"
               defaultValue={character.stats[stat.key] ?? stat.defaultValue}
@@ -531,29 +584,29 @@ function CharacterPanel({
                 })
               }
             />
-            <button
+            <Button
               disabled={!editable}
               onClick={() =>
                 onRoll(`1d20 + ${stat.key}`, stat.label, "PUBLIC", character.id)
               }
             >
               Бросок
-            </button>
+            </Button>
           </label>
         ))}
       </div>
-      <button
+      <Button
         onClick={() =>
           onRoll("1d20 + agility", "Инициатива", "PUBLIC", character.id)
         }
       >
         Инициатива (d20 + Ловкость)
-      </button>
+      </Button>
       <div className="subsection">
         <h3>Навыки</h3>
         {character.skills.length ? (
           character.skills.map((skill) => (
-            <button
+            <Button
               className="action-row"
               key={skill.key}
               onClick={() =>
@@ -562,7 +615,7 @@ function CharacterPanel({
             >
               <span>{skill.name}</span>
               <code>{skill.formula}</code>
-            </button>
+            </Button>
           ))
         ) : (
           <p className="muted">Навыки ещё не добавлены.</p>
@@ -576,13 +629,13 @@ function CharacterPanel({
               <strong>{spell.name}</strong>
               <p>{spell.description}</p>
               {spell.formula && (
-                <button
+                <Button
                   onClick={() =>
                     onRoll(spell.formula!, spell.name, "PUBLIC", character.id)
                   }
                 >
                   Бросить {spell.formula}
-                </button>
+                </Button>
               )}
             </div>
           ))
@@ -593,7 +646,7 @@ function CharacterPanel({
       <div className="subsection">
         <h3>Каталог персонажа</h3>
         {snapshot.me.role === "GM" && snapshot.catalogEntries.length > 0 && (
-          <select
+          <FormSelect
             defaultValue=""
             onChange={(event) => {
               if (event.target.value)
@@ -607,7 +660,7 @@ function CharacterPanel({
                 {entry.name}
               </option>
             ))}
-          </select>
+          </FormSelect>
         )}
         {character.entries.length ? (
           character.entries.map((entry) => (
@@ -624,20 +677,20 @@ function CharacterPanel({
                   {entry.data.uses.progressText
                     ? ` · ${entry.data.uses.progressText}`
                     : ""}
-                  <button
+                  <Button
                     disabled={!editable}
                     onClick={() =>
                       onRechargeEntry(character.id, entry.id, entry.revision)
                     }
                   >
                     Перезарядить
-                  </button>
+                  </Button>
                 </p>
               )}
               {[...(entry.data.rollActions ?? [])]
                 .sort((a, b) => a.order - b.order)
                 .map((action) => (
-                  <button
+                  <Button
                     key={action.id}
                     disabled={!editable || (entry.data.uses?.current ?? 1) < 1}
                     onClick={() =>
@@ -645,58 +698,27 @@ function CharacterPanel({
                     }
                   >
                     {action.label} · {action.kind}
-                  </button>
+                  </Button>
                 ))}
               {snapshot.me.role === "GM" && (
                 <div className="inline-fields">
-                  <button onClick={() => setEntryEditor(entry)}>
+                  <Button onClick={() => setEntryEditor(entry)}>
                     Редактировать запись
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     className="danger-link"
                     onClick={() =>
                       void onDeleteEntry(character.id, entry.id, entry.revision)
                     }
                   >
                     Удалить у персонажа
-                  </button>
+                  </Button>
                 </div>
               )}
               {snapshot.me.role === "GM" && (
-                <button
-                  hidden
-                  onClick={() => {
-                    const kind = window.prompt(
-                      "Тип: SKILL или ABILITY",
-                      entry.kind,
-                    );
-                    if (kind !== "SKILL" && kind !== "ABILITY") return;
-                    const name = window.prompt("Название", entry.name);
-                    if (!name?.trim()) return;
-                    const description = window.prompt(
-                      "Описание",
-                      entry.description,
-                    );
-                    if (description === null) return;
-                    const raw = window.prompt(
-                      "Данные JSON",
-                      JSON.stringify(entry.data, null, 2),
-                    );
-                    if (raw === null) return;
-                    try {
-                      void onUpdateEntry(character.id, entry.id, {
-                        kind,
-                        name: name.trim(),
-                        description,
-                        data: JSON.parse(raw) as Record<string, unknown>,
-                      });
-                    } catch {
-                      window.alert("Некорректный JSON");
-                    }
-                  }}
-                >
+                <Button hidden onClick={() => setEntryEditor(entry)}>
                   Редактировать запись
-                </button>
+                </Button>
               )}
             </div>
           ))
@@ -707,31 +729,29 @@ function CharacterPanel({
         )}
       </div>
       {entryEditor && (
-        <div className="entity-modal-backdrop" role="presentation">
-          <section
-            className="entity-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Редактирование ${entryEditor.name}`}
-          >
-            <CatalogEntryForm
-              key={entryEditor.id}
-              existing={entryEditor}
-              onCancel={() => setEntryEditor(null)}
-              onSubmit={async (input) => {
-                await onUpdateEntry(character.id, entryEditor.id, {
-                  ...input,
-                  revision: entryEditor.revision,
-                });
-                setEntryEditor(null);
-              }}
-            />
-          </section>
-        </div>
+        <ArkenDialog
+          open
+          footer={false}
+          title={`Редактирование ${entryEditor.name}`}
+          onClose={() => setEntryEditor(null)}
+        >
+          <CatalogEntryForm
+            key={entryEditor.id}
+            existing={entryEditor}
+            onCancel={() => setEntryEditor(null)}
+            onSubmit={async (input) => {
+              await onUpdateEntry(character.id, entryEditor.id, {
+                ...input,
+                revision: entryEditor.revision,
+              });
+              setEntryEditor(null);
+            }}
+          />
+        </ArkenDialog>
       )}
       <label className="field">
         Инвентарь (один предмет на строку)
-        <textarea
+        <FormTextArea
           defaultValue={character.inventory.join("\n")}
           disabled={!editable}
           rows={5}
@@ -748,7 +768,7 @@ function CharacterPanel({
       </label>
       <label className="field">
         Ресурсы (JSON: имя → current/maximum)
-        <textarea
+        <FormTextArea
           defaultValue={JSON.stringify(character.resources, null, 2)}
           disabled={!editable}
           rows={5}
@@ -783,7 +803,7 @@ function CharacterPanel({
         {(["gold", "silver", "copper", "sp"] as const).map((key) => (
           <span className="inline-fields" key={key}>
             <b>{key}</b>
-            <button
+            <Button
               disabled={!editable || countersPending || walletDraft[key] === 0}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() =>
@@ -794,8 +814,8 @@ function CharacterPanel({
               }
             >
               −
-            </button>
-            <input
+            </Button>
+            <FormInput
               type="number"
               min={0}
               value={walletDraft[key]}
@@ -811,7 +831,7 @@ function CharacterPanel({
               }
               onBlur={() => void saveWallet(walletDraft)}
             />
-            <button
+            <Button
               disabled={!editable || countersPending}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() =>
@@ -819,7 +839,7 @@ function CharacterPanel({
               }
             >
               +
-            </button>
+            </Button>
           </span>
         ))}
         {countersPending && <span className="muted">Сохраняем…</span>}
@@ -831,7 +851,7 @@ function CharacterPanel({
       </label>
       <label className="field">
         Заметки
-        <textarea
+        <FormTextArea
           defaultValue={character.notes}
           disabled={!editable}
           rows={7}
@@ -843,6 +863,20 @@ function CharacterPanel({
           }
         />
       </label>
+      <TextPromptDialog
+        open={renameOpen}
+        title="Переименовать персонажа"
+        label="Имя персонажа"
+        initialValue={character.name}
+        onClose={() => setRenameOpen(false)}
+        onApply={async (name) => {
+          await onPatch(character.id, {
+            name,
+            revision: character.revision,
+          });
+          setRenameOpen(false);
+        }}
+      />
     </section>
   );
 }
@@ -948,7 +982,7 @@ function ChatPanel({
         <div ref={endRef} aria-hidden="true" />
       </div>
       {newMessageCount > 0 && (
-        <button
+        <Button
           className="new-messages"
           onClick={() => {
             const list = listRef.current;
@@ -959,26 +993,26 @@ function ChatPanel({
           }}
         >
           Новые сообщения · {newMessageCount}
-        </button>
+        </Button>
       )}
       <div className="chat-tools">
         <div className="inline-fields">
-          <input
+          <FormInput
             aria-label="Формула броска"
             value={formula}
             onChange={(event) => setFormula(event.target.value)}
           />
-          <button
+          <Button
             onClick={() =>
               onRoll(formula, undefined, visibility, snapshot.me.characterId)
             }
           >
             Бросить
-          </button>
+          </Button>
         </div>
         <div className="inline-fields">
           {[2, 4, 8, 12, 20].map((sides) => (
-            <button
+            <Button
               key={sides}
               onClick={() =>
                 onRoll(
@@ -990,11 +1024,11 @@ function ChatPanel({
               }
             >
               d{sides}
-            </button>
+            </Button>
           ))}
         </div>
         <label className="compact-check">
-          <input
+          <FormInput
             type="checkbox"
             checked={visibility === "GM_ONLY"}
             onChange={(event) =>
@@ -1005,14 +1039,14 @@ function ChatPanel({
         </label>
       </div>
       <form className="chat-compose" onSubmit={submit}>
-        <textarea
+        <FormTextArea
           aria-label="Сообщение"
           placeholder="Сообщение…"
           value={text}
           onChange={(event) => setText(event.target.value)}
           rows={3}
         />
-        <button className="primary">Отправить</button>
+        <Button className="primary">Отправить</Button>
       </form>
     </section>
   );
@@ -1020,7 +1054,13 @@ function ChatPanel({
 
 function PalettePanel(props: Props) {
   const definitions = props.snapshot.tokenDefinitions ?? [];
-  if (!definitions.length)
+  const [editor, setEditor] = useState<
+    (typeof definitions)[number] | "NEW" | null
+  >(null);
+  const [deleteDefinition, setDeleteDefinition] = useState<
+    (typeof definitions)[number] | null
+  >(null);
+  if (!definitions.length && props.snapshot.me.role !== "GM")
     return (
       <Empty
         title="Нет доступных токенов"
@@ -1036,6 +1076,11 @@ function PalettePanel(props: Props) {
         </div>
         <span className="revision">{definitions.length}</span>
       </div>
+      {props.snapshot.me.role === "GM" && (
+        <Button view="action" onClick={() => setEditor("NEW")}>
+          Создать токен
+        </Button>
+      )}
       <p className="muted">
         Нажмите, чтобы поставить токен в центр карты, или перетащите его на
         нужное место.
@@ -1058,7 +1103,7 @@ function PalettePanel(props: Props) {
                 );
               }}
             >
-              <button
+              <Button
                 className="palette-place"
                 onClick={() => props.onPlaceTokenDefinition(definition.id)}
                 title="Поставить экземпляр токена на активную сцену"
@@ -1071,8 +1116,8 @@ function PalettePanel(props: Props) {
                   </span>
                 )}
                 <strong>{definition.name}</strong>
-              </button>
-              <select
+              </Button>
+              <FormSelect
                 aria-label={`Изображение токена ${definition.name}`}
                 value={definition.defaultAssetId ?? ""}
                 onChange={(event) =>
@@ -1091,36 +1136,300 @@ function PalettePanel(props: Props) {
                       {item.name}
                     </option>
                   ))}
-              </select>
+              </FormSelect>
+              {props.snapshot.me.role !== "GM" && (
+                <TokenImageAssignment
+                  definition={definition}
+                  onUpload={props.onUpload}
+                  onPatch={props.onPatchTokenDefinition}
+                />
+              )}
               {props.snapshot.me.role === "GM" && (
-                <button
-                  className="danger-link"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `Удалить определение «${definition.name}» и все его размещения на сценах? Это не удаление одного токена.`,
-                      )
-                    )
-                      void props.onDeleteTokenDefinition(
-                        definition.id,
-                        definition.revision,
-                      );
-                  }}
-                >
-                  Удалить определение и все размещения
-                </button>
+                <div className="inline-fields">
+                  <Button onClick={() => setEditor(definition)}>
+                    Настроить
+                  </Button>
+                  <Button
+                    className="danger-link"
+                    onClick={() => setDeleteDefinition(definition)}
+                  >
+                    Удалить определение и все размещения
+                  </Button>
+                </div>
               )}
             </article>
           );
         })}
       </div>
+      {editor && (
+        <TokenDefinitionEditor
+          key={editor === "NEW" ? "new" : `${editor.id}:${editor.revision}`}
+          snapshot={props.snapshot}
+          definition={editor === "NEW" ? undefined : editor}
+          onUpload={props.onUpload}
+          onCancel={() => setEditor(null)}
+          onCreate={props.onCreateTokenDefinition}
+          onPatch={props.onPatchTokenDefinition}
+          onReplaceControllers={props.onReplaceTokenControllers}
+        />
+      )}
+      <ConfirmDialog
+        open={Boolean(deleteDefinition)}
+        title="Удалить определение токена?"
+        message={
+          deleteDefinition
+            ? `Определение «${deleteDefinition.name}» и все его размещения на сценах будут удалены. Это не удаление одного токена с карты.`
+            : ""
+        }
+        confirmLabel="Удалить"
+        onClose={() => setDeleteDefinition(null)}
+        onConfirm={() => {
+          if (!deleteDefinition) return;
+          const target = deleteDefinition;
+          setDeleteDefinition(null);
+          void props.onDeleteTokenDefinition(target.id, target.revision);
+        }}
+      />
     </section>
+  );
+}
+
+function TokenImageAssignment({
+  definition,
+  onUpload,
+  onPatch,
+}: {
+  definition: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
+  onUpload: Props["onUpload"];
+  onPatch: Props["onPatchTokenDefinition"];
+}) {
+  const [file, setFile] = useState<File>();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const assign = async () => {
+    if (!file || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const asset = await onUpload(file, "TOKEN");
+      await onPatch(definition.id, definition.revision, {
+        defaultAssetId: asset.id,
+      });
+      setFile(undefined);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось назначить изображение токену.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="direct-asset-upload">
+      <ImageUploadField
+        label={`Новое изображение для ${definition.name}`}
+        value={file}
+        accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+        hint="PNG, JPEG или WebP"
+        disabled={saving}
+        onUpdate={setFile}
+      />
+      <Button
+        view="action"
+        disabled={!file || saving}
+        loading={saving}
+        onClick={() => void assign()}
+      >
+        Загрузить и назначить
+      </Button>
+      {error && <div className="field-error">{error}</div>}
+    </div>
+  );
+}
+
+function TokenDefinitionEditor({
+  snapshot,
+  definition,
+  onUpload,
+  onCancel,
+  onCreate,
+  onPatch,
+  onReplaceControllers,
+}: {
+  snapshot: GameSnapshot;
+  definition?: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
+  onUpload: Props["onUpload"];
+  onCancel: () => void;
+  onCreate: Props["onCreateTokenDefinition"];
+  onPatch: Props["onPatchTokenDefinition"];
+  onReplaceControllers: Props["onReplaceTokenControllers"];
+}) {
+  const [name, setName] = useState(definition?.name ?? "");
+  const [characterId, setCharacterId] = useState(definition?.characterId ?? "");
+  const [assetId, setAssetId] = useState(definition?.defaultAssetId ?? "");
+  const [width, setWidth] = useState(definition?.defaultWidth ?? 64);
+  const [height, setHeight] = useState(definition?.defaultHeight ?? 64);
+  const [controllers, setControllers] = useState<string[]>(
+    definition?.controllerMembershipIds ?? [],
+  );
+  const [image, setImage] = useState<File>();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return setError("Укажите название токена.");
+    setSaving(true);
+    setError("");
+    try {
+      let selectedAssetId = assetId || null;
+      if (image) selectedAssetId = (await onUpload(image, "TOKEN")).id;
+      const input = {
+        name: name.trim(),
+        characterId: characterId || null,
+        defaultAssetId: selectedAssetId,
+        defaultWidth: width,
+        defaultHeight: height,
+        controllerMembershipIds: controllers,
+      };
+      if (!definition) await onCreate(input);
+      else {
+        await onPatch(definition.id, definition.revision, input);
+        await onReplaceControllers(
+          definition.id,
+          definition.revision + 1,
+          controllers,
+        );
+      }
+      onCancel();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось сохранить токен.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ArkenDialog
+      open
+      footer={false}
+      title={definition ? `Настройка ${definition.name}` : "Новый токен"}
+      onClose={onCancel}
+    >
+      <form className="entity-form" onSubmit={submit}>
+        <label>
+          Название
+          <FormInput
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label>
+          Персонаж
+          <FormSelect
+            value={characterId}
+            onChange={(event) => setCharacterId(event.target.value)}
+          >
+            <option value="">Без персонажа</option>
+            {snapshot.characters.map((character) => (
+              <option key={character.id} value={character.id}>
+                {character.name}
+              </option>
+            ))}
+          </FormSelect>
+        </label>
+        <label>
+          Изображение из файлов
+          <FormSelect
+            value={assetId}
+            onChange={(event) => setAssetId(event.target.value)}
+          >
+            <option value="">Без изображения</option>
+            {snapshot.assets
+              .filter((asset) => asset.kind === "TOKEN")
+              .map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.name}
+                </option>
+              ))}
+          </FormSelect>
+        </label>
+        <ImageUploadField
+          label="Загрузить новое изображение"
+          value={image}
+          onUpdate={setImage}
+          disabled={saving}
+        />
+        <div className="inline-fields">
+          <label>
+            Ширина
+            <FormInput
+              type="number"
+              min={16}
+              max={1024}
+              value={width}
+              onChange={(event) => setWidth(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            Высота
+            <FormInput
+              type="number"
+              min={16}
+              max={1024}
+              value={height}
+              onChange={(event) => setHeight(Number(event.target.value))}
+            />
+          </label>
+        </div>
+        <fieldset>
+          <legend>Управление игроками</legend>
+          {snapshot.members
+            .filter((member) => member.role === "PLAYER")
+            .map((member) => (
+              <label key={member.id} className="inline-fields">
+                <FormInput
+                  type="checkbox"
+                  checked={controllers.includes(member.id)}
+                  onChange={(event) =>
+                    setControllers((current) =>
+                      event.target.checked
+                        ? [...new Set([...current, member.id])]
+                        : current.filter((id) => id !== member.id),
+                    )
+                  }
+                />
+                {member.displayName}
+              </label>
+            ))}
+        </fieldset>
+        {error && <div className="field-error">{error}</div>}
+        <div className="dialog-actions">
+          <Button type="submit" view="action" loading={saving}>
+            Сохранить
+          </Button>
+          <Button type="button" onClick={onCancel} disabled={saving}>
+            Отмена
+          </Button>
+        </div>
+      </form>
+    </ArkenDialog>
   );
 }
 
 function SetupPanel(props: Props) {
   const [characterName, setCharacterName] = useState("");
   const [sceneName, setSceneName] = useState("");
+  const [renameMember, setRenameMember] = useState<
+    GameSnapshot["members"][number] | null
+  >(null);
+  const [renameSceneOpen, setRenameSceneOpen] = useState(false);
   const [catalogEditor, setCatalogEditor] = useState<
     CatalogEntryDto | "NEW" | null
   >(null);
@@ -1168,32 +1477,18 @@ function SetupPanel(props: Props) {
                 (item) => item.membershipId === member.id,
               )?.online;
               return (
-                <button
-                  key={member.id}
-                  onClick={() => {
-                    const name = window.prompt(
-                      "Новое имя игрока",
-                      member.displayName,
-                    );
-                    if (name?.trim())
-                      void props.onRenameMembership(
-                        member.id,
-                        member.revision ?? 0,
-                        name.trim(),
-                      );
-                  }}
-                >
+                <Button key={member.id} onClick={() => setRenameMember(member)}>
                   {online ? "●" : "○"} {member.displayName}
-                </button>
+                </Button>
               );
             })}
         </div>
       </div>
       <div className="subsection">
         <h3>Общий каталог</h3>
-        <button onClick={() => setCatalogEditor("NEW")}>
+        <Button onClick={() => setCatalogEditor("NEW")}>
           Добавить навык или способность
-        </button>
+        </Button>
         <div className="catalog-entry-list">
           {props.snapshot.catalogEntries.map((entry) => (
             <article className="plain-row" key={`v2-${entry.id}`}>
@@ -1203,53 +1498,51 @@ function SetupPanel(props: Props) {
               </span>
               {entry.description && <p>{entry.description}</p>}
               <div className="inline-fields">
-                <button onClick={() => setCatalogEditor(entry)}>
+                <Button onClick={() => setCatalogEditor(entry)}>
                   Редактировать
-                </button>
-                <button
+                </Button>
+                <Button
                   className="danger-link"
                   onClick={() =>
                     void props.onDeleteCatalogEntry(entry.id, entry.revision)
                   }
                 >
                   Удалить шаблон
-                </button>
+                </Button>
               </div>
             </article>
           ))}
         </div>
         {catalogEditor && (
-          <div className="entity-modal-backdrop" role="presentation">
-            <section
-              className="entity-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-label={
-                catalogEditor === "NEW"
-                  ? "Новая запись каталога"
-                  : `Редактирование ${catalogEditor.name}`
-              }
-            >
-              <CatalogEntryForm
-                key={catalogEditor === "NEW" ? "new" : catalogEditor.id}
-                existing={catalogEditor === "NEW" ? undefined : catalogEditor}
-                onCancel={() => setCatalogEditor(null)}
-                onSubmit={async (input: CatalogEntryFormInput) => {
-                  if (catalogEditor === "NEW")
-                    await props.onCreateCatalogEntry(input);
-                  else
-                    await props.onUpdateCatalogEntry(catalogEditor.id, {
-                      ...input,
-                      revision: catalogEditor.revision,
-                    });
-                  setCatalogEditor(null);
-                }}
-              />
-            </section>
-          </div>
+          <ArkenDialog
+            open
+            footer={false}
+            title={
+              catalogEditor === "NEW"
+                ? "Новая запись каталога"
+                : `Редактирование ${catalogEditor.name}`
+            }
+            onClose={() => setCatalogEditor(null)}
+          >
+            <CatalogEntryForm
+              key={catalogEditor === "NEW" ? "new" : catalogEditor.id}
+              existing={catalogEditor === "NEW" ? undefined : catalogEditor}
+              onCancel={() => setCatalogEditor(null)}
+              onSubmit={async (input: CatalogEntryFormInput) => {
+                if (catalogEditor === "NEW")
+                  await props.onCreateCatalogEntry(input);
+                else
+                  await props.onUpdateCatalogEntry(catalogEditor.id, {
+                    ...input,
+                    revision: catalogEditor.revision,
+                  });
+                setCatalogEditor(null);
+              }}
+            />
+          </ArkenDialog>
         )}
         <div hidden aria-hidden="true">
-          <select
+          <FormSelect
             value={catalogKind}
             onChange={(event) =>
               setCatalogKind(event.target.value as "SKILL" | "ABILITY")
@@ -1257,24 +1550,24 @@ function SetupPanel(props: Props) {
           >
             <option value="SKILL">Навык</option>
             <option value="ABILITY">Способность</option>
-          </select>
-          <input
+          </FormSelect>
+          <FormInput
             value={catalogName}
             placeholder="Название"
             onChange={(event) => setCatalogName(event.target.value)}
           />
-          <textarea
+          <FormTextArea
             value={catalogDescription}
             placeholder="Описание"
             onChange={(event) => setCatalogDescription(event.target.value)}
           />
-          <textarea
+          <FormTextArea
             value={catalogData}
             onChange={(event) => setCatalogData(event.target.value)}
             rows={8}
             aria-label="Данные и действия JSON"
           />
-          <button
+          <Button
             onClick={() =>
               setCatalogData(
                 JSON.stringify(
@@ -1311,8 +1604,8 @@ function SetupPanel(props: Props) {
             }
           >
             Пресет: физический
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() =>
               setCatalogData(
                 JSON.stringify(
@@ -1348,15 +1641,14 @@ function SetupPanel(props: Props) {
             }
           >
             Пресет: магический
-          </button>
-          <button
+          </Button>
+          <Button
             disabled={!catalogName.trim()}
             onClick={async () => {
               let data: Record<string, unknown>;
               try {
                 data = JSON.parse(catalogData) as Record<string, unknown>;
               } catch {
-                window.alert("Некорректный JSON");
                 return;
               }
               await props.onCreateCatalogEntry({
@@ -1370,44 +1662,14 @@ function SetupPanel(props: Props) {
             }}
           >
             Добавить
-          </button>
+          </Button>
           {props.snapshot.catalogEntries.map((entry) => (
             <div className="plain-row" key={entry.id}>
               <strong>{entry.name}</strong>
               <p>{entry.description}</p>
-              <button
-                onClick={() => {
-                  const kind = window.prompt(
-                    "Тип: SKILL или ABILITY",
-                    entry.kind,
-                  );
-                  if (kind !== "SKILL" && kind !== "ABILITY") return;
-                  const name = window.prompt("Название", entry.name);
-                  if (!name?.trim()) return;
-                  const description = window.prompt(
-                    "Описание",
-                    entry.description,
-                  );
-                  if (description === null) return;
-                  const raw = window.prompt(
-                    "Данные JSON",
-                    JSON.stringify(entry.data, null, 2),
-                  );
-                  if (raw === null) return;
-                  try {
-                    void props.onUpdateCatalogEntry(entry.id, {
-                      kind,
-                      name: name.trim(),
-                      description,
-                      data: JSON.parse(raw) as Record<string, unknown>,
-                    });
-                  } catch {
-                    window.alert("Некорректный JSON");
-                  }
-                }}
-              >
+              <Button onClick={() => setCatalogEditor(entry)}>
                 Редактировать шаблон
-              </button>
+              </Button>
             </div>
           ))}
         </div>
@@ -1416,7 +1678,7 @@ function SetupPanel(props: Props) {
         <h3>Проверка видимости</h3>
         <label className="field">
           Игрок
-          <select
+          <FormSelect
             value={previewMembership}
             onChange={(event) => setPreviewMembership(event.target.value)}
           >
@@ -1428,20 +1690,20 @@ function SetupPanel(props: Props) {
                   {member.displayName}
                 </option>
               ))}
-          </select>
+          </FormSelect>
         </label>
-        <button
+        <Button
           disabled={!previewMembership}
           onClick={() => props.onPreviewPlayer(previewMembership)}
         >
           Посмотреть глазами игрока
-        </button>
+        </Button>
       </div>
       <div className="subsection">
         <h3>Сцены</h3>
         <label className="field">
           Активная
-          <select
+          <FormSelect
             value={activeScene?.id ?? ""}
             onChange={(event) => props.onActivateScene(event.target.value)}
           >
@@ -1450,30 +1712,17 @@ function SetupPanel(props: Props) {
                 {scene.name}
               </option>
             ))}
-          </select>
+          </FormSelect>
         </label>
         {activeScene && (
-          <button
-            onClick={() => {
-              const name = window.prompt(
-                "Новое название сцены",
-                activeScene.name,
-              );
-              if (name?.trim())
-                void props.onRenameScene(
-                  activeScene.id,
-                  activeScene.revision ?? 0,
-                  name.trim(),
-                );
-            }}
-          >
+          <Button onClick={() => setRenameSceneOpen(true)}>
             Переименовать сцену
-          </button>
+          </Button>
         )}
         {activeScene && (
           <label className="field">
             Фоновая карта
-            <select
+            <FormSelect
               value={activeScene.mapAssetId ?? ""}
               onChange={(event) =>
                 props.onAssignMap(activeScene.id, event.target.value || null)
@@ -1485,7 +1734,7 @@ function SetupPanel(props: Props) {
                   {map.name}
                 </option>
               ))}
-            </select>
+            </FormSelect>
           </label>
         )}
         <form
@@ -1497,12 +1746,12 @@ function SetupPanel(props: Props) {
             setSceneName("");
           }}
         >
-          <input
+          <FormInput
             placeholder="Название сцены"
             value={sceneName}
             onChange={(event) => setSceneName(event.target.value)}
           />
-          <button>Создать</button>
+          <Button>Создать</Button>
         </form>
       </div>
       <div className="subsection">
@@ -1516,16 +1765,16 @@ function SetupPanel(props: Props) {
             setCharacterName("");
           }}
         >
-          <input
+          <FormInput
             placeholder="Имя персонажа"
             value={characterName}
             onChange={(event) => setCharacterName(event.target.value)}
           />
-          <button>Создать</button>
+          <Button>Создать</Button>
         </form>
         <label className="field">
           Персонаж для токена
-          <select
+          <FormSelect
             value={tokenCharacter}
             onChange={(event) => setTokenCharacter(event.target.value)}
           >
@@ -1534,20 +1783,20 @@ function SetupPanel(props: Props) {
                 {character.name}
               </option>
             ))}
-          </select>
+          </FormSelect>
         </label>
-        <button
+        <Button
           onClick={() => props.onCreateToken(tokenCharacter)}
           disabled={!tokenCharacter || !activeScene}
         >
           Добавить токен в центр
-        </button>
+        </Button>
       </div>
       <div className="subsection">
         <h3>Постоянные ссылки игроков</h3>
         <label className="field">
           Персонаж
-          <select
+          <FormSelect
             value={inviteCharacter}
             onChange={(event) => setInviteCharacter(event.target.value)}
           >
@@ -1556,9 +1805,9 @@ function SetupPanel(props: Props) {
                 {character.name}
               </option>
             ))}
-          </select>
+          </FormSelect>
         </label>
-        <button
+        <Button
           onClick={async () => {
             const result = await props.onCreateInvite(
               inviteCharacter,
@@ -1572,14 +1821,14 @@ function SetupPanel(props: Props) {
           disabled={!inviteCharacter}
         >
           Создать постоянную ссылку
-        </button>
+        </Button>
         {inviteUrl && (
           <div className="copy-field">
-            <input readOnly value={inviteUrl} />
-            <button onClick={() => navigator.clipboard.writeText(inviteUrl)}>
+            <FormInput readOnly value={inviteUrl} />
+            <Button onClick={() => navigator.clipboard.writeText(inviteUrl)}>
               Копировать
-            </button>
-            <button onClick={() => setInviteUrl("")}>Скрыть</button>
+            </Button>
+            <Button onClick={() => setInviteUrl("")}>Скрыть</Button>
           </div>
         )}
         {playerAccess.map((grant) => (
@@ -1589,7 +1838,7 @@ function SetupPanel(props: Props) {
             </span>
             {!grant.revokedAt && (
               <>
-                <button
+                <Button
                   onClick={async () => {
                     const result = await props.onRotatePlayerAccess(grant.id);
                     setInviteUrl(result.url ?? "");
@@ -1597,8 +1846,8 @@ function SetupPanel(props: Props) {
                   }}
                 >
                   Заменить ссылку
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={async () => {
                     await props.onRevokePlayerAccess(grant.id);
                     setInviteUrl("");
@@ -1606,12 +1855,41 @@ function SetupPanel(props: Props) {
                   }}
                 >
                   Отозвать
-                </button>
+                </Button>
               </>
             )}
           </div>
         ))}
       </div>
+      <TextPromptDialog
+        open={Boolean(renameMember)}
+        title="Переименовать игрока"
+        label="Имя игрока"
+        initialValue={renameMember?.displayName ?? ""}
+        onClose={() => setRenameMember(null)}
+        onApply={async (name) => {
+          if (!renameMember) return;
+          const target = renameMember;
+          await props.onRenameMembership(target.id, target.revision ?? 0, name);
+          setRenameMember(null);
+        }}
+      />
+      <TextPromptDialog
+        open={renameSceneOpen}
+        title="Переименовать сцену"
+        label="Название сцены"
+        initialValue={activeScene?.name ?? ""}
+        onClose={() => setRenameSceneOpen(false)}
+        onApply={async (name) => {
+          if (!activeScene) return;
+          await props.onRenameScene(
+            activeScene.id,
+            activeScene.revision ?? 0,
+            name,
+          );
+          setRenameSceneOpen(false);
+        }}
+      />
     </section>
   );
 }
@@ -1623,9 +1901,9 @@ function MediaPanel({
   snapshot: GameSnapshot;
   onUpload: Props["onUpload"];
 }) {
-  const [kind, setKind] = useState<AssetKind>(
-    snapshot.me.role === "GM" ? "MAP" : "PORTRAIT",
-  );
+  const [drafts, setDrafts] = useState<Partial<Record<AssetKind, File>>>({});
+  const [uploading, setUploading] = useState<AssetKind | null>(null);
+  const [error, setError] = useState("");
   const allowed = useMemo<AssetKind[]>(
     () =>
       snapshot.me.role === "GM"
@@ -1633,10 +1911,28 @@ function MediaPanel({
         : ["TOKEN", "PORTRAIT"],
     [snapshot.me.role],
   );
-  const upload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) await onUpload(file, kind);
-    event.target.value = "";
+  const labels: Record<AssetKind, string> = {
+    MAP: "Карты",
+    TOKEN: "Изображения токенов",
+    PORTRAIT: "Портреты персонажей",
+    IMAGE: "Другие изображения",
+    AUDIO: "Музыка и звуки",
+  };
+  const upload = async (kind: AssetKind) => {
+    const file = drafts[kind];
+    if (!file) return;
+    setUploading(kind);
+    setError("");
+    try {
+      await onUpload(file, kind);
+      setDrafts((current) => ({ ...current, [kind]: undefined }));
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Не удалось загрузить файл.",
+      );
+    } finally {
+      setUploading(null);
+    }
   };
   return (
     <section className="panel-section">
@@ -1647,34 +1943,43 @@ function MediaPanel({
         </div>
         <span className="revision">{snapshot.assets.length}</span>
       </div>
-      <div className="upload-row">
-        <select
-          value={kind}
-          onChange={(event) => setKind(event.target.value as AssetKind)}
-        >
-          {allowed.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <label className="file-button">
-          Загрузить
-          <input
-            type="file"
-            accept={
-              kind === "AUDIO"
-                ? ".mp3,.ogg,audio/mpeg,audio/ogg"
-                : ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-            }
-            onChange={upload}
-          />
-        </label>
+      <div className="upload-sections">
+        {allowed.map((kind) => (
+          <section className="upload-section" key={kind}>
+            <ImageUploadField
+              label={labels[kind]}
+              value={drafts[kind]}
+              accept={
+                kind === "AUDIO"
+                  ? ".mp3,.ogg,audio/mpeg,audio/ogg"
+                  : ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+              }
+              hint={kind === "AUDIO" ? "MP3 или OGG" : "PNG, JPEG или WebP"}
+              disabled={uploading !== null}
+              onUpdate={(file) =>
+                setDrafts((current) => ({ ...current, [kind]: file }))
+              }
+            />
+            <Button
+              view="action"
+              disabled={!drafts[kind] || uploading !== null}
+              loading={uploading === kind}
+              onClick={() => void upload(kind)}
+            >
+              Загрузить
+            </Button>
+          </section>
+        ))}
       </div>
+      {error && <div className="field-error">{error}</div>}
       <div className="asset-list">
         {snapshot.assets.map((asset) => (
           <div className="asset-row" key={asset.id}>
-            <span>{asset.kind}</span>
+            {asset.kind !== "AUDIO" ? (
+              <img className="asset-thumbnail" src={asset.url} alt="" />
+            ) : (
+              <span>{asset.kind}</span>
+            )}
             <div>
               <strong>{asset.name}</strong>
               <small>{(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ</small>

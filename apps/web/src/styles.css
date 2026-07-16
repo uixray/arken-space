@@ -805,6 +805,27 @@ code {
   padding: var(--space-sm) 0;
   border-bottom: 1px solid var(--line);
 }
+
+.upload-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.upload-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+}
+
+.asset-thumbnail {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+}
 .asset-row > span {
   align-self: start;
   padding: 2px 4px;
