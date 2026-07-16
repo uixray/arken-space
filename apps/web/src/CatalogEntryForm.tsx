@@ -1,5 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import type { CatalogEntryDto } from "@arken/contracts";
+import { Button } from "@gravity-ui/uikit";
+import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 
 export type CatalogEntryFormInput = Pick<
   CatalogEntryDto,
@@ -262,7 +264,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
     >
       <label>
         Тип
-        <select
+        <FormSelect
           value={kind}
           onChange={(event) =>
             setKind(event.target.value as CatalogEntryDto["kind"])
@@ -270,11 +272,11 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
         >
           <option value="SKILL">Навык</option>
           <option value="ABILITY">Способность</option>
-        </select>
+        </FormSelect>
       </label>
       <label>
         Название
-        <input
+        <FormInput
           value={name}
           maxLength={120}
           required
@@ -283,7 +285,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
       </label>
       <label>
         Описание
-        <textarea
+        <FormTextArea
           value={description}
           maxLength={10000}
           onChange={(event) => setDescription(event.target.value)}
@@ -293,7 +295,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
       <fieldset>
         <legend>Использования</legend>
         <label>
-          <input
+          <FormInput
             type="checkbox"
             checked={usesEnabled}
             onChange={(event) => setUsesEnabled(event.target.checked)}
@@ -304,7 +306,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
           <>
             <label>
               Осталось
-              <input
+              <FormInput
                 type="number"
                 min={0}
                 max={usesMax}
@@ -314,7 +316,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
             </label>
             <label>
               Максимум
-              <input
+              <FormInput
                 type="number"
                 min={1}
                 value={usesMax}
@@ -323,7 +325,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
             </label>
             <label>
               Перезарядка
-              <select
+              <FormSelect
                 value={recharge}
                 onChange={(event) =>
                   setRecharge(event.target.value as typeof recharge)
@@ -332,11 +334,11 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
                 <option value="DAY">В день</option>
                 <option value="BATTLE">В бой</option>
                 <option value="WEEK">В неделю</option>
-              </select>
+              </FormSelect>
             </label>
             <label>
               Прогресс
-              <input
+              <FormInput
                 value={progressText}
                 maxLength={200}
                 placeholder="Например: прошёл 2-й день"
@@ -354,7 +356,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
             <legend>Бросок {index + 1}</legend>
             <label>
               Название
-              <input
+              <FormInput
                 value={action.label}
                 maxLength={100}
                 onChange={(event) =>
@@ -364,7 +366,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
             </label>
             <label>
               Тип
-              <select
+              <FormSelect
                 value={action.kind}
                 onChange={(event) =>
                   updateAction(action.id, {
@@ -375,11 +377,11 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
                 <option value="HIT">Попадание</option>
                 <option value="DAMAGE">Урон</option>
                 <option value="CUSTOM">Другой</option>
-              </select>
+              </FormSelect>
             </label>
             <label>
               Кубики
-              <input
+              <FormInput
                 value={action.dice}
                 placeholder="1d20"
                 onChange={(event) =>
@@ -389,7 +391,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
             </label>
             <label>
               Источник модификатора
-              <select
+              <FormSelect
                 value={action.modifierSource}
                 onChange={(event) =>
                   updateAction(action.id, {
@@ -401,12 +403,12 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
                 <option value="NONE">Без модификатора</option>
                 <option value="CHARACTERISTIC">Характеристика</option>
                 <option value="ENTRY_VALUE">Значение записи</option>
-              </select>
+              </FormSelect>
             </label>
             {action.modifierSource === "CHARACTERISTIC" && (
               <label>
                 Характеристика
-                <select
+                <FormSelect
                   required
                   value={action.modifierKey}
                   onChange={(event) =>
@@ -419,13 +421,13 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
                       {label}
                     </option>
                   ))}
-                </select>
+                </FormSelect>
               </label>
             )}
             {action.modifierSource === "ENTRY_VALUE" && (
               <label>
                 Ключ значения
-                <select
+                <FormSelect
                   required
                   value={action.modifierKey}
                   onChange={(event) =>
@@ -438,12 +440,12 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
                       {key}
                     </option>
                   ))}
-                </select>
+                </FormSelect>
               </label>
             )}
             <label>
               Порядок
-              <input
+              <FormInput
                 type="number"
                 min={0}
                 max={1000}
@@ -454,7 +456,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
               />
             </label>
             <label>
-              <input
+              <FormInput
                 type="checkbox"
                 checked={action.advantage}
                 onChange={(event) =>
@@ -464,7 +466,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
               Преимущество
             </label>
             <label>
-              <input
+              <FormInput
                 type="checkbox"
                 checked={action.consumeUse}
                 onChange={(event) =>
@@ -473,7 +475,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
               />{" "}
               Тратить использование
             </label>
-            <button
+            <Button
               type="button"
               onClick={() =>
                 setActions((current) =>
@@ -482,17 +484,17 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
               }
             >
               Удалить бросок
-            </button>
+            </Button>
           </fieldset>
         ))}
-        <button
+        <Button
           type="button"
           onClick={() =>
             setActions((current) => [...current, emptyAction(current.length)])
           }
         >
           Добавить бросок
-        </button>
+        </Button>
       </fieldset>
 
       <fieldset>
@@ -501,7 +503,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
           <div key={row.id}>
             <label>
               Ключ
-              <input
+              <FormInput
                 value={row.key}
                 pattern="[a-z][a-z0-9_]{0,39}"
                 placeholder="magic"
@@ -518,7 +520,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
             </label>
             <label>
               Значение
-              <input
+              <FormInput
                 type="number"
                 step="any"
                 value={row.value}
@@ -533,7 +535,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
                 }
               />
             </label>
-            <button
+            <Button
               type="button"
               onClick={() =>
                 setValues((current) =>
@@ -542,10 +544,10 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
               }
             >
               Удалить значение
-            </button>
+            </Button>
           </div>
         ))}
-        <button
+        <Button
           type="button"
           onClick={() =>
             setValues((current) => [
@@ -555,12 +557,12 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
           }
         >
           Добавить значение
-        </button>
+        </Button>
       </fieldset>
 
       <label>
         Заметки
-        <textarea
+        <FormTextArea
           value={notes}
           maxLength={10000}
           onChange={(event) => setNotes(event.target.value)}
@@ -568,12 +570,12 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
       </label>
       {error && <p role="alert">{error}</p>}
       <div>
-        <button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting}>
           {submitting ? "Сохранение…" : "Сохранить"}
-        </button>
-        <button type="button" onClick={onCancel} disabled={submitting}>
+        </Button>
+        <Button type="button" onClick={onCancel} disabled={submitting}>
           Отмена
-        </button>
+        </Button>
       </div>
     </form>
   );

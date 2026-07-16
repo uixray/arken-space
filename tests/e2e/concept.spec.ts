@@ -161,6 +161,10 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   await expect(page.getByRole("heading", { name: "Картограф" })).toBeVisible();
   await expect(page.getByText("Наблюдение")).toBeVisible();
 
+  await page
+    .getByRole("dialog", { name: "Персонажи" })
+    .getByRole("button", { name: "Закрыть диалоговое окно" })
+    .click();
   await page.getByRole("button", { name: /Чат/ }).click();
   await expect(page.getByText("Сцена готова.")).toBeVisible();
   await page.screenshot({

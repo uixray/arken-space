@@ -8,7 +8,7 @@ export default defineConfig({
   timeout: 30_000,
   retries: 1,
   webServer: {
-    command: `corepack pnpm --filter @arken/web dev -- --port ${e2ePort}`,
+    command: `corepack pnpm --filter @arken/web dev --port ${e2ePort}`,
     url: e2eBaseUrl,
     reuseExistingServer: true,
     timeout: 60_000,
