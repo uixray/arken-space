@@ -18,6 +18,9 @@ import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
 import { appendChatMessage } from "./chat-state";
 import { addRollToast, removeRollToast, type RollToast } from "./toast-state";
+import { notify } from "./ui/notifications";
+import { TextPromptDialog } from "./ui/TextPromptDialog";
+import { ErrorState, LoadingState } from "./ui/EntityState";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -209,6 +212,17 @@ export function App() {
     null,
   );
   const [error, setError] = useState("");
+  const [createSceneOpen, setCreateSceneOpen] = useState(false);
+
+  useEffect(() => {
+    if (!error || !snapshot) return;
+    notify({
+      title: "Не удалось выполнить действие",
+      message: error,
+      tone: "danger",
+    });
+    setError("");
+  }, [error, snapshot]);
   const chatOpenRef = useRef(false);
   const [requestedChatMessageId, setRequestedChatMessageId] = useState<
     string | null
@@ -556,8 +570,11 @@ export function App() {
     return (
       <main className="loading">
         <div className="wordmark">arken-space</div>
-        <p>{error || "Загружаем кампанию…"}</p>
-        {error && <button onClick={load}>Повторить</button>}
+        {error ? (
+          <ErrorState description={error} onRetry={load} />
+        ) : (
+          <LoadingState label="Загружаем кампанию…" />
+        )}
       </main>
     );
 
@@ -634,23 +651,7 @@ export function App() {
           {!previewSnapshot && snapshot.me.role === "GM" && (
             <button
               aria-label="Создать сцену"
-              onClick={() => {
-                const name = window.prompt("Название новой сцены");
-                if (!name?.trim()) return;
-                void run(async () => {
-                  const scene = await api<import("@arken/contracts").SceneDto>(
-                    "/api/scenes",
-                    {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        name: name.trim(),
-                      }),
-                    },
-                  );
-                  setViewedSceneId(scene.id);
-                }, true);
-              }}
+              onClick={() => setCreateSceneOpen(true)}
             >
               +
             </button>
@@ -1419,12 +1420,29 @@ export function App() {
           />
         )}
       </div>
-      {error && (
-        <div className="toast" role="alert">
-          <span>{error}</span>
-          <button onClick={() => setError("")}>Закрыть</button>
-        </div>
-      )}
+      <TextPromptDialog
+        open={createSceneOpen}
+        title="Новая сцена"
+        label="Название сцены"
+        applyLabel="Создать"
+        onClose={() => setCreateSceneOpen(false)}
+        onApply={async (name) => {
+          await run(async () => {
+            const scene = await api<import("@arken/contracts").SceneDto>(
+              "/api/scenes",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  actionId: crypto.randomUUID(),
+                  name,
+                }),
+              },
+            );
+            setViewedSceneId(scene.id);
+          }, true);
+          setCreateSceneOpen(false);
+        }}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ export interface ArkenDialogProps {
   danger?: boolean;
   loading?: boolean;
   error?: string;
+  footer?: boolean;
   onApply?: () => void;
   onClose: () => void;
 }
@@ -23,6 +24,7 @@ export function ArkenDialog({
   danger = false,
   loading = false,
   error,
+  footer = true,
   onApply,
   onClose,
 }: ArkenDialogProps) {
@@ -40,16 +42,18 @@ export function ArkenDialog({
     >
       <Dialog.Header caption={title} />
       <Dialog.Body>{children}</Dialog.Body>
-      <Dialog.Footer
-        preset={danger ? "danger" : "default"}
-        textButtonApply={applyLabel}
-        textButtonCancel={cancelLabel}
-        onClickButtonApply={onApply}
-        onClickButtonCancel={onClose}
-        loading={loading}
-        errorText={error}
-        showError={Boolean(error)}
-      />
+      {footer ? (
+        <Dialog.Footer
+          preset={danger ? "danger" : "default"}
+          textButtonApply={applyLabel}
+          textButtonCancel={cancelLabel}
+          onClickButtonApply={onApply}
+          onClickButtonCancel={onClose}
+          loading={loading}
+          errorText={error}
+          showError={Boolean(error)}
+        />
+      ) : null}
     </Dialog>
   );
 }

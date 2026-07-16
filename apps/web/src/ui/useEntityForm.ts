@@ -33,6 +33,10 @@ export function useEntityForm<T extends object>(
     (patch: Partial<T>) => dispatch({ type: "change", patch }),
     [],
   );
+  const replace = useCallback(
+    (value: T) => dispatch({ type: "replace", value }),
+    [],
+  );
   const reset = useCallback(() => {
     options?.onRollback?.(state.initial);
     dispatch({ type: "reset" });
@@ -67,5 +71,5 @@ export function useEntityForm<T extends object>(
     }
   }, [options, save, state.draft, state.initial]);
 
-  return { state, dirty, update, reset, submit };
+  return { state, dirty, update, replace, reset, submit };
 }
