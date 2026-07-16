@@ -284,6 +284,92 @@ test("GM prepares a scene locally before publishing it to players", async ({
   await expect(editor.getByText("Рамка изображения")).toBeVisible();
 });
 
+test("canvas tools stay selected and token placement targets the GM viewed scene", async ({
+  page,
+}) => {
+  const canvasSnapshot = structuredClone(snapshot);
+  const viewedSceneId = "8476b502-02f8-4cd6-9c55-3816d70d44dc";
+  const definitionId = "9576b502-02f8-4cd6-9c55-3816d70d44dc";
+  canvasSnapshot.scenes.push({
+    ...canvasSnapshot.scenes[0]!,
+    id: viewedSceneId,
+    name: "Секретная сцена",
+    active: false,
+    revision: 0,
+  });
+  canvasSnapshot.tokenDefinitions = [
+    {
+      id: definitionId,
+      characterId: null,
+      defaultAssetId: null,
+      name: "Разведчик",
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 0,
+    },
+  ];
+  let placementSceneId = "";
+  let fogRequests = 0;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(canvasSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/token-definitions/*/placements", async (route) => {
+    placementSceneId = (route.request().postDataJSON() as { sceneId: string })
+      .sceneId;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.route("**/api/fog-reveals", async (route) => {
+    fogRequests += 1;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.goto("/");
+
+  await page.locator(".scene-switcher select").selectOption(viewedSceneId);
+  await page.locator(".token-tray summary").click();
+  await page
+    .locator(".token-tray")
+    .getByRole("button", { name: /Разведчик/ })
+    .click();
+  await expect.poll(() => placementSceneId).toBe(viewedSceneId);
+
+  const canvas = page.locator("canvas").last();
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  const start = { x: bounds!.x + 120, y: bounds!.y + 120 };
+  await page.getByRole("button", { name: "Открыть туман" }).click();
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 80, start.y + 80);
+  await page.mouse.up();
+  await expect.poll(() => fogRequests).toBe(1);
+  await expect(
+    page.getByRole("button", { name: "Открыть туман" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "Ping" }).click();
+  await page.mouse.click(start.x + 40, start.y + 40);
+  await expect(page.getByRole("button", { name: "Ping" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
 for (const viewport of [
   { width: 1366, height: 768 },
   { width: 1920, height: 1080 },

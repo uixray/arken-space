@@ -10,8 +10,7 @@ import {
   Text,
 } from "react-konva";
 import useImage from "use-image";
-import type Konva from "konva";
-import { api } from "../api";
+import Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
 import { isRectFullyRevealed } from "./fog";
 
@@ -93,6 +92,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
     null,
   );
+  const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
+  const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([]);
+  const [marquee, setMarquee] = useState<{
+    startX: number;
+    startY: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const panStartRef = useRef<{
+    pointerX: number;
+    pointerY: number;
+    stageX: number;
+    stageY: number;
+  } | null>(null);
   const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
   const [dragPositions, setDragPositions] = useState<
     Record<string, { x: number; y: number; revision: number }>
@@ -123,6 +138,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       "",
     "anonymous",
   );
+  useEffect(() => {
+    const previous = Konva.dragButtons;
+    Konva.dragButtons = [0];
+    return () => {
+      Konva.dragButtons = previous;
+    };
+  }, []);
   useEffect(() => {
     if (!tokenMenu) return;
     const close = (event: KeyboardEvent | PointerEvent) => {
@@ -215,6 +237,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     x: Math.min(worldDraft.width, Math.max(0, point.x)),
     y: Math.min(worldDraft.height, Math.max(0, point.y)),
   });
+  const playerClip =
+    props.role === "PLAYER"
+      ? {
+          clipX: 0,
+          clipY: 0,
+          clipWidth: worldDraft.width,
+          clipHeight: worldDraft.height,
+        }
+      : {};
 
   const handleWheel = (event: Konva.KonvaEventObject<WheelEvent>) => {
     event.evt.preventDefault();
@@ -300,7 +331,33 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (point) props.onPing(point);
   };
 
-  const handlePointerDown = () => {
+  const handlePointerDown = (event: Konva.KonvaEventObject<MouseEvent>) => {
+    if (event.evt.button === 1) {
+      event.evt.preventDefault();
+      const pointer = stageRef.current?.getPointerPosition();
+      if (pointer)
+        panStartRef.current = {
+          pointerX: pointer.x,
+          pointerY: pointer.y,
+          stageX: position.x,
+          stageY: position.y,
+        };
+      return;
+    }
+    if (event.evt.button === 2 && event.target === stageRef.current) {
+      const point = pointerInWorld();
+      if (point)
+        setMarquee({
+          startX: point.x,
+          startY: point.y,
+          x: point.x,
+          y: point.y,
+          width: 0,
+          height: 0,
+        });
+      return;
+    }
+    if (event.evt.button !== 0) return;
     handleFogDown();
     const point = pointerInWorld();
     if (!point) return;
@@ -310,6 +367,37 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
 
   const handlePointerMove = () => {
+    if (panStartRef.current) {
+      const pointer = stageRef.current?.getPointerPosition();
+      if (pointer)
+        setPosition({
+          x:
+            panStartRef.current.stageX +
+            pointer.x -
+            panStartRef.current.pointerX,
+          y:
+            panStartRef.current.stageY +
+            pointer.y -
+            panStartRef.current.pointerY,
+        });
+      return;
+    }
+    if (marquee) {
+      const point = pointerInWorld();
+      if (point)
+        setMarquee((current) =>
+          current
+            ? {
+                ...current,
+                x: Math.min(current.startX, point.x),
+                y: Math.min(current.startY, point.y),
+                width: Math.abs(point.x - current.startX),
+                height: Math.abs(point.y - current.startY),
+              }
+            : null,
+        );
+      return;
+    }
     handleFogMove();
     const point = pointerInWorld();
     if (!point) return;
@@ -328,6 +416,52 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
 
   const handlePointerUp = async () => {
+    panStartRef.current = null;
+    if (marquee) {
+      const intersects = (rect: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }) =>
+        rect.x < marquee.x + marquee.width &&
+        rect.x + rect.width > marquee.x &&
+        rect.y < marquee.y + marquee.height &&
+        rect.y + rect.height > marquee.y;
+      setSelectedTokenIds(
+        props.tokens
+          .filter(
+            (token) =>
+              token.layer !== "MAP" &&
+              !token.locked &&
+              (props.role === "GM" ||
+                token.controllerMembershipIds.includes(props.membershipId)),
+          )
+          .filter((token) => intersects(token))
+          .map((token) => token.id),
+      );
+      setSelectedDrawingIds(
+        props.drawings
+          .filter(
+            (drawing) =>
+              props.role === "GM" ||
+              drawing.authorMembershipId === props.membershipId,
+          )
+          .filter((drawing) => {
+            const xs = drawing.points.filter((_, index) => index % 2 === 0);
+            const ys = drawing.points.filter((_, index) => index % 2 === 1);
+            return intersects({
+              x: drawing.x + Math.min(...xs),
+              y: drawing.y + Math.min(...ys),
+              width: Math.max(...xs) - Math.min(...xs),
+              height: Math.max(...ys) - Math.min(...ys),
+            });
+          })
+          .map((drawing) => drawing.id),
+      );
+      setMarquee(null);
+      return;
+    }
     await handleFogUp();
     if (props.tool === "DRAW" && drawingPoints.length >= 4)
       await props.onDrawingCreate({ points: drawingPoints, color: "#f0c75e" });
@@ -451,11 +585,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         y={position.y}
         scaleX={scale}
         scaleY={scale}
-        draggable={props.tool === "PAN"}
-        onDragEnd={(event) => {
-          if (event.target === stageRef.current)
-            setPosition({ x: event.target.x(), y: event.target.y() });
-        }}
+        draggable={false}
         onWheel={handleWheel}
         onMouseDown={handlePointerDown}
         onMouseMove={handlePointerMove}
@@ -604,12 +734,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           </Layer>
         )}
 
-        <Layer
-          clipX={0}
-          clipY={0}
-          clipWidth={worldDraft.width}
-          clipHeight={worldDraft.height}
-        >
+        <Layer {...playerClip}>
           {props.tokens
             .filter((token) => token.layer === "MAP")
             .map((token) => (
@@ -618,8 +743,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 x={token.x}
                 y={token.y}
                 listening={props.role === "GM"}
+                onClick={() => {
+                  setSelectedTokenIds([token.id]);
+                  setSelectedDrawingIds([]);
+                  setSelectedDrawingId(null);
+                }}
                 onContextMenu={(event) => {
                   event.evt.preventDefault();
+                  event.cancelBubble = true;
                   if (props.role !== "GM") return;
                   const rect = containerRef.current?.getBoundingClientRect();
                   if (!rect) return;
@@ -630,6 +761,18 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   });
                 }}
               >
+                {selectedTokenIds.includes(token.id) && (
+                  <Rect
+                    x={-4 / scale}
+                    y={-4 / scale}
+                    width={token.width + 8 / scale}
+                    height={token.height + 8 / scale}
+                    stroke="#7ee0ff"
+                    strokeWidth={2 / scale}
+                    dash={[6 / scale, 3 / scale]}
+                    listening={false}
+                  />
+                )}
                 {assetUrl(token.assetId) ? (
                   <TokenImage
                     src={assetUrl(token.assetId)!}
@@ -650,16 +793,39 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     fill="#b5623e"
                   />
                 )}
+                {props.role === "GM" &&
+                  selectedTokenIds.length === 1 &&
+                  selectedTokenIds[0] === token.id && (
+                    <Circle
+                      x={token.width}
+                      y={token.height}
+                      radius={7 / scale}
+                      fill="#7ee0ff"
+                      stroke="#102027"
+                      strokeWidth={1 / scale}
+                      draggable
+                      onMouseDown={(event) => {
+                        event.cancelBubble = true;
+                      }}
+                      onDragMove={(event) => {
+                        event.target.position({
+                          x: Math.max(16, event.target.x()),
+                          y: Math.max(16, event.target.y()),
+                        });
+                      }}
+                      onDragEnd={(event) => {
+                        void props.onTokenResize?.(token.id, token.revision, {
+                          width: Math.round(Math.max(16, event.target.x())),
+                          height: Math.round(Math.max(16, event.target.y())),
+                        });
+                      }}
+                    />
+                  )}
               </Group>
             ))}
         </Layer>
 
-        <Layer
-          clipX={0}
-          clipY={0}
-          clipWidth={worldDraft.width}
-          clipHeight={worldDraft.height}
-        >
+        <Layer {...playerClip}>
           {props.drawings.map((drawing) => (
             <Line
               key={drawing.id}
@@ -671,27 +837,54 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               lineCap="round"
               lineJoin="round"
               listening={
-                props.role === "GM" ||
-                drawingRevealed(drawing.points, drawing.x, drawing.y)
-              }
-              draggable={
                 (props.role === "GM" ||
-                  drawing.authorMembershipId === props.membershipId) &&
+                  (Boolean(props.membershipId) &&
+                    drawing.authorMembershipId === props.membershipId)) &&
                 (props.role === "GM" ||
                   drawingRevealed(drawing.points, drawing.x, drawing.y))
               }
-              onClick={() => setSelectedDrawingId(drawing.id)}
-              onDragEnd={(event) =>
-                void api(`/api/drawings/${drawing.id}`, {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    revision: drawing.revision,
-                    x: event.target.x(),
-                    y: event.target.y(),
-                  }),
-                })
+              draggable={
+                (props.role === "GM" ||
+                  (Boolean(props.membershipId) &&
+                    drawing.authorMembershipId === props.membershipId)) &&
+                (props.role === "GM" ||
+                  drawingRevealed(drawing.points, drawing.x, drawing.y))
               }
+              hitStrokeWidth={14 / scale}
+              shadowColor={
+                selectedDrawingIds.includes(drawing.id) ? "#7ee0ff" : undefined
+              }
+              shadowBlur={
+                selectedDrawingIds.includes(drawing.id) ? 10 / scale : 0
+              }
+              onClick={() => {
+                setSelectedDrawingId(drawing.id);
+                setSelectedDrawingIds([drawing.id]);
+                setSelectedTokenIds([]);
+              }}
+              onDragEnd={(event) => {
+                if (
+                  selectedDrawingIds.includes(drawing.id) &&
+                  selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+                  props.onBulkMove
+                ) {
+                  void props.onBulkMove(
+                    {
+                      tokenIds: selectedTokenIds,
+                      drawingIds: selectedDrawingIds,
+                    },
+                    {
+                      x: event.target.x() - drawing.x,
+                      y: event.target.y() - drawing.y,
+                    },
+                  );
+                  return;
+                }
+                void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
+                  x: event.target.x(),
+                  y: event.target.y(),
+                });
+              }}
             />
           ))}
           {drawingPoints.length >= 4 && (
@@ -705,14 +898,25 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           )}
         </Layer>
 
+        {marquee && (
+          <Layer listening={false}>
+            <Rect
+              x={marquee.x}
+              y={marquee.y}
+              width={marquee.width}
+              height={marquee.height}
+              fill="#7ee0ff"
+              opacity={0.12}
+              stroke="#7ee0ff"
+              strokeWidth={1 / scale}
+              dash={[6 / scale, 4 / scale]}
+            />
+          </Layer>
+        )}
+
         {renderFog()}
 
-        <Layer
-          clipX={0}
-          clipY={0}
-          clipWidth={worldDraft.width}
-          clipHeight={worldDraft.height}
-        >
+        <Layer {...playerClip}>
           {props.tokens
             .filter((token) => token.layer !== "MAP")
             .filter((token) => token.layer !== "GM" || showGmLayer)
@@ -775,6 +979,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
                 const x = snap(event.target.x());
                 const y = snap(event.target.y());
+                const bulkSelection = {
+                  tokenIds: selectedTokenIds,
+                  drawingIds: selectedDrawingIds,
+                };
+                if (
+                  selectedTokenIds.includes(token.id) &&
+                  selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+                  props.onBulkMove
+                ) {
+                  event.target.position({ x, y });
+                  void props.onBulkMove(bulkSelection, {
+                    x: x - token.x,
+                    y: y - token.y,
+                  });
+                  return;
+                }
                 event.target.position({ x, y });
                 setDragPositions((current) => ({
                   ...current,
@@ -813,8 +1033,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   onDragEnd={onDragEnd}
                   onMouseEnter={() => setHoveredTokenId(token.id)}
                   onMouseLeave={() => setHoveredTokenId(null)}
+                  onClick={(event) => {
+                    if (event.evt.button !== 0) return;
+                    setSelectedTokenIds([token.id]);
+                    setSelectedDrawingIds([]);
+                    setSelectedDrawingId(null);
+                  }}
                   onContextMenu={(event) => {
                     event.evt.preventDefault();
+                    event.cancelBubble = true;
                     if (props.role !== "GM") return;
                     const rect = containerRef.current?.getBoundingClientRect();
                     if (!rect) return;
@@ -825,6 +1052,18 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     });
                   }}
                 >
+                  {selectedTokenIds.includes(token.id) && (
+                    <Rect
+                      x={-4 / scale}
+                      y={-4 / scale}
+                      width={token.width + 8 / scale}
+                      height={token.height + 8 / scale}
+                      stroke="#7ee0ff"
+                      strokeWidth={2 / scale}
+                      dash={[6 / scale, 3 / scale]}
+                      listening={false}
+                    />
+                  )}
                   {(occupiedCells[
                     gridCellKey(
                       dragPosition?.x ?? token.x,
@@ -875,6 +1114,40 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     listening={false}
                     visible={hoveredTokenId === token.id || canMove}
                   />
+                  {props.role === "GM" &&
+                    selectedTokenIds.length === 1 &&
+                    selectedTokenIds[0] === token.id && (
+                      <Circle
+                        x={token.width}
+                        y={token.height}
+                        radius={7 / scale}
+                        fill="#7ee0ff"
+                        stroke="#102027"
+                        strokeWidth={1 / scale}
+                        draggable
+                        onMouseDown={(event) => {
+                          event.cancelBubble = true;
+                        }}
+                        onDragMove={(event) => {
+                          event.target.position({
+                            x: Math.max(16, event.target.x()),
+                            y: Math.max(16, event.target.y()),
+                          });
+                        }}
+                        onDragEnd={(event) => {
+                          const width = Math.round(
+                            Math.max(16, event.target.x()),
+                          );
+                          const height = Math.round(
+                            Math.max(16, event.target.y()),
+                          );
+                          void props.onTokenResize?.(token.id, token.revision, {
+                            width,
+                            height,
+                          });
+                        }}
+                      />
+                    )}
                 </Group>
               );
             })}
@@ -938,14 +1211,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               key={layer}
               onClick={() => {
                 if (tokenMenu.token.layer !== layer)
-                  void api(`/api/tokens/${tokenMenu.token.id}/layer`, {
-                    method: "PATCH",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision: tokenMenu.token.revision,
-                      layer,
-                    }),
-                  });
+                  void props.onTokenLayerChange?.(
+                    tokenMenu.token.id,
+                    tokenMenu.token.revision,
+                    layer,
+                  );
                 setTokenMenu(null);
               }}
             >
@@ -953,6 +1223,21 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               {label}
             </button>
           ))}
+          <button
+            role="menuitem"
+            onClick={() => {
+              void props.onTokenDelete?.(
+                tokenMenu.token.id,
+                tokenMenu.token.revision,
+              );
+              setSelectedTokenIds((current) =>
+                current.filter((id) => id !== tokenMenu.token.id),
+              );
+              setTokenMenu(null);
+            }}
+          >
+            Удалить с карты
+          </button>
           <button onClick={() => setTokenMenu(null)}>Отмена</button>
         </div>
       )}
@@ -1006,21 +1291,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           if (
             !drawing ||
             (props.role !== "GM" &&
-              drawing.authorMembershipId !== props.membershipId)
+              (!props.membershipId ||
+                drawing.authorMembershipId !== props.membershipId))
           )
             return null;
           return (
             <span>
               <button
                 onClick={() =>
-                  void api(`/api/drawings/${drawing.id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision: drawing.revision,
-                      color:
-                        drawing.color === "#f0c75e" ? "#5ecbf0" : "#f0c75e",
-                    }),
+                  void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
+                    color: drawing.color === "#f0c75e" ? "#5ecbf0" : "#f0c75e",
                   })
                 }
               >
@@ -1028,13 +1308,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               </button>
               <button
                 onClick={() =>
-                  void api(`/api/drawings/${drawing.id}/copy`, {
-                    method: "POST",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision: drawing.revision,
-                    }),
-                  })
+                  void props.onDrawingCopy?.(drawing.id, drawing.revision)
                 }
               >
                 Копировать
@@ -1042,13 +1316,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               <button
                 onClick={() => {
                   setSelectedDrawingId(null);
-                  void api(`/api/drawings/${drawing.id}`, {
-                    method: "DELETE",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision: drawing.revision,
-                    }),
-                  });
+                  setSelectedDrawingIds((current) =>
+                    current.filter((id) => id !== drawing.id),
+                  );
+                  void props.onDrawingDelete?.(drawing.id, drawing.revision);
                 }}
               >
                 Удалить
@@ -1056,6 +1327,21 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             </span>
           );
         })()}
+        {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
+          <button
+            onClick={() => {
+              void props.onBulkDelete?.({
+                tokenIds: selectedTokenIds,
+                drawingIds: selectedDrawingIds,
+              });
+              setSelectedTokenIds([]);
+              setSelectedDrawingIds([]);
+              setSelectedDrawingId(null);
+            }}
+          >
+            Удалить выбранное
+          </button>
+        )}
       </div>
     </div>
   );

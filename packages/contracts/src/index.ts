@@ -242,9 +242,37 @@ export const replaceTokenControllersSchema = z.object({
 export const placeTokenDefinitionSchema = z.object({
   actionId: actionIdSchema,
   definitionId: z.string().uuid(),
+  sceneId: z.string().uuid().optional(),
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
 });
+export const resizeTokenSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  width: z.number().finite().min(16).max(1024),
+  height: z.number().finite().min(16).max(1024),
+});
+const canvasBulkTargetSchema = z.object({
+  targetType: z.enum(["TOKEN", "DRAWING"]),
+  targetId: z.string().uuid(),
+  revision: z.number().int().nonnegative(),
+});
+export const canvasBulkCommandSchema = z.discriminatedUnion("operation", [
+  z.object({
+    actionId: actionIdSchema,
+    sceneId: z.string().uuid(),
+    operation: z.literal("MOVE"),
+    deltaX: z.number().finite(),
+    deltaY: z.number().finite(),
+    targets: z.array(canvasBulkTargetSchema).min(1).max(250),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    sceneId: z.string().uuid(),
+    operation: z.literal("DELETE"),
+    targets: z.array(canvasBulkTargetSchema).min(1).max(250),
+  }),
+]);
 export const createTokenDefinitionSchema = z.object({
   actionId: actionIdSchema,
   name: z.string().trim().min(1).max(80),

@@ -312,8 +312,8 @@ export async function buildSnapshot(
         characterId: definition.characterId,
         assetId: definition.defaultAssetId,
         name: definition.name,
-        width: definition.defaultWidth,
-        height: definition.defaultHeight,
+        width: token.width,
+        height: token.height,
         controllerMembershipIds:
           auth.role === "GM"
             ? (controllersByDefinition.get(definition.id) ?? [])

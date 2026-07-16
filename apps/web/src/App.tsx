@@ -897,7 +897,6 @@ export function App() {
                       }),
                     }),
                   );
-                  setTool("PAN");
                 }}
                 onDrawingCreate={async (drawing) => {
                   let created:
@@ -915,7 +914,19 @@ export function App() {
                       },
                     );
                   });
-                  setTool("PAN");
+                  if (created) {
+                    const reconciled = created;
+                    setSnapshot((current) => {
+                      if (!current) return current;
+                      const drawings = current.drawings ?? [];
+                      if (drawings.some((item) => item.id === reconciled.id))
+                        return current;
+                      return {
+                        ...current,
+                        drawings: [...drawings, reconciled],
+                      };
+                    });
+                  }
                   return created;
                 }}
                 onPing={(point) => {
@@ -923,7 +934,6 @@ export function App() {
                     sceneId: activeScene.id,
                     ...point,
                   });
-                  setTool("PAN");
                 }}
                 onPlaceTokenDefinition={async (definitionId, point) =>
                   run(() =>
@@ -932,7 +942,163 @@ export function App() {
                       body: JSON.stringify({
                         actionId: crypto.randomUUID(),
                         definitionId,
+                        sceneId: activeScene.id,
                         ...point,
+                      }),
+                    }),
+                  )
+                }
+                onTokenLayerChange={(tokenId, revision, layer) =>
+                  run(() =>
+                    api(`/api/tokens/${tokenId}/layer`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision,
+                        layer,
+                      }),
+                    }),
+                  )
+                }
+                onTokenDelete={(tokenId, revision) =>
+                  run(() =>
+                    api(`/api/tokens/${tokenId}`, {
+                      method: "DELETE",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision,
+                      }),
+                    }),
+                  )
+                }
+                onTokenResize={(tokenId, revision, size) =>
+                  run(() =>
+                    api(`/api/tokens/${tokenId}/size`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision,
+                        ...size,
+                      }),
+                    }),
+                  )
+                }
+                onDrawingUpdate={(drawingId, revision, patch) =>
+                  run(() =>
+                    api(`/api/drawings/${drawingId}`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision,
+                        ...patch,
+                      }),
+                    }),
+                  )
+                }
+                onDrawingDelete={(drawingId, revision) =>
+                  run(() =>
+                    api(`/api/drawings/${drawingId}`, {
+                      method: "DELETE",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision,
+                      }),
+                    }),
+                  )
+                }
+                onDrawingCopy={(drawingId, revision) =>
+                  run(() =>
+                    api(`/api/drawings/${drawingId}/copy`, {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision,
+                      }),
+                    }),
+                  )
+                }
+                onBulkMove={(selection, delta) =>
+                  run(() =>
+                    api("/api/canvas/bulk", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        sceneId: activeScene.id,
+                        operation: "MOVE",
+                        deltaX: delta.x,
+                        deltaY: delta.y,
+                        targets: [
+                          ...selection.tokenIds.flatMap((id) => {
+                            const token = activeTokens.find(
+                              (item) => item.id === id,
+                            );
+                            return token
+                              ? [
+                                  {
+                                    targetType: "TOKEN" as const,
+                                    targetId: id,
+                                    revision: token.revision,
+                                  },
+                                ]
+                              : [];
+                          }),
+                          ...selection.drawingIds.flatMap((id) => {
+                            const drawing = activeDrawings.find(
+                              (item) => item.id === id,
+                            );
+                            return drawing
+                              ? [
+                                  {
+                                    targetType: "DRAWING" as const,
+                                    targetId: id,
+                                    revision: drawing.revision,
+                                  },
+                                ]
+                              : [];
+                          }),
+                        ],
+                      }),
+                    }),
+                  )
+                }
+                onBulkDelete={(selection) =>
+                  run(() =>
+                    api("/api/canvas/bulk", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        sceneId: activeScene.id,
+                        operation: "DELETE",
+                        targets: [
+                          ...selection.tokenIds.flatMap((id) => {
+                            const token = activeTokens.find(
+                              (item) => item.id === id,
+                            );
+                            return token
+                              ? [
+                                  {
+                                    targetType: "TOKEN" as const,
+                                    targetId: id,
+                                    revision: token.revision,
+                                  },
+                                ]
+                              : [];
+                          }),
+                          ...selection.drawingIds.flatMap((id) => {
+                            const drawing = activeDrawings.find(
+                              (item) => item.id === id,
+                            );
+                            return drawing
+                              ? [
+                                  {
+                                    targetType: "DRAWING" as const,
+                                    targetId: id,
+                                    revision: drawing.revision,
+                                  },
+                                ]
+                              : [];
+                          }),
+                        ],
                       }),
                     }),
                   )
@@ -1015,6 +1181,7 @@ export function App() {
                               body: JSON.stringify({
                                 actionId: crypto.randomUUID(),
                                 definitionId: definition.id,
+                                sceneId: activeScene.id,
                               }),
                             },
                           ),
@@ -1065,6 +1232,7 @@ export function App() {
                   body: JSON.stringify({
                     actionId: crypto.randomUUID(),
                     definitionId,
+                    sceneId: activeScene?.id,
                   }),
                 }),
               )

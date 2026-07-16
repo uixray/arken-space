@@ -15,7 +15,9 @@ import {
   createFogRevealSchema,
   changeTokenLayerSchema,
   createDrawingSchema,
+  canvasBulkCommandSchema,
   drawingCommandSchema,
+  resizeTokenSchema,
   historyCommandSchema,
   sceneCanvasConfigSchema,
   updateDrawingSchema,
@@ -1788,21 +1790,34 @@ export function registerRoutes(
       ...(request.body as Record<string, unknown>),
       definitionId: id,
     });
-    if (await findAction(db, auth.campaignId, body.actionId))
+    const priorAction = await findAction(db, auth.campaignId, body.actionId);
+    if (priorAction) {
+      if (priorAction.entityType === "token" && priorAction.entityId) {
+        const [priorPlacement] = await db
+          .select()
+          .from(tokens)
+          .where(eq(tokens.id, priorAction.entityId))
+          .limit(1);
+        if (priorPlacement) return reply.code(200).send(priorPlacement);
+      }
       return reply.code(200).send({ duplicate: true });
+    }
     const [campaign] = await db
       .select({ activeSceneId: campaigns.activeSceneId })
       .from(campaigns)
       .where(eq(campaigns.id, auth.campaignId))
       .limit(1);
-    if (!campaign?.activeSceneId)
+    const requestedSceneId = body.sceneId ?? campaign?.activeSceneId;
+    if (!requestedSceneId)
       return reply.code(409).send({ error: "ACTIVE_SCENE_REQUIRED" });
+    if (auth.role !== "GM" && requestedSceneId !== campaign?.activeSceneId)
+      return reply.code(403).send({ error: "INACTIVE_SCENE_FORBIDDEN" });
     const [scene] = await db
       .select()
       .from(scenes)
       .where(
         and(
-          eq(scenes.id, campaign.activeSceneId),
+          eq(scenes.id, requestedSceneId),
           eq(scenes.campaignId, auth.campaignId),
         ),
       )
@@ -1897,6 +1912,69 @@ export function registerRoutes(
       return reply.code(409).send({ error: "TOKEN_DEFINITION_DELETED" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return reply.code(201).send(placement);
+  });
+
+  app.patch("/api/tokens/:id/size", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = resizeTokenSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [row] = await db
+      .select({ token: tokens })
+      .from(tokens)
+      .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+      .where(and(eq(tokens.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
+    if (row.token.revision !== body.revision)
+      return reply.code(409).send({ error: "STALE_REVISION" });
+    const updated = await db.transaction(async (tx) => {
+      await invalidateRedoBranch(tx, auth, row.token.sceneId);
+      const [saved] = await tx
+        .update(tokens)
+        .set({
+          width: body.width,
+          height: body.height,
+          revision: row.token.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
+        .returning();
+      if (!saved) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "TOKEN_RESIZED",
+        entityType: "TOKEN",
+        entityId: id,
+        entityRevision: saved.revision,
+        payload: { width: saved.width, height: saved.height },
+      });
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: saved.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        scope: saved.layer === "GM" ? "GM" : "PUBLIC",
+        type: "TOKEN_RESIZE",
+        targetType: "TOKEN",
+        targetId: id,
+        before: { width: row.token.width, height: row.token.height },
+        after: { width: saved.width, height: saved.height },
+        beforeRevision: row.token.revision,
+        afterRevision: saved.revision,
+        currentRevision: saved.revision,
+      });
+      return saved;
+    });
+    if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
   });
 
   app.delete("/api/tokens/:id", async (request, reply) => {
@@ -2314,7 +2392,21 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    const { actionId, ...revealInput } = body;
+    const left = Math.max(0, body.x);
+    const top = Math.max(0, body.y);
+    const right = Math.min(scene.width, body.x + body.width);
+    const bottom = Math.min(scene.height, body.y + body.height);
+    if (right <= left || bottom <= top)
+      return reply.code(422).send({ error: "FOG_OUTSIDE_SCENE" });
+    const { actionId, sceneId: _sceneId, ...rest } = body;
+    const revealInput = {
+      ...rest,
+      sceneId: scene.id,
+      x: left,
+      y: top,
+      width: right - left,
+      height: bottom - top,
+    };
     const result = await db.transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, scene.id);
       const [reveal] = await tx
@@ -2688,6 +2780,234 @@ export function registerRoutes(
     return reply.code(204).send();
   });
 
+  app.post("/api/canvas/bulk", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const body = canvasBulkCommandSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    if (
+      new Set(
+        body.targets.map((target) => `${target.targetType}:${target.targetId}`),
+      ).size !== body.targets.length
+    )
+      return reply.code(422).send({ error: "DUPLICATE_BULK_TARGET" });
+    const [scene] = await db
+      .select()
+      .from(scenes)
+      .where(
+        and(
+          eq(scenes.id, body.sceneId),
+          eq(scenes.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    const tokenIds = body.targets
+      .filter((target) => target.targetType === "TOKEN")
+      .map((target) => target.targetId);
+    const drawingIds = body.targets
+      .filter((target) => target.targetType === "DRAWING")
+      .map((target) => target.targetId);
+    const tokenRows = tokenIds.length
+      ? await db
+          .select()
+          .from(tokens)
+          .where(
+            and(inArray(tokens.id, tokenIds), eq(tokens.sceneId, scene.id)),
+          )
+      : [];
+    const drawingRows = drawingIds.length
+      ? await db
+          .select()
+          .from(drawings)
+          .where(
+            and(
+              inArray(drawings.id, drawingIds),
+              eq(drawings.sceneId, scene.id),
+            ),
+          )
+      : [];
+    if (
+      tokenRows.length !== tokenIds.length ||
+      drawingRows.length !== drawingIds.length
+    )
+      return reply.code(404).send({ error: "CANVAS_TARGET_NOT_FOUND" });
+    const requested = new Map(
+      body.targets.map((target) => [
+        `${target.targetType}:${target.targetId}`,
+        target,
+      ]),
+    );
+    if (
+      [
+        ...tokenRows.map((row) => ["TOKEN", row] as const),
+        ...drawingRows.map((row) => ["DRAWING", row] as const),
+      ].some(
+        ([kind, row]) =>
+          requested.get(`${kind}:${row.id}`)?.revision !== row.revision,
+      )
+    )
+      return reply.code(409).send({ error: "STALE_REVISION" });
+    if (auth.role !== "GM") {
+      const controlled = tokenIds.length
+        ? await db
+            .select({ tokenDefinitionId: tokenControllers.tokenDefinitionId })
+            .from(tokenControllers)
+            .where(
+              and(
+                inArray(
+                  tokenControllers.tokenDefinitionId,
+                  tokenRows.map((row) => row.definitionId),
+                ),
+                eq(tokenControllers.membershipId, auth.membershipId),
+              ),
+            )
+        : [];
+      const controlledIds = new Set(
+        controlled.map((row) => row.tokenDefinitionId),
+      );
+      if (
+        tokenRows.some(
+          (row) =>
+            !controlledIds.has(row.definitionId) ||
+            row.locked ||
+            !row.visible ||
+            row.layer === "GM",
+        ) ||
+        drawingRows.some((row) => row.authorMembershipId !== auth.membershipId)
+      )
+        return reply.code(403).send({ error: "CANVAS_TARGET_FORBIDDEN" });
+    }
+    const result = await db
+      .transaction(async (tx) => {
+        await invalidateRedoBranch(tx, auth, scene.id);
+        const afterTokens: (typeof tokens.$inferSelect)[] = [];
+        const afterDrawings: (typeof drawings.$inferSelect)[] = [];
+        for (const row of tokenRows) {
+          if (body.operation === "DELETE") {
+            const [deleted] = await tx
+              .delete(tokens)
+              .where(
+                and(eq(tokens.id, row.id), eq(tokens.revision, row.revision)),
+              )
+              .returning();
+            if (!deleted) throw new Error("BULK_CONFLICT");
+          } else {
+            const [updated] = await tx
+              .update(tokens)
+              .set({
+                x: row.x + body.deltaX,
+                y: row.y + body.deltaY,
+                revision: row.revision + 1,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(eq(tokens.id, row.id), eq(tokens.revision, row.revision)),
+              )
+              .returning();
+            if (!updated) throw new Error("BULK_CONFLICT");
+            afterTokens.push(updated);
+          }
+        }
+        for (const row of drawingRows) {
+          if (body.operation === "DELETE") {
+            const [deleted] = await tx
+              .delete(drawings)
+              .where(
+                and(
+                  eq(drawings.id, row.id),
+                  eq(drawings.revision, row.revision),
+                ),
+              )
+              .returning();
+            if (!deleted) throw new Error("BULK_CONFLICT");
+          } else {
+            const [updated] = await tx
+              .update(drawings)
+              .set({
+                x: row.x + body.deltaX,
+                y: row.y + body.deltaY,
+                revision: row.revision + 1,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(drawings.id, row.id),
+                  eq(drawings.revision, row.revision),
+                ),
+              )
+              .returning();
+            if (!updated) throw new Error("BULK_CONFLICT");
+            afterDrawings.push(updated);
+          }
+        }
+        const targetRevisions = {
+          tokens: Object.fromEntries(
+            tokenRows.map((row) => [row.id, row.revision]),
+          ),
+          drawings: Object.fromEntries(
+            drawingRows.map((row) => [row.id, row.revision]),
+          ),
+        };
+        const before = {
+          tokens: tokenRows,
+          drawings: drawingRows,
+          revisions: targetRevisions,
+        };
+        const after =
+          body.operation === "DELETE"
+            ? {
+                tokens: [],
+                drawings: [],
+                revisions: targetRevisions,
+              }
+            : {
+                tokens: afterTokens,
+                drawings: afterDrawings,
+                revisions: {
+                  tokens: Object.fromEntries(
+                    afterTokens.map((row) => [row.id, row.revision]),
+                  ),
+                  drawings: Object.fromEntries(
+                    afterDrawings.map((row) => [row.id, row.revision]),
+                  ),
+                },
+              };
+        await tx.insert(actionJournal).values({
+          campaignId: auth.campaignId,
+          sceneId: scene.id,
+          actorMembershipId: auth.membershipId,
+          actionId: body.actionId,
+          type: `CANVAS_BULK_${body.operation}`,
+          targetType: "CANVAS_BULK",
+          targetId: body.actionId,
+          before,
+          after,
+          currentRevision: 0,
+          scope: tokenRows.some((row) => row.layer === "GM") ? "GM" : "PUBLIC",
+        });
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: `canvas.bulk.${body.operation.toLowerCase()}`,
+          entityType: "canvas_bulk",
+          entityId: body.actionId,
+          payload: { sceneId: scene.id, targets: body.targets },
+        });
+        return after;
+      })
+      .catch((error: unknown) =>
+        error instanceof Error && error.message === "BULK_CONFLICT"
+          ? null
+          : Promise.reject(error),
+      );
+    if (!result) return reply.code(409).send({ error: "CANVAS_BULK_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return { ok: true, ...result };
+  });
+
   app.get("/api/canvas/history", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -2760,275 +3080,555 @@ export function registerRoutes(
       if (!command)
         return reply.code(404).send({ error: "HISTORY_ACTION_NOT_FOUND" });
       const snapshot = direction === "undo" ? command.before : command.after;
-      const saved = await db.transaction(async (tx) => {
-        let targetRevision = command.currentRevision;
-        if (command.targetType === "DRAWING") {
-          if (snapshot === null) {
-            const [deleted] = await tx
-              .delete(drawings)
-              .where(
-                and(
-                  eq(drawings.id, command.targetId),
-                  targetRevision === null
-                    ? undefined
-                    : eq(drawings.revision, targetRevision),
-                ),
-              )
-              .returning();
-            if (!deleted) return null;
-          } else {
-            const drawing = snapshot as typeof drawings.$inferSelect;
-            const [existing] = await tx
-              .select()
-              .from(drawings)
-              .where(eq(drawings.id, command.targetId))
-              .limit(1);
-            if (existing) {
+      const saved = await db
+        .transaction(async (tx) => {
+          let targetRevision = command.currentRevision;
+          if (command.targetType === "CANVAS_BULK") {
+            const conflict = (): never => {
+              throw new Error("CANVAS_BULK_HISTORY_CONFLICT");
+            };
+            type StoredToken = Omit<typeof tokens.$inferSelect, "updatedAt"> & {
+              updatedAt: Date | string;
+            };
+            type StoredDrawing = Omit<
+              typeof drawings.$inferSelect,
+              "createdAt" | "updatedAt"
+            > & {
+              createdAt: Date | string;
+              updatedAt: Date | string;
+            };
+            type CompoundSnapshot = {
+              tokens: StoredToken[];
+              drawings: StoredDrawing[];
+              revisions?: {
+                tokens?: Record<string, number>;
+                drawings?: Record<string, number>;
+              };
+            };
+            const desired = snapshot as CompoundSnapshot;
+            const current = (
+              direction === "undo" ? command.after : command.before
+            ) as CompoundSnapshot;
+            const tokenIds = new Set([
+              ...desired.tokens.map((row) => row.id),
+              ...current.tokens.map((row) => row.id),
+              ...Object.keys(desired.revisions?.tokens ?? {}),
+              ...Object.keys(current.revisions?.tokens ?? {}),
+            ]);
+            const drawingIds = new Set([
+              ...desired.drawings.map((row) => row.id),
+              ...current.drawings.map((row) => row.id),
+              ...Object.keys(desired.revisions?.drawings ?? {}),
+              ...Object.keys(current.revisions?.drawings ?? {}),
+            ]);
+            const currentTokens = tokenIds.size
+              ? await tx
+                  .select()
+                  .from(tokens)
+                  .where(inArray(tokens.id, [...tokenIds]))
+              : [];
+            const currentDrawings = drawingIds.size
+              ? await tx
+                  .select()
+                  .from(drawings)
+                  .where(inArray(drawings.id, [...drawingIds]))
+              : [];
+            const currentTokenRows = new Map(
+              currentTokens.map((row) => [row.id, row]),
+            );
+            const currentDrawingRows = new Map(
+              currentDrawings.map((row) => [row.id, row]),
+            );
+            const expectedTokenRows = new Map(
+              current.tokens.map((row) => [row.id, row]),
+            );
+            const expectedDrawingRows = new Map(
+              current.drawings.map((row) => [row.id, row]),
+            );
+            for (const id of tokenIds) {
+              const actual = currentTokenRows.get(id);
+              const expected = expectedTokenRows.get(id);
               if (
-                targetRevision === null ||
-                existing.revision !== targetRevision
+                Boolean(actual) !== Boolean(expected) ||
+                (actual &&
+                  actual.revision !==
+                    (current.revisions?.tokens?.[id] ?? expected?.revision))
               )
-                return null;
-              const [updated] = await tx
-                .update(drawings)
-                .set({
-                  points: drawing.points,
-                  color: drawing.color,
-                  x: drawing.x,
-                  y: drawing.y,
-                  revision: existing.revision + 1,
-                  updatedAt: new Date(),
-                })
+                conflict();
+            }
+            for (const id of drawingIds) {
+              const actual = currentDrawingRows.get(id);
+              const expected = expectedDrawingRows.get(id);
+              if (
+                Boolean(actual) !== Boolean(expected) ||
+                (actual &&
+                  actual.revision !==
+                    (current.revisions?.drawings?.[id] ?? expected?.revision))
+              )
+                conflict();
+            }
+            const desiredTokenIds = new Set(
+              desired.tokens.map((row) => row.id),
+            );
+            const desiredDrawingIds = new Set(
+              desired.drawings.map((row) => row.id),
+            );
+            const nextTokenRevisions = {
+              ...(desired.revisions?.tokens ?? {}),
+            };
+            const nextDrawingRevisions = {
+              ...(desired.revisions?.drawings ?? {}),
+            };
+            const nextTokens: StoredToken[] = [];
+            const nextDrawings: StoredDrawing[] = [];
+            for (const prior of current.tokens) {
+              if (desiredTokenIds.has(prior.id)) continue;
+              const [deleted] = await tx
+                .delete(tokens)
                 .where(
                   and(
-                    eq(drawings.id, command.targetId),
-                    eq(drawings.revision, existing.revision),
+                    eq(tokens.id, prior.id),
+                    eq(
+                      tokens.revision,
+                      current.revisions?.tokens?.[prior.id] ?? prior.revision,
+                    ),
                   ),
                 )
                 .returning();
-              if (!updated) return null;
-              targetRevision = updated.revision;
+              const deletedRow = deleted ?? conflict();
+              nextTokenRevisions[prior.id] = deletedRow.revision;
+            }
+            for (const prior of current.drawings) {
+              if (desiredDrawingIds.has(prior.id)) continue;
+              const [deleted] = await tx
+                .delete(drawings)
+                .where(
+                  and(
+                    eq(drawings.id, prior.id),
+                    eq(
+                      drawings.revision,
+                      current.revisions?.drawings?.[prior.id] ?? prior.revision,
+                    ),
+                  ),
+                )
+                .returning();
+              const deletedRow = deleted ?? conflict();
+              nextDrawingRevisions[prior.id] = deletedRow.revision;
+            }
+            for (const token of desired.tokens) {
+              const existing = currentTokenRows.get(token.id);
+              const nextRevision =
+                (current.revisions?.tokens?.[token.id] ??
+                  desired.revisions?.tokens?.[token.id] ??
+                  token.revision) + 1;
+              if (existing) {
+                const [updated] = await tx
+                  .update(tokens)
+                  .set({
+                    definitionId: token.definitionId,
+                    sceneId: token.sceneId,
+                    characterId: token.characterId,
+                    ownerMembershipId: token.ownerMembershipId,
+                    assetId: token.assetId,
+                    levelId: token.levelId,
+                    layer: token.layer,
+                    name: token.name,
+                    x: token.x,
+                    y: token.y,
+                    z: token.z,
+                    width: token.width,
+                    height: token.height,
+                    rotation: token.rotation,
+                    visible: token.visible,
+                    locked: token.locked,
+                    revision: nextRevision,
+                    updatedAt: new Date(),
+                  })
+                  .where(
+                    and(
+                      eq(tokens.id, token.id),
+                      eq(tokens.revision, existing.revision),
+                    ),
+                  )
+                  .returning();
+                const updatedRow = updated ?? conflict();
+                nextTokens.push(updatedRow);
+                nextTokenRevisions[token.id] = updatedRow.revision;
+              } else {
+                const [restored] = await tx
+                  .insert(tokens)
+                  .values({
+                    id: token.id,
+                    definitionId: token.definitionId,
+                    sceneId: token.sceneId,
+                    characterId: token.characterId,
+                    ownerMembershipId: token.ownerMembershipId,
+                    assetId: token.assetId,
+                    levelId: token.levelId,
+                    layer: token.layer,
+                    name: token.name,
+                    x: token.x,
+                    y: token.y,
+                    z: token.z,
+                    width: token.width,
+                    height: token.height,
+                    rotation: token.rotation,
+                    visible: token.visible,
+                    locked: token.locked,
+                    revision: nextRevision,
+                    updatedAt: new Date(token.updatedAt),
+                  })
+                  .returning();
+                const restoredRow = restored ?? conflict();
+                nextTokens.push(restoredRow);
+                nextTokenRevisions[token.id] = restoredRow.revision;
+              }
+            }
+            for (const drawing of desired.drawings) {
+              const existing = currentDrawingRows.get(drawing.id);
+              const nextRevision =
+                (current.revisions?.drawings?.[drawing.id] ??
+                  desired.revisions?.drawings?.[drawing.id] ??
+                  drawing.revision) + 1;
+              if (existing) {
+                const [updated] = await tx
+                  .update(drawings)
+                  .set({
+                    sceneId: drawing.sceneId,
+                    authorMembershipId: drawing.authorMembershipId,
+                    points: drawing.points,
+                    color: drawing.color,
+                    x: drawing.x,
+                    y: drawing.y,
+                    revision: nextRevision,
+                    updatedAt: new Date(),
+                  })
+                  .where(
+                    and(
+                      eq(drawings.id, drawing.id),
+                      eq(drawings.revision, existing.revision),
+                    ),
+                  )
+                  .returning();
+                const updatedRow = updated ?? conflict();
+                nextDrawings.push(updatedRow);
+                nextDrawingRevisions[drawing.id] = updatedRow.revision;
+              } else {
+                const [restored] = await tx
+                  .insert(drawings)
+                  .values({
+                    id: drawing.id,
+                    sceneId: drawing.sceneId,
+                    authorMembershipId: drawing.authorMembershipId,
+                    points: drawing.points,
+                    color: drawing.color,
+                    x: drawing.x,
+                    y: drawing.y,
+                    revision: nextRevision,
+                    createdAt: new Date(drawing.createdAt),
+                    updatedAt: new Date(drawing.updatedAt),
+                  })
+                  .returning();
+                const restoredRow = restored ?? conflict();
+                nextDrawings.push(restoredRow);
+                nextDrawingRevisions[drawing.id] = restoredRow.revision;
+              }
+            }
+            const nextSnapshot: CompoundSnapshot = {
+              tokens: nextTokens,
+              drawings: nextDrawings,
+              revisions: {
+                tokens: nextTokenRevisions,
+                drawings: nextDrawingRevisions,
+              },
+            };
+            if (direction === "undo") command.before = nextSnapshot;
+            else command.after = nextSnapshot;
+            targetRevision = (targetRevision ?? 0) + 1;
+          } else if (command.targetType === "DRAWING") {
+            if (snapshot === null) {
+              const [deleted] = await tx
+                .delete(drawings)
+                .where(
+                  and(
+                    eq(drawings.id, command.targetId),
+                    targetRevision === null
+                      ? undefined
+                      : eq(drawings.revision, targetRevision),
+                  ),
+                )
+                .returning();
+              if (!deleted) return null;
             } else {
-              const nextRevision = (targetRevision ?? drawing.revision) + 1;
+              const drawing = snapshot as typeof drawings.$inferSelect;
+              const [existing] = await tx
+                .select()
+                .from(drawings)
+                .where(eq(drawings.id, command.targetId))
+                .limit(1);
+              if (existing) {
+                if (
+                  targetRevision === null ||
+                  existing.revision !== targetRevision
+                )
+                  return null;
+                const [updated] = await tx
+                  .update(drawings)
+                  .set({
+                    points: drawing.points,
+                    color: drawing.color,
+                    x: drawing.x,
+                    y: drawing.y,
+                    revision: existing.revision + 1,
+                    updatedAt: new Date(),
+                  })
+                  .where(
+                    and(
+                      eq(drawings.id, command.targetId),
+                      eq(drawings.revision, existing.revision),
+                    ),
+                  )
+                  .returning();
+                if (!updated) return null;
+                targetRevision = updated.revision;
+              } else {
+                const nextRevision = (targetRevision ?? drawing.revision) + 1;
+                const [restored] = await tx
+                  .insert(drawings)
+                  .values({
+                    id: command.targetId,
+                    sceneId: drawing.sceneId,
+                    authorMembershipId: drawing.authorMembershipId,
+                    points: drawing.points,
+                    color: drawing.color,
+                    x: drawing.x,
+                    y: drawing.y,
+                    revision: nextRevision,
+                  })
+                  .returning();
+                if (!restored) return null;
+                targetRevision = restored.revision;
+              }
+            }
+          } else if (command.targetType === "TOKEN") {
+            if (snapshot === null) {
+              const [deleted] = await tx
+                .delete(tokens)
+                .where(
+                  and(
+                    eq(tokens.id, command.targetId),
+                    command.currentRevision === null
+                      ? undefined
+                      : eq(tokens.revision, command.currentRevision),
+                  ),
+                )
+                .returning();
+              if (!deleted) return null;
+              targetRevision = deleted.revision;
+            } else if (
+              command.type === "TOKEN_DELETE" ||
+              command.type === "TOKEN_CREATE"
+            ) {
+              const token = snapshot as typeof tokens.$inferSelect;
+              const [existing] = await tx
+                .select({ id: tokens.id })
+                .from(tokens)
+                .where(eq(tokens.id, command.targetId))
+                .limit(1);
+              if (existing) return null;
+              const nextRevision = (targetRevision ?? token.revision) + 1;
               const [restored] = await tx
-                .insert(drawings)
+                .insert(tokens)
                 .values({
-                  id: command.targetId,
-                  sceneId: drawing.sceneId,
-                  authorMembershipId: drawing.authorMembershipId,
-                  points: drawing.points,
-                  color: drawing.color,
-                  x: drawing.x,
-                  y: drawing.y,
+                  id: token.id,
+                  definitionId: token.definitionId,
+                  sceneId: token.sceneId,
+                  characterId: token.characterId,
+                  ownerMembershipId: token.ownerMembershipId,
+                  assetId: token.assetId,
+                  levelId: token.levelId,
+                  layer: token.layer,
+                  name: token.name,
+                  x: token.x,
+                  y: token.y,
+                  z: token.z,
+                  width: token.width,
+                  height: token.height,
+                  rotation: token.rotation,
+                  visible: token.visible,
+                  locked: token.locked,
                   revision: nextRevision,
                 })
                 .returning();
               if (!restored) return null;
               targetRevision = restored.revision;
+            } else {
+              const values = snapshot as {
+                layer?: "MAP" | "GM" | "PLAYER";
+                x?: number;
+                y?: number;
+                z?: number;
+                levelId?: string | null;
+                width?: number;
+                height?: number;
+              } | null;
+              if (!values || targetRevision === null) return null;
+              const [updated] = await tx
+                .update(tokens)
+                .set({
+                  ...(values.layer ? { layer: values.layer } : {}),
+                  ...(values.x !== undefined ? { x: values.x } : {}),
+                  ...(values.y !== undefined ? { y: values.y } : {}),
+                  ...(values.z !== undefined ? { z: values.z } : {}),
+                  ...(values.levelId !== undefined
+                    ? { levelId: values.levelId }
+                    : {}),
+                  ...(values.width !== undefined
+                    ? { width: values.width }
+                    : {}),
+                  ...(values.height !== undefined
+                    ? { height: values.height }
+                    : {}),
+                  revision: targetRevision + 1,
+                  updatedAt: new Date(),
+                })
+                .where(
+                  and(
+                    eq(tokens.id, command.targetId),
+                    eq(tokens.revision, targetRevision),
+                  ),
+                )
+                .returning();
+              if (!updated) return null;
+              targetRevision = updated.revision;
             }
-          }
-        } else if (command.targetType === "TOKEN") {
-          if (snapshot === null) {
-            const [deleted] = await tx
-              .delete(tokens)
+          } else if (command.targetType === "FOG") {
+            if (snapshot === null) {
+              const [deleted] = await tx
+                .delete(fogReveals)
+                .where(eq(fogReveals.id, command.targetId))
+                .returning();
+              if (!deleted) return null;
+            } else {
+              const fog = snapshot as typeof fogReveals.$inferSelect;
+              const [restored] = await tx
+                .insert(fogReveals)
+                .values({
+                  id: command.targetId,
+                  sceneId: fog.sceneId,
+                  x: fog.x,
+                  y: fog.y,
+                  width: fog.width,
+                  height: fog.height,
+                  operation: fog.operation,
+                  revision: (targetRevision ?? fog.revision) + 1,
+                })
+                .returning();
+              if (!restored) return null;
+              targetRevision = restored.revision;
+            }
+          } else if (command.targetType === "SCENE") {
+            if (snapshot === null) return null;
+            const values = snapshot as {
+              name?: string;
+              mapAssetId?: string | null;
+              grid: typeof scenes.$inferSelect.grid;
+              mapScale: number;
+              world?: { width: number; height: number };
+              backgroundFrame?: {
+                x: number;
+                y: number;
+                width: number;
+                height: number;
+              };
+            };
+            const [currentScene] = await tx
+              .select({ revision: scenes.revision })
+              .from(scenes)
               .where(
                 and(
-                  eq(tokens.id, command.targetId),
-                  command.currentRevision === null
-                    ? undefined
-                    : eq(tokens.revision, command.currentRevision),
+                  eq(scenes.id, command.targetId),
+                  eq(scenes.campaignId, auth.campaignId),
                 ),
               )
-              .returning();
-            if (!deleted) return null;
-            targetRevision = deleted.revision;
-          } else if (
-            command.type === "TOKEN_DELETE" ||
-            command.type === "TOKEN_CREATE"
-          ) {
-            const token = snapshot as typeof tokens.$inferSelect;
-            const [existing] = await tx
-              .select({ id: tokens.id })
-              .from(tokens)
-              .where(eq(tokens.id, command.targetId))
               .limit(1);
-            if (existing) return null;
-            const nextRevision = (targetRevision ?? token.revision) + 1;
-            const [restored] = await tx
-              .insert(tokens)
-              .values({
-                id: token.id,
-                definitionId: token.definitionId,
-                sceneId: token.sceneId,
-                characterId: token.characterId,
-                ownerMembershipId: token.ownerMembershipId,
-                assetId: token.assetId,
-                levelId: token.levelId,
-                layer: token.layer,
-                name: token.name,
-                x: token.x,
-                y: token.y,
-                z: token.z,
-                width: token.width,
-                height: token.height,
-                rotation: token.rotation,
-                visible: token.visible,
-                locked: token.locked,
-                revision: nextRevision,
-              })
-              .returning();
-            if (!restored) return null;
-            targetRevision = restored.revision;
-          } else {
-            const values = snapshot as {
-              layer?: "MAP" | "GM" | "PLAYER";
-              x?: number;
-              y?: number;
-              z?: number;
-              levelId?: string | null;
-            } | null;
-            if (!values || targetRevision === null) return null;
+            if (!currentScene) return null;
             const [updated] = await tx
-              .update(tokens)
+              .update(scenes)
               .set({
-                ...(values.layer ? { layer: values.layer } : {}),
-                ...(values.x !== undefined ? { x: values.x } : {}),
-                ...(values.y !== undefined ? { y: values.y } : {}),
-                ...(values.z !== undefined ? { z: values.z } : {}),
-                ...(values.levelId !== undefined
-                  ? { levelId: values.levelId }
+                ...(values.name !== undefined ? { name: values.name } : {}),
+                ...(values.mapAssetId !== undefined
+                  ? { mapAssetId: values.mapAssetId }
                   : {}),
-                revision: targetRevision + 1,
+                grid: values.grid,
+                mapScale: values.mapScale,
+                ...(values.world
+                  ? { width: values.world.width, height: values.world.height }
+                  : {}),
+                ...(values.backgroundFrame
+                  ? {
+                      backgroundX: values.backgroundFrame.x,
+                      backgroundY: values.backgroundFrame.y,
+                      backgroundWidth: values.backgroundFrame.width,
+                      backgroundHeight: values.backgroundFrame.height,
+                    }
+                  : {}),
+                revision: currentScene.revision + 1,
                 updatedAt: new Date(),
               })
               .where(
                 and(
-                  eq(tokens.id, command.targetId),
-                  eq(tokens.revision, targetRevision),
+                  eq(scenes.id, command.targetId),
+                  eq(scenes.revision, currentScene.revision),
+                  eq(scenes.campaignId, auth.campaignId),
                 ),
               )
               .returning();
             if (!updated) return null;
             targetRevision = updated.revision;
-          }
-        } else if (command.targetType === "FOG") {
-          if (snapshot === null) {
-            const [deleted] = await tx
-              .delete(fogReveals)
-              .where(eq(fogReveals.id, command.targetId))
-              .returning();
-            if (!deleted) return null;
-          } else {
-            const fog = snapshot as typeof fogReveals.$inferSelect;
-            const [restored] = await tx
-              .insert(fogReveals)
-              .values({
-                id: command.targetId,
-                sceneId: fog.sceneId,
-                x: fog.x,
-                y: fog.y,
-                width: fog.width,
-                height: fog.height,
-                operation: fog.operation,
-                revision: (targetRevision ?? fog.revision) + 1,
-              })
-              .returning();
-            if (!restored) return null;
-            targetRevision = restored.revision;
-          }
-        } else if (command.targetType === "SCENE") {
-          if (snapshot === null) return null;
-          const values = snapshot as {
-            name?: string;
-            mapAssetId?: string | null;
-            grid: typeof scenes.$inferSelect.grid;
-            mapScale: number;
-            world?: { width: number; height: number };
-            backgroundFrame?: {
-              x: number;
-              y: number;
-              width: number;
-              height: number;
-            };
-          };
-          const [currentScene] = await tx
-            .select({ revision: scenes.revision })
-            .from(scenes)
-            .where(
-              and(
-                eq(scenes.id, command.targetId),
-                eq(scenes.campaignId, auth.campaignId),
-              ),
-            )
-            .limit(1);
-          if (!currentScene) return null;
-          const [updated] = await tx
-            .update(scenes)
+          } else return null;
+          const nextStatus = direction === "undo" ? "UNDONE" : "APPLIED";
+          const [journal] = await tx
+            .update(actionJournal)
             .set({
-              ...(values.name !== undefined ? { name: values.name } : {}),
-              ...(values.mapAssetId !== undefined
-                ? { mapAssetId: values.mapAssetId }
+              status: nextStatus,
+              currentRevision: targetRevision,
+              ...(command.targetType === "CANVAS_BULK"
+                ? { before: command.before, after: command.after }
                 : {}),
-              grid: values.grid,
-              mapScale: values.mapScale,
-              ...(values.world
-                ? { width: values.world.width, height: values.world.height }
-                : {}),
-              ...(values.backgroundFrame
-                ? {
-                    backgroundX: values.backgroundFrame.x,
-                    backgroundY: values.backgroundFrame.y,
-                    backgroundWidth: values.backgroundFrame.width,
-                    backgroundHeight: values.backgroundFrame.height,
-                  }
-                : {}),
-              revision: currentScene.revision + 1,
+              transitionSequence: sql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
               updatedAt: new Date(),
             })
             .where(
               and(
-                eq(scenes.id, command.targetId),
-                eq(scenes.revision, currentScene.revision),
-                eq(scenes.campaignId, auth.campaignId),
+                eq(actionJournal.sequence, command.sequence),
+                eq(actionJournal.status, desiredStatus),
               ),
             )
             .returning();
-          if (!updated) return null;
-          targetRevision = updated.revision;
-        } else return null;
-        const nextStatus = direction === "undo" ? "UNDONE" : "APPLIED";
-        const [journal] = await tx
-          .update(actionJournal)
-          .set({
-            status: nextStatus,
-            currentRevision: targetRevision,
-            transitionSequence: sql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(actionJournal.sequence, command.sequence),
-              eq(actionJournal.status, desiredStatus),
-            ),
-          )
-          .returning();
-        if (!journal) return null;
-        const [event] = await tx
-          .insert(gameEvents)
-          .values({
-            campaignId: auth.campaignId,
-            actionId: body.actionId,
-            membershipId: auth.membershipId,
-            type: `canvas.${direction}`,
-            entityType: command.targetType.toLowerCase(),
-            entityId: command.targetId,
-            entityRevision: targetRevision,
-            payload: { journalSequence: command.sequence },
-          })
-          .returning();
-        if (!event) throw new Error("EVENT_RECORD_FAILED");
-        return { journal, event };
-      });
+          if (!journal) return null;
+          const [event] = await tx
+            .insert(gameEvents)
+            .values({
+              campaignId: auth.campaignId,
+              actionId: body.actionId,
+              membershipId: auth.membershipId,
+              type: `canvas.${direction}`,
+              entityType: command.targetType.toLowerCase(),
+              entityId: command.targetId,
+              entityRevision: targetRevision,
+              payload: { journalSequence: command.sequence },
+            })
+            .returning();
+          if (!event) throw new Error("EVENT_RECORD_FAILED");
+          return { journal, event };
+        })
+        .catch((error: unknown) =>
+          error instanceof Error &&
+          error.message === "CANVAS_BULK_HISTORY_CONFLICT"
+            ? null
+            : Promise.reject(error),
+        );
       if (!saved)
         return reply.code(409).send({ error: "HISTORY_CONFLICT_RESYNC" });
       await broadcastSnapshots(io, db, auth.campaignId);

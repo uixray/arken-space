@@ -45,6 +45,32 @@ export interface SceneRendererProps {
     definitionId: string,
     point?: { x: number; y: number },
   ) => Promise<void>;
+  onTokenLayerChange?: (
+    tokenId: string,
+    revision: number,
+    layer: TokenDto["layer"],
+  ) => Promise<void>;
+  onTokenDelete?: (tokenId: string, revision: number) => Promise<void>;
+  onTokenResize?: (
+    tokenId: string,
+    revision: number,
+    size: { width: number; height: number },
+  ) => Promise<void>;
+  onDrawingUpdate?: (
+    drawingId: string,
+    revision: number,
+    patch: { x?: number; y?: number; color?: string },
+  ) => Promise<void>;
+  onDrawingDelete?: (drawingId: string, revision: number) => Promise<void>;
+  onDrawingCopy?: (drawingId: string, revision: number) => Promise<void>;
+  onBulkMove?: (
+    selection: { tokenIds: string[]; drawingIds: string[] },
+    delta: { x: number; y: number },
+  ) => Promise<void>;
+  onBulkDelete?: (selection: {
+    tokenIds: string[];
+    drawingIds: string[];
+  }) => Promise<void>;
   gmFogOpacity?: number;
   gmFogVisible?: boolean;
   canvasEditMode?: "BACKGROUND" | "WORLD" | null;
