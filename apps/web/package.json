@@ -11,6 +11,8 @@
   "dependencies": {
     "@arken/contracts": "workspace:*",
     "@arken/system": "workspace:*",
+    "@gravity-ui/icons": "2.20.0",
+    "@gravity-ui/uikit": "7.43.0",
     "konva": "latest",
     "react": "latest",
     "react-dom": "latest",
