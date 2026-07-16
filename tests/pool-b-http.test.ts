@@ -211,6 +211,77 @@ afterEach(async () => {
 });
 
 describe("Pool B HTTP boundaries", () => {
+  it("renames a campaign with GM-only CAS and idempotent replay", async () => {
+    const denied = await app.inject({
+      method: "PATCH",
+      url: "/api/campaign",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        name: "Forbidden",
+      },
+    });
+    expect(denied.statusCode).toBe(403);
+
+    const actionId = crypto.randomUUID();
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: "/api/campaign",
+      headers: headers(secrets.gm),
+      payload: { actionId, revision: 0, name: "  New campaign  " },
+    });
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect(renamed.json()).toMatchObject({ name: "New campaign", revision: 1 });
+
+    const replay = await app.inject({
+      method: "PATCH",
+      url: "/api/campaign",
+      headers: headers(secrets.gm),
+      payload: { actionId, revision: 0, name: "New campaign" },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ name: "New campaign", revision: 1 });
+
+    const stale = await app.inject({
+      method: "PATCH",
+      url: "/api/campaign",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        name: "Stale rename",
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toEqual({ error: "CAMPAIGN_CONFLICT", revision: 1 });
+
+    const bootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(bootstrap.json().campaign).toMatchObject({
+      name: "New campaign",
+      revision: 1,
+    });
+
+    const events = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(
+        and(
+          eq(schema.gameEvents.campaignId, ids.campaign),
+          eq(schema.gameEvents.actionId, actionId),
+        ),
+      );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "campaign.renamed",
+      entityRevision: 1,
+    });
+  });
+
   it("creates and updates scene metadata with MAP validation, CAS and useful replay responses", async () => {
     const playerDenied = await app.inject({
       method: "POST",

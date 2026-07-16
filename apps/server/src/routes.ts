@@ -31,6 +31,7 @@ import {
   campaignClockCommandSchema,
   characterCountersCommandSchema,
   rechargeEntryCommandSchema,
+  renameCampaignSchema,
   deleteTokenSchema,
   gmLoginSchema,
   inviteClaimSchema,
@@ -3974,6 +3975,66 @@ export function registerRoutes(
     }
     await broadcastSnapshots(io, db, auth.campaignId);
     return result.updated;
+  });
+
+  app.patch("/api/campaign", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = renameCampaignSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) {
+      const [replayed] = await db
+        .select()
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      return replayed
+        ? reply.code(200).send(replayed)
+        : reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    }
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    const updated = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(campaigns)
+        .set({
+          name: body.name,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.renamed",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: next.revision,
+        payload: { name: next.name },
+      });
+      return next;
+    });
+    if (!updated) return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
   });
 
   app.patch("/api/characters/:id/counters", async (request, reply) => {

@@ -247,6 +247,72 @@ test("GM controls music from the top bar and opens the library", async ({
   ).toHaveCount(0);
 });
 
+test("GM shell keeps essential controls accessible across desktop widths", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    await expect(
+      page.getByRole("combobox", { name: "Просматриваемая сцена" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Создать сцену" }),
+    ).toBeVisible();
+    for (const tool of [
+      "Перемещение",
+      "Открыть туман",
+      "Закрыть туман",
+      "Рисование",
+      "Линейка",
+      "Пинг",
+    ]) {
+      await expect(page.getByRole("button", { name: tool })).toBeVisible();
+    }
+    for (const trigger of ["Токены", "Сцены", "Подготовка", "Файлы"]) {
+      await expect(
+        page.locator(".tabs").getByRole("button", { name: trigger }),
+      ).toBeVisible();
+    }
+
+    const zoom = page.getByRole("slider", { name: "Масштаб карты" });
+    await expect(zoom).toBeVisible();
+    const zoomBox = await zoom.boundingBox();
+    expect(zoomBox).not.toBeNull();
+    expect(zoomBox!.height).toBeGreaterThan(zoomBox!.width);
+
+    const music = page.getByRole("region", { name: "Музыка" });
+    await expect(music).toBeVisible();
+    const musicBox = await music.boundingBox();
+    expect(musicBox).not.toBeNull();
+    expect(musicBox!.x).toBeGreaterThanOrEqual(0);
+    expect(musicBox!.x + musicBox!.width).toBeLessThanOrEqual(viewport.width);
+  }
+
+  await page
+    .locator(".tabs")
+    .getByRole("button", { name: "Подготовка" })
+    .click();
+  await expect(page.getByRole("dialog", { name: "Подготовка" })).toBeVisible();
+  await expect(page.locator("canvas").first()).toBeVisible();
+});
+
 test("GM prepares a scene locally before publishing it to players", async ({
   page,
 }) => {
@@ -389,9 +455,9 @@ test("canvas tools stay selected and token placement targets the GM viewed scene
     page.getByRole("button", { name: "Открыть туман" }),
   ).toHaveAttribute("aria-pressed", "true");
 
-  await page.getByRole("button", { name: "Ping" }).click();
+  await page.getByRole("button", { name: "Пинг" }).click();
   await page.mouse.click(start.x + 40, start.y + 40);
-  await expect(page.getByRole("button", { name: "Ping" })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Пинг" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );

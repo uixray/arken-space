@@ -179,7 +179,7 @@ export function Sidebar(props: Props) {
   const isGm = props.snapshot.me.role === "GM";
   const [tab, setTab] = useState<
     "character" | "chat" | "palette" | "setup" | "media" | "scenes"
-  >(isGm ? "setup" : "chat");
+  >("chat");
   const [playerCharacterOpen, setPlayerCharacterOpen] = useState(false);
   const playerCharacterButtonRef = useRef<HTMLButtonElement>(null);
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
@@ -278,7 +278,9 @@ export function Sidebar(props: Props) {
           Файлы
         </Button>
       </nav>
-      <div className={`panel-scroll ${tab === "chat" ? "chat-scroll" : ""}`}>
+      <div
+        className={`panel-scroll ${tab === "chat" || tab === "setup" ? "chat-scroll" : ""}`}
+      >
         {tab === "character" && isGm && (
           <ArkenDialog
             open
@@ -304,7 +306,7 @@ export function Sidebar(props: Props) {
             />
           </ArkenDialog>
         )}
-        {tab === "chat" && (
+        {(tab === "chat" || tab === "setup") && (
           <ChatPanel
             snapshot={props.snapshot}
             onChat={props.onChat}
@@ -323,7 +325,16 @@ export function Sidebar(props: Props) {
             <PalettePanel {...props} />
           </ArkenDialog>
         )}
-        {tab === "setup" && isGm && <SetupPanel {...props} />}
+        {tab === "setup" && isGm && (
+          <ArkenDialog
+            open
+            footer={false}
+            title="Подготовка"
+            onClose={() => setTab("chat")}
+          >
+            <SetupPanel {...props} />
+          </ArkenDialog>
+        )}
         {tab === "scenes" && isGm && (
           <SceneManagerDialog
             open

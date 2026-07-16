@@ -149,11 +149,25 @@ code {
 .brand strong {
   letter-spacing: 0.02em;
 }
-.brand span {
+.brand span,
+.campaign-name-button {
   overflow: hidden;
   color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.campaign-name-button {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.campaign-name-button:hover,
+.campaign-name-button:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
 }
 .scene-title {
   font-weight: 700;
@@ -1173,7 +1187,8 @@ code {
   .topbar {
     grid-template-columns: minmax(220px, 1fr) auto minmax(280px, 1fr);
   }
-  .brand span {
+  .brand span,
+  .campaign-name-button {
     display: none;
   }
 }

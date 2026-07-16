@@ -127,6 +127,11 @@ export const createInviteSchema = z.object({
   expiresInHours: z.number().int().min(1).max(720).default(168),
 });
 export const rotatePlayerAccessSchema = z.object({ actionId: actionIdSchema });
+export const renameCampaignSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  name: z.string().trim().min(1).max(120),
+});
 
 export interface PlayerAccessDto {
   id: string;

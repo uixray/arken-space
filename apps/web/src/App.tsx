@@ -84,10 +84,20 @@ function CanvasHistoryControls({
   }, [sceneId, disabled, canUndo, canRedo, act]);
   return (
     <>
-      <button disabled={disabled || !canUndo} onClick={() => void act("undo")}>
+      <button
+        aria-label="Отменить последнее действие"
+        title="Отменить последнее действие"
+        disabled={disabled || !canUndo}
+        onClick={() => void act("undo")}
+      >
         Отменить
       </button>
-      <button disabled={disabled || !canRedo} onClick={() => void act("redo")}>
+      <button
+        aria-label="Повторить отменённое действие"
+        title="Повторить отменённое действие"
+        disabled={disabled || !canRedo}
+        onClick={() => void act("redo")}
+      >
         Повторить
       </button>
     </>
@@ -107,7 +117,9 @@ function GridSettings({
   useEffect(() => setDraft(scene.grid), [scene]);
   return (
     <details className="grid-settings">
-      <summary>Сетка</summary>
+      <summary aria-label="Настройки сетки" title="Настройки сетки">
+        Сетка
+      </summary>
       <div className="grid-settings-popover">
         <label>
           Шаг
@@ -216,6 +228,7 @@ export function App() {
   const [error, setError] = useState("");
   const [createSceneOpen, setCreateSceneOpen] = useState(false);
   const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
+  const [campaignRenameOpen, setCampaignRenameOpen] = useState(false);
 
   useEffect(() => {
     if (!error || !snapshot) return;
@@ -606,7 +619,18 @@ export function App() {
       <header className="topbar">
         <div className="brand">
           <strong>arken-space</strong>
-          <span>{viewSnapshot.campaign.name}</span>
+          {snapshot.me.role === "GM" && !previewSnapshot ? (
+            <button
+              type="button"
+              className="campaign-name-button"
+              aria-label="Переименовать кампанию"
+              onClick={() => setCampaignRenameOpen(true)}
+            >
+              {viewSnapshot.campaign.name}
+            </button>
+          ) : (
+            <span>{viewSnapshot.campaign.name}</span>
+          )}
         </div>
         <div className="scene-switcher">
           <select
@@ -633,6 +657,7 @@ export function App() {
           {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
             <button
               className="publish-scene"
+              title="Опубликовать выбранную сцену для игроков"
               disabled={activeScene.id === broadcastScene?.id}
               onClick={() =>
                 void run(() =>
@@ -654,6 +679,7 @@ export function App() {
           {!previewSnapshot && snapshot.me.role === "GM" && (
             <button
               aria-label="Создать сцену"
+              title="Создать новую сцену"
               onClick={() => setSceneDialogRequest((value) => value + 1)}
             >
               +
@@ -729,11 +755,35 @@ export function App() {
           </button>
         </div>
       </header>
+      <TextPromptDialog
+        open={campaignRenameOpen}
+        title="Название кампании"
+        label="Название кампании"
+        initialValue={snapshot.campaign.name}
+        applyLabel="Сохранить"
+        onClose={() => setCampaignRenameOpen(false)}
+        onApply={async (name) => {
+          const updated = await api<GameSnapshot["campaign"]>("/api/campaign", {
+            method: "PATCH",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              revision: snapshot.campaign.revision,
+              name,
+            }),
+          });
+          setSnapshot((current) =>
+            current ? { ...current, campaign: updated } : current,
+          );
+          setCampaignRenameOpen(false);
+        }}
+      />
       <div className="workbench">
         <main className="map-shell">
           <div className="map-toolbar">
             <div className="toolbar-group">
               <button
+                aria-label="Перемещение"
+                title="Перемещение по карте (средняя кнопка мыши)"
                 aria-pressed={tool === "PAN"}
                 onClick={() => setTool("PAN")}
               >
@@ -742,12 +792,16 @@ export function App() {
               {!previewSnapshot && snapshot.me.role === "GM" && (
                 <>
                   <button
+                    aria-label="Открыть туман"
+                    title="Открыть выбранную область тумана"
                     aria-pressed={tool === "FOG"}
                     onClick={() => setTool("FOG")}
                   >
                     Открыть туман
                   </button>
                   <button
+                    aria-label="Закрыть туман"
+                    title="Закрыть выбранную область туманом"
                     aria-pressed={tool === "COVER"}
                     onClick={() => setTool("COVER")}
                   >
@@ -756,22 +810,28 @@ export function App() {
                 </>
               )}
               <button
+                aria-label="Рисование"
+                title="Нарисовать линию на карте"
                 aria-pressed={tool === "DRAW"}
                 onClick={() => setTool("DRAW")}
               >
                 Рисование
               </button>
               <button
+                aria-label="Линейка"
+                title="Измерить расстояние на карте"
                 aria-pressed={tool === "RULER"}
                 onClick={() => setTool("RULER")}
               >
                 Линейка
               </button>
               <button
+                aria-label="Пинг"
+                title="Показать точку группе"
                 aria-pressed={tool === "PING"}
                 onClick={() => setTool("PING")}
               >
-                Ping
+                Пинг
               </button>
               {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
                 <>
@@ -792,7 +852,12 @@ export function App() {
                     }
                   />
                   <details className="resize-settings">
-                    <summary>Размер карты</summary>
+                    <summary
+                      aria-label="Настройки размера карты"
+                      title="Настройки размера карты"
+                    >
+                      Размер карты
+                    </summary>
                     <div className="resize-settings-popover">
                       <button
                         aria-pressed={canvasEditMode === "BACKGROUND"}
@@ -831,7 +896,12 @@ export function App() {
             )}
             {!previewSnapshot && (
               <details className="toolbar-overflow">
-                <summary aria-label="Дополнительные инструменты">•••</summary>
+                <summary
+                  aria-label="Дополнительные инструменты"
+                  title="Дополнительные инструменты карты"
+                >
+                  •••
+                </summary>
                 <div className="toolbar-overflow-menu">
                   {snapshot.me.role === "GM" && (
                     <div className="fog-view-controls">
