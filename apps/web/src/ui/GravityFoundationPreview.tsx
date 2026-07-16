@@ -13,12 +13,17 @@ import {
 import { Gear, Plus, TrashBin } from "@gravity-ui/icons";
 import { ArkenDialog } from "./ArkenDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { EmptyState } from "./EntityState";
+import { FuturePoolDialogs } from "./FuturePoolDialogs";
+import { NumberStepper } from "./NumberStepper";
+import { SelectionActions } from "./SelectionActions";
 import { notify } from "./notifications";
 
 export function GravityFoundationPreview() {
   const [formOpen, setFormOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [popupOpen, setPopupOpen] = useState(false);
+  const [selectionCount, setSelectionCount] = useState(3);
   const [popupAnchor, setPopupAnchor] = useState<HTMLButtonElement | null>(
     null,
   );
@@ -91,6 +96,45 @@ export function GravityFoundationPreview() {
             Показать уведомление
           </Button>
         </div>
+      </section>
+
+      <section className="gravity-preview__section">
+        <div className="gravity-preview__section-heading">
+          <div>
+            <h2>Общие паттерны</h2>
+            <p>Числовые значения, пустые состояния и массовые операции.</p>
+          </div>
+        </div>
+        <div className="gravity-preview__fields">
+          <NumberStepper
+            label="Размер токена"
+            value={1}
+            min={0.25}
+            max={8}
+            step={0.25}
+            onUpdate={() => undefined}
+          />
+          <EmptyState
+            title="Файлы не загружены"
+            description="Добавьте карту, токен, портрет или музыку."
+          />
+        </div>
+        <SelectionActions
+          count={selectionCount}
+          onMove={() => undefined}
+          onDelete={() => setConfirmOpen(true)}
+          onClear={() => setSelectionCount(0)}
+        />
+      </section>
+
+      <section className="gravity-preview__section">
+        <div className="gravity-preview__section-heading">
+          <div>
+            <h2>Каркасы следующих пулов</h2>
+            <p>Изолированные формы без подключения к игровому API.</p>
+          </div>
+        </div>
+        <FuturePoolDialogs />
       </section>
 
       <section className="gravity-preview__section gravity-preview__form-grid">
