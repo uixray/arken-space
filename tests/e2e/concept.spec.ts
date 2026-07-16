@@ -203,7 +203,7 @@ test("GM opens token and file workflows without leaving the canvas", async ({
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 
-  await tabs.nth(5).click();
+  await tabs.nth(6).click();
   const filesDialog = page.getByRole("dialog");
   await expect(
     filesDialog.getByRole("heading", { name: "Файлы" }),
@@ -218,6 +218,70 @@ test("GM opens token and file workflows without leaving the canvas", async ({
     await expect(filesDialog.getByText(section, { exact: true })).toBeVisible();
   }
   await expect(page.locator("canvas").first()).toBeVisible();
+});
+
+test("GM prepares a scene locally before publishing it to players", async ({
+  page,
+}) => {
+  const sceneSnapshot = structuredClone(snapshot);
+  sceneSnapshot.scenes[0]!.revision = 2;
+  sceneSnapshot.scenes[0]!.backgroundFrame = {
+    x: 0,
+    y: 0,
+    width: 1600,
+    height: 1000,
+  };
+  sceneSnapshot.scenes.push({
+    ...sceneSnapshot.scenes[0]!,
+    id: "8476b502-02f8-4cd6-9c55-3816d70d44dc",
+    name: "Тайная комната",
+    active: false,
+    revision: 0,
+  });
+  let publishedSceneId = "";
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(sceneSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/scenes/activate", async (route) => {
+    publishedSceneId = (route.request().postDataJSON() as { sceneId: string })
+      .sceneId;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Сцены" }).click();
+  const dialog = page.getByRole("dialog", { name: "Сцены" });
+  await expect(dialog.getByText("Показана игрокам")).toBeVisible();
+  const secretCard = dialog.locator(".scene-manager-card", {
+    hasText: "Тайная комната",
+  });
+  await secretCard.getByRole("button", { name: "Открыть для мастера" }).click();
+  await expect(page.locator(".scene-switcher select")).toHaveValue(
+    "8476b502-02f8-4cd6-9c55-3816d70d44dc",
+  );
+  await expect(secretCard.getByText("Просматривается мастером")).toBeVisible();
+  expect(publishedSceneId).toBe("");
+
+  await secretCard.getByRole("button", { name: "Показать игрокам" }).click();
+  await expect
+    .poll(() => publishedSceneId)
+    .toBe("8476b502-02f8-4cd6-9c55-3816d70d44dc");
+  await secretCard.getByRole("button", { name: "Настроить" }).click();
+  const editor = page.getByRole("dialog", { name: /Настройка/ });
+  await expect(editor.getByLabel("Название")).toHaveValue("Тайная комната");
+  await expect(editor.getByText("Игровая область")).toBeVisible();
+  await expect(editor.getByText("Рамка изображения")).toBeVisible();
 });
 
 for (const viewport of [
