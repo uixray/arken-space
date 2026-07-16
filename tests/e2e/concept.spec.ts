@@ -150,13 +150,12 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   await page.goto("/");
 
   await expect(
-    page.getByRole("combobox", { name: "Активная сцена" }),
+    page.getByRole("combobox", { name: "Просматриваемая сцена" }),
   ).toHaveValue(snapshot.scenes.find((scene) => scene.active)?.id);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Панорама" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Перемещение" }),
+  ).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "Персонаж" }).click();
   await expect(page.getByRole("heading", { name: "Картограф" })).toBeVisible();

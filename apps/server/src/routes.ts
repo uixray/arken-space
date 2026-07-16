@@ -101,6 +101,25 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "UNKNOWN_ERROR";
 }
 
+export function fitFrameToWorld(
+  assetWidth: number | null | undefined,
+  assetHeight: number | null | undefined,
+  worldWidth: number,
+  worldHeight: number,
+) {
+  if (!assetWidth || !assetHeight)
+    return { x: 0, y: 0, width: worldWidth, height: worldHeight };
+  const scale = Math.min(worldWidth / assetWidth, worldHeight / assetHeight);
+  const width = assetWidth * scale;
+  const height = assetHeight * scale;
+  return {
+    x: (worldWidth - width) / 2,
+    y: (worldHeight - height) / 2,
+    width,
+    height,
+  };
+}
+
 const walletLabels = {
   gold: "золото",
   silver: "серебро",
@@ -1086,6 +1105,32 @@ export function registerRoutes(
     const body = createSceneSchema.parse(request.body);
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) return reply.code(200).send({ duplicate: true });
+    const mapAsset = body.mapAssetId
+      ? (
+          await db
+            .select({
+              id: assets.id,
+              width: assets.width,
+              height: assets.height,
+            })
+            .from(assets)
+            .where(
+              and(
+                eq(assets.id, body.mapAssetId),
+                eq(assets.campaignId, auth.campaignId),
+              ),
+            )
+            .limit(1)
+        )[0]
+      : null;
+    if (body.mapAssetId && !mapAsset)
+      return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+    const initialBackground = fitFrameToWorld(
+      mapAsset?.width,
+      mapAsset?.height,
+      body.width,
+      body.height,
+    );
     const { actionId, ...sceneInput } = body;
     const scene = await db.transaction(async (tx) => {
       const [created] = await tx
@@ -1094,8 +1139,10 @@ export function registerRoutes(
           campaignId: auth.campaignId,
           ...sceneInput,
           mapAssetId: body.mapAssetId ?? null,
-          backgroundWidth: body.width,
-          backgroundHeight: body.height,
+          backgroundX: initialBackground.x,
+          backgroundY: initialBackground.y,
+          backgroundWidth: initialBackground.width,
+          backgroundHeight: initialBackground.height,
         })
         .returning();
       if (!created) throw new Error("SCENE_CREATE_FAILED");
@@ -1137,11 +1184,41 @@ export function registerRoutes(
     if (body.revision !== undefined && body.revision !== current.revision)
       return reply.code(409).send({ error: "SCENE_CONFLICT" });
     const { actionId, revision: _revision, ...sceneUpdates } = body;
+    let mapFrame:
+      { x: number; y: number; width: number; height: number } | undefined;
+    if (body.mapAssetId) {
+      const [mapAsset] = await db
+        .select({ width: assets.width, height: assets.height })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, body.mapAssetId),
+            eq(assets.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!mapAsset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+      if (body.mapAssetId !== current.mapAssetId)
+        mapFrame = fitFrameToWorld(
+          mapAsset.width,
+          mapAsset.height,
+          body.width ?? current.width,
+          body.height ?? current.height,
+        );
+    }
     const scene = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(scenes)
         .set({
           ...sceneUpdates,
+          ...(mapFrame
+            ? {
+                backgroundX: mapFrame.x,
+                backgroundY: mapFrame.y,
+                backgroundWidth: mapFrame.width,
+                backgroundHeight: mapFrame.height,
+              }
+            : {}),
           revision: current.revision + 1,
           updatedAt: new Date(),
         })
@@ -2543,7 +2620,7 @@ export function registerRoutes(
             targetRevision = restored.revision;
           }
         } else if (command.targetType === "SCENE") {
-          if (targetRevision === null || snapshot === null) return null;
+          if (snapshot === null) return null;
           const values = snapshot as {
             grid: typeof scenes.$inferSelect.grid;
             mapScale: number;
@@ -2555,6 +2632,17 @@ export function registerRoutes(
               height: number;
             };
           };
+          const [currentScene] = await tx
+            .select({ revision: scenes.revision })
+            .from(scenes)
+            .where(
+              and(
+                eq(scenes.id, command.targetId),
+                eq(scenes.campaignId, auth.campaignId),
+              ),
+            )
+            .limit(1);
+          if (!currentScene) return null;
           const [updated] = await tx
             .update(scenes)
             .set({
@@ -2571,13 +2659,13 @@ export function registerRoutes(
                     backgroundHeight: values.backgroundFrame.height,
                   }
                 : {}),
-              revision: targetRevision + 1,
+              revision: currentScene.revision + 1,
               updatedAt: new Date(),
             })
             .where(
               and(
                 eq(scenes.id, command.targetId),
-                eq(scenes.revision, targetRevision),
+                eq(scenes.revision, currentScene.revision),
                 eq(scenes.campaignId, auth.campaignId),
               ),
             )

@@ -80,6 +80,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const { canvasEditMode, onCanvasEditCancel } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
+  const fogMaskRef = useRef<Konva.Group>(null);
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -93,6 +94,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     null,
   );
   const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
+  const [dragPositions, setDragPositions] = useState<
+    Record<string, { x: number; y: number; revision: number }>
+  >({});
   const [fogStart, setFogStart] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -143,6 +147,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     props.scene.height,
   ]);
   useEffect(() => {
+    setDragPositions((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const token of props.tokens) {
+        const pending = next[token.id];
+        if (
+          pending &&
+          (token.revision > pending.revision ||
+            (token.x === pending.x && token.y === pending.y))
+        ) {
+          delete next[token.id];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [props.tokens]);
+  useEffect(() => {
     if (!canvasEditMode) return;
     const cancel = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -167,6 +189,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+  useEffect(() => {
+    const mask = fogMaskRef.current;
+    if (!mask) return;
+    mask.clearCache();
+    mask.cache({
+      x: 0,
+      y: 0,
+      width: worldDraft.width,
+      height: worldDraft.height,
+      pixelRatio: 1,
+    });
+    mask.getLayer()?.batchDraw();
+  }, [props.fogReveals, worldDraft.width, worldDraft.height]);
 
   const pointerInWorld = () => {
     const pointer = stageRef.current?.getPointerPosition();
@@ -176,6 +211,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       y: (pointer.y - position.y) / scale,
     };
   };
+  const clampToWorld = (point: { x: number; y: number }) => ({
+    x: Math.min(worldDraft.width, Math.max(0, point.x)),
+    y: Math.min(worldDraft.height, Math.max(0, point.y)),
+  });
 
   const handleWheel = (event: Konva.KonvaEventObject<WheelEvent>) => {
     event.evt.preventDefault();
@@ -232,18 +271,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if ((props.tool !== "FOG" && props.tool !== "COVER") || props.role !== "GM")
       return;
     const point = pointerInWorld();
-    if (point) setFogStart(point);
+    if (point) setFogStart(clampToWorld(point));
   };
 
   const handleFogMove = () => {
     if (!fogStart || (props.tool !== "FOG" && props.tool !== "COVER")) return;
     const point = pointerInWorld();
     if (!point) return;
+    const bounded = clampToWorld(point);
     setFogDraft({
-      x: Math.min(fogStart.x, point.x),
-      y: Math.min(fogStart.y, point.y),
-      width: Math.abs(point.x - fogStart.x),
-      height: Math.abs(point.y - fogStart.y),
+      x: Math.min(fogStart.x, bounded.x),
+      y: Math.min(fogStart.y, bounded.y),
+      width: Math.abs(bounded.x - fogStart.x),
+      height: Math.abs(bounded.y - fogStart.y),
     });
   };
 
@@ -264,7 +304,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     handleFogDown();
     const point = pointerInWorld();
     if (!point) return;
-    if (props.tool === "DRAW") setDrawingPoints([point.x, point.y]);
+    const bounded = clampToWorld(point);
+    if (props.tool === "DRAW") setDrawingPoints([bounded.x, bounded.y]);
     if (props.tool === "RULER") setRulerStart(point);
   };
 
@@ -272,8 +313,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     handleFogMove();
     const point = pointerInWorld();
     if (!point) return;
-    if (props.tool === "DRAW" && drawingPoints.length)
-      setDrawingPoints((current) => [...current, point.x, point.y]);
+    if (props.tool === "DRAW" && drawingPoints.length) {
+      const bounded = clampToWorld(point);
+      setDrawingPoints((current) => [...current, bounded.x, bounded.y]);
+    }
     if (props.tool === "RULER" && rulerStart)
       props.socket?.emit("ruler:update", {
         sceneId: props.scene.id,
@@ -300,6 +343,21 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     props.scene.grid.enabled
       ? Math.round(value / props.scene.grid.size) * props.scene.grid.size
       : value;
+  const gridCellKey = (x: number, y: number) => {
+    const size = props.scene.grid.enabled ? props.scene.grid.size : 64;
+    return `${Math.floor((x - props.scene.grid.offsetX) / size)}:${Math.floor((y - props.scene.grid.offsetY) / size)}`;
+  };
+  const occupiedCells = props.tokens.reduce<Record<string, number>>(
+    (cells, token) => {
+      if (token.layer !== "MAP") {
+        const position = dragPositions[token.id] ?? token;
+        const key = gridCellKey(position.x, position.y);
+        cells[key] = (cells[key] ?? 0) + 1;
+      }
+      return cells;
+    },
+    {},
+  );
   const drawingRevealed = (points: number[], x: number, y: number) => {
     const xs = points.filter((_, index) => index % 2 === 0);
     const ys = points.filter((_, index) => index % 2 === 1);
@@ -320,27 +378,34 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     <Layer
       listening={false}
       visible={props.role === "PLAYER" || props.gmFogVisible !== false}
-      opacity={props.role === "GM" ? (props.gmFogOpacity ?? 0.35) : 1}
+      clipX={0}
+      clipY={0}
+      clipWidth={worldDraft.width}
+      clipHeight={worldDraft.height}
     >
-      <Rect
-        width={worldDraft.width}
-        height={worldDraft.height}
-        fill="#080807"
-        opacity={1}
-      />
-      {props.fogReveals.map((fog) => (
+      <Group
+        ref={fogMaskRef}
+        opacity={props.role === "GM" ? (props.gmFogOpacity ?? 0.35) : 1}
+      >
         <Rect
-          key={fog.id}
-          x={fog.x}
-          y={fog.y}
-          width={fog.width}
-          height={fog.height}
-          fill="#000"
-          globalCompositeOperation={
-            fog.operation === "COVER" ? "source-over" : "destination-out"
-          }
+          width={worldDraft.width}
+          height={worldDraft.height}
+          fill="#080807"
         />
-      ))}
+        {props.fogReveals.map((fog) => (
+          <Rect
+            key={fog.id}
+            x={fog.x}
+            y={fog.y}
+            width={fog.width}
+            height={fog.height}
+            fill="#000"
+            globalCompositeOperation={
+              fog.operation === "COVER" ? "source-over" : "destination-out"
+            }
+          />
+        ))}
+      </Group>
       {fogDraft && (
         <Rect
           {...fogDraft}
@@ -397,7 +462,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onMouseUp={handlePointerUp}
         onClick={handleClick}
       >
-        <Layer listening={false}>
+        <Layer
+          listening={false}
+          clipX={0}
+          clipY={0}
+          clipWidth={worldDraft.width}
+          clipHeight={worldDraft.height}
+        >
           <Rect
             width={worldDraft.width}
             height={worldDraft.height}
@@ -533,7 +604,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           </Layer>
         )}
 
-        <Layer>
+        <Layer
+          clipX={0}
+          clipY={0}
+          clipWidth={worldDraft.width}
+          clipHeight={worldDraft.height}
+        >
           {props.tokens
             .filter((token) => token.layer === "MAP")
             .map((token) => (
@@ -574,12 +650,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     fill="#b5623e"
                   />
                 )}
-                <Text text={token.name} y={token.height + 4} fill="#eee6d5" />
               </Group>
             ))}
         </Layer>
 
-        <Layer>
+        <Layer
+          clipX={0}
+          clipY={0}
+          clipWidth={worldDraft.width}
+          clipHeight={worldDraft.height}
+        >
           {props.drawings.map((drawing) => (
             <Line
               key={drawing.id}
@@ -627,11 +707,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
 
         {renderFog()}
 
-        <Layer>
+        <Layer
+          clipX={0}
+          clipY={0}
+          clipWidth={worldDraft.width}
+          clipHeight={worldDraft.height}
+        >
           {props.tokens
             .filter((token) => token.layer !== "MAP")
             .filter((token) => token.layer !== "GM" || showGmLayer)
             .filter((token) => token.visible || props.role === "GM")
+            .filter(
+              (token) =>
+                props.role === "GM" ||
+                (token.x + token.width > 0 &&
+                  token.y + token.height > 0 &&
+                  token.x < worldDraft.width &&
+                  token.y < worldDraft.height),
+            )
             .filter(
               (token) =>
                 props.role === "GM" ||
@@ -648,6 +741,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 (props.role === "GM" ||
                   token.controllerMembershipIds.includes(props.membershipId));
               const url = assetUrl(token.assetId);
+              const dragPosition = dragPositions[token.id];
               const common = {
                 x: 0,
                 y: 0,
@@ -659,7 +753,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 onDragMove: () => undefined,
                 onDragEnd: () => undefined,
               };
-              const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) =>
+              const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
+                setDragPositions((current) => ({
+                  ...current,
+                  [token.id]: {
+                    x: event.target.x(),
+                    y: event.target.y(),
+                    revision: token.revision,
+                  },
+                }));
                 props.socket?.emit("token:moving", {
                   actionId: crypto.randomUUID(),
                   tokenId: token.id,
@@ -669,10 +771,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   levelId: token.levelId,
                   revision: token.revision,
                 });
+              };
               const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
                 const x = snap(event.target.x());
                 const y = snap(event.target.y());
                 event.target.position({ x, y });
+                setDragPositions((current) => ({
+                  ...current,
+                  [token.id]: { x, y, revision: token.revision },
+                }));
                 props.socket?.emit(
                   "token:moved",
                   {
@@ -685,16 +792,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     revision: token.revision,
                   },
                   (ack) => {
-                    if (!ack.ok)
+                    if (!ack.ok) {
+                      setDragPositions((current) => {
+                        const next = { ...current };
+                        delete next[token.id];
+                        return next;
+                      });
                       props.socket?.emit("game:resync", ack.sequence);
+                    }
                   },
                 );
               };
               return (
                 <Group
                   key={token.id}
-                  x={token.x}
-                  y={token.y}
+                  x={dragPosition?.x ?? token.x}
+                  y={dragPosition?.y ?? token.y}
                   draggable={canMove}
                   onDragMove={onDragMove}
                   onDragEnd={onDragEnd}
@@ -712,6 +825,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     });
                   }}
                 >
+                  {(occupiedCells[
+                    gridCellKey(
+                      dragPosition?.x ?? token.x,
+                      dragPosition?.y ?? token.y,
+                    )
+                  ] ?? 0) > 1 && (
+                    <Circle
+                      x={token.width / 2}
+                      y={token.height / 2}
+                      radius={Math.max(token.width, token.height) / 2 + 5}
+                      stroke="#ffcc66"
+                      strokeWidth={3 / scale}
+                      dash={[5 / scale, 4 / scale]}
+                      listening={false}
+                    />
+                  )}
                   {url ? (
                     <TokenImage src={url} {...common} />
                   ) : (
