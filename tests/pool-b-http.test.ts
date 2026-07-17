@@ -1527,13 +1527,16 @@ describe("Pool B HTTP boundaries", () => {
             entry.data.uses?.current,
         ),
     ).toEqual([1, 2]);
-    expect(
-      snapshot
-        .json()
-        .messages.filter(
-          (message: { kind: string }) => message.kind === "SYSTEM",
-        ),
-    ).toHaveLength(4);
+    const systemBodies = snapshot
+      .json()
+      .messages.filter((message: { kind: string }) => message.kind === "SYSTEM")
+      .map((message: { body: string }) => message.body);
+    expect(systemBodies).toHaveLength(4);
+    expect(systemBodies.slice(-3)).toEqual([
+      "День кампании: 8. Перезаряжено: 1.",
+      "Бой #1 начат.",
+      "Бой #1 завершён. Перезаряжено: 1.",
+    ]);
   });
 
   it("rejects foreign ownership, player clock access, malformed use models and stale revisions", async () => {

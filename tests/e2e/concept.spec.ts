@@ -561,7 +561,7 @@ test("player opens the character drawer while chat remains visible", async ({
   await expect(page.getByRole("button", { name: "Персонаж" })).toBeFocused();
 });
 
-test("wallet draft sends one intended mutation and ignores unchanged blur", async ({
+test("wallet queues rapid mutations and ignores unchanged blur", async ({
   page,
 }) => {
   const playerSnapshot = structuredClone(snapshot);
@@ -574,6 +574,7 @@ test("wallet draft sends one intended mutation and ignores unchanged blur", asyn
   playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
   playerSnapshot.members = [playerSnapshot.me];
   const submittedGold: number[] = [];
+  const submittedRevisions: number[] = [];
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
@@ -584,8 +585,12 @@ test("wallet draft sends one intended mutation and ignores unchanged blur", asyn
   await page.route("**/api/characters/*/counters", async (route) => {
     const payload = route.request().postDataJSON() as {
       wallet: (typeof playerSnapshot.characters)[0]["wallet"];
+      revision: number;
     };
     submittedGold.push(payload.wallet.gold);
+    submittedRevisions.push(payload.revision);
+    if (submittedGold.length === 1)
+      await new Promise((resolve) => setTimeout(resolve, 100));
     playerSnapshot.characters[0]!.wallet = payload.wallet;
     playerSnapshot.characters[0]!.revision += 1;
     await route.fulfill({
@@ -606,13 +611,135 @@ test("wallet draft sends one intended mutation and ignores unchanged blur", asyn
   expect(submittedGold).toEqual([]);
 
   await goldRow.locator("button").last().click();
-  await expect.poll(() => submittedGold).toEqual([1]);
-  await expect(input).toHaveValue("1");
+  await goldRow.locator("button").last().click();
+  await goldRow.locator("button").last().click();
+  await input.focus();
+  await page.locator(".drawer-heading strong").click();
+  await expect.poll(() => submittedGold).toEqual([1, 2, 3]);
+  expect(submittedRevisions).toEqual([1, 2, 3]);
+  await expect(input).toHaveValue("3");
 
   await input.fill("5");
   await goldRow.locator("button").last().click();
-  await expect.poll(() => submittedGold).toEqual([1, 6]);
+  await expect.poll(() => submittedGold).toEqual([1, 2, 3, 6]);
   await expect(input).toHaveValue("6");
+});
+
+test("resource conflict replaces the draft with canonical bootstrap data", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]!.id,
+  };
+  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.characters[0]!.resources = {
+    mana: { current: 2, maximum: 10 },
+  };
+  playerSnapshot.members = [playerSnapshot.me];
+  let requests = 0;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    }),
+  );
+  await page.route("**/api/characters/*/counters", (route) => {
+    requests += 1;
+    playerSnapshot.characters[0]!.resources = {
+      mana: { current: 8, maximum: 10 },
+    };
+    playerSnapshot.characters[0]!.revision += 1;
+    return route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "CHARACTER_CONFLICT",
+        revision: playerSnapshot.characters[0]!.revision,
+      }),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Персонаж" }).click();
+  const resources = page
+    .locator(".player-character-drawer textarea:visible")
+    .nth(1);
+  await resources.fill('{"mana":{"current":5,"maximum":10}}');
+  await page.locator(".drawer-heading strong").click();
+
+  await expect.poll(() => requests).toBe(1);
+  await expect(resources).toHaveValue(
+    JSON.stringify({ mana: { current: 8, maximum: 10 } }, null, 2),
+  );
+  await expect(page.getByRole("alert")).toContainText(
+    "Ресурсы изменены в другой сессии",
+  );
+});
+
+test("wallet refreshes and safely reapplies a delta after a stale revision", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]!.id,
+  };
+  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.members = [playerSnapshot.me];
+  let bootstrapCount = 0;
+  const submissions: Array<{ gold: number; revision: number }> = [];
+  await page.route("**/api/bootstrap", (route) => {
+    bootstrapCount += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    });
+  });
+  await page.route("**/api/characters/*/counters", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      wallet: (typeof playerSnapshot.characters)[0]["wallet"];
+      revision: number;
+    };
+    submissions.push({ gold: payload.wallet.gold, revision: payload.revision });
+    if (submissions.length === 1) {
+      playerSnapshot.characters[0]!.wallet.gold = 10;
+      playerSnapshot.characters[0]!.revision = 2;
+      return route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "CHARACTER_CONFLICT", revision: 2 }),
+      });
+    }
+    playerSnapshot.characters[0]!.wallet = payload.wallet;
+    playerSnapshot.characters[0]!.revision += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot.characters[0]),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Персонаж" }).click();
+  const goldRow = page
+    .locator(".player-character-drawer .inline-fields")
+    .filter({ hasText: /^gold/ });
+  await goldRow.locator("button").last().click();
+
+  await expect
+    .poll(() => submissions)
+    .toEqual([
+      { gold: 1, revision: 1 },
+      { gold: 11, revision: 2 },
+    ]);
+  expect(bootstrapCount).toBeGreaterThanOrEqual(2);
+  await expect(goldRow.locator('input[type="number"]')).toHaveValue("11");
 });
 
 test("player fog keeps covered foreign tokens hidden while owned tokens remain visible", async ({

@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessageDto } from "@arken/contracts";
-import { addRollToast, removeRollToast, type RollToast } from "./toast-state";
+import {
+  addRollToast,
+  removeRollToast,
+  scheduleRollToastRemoval,
+  shouldShowRollToast,
+  type RollToast,
+} from "./toast-state";
 
 const toast = (id: string, appearanceId: number): RollToast => ({
   message: { id } as ChatMessageDto,
@@ -8,6 +14,25 @@ const toast = (id: string, appearanceId: number): RollToast => ({
 });
 
 describe("roll toast queue", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("suppresses roll notifications while their result is visible in chat", () => {
+    expect(shouldShowRollToast(true, "DICE", true)).toBe(false);
+    expect(shouldShowRollToast(true, "DICE", false)).toBe(true);
+    expect(shouldShowRollToast(true, "TEXT", false)).toBe(false);
+    expect(shouldShowRollToast(false, "DICE", false)).toBe(false);
+  });
+
+  it("expires an appearance after exactly five seconds", () => {
+    vi.useFakeTimers();
+    const expired = vi.fn();
+    scheduleRollToastRemoval(expired);
+
+    vi.advanceTimersByTime(4999);
+    expect(expired).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(expired).toHaveBeenCalledOnce();
+  });
   it("is bounded to the three newest appearances", () => {
     const result = ["1", "2", "3", "4"].reduce(
       (current, id, index) => addRollToast(current, toast(id, index)),

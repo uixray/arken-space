@@ -19,7 +19,13 @@ import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
 import { MusicBar } from "./MusicBar";
 import { appendChatMessage } from "./chat-state";
-import { addRollToast, removeRollToast, type RollToast } from "./toast-state";
+import {
+  addRollToast,
+  removeRollToast,
+  scheduleRollToastRemoval,
+  shouldShowRollToast,
+  type RollToast,
+} from "./toast-state";
 import { notify } from "./ui/notifications";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
@@ -434,7 +440,7 @@ export function App() {
           ? appendChatMessage(current, event.data, event.sequence)
           : current,
       );
-      if (unseen && event.data.kind === "DICE" && !chatOpenRef.current) {
+      if (shouldShowRollToast(unseen, event.data.kind, chatOpenRef.current)) {
         const appearanceId = ++toastAppearanceRef.current;
         let added = false;
         setRollToasts((current) => {
@@ -445,12 +451,12 @@ export function App() {
           added = next !== current;
           return next;
         });
-        window.setTimeout(() => {
+        scheduleRollToastRemoval(() => {
           if (added)
             setRollToasts((current) =>
               removeRollToast(current, event.data.id, appearanceId),
             );
-        }, 5000);
+        });
       }
     });
     next.on("character:updated", (event) =>
@@ -565,6 +571,124 @@ export function App() {
           characterMutationQueuesRef.current.delete(id);
       });
     characterMutationQueuesRef.current.set(id, queueTail);
+    return operation
+      .then(() => undefined)
+      .catch(async (reason) => {
+        await queueTail;
+        throw reason;
+      });
+  };
+
+  const updateCharacterCounters = (
+    characterId: string,
+    requestedRevision: number,
+    patch: {
+      wallet?: import("@arken/contracts").CharacterDto["wallet"];
+      resources?: import("@arken/contracts").CharacterDto["resources"];
+    },
+    intent?: {
+      walletDelta?: {
+        key: keyof import("@arken/contracts").CharacterDto["wallet"];
+        delta: number;
+      };
+    },
+  ) => {
+    const previous =
+      characterMutationQueuesRef.current.get(characterId) ??
+      Promise.resolve(
+        snapshot?.characters.find((character) => character.id === characterId),
+      );
+    const operation = previous.then(async (queuedCharacter) => {
+      let canonical = queuedCharacter;
+      const submit = async (base: import("@arken/contracts").CharacterDto) => {
+        const nextPatch = intent?.walletDelta
+          ? {
+              wallet: {
+                ...base.wallet,
+                [intent.walletDelta.key]: Math.max(
+                  0,
+                  base.wallet[intent.walletDelta.key] +
+                    intent.walletDelta.delta,
+                ),
+              },
+            }
+          : patch;
+        return api<import("@arken/contracts").CharacterDto>(
+          `/api/characters/${characterId}/counters`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              ...nextPatch,
+              actionId: crypto.randomUUID(),
+              revision: base.revision,
+            }),
+          },
+        );
+      };
+      if (!canonical) {
+        const refreshed = await api<GameSnapshot>("/api/bootstrap");
+        setSnapshot(refreshed);
+        canonical = refreshed.characters.find(
+          (character) => character.id === characterId,
+        );
+      }
+      if (!canonical)
+        throw new Error("Персонаж больше не доступен. Обновите страницу.");
+      try {
+        const updated = await submit({
+          ...canonical,
+          revision: canonical.revision ?? requestedRevision,
+        });
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                characters: current.characters.map((character) =>
+                  character.id === characterId ? updated : character,
+                ),
+              }
+            : current,
+        );
+        return updated;
+      } catch (reason) {
+        if (
+          !(reason instanceof ApiError) ||
+          reason.code !== "CHARACTER_CONFLICT"
+        )
+          throw reason;
+        const refreshed = await api<GameSnapshot>("/api/bootstrap");
+        setSnapshot(refreshed);
+        const freshCharacter = refreshed.characters.find(
+          (character) => character.id === characterId,
+        );
+        if (!freshCharacter || !intent?.walletDelta) throw reason;
+        const updated = await submit(freshCharacter);
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                characters: current.characters.map((character) =>
+                  character.id === characterId ? updated : character,
+                ),
+              }
+            : current,
+        );
+        return updated;
+      }
+    });
+    const queueTail = operation
+      .catch(async () => {
+        const refreshed = await api<GameSnapshot>("/api/bootstrap");
+        setSnapshot(refreshed);
+        return refreshed.characters.find(
+          (character) => character.id === characterId,
+        );
+      })
+      .finally(() => {
+        if (characterMutationQueuesRef.current.get(characterId) === queueTail)
+          characterMutationQueuesRef.current.delete(characterId);
+      });
+    characterMutationQueuesRef.current.set(characterId, queueTail);
     return operation
       .then(() => undefined)
       .catch(async (reason) => {
@@ -1749,20 +1873,7 @@ export function App() {
                 true,
               )
             }
-            onUpdateCounters={(characterId, revision, patch) =>
-              run(
-                () =>
-                  api(`/api/characters/${characterId}/counters`, {
-                    method: "PATCH",
-                    body: JSON.stringify({
-                      ...patch,
-                      actionId: crypto.randomUUID(),
-                      revision,
-                    }),
-                  }),
-                true,
-              )
-            }
+            onUpdateCounters={updateCharacterCounters}
             onCampaignClock={(command, revision) =>
               run(
                 () =>

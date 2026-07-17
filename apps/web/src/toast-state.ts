@@ -5,6 +5,20 @@ export type RollToast = {
   appearanceId: number;
 };
 
+export const ROLL_TOAST_LIFETIME_MS = 5000;
+
+export function shouldShowRollToast(
+  unseen: boolean,
+  kind: ChatMessageDto["kind"],
+  chatVisible: boolean,
+) {
+  return unseen && kind === "DICE" && !chatVisible;
+}
+
+export function scheduleRollToastRemoval(callback: () => void) {
+  return globalThis.setTimeout(callback, ROLL_TOAST_LIFETIME_MS);
+}
+
 export function addRollToast(current: RollToast[], next: RollToast) {
   if (current.some((toast) => toast.message.id === next.message.id))
     return current;

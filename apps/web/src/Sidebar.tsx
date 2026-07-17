@@ -160,6 +160,12 @@ type Props = {
       wallet?: CharacterDto["wallet"];
       resources?: CharacterDto["resources"];
     },
+    intent?: {
+      walletDelta?: {
+        key: keyof CharacterDto["wallet"];
+        delta: number;
+      };
+    },
   ) => Promise<void>;
   onCampaignClock: (
     command: "ADVANCE_DAY" | "START_BATTLE" | "END_BATTLE",
@@ -427,7 +433,7 @@ function CharacterPanel({
   onCampaignClock: Props["onCampaignClock"];
   onUpload: Props["onUpload"];
 }) {
-  const [countersPending, setCountersPending] = useState(false);
+  const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
   const [entryEditor, setEntryEditor] = useState<
     CharacterDto["entries"][number] | null
@@ -437,9 +443,19 @@ function CharacterPanel({
   const [walletDraft, setWalletDraft] = useState(
     () => character?.wallet ?? { gold: 0, silver: 0, copper: 0, sp: 0 },
   );
+  const walletDraftRef = useRef(walletDraft);
+  const walletInputDirtyRef = useRef(false);
+  const [resourcesDraft, setResourcesDraft] = useState(() =>
+    JSON.stringify(character?.resources ?? {}, null, 2),
+  );
   useEffect(() => {
-    if (character) setWalletDraft(character.wallet);
-  }, [character]);
+    if (character && countersPending === 0) {
+      walletDraftRef.current = character.wallet;
+      walletInputDirtyRef.current = false;
+      setWalletDraft(character.wallet);
+      setResourcesDraft(JSON.stringify(character.resources, null, 2));
+    }
+  }, [character, countersPending]);
   const editable =
     character &&
     (snapshot.me.role === "GM" ||
@@ -455,30 +471,62 @@ function CharacterPanel({
     (asset) => asset.id === character.portraitAssetId,
   );
   const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
+    if (!walletInputDirtyRef.current) return;
     if (
-      countersPending ||
       (Object.keys(nextWallet) as Array<keyof CharacterDto["wallet"]>).every(
         (key) => nextWallet[key] === character.wallet[key],
       )
-    )
+    ) {
+      walletInputDirtyRef.current = false;
       return;
+    }
+    walletInputDirtyRef.current = false;
+    walletDraftRef.current = nextWallet;
     setWalletDraft(nextWallet);
-    setCountersPending(true);
+    setCountersPending((current) => current + 1);
     setCountersError("");
     try {
       await onUpdateCounters(character.id, character.revision, {
         wallet: nextWallet,
       });
     } catch (reason) {
-      setWalletDraft(character.wallet);
       setCountersError(
         reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
           ? "Кошелёк уже изменён в другой сессии. Значения обновлены — повторите действие."
           : "Не удалось сохранить кошелёк. Проверьте соединение и повторите действие.",
       );
     } finally {
-      setCountersPending(false);
+      setCountersPending((current) => Math.max(0, current - 1));
     }
+  };
+  const changeWallet = (key: keyof CharacterDto["wallet"], delta: number) => {
+    const current = walletDraftRef.current;
+    const nextValue = Math.max(0, current[key] + delta);
+    const appliedDelta = nextValue - current[key];
+    if (appliedDelta === 0) return;
+    const next = { ...current, [key]: nextValue };
+    walletDraftRef.current = next;
+    setWalletDraft(next);
+    setCountersPending((count) => count + 1);
+    setCountersError("");
+    const intent = walletInputDirtyRef.current
+      ? undefined
+      : { walletDelta: { key, delta: appliedDelta } };
+    walletInputDirtyRef.current = false;
+    void onUpdateCounters(
+      character.id,
+      character.revision,
+      { wallet: next },
+      intent,
+    )
+      .catch((reason) => {
+        setCountersError(
+          reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+            ? "Кошелёк изменён в другой сессии. Данные обновлены; повторите изменение, если оно всё ещё нужно."
+            : "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите действие.",
+        );
+      })
+      .finally(() => setCountersPending((count) => Math.max(0, count - 1)));
   };
   return (
     <section className="panel-section">
@@ -799,11 +847,11 @@ function CharacterPanel({
       <label className="field">
         Ресурсы (JSON: имя → current/maximum)
         <FormTextArea
-          defaultValue={JSON.stringify(character.resources, null, 2)}
+          value={resourcesDraft}
           disabled={!editable}
           rows={5}
+          onChange={(event) => setResourcesDraft(event.target.value)}
           onBlur={(event) => {
-            const textarea = event.currentTarget;
             try {
               const resources = JSON.parse(
                 event.target.value,
@@ -813,16 +861,24 @@ function CharacterPanel({
                 JSON.stringify(character.resources)
               )
                 return;
+              setCountersPending((count) => count + 1);
+              setCountersError("");
               void onUpdateCounters(character.id, character.revision, {
                 resources,
-              }).catch(() => {
-                textarea.value = JSON.stringify(character.resources, null, 2);
-                setCountersError(
-                  "Не удалось сохранить ресурсы. Проверьте данные и соединение.",
+              })
+                .catch((reason) => {
+                  setCountersError(
+                    reason instanceof ApiError &&
+                      reason.code === "CHARACTER_CONFLICT"
+                      ? "Ресурсы изменены в другой сессии. Показаны актуальные значения — повторите правку при необходимости."
+                      : "Не удалось сохранить ресурсы. Проверьте данные и соединение.",
+                  );
+                })
+                .finally(() =>
+                  setCountersPending((count) => Math.max(0, count - 1)),
                 );
-              });
             } catch {
-              event.target.value = JSON.stringify(character.resources, null, 2);
+              setResourcesDraft(JSON.stringify(character.resources, null, 2));
             }
           }}
         />
@@ -834,14 +890,9 @@ function CharacterPanel({
           <span className="inline-fields" key={key}>
             <b>{key}</b>
             <Button
-              disabled={!editable || countersPending || walletDraft[key] === 0}
+              disabled={!editable || walletDraft[key] === 0}
               onPointerDown={(event) => event.preventDefault()}
-              onClick={() =>
-                void saveWallet({
-                  ...walletDraft,
-                  [key]: Math.max(0, walletDraft[key] - 1),
-                })
-              }
+              onClick={() => changeWallet(key, -1)}
             >
               −
             </Button>
@@ -849,30 +900,31 @@ function CharacterPanel({
               type="number"
               min={0}
               value={walletDraft[key]}
-              disabled={!editable || countersPending}
-              onChange={(event) =>
-                setWalletDraft((current) => ({
-                  ...current,
+              disabled={!editable}
+              onChange={(event) => {
+                const next = {
+                  ...walletDraftRef.current,
                   [key]: Math.max(
                     0,
                     Number.parseInt(event.target.value || "0", 10),
                   ),
-                }))
-              }
+                };
+                walletDraftRef.current = next;
+                walletInputDirtyRef.current = true;
+                setWalletDraft(next);
+              }}
               onBlur={() => void saveWallet(walletDraft)}
             />
             <Button
-              disabled={!editable || countersPending}
+              disabled={!editable}
               onPointerDown={(event) => event.preventDefault()}
-              onClick={() =>
-                void saveWallet({ ...walletDraft, [key]: walletDraft[key] + 1 })
-              }
+              onClick={() => changeWallet(key, 1)}
             >
               +
             </Button>
           </span>
         ))}
-        {countersPending && <span className="muted">Сохраняем…</span>}
+        {countersPending > 0 && <span className="muted">Сохраняем…</span>}
         {countersError && (
           <span className="field-error" role="alert">
             {countersError}
