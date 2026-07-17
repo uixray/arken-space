@@ -486,7 +486,7 @@ test("GM and six isolated players recover authoritative state without security l
     await pages[0]!.locator(".tabs > button").nth(2).click();
     await expect(pages[0]!.locator(".token-palette")).toBeVisible();
     await expect(pages[0]!.locator(".palette-card")).toHaveCount(1);
-    await expect(pages[0]!.locator(".palette-card strong")).toHaveText(
+    await expect(pages[0]!.locator(".palette-place strong")).toHaveText(
       runTag + " Player Token 1",
     );
     const controlledDefinitionId = playerTokens[0]!.definitionId;
@@ -516,26 +516,38 @@ test("GM and six isolated players recover authoritative state without security l
           ).length,
       )
       .toBe(placementsBefore + 1);
-    await expect(pages[0]!.locator(".tabs > button")).toHaveCount(5);
+    await expect(pages[0]!.locator(".tabs > button")).toHaveCount(4);
+    await pages[0]!
+      .getByRole("dialog", { name: "Токены" })
+      .getByRole("button", { name: "Закрыть диалоговое окно" })
+      .click();
 
     // Local audio consent is deliberately per-browser and must survive a
     // reload without changing shared playback state.
-    await pages[0]!.locator(".tabs > button").nth(3).click();
-    await expect(pages[0]!.locator(".music-bar")).toBeVisible();
-    await pages[0]!.locator(".music-bar .primary").click();
-    await expect(pages[0]!.locator(".music-bar .volume")).toBeVisible();
+    const playerMusic = pages[0]!.getByRole("region", { name: "Музыка" });
+    await expect(playerMusic).toBeVisible();
+    await playerMusic.getByRole("button", { name: "Включить звук" }).click();
+    await expect(
+      playerMusic.getByRole("slider", { name: "Личная громкость" }),
+    ).toBeVisible();
     await pages[0]!.reload();
-    await pages[0]!.locator(".tabs > button").nth(3).click();
-    await expect(pages[0]!.locator(".music-bar .volume")).toBeVisible();
+    await expect(
+      pages[0]!.getByRole("slider", { name: "Личная громкость" }),
+    ).toBeVisible();
 
     const gmConnection = await connectSocket(gm);
     connections.push(gmConnection);
     for (let index = 0; index < 5; index += 1)
       connections.push(await connectSocket(players[index]));
 
+    await gmPage.getByRole("button", { name: "Подготовка" }).click();
+    const setupDialog = gmPage.getByRole("dialog", { name: "Подготовка" });
     await expect(
-      gmPage.getByRole("button", { name: "● Player 1", exact: true }),
+      setupDialog.getByRole("button", { name: "● Player 1", exact: true }),
     ).toBeVisible();
+    await setupDialog
+      .getByRole("button", { name: "Закрыть диалоговое окно" })
+      .click();
 
     for (let index = 0; index < 5; index += 1) {
       const snapshot = connections[index + 1].snapshot;
@@ -774,12 +786,17 @@ test("GM and six isolated players recover authoritative state without security l
     await Promise.all(messageResponses.map(expectOk));
     publicMarkers.push(gmPublicMessage);
 
-    // Product gate: a roll received outside chat creates a navigable
-    // notification. Opening it focuses the exact message while the composer
-    // remains visible and usable independently of message-list scrolling.
+    // Product gate: a roll received while chat is hidden creates a toast.
+    // Closing the active workflow returns to chat, where the persistent roll
+    // card is directly visible and the transient toast is no longer needed.
     await expect(pages[0]!.locator(".roll-toast").first()).toBeVisible();
-    await pages[0]!.locator(".roll-toast-open").first().click();
-    await expect(pages[0]!.locator(".message:focus")).toHaveCount(1);
+    await pages[0]!
+      .getByRole("dialog", { name: "Токены" })
+      .getByRole("button", { name: "Закрыть диалоговое окно" })
+      .click();
+    await expect(
+      pages[0]!.locator(".message", { hasText: publicMarkers[1] }),
+    ).toBeVisible();
     await pages[0]!.locator(".message-list").evaluate((element) => {
       element.scrollTop = 0;
     });
