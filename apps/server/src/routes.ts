@@ -74,6 +74,12 @@ import { buildSnapshot } from "./snapshot.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import { normalizeLegacyEntryData } from "./entry-data.js";
 import {
+  clientEventSchema,
+  publicUploadError,
+  safeClientMessage,
+  sanitizeClientContext,
+} from "./telemetry.js";
+import {
   assertStorageCapacity,
   displayNameFromUpload,
   openStoredFile,
@@ -402,7 +408,7 @@ export function registerRoutes(
   db: Database,
   io: RealtimeServer,
 ) {
-  app.get("/healthz", async (_request, reply) => {
+  app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
       await db.execute(sql`select 1`);
       return {
@@ -609,22 +615,15 @@ export function registerRoutes(
   app.post("/api/client-logs", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const body = z
-      .object({
-        level: z.enum(["info", "warn", "error"]),
-        event: z.string().trim().min(1).max(120),
-        message: z.string().max(2000).optional(),
-        context: z.record(z.string(), z.unknown()).optional(),
-      })
-      .parse(request.body);
+    const body = clientEventSchema.parse(request.body);
     app.log[body.level](
       {
         source: "browser",
         membershipId: auth.membershipId,
         campaignId: auth.campaignId,
         event: body.event,
-        message: body.message,
-        context: body.context,
+        message: safeClientMessage(body.event),
+        context: sanitizeClientContext(body.context),
         requestId: request.id,
       },
       "client.event",
@@ -4568,7 +4567,9 @@ export function registerRoutes(
       await broadcastSnapshots(io, db, auth.campaignId);
       return reply.code(201).send(asset);
     } catch (error) {
-      return reply.code(400).send({ error: errorMessage(error) });
+      const errorCode = publicUploadError(error);
+      request.log.warn({ errorCode, actionId }, "asset.upload_rejected");
+      return reply.code(400).send({ error: errorCode });
     }
   });
 

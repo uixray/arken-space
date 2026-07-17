@@ -111,11 +111,30 @@ Production reset remains a separate go/no-go point. Do not run the destructive t
 ## Logs needed for an incident
 
 - nginx access and error logs;
-- `docker compose logs server postgres web`;
+- the bounded incident bundle described below;
 - browser-generated `client.event` records from `/api/client-logs`;
 - affected membership ID, action ID, snapshot version and approximate time.
 
 Server logs must never contain session cookies, invitation tokens or uploaded file contents.
+
+Production containers use Docker's `json-file` driver with five files of at most 10 MiB per service. After changing these limits, recreate the containers; a restart alone does not replace an existing container's logging configuration.
+
+Collect a diagnostic bundle around the reported time from the production application directory:
+
+```sh
+pnpm incident:bundle -- --since 2h
+```
+
+`--since` accepts minutes or hours and is capped at 24 hours. `--output <directory>` may select a protected destination. The collector records Compose status and bounded logs for `server`, `postgres` and `web`, applies defense-in-depth redaction, and writes a manifest. It never queries application tables and never includes database rows, environment variables, uploaded media, cookies or request bodies. Review the bundle manually before transferring it. Add nginx logs separately only after the same review and redaction.
+
+Incident bundles are temporary operational data: keep them mode `0700`/`0600`, transfer only through an approved encrypted channel, and delete local and received copies within 14 days after the incident is closed. Delete with `rm -rf -- <exact-bundle-directory>` only after verifying the resolved path is under `test-results/incidents` or the explicitly chosen incident directory.
+
+### Application record retention
+
+- `game_events` is the authoritative audit/event stream. It is retained for the lifetime of its campaign; there is no automatic age-based deletion.
+- `chat_messages` is campaign game content. It is also retained for the lifetime of its campaign; there is no automatic age-based deletion.
+- Neither table is copied into an incident bundle. Investigations should use IDs, timestamps and aggregate counts first. Reading or exporting message bodies requires a separately approved, narrowly scoped operator action.
+- Rows may be deleted only by an explicitly approved campaign/gameplay deletion workflow after a fresh verified backup and restore rehearsal. The operator receipt must record campaign ID, time window, affected row counts and backup snapshot. Ad-hoc age-based SQL and manual deletion during incident response are prohibited.
 
 ## Isolated multiplayer test
 

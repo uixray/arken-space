@@ -12,6 +12,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: unless-stopped
 
   server:
@@ -53,6 +58,11 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: unless-stopped
 
   web:
@@ -64,6 +74,11 @@ services:
     depends_on:
       server:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: unless-stopped
 
 volumes:

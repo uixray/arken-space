@@ -18,6 +18,7 @@
     "test:multiplayer": "node scripts/run-multiplayer-e2e.mjs",
     "restore:rehearse": "node scripts/run-restore-rehearsal.mjs",
     "gameplay:reset:safe": "node scripts/run-gameplay-reset-safe.mjs",
+    "incident:bundle": "node scripts/collect-incident-bundle.mjs",
     "db:generate": "pnpm --filter @arken/db generate",
     "db:migrate": "pnpm --filter @arken/db migrate",
     "db:studio": "pnpm --filter @arken/db studio",

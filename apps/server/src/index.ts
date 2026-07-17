@@ -13,6 +13,7 @@ import { env } from "./env.js";
 import { registerRealtime } from "./realtime.js";
 import { registerRoutes } from "./routes.js";
 import { ensureSeed } from "./seed.js";
+import { requestActionId } from "./telemetry.js";
 
 const app = Fastify({
   logger: { level: env.NODE_ENV === "production" ? "info" : "debug" },
@@ -32,6 +33,9 @@ await app.register(rateLimit, {
 });
 
 app.addHook("onRequest", async (request, reply) => {
+  reply.header("x-request-id", request.id);
+  const actionId = requestActionId(request.headers["x-action-id"]);
+  if (actionId) request.log = request.log.child({ actionId });
   if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
   const origin = request.headers.origin;
   if (origin && origin !== env.WEB_ORIGIN)
@@ -57,17 +61,32 @@ app.addHook("onClose", async () => {
   await client.end();
 });
 
-app.setErrorHandler((error, _request, reply) => {
+app.setErrorHandler((error, request, reply) => {
   const problem = error as Error & {
     validation?: unknown;
     statusCode?: number;
   };
-  app.log.error(problem);
-  if (problem.validation)
-    return reply
-      .code(400)
-      .send({ error: "VALIDATION_ERROR", message: problem.message });
-  return reply.code(problem.statusCode ?? 500).send({
+  const isValidationError =
+    Boolean(problem.validation) || problem.name === "ZodError";
+  const statusCode = isValidationError ? 400 : (problem.statusCode ?? 500);
+  const details = {
+    err: problem,
+    requestId: request.id,
+    actionId: requestActionId(request.headers["x-action-id"]),
+    statusCode,
+  };
+  if (statusCode >= 500)
+    request.log.error(details, "request.unexpected_failure");
+  else request.log.warn(details, "request.rejected");
+  if (isValidationError)
+    return reply.code(400).send({
+      error: "VALIDATION_ERROR",
+      message:
+        env.NODE_ENV === "production"
+          ? "Некорректные данные запроса"
+          : problem.message,
+    });
+  return reply.code(statusCode).send({
     error: "REQUEST_FAILED",
     message:
       env.NODE_ENV === "production"
