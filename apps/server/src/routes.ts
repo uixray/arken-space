@@ -55,6 +55,8 @@ import {
   chatMessages,
   drawings,
   fogReveals,
+  feedbackAttachments,
+  feedbackReports,
   gameEvents,
   invites,
   playerAccessGrants,
@@ -86,6 +88,11 @@ import {
   removeStoredUpload,
   storeUpload,
 } from "./storage.js";
+import {
+  authenticatedFeedbackFieldsSchema,
+  parseFeedbackDiagnostics,
+  publicSuggestionSchema,
+} from "./feedback.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -630,6 +637,165 @@ export function registerRoutes(
     );
     return reply.code(202).send({ ok: true });
   });
+
+  app.post(
+    "/api/feedback/suggestions",
+    {
+      bodyLimit: 16 * 1024,
+      config: { rateLimit: { max: 5, timeWindow: "1 hour" } },
+    },
+    async (request, reply) => {
+      const body = publicSuggestionSchema.parse(request.body);
+      // Bots commonly fill this invisible field. Answer successfully without
+      // retaining their payload, so the endpoint does not become an oracle.
+      if (body.website) return reply.code(202).send({ accepted: true });
+      const [created] = await db
+        .insert(feedbackReports)
+        .values({
+          kind: "SUGGESTION",
+          description: body.description,
+          contact: body.contact || null,
+          buildVersion: env.APP_VERSION,
+          buildRevision: env.BUILD_REVISION,
+          requestId: request.id,
+          diagnostics: {},
+        })
+        .returning({ id: feedbackReports.id });
+      request.log.info(
+        { reportId: created?.id },
+        "feedback.suggestion_received",
+      );
+      return reply.code(201).send({ id: created?.id, accepted: true });
+    },
+  );
+
+  app.post(
+    "/api/feedback/reports",
+    { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } },
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      if (!request.isMultipart())
+        return reply.code(415).send({ error: "MULTIPART_REQUIRED" });
+
+      const fields: Record<string, string> = {};
+      const uploads: Array<{
+        kind: "SCREENSHOT" | "USER_IMAGE";
+        buffer: Buffer;
+      }> = [];
+      for await (const part of request.parts({
+        limits: {
+          files: 2,
+          fields: 5,
+          parts: 7,
+          fileSize: env.MAX_IMAGE_BYTES,
+        },
+      })) {
+        if (part.type === "file") {
+          const kind =
+            part.fieldname === "screenshot"
+              ? "SCREENSHOT"
+              : part.fieldname === "image"
+                ? "USER_IMAGE"
+                : null;
+          if (!kind) {
+            part.file.resume();
+            return reply.code(400).send({ error: "UNKNOWN_ATTACHMENT_FIELD" });
+          }
+          if (uploads.some((upload) => upload.kind === kind)) {
+            part.file.resume();
+            return reply.code(400).send({ error: "DUPLICATE_ATTACHMENT" });
+          }
+          uploads.push({ kind, buffer: await part.toBuffer() });
+        } else {
+          if (typeof part.value !== "string" || fields[part.fieldname])
+            return reply.code(400).send({ error: "INVALID_FEEDBACK_FIELD" });
+          fields[part.fieldname] = part.value;
+        }
+      }
+      const body = authenticatedFeedbackFieldsSchema.parse(fields);
+      if (body.website) return reply.code(202).send({ accepted: true });
+      const diagnostics = parseFeedbackDiagnostics(body.diagnostics);
+
+      const incomingBytes = uploads.reduce(
+        (total, upload) => total + upload.buffer.length,
+        0,
+      );
+      if (incomingBytes > 0) {
+        const [assetUsage, attachmentUsage] = await Promise.all([
+          db.select({ used: sum(assets.sizeBytes) }).from(assets),
+          db
+            .select({ used: sum(feedbackAttachments.sizeBytes) })
+            .from(feedbackAttachments),
+        ]);
+        await assertStorageCapacity(
+          Number(assetUsage[0]?.used ?? 0) +
+            Number(attachmentUsage[0]?.used ?? 0),
+          incomingBytes,
+        );
+      }
+
+      const stored = [] as Array<
+        Awaited<ReturnType<typeof storeUpload>> & {
+          kind: "SCREENSHOT" | "USER_IMAGE";
+        }
+      >;
+      try {
+        for (const upload of uploads)
+          stored.push({
+            kind: upload.kind,
+            ...(await storeUpload(upload.buffer, "image")),
+          });
+        const report = await db.transaction(async (tx) => {
+          const [created] = await tx
+            .insert(feedbackReports)
+            .values({
+              kind: body.kind,
+              campaignId: auth.campaignId,
+              actorMembershipId: auth.membershipId,
+              title: body.title,
+              description: body.description,
+              buildVersion: env.APP_VERSION,
+              buildRevision: env.BUILD_REVISION,
+              requestId: request.id,
+              diagnostics,
+            })
+            .returning({ id: feedbackReports.id });
+          if (!created) throw new Error("FEEDBACK_CREATE_FAILED");
+          if (stored.length)
+            await tx.insert(feedbackAttachments).values(
+              stored.map((attachment) => ({
+                reportId: created.id,
+                kind: attachment.kind,
+                storageKey: attachment.storageKey,
+                mimeType: attachment.mimeType,
+                sizeBytes: attachment.sizeBytes,
+                width: attachment.width!,
+                height: attachment.height!,
+              })),
+            );
+          return created;
+        });
+        request.log.info(
+          {
+            reportId: report.id,
+            kind: body.kind,
+            attachmentCount: stored.length,
+          },
+          "feedback.report_received",
+        );
+        return reply.code(201).send({ id: report.id, accepted: true });
+      } catch (error) {
+        await Promise.all(
+          stored.map((attachment) => removeStoredUpload(attachment.storageKey)),
+        );
+        const errorCode = publicUploadError(error);
+        if (errorCode !== "UPLOAD_FAILED")
+          return reply.code(400).send({ error: errorCode });
+        throw error;
+      }
+    },
+  );
 
   app.post("/api/characters", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);

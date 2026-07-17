@@ -46,6 +46,15 @@ export const journalStatusEnum = pgEnum("journal_status", [
   "UNDONE",
   "INVALIDATED",
 ]);
+export const feedbackKindEnum = pgEnum("feedback_kind", [
+  "SUGGESTION",
+  "BUG",
+  "IDEA",
+]);
+export const feedbackAttachmentKindEnum = pgEnum("feedback_attachment_kind", [
+  "SCREENSHOT",
+  "USER_IMAGE",
+]);
 
 export const campaigns = pgTable("campaigns", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -80,6 +89,58 @@ export const memberships = pgTable(
       .notNull(),
   },
   (table) => [index("memberships_campaign_idx").on(table.campaignId)],
+);
+
+export const feedbackReports = pgTable(
+  "feedback_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    kind: feedbackKindEnum("kind").notNull(),
+    campaignId: uuid("campaign_id").references(() => campaigns.id, {
+      onDelete: "set null",
+    }),
+    actorMembershipId: uuid("actor_membership_id").references(
+      () => memberships.id,
+      { onDelete: "set null" },
+    ),
+    title: text("title").notNull().default(""),
+    description: text("description").notNull(),
+    contact: text("contact"),
+    buildVersion: text("build_version").notNull(),
+    buildRevision: text("build_revision").notNull(),
+    requestId: text("request_id").notNull(),
+    diagnostics: jsonb("diagnostics")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("feedback_reports_created_idx").on(table.createdAt),
+    index("feedback_reports_campaign_idx").on(table.campaignId),
+  ],
+);
+
+export const feedbackAttachments = pgTable(
+  "feedback_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => feedbackReports.id, { onDelete: "cascade" }),
+    kind: feedbackAttachmentKindEnum("kind").notNull(),
+    storageKey: text("storage_key").notNull().unique(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("feedback_attachments_report_idx").on(table.reportId)],
 );
 
 export const assets = pgTable("assets", {

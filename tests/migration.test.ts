@@ -30,6 +30,8 @@ describe("initial PostgreSQL migration", () => {
         "chat_messages",
         "drawings",
         "fog_reveals",
+        "feedback_attachments",
+        "feedback_reports",
         "game_events",
         "invites",
         "memberships",

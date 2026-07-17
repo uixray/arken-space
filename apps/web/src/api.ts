@@ -1,3 +1,5 @@
+import { rememberApiFailure } from "./feedback-diagnostics";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -81,6 +83,13 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       requestId,
       actionId,
     );
+    rememberApiFailure({
+      at: new Date().toISOString(),
+      status: response.status,
+      code: error.code,
+      requestId,
+      actionId,
+    });
     const operation = mutationOperation(path, method);
     if (operation)
       reportClientEvent({

@@ -169,6 +169,32 @@ code {
   color: var(--text);
   text-decoration: underline;
 }
+
+.feedback-report-form {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.feedback-field {
+  display: grid;
+  gap: 6px;
+  color: var(--g-color-text-secondary);
+  font-size: 13px;
+}
+.feedback-capture-mode [role="dialog"] {
+  visibility: hidden;
+}
+.feedback-capture {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+.feedback-capture span,
+.feedback-privacy-note {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
 .scene-title {
   font-weight: 700;
 }
@@ -1118,7 +1144,6 @@ code {
   padding: 0;
 }
 
-.auth-shell,
 .loading {
   display: grid;
   place-items: center;
@@ -1126,19 +1151,197 @@ code {
   height: 100%;
   background: #171715;
 }
+.landing-shell {
+  min-height: 100%;
+  overflow-y: auto;
+  background:
+    radial-gradient(
+      circle at 75% 0%,
+      rgba(201, 113, 70, 0.1),
+      transparent 35rem
+    ),
+    #171715;
+  color: var(--text);
+}
+.landing-header,
+.landing-hero,
+.landing-section,
+.landing-footer {
+  width: min(1120px, calc(100% - 48px));
+  margin-inline: auto;
+}
+.landing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  border-bottom: 1px solid var(--line);
+}
+.landing-header .wordmark {
+  color: inherit;
+  text-decoration: none;
+}
+.landing-badge {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: clamp(32px, 7vw, 96px);
+  align-items: center;
+  min-height: 520px;
+  padding-block: 64px;
+}
+.landing-intro h1 {
+  max-width: 16ch;
+  margin: 8px 0 20px;
+  font-size: clamp(2.25rem, 5vw, 4.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+.landing-intro > p:not(.landing-kicker) {
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+.landing-intro .landing-note {
+  margin-top: 20px;
+  padding-left: 14px;
+  border-left: 2px solid var(--accent);
+  font-size: 0.92rem;
+}
+.landing-kicker {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
 .auth-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
-  width: min(420px, calc(100vw - 48px));
+  gap: var(--space-md);
+  width: 100%;
   padding: 32px;
   border: 1px solid var(--line);
   background: var(--surface);
 }
+.auth-panel h2 {
+  margin: 6px 0 0;
+}
 .auth-panel p {
   max-width: 45ch;
+  margin: 0;
   color: var(--muted);
   line-height: 1.5;
+}
+.auth-panel label,
+.feedback-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.landing-section {
+  padding-block: 72px;
+  border-top: 1px solid var(--line);
+}
+.landing-section > h2,
+.landing-roadmap h2,
+.feedback-copy h2 {
+  margin: 8px 0 28px;
+  font-size: clamp(1.7rem, 3vw, 2.5rem);
+}
+.capability-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.capability-card {
+  min-height: 180px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.capability-card h3 {
+  margin: 0 0 12px;
+}
+.capability-card p,
+.feedback-copy > p:last-child,
+.feedback-success p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.landing-roadmap,
+.feedback-section {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(0, 1.25fr);
+  gap: clamp(32px, 7vw, 96px);
+}
+.landing-roadmap ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: roadmap;
+}
+.landing-roadmap li {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 64px;
+  border-bottom: 1px solid var(--line);
+  counter-increment: roadmap;
+}
+.landing-roadmap li::before {
+  content: counter(roadmap, decimal-leading-zero);
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.feedback-form {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.optional {
+  color: var(--muted);
+  font-weight: 400;
+}
+.feedback-honeypot {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.feedback-success {
+  align-self: start;
+  padding: 28px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.feedback-success h3 {
+  margin-top: 0;
+}
+.feedback-success button {
+  margin-top: 20px;
+}
+.landing-footer {
+  display: flex;
+  justify-content: space-between;
+  padding-block: 28px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 .wordmark {
   font-weight: 800;
@@ -1154,6 +1357,43 @@ code {
   border: 1px solid #81554f;
   background: #392522;
   color: #f0bbb4;
+}
+@media (max-width: 760px) {
+  .landing-header,
+  .landing-hero,
+  .landing-section,
+  .landing-footer {
+    width: min(100% - 28px, 560px);
+  }
+  .landing-hero,
+  .landing-roadmap,
+  .feedback-section {
+    grid-template-columns: 1fr;
+  }
+  .landing-hero {
+    min-height: auto;
+    gap: 36px;
+    padding-block: 48px;
+  }
+  .landing-intro h1 {
+    font-size: clamp(2.15rem, 12vw, 3.5rem);
+  }
+  .capability-grid {
+    grid-template-columns: 1fr;
+  }
+  .capability-card {
+    min-height: auto;
+  }
+  .landing-section {
+    padding-block: 52px;
+  }
+  .auth-panel {
+    padding: 24px;
+  }
+  .landing-footer {
+    gap: 12px;
+    flex-direction: column;
+  }
 }
 .toast {
   position: fixed;

@@ -18,6 +18,7 @@ import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
 import { MusicBar } from "./MusicBar";
+import { FeedbackReporter } from "./FeedbackReporter";
 import { appendChatMessage } from "./chat-state";
 import {
   addRollToast,
@@ -864,6 +865,13 @@ export function App() {
               ? `Просмотр: ${viewSnapshot.me.displayName}`
               : `${snapshot.me.displayName} · ${snapshot.me.role}`}
           </span>
+          {!previewSnapshot && (
+            <FeedbackReporter
+              buildVersion={snapshot.buildVersion}
+              buildRevision={snapshot.buildRevision}
+              connection={connection}
+            />
+          )}
           {previewSnapshot && (
             <button onClick={() => setPreviewSnapshot(null)}>
               Вернуться к мастеру

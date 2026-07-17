@@ -25,7 +25,7 @@ await app.register(cors, { origin: env.WEB_ORIGIN, credentials: true });
 await app.register(cookie);
 await app.register(multipart, {
   attachFieldsToBody: false,
-  limits: { files: 1 },
+  limits: { files: 2 },
 });
 await app.register(rateLimit, {
   max: env.RATE_LIMIT_MAX,
