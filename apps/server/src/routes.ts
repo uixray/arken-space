@@ -46,6 +46,10 @@ import {
   type ServerToClientEvents,
 } from "@arken/contracts";
 import {
+  betaPlayerByHandle,
+  matchesBetaPlayerIdentity,
+} from "@arken/contracts";
+import {
   assets,
   actionJournal,
   catalogEntries,
@@ -496,6 +500,34 @@ export function registerRoutes(
       body.displayName ?? invite.label,
     );
     await createSession(db, reply, result.id);
+    return { ok: true };
+  });
+
+  // Temporary closed-beta shortcut. This intentionally authenticates by a
+  // public alias and must be removed when UIX-232's recorded debt is paid.
+  app.post("/api/auth/player/:handle", async (request, reply) => {
+    const handle = z
+      .object({ handle: z.string().min(1).max(40) })
+      .parse(request.params).handle;
+    const player = betaPlayerByHandle(handle);
+    if (!player) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
+    const activeGrants = await db
+      .select({
+        membershipId: playerAccessGrants.membershipId,
+        label: playerAccessGrants.label,
+        displayName: memberships.displayName,
+      })
+      .from(playerAccessGrants)
+      .innerJoin(
+        memberships,
+        eq(playerAccessGrants.membershipId, memberships.id),
+      )
+      .where(isNull(playerAccessGrants.revokedAt));
+    const grant = activeGrants.find((candidate) =>
+      matchesBetaPlayerIdentity(player, candidate),
+    );
+    if (!grant) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
+    await createSession(db, reply, grant.membershipId);
     return { ok: true };
   });
 

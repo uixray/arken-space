@@ -1,6 +1,7 @@
 import { Button } from "@gravity-ui/uikit";
 import { useState, type FormEvent } from "react";
 import { api } from "./api";
+import { betaPlayerByHandle, betaPlayers } from "@arken/contracts";
 import { FormInput, FormTextArea } from "./ui/GravityFormControls";
 
 type FeedbackStatus = "idle" | "sending" | "sent";
@@ -35,7 +36,8 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const parts = window.location.pathname.split("/").filter(Boolean);
   const mode = parts[0];
   const token = parts[1] ?? "";
-  const hasInvitation = mode === "gm" || mode === "join";
+  const betaPlayer = mode === "play" ? betaPlayerByHandle(token) : undefined;
+  const hasInvitation = mode === "gm" || mode === "join" || Boolean(betaPlayer);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -51,6 +53,10 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
         await api("/api/auth/invite", {
           method: "POST",
           body: JSON.stringify({ token, displayName: name }),
+        });
+      else if (mode === "play" && betaPlayer)
+        await api(`/api/auth/player/${encodeURIComponent(betaPlayer.handle)}`, {
+          method: "POST",
         });
       else throw new Error("Откройте персональную ссылку мастера или игрока");
       window.history.replaceState({}, "", "/");
@@ -124,7 +130,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
                 ? "Вход мастера"
                 : mode === "join"
                   ? "Вход в кампанию"
-                  : "Нужна персональная ссылка"}
+                  : betaPlayer
+                    ? `Войти как ${betaPlayer.name}`
+                    : "Выберите игрока"}
             </h2>
           </div>
           <p>
@@ -132,7 +140,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               ? "После входа ссылка будет заменена безопасной сессией в этом браузере."
               : mode === "join"
                 ? "Укажите имя, которое увидят другие участники игры."
-                : "Попросите мастера прислать сохранённое приглашение игрока или персональную ссылку мастера."}
+                : betaPlayer
+                  ? `Публичный бета-аккаунт @${betaPlayer.handle}.`
+                  : "На время закрытого бета-теста выберите свой аккаунт."}
           </p>
           {mode === "join" && (
             <label>
@@ -162,6 +172,16 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
             >
               Войти
             </Button>
+          )}
+          {!hasInvitation && (
+            <nav className="beta-player-list" aria-label="Постоянные игроки">
+              {betaPlayers.map((player) => (
+                <a key={player.handle} href={`/play/${player.handle}`}>
+                  <strong>{player.name}</strong>
+                  <span>@{player.handle}</span>
+                </a>
+              ))}
+            </nav>
           )}
         </form>
       </section>

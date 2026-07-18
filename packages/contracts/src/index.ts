@@ -1,4 +1,9 @@
 import { z } from "zod";
+export {
+  betaPlayerByHandle,
+  betaPlayers,
+  matchesBetaPlayerIdentity,
+} from "./beta-players.js";
 
 export const roleSchema = z.enum(["GM", "PLAYER"]);
 export const projectionSchema = z.enum([

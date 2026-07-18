@@ -1,5 +1,12 @@
 # Technical debt
 
+## 2026-07-18 — Public beta player aliases have no authentication secret
+
+- The owner explicitly accepted public nickname-based account selection for the closed beta to reduce onboarding friction.
+- Anyone who can open the service can impersonate any of the six listed players and access that player's permitted campaign data/actions.
+- GM authentication remains separate and must never be exposed through this flow.
+- Before opening access beyond the known beta group, replace `/play/:handle` authentication with a personal secret, PIN, or external identity provider; revoke public alias sessions during migration.
+
 ## 2026-07-15 — Wallet formatting verified only through broken chat layout
 
 - Localized wallet audit formatting appears correct in production, but the owner could verify it only after reducing browser zoom to 50% because the chat layout is unusable at 100% with a long history.

@@ -119,6 +119,51 @@ test("public landing explains the service and accepts a suggestion", async ({
   });
 });
 
+test("public landing lists the six permanent beta players", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
+  );
+  await page.goto("/");
+  const players = page.getByRole("navigation", { name: "Постоянные игроки" });
+  await expect(players.getByRole("link")).toHaveCount(6);
+  await expect(
+    players.getByRole("link", { name: /Эд.*archinamon/ }),
+  ).toHaveAttribute("href", "/play/archinamon");
+  await expect(
+    players.getByRole("link", { name: /Андрей.*uixray/ }),
+  ).toHaveAttribute("href", "/play/uixray");
+});
+
+test("nickname link exchanges a public beta player session", async ({
+  page,
+}) => {
+  let authenticated = false;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: authenticated ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(authenticated ? baseSnapshot : {}),
+    }),
+  );
+  await page.route("**/api/auth/player/archinamon", (route) => {
+    authenticated = true;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.goto("/play/archinamon");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page.getByText(baseSnapshot.campaign.name)).toBeVisible();
+  await expect(page).toHaveURL("/");
+});
+
 for (const invitation of [
   { path: "/gm/gm-token", endpoint: "/api/auth/gm", label: "Вход мастера" },
   {
