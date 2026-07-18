@@ -12,6 +12,12 @@ export function normalizeLegacyStats(value: unknown): Record<string, number> {
   return stats;
 }
 
+export function normalizeLegacyFormula(value: string) {
+  return value
+    .replace(/\bmind\b/gi, "intelligence")
+    .replace(/\bspirit\b/gi, "willpower");
+}
+
 export function normalizeLegacyEntryData(value: unknown) {
   if (!value || typeof value !== "object") return value;
   const data = value as Record<string, unknown>;

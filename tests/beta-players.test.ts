@@ -3,6 +3,7 @@ import {
   betaPlayerByHandle,
   betaPlayers,
   matchesBetaPlayerIdentity,
+  uniqueBetaPlayerIdentity,
 } from "../packages/contracts/src/beta-players.js";
 
 describe("beta player aliases", () => {
@@ -35,5 +36,17 @@ describe("beta player aliases", () => {
         label: "Unrelated label",
       }),
     ).toBe(false);
+  });
+
+  it("allows callers to reject ambiguous duplicate matches", () => {
+    const player = betaPlayers[0];
+    const matches = [
+      { displayName: player.name, label: "first" },
+      { displayName: "other", label: player.handle },
+    ];
+    expect(uniqueBetaPlayerIdentity(player, matches)).toBeUndefined();
+    expect(uniqueBetaPlayerIdentity(player, matches.slice(0, 1))).toEqual(
+      matches[0],
+    );
   });
 });

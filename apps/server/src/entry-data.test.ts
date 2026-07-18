@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { entryDataSchema } from "@arken/contracts";
 import {
   normalizeLegacyEntryData,
+  normalizeLegacyFormula,
   normalizeLegacyStats,
 } from "./entry-data.js";
 
@@ -40,5 +41,13 @@ describe("normalizeLegacyStats", () => {
       intelligence: 9,
       willpower: 5,
     });
+  });
+});
+
+describe("normalizeLegacyFormula", () => {
+  it("maps both legacy stat names without rewriting partial words", () => {
+    expect(normalizeLegacyFormula("1d20 + mind + spirit + mastermind")).toBe(
+      "1d20 + intelligence + willpower + mastermind",
+    );
   });
 });

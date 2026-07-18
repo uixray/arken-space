@@ -45,10 +45,7 @@ import {
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@arken/contracts";
-import {
-  betaPlayerByHandle,
-  matchesBetaPlayerIdentity,
-} from "@arken/contracts";
+import { betaPlayerByHandle, uniqueBetaPlayerIdentity } from "@arken/contracts";
 import {
   assets,
   actionJournal,
@@ -78,7 +75,11 @@ import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
-import { normalizeLegacyEntryData } from "./entry-data.js";
+import {
+  normalizeLegacyEntryData,
+  normalizeLegacyFormula,
+  normalizeLegacyStats,
+} from "./entry-data.js";
 import {
   clientEventSchema,
   publicUploadError,
@@ -522,10 +523,14 @@ export function registerRoutes(
         memberships,
         eq(playerAccessGrants.membershipId, memberships.id),
       )
-      .where(isNull(playerAccessGrants.revokedAt));
-    const grant = activeGrants.find((candidate) =>
-      matchesBetaPlayerIdentity(player, candidate),
-    );
+      .where(
+        and(
+          isNull(playerAccessGrants.revokedAt),
+          eq(memberships.role, "PLAYER"),
+          eq(playerAccessGrants.campaignId, memberships.campaignId),
+        ),
+      );
+    const grant = uniqueBetaPlayerIdentity(player, activeGrants);
     if (!grant) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
     await createSession(db, reply, grant.membershipId);
     return { ok: true };
@@ -4484,7 +4489,7 @@ export function registerRoutes(
         const key = `modifier_${index}`;
         const value =
           source.type === "CHARACTERISTIC"
-            ? row.character.stats[source.key]
+            ? normalizeLegacyStats(row.character.stats)[source.key]
             : parsedData.data.values?.[source.key];
         if (value === undefined || !Number.isFinite(value))
           return reply
@@ -4620,13 +4625,10 @@ export function registerRoutes(
         .limit(1);
     }
     try {
-      const normalizedFormula = body.formula.replace(
-        /\bspirit\b/gi,
-        "willpower",
-      );
+      const normalizedFormula = normalizeLegacyFormula(body.formula);
       const result = rollFormula(
         normalizedFormula,
-        character?.stats ?? {},
+        normalizeLegacyStats(character?.stats),
         randomInt,
         body.label,
       );

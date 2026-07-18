@@ -3,6 +3,7 @@ export {
   betaPlayerByHandle,
   betaPlayers,
   matchesBetaPlayerIdentity,
+  uniqueBetaPlayerIdentity,
 } from "./beta-players.js";
 
 export const roleSchema = z.enum(["GM", "PLAYER"]);

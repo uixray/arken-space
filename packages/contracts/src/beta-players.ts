@@ -24,3 +24,12 @@ export function matchesBetaPlayerIdentity(
     (value) => value != null && expected.has(value.toLocaleLowerCase("ru")),
   );
 }
+
+export function uniqueBetaPlayerIdentity<
+  T extends { displayName: string | null; label: string | null },
+>(player: (typeof betaPlayers)[number], candidates: readonly T[]) {
+  const matches = candidates.filter((candidate) =>
+    matchesBetaPlayerIdentity(player, candidate),
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
