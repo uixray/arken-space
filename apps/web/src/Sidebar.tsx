@@ -174,6 +174,10 @@ type Props = {
   requestedChatMessageId: string | null;
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
+  workspace: "characters" | "tokens" | "scenes" | "setup" | "media" | null;
+  onWorkspaceChange: (
+    workspace: "characters" | "tokens" | "scenes" | "setup" | "media" | null,
+  ) => void;
 };
 
 export function Sidebar(props: Props) {
@@ -181,13 +185,10 @@ export function Sidebar(props: Props) {
     onChatVisibilityChange,
     onRequestedChatMessageHandled,
     requestedChatMessageId,
+    onWorkspaceChange,
+    sceneDialogRequest,
   } = props;
   const isGm = props.snapshot.me.role === "GM";
-  const [tab, setTab] = useState<
-    "character" | "chat" | "palette" | "setup" | "media" | "scenes"
-  >("chat");
-  const [playerCharacterOpen, setPlayerCharacterOpen] = useState(false);
-  const playerCharacterButtonRef = useRef<HTMLButtonElement>(null);
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const ownCharacter = props.snapshot.characters.find(
     (character) => character.ownerMembershipId === props.snapshot.me.id,
@@ -202,97 +203,40 @@ export function Sidebar(props: Props) {
 
   const openChat = (messageId?: string) => {
     setFocusedMessageId(messageId ?? null);
-    setTab("chat");
   };
-  const chatVisible = tab === "chat";
-  useEffect(
-    () => onChatVisibilityChange(chatVisible),
-    [chatVisible, onChatVisibilityChange],
-  );
+  useEffect(() => onChatVisibilityChange(true), [onChatVisibilityChange]);
   useEffect(() => {
     if (!requestedChatMessageId) return;
     setFocusedMessageId(requestedChatMessageId);
-    setTab("chat");
     onRequestedChatMessageHandled();
   }, [requestedChatMessageId, onRequestedChatMessageHandled]);
   useEffect(() => {
-    if (props.sceneDialogRequest > 0 && isGm) setTab("scenes");
-  }, [props.sceneDialogRequest, isGm]);
-  useEffect(() => {
-    if (!playerCharacterOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setPlayerCharacterOpen(false);
-      playerCharacterButtonRef.current?.focus();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [playerCharacterOpen]);
+    if (sceneDialogRequest > 0 && isGm) onWorkspaceChange("scenes");
+  }, [sceneDialogRequest, isGm, onWorkspaceChange]);
 
   return (
     <aside className={`sidebar ${!isGm ? "player-sidebar" : ""}`}>
       <nav className="tabs" aria-label="Панели">
-        <Button
-          view="flat"
-          ref={playerCharacterButtonRef}
-          aria-pressed={!isGm ? playerCharacterOpen : tab === "character"}
-          onClick={() =>
-            isGm
-              ? setTab("character")
-              : setPlayerCharacterOpen((current) => !current)
-          }
-        >
-          Персонаж
-        </Button>
-        <Button
-          view="flat"
-          aria-pressed={tab === "chat"}
-          onClick={() => openChat()}
-        >
+        <Button view="flat" aria-pressed="true" onClick={() => openChat()}>
           Чат <span>{props.snapshot.messages.length}</span>
         </Button>
-        <Button
-          view="flat"
-          aria-pressed={tab === "palette"}
-          onClick={() => setTab("palette")}
-        >
-          Токены
-        </Button>
-        {isGm && (
-          <Button
-            view="flat"
-            aria-pressed={tab === "scenes"}
-            onClick={() => setTab("scenes")}
-          >
-            Сцены
-          </Button>
-        )}
-        {isGm && (
-          <Button
-            view="flat"
-            aria-pressed={tab === "setup"}
-            onClick={() => setTab("setup")}
-          >
-            Подготовка
-          </Button>
-        )}
-        <Button
-          view="flat"
-          aria-pressed={tab === "media"}
-          onClick={() => setTab("media")}
-        >
-          Файлы
-        </Button>
       </nav>
-      <div
-        className={`panel-scroll ${tab === "chat" || tab === "setup" ? "chat-scroll" : ""}`}
-      >
-        {tab === "character" && isGm && (
+      <div className="panel-scroll chat-scroll">
+        <ChatPanel
+          snapshot={props.snapshot}
+          onChat={props.onChat}
+          onRoll={props.onRoll}
+          focusedMessageId={focusedMessageId}
+          onMessageFocused={() => setFocusedMessageId(null)}
+        />
+        {props.workspace === "characters" && (
           <ArkenDialog
             open
             footer={false}
             title="Персонажи"
-            onClose={() => setTab("chat")}
+            variant="workspace"
+            className={!isGm ? "player-character-drawer" : undefined}
+            onClose={() => props.onWorkspaceChange(null)}
           >
             <CharacterPanel
               snapshot={props.snapshot}
@@ -312,92 +256,53 @@ export function Sidebar(props: Props) {
             />
           </ArkenDialog>
         )}
-        {(tab === "chat" || tab === "setup") && (
-          <ChatPanel
-            snapshot={props.snapshot}
-            onChat={props.onChat}
-            onRoll={props.onRoll}
-            focusedMessageId={focusedMessageId}
-            onMessageFocused={() => setFocusedMessageId(null)}
-          />
-        )}
-        {tab === "palette" && (
+        {props.workspace === "tokens" && (
           <ArkenDialog
             open
             footer={false}
             title="Токены"
-            onClose={() => setTab("chat")}
+            variant="workspace"
+            onClose={() => props.onWorkspaceChange(null)}
           >
             <PalettePanel {...props} />
           </ArkenDialog>
         )}
-        {tab === "setup" && isGm && (
+        {props.workspace === "setup" && isGm && (
           <ArkenDialog
             open
             footer={false}
             title="Подготовка"
-            onClose={() => setTab("chat")}
+            variant="workspace"
+            onClose={() => props.onWorkspaceChange(null)}
           >
             <SetupPanel {...props} />
           </ArkenDialog>
         )}
-        {tab === "scenes" && isGm && (
+        {props.workspace === "scenes" && isGm && (
           <SceneManagerDialog
             open
+            variant="workspace"
             snapshot={props.snapshot}
             viewedSceneId={props.viewedSceneId}
-            onClose={() => setTab("chat")}
+            onClose={() => props.onWorkspaceChange(null)}
             onView={props.onViewScene}
             onPublish={props.onActivateScene}
             onSave={props.onSaveScene}
             onUpload={props.onUpload}
           />
         )}
-        {tab === "media" && (
+        {props.workspace === "media" && (
           <ArkenDialog
             open
             footer={false}
             title="Файлы"
-            onClose={() => setTab("chat")}
+            variant="workspace"
+            onClose={() => props.onWorkspaceChange(null)}
           >
             <MediaPanel snapshot={props.snapshot} onUpload={props.onUpload} />
           </ArkenDialog>
         )}
       </div>
-      {!isGm && playerCharacterOpen && (
-        <aside className="player-character-drawer" aria-label="Персонаж">
-          <div className="drawer-heading">
-            <strong>Персонаж</strong>
-            <Button
-              aria-label="Закрыть персонажа"
-              onClick={() => {
-                setPlayerCharacterOpen(false);
-                playerCharacterButtonRef.current?.focus();
-              }}
-            >
-              ×
-            </Button>
-          </div>
-          <div className="panel-scroll">
-            <CharacterPanel
-              snapshot={props.snapshot}
-              character={selectedCharacter}
-              selectedId={selectedCharacterId}
-              setSelectedId={setSelectedCharacterId}
-              onPatch={props.onPatchCharacter}
-              onRoll={props.onRoll}
-              onAssignEntry={props.onAssignCatalogEntry}
-              onUpdateEntry={props.onUpdateCharacterEntry}
-              onDeleteEntry={props.onDeleteCharacterEntry}
-              onRollEntry={props.onRollEntry}
-              onRechargeEntry={props.onRechargeEntry}
-              onUpdateCounters={props.onUpdateCounters}
-              onCampaignClock={props.onCampaignClock}
-              onUpload={props.onUpload}
-            />
-          </div>
-        </aside>
-      )}
     </aside>
   );
 }

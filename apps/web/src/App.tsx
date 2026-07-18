@@ -37,6 +37,9 @@ const Orthographic2DRenderer = lazy(() =>
   })),
 );
 
+type WorkspaceDestination =
+  "characters" | "tokens" | "scenes" | "setup" | "media";
+
 function CanvasHistoryControls({
   sceneId,
   disabled,
@@ -236,6 +239,21 @@ export function App() {
   const [createSceneOpen, setCreateSceneOpen] = useState(false);
   const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
   const [campaignRenameOpen, setCampaignRenameOpen] = useState(false);
+  const [workspace, setWorkspace] = useState<WorkspaceDestination | null>(null);
+  const workspaceMenuRef = useRef<HTMLDetailsElement>(null);
+
+  const handleWorkspaceChange = useCallback(
+    (nextWorkspace: WorkspaceDestination | null) => {
+      setWorkspace(nextWorkspace);
+      if (workspaceMenuRef.current) workspaceMenuRef.current.open = false;
+      if (nextWorkspace === null) {
+        requestAnimationFrame(() =>
+          workspaceMenuRef.current?.querySelector("summary")?.focus(),
+        );
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!error || !snapshot) return;
@@ -811,6 +829,47 @@ export function App() {
             </button>
           )}
         </div>
+        <details ref={workspaceMenuRef} className="workspace-menu">
+          <summary aria-label="Открыть рабочее пространство">
+            Рабочее пространство
+          </summary>
+          <div className="workspace-menu__content">
+            <button
+              type="button"
+              onClick={() => handleWorkspaceChange("characters")}
+            >
+              Персонажи
+            </button>
+            <button
+              type="button"
+              onClick={() => handleWorkspaceChange("tokens")}
+            >
+              Токены
+            </button>
+            {snapshot.me.role === "GM" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleWorkspaceChange("scenes")}
+                >
+                  Сцены
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleWorkspaceChange("setup")}
+                >
+                  Подготовка
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => handleWorkspaceChange("media")}
+            >
+              Файлы
+            </button>
+          </div>
+        </details>
         <div className="status-line">
           <MusicBar
             audio={snapshot.audio}
@@ -1449,6 +1508,8 @@ export function App() {
             requestedChatMessageId={requestedChatMessageId}
             onRequestedChatMessageHandled={handleRequestedChatMessage}
             onChatVisibilityChange={handleChatVisibilityChange}
+            workspace={workspace}
+            onWorkspaceChange={handleWorkspaceChange}
             onPlaceTokenDefinition={async (definitionId) =>
               run(() =>
                 api(`/api/token-definitions/${definitionId}/placements`, {

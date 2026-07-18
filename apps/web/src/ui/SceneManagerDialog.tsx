@@ -53,6 +53,7 @@ export function SceneManagerDialog({
   onPublish,
   onSave,
   onUpload,
+  variant = "modal",
 }: {
   open: boolean;
   snapshot: GameSnapshot;
@@ -62,6 +63,7 @@ export function SceneManagerDialog({
   onPublish: (sceneId: string) => Promise<void>;
   onSave: (scene: SceneDto | null, draft: SceneDraft) => Promise<void>;
   onUpload: (file: File, kind: "MAP") => Promise<AssetDto>;
+  variant?: "modal" | "workspace";
 }) {
   const [editing, setEditing] = useState<SceneDto | "NEW" | null>(null);
   const broadcast = snapshot.scenes.find((scene) => scene.active);
@@ -69,7 +71,13 @@ export function SceneManagerDialog({
     snapshot.tokens.filter((token) => token.sceneId === sceneId).length;
 
   return (
-    <ArkenDialog open={open} footer={false} title="Сцены" onClose={onClose}>
+    <ArkenDialog
+      open={open}
+      footer={false}
+      title="Сцены"
+      variant={variant}
+      onClose={onClose}
+    >
       <div className="scene-manager-heading">
         <p>Подготавливайте сцену локально, не переключая игроков.</p>
         <Button view="action" onClick={() => setEditing("NEW")}>

@@ -62,6 +62,7 @@ export function FeedbackReporter(props: Props) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(initialDraft);
   const [screenshot, setScreenshot] = useState<File>();
+  const [screenshotPreview, setScreenshotPreview] = useState<string>();
   const [attachment, setAttachment] = useState<File>();
   const [capturing, setCapturing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -71,10 +72,26 @@ export function FeedbackReporter(props: Props) {
     if (!open) {
       setDraft(initialDraft);
       setScreenshot(undefined);
+      setScreenshotPreview(undefined);
       setAttachment(undefined);
       setError(undefined);
     }
   }, [open]);
+
+  useEffect(
+    () => () => {
+      if (screenshotPreview) URL.revokeObjectURL(screenshotPreview);
+    },
+    [screenshotPreview],
+  );
+
+  const updateScreenshot = (file?: File) => {
+    setScreenshot(file);
+    setScreenshotPreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return file ? URL.createObjectURL(file) : undefined;
+    });
+  };
 
   const submit = async () => {
     if (!draft.title.trim() || !draft.description.trim()) {
@@ -188,7 +205,7 @@ export function FeedbackReporter(props: Props) {
               onClick={() => {
                 setCapturing(true);
                 void captureVisibleInterface()
-                  .then(setScreenshot)
+                  .then(updateScreenshot)
                   .catch(() =>
                     setError(
                       "Скриншот не сделан. Разрешите захват текущей вкладки.",
@@ -205,6 +222,20 @@ export function FeedbackReporter(props: Props) {
                 : "Вы сами выбираете вкладку для захвата"}
             </span>
           </div>
+          {screenshotPreview ? (
+            <figure className="feedback-screenshot-preview">
+              <img
+                src={screenshotPreview}
+                alt="Предпросмотр снимка интерфейса"
+              />
+              <figcaption>
+                <span>{screenshot?.name}</span>
+                <Button view="flat" size="s" onClick={() => updateScreenshot()}>
+                  Удалить снимок
+                </Button>
+              </figcaption>
+            </figure>
+          ) : null}
           <ImageUploadField
             label="Дополнительное изображение"
             hint="Необязательно; PNG, JPEG или WebP"

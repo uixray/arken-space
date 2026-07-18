@@ -158,13 +158,14 @@ test("concept shell keeps the map primary and exposes core tools", async ({
     page.getByRole("button", { name: "Перемещение" }),
   ).toHaveAttribute("aria-pressed", "true");
 
-  await page.getByRole("button", { name: "Персонаж" }).click();
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Персонажи" }).click();
   await expect(page.getByRole("heading", { name: "Картограф" })).toBeVisible();
   await expect(page.getByText("Наблюдение")).toBeVisible();
 
   await page
     .getByRole("dialog", { name: "Персонажи" })
-    .getByRole("button", { name: "Закрыть диалоговое окно" })
+    .getByRole("button", { name: "Закрыть окно" })
     .click();
   await page.getByRole("button", { name: /Чат/ }).click();
   await expect(page.getByText("Сцена готова.")).toBeVisible();
@@ -193,22 +194,19 @@ test("GM opens token and file workflows without leaving the canvas", async ({
   );
   await page.goto("/");
 
-  const tabs = page.locator(".tabs").getByRole("button");
-  await tabs.nth(2).click();
-  const tokensDialog = page.getByRole("dialog");
-  await expect(
-    tokensDialog.getByRole("heading", { name: "Токены" }),
-  ).toBeVisible();
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Токены" }).click();
+  const tokensDialog = page.getByRole("dialog", { name: "Токены" });
+  await expect(tokensDialog).toBeVisible();
   await tokensDialog.getByRole("button", { name: "Создать токен" }).click();
   await expect(page.getByRole("dialog", { name: "Новый токен" })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 
-  await page.locator(".tabs").getByRole("button", { name: "Файлы" }).click();
-  const filesDialog = page.getByRole("dialog");
-  await expect(
-    filesDialog.getByRole("heading", { name: "Файлы" }),
-  ).toBeVisible();
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Файлы" }).click();
+  const filesDialog = page.getByRole("dialog", { name: "Файлы" });
+  await expect(filesDialog).toBeVisible();
   for (const section of [
     "Карты",
     "Изображения токенов",
@@ -263,6 +261,7 @@ test("GM shell keeps essential controls accessible across desktop widths", async
 
   for (const viewport of [
     { width: 1366, height: 768 },
+    { width: 1440, height: 900 },
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
@@ -285,11 +284,18 @@ test("GM shell keeps essential controls accessible across desktop widths", async
     ]) {
       await expect(page.getByRole("button", { name: tool })).toBeVisible();
     }
-    for (const trigger of ["Токены", "Сцены", "Подготовка", "Файлы"]) {
-      await expect(
-        page.locator(".tabs").getByRole("button", { name: trigger }),
-      ).toBeVisible();
+    await expect(page.locator(".tabs").getByRole("button")).toHaveCount(1);
+    await page.locator(".workspace-menu summary").click();
+    for (const trigger of [
+      "Персонажи",
+      "Токены",
+      "Сцены",
+      "Подготовка",
+      "Файлы",
+    ]) {
+      await expect(page.getByRole("button", { name: trigger })).toBeVisible();
     }
+    await page.locator(".workspace-menu summary").click();
 
     const zoom = page.getByRole("slider", { name: "Масштаб карты" });
     await expect(zoom).toBeVisible();
@@ -305,10 +311,8 @@ test("GM shell keeps essential controls accessible across desktop widths", async
     expect(musicBox!.x + musicBox!.width).toBeLessThanOrEqual(viewport.width);
   }
 
-  await page
-    .locator(".tabs")
-    .getByRole("button", { name: "Подготовка" })
-    .click();
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Подготовка" }).click();
   await expect(page.getByRole("dialog", { name: "Подготовка" })).toBeVisible();
   await expect(page.locator("canvas").first()).toBeVisible();
 });
@@ -353,6 +357,7 @@ test("GM prepares a scene locally before publishing it to players", async ({
   });
   await page.goto("/");
 
+  await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Сцены" }).click();
   const dialog = page.getByRole("dialog", { name: "Сцены" });
   await expect(dialog.getByText("Показана игрокам")).toBeVisible();
@@ -552,13 +557,14 @@ test("player opens the character drawer while chat remains visible", async ({
   );
   await page.goto("/");
   await expect(page.locator(".chat-compose")).toBeVisible();
-  await page.getByRole("button", { name: "Персонаж" }).click();
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Персонажи" }).click();
   await expect(page.locator(".player-character-drawer")).toBeVisible();
   await expect(page.locator(".chat-compose")).toBeVisible();
   await expect(page.getByRole("button", { name: /Наблюдение/ })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".player-character-drawer")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Персонаж" })).toBeFocused();
+  await expect(page.locator(".workspace-menu summary")).toBeFocused();
 });
 
 test("wallet queues rapid mutations and ignores unchanged blur", async ({
@@ -600,21 +606,22 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
     });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Персонаж" }).click();
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Персонажи" }).click();
   const goldRow = page
     .locator(".player-character-drawer .inline-fields")
     .filter({ hasText: /^gold/ });
   const input = goldRow.locator('input[type="number"]');
 
   await input.focus();
-  await page.locator(".drawer-heading strong").click();
+  await page.locator(".arken-workspace-window__header h2").click();
   expect(submittedGold).toEqual([]);
 
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
   await input.focus();
-  await page.locator(".drawer-heading strong").click();
+  await page.locator(".arken-workspace-window__header h2").click();
   await expect.poll(() => submittedGold).toEqual([1, 2, 3]);
   expect(submittedRevisions).toEqual([1, 2, 3]);
   await expect(input).toHaveValue("3");
@@ -664,12 +671,13 @@ test("resource conflict replaces the draft with canonical bootstrap data", async
     });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Персонаж" }).click();
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Персонажи" }).click();
   const resources = page
     .locator(".player-character-drawer textarea:visible")
     .nth(1);
   await resources.fill('{"mana":{"current":5,"maximum":10}}');
-  await page.locator(".drawer-heading strong").click();
+  await page.locator(".arken-workspace-window__header h2").click();
 
   await expect.poll(() => requests).toBe(1);
   await expect(resources).toHaveValue(
@@ -726,7 +734,8 @@ test("wallet refreshes and safely reapplies a delta after a stale revision", asy
     });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Персонаж" }).click();
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Персонажи" }).click();
   const goldRow = page
     .locator(".player-character-drawer .inline-fields")
     .filter({ hasText: /^gold/ });
