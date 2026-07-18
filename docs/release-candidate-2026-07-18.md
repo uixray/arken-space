@@ -1,8 +1,8 @@
-﻿# Production release candidate вЂ” 2026-07-18
+# Production release candidate вЂ” 2026-07-18
 
 ## Release identity
 
-- Candidate revision: `a97df9aad56cb66b84b722f5c28566838461f821`
+- Candidate revision: `178d345675bec89a179d6de8a9a06b92f827b15b`
 - Included commits:
   - `6e5fb30` вЂ” UIX-228 character stability and legacy roll compatibility
   - `a97df9a` вЂ” UIX-232 trusted beta player entry links
@@ -15,7 +15,7 @@
 - Scoped profile matching regression: PASS (3 tests)
 - Lint: PASS
 - Typecheck: PASS
-- Unit/integration suite: PASS (23 files, 145 tests)
+- Unit/integration suite: PASS (23 files, 147 tests)
 - Production build: PASS
 - Playwright: PASS (20 passed, 1 credential-dependent GM exchange skipped)
 - Git worktree after commits: clean
@@ -35,19 +35,20 @@
 ## Blocking pre-deploy gates
 
 1. Push candidate revision to the public GitHub `main` branch.
-2. Create or rename six PLAYER memberships and active grants so display name or label matches:
+2. Through the authenticated GM workflow, create six starter characters and six PLAYER memberships/grants; do not rename or reuse legacy identities. Each grant label must match:
    - Р­Рґ / `archinamon`
    - РСЂР°РєР»РёР№ / `IRAKLY123`
    - Р”Р°С€Р° / `DaryaSteel`
    - Р›РµС€Р° / `VeePeeK`
    - РњРёС€Р° / `Zheludock`
    - РђРЅРґСЂРµР№ / `uixray`
-3. Confirm DNS, TLS, nginx config and at least 5 GiB free after the media reserve.
-4. Create a fresh restic snapshot and record its exact ID.
-5. Rehearse that exact snapshot against this exact 40-character candidate revision.
-6. Confirm restore evidence: checksums, counts, schema 2, cleanup, disk and production health checks.
-7. Record rollback revision `3d15ba777336c0053abfb0b179e01a42fdfb1c8f` and the fresh snapshot ID.
-8. Obtain explicit production deployment GO.
+3. Verify exactly one active PLAYER grant per alias, each bound to the intended starter character; token-controller assignment may remain empty until the GM assigns a token.
+4. Confirm DNS, TLS, nginx config and at least 5 GiB free after the media reserve.
+5. Create a fresh restic snapshot and record its exact ID.
+6. Rehearse that exact snapshot against this exact 40-character candidate revision.
+7. Confirm restore evidence: checksums, counts, schema 2, cleanup, disk and production health checks.
+8. Record rollback revision `3d15ba777336c0053abfb0b179e01a42fdfb1c8f` and the fresh snapshot ID.
+9. Obtain explicit production deployment GO.
 
 ## Post-deploy smoke
 
