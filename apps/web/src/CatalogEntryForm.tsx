@@ -155,6 +155,25 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
     if (
       actions.some(
         (action) =>
+          action.modifierSource !== "NONE" && !action.modifierKey.trim(),
+      )
+    )
+      return setError(
+        "Для каждого модификатора выберите существующую зависимость.",
+      );
+    if (
+      actions.some(
+        (action) =>
+          action.modifierSource === "CHARACTERISTIC" &&
+          !characteristics.some(([key]) => key === action.modifierKey),
+      )
+    )
+      return setError(
+        "Выбранная характеристика больше не существует. Выберите актуальную.",
+      );
+    if (
+      actions.some(
+        (action) =>
           !/^\d{0,2}d(?:2|4|6|8|10|12|20|100)(?:kh1)?$/.test(action.dice),
       )
     )

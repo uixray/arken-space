@@ -10,6 +10,7 @@ import "@gravity-ui/uikit/styles/fonts.css";
 import "@gravity-ui/uikit/styles/styles.css";
 import "./random-uuid-polyfill";
 import { App } from "./App";
+import { AppErrorBoundary } from "./AppErrorBoundary";
 import { appToaster } from "./ui/toaster";
 import "./ui/gravity-foundation.css";
 import "./styles.css";
@@ -20,7 +21,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider theme="dark" lang="ru">
       <ToasterProvider toaster={appToaster}>
-        <App />
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
         <ToasterComponent />
       </ToasterProvider>
     </ThemeProvider>

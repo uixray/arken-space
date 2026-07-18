@@ -528,9 +528,9 @@ export function registerRealtime(
               next = {
                 ...next,
                 assetId: command.assetId,
-                playing: false,
+                playing: command.assetId ? logicalPlaying : false,
                 positionSeconds: 0,
-                startedAt: null,
+                startedAt: command.assetId && logicalPlaying ? now : null,
               };
               break;
             case "PLAY":

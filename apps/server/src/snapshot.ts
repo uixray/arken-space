@@ -19,7 +19,10 @@ import {
 import type { AuthContext } from "./auth.js";
 import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import { env } from "./env.js";
-import { normalizeLegacyEntryData } from "./entry-data.js";
+import {
+  normalizeLegacyEntryData,
+  normalizeLegacyStats,
+} from "./entry-data.js";
 import { normalizeAudioDeadline } from "./audio-state.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
@@ -255,14 +258,20 @@ export async function buildSnapshot(
       name: character.name,
       ownerMembershipId: character.ownerMembershipId,
       portraitAssetId: character.portraitAssetId,
-      stats: character.stats,
-      skills: character.skills,
-      spells: character.spells,
+      stats: normalizeLegacyStats(character.stats),
+      skills: Array.isArray(character.skills) ? character.skills : [],
+      spells: Array.isArray(character.spells) ? character.spells : [],
       notes: character.notes,
       backstory: character.backstory,
-      inventory: character.inventory,
-      resources: character.resources,
-      wallet: character.wallet,
+      inventory: Array.isArray(character.inventory) ? character.inventory : [],
+      resources:
+        character.resources && typeof character.resources === "object"
+          ? character.resources
+          : {},
+      wallet:
+        character.wallet && typeof character.wallet === "object"
+          ? character.wallet
+          : { gold: 0, silver: 0, copper: 0, sp: 0 },
       entries: (entriesByCharacter.get(character.id) ?? []).map((entry) => ({
         id: entry.id,
         sourceCatalogEntryId: entry.sourceCatalogEntryId,

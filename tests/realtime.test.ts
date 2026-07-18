@@ -27,6 +27,7 @@ const ids = {
   extraOwnedToken: "10000000-0000-4000-8000-000000000008",
   enemyToken: "10000000-0000-4000-8000-000000000009",
   audioAsset: "20000000-0000-4000-8000-000000000001",
+  secondAudioAsset: "20000000-0000-4000-8000-000000000007",
   tokenAsset: "20000000-0000-4000-8000-000000000002",
   mapAsset: "20000000-0000-4000-8000-000000000003",
   foreignAudioAsset: "20000000-0000-4000-8000-000000000004",
@@ -657,7 +658,8 @@ describe("durable realtime token commands", () => {
       insert into assets
         (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
       values
-        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/audio-command', 'audio/mpeg', 10, 60);
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/audio-command', 'audio/mpeg', 10, 60),
+        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track 2', 'test/audio-command-2', 'audio/mpeg', 10, 60);
     `);
 
     const selectActionId = crypto.randomUUID();
@@ -787,6 +789,43 @@ describe("durable realtime token commands", () => {
         command: "PLAY",
       }),
     ).toMatchObject({ ok: false, status: "FORBIDDEN", reason: "GM_REQUIRED" });
+  });
+
+  it("keeps playback active when selecting another track", async () => {
+    await database.exec(`
+      insert into assets
+        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+      values
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/switch-1', 'audio/mpeg', 10, 60),
+        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track 2', 'test/switch-2', 'audio/mpeg', 10, 60);
+    `);
+    await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      command: "SELECT",
+      assetId: ids.audioAsset,
+    });
+    await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 1,
+      command: "PLAY",
+    });
+    const switched = await audioCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 2,
+      command: "SELECT",
+      assetId: ids.secondAudioAsset,
+    });
+    expect(switched).toMatchObject({
+      ok: true,
+      data: {
+        assetId: ids.secondAudioAsset,
+        playing: true,
+        positionSeconds: 0,
+        revision: 3,
+      },
+    });
+    expect(switched.data?.startedAt).not.toBeNull();
   });
 
   it("ignores client startedAt on the temporary legacy audio path", async () => {
