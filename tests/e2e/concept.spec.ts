@@ -245,6 +245,66 @@ test("GM controls music from the top bar and opens the library", async ({
   ).toHaveCount(0);
 });
 
+test("chat composer and canvas quick rolls submit explicit, server-safe intents", async ({
+  page,
+}) => {
+  const diceRequests: Array<Record<string, unknown>> = [];
+  const chatRequests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/dice", async (route) => {
+    diceRequests.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.route("**/api/chat", async (route) => {
+    chatRequests.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.goto("/");
+
+  const quickRolls = page.locator(".canvas-roll-overlay");
+  await expect(quickRolls).toBeVisible();
+  await quickRolls
+    .getByLabel("Режим быстрого броска")
+    .selectOption("ADVANTAGE");
+  await quickRolls.getByRole("button", { name: "d20" }).click();
+  await expect.poll(() => diceRequests.length).toBe(1);
+  expect(diceRequests[0]).toMatchObject({
+    formula: "1d20",
+    rollMode: "ADVANTAGE",
+  });
+
+  const composer = page.locator(".chat-compose textarea");
+  await composer.fill("Сообщение для группы");
+  await composer.press("Enter");
+  await expect.poll(() => chatRequests.length).toBe(1);
+  expect(chatRequests[0]).toMatchObject({ body: "Сообщение для группы" });
+
+  await composer.fill("/roll 1d20 + agility");
+  await page.getByRole("button", { name: "Отправить" }).click();
+  await expect.poll(() => diceRequests.length).toBe(2);
+  expect(diceRequests[1]).toMatchObject({
+    formula: "1d20 + agility",
+    rollMode: "NORMAL",
+  });
+});
+
 test("GM shell keeps essential controls accessible across desktop widths", async ({
   page,
 }) => {

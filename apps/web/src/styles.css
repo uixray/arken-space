@@ -636,6 +636,49 @@ code {
   min-height: 28px;
   padding: 3px;
 }
+.canvas-roll-overlay {
+  position: absolute;
+  z-index: 13;
+  bottom: 12px;
+  left: 50%;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px;
+  max-width: min(620px, calc(100% - 140px));
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 24px #0008;
+  transform: translateX(-50%);
+}
+.canvas-roll-dice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.canvas-roll-dice button,
+.canvas-roll-custom button {
+  min-height: 28px;
+  padding: 3px 7px;
+}
+.canvas-roll-custom {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+}
+.canvas-roll-custom input {
+  width: 112px;
+  min-width: 0;
+}
+.canvas-roll-overlay > label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
 .token-context-menu {
   position: absolute;
   z-index: 40;
@@ -892,14 +935,25 @@ code {
 }
 .roll-result {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   border: 1px solid var(--line);
   background: var(--surface-2);
 }
-.roll-result div {
+.roll-total {
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  padding: 8px;
+  border-right: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.roll-details > div {
   padding: 6px 8px 0;
   font-weight: 700;
 }
-.roll-result small {
+.roll-details small {
   padding: 0 8px 6px;
   color: var(--muted);
   font-family: ui-monospace, monospace;
@@ -920,6 +974,12 @@ code {
 }
 .chat-compose textarea {
   resize: none;
+}
+.composer-error {
+  margin: 0;
+  padding: 0 var(--space-md) var(--space-sm);
+  color: var(--danger);
+  font-size: 0.8rem;
 }
 .new-messages {
   position: absolute;

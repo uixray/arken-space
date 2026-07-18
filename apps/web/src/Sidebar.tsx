@@ -23,6 +23,7 @@ import { ArkenDialog } from "./ui/ArkenDialog";
 import { ImageUploadField } from "./ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { SceneManagerDialog, type SceneDraft } from "./ui/SceneManagerDialog";
+import { parseComposerInput } from "./chat-composer";
 
 function formatDiceBreakdown(dice: GameSnapshot["messages"][number]["dice"]) {
   if (!dice) return "";
@@ -77,6 +78,7 @@ type Props = {
     label?: string,
     visibility?: MessageVisibility,
     characterId?: string | null,
+    rollMode?: "NORMAL" | "ADVANTAGE" | "DISADVANTAGE",
   ) => Promise<void>;
   onCreateCharacter: (name: string) => Promise<void>;
   onCreateInvite: (
@@ -881,9 +883,12 @@ function ChatPanel({
   focusedMessageId: string | null;
   onMessageFocused: () => void;
 }) {
-  const [text, setText] = useState("");
-  const [formula, setFormula] = useState("2d6");
+  const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
+  const [rollMode, setRollMode] = useState<
+    "NORMAL" | "ADVANTAGE" | "DISADVANTAGE"
+  >("NORMAL");
+  const [composerError, setComposerError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
@@ -915,9 +920,22 @@ function ChatPanel({
   }, [focusedMessageId, onMessageFocused]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!text.trim()) return;
-    await onChat(text, visibility);
-    setText("");
+    const intent = parseComposerInput(composer);
+    if (intent.kind === "INVALID") {
+      setComposerError(intent.message);
+      return;
+    }
+    setComposerError("");
+    if (intent.kind === "ROLL")
+      await onRoll(
+        intent.formula,
+        undefined,
+        visibility,
+        snapshot.me.characterId,
+        rollMode,
+      );
+    else await onChat(intent.body, visibility);
+    setComposer("");
   };
   return (
     <section className="chat-panel">
@@ -958,8 +976,13 @@ function ChatPanel({
             </header>
             {message.kind === "DICE" && message.dice ? (
               <div className="roll-result">
-                <div>{message.body}</div>
-                <small>{formatDiceBreakdown(message.dice)}</small>
+                <strong className="roll-total" aria-label="Итог броска">
+                  {message.dice.total}
+                </strong>
+                <div className="roll-details">
+                  <div>{message.body}</div>
+                  <small>{formatDiceBreakdown(message.dice)}</small>
+                </div>
               </div>
             ) : (
               <p>{message.body}</p>
@@ -983,37 +1006,22 @@ function ChatPanel({
         </Button>
       )}
       <div className="chat-tools">
-        <div className="inline-fields">
-          <FormInput
-            aria-label="Формула броска"
-            value={formula}
-            onChange={(event) => setFormula(event.target.value)}
-          />
-          <Button
-            onClick={() =>
-              onRoll(formula, undefined, visibility, snapshot.me.characterId)
+        <label className="compact-select">
+          Бросок d20
+          <select
+            aria-label="Режим броска"
+            value={rollMode}
+            onChange={(event) =>
+              setRollMode(
+                event.target.value as "NORMAL" | "ADVANTAGE" | "DISADVANTAGE",
+              )
             }
           >
-            Бросить
-          </Button>
-        </div>
-        <div className="inline-fields">
-          {[2, 4, 8, 12, 20].map((sides) => (
-            <Button
-              key={sides}
-              onClick={() =>
-                onRoll(
-                  `1d${sides}`,
-                  `d${sides}`,
-                  visibility,
-                  snapshot.me.characterId,
-                )
-              }
-            >
-              d{sides}
-            </Button>
-          ))}
-        </div>
+            <option value="NORMAL">обычный</option>
+            <option value="ADVANTAGE">с преимуществом</option>
+            <option value="DISADVANTAGE">с помехой</option>
+          </select>
+        </label>
         <label className="compact-check">
           <FormInput
             type="checkbox"
@@ -1027,14 +1035,27 @@ function ChatPanel({
       </div>
       <form className="chat-compose" onSubmit={submit}>
         <FormTextArea
-          aria-label="Сообщение"
-          placeholder="Сообщение…"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
+          aria-label="Сообщение или бросок"
+          placeholder="Сообщение … или /roll 1d20 + agility"
+          value={composer}
+          onChange={(event) => setComposer(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
           rows={3}
         />
-        <Button className="primary">Отправить</Button>
+        <Button className="primary" type="submit">
+          Отправить
+        </Button>
       </form>
+      {composerError && (
+        <p className="composer-error" role="alert">
+          {composerError}
+        </p>
+      )}
     </section>
   );
 }

@@ -70,7 +70,7 @@ import {
 } from "@arken/db";
 import { createStarterCharacter } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
-import { DiceFormulaError, rollFormula } from "./dice.js";
+import { applyRollMode, DiceFormulaError, rollFormula } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
@@ -4625,12 +4625,22 @@ export function registerRoutes(
         .limit(1);
     }
     try {
-      const normalizedFormula = normalizeLegacyFormula(body.formula);
+      const normalizedFormula = applyRollMode(
+        normalizeLegacyFormula(body.formula),
+        body.rollMode ?? "NORMAL",
+      );
+      const modeLabel =
+        body.rollMode === "ADVANTAGE"
+          ? "преимущество"
+          : body.rollMode === "DISADVANTAGE"
+            ? "помеха"
+            : null;
+      const rollLabel = `${body.label ?? body.formula}${modeLabel ? ` · ${modeLabel}` : ""}`;
       const result = rollFormula(
         normalizedFormula,
         normalizeLegacyStats(character?.stats),
         randomInt,
-        body.label,
+        rollLabel,
       );
       const saved = await db.transaction(async (tx) => {
         const [row] = await tx
@@ -4641,7 +4651,7 @@ export function registerRoutes(
             characterId: character?.id ?? null,
             kind: "DICE",
             visibility: body.visibility,
-            body: body.label ?? body.formula,
+            body: rollLabel,
             dice: result,
           })
           .returning();

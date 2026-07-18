@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type FormEvent,
 } from "react";
 import type {
   AssetKind,
@@ -39,6 +40,84 @@ const Orthographic2DRenderer = lazy(() =>
 
 type WorkspaceDestination =
   "characters" | "tokens" | "scenes" | "setup" | "media";
+
+type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
+
+function CanvasRollOverlay({
+  characterId,
+  onRoll,
+}: {
+  characterId: string | null;
+  onRoll: (
+    formula: string,
+    label?: string,
+    visibility?: MessageVisibility,
+    characterId?: string | null,
+    rollMode?: RollMode,
+  ) => Promise<void>;
+}) {
+  const [formula, setFormula] = useState("1d20");
+  const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
+  const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (formula.trim())
+      void onRoll(formula, "Быстрый бросок", visibility, characterId, rollMode);
+  };
+  return (
+    <section className="canvas-roll-overlay" aria-label="Быстрые броски">
+      <div className="canvas-roll-dice" aria-label="Кости">
+        {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
+          <button
+            key={sides}
+            type="button"
+            onClick={() =>
+              void onRoll(
+                `1d${sides}`,
+                `d${sides}`,
+                visibility,
+                characterId,
+                sides === 20 ? rollMode : "NORMAL",
+              )
+            }
+          >
+            d{sides}
+          </button>
+        ))}
+      </div>
+      <form className="canvas-roll-custom" onSubmit={submit}>
+        <input
+          aria-label="Своя формула броска"
+          value={formula}
+          onChange={(event) => setFormula(event.target.value)}
+        />
+        <button type="submit">Бросить</button>
+      </form>
+      <label>
+        Режим d20
+        <select
+          aria-label="Режим быстрого броска"
+          value={rollMode}
+          onChange={(event) => setRollMode(event.target.value as RollMode)}
+        >
+          <option value="NORMAL">обычный</option>
+          <option value="ADVANTAGE">с преимуществом</option>
+          <option value="DISADVANTAGE">с помехой</option>
+        </select>
+      </label>
+      <label className="compact-check">
+        <input
+          type="checkbox"
+          checked={visibility === "GM_ONLY"}
+          onChange={(event) =>
+            setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
+          }
+        />
+        Только мастеру
+      </label>
+    </section>
+  );
+}
 
 function CanvasHistoryControls({
   sceneId,
@@ -518,6 +597,27 @@ export function App() {
       throw reason;
     }
   };
+
+  const submitRoll = async (
+    formula: string,
+    label?: string,
+    visibility = "PUBLIC" as MessageVisibility,
+    characterId: string | null = null,
+    rollMode: RollMode = "NORMAL",
+  ) =>
+    run(() =>
+      api("/api/dice", {
+        method: "POST",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          formula,
+          label,
+          visibility,
+          characterId,
+          rollMode,
+        }),
+      }),
+    );
 
   const patchCharacter = (
     id: string,
@@ -1391,6 +1491,12 @@ export function App() {
           ) : (
             <div className="empty-map">Мастер ещё не создал сцену.</div>
           )}
+          {!previewSnapshot && (
+            <CanvasRollOverlay
+              characterId={snapshot.me.characterId}
+              onRoll={submitRoll}
+            />
+          )}
           {rollToasts.length > 0 && (
             <div className="roll-toast-stack" aria-live="polite">
               {rollToasts.map(({ message, appearanceId }) => (
@@ -1590,25 +1696,7 @@ export function App() {
                 }),
               )
             }
-            onRoll={async (
-              formula,
-              label,
-              visibility = "PUBLIC" as MessageVisibility,
-              characterId = null,
-            ) =>
-              run(() =>
-                api("/api/dice", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    formula,
-                    label,
-                    visibility,
-                    characterId,
-                  }),
-                }),
-              )
-            }
+            onRoll={submitRoll}
             onCreateCharacter={async (name) =>
               run(
                 () =>

@@ -1,9 +1,38 @@
 import type { DiceResult, DiceTerm } from "@arken/contracts";
 
 const termPattern =
-  /^(?:(\d{0,3})d(\d{1,4})(kh1)?|([a-zA-Z_][a-zA-Z0-9_]*)|(\d+))$/;
+  /^(?:(\d{0,3})d(\d{1,4})(kh1|kl1)?|([a-zA-Z_][a-zA-Z0-9_]*)|(\d+))$/;
 
 export class DiceFormulaError extends Error {}
+
+export type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
+
+/**
+ * Converts a single ordinary d20 term into a server-resolved advantage or
+ * disadvantage roll. The raw formula remains an expression only: all random
+ * values are still generated in `rollFormula` on the server.
+ */
+export function applyRollMode(formula: string, rollMode: RollMode): string {
+  const compact = formula.replace(/\s+/g, "");
+  if (rollMode === "NORMAL") return compact;
+  const tokens = compact.match(/[+-]?[^+-]+/g);
+  if (!tokens?.length) throw new DiceFormulaError("Формула пуста");
+  const d20Indexes = tokens
+    .map((token, index) => ({ token, index }))
+    .filter(
+      ({ token }) =>
+        token.replace(/^[+-]/, "") === "1d20" ||
+        token.replace(/^[+-]/, "") === "d20",
+    );
+  if (d20Indexes.length !== 1)
+    throw new DiceFormulaError(
+      "Преимущество и помеха доступны для одного обычного d20 в формуле",
+    );
+  const { index, token } = d20Indexes[0]!;
+  const sign = token.startsWith("-") ? "-" : token.startsWith("+") ? "+" : "";
+  tokens[index] = `${sign}2d20${rollMode === "ADVANTAGE" ? "kh1" : "kl1"}`;
+  return tokens.join("");
+}
 
 export function rollFormula(
   formula: string,
@@ -38,9 +67,12 @@ export function rollFormula(
       if (sides < 2 || sides > 1000)
         throw new DiceFormulaError("У кости должно быть от 2 до 1000 граней");
       const rolls = Array.from({ length: count }, () => randomInt(sides) + 1);
-      const kept = match[3]
-        ? Math.max(...rolls)
-        : rolls.reduce((sum, value) => sum + value, 0);
+      const kept =
+        match[3] === "kh1"
+          ? Math.max(...rolls)
+          : match[3] === "kl1"
+            ? Math.min(...rolls)
+            : rolls.reduce((sum, value) => sum + value, 0);
       const subtotal = kept * sign;
       terms.push({
         notation: `${sign < 0 ? "-" : ""}${count}d${sides}${match[3] ?? ""}`,

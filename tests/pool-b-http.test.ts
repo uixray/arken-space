@@ -984,6 +984,46 @@ describe("Pool B HTTP boundaries", () => {
     });
   });
 
+  it("resolves requested d20 advantage and disadvantage on the server", async () => {
+    const advantage = await app.inject({
+      method: "POST",
+      url: "/api/dice",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        formula: "1d20 + agility",
+        rollMode: "ADVANTAGE",
+        visibility: "PUBLIC",
+        characterId: ids.character,
+      },
+    });
+    expect(advantage.statusCode).toBe(201);
+    const advantagePayload = advantage.json();
+    expect(advantagePayload.dice).toMatchObject({
+      terms: [expect.objectContaining({ notation: "2d20kh1" })],
+    });
+    expect(advantagePayload.body).toContain("преимущество");
+    expect(advantagePayload.dice.terms[0].rolls).toHaveLength(2);
+
+    const disadvantage = await app.inject({
+      method: "POST",
+      url: "/api/dice",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        formula: "1d20 + agility",
+        rollMode: "DISADVANTAGE",
+        visibility: "GM_ONLY",
+        characterId: ids.character,
+      },
+    });
+    expect(disadvantage.statusCode).toBe(201);
+    expect(disadvantage.json().dice).toMatchObject({
+      terms: [expect.objectContaining({ notation: "2d20kl1" })],
+    });
+    expect(disadvantage.json().body).toContain("помеха");
+  });
+
   it("enforces catalog permissions, receipts, assignment snapshots and role filtering", async () => {
     const denied = await app.inject({
       method: "POST",

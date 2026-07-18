@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DiceFormulaError, rollFormula } from "../apps/server/src/dice";
+import {
+  applyRollMode,
+  DiceFormulaError,
+  rollFormula,
+} from "../apps/server/src/dice";
 import { modifierSourceSchema } from "../packages/contracts/src";
 
 describe("rollFormula", () => {
@@ -38,6 +42,23 @@ describe("rollFormula", () => {
       terms: [{ notation: "2d20kh1", rolls: [2, 17], subtotal: 17 }],
       modifiers: [{ source: "agility", value: 3 }],
     });
+  });
+
+  it("applies advantage and disadvantage to one d20 before server rolling", () => {
+    expect(applyRollMode("1d20 + agility", "ADVANTAGE")).toBe(
+      "2d20kh1+agility",
+    );
+    expect(applyRollMode("d20 + agility", "DISADVANTAGE")).toBe(
+      "2d20kl1+agility",
+    );
+    const tie = rollFormula("2d20kl1 + agility", { agility: 2 }, () => 9);
+    expect(tie.terms[0]).toMatchObject({
+      notation: "2d20kl1",
+      rolls: [10, 10],
+      subtotal: 10,
+    });
+    expect(tie.total).toBe(12);
+    expect(() => applyRollMode("2d20", "ADVANTAGE")).toThrow(DiceFormulaError);
   });
 
   it("accepts only finite arithmetic modifier formulas and rejects code or references", () => {

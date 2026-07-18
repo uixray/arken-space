@@ -465,6 +465,8 @@ export const createChatMessageSchema = z.object({
 export const diceRequestSchema = z.object({
   actionId: actionIdSchema,
   formula: z.string().trim().min(1).max(160),
+  /** The server expands one d20 into a kept pair; the client never rolls it. */
+  rollMode: z.enum(["NORMAL", "ADVANTAGE", "DISADVANTAGE"]).default("NORMAL"),
   visibility: messageVisibilitySchema.default("PUBLIC"),
   characterId: z.string().uuid().nullable().optional(),
   label: z.string().trim().max(100).optional(),
