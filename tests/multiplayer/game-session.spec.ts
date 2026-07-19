@@ -535,11 +535,6 @@ test("GM and six isolated players recover authoritative state without security l
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
     ).toHaveCount(0);
     await pages[0]!.locator(".workspace-menu summary").click();
-    await pages[0]!
-      .getByRole("dialog", { name: "Токены" })
-      .getByRole("button", { name: "Закрыть диалоговое окно" })
-      .click();
-
     // Local audio consent is deliberately per-browser and must survive a
     // reload without changing shared playback state.
     const playerMusic = pages[0]!.getByRole("region", { name: "Музыка" });
