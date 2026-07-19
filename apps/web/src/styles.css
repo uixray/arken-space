@@ -1239,7 +1239,7 @@ code {
 .arken-workspace-window {
   position: fixed;
   /* Workspace windows must stay below Gravity's modal editor/dialog layer. */
-  z-index: calc(var(--arken-layer-dialog, 2000) - 1);
+  z-index: 1200;
   top: max(60px, 8vh);
   right: clamp(16px, 4vw, 64px);
   display: grid;
