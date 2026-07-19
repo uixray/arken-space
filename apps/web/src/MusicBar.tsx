@@ -5,6 +5,7 @@ import type { GameSocket } from "./realtime";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { EmptyState, ErrorState } from "./ui/EntityState";
 import { notify } from "./ui/notifications";
+import { isAudioConsentError } from "./audio-playback";
 
 const ENABLED_KEY = "arken.audio.enabled";
 const VOLUME_KEY = "arken.audio.volume";
@@ -76,8 +77,12 @@ export function MusicBar({
     }
     if (Math.abs(player.currentTime - expected) > 0.75)
       player.currentTime = expected;
-    if (audio.playing)
-      void player.play().catch(() => {
+    if (audio.playing && player.paused)
+      void player.play().catch((reason: unknown) => {
+        // Snapshot refreshes (including scene activation) can race with media
+        // loading and reject play() with AbortError. That is transient and
+        // must not revoke the user's local audio consent.
+        if (!isAudioConsentError(reason)) return;
         setEnabled(false);
         notify({
           title: "Браузер заблокировал звук",
