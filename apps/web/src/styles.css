@@ -1219,7 +1219,7 @@ code {
 }
 .palette-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: var(--space-sm);
 }
 .palette-card {
@@ -1230,6 +1230,7 @@ code {
   padding: var(--space-sm);
   border: 1px solid var(--line);
   background: var(--surface-2);
+  overflow: hidden;
 }
 .palette-card > * {
   min-width: 0;
@@ -1237,7 +1238,8 @@ code {
 
 .arken-workspace-window {
   position: fixed;
-  z-index: var(--arken-layer-dialog, 2000);
+  /* Workspace windows must stay below Gravity's modal editor/dialog layer. */
+  z-index: calc(var(--arken-layer-dialog, 2000) - 1);
   top: max(60px, 8vh);
   right: clamp(16px, 4vw, 64px);
   display: grid;
@@ -1300,6 +1302,16 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.palette-card .inline-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.palette-card .inline-fields button {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .danger-link {
   border-color: #73463c;
