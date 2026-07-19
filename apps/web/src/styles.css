@@ -1278,7 +1278,7 @@ code {
 }
 .palette-place {
   display: grid;
-  grid-template-rows: 72px minmax(2.5rem, auto);
+  grid-template-rows: 72px;
   gap: var(--space-xs);
   padding: 0;
   border: 0;
@@ -1298,12 +1298,13 @@ code {
   font-size: 1.35rem;
   font-weight: 800;
 }
-.palette-place strong {
-  position: static !important;
+.palette-card__title {
+  position: static;
   display: block;
   width: 100%;
   min-width: 0;
-  align-self: start;
+  padding: 0 var(--space-xs);
+  text-align: center;
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;

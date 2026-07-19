@@ -1123,8 +1123,8 @@ function PalettePanel(props: Props) {
                     {definition.name.slice(0, 2).toUpperCase()}
                   </span>
                 )}
-                <strong>{definition.name}</strong>
               </Button>
+              <strong className="palette-card__title">{definition.name}</strong>
               <FormSelect
                 aria-label={`Изображение токена ${definition.name}`}
                 value={definition.defaultAssetId ?? ""}
