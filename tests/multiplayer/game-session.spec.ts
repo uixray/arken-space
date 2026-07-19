@@ -214,10 +214,14 @@ async function claimInvite(
   await page.goto(inviteUrl);
   await page.getByLabel("Имя").fill(displayName);
   await page.getByRole("button", { name: "Войти" }).click();
-  await expect(
-    page.getByText(displayName + " · PLAYER", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Выйти" })).toBeVisible();
   await expect(page.getByText("в сети", { exact: true })).toBeVisible();
+  await expect
+    .poll(async () => (await bootstrap(context)).me)
+    .toMatchObject({
+      displayName,
+      role: "PLAYER",
+    });
   return page;
 }
 
@@ -253,8 +257,14 @@ test("GM and six isolated players recover authoritative state without security l
     const gmPage = await gm.newPage();
     await gmPage.goto("/gm/" + gmToken);
     await gmPage.getByRole("button", { name: "Войти" }).click();
-    await expect(gmPage.getByText(/Мастер · GM/)).toBeVisible();
+    await expect(gmPage.getByRole("button", { name: "Выйти" })).toBeVisible();
     await expect(gmPage.getByText("в сети", { exact: true })).toBeVisible();
+    await expect
+      .poll(async () => (await bootstrap(gm)).me)
+      .toMatchObject({
+        displayName: "Мастер",
+        role: "GM",
+      });
 
     const characterResponses = await Promise.all(
       Array.from({ length: 6 }, (_, index) =>
