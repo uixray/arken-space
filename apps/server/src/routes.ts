@@ -18,6 +18,7 @@ import {
   canvasBulkCommandSchema,
   drawingCommandSchema,
   resizeTokenSchema,
+  tokenAppearanceSchema,
   historyCommandSchema,
   sceneCanvasConfigSchema,
   updateDrawingSchema,
@@ -2135,13 +2136,27 @@ export function registerRoutes(
     if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
     if (row.token.revision !== body.revision)
       return reply.code(409).send({ error: "STALE_REVISION" });
+    // The client only exposes a proportional handle, but the server remains
+    // authoritative so an older or malicious client cannot distort a token.
+    const widthScale = body.width / row.token.width;
+    const heightScale = body.height / row.token.height;
+    const scale =
+      Math.abs(widthScale - 1) >= Math.abs(heightScale - 1)
+        ? widthScale
+        : heightScale;
+    const boundedScale = Math.min(
+      Math.min(1024 / row.token.width, 1024 / row.token.height),
+      Math.max(Math.max(16 / row.token.width, 16 / row.token.height), scale),
+    );
+    const width = Math.round(row.token.width * boundedScale);
+    const height = Math.round(row.token.height * boundedScale);
     const updated = await db.transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [saved] = await tx
         .update(tokens)
         .set({
-          width: body.width,
-          height: body.height,
+          width,
+          height,
           revision: row.token.revision + 1,
           updatedAt: new Date(),
         })
@@ -2169,6 +2184,72 @@ export function registerRoutes(
         targetId: id,
         before: { width: row.token.width, height: row.token.height },
         after: { width: saved.width, height: saved.height },
+        beforeRevision: row.token.revision,
+        afterRevision: saved.revision,
+        currentRevision: saved.revision,
+      });
+      return saved;
+    });
+    if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
+  });
+
+  app.patch("/api/tokens/:id/appearance", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = tokenAppearanceSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [row] = await db
+      .select({ token: tokens })
+      .from(tokens)
+      .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+      .where(and(eq(tokens.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
+    if (row.token.revision !== body.revision)
+      return reply.code(409).send({ error: "STALE_REVISION" });
+    const updated = await db.transaction(async (tx) => {
+      await invalidateRedoBranch(tx, auth, row.token.sceneId);
+      const [saved] = await tx
+        .update(tokens)
+        .set({
+          baseColor: body.baseColor,
+          frameColor: body.frameColor,
+          revision: row.token.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
+        .returning();
+      if (!saved) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "TOKEN_APPEARANCE_UPDATED",
+        entityType: "TOKEN",
+        entityId: id,
+        entityRevision: saved.revision,
+        payload: { baseColor: saved.baseColor, frameColor: saved.frameColor },
+      });
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: saved.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        scope: saved.layer === "GM" ? "GM" : "PUBLIC",
+        type: "TOKEN_APPEARANCE",
+        targetType: "TOKEN",
+        targetId: id,
+        before: {
+          baseColor: row.token.baseColor,
+          frameColor: row.token.frameColor,
+        },
+        after: { baseColor: saved.baseColor, frameColor: saved.frameColor },
         beforeRevision: row.token.revision,
         afterRevision: saved.revision,
         currentRevision: saved.revision,
@@ -3444,6 +3525,8 @@ export function registerRoutes(
                     rotation: token.rotation,
                     visible: token.visible,
                     locked: token.locked,
+                    baseColor: token.baseColor,
+                    frameColor: token.frameColor,
                     revision: nextRevision,
                     updatedAt: new Date(),
                   })
@@ -3478,6 +3561,8 @@ export function registerRoutes(
                     rotation: token.rotation,
                     visible: token.visible,
                     locked: token.locked,
+                    baseColor: token.baseColor,
+                    frameColor: token.frameColor,
                     revision: nextRevision,
                     updatedAt: new Date(token.updatedAt),
                   })
@@ -3660,6 +3745,8 @@ export function registerRoutes(
                   rotation: token.rotation,
                   visible: token.visible,
                   locked: token.locked,
+                  baseColor: token.baseColor,
+                  frameColor: token.frameColor,
                   revision: nextRevision,
                 })
                 .returning();
@@ -3674,6 +3761,8 @@ export function registerRoutes(
                 levelId?: string | null;
                 width?: number;
                 height?: number;
+                baseColor?: string;
+                frameColor?: string | null;
               } | null;
               if (!values || targetRevision === null) return null;
               const [updated] = await tx
@@ -3691,6 +3780,12 @@ export function registerRoutes(
                     : {}),
                   ...(values.height !== undefined
                     ? { height: values.height }
+                    : {}),
+                  ...(values.baseColor !== undefined
+                    ? { baseColor: values.baseColor }
+                    : {}),
+                  ...(values.frameColor !== undefined
+                    ? { frameColor: values.frameColor }
                     : {}),
                   revision: targetRevision + 1,
                   updatedAt: new Date(),

@@ -228,6 +228,15 @@ export const createTokenSchema = z.object({
   rotation: z.number().finite().default(0),
   visible: z.boolean().default(true),
   locked: z.boolean().default(false),
+  baseColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#b5623e"),
+  frameColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable()
+    .default(null),
   layer: tokenLayerSchema.default("PLAYER"),
   controllerMembershipIds: z.array(z.string().uuid()).max(50).optional(),
 });
@@ -262,6 +271,15 @@ export const resizeTokenSchema = z.object({
   revision: z.number().int().nonnegative(),
   width: z.number().finite().min(16).max(1024),
   height: z.number().finite().min(16).max(1024),
+});
+export const tokenAppearanceSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  baseColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  frameColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable(),
 });
 const canvasBulkTargetSchema = z.object({
   targetType: z.enum(["TOKEN", "DRAWING"]),
@@ -649,6 +667,8 @@ export interface TokenDto {
   rotation: number;
   visible: boolean;
   locked: boolean;
+  baseColor: string;
+  frameColor: string | null;
   layer: z.infer<typeof tokenLayerSchema>;
   revision: number;
 }
@@ -803,7 +823,10 @@ export interface ClientToServerEvents {
     state: z.infer<typeof audioStateUpdateSchema>,
     ack?: (result: CommandAck<AudioStateDto>) => void,
   ) => void;
-  "map:ping": (ping: { sceneId: string; x: number; y: number }) => void;
+  "map:ping": (
+    ping: { sceneId: string; x: number; y: number },
+    ack?: (result: { ok: boolean; reason?: string }) => void,
+  ) => void;
   "ruler:update": (ruler: z.infer<typeof rulerUpdateSchema>) => void;
   "ruler:clear": (ruler: { sceneId: string }) => void;
   "game:resync": (knownSequence?: number) => void;

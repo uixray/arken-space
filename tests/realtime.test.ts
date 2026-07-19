@@ -22,6 +22,7 @@ const ids = {
   player: "10000000-0000-4000-8000-000000000003",
   otherPlayer: "10000000-0000-4000-8000-000000000006",
   scene: "10000000-0000-4000-8000-000000000004",
+  inactiveScene: "10000000-0000-4000-8000-000000000018",
   token: "10000000-0000-4000-8000-000000000005",
   otherToken: "10000000-0000-4000-8000-000000000007",
   extraOwnedToken: "10000000-0000-4000-8000-000000000008",
@@ -172,6 +173,12 @@ function setAudio(
   });
 }
 
+function ping(socket: typeof gmClient, sceneId: string) {
+  return new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+    socket.emit("map:ping", { sceneId, x: 32, y: 48 }, resolve);
+  });
+}
+
 function audioCommand(
   socket: typeof gmClient,
   input:
@@ -210,7 +217,8 @@ beforeEach(async () => {
       ('${ids.player}', '${ids.campaign}', 'PLAYER', 'Player'),
       ('${ids.otherPlayer}', '${ids.campaign}', 'PLAYER', 'Other player');
     insert into scenes (id, campaign_id, name, grid) values
-      ('${ids.scene}', '${ids.campaign}', 'Active', '{"enabled":true,"size":64,"offsetX":0,"offsetY":0,"color":"#fff","opacity":0.2}');
+      ('${ids.scene}', '${ids.campaign}', 'Active', '{"enabled":true,"size":64,"offsetX":0,"offsetY":0,"color":"#fff","opacity":0.2}'),
+      ('${ids.inactiveScene}', '${ids.campaign}', 'GM draft', '{"enabled":true,"size":64,"offsetX":0,"offsetY":0,"color":"#fff","opacity":0.2}');
     update campaigns set active_scene_id = '${ids.scene}' where id = '${ids.campaign}';
     insert into tokens (id, scene_id, owner_membership_id, name, x, y, visible) values
       ('${ids.token}', '${ids.scene}', '${ids.player}', 'Player token', 0, 0, true),
@@ -286,6 +294,31 @@ afterEach(async () => {
 });
 
 describe("GM presence", () => {
+  it("delivers active-scene pings and reports a GM-only scene without recipients", async () => {
+    const activePing = new Promise<
+      Parameters<ServerToClientEvents["map:ping"]>[0]
+    >((resolve) => client.once("map:ping", resolve));
+    await expect(ping(gmClient, ids.scene)).resolves.toEqual({ ok: true });
+    await expect(activePing).resolves.toMatchObject({ sceneId: ids.scene });
+
+    let leakedToPlayer = false;
+    client.on("map:ping", (event) => {
+      if (event.sceneId === ids.inactiveScene) leakedToPlayer = true;
+    });
+    const gmOnlyPing = new Promise<
+      Parameters<ServerToClientEvents["map:ping"]>[0]
+    >((resolve) => gmClient.once("map:ping", resolve));
+    await expect(ping(gmClient, ids.inactiveScene)).resolves.toEqual({
+      ok: false,
+      reason: "NO_VISIBLE_PLAYERS",
+    });
+    await expect(gmOnlyPing).resolves.toMatchObject({
+      sceneId: ids.inactiveScene,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(leakedToPlayer).toBe(false);
+  });
+
   it("emits the campaign presence matrix only to GM sockets", async () => {
     let playerEvents = 0;
     client.on("presence:updated", () => playerEvents++);

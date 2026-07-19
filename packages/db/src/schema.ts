@@ -398,6 +398,8 @@ export const tokens = pgTable(
     rotation: doublePrecision("rotation").notNull().default(0),
     visible: boolean("visible").notNull().default(true),
     locked: boolean("locked").notNull().default(false),
+    baseColor: text("base_color").notNull().default("#b5623e"),
+    frameColor: text("frame_color"),
     revision: integer("revision").notNull().default(0),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()

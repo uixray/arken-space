@@ -56,6 +56,11 @@ export interface SceneRendererProps {
     revision: number,
     size: { width: number; height: number },
   ) => Promise<void>;
+  onTokenAppearanceChange?: (
+    tokenId: string,
+    revision: number,
+    appearance: { baseColor: string; frameColor: string | null },
+  ) => Promise<void>;
   onDrawingUpdate?: (
     drawingId: string,
     revision: number,
@@ -73,6 +78,7 @@ export interface SceneRendererProps {
   }) => Promise<void>;
   gmFogOpacity?: number;
   gmFogVisible?: boolean;
+  gmGridVisible?: boolean;
   canvasEditMode?: "BACKGROUND" | "WORLD" | null;
   onCanvasEditCancel?: () => void;
   onCanvasPatch?: (patch: {

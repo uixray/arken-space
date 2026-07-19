@@ -2367,7 +2367,7 @@ describe("Pool B HTTP boundaries", () => {
     expect(resized.statusCode).toBe(200);
     expect(resized.json()).toMatchObject({
       width: 96,
-      height: 80,
+      height: 96,
       revision: 1,
     });
     const undo = await app.inject({
@@ -2382,6 +2382,42 @@ describe("Pool B HTTP boundaries", () => {
       .from(schema.tokens)
       .where(eq(schema.tokens.id, ids.token));
     expect(restored).toMatchObject({ width: 64, height: 64, revision: 2 });
+  });
+
+  it("persists token appearance with CAS and restores it through canvas history", async () => {
+    const changed = await app.inject({
+      method: "PATCH",
+      url: `/api/tokens/${ids.token}/appearance`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        baseColor: "#285e9f",
+        frameColor: "#f0c75e",
+      },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json()).toMatchObject({
+      baseColor: "#285e9f",
+      frameColor: "#f0c75e",
+      revision: 1,
+    });
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undo.statusCode).toBe(200);
+    const [restored] = await db
+      .select()
+      .from(schema.tokens)
+      .where(eq(schema.tokens.id, ids.token));
+    expect(restored).toMatchObject({
+      baseColor: "#b5623e",
+      frameColor: null,
+      revision: 2,
+    });
   });
 
   it("moves mixed canvas targets atomically with permission, CAS, replay and compound history", async () => {

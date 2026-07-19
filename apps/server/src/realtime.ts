@@ -113,8 +113,6 @@ export async function editableToken(
     characterId: row.definition.characterId,
     assetId: row.definition.defaultAssetId,
     name: row.definition.name,
-    width: row.definition.defaultWidth,
-    height: row.definition.defaultHeight,
     controllerMembershipIds,
     definitionRevision: row.definition.revision,
   };
@@ -689,29 +687,48 @@ export function registerRealtime(
       });
     });
 
-    socket.on("map:ping", async (input) => {
-      if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) return;
-      const [active] = await db
-        .select({ sceneId: scenes.id })
+    socket.on("map:ping", async (input, ack) => {
+      if (!Number.isFinite(input.x) || !Number.isFinite(input.y))
+        return ack?.({ ok: false, reason: "INVALID_PING" });
+      const [scene] = await db
+        .select({ sceneId: scenes.id, activeSceneId: campaigns.activeSceneId })
         .from(scenes)
         .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
         .where(
           and(
             eq(scenes.id, input.sceneId),
             eq(scenes.campaignId, auth.campaignId),
-            eq(campaigns.activeSceneId, scenes.id),
           ),
         )
         .limit(1);
-      if (!active) return;
-      io.to(campaignRoom(auth.campaignId)).emit("map:ping", {
-        sceneId: active.sceneId,
+      if (!scene) return ack?.({ ok: false, reason: "SCENE_NOT_FOUND" });
+      const isPlayerScene = scene.sceneId === scene.activeSceneId;
+      if (auth.role === "PLAYER" && !isPlayerScene)
+        return ack?.({ ok: false, reason: "SCENE_NOT_ACTIVE" });
+      const recipients = isPlayerScene
+        ? (await io.in(campaignRoom(auth.campaignId)).fetchSockets())
+            .filter((candidate) => candidate.data.auth.role === "PLAYER")
+            .map((candidate) => candidate.data.auth.membershipId)
+        : [];
+      const uniqueRecipients = [...new Set(recipients)];
+      const ping = {
+        sceneId: scene.sceneId,
         membershipId: auth.membershipId,
         displayName: auth.displayName,
         x: input.x,
         y: input.y,
         createdAt: new Date().toISOString(),
-      });
+      };
+      // GMs always receive their own ping; an empty player audience is still
+      // reported explicitly so it cannot be mistaken for a delivery failure.
+      if (auth.role === "GM" && uniqueRecipients.length === 0) {
+        io.to(gmRoom(auth.campaignId)).emit("map:ping", ping);
+        return ack?.({ ok: false, reason: "NO_VISIBLE_PLAYERS" });
+      }
+      for (const membershipId of uniqueRecipients)
+        io.to(memberRoom(membershipId)).emit("map:ping", ping);
+      io.to(gmRoom(auth.campaignId)).emit("map:ping", ping);
+      ack?.({ ok: true });
     });
 
     socket.on("disconnect", (reason) => {

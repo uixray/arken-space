@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   Circle,
   Group,
@@ -72,7 +73,11 @@ function TokenImage({
   onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => void;
 }) {
   const [image] = useImage(src, "anonymous");
-  return <Image image={image} {...props} />;
+  const [lastImage, setLastImage] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    if (image) setLastImage(image);
+  }, [image]);
+  return <Image image={image ?? lastImage ?? undefined} {...props} />;
 }
 
 export function Orthographic2DRenderer(props: SceneRendererProps) {
@@ -122,6 +127,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     height: number;
   } | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
+  const drawingPointsRef = useRef<number[]>([]);
   const [backgroundDraft, setBackgroundDraft] = useState(
     props.scene.backgroundFrame,
   );
@@ -358,11 +364,21 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       return;
     }
     if (event.evt.button !== 0) return;
+    if (event.target === stageRef.current && props.tool === "PAN") {
+      setSelectedTokenIds([]);
+      setSelectedDrawingIds([]);
+      setSelectedDrawingId(null);
+      setTokenMenu(null);
+    }
     handleFogDown();
     const point = pointerInWorld();
     if (!point) return;
     const bounded = clampToWorld(point);
-    if (props.tool === "DRAW") setDrawingPoints([bounded.x, bounded.y]);
+    if (props.tool === "DRAW") {
+      const points = [bounded.x, bounded.y];
+      drawingPointsRef.current = points;
+      setDrawingPoints(points);
+    }
     if (props.tool === "RULER") setRulerStart(point);
   };
 
@@ -401,9 +417,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     handleFogMove();
     const point = pointerInWorld();
     if (!point) return;
-    if (props.tool === "DRAW" && drawingPoints.length) {
+    if (props.tool === "DRAW" && drawingPointsRef.current.length) {
       const bounded = clampToWorld(point);
-      setDrawingPoints((current) => [...current, bounded.x, bounded.y]);
+      const next = [...drawingPointsRef.current, bounded.x, bounded.y];
+      drawingPointsRef.current = next;
+      setDrawingPoints(next);
     }
     if (props.tool === "RULER" && rulerStart)
       props.socket?.emit("ruler:update", {
@@ -462,12 +480,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setMarquee(null);
       return;
     }
+    const completedDrawing = drawingPointsRef.current;
+    // Clear synchronously before the async command so a trailing preview can
+    // never survive the pointer-up frame.
+    drawingPointsRef.current = [];
+    flushSync(() => setDrawingPoints([]));
     await handleFogUp();
-    if (props.tool === "DRAW" && drawingPoints.length >= 4)
-      await props.onDrawingCreate({ points: drawingPoints, color: "#f0c75e" });
+    if (props.tool === "DRAW" && completedDrawing.length >= 4)
+      await props.onDrawingCreate({
+        points: completedDrawing,
+        color: "#f0c75e",
+      });
     if (props.tool === "RULER")
       props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
-    setDrawingPoints([]);
     setRulerStart(null);
   };
 
@@ -613,13 +638,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               height={backgroundDraft.height}
             />
           )}
-          {props.scene.grid.enabled && (
-            <Grid
-              width={worldDraft.width}
-              height={worldDraft.height}
-              {...props.scene.grid}
-            />
-          )}
+          {props.scene.grid.enabled &&
+            (props.role !== "GM" || props.gmGridVisible !== false) && (
+              <Grid
+                width={worldDraft.width}
+                height={worldDraft.height}
+                {...props.scene.grid}
+              />
+            )}
         </Layer>
 
         {props.role === "GM" && props.canvasEditMode && (
@@ -774,23 +800,36 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   />
                 )}
                 {assetUrl(token.assetId) ? (
-                  <TokenImage
-                    src={assetUrl(token.assetId)!}
-                    x={0}
-                    y={0}
-                    width={token.width}
-                    height={token.height}
-                    rotation={token.rotation}
-                    draggable={false}
-                    onDragMove={() => undefined}
-                    onDragEnd={() => undefined}
-                  />
+                  <>
+                    <TokenImage
+                      src={assetUrl(token.assetId)!}
+                      x={0}
+                      y={0}
+                      width={token.width}
+                      height={token.height}
+                      rotation={token.rotation}
+                      draggable={false}
+                      onDragMove={() => undefined}
+                      onDragEnd={() => undefined}
+                    />
+                    {token.frameColor && (
+                      <Rect
+                        width={token.width}
+                        height={token.height}
+                        stroke={token.frameColor}
+                        strokeWidth={3 / scale}
+                        listening={false}
+                      />
+                    )}
+                  </>
                 ) : (
                   <Circle
                     radius={Math.min(token.width, token.height) / 2}
                     x={token.width / 2}
                     y={token.height / 2}
-                    fill="#b5623e"
+                    fill={token.baseColor}
+                    stroke={token.frameColor ?? undefined}
+                    strokeWidth={token.frameColor ? 3 / scale : 0}
                   />
                 )}
                 {props.role === "GM" &&
@@ -808,15 +847,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                         event.cancelBubble = true;
                       }}
                       onDragMove={(event) => {
+                        const aspect = token.width / token.height;
+                        const width = Math.max(16, event.target.x());
                         event.target.position({
-                          x: Math.max(16, event.target.x()),
-                          y: Math.max(16, event.target.y()),
+                          x: width,
+                          y: Math.max(16, width / aspect),
                         });
                       }}
                       onDragEnd={(event) => {
+                        const width = Math.round(
+                          Math.max(16, event.target.x()),
+                        );
                         void props.onTokenResize?.(token.id, token.revision, {
-                          width: Math.round(Math.max(16, event.target.x())),
-                          height: Math.round(Math.max(16, event.target.y())),
+                          width,
+                          height: Math.round(
+                            width / (token.width / token.height),
+                          ),
                         });
                       }}
                     />
@@ -1081,15 +1127,26 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     />
                   )}
                   {url ? (
-                    <TokenImage src={url} {...common} />
+                    <>
+                      <TokenImage src={url} {...common} />
+                      {token.frameColor && (
+                        <Rect
+                          width={token.width}
+                          height={token.height}
+                          stroke={token.frameColor}
+                          strokeWidth={3 / scale}
+                          listening={false}
+                        />
+                      )}
+                    </>
                   ) : (
                     <Group {...common}>
                       <Circle
                         x={token.width / 2}
                         y={token.height / 2}
                         radius={Math.min(token.width, token.height) / 2}
-                        fill="#b5623e"
-                        stroke="#e2d4b4"
+                        fill={token.baseColor}
+                        stroke={token.frameColor ?? "#e2d4b4"}
                         strokeWidth={2}
                       />
                       <Text
@@ -1108,11 +1165,36 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     y={token.height + 5}
                     width={token.width + 32}
                     align="center"
-                    text={token.name}
+                    text={`${token.name}${
+                      (occupiedCells[
+                        gridCellKey(
+                          dragPosition?.x ?? token.x,
+                          dragPosition?.y ?? token.y,
+                        )
+                      ] ?? 0) > 1
+                        ? ` +${
+                            (occupiedCells[
+                              gridCellKey(
+                                dragPosition?.x ?? token.x,
+                                dragPosition?.y ?? token.y,
+                              )
+                            ] ?? 0) - 1
+                          }`
+                        : ""
+                    }`}
                     fill="#eee6d5"
                     fontSize={13}
                     listening={false}
-                    visible={hoveredTokenId === token.id || canMove}
+                    visible={
+                      hoveredTokenId === token.id ||
+                      canMove ||
+                      (occupiedCells[
+                        gridCellKey(
+                          dragPosition?.x ?? token.x,
+                          dragPosition?.y ?? token.y,
+                        )
+                      ] ?? 0) > 1
+                    }
                   />
                   {props.role === "GM" &&
                     selectedTokenIds.length === 1 &&
@@ -1129,9 +1211,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           event.cancelBubble = true;
                         }}
                         onDragMove={(event) => {
+                          const aspect = token.width / token.height;
+                          const width = Math.max(16, event.target.x());
                           event.target.position({
-                            x: Math.max(16, event.target.x()),
-                            y: Math.max(16, event.target.y()),
+                            x: width,
+                            y: Math.max(16, width / aspect),
                           });
                         }}
                         onDragEnd={(event) => {
@@ -1139,7 +1223,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                             Math.max(16, event.target.x()),
                           );
                           const height = Math.round(
-                            Math.max(16, event.target.y()),
+                            width / (token.width / token.height),
                           );
                           void props.onTokenResize?.(token.id, token.revision, {
                             width,
@@ -1223,6 +1307,55 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               {label}
             </button>
           ))}
+          <label>
+            Цвет
+            <input
+              type="color"
+              value={tokenMenu.token.baseColor}
+              onChange={(event) => {
+                setTokenMenu(null);
+                void props.onTokenAppearanceChange?.(
+                  tokenMenu.token.id,
+                  tokenMenu.token.revision,
+                  {
+                    baseColor: event.target.value,
+                    frameColor: tokenMenu.token.frameColor,
+                  },
+                );
+              }}
+            />
+          </label>
+          <label>
+            Рамка
+            <input
+              type="color"
+              value={tokenMenu.token.frameColor ?? "#e2d4b4"}
+              onChange={(event) => {
+                setTokenMenu(null);
+                void props.onTokenAppearanceChange?.(
+                  tokenMenu.token.id,
+                  tokenMenu.token.revision,
+                  {
+                    baseColor: tokenMenu.token.baseColor,
+                    frameColor: event.target.value,
+                  },
+                );
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setTokenMenu(null);
+                void props.onTokenAppearanceChange?.(
+                  tokenMenu.token.id,
+                  tokenMenu.token.revision,
+                  { baseColor: tokenMenu.token.baseColor, frameColor: null },
+                );
+              }}
+            >
+              Без рамки
+            </button>
+          </label>
           <button
             role="menuitem"
             onClick={() => {

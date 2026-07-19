@@ -289,6 +289,9 @@ export function App() {
     return Number.isFinite(stored) ? Math.min(1, Math.max(0, stored)) : 0.35;
   });
   const [gmFogVisible, setGmFogVisible] = useState(true);
+  const [gmGridVisible, setGmGridVisible] = useState(
+    () => localStorage.getItem("arken.gmGridVisible") !== "false",
+  );
   const [canvasEditMode, setCanvasEditMode] = useState<
     "BACKGROUND" | "WORLD" | null
   >(null);
@@ -1199,6 +1202,21 @@ export function App() {
                       <label>
                         <input
                           type="checkbox"
+                          checked={gmGridVisible}
+                          onChange={(event) => {
+                            const visible = event.target.checked;
+                            setGmGridVisible(visible);
+                            localStorage.setItem(
+                              "arken.gmGridVisible",
+                              String(visible),
+                            );
+                          }}
+                        />
+                        Показывать сетку
+                      </label>
+                      <label>
+                        <input
+                          type="checkbox"
                           checked={gmFogVisible}
                           onChange={(event) =>
                             setGmFogVisible(event.target.checked)
@@ -1254,6 +1272,7 @@ export function App() {
                 )}
                 gmFogOpacity={gmFogOpacity}
                 gmFogVisible={gmFogVisible}
+                gmGridVisible={gmGridVisible}
                 canvasEditMode={canvasEditMode}
                 onCanvasEditCancel={() => setCanvasEditMode(null)}
                 onCanvasPatch={(patch) =>
@@ -1313,10 +1332,21 @@ export function App() {
                   return created;
                 }}
                 onPing={(point) => {
-                  socket?.emit("map:ping", {
-                    sceneId: activeScene.id,
-                    ...point,
-                  });
+                  socket?.emit(
+                    "map:ping",
+                    {
+                      sceneId: activeScene.id,
+                      ...point,
+                    },
+                    (result) => {
+                      if (!result.ok && result.reason === "NO_VISIBLE_PLAYERS")
+                        notify({
+                          title:
+                            "На карте нет игроков, которые могут это увидеть",
+                          tone: "info",
+                        });
+                    },
+                  );
                 }}
                 onPlaceTokenDefinition={async (definitionId, point) =>
                   run(() =>
@@ -1362,6 +1392,18 @@ export function App() {
                         actionId: crypto.randomUUID(),
                         revision,
                         ...size,
+                      }),
+                    }),
+                  )
+                }
+                onTokenAppearanceChange={(tokenId, revision, appearance) =>
+                  run(() =>
+                    api(`/api/tokens/${tokenId}/appearance`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision,
+                        ...appearance,
                       }),
                     }),
                   )
