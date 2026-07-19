@@ -493,7 +493,10 @@ test("GM and six isolated players recover authoritative state without security l
     // Product gate: players only see their controlled definitions in the
     // palette, can place one through the browser UI, and never receive the GM
     // preparation/presence surface.
-    await pages[0]!.locator(".tabs > button").nth(2).click();
+    await pages[0]!.locator(".workspace-menu summary").click();
+    await pages[0]!
+      .getByRole("button", { name: "Токены", exact: true })
+      .click();
     await expect(pages[0]!.locator(".token-palette")).toBeVisible();
     await expect(pages[0]!.locator(".palette-card")).toHaveCount(1);
     await expect(pages[0]!.locator(".palette-place strong")).toHaveText(
@@ -526,7 +529,12 @@ test("GM and six isolated players recover authoritative state without security l
           ).length,
       )
       .toBe(placementsBefore + 1);
-    await expect(pages[0]!.locator(".tabs > button")).toHaveCount(4);
+    await expect(pages[0]!.locator(".tabs > button")).toHaveCount(1);
+    await pages[0]!.locator(".workspace-menu summary").click();
+    await expect(
+      pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
+    ).toHaveCount(0);
+    await pages[0]!.locator(".workspace-menu summary").click();
     await pages[0]!
       .getByRole("dialog", { name: "Токены" })
       .getByRole("button", { name: "Закрыть диалоговое окно" })
@@ -744,7 +752,10 @@ test("GM and six isolated players recover authoritative state without security l
     for (const result of [foreignMove, enemyMove, hiddenMove])
       expect(result).toMatchObject({ ok: false, status: "FORBIDDEN" });
 
-    await pages[0]!.getByRole("button", { name: "Токены" }).click();
+    await pages[0]!.locator(".workspace-menu summary").click();
+    await pages[0]!
+      .getByRole("button", { name: "Токены", exact: true })
+      .click();
     const publicMarkers = Array.from({ length: 6 }, (_, index) =>
       index % 2 === 0
         ? runTag + "-public-chat-" + (index + 1)
