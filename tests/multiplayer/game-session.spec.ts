@@ -803,10 +803,9 @@ test("GM and six isolated players recover authoritative state without security l
     await Promise.all(messageResponses.map(expectOk));
     publicMarkers.push(gmPublicMessage);
 
-    // Product gate: a roll received while chat is hidden creates a toast.
-    // Closing the active workflow returns to chat, where the persistent roll
-    // card is directly visible and the transient toast is no longer needed.
-    await expect(pages[0]!.locator(".roll-toast").first()).toBeVisible();
+    // Workspace now opens as a dialog over the persistent chat, so incoming
+    // rolls remain directly available in the transcript rather than creating
+    // a transient toast reserved for a genuinely hidden chat.
     await pages[0]!
       .getByRole("dialog", { name: "Токены" })
       .getByRole("button", { name: "Закрыть окно" })
