@@ -1278,7 +1278,7 @@ code {
 }
 .palette-place {
   display: grid;
-  grid-template-rows: 72px auto;
+  grid-template-rows: 72px minmax(2.5rem, auto);
   gap: var(--space-xs);
   padding: 0;
   border: 0;
@@ -1299,6 +1299,12 @@ code {
   font-weight: 800;
 }
 .palette-place strong {
+  position: static !important;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  align-self: start;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
