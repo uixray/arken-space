@@ -561,9 +561,7 @@ test("GM and six isolated players recover authoritative state without security l
     await expect(
       setupDialog.getByRole("button", { name: "● Player 1", exact: true }),
     ).toBeVisible();
-    await setupDialog
-      .getByRole("button", { name: "Закрыть диалоговое окно" })
-      .click();
+    await setupDialog.getByRole("button", { name: "Закрыть окно" }).click();
 
     for (let index = 0; index < 5; index += 1) {
       const snapshot = connections[index + 1].snapshot;
@@ -811,7 +809,7 @@ test("GM and six isolated players recover authoritative state without security l
     await expect(pages[0]!.locator(".roll-toast").first()).toBeVisible();
     await pages[0]!
       .getByRole("dialog", { name: "Токены" })
-      .getByRole("button", { name: "Закрыть диалоговое окно" })
+      .getByRole("button", { name: "Закрыть окно" })
       .click();
     await expect(
       pages[0]!.locator(".message", { hasText: publicMarkers[1] }),
