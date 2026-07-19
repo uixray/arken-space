@@ -839,9 +839,9 @@ test("GM and six isolated players recover authoritative state without security l
     }
 
     await pages[1].reload();
-    await expect(
-      pages[1].getByText("Player 2 · PLAYER", { exact: true }),
-    ).toBeVisible();
+    await expect
+      .poll(async () => (await bootstrap(players[1])).me)
+      .toMatchObject({ displayName: "Player 2", role: "PLAYER" });
     await expect(
       pages[1].getByRole("combobox", { name: "Активная сцена" }),
     ).toHaveValue(initialScene.id);
