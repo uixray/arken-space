@@ -4,7 +4,7 @@
 
 - Candidate revision: `b8d612cb8bdc589b672555674a774cb6112d7102`
 - Current production revision (last read-only inspection): `3d15ba777336c0053abfb0b179e01a42fdfb1c8f`
-- Candidate is two commits ahead of `origin/main`; push is still required.
+- Reviewed application candidate and release evidence are published on `origin/main` through revision `45b894e`.
 - Database change since production: migration `0015_token_appearance.sql` adds persisted token base/border appearance.
 - Application schema version remains `2`; migration identity and application schema version must be recorded separately.
 - Production deployment performed: no.
@@ -40,16 +40,15 @@
 
 ## Blocking pre-deploy gates
 
-1. Push exact candidate revision to `origin/main`.
-2. Confirm production still runs the recorded rollback revision and inspect health/DNS/TLS/disk read-only.
-3. Create or verify exactly one intended PLAYER grant and starter character for each of the six beta aliases.
-4. Create a fresh restic snapshot and record its exact ID.
-5. Rehearse that exact snapshot against candidate `b8d612cb8bdc589b672555674a774cb6112d7102` in the isolated restore environment.
-6. Confirm checksums, counts, migration `0015`, application schema `2`, cleanup, disk and production health.
-7. Run the isolated GM+6/recovery harness against the exact candidate.
-8. Run the 30–45 minute human GM+6 rehearsal across Chrome, Firefox and Edge.
-9. Record rollback revision and snapshot ID.
-10. Obtain explicit production deployment GO. No deployment is authorized by this document.
+1. Confirm production still runs the recorded rollback revision and inspect health/DNS/TLS/disk read-only.
+2. Create or verify exactly one intended PLAYER grant and starter character for each of the six beta aliases.
+3. Create a fresh restic snapshot and record its exact ID.
+4. Rehearse that exact snapshot against candidate `b8d612cb8bdc589b672555674a774cb6112d7102` in the isolated restore environment.
+5. Confirm checksums, counts, migration `0015`, application schema `2`, cleanup, disk and production health.
+6. Run the isolated GM+6/recovery harness against the exact candidate.
+7. Run the 30–45 minute human GM+6 rehearsal across Chrome, Firefox and Edge.
+8. Record rollback revision and snapshot ID.
+9. Obtain explicit production deployment GO. No deployment is authorized by this document.
 
 ## Post-deploy smoke
 
