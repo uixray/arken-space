@@ -245,6 +245,78 @@ test("GM controls music from the top bar and opens the library", async ({
   ).toHaveCount(0);
 });
 
+test("scene refresh races do not revoke local music consent", async ({
+  page,
+}) => {
+  const musicSnapshot = structuredClone(snapshot);
+  const secondSceneId = "8476b502-02f8-4cd6-9c55-3816d70d44dc";
+  const audioAssetId = "9476b502-02f8-4cd6-9c55-3816d70d44dc";
+  musicSnapshot.scenes.push({
+    ...musicSnapshot.scenes[0]!,
+    id: secondSceneId,
+    name: "Музыкальная сцена",
+    active: false,
+  });
+  musicSnapshot.assets.push({
+    id: audioAssetId,
+    kind: "AUDIO",
+    name: "Тема экспедиции",
+    mimeType: "audio/mpeg",
+    sizeBytes: 1024,
+    width: null,
+    height: null,
+    durationSeconds: 120,
+    url: "/test-track.mp3",
+    createdAt: new Date().toISOString(),
+  });
+  musicSnapshot.audio = {
+    assetId: audioAssetId,
+    playing: true,
+    positionSeconds: 15,
+    loop: true,
+    startedAt: new Date().toISOString(),
+    revision: 2,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await page.addInitScript(() => {
+    localStorage.setItem("arken.audio.enabled", "true");
+    HTMLMediaElement.prototype.play = () =>
+      Promise.reject(new DOMException("interrupted", "AbortError"));
+  });
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(musicSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/scenes/activate", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  );
+
+  await page.goto("/");
+  await expect(
+    page.getByRole("slider", { name: "Личная громкость" }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Просматриваемая сцена" })
+    .selectOption(secondSceneId);
+  await page.getByRole("button", { name: "Показать игрокам" }).click();
+
+  await expect(
+    page.getByRole("slider", { name: "Личная громкость" }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("arken.audio.enabled")),
+    )
+    .toBe("true");
+});
+
 test("chat composer and canvas quick rolls submit explicit, server-safe intents", async ({
   page,
 }) => {
