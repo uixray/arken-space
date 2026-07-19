@@ -17,6 +17,7 @@ Multi-level, isometric and full 3D rendering are deliberately deferred until the
 ```powershell
 Copy-Item .env.example .env
 corepack pnpm install
+corepack pnpm build
 corepack pnpm dev:db
 corepack pnpm db:migrate
 corepack pnpm dev
@@ -46,3 +47,10 @@ All implementation, generated code and commits for arken-space must stay inside 
 - See [docs/operations.md](./docs/operations.md) for deployment, backup, restore and incident checks.
 - See [docs/yandex-object-storage-backup-2026-07-13.md](./docs/yandex-object-storage-backup-2026-07-13.md) for the private bucket, IAM, secret handling and current cost setup.
 - See [docs/server-audit-2026-07-12.md](./docs/server-audit-2026-07-12.md) for the current host capacity and deployment blockers.
+
+## Codebase documentation
+
+- [Architecture](./docs/architecture.md) — runtime, modules, data model and request/realtime flows.
+- [Development guide](./docs/development-guide.md) — clean setup, commands, tests and safe change recipes.
+- [Skills matrix](./docs/skills-matrix.md) — required competencies, ownership and review checklists.
+- [Codebase audit](./docs/codebase-audit.md) — current strengths, risks, drift and recommended priorities.
