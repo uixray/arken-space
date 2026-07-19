@@ -2,7 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/multiplayer",
-  timeout: 360_000,
+  // The full GM + 6 story intentionally includes image builds, concurrent
+  // browser activity, a network outage and backend restart. Docker Desktop on
+  // Windows can exceed six minutes even when every bounded assertion passes.
+  timeout: 600_000,
   retries: 0,
   workers: 1,
   outputDir: "test-results/artifacts",
