@@ -199,7 +199,23 @@ test("GM opens token and file workflows without leaving the canvas", async ({
   const tokensDialog = page.getByRole("dialog", { name: "Токены" });
   await expect(tokensDialog).toBeVisible();
   await tokensDialog.getByRole("button", { name: "Создать токен" }).click();
-  await expect(page.getByRole("dialog", { name: "Новый токен" })).toBeVisible();
+  const tokenEditor = page.getByRole("dialog", { name: "Новый токен" });
+  await expect(tokenEditor).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const modal = document.querySelector<HTMLElement>(".g-modal");
+        const workspace = document.querySelector<HTMLElement>(
+          ".arken-workspace-window",
+        );
+        if (!modal || !workspace) return false;
+        return (
+          Number.parseInt(getComputedStyle(modal).zIndex, 10) >
+          Number.parseInt(getComputedStyle(workspace).zIndex, 10)
+        );
+      }),
+    )
+    .toBe(true);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 

@@ -13,6 +13,12 @@
   --arken-layer-toast: 3000;
 }
 
+/* Gravity portals default to z-index 1000. Blocking editors opened from a
+ * workspace window must stay above their 1200 parent layer. */
+.g-modal {
+  z-index: var(--arken-layer-dialog);
+}
+
 .gravity-preview {
   min-height: 100%;
   padding: 32px;

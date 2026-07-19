@@ -37,3 +37,12 @@
 1. Publish the local prevention fix.
 2. Open an authenticated production GM session and perform read-only inventory plus visual QA.
 3. If duplicates are confirmed, prepare an exact cleanup plan and request explicit approval before mutation.
+
+## Visual correction pool
+
+- Evidence: production screenshot showed token names overflowing their cards and the nested token editor behind the Tokens workspace.
+- Token previews are now isolated to 72 px; initials are bounded; names use a stable 0.875 rem size and a two-line clamp with safe wrapping.
+- Gravity modal portals now use the dialog layer (2000), above workspace windows (1200).
+- Added an end-to-end assertion that the nested token editor has a higher computed layer than its parent workspace.
+- Verification: web typecheck PASS; scoped lint and Prettier PASS; focused Playwright 1/1 PASS; diff check PASS.
+- Production remains unchanged. Next action is publish, then repeat visual QA on the production-sized viewport after release approval.
