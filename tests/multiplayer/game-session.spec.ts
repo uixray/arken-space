@@ -553,7 +553,10 @@ test("GM and six isolated players recover authoritative state without security l
     for (let index = 0; index < 5; index += 1)
       connections.push(await connectSocket(players[index]));
 
-    await gmPage.getByRole("button", { name: "Подготовка" }).click();
+    await gmPage.locator(".workspace-menu summary").click();
+    await gmPage
+      .getByRole("button", { name: "Подготовка", exact: true })
+      .click();
     const setupDialog = gmPage.getByRole("dialog", { name: "Подготовка" });
     await expect(
       setupDialog.getByRole("button", { name: "● Player 1", exact: true }),
