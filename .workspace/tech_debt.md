@@ -20,3 +20,9 @@
 - The complete human product rehearsal is deferred until the prioritized usability and gameplay backlog is implemented.
 - This leaves current canvas behavior, multiplayer usability, and the expanded character system without a complete end-to-end product acceptance pass.
 - Return to this debt before declaring the backlog release ready for a full game: run the complete GM + 6 rehearsal across the supported browsers and record defects against approved acceptance criteria.
+
+## 2026-07-19 — human release rehearsal remains provisional
+
+- **Compromise:** the isolated candidate was reported as “more or less working”, without a recorded 30–45 minute GM+6 checklist result across the required independent Chrome, Firefox and Edge profiles.
+- **Impact:** production release evidence is incomplete; no production deployment may be authorized from this result.
+- **Next action:** record the runbook’s pass/fail outcome, any defects, browser/profile coverage, and explicit GO/NO-GO before re-requesting deployment.
