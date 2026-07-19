@@ -31,6 +31,7 @@ import {
 import { notify } from "./ui/notifications";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
+import { characterTokenPlacementRequest } from "./token-placement";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -1915,25 +1916,19 @@ export function App() {
               )
             }
             onCreateToken={async (characterId) => {
-              const character = snapshot.characters.find(
-                (item) => item.id === characterId,
+              if (!activeScene) return;
+              const request = characterTokenPlacementRequest(
+                snapshot,
+                characterId,
+                activeScene,
+                crypto.randomUUID(),
               );
-              if (!activeScene || !character) return;
+              if (!request) return;
               await run(
                 () =>
-                  api("/api/tokens", {
+                  api(request.path, {
                     method: "POST",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      sceneId: activeScene.id,
-                      characterId,
-                      ownerMembershipId: character.ownerMembershipId,
-                      name: character.name,
-                      x: activeScene.width / 2,
-                      y: activeScene.height / 2,
-                      width: activeScene.grid.size,
-                      height: activeScene.grid.size,
-                    }),
+                    body: JSON.stringify(request.body),
                   }),
                 true,
               );
