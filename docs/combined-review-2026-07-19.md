@@ -20,8 +20,8 @@
 ## Verification
 
 - Prior complete candidate gate: lint, typecheck, build, 155 unit/integration tests PASS.
-- Prior Playwright gate: 21 PASS, 1 credential-dependent test skipped.
-- Added UIX-230 local/published scene regression: PASS.
+- Final Playwright gate: 22 PASS, 1 credential-dependent test skipped, including UIX-230 local/published scene regression.
+- Full unit suite initially hit one PGlite setup timeout; the affected test passed alone and the complete 155-test suite passed on clean rerun. Treated as test-host timing noise, not a product failure.
 - Docker-dependent multiplayer and restore gates: BLOCKED locally because Docker Desktop Linux engine is unavailable.
 
 ## Blockers

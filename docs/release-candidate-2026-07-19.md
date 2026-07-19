@@ -27,8 +27,7 @@
 - Typecheck: PASS.
 - Unit/integration: 25 files, 155 tests PASS.
 - Production build: PASS.
-- Playwright before the added music scenario: 21 PASS, 1 credential-dependent test skipped.
-- Added music/scene scenario: 1 PASS.
+- Playwright: 22 PASS, 1 credential-dependent test skipped, including the added music/scene scenario.
 - Known non-blocking output: mocked backend proxy refusals, Konva six-layer warning and web chunk above 500 kB.
 
 ## Local operational constraints
@@ -37,6 +36,7 @@
 - Isolated `test:multiplayer` and `restore:rehearse` cannot run here.
 - No local `.env` exists; no production secrets were read or copied.
 - These constraints block UIX-201/UIX-217 completion but do not invalidate deterministic unit/browser results.
+- Production read-only check: DNS resolves to `51.250.26.16`, HTTPS returns 200, and `/healthz` reports database healthy at revision `3d15ba7`, application schema `2`.
 
 ## Blocking pre-deploy gates
 
