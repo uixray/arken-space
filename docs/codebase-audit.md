@@ -25,10 +25,7 @@
 `127.0.0.1` listener (`EPERM`); вне этого ограничения полный suite проходит за
 22.31 s. Оставшиеся 25 suites отдельно прошли в sandbox: 141/141 tests.
 
-Repository-wide `pnpm format:check` имеет существующий baseline из пяти файлов:
-`apps/web/src/token-placement.test.ts` и четыре исторических checkpoint-документа
-`uix-225`, `uix-226`, `uix-227-uix-231`, `uix-230`. Новые документы отформатированы;
-baseline-файлы в рамках этого обзора не менялись.
+Repository-wide `pnpm format:check` ? PASS. ???? ????? ?????????????? baseline-?????? (`apps/web/src/token-placement.test.ts` ? checkpoint-????????? `uix-225`, `uix-226`, `uix-227-uix-231`, `uix-230`) ??????????? ??????????????? ??? ????????????? ?????????.
 
 Docker multiplayer, Playwright и restore rehearsal в рамках документирования не
 запускались. Их прошлые результаты и release constraints остаются теми, что
@@ -85,9 +82,14 @@ reproduction.
 
 - Evidence: `apps/server/src/routes.ts`, `packages/contracts/src/beta-players.ts`,
   `.workspace/tech_debt.md`.
-- Статус: осознанно принято только для закрытой beta-группы.
-- До расширения доступа: персональный secret/PIN/IdP, миграция memberships и отзыв
-  старых sessions.
+- Статус: accepted beta risk. Текущая схема осознанно сохранена только на время
+  закрытой beta-группы и не считается целевой авторизацией продукта.
+- Owner: product owner совместно с backend owner.
+- Exit criterion: до выхода из beta внедрена персональная аутентификация
+  (secret/PIN/IdP), memberships перенесены на новую схему, старые sessions отозваны,
+  а негативные authorization-тесты проходят.
+- Следующее действие: до планирования выхода из beta выбрать целевую схему
+  аутентификации и оформить отдельную implementation-задачу с планом миграции.
 
 ### Production guard не запрещает development GM token
 
@@ -121,11 +123,14 @@ diff.
 - Первое действие: отдельно восстановить/проверить metadata на clean database и
   добавить gate «schema ↔ migrations ↔ metadata» до следующей feature migration.
 
-### Human release gate остаётся незавершённым
+### Production release выполнен; расширенный human gate остаётся release debt
 
 Автоматические проверки не заменяют записанный 30–45-минутный GM+6 rehearsal в
-независимых Chrome/Firefox/Edge profiles. Текущий tech debt прямо не авторизует
-production deployment без pass/fail, defects и явного GO/NO-GO.
+независимых Chrome/Firefox/Edge profiles. При этом production deployment ревизии
+`abcb2efc25e8e9664fdf2becd66b9645e22f82ae` уже выполнен после явного разрешения:
+fresh backup/restore gate — PASS, production health и database checks — PASS, schema
+version — `2`. Невыполненный расширенный cross-browser rehearsal остаётся release
+debt для следующего релизного цикла, а не блокером уже состоявшегося deployment.
 
 - Evidence: `.workspace/tech_debt.md`,
   `docs/uix-217-rehearsal-runbook.md`, `docs/publish-readiness-2026-07-19.md`.
@@ -288,8 +293,8 @@ component tests для event reconciliation/music/token editor и repository-lev
 5. Исправить focused frontend defects и добавить component tests.
 6. Ввести repository CI и dependency/container pinning policy.
 7. Начать incremental decomposition hotspots.
-8. Завершить human GM+6 Chrome/Firefox/Edge rehearsal и только затем принимать
-   отдельное production GO/NO-GO решение.
+8. До следующего production GO/NO-GO завершить human GM+6 Chrome/Firefox/Edge
+   rehearsal и приложить результаты к release evidence.
 
 ## Связанные документы
 
