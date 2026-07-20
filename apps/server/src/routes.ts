@@ -2273,9 +2273,11 @@ export function registerRoutes(
         token: tokens,
         definition: tokenDefinitions,
         campaignId: scenes.campaignId,
+        activeSceneId: campaigns.activeSceneId,
       })
       .from(tokens)
       .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+      .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
       .innerJoin(tokenDefinitions, eq(tokens.definitionId, tokenDefinitions.id))
       .where(and(eq(tokens.id, id), eq(scenes.campaignId, auth.campaignId)))
       .limit(1);
@@ -2298,7 +2300,8 @@ export function registerRoutes(
         !controller ||
         row.token.locked ||
         !row.token.visible ||
-        row.token.layer === "GM"
+        row.token.layer === "GM" ||
+        row.token.sceneId !== row.activeSceneId
       )
         return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
     }
@@ -4071,13 +4074,33 @@ export function registerRoutes(
     const body = createChatMessageSchema.parse(request.body);
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) return reply.code(200).send({ duplicate: true });
+    let characterId: string | null = null;
+    if (body.characterId) {
+      const [character] = await db
+        .select()
+        .from(characters)
+        .where(
+          and(
+            eq(characters.id, body.characterId),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (
+        !character ||
+        (auth.role !== "GM" &&
+          character.ownerMembershipId !== auth.membershipId)
+      )
+        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+      characterId = character.id;
+    }
     const saved = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(chatMessages)
         .values({
           campaignId: auth.campaignId,
           membershipId: auth.membershipId,
-          characterId: body.characterId ?? null,
+          characterId,
           body: body.body,
           visibility: body.visibility,
         })

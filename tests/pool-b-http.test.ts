@@ -2328,6 +2328,47 @@ describe("Pool B HTTP boundaries", () => {
     expect(outside.json()).toMatchObject({ error: "FOG_OUTSIDE_SCENE" });
   });
 
+  it("does not let a player delete their controlled token from an inactive scene", async () => {
+    const inactiveSceneId = crypto.randomUUID();
+    const inactiveTokenId = crypto.randomUUID();
+    await db.insert(schema.scenes).values({
+      id: inactiveSceneId,
+      campaignId: ids.campaign,
+      name: "GM preparation",
+      grid: {
+        enabled: true,
+        size: 64,
+        offsetX: 0,
+        offsetY: 0,
+        color: "#ffffff",
+        opacity: 0.2,
+      },
+    });
+    await db.insert(schema.tokens).values({
+      id: inactiveTokenId,
+      definitionId: ids.definition,
+      sceneId: inactiveSceneId,
+      name: "Hero in preparation",
+      x: 0,
+      y: 0,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/tokens/${inactiveTokenId}`,
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: 0 },
+    });
+
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json()).toEqual({ error: "TOKEN_FORBIDDEN" });
+    const [token] = await db
+      .select({ id: schema.tokens.id })
+      .from(schema.tokens)
+      .where(eq(schema.tokens.id, inactiveTokenId));
+    expect(token).toEqual({ id: inactiveTokenId });
+  });
+
   it("allows only a GM to resize a placement with CAS and restores its size through undo", async () => {
     const playerDenied = await app.inject({
       method: "PATCH",
@@ -2567,6 +2608,92 @@ describe("Pool B HTTP boundaries", () => {
     expect(journals[0]).toMatchObject({
       targetType: "CANVAS_BULK",
       status: "APPLIED",
+    });
+  });
+
+  it("scopes chat character attribution to the authenticated campaign and player", async () => {
+    const otherPlayerId = crypto.randomUUID();
+    const otherCharacterId = crypto.randomUUID();
+    await db.insert(schema.memberships).values({
+      id: otherPlayerId,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Other player",
+    });
+    await db.insert(schema.characters).values({
+      id: otherCharacterId,
+      campaignId: ids.campaign,
+      ownerMembershipId: otherPlayerId,
+      name: "Other hero",
+    });
+
+    const ownCharacter = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        body: "Own character message",
+        characterId: ids.character,
+      },
+    });
+    expect(ownCharacter.statusCode, ownCharacter.body).toBe(201);
+    expect(ownCharacter.json()).toMatchObject({
+      membershipId: ids.player,
+      characterId: ids.character,
+      visibility: "PUBLIC",
+    });
+
+    const otherPlayerCharacter = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        body: "Impersonated character message",
+        characterId: otherCharacterId,
+      },
+    });
+    expect(otherPlayerCharacter.statusCode, otherPlayerCharacter.body).toBe(
+      403,
+    );
+    expect(otherPlayerCharacter.json()).toEqual({
+      error: "CHARACTER_FORBIDDEN",
+    });
+
+    const crossCampaignCharacter = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        body: "Cross-campaign character message",
+        characterId: ids.foreignCharacter,
+      },
+    });
+    expect(crossCampaignCharacter.statusCode, crossCampaignCharacter.body).toBe(
+      403,
+    );
+    expect(crossCampaignCharacter.json()).toEqual({
+      error: "CHARACTER_FORBIDDEN",
+    });
+
+    const gmCharacter = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        body: "GM character message",
+        characterId: ids.character,
+        visibility: "GM_ONLY",
+      },
+    });
+    expect(gmCharacter.statusCode, gmCharacter.body).toBe(201);
+    expect(gmCharacter.json()).toMatchObject({
+      membershipId: ids.gm,
+      characterId: ids.character,
+      visibility: "GM_ONLY",
     });
   });
 
