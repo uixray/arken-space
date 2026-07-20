@@ -42,6 +42,7 @@ All implementation, generated code and commits for arken-space must stay inside 
 ## Project tracking
 
 - [Linear project](https://linear.app/uixraydesign/project/arken-space-004b59486dc4)
+- [Публичная дорожная карта на 20.07–16.08.2026](./ROADMAP.md)
 - See [tasks.md](./tasks.md) for the delivery issues.
 - See [docs/roadmap.md](./docs/roadmap.md) for the production-first sequence leading to the first real game.
 - See [docs/operations.md](./docs/operations.md) for deployment, backup, restore and incident checks.
