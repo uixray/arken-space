@@ -42,9 +42,7 @@ describe("character token placement", () => {
       "action-two",
     );
 
-    expect(first?.path).toBe(
-      "/api/token-definitions/definition-ed/placements",
-    );
+    expect(first?.path).toBe("/api/token-definitions/definition-ed/placements");
     expect(first?.body).toMatchObject({
       definitionId: definition.id,
       sceneId: scene.id,
