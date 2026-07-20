@@ -3,10 +3,13 @@ import {
   audioStates,
   campaigns,
   characters,
+  gmAccessCredentials,
   memberships,
   scenes,
 } from "@arken/db";
 import { createStarterCharacter } from "@arken/system";
+import { env } from "./env.js";
+import { hashToken } from "./security.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -30,6 +33,14 @@ export async function ensureSeed(db: Database) {
       .returning();
   }
   if (!campaign) throw new Error("Could not create campaign");
+
+  await db
+    .insert(gmAccessCredentials)
+    .values({
+      campaignId: campaign.id,
+      tokenHash: hashToken(env.GM_ACCESS_TOKEN),
+    })
+    .onConflictDoNothing();
 
   let [gm] = await db
     .select()

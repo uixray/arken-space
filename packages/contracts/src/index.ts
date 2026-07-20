@@ -133,6 +133,10 @@ export const createInviteSchema = z.object({
   expiresInHours: z.number().int().min(1).max(720).default(168),
 });
 export const rotatePlayerAccessSchema = z.object({ actionId: actionIdSchema });
+export const rotateGmAccessSchema = z.object({
+  actionId: actionIdSchema,
+  token: z.string().min(32).max(512),
+});
 export const renameCampaignSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),

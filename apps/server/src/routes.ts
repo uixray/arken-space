@@ -37,6 +37,7 @@ import {
   gmLoginSchema,
   inviteClaimSchema,
   rotatePlayerAccessSchema,
+  rotateGmAccessSchema,
   replaceTokenControllersSchema,
   placeTokenDefinitionSchema,
   renameCommandSchema,
@@ -60,6 +61,7 @@ import {
   feedbackAttachments,
   feedbackReports,
   gameEvents,
+  gmAccessCredentials,
   invites,
   playerAccessGrants,
   memberships,
@@ -444,15 +446,22 @@ export function registerRoutes(
 
   app.post("/api/auth/gm", async (request, reply) => {
     const body = gmLoginSchema.parse(request.body);
-    if (!safeEqual(hashToken(body.token), hashToken(env.GM_ACCESS_TOKEN)))
-      return reply.code(403).send({ error: "INVALID_MASTER_TOKEN" });
-    const [gm] = await db
-      .select()
-      .from(memberships)
-      .where(eq(memberships.role, "GM"))
-      .limit(1);
-    if (!gm) return reply.code(503).send({ error: "MASTER_NOT_SEEDED" });
-    await createSession(db, reply, gm.id);
+    const credentials = await db
+      .select({
+        membershipId: memberships.id,
+        tokenHash: gmAccessCredentials.tokenHash,
+      })
+      .from(gmAccessCredentials)
+      .innerJoin(
+        memberships,
+        eq(memberships.campaignId, gmAccessCredentials.campaignId),
+      )
+      .where(eq(memberships.role, "GM"));
+    const gm = credentials.find((credential) =>
+      safeEqual(hashToken(body.token), credential.tokenHash),
+    );
+    if (!gm) return reply.code(403).send({ error: "INVALID_MASTER_TOKEN" });
+    await createSession(db, reply, gm.membershipId);
     return { ok: true };
   });
 
@@ -541,6 +550,67 @@ export function registerRoutes(
     const token = request.cookies[env.SESSION_COOKIE_NAME];
     if (token)
       await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+    reply.clearCookie(env.SESSION_COOKIE_NAME, { path: "/" });
+    return { ok: true };
+  });
+
+  app.post("/api/gm-access/rotate", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = rotateGmAccessSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ ok: true, duplicate: true });
+    const result = await db.transaction(async (tx) => {
+      const [credential] = await tx
+        .select()
+        .from(gmAccessCredentials)
+        .where(eq(gmAccessCredentials.campaignId, auth.campaignId))
+        .limit(1);
+      if (!credential) return null;
+      const [rotated] = await tx
+        .update(gmAccessCredentials)
+        .set({
+          tokenHash: hashToken(body.token),
+          revision: credential.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(gmAccessCredentials.campaignId, auth.campaignId),
+            eq(gmAccessCredentials.tokenHash, credential.tokenHash),
+            eq(gmAccessCredentials.revision, credential.revision),
+          ),
+        )
+        .returning();
+      if (!rotated) return null;
+      const gmRows = await tx
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.campaignId, auth.campaignId),
+            eq(memberships.role, "GM"),
+          ),
+        );
+      const gmMembershipIds = gmRows.map((member) => member.id);
+      await tx
+        .delete(sessions)
+        .where(inArray(sessions.membershipId, gmMembershipIds));
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "gm_access.rotated",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+      });
+      return gmMembershipIds;
+    });
+    if (!result) return reply.code(409).send({ error: "GM_ACCESS_CONFLICT" });
+    for (const membershipId of result)
+      io.in(memberRoom(membershipId)).disconnectSockets(true);
     reply.clearCookie(env.SESSION_COOKIE_NAME, { path: "/" });
     return { ok: true };
   });

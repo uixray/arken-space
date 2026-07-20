@@ -91,6 +91,20 @@ export const memberships = pgTable(
   (table) => [index("memberships_campaign_idx").on(table.campaignId)],
 );
 
+export const gmAccessCredentials = pgTable("gm_access_credentials", {
+  campaignId: uuid("campaign_id")
+    .primaryKey()
+    .references(() => campaigns.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  revision: integer("revision").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const feedbackReports = pgTable(
   "feedback_reports",
   {
