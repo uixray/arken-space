@@ -134,10 +134,16 @@ function waitForPing(
   });
 }
 async function expectPingOverlay(page: Page, before: Buffer) {
-  const screenshot = await page.locator(".map-viewport").screenshot({
+  const viewport = page.locator(".map-viewport");
+  await expect
+    .poll(
+      async () => !(await viewport.screenshot()).equals(before),
+      { timeout: 3_000 },
+    )
+    .toBe(true);
+  await viewport.screenshot({
     path: "test-results/multiplayer/live-ping-over-covered-fog.png",
   });
-  expect(screenshot.equals(before)).toBe(false);
 }
 
 function move(
