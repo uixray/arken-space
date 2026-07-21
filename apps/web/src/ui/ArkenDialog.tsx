@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Dialog } from "@gravity-ui/uikit";
+import { useWorkspaceWindow } from "./useWorkspaceWindow";
 
 export interface ArkenDialogProps {
   open: boolean;
@@ -36,6 +37,16 @@ export function ArkenDialog({
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const {
+    setWindowElement,
+    position,
+    zIndex,
+    bringToFront,
+    onDragStart,
+    onDragMove,
+    stopDragging,
+    resetLayout,
+  } = useWorkspaceWindow(open && variant === "workspace");
 
   useEffect(() => {
     if (!open || variant !== "workspace") return;
@@ -48,17 +59,46 @@ export function ArkenDialog({
     if (!open) return null;
     return (
       <section
+        ref={setWindowElement}
         className={["arken-workspace-window", className]
           .filter(Boolean)
           .join(" ")}
         role="dialog"
         aria-labelledby={titleId}
+        style={{
+          ...(position ?? {}),
+          zIndex,
+        }}
+        onPointerDown={bringToFront}
+        onFocusCapture={bringToFront}
         onKeyDown={(event) => {
           if (event.key === "Escape") onClose();
         }}
       >
         <header className="arken-workspace-window__header">
-          <h2 id={titleId}>{title}</h2>
+          <div
+            className="arken-workspace-window__drag-handle"
+            role="group"
+            aria-label={`Перетащить окно: ${title}`}
+            title="Перетащить окно"
+            onPointerDown={onDragStart}
+            onPointerMove={onDragMove}
+            onPointerUp={stopDragging}
+            onPointerCancel={stopDragging}
+          >
+            <h2 id={titleId}>{title}</h2>
+          </div>
+          {position ? (
+            <button
+              type="button"
+              className="arken-workspace-window__reset"
+              onClick={resetLayout}
+              aria-label="Сбросить расположение окна"
+              title="Сбросить расположение окна"
+            >
+              ↺
+            </button>
+          ) : null}
           <button
             ref={closeRef}
             type="button"

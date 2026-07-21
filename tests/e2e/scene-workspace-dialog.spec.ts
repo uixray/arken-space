@@ -159,3 +159,65 @@ test("long token names remain inside a palette card", async ({ page }) => {
     true,
   );
 });
+
+test("a desktop workspace window drags by its labelled header handle and resets safely", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockBootstrap(page, snapshot);
+  await page.goto("/");
+
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Токены" }).click();
+  const workspace = page.getByRole("dialog", { name: "Токены" });
+  const handle = workspace.getByRole("group", {
+    name: "Перетащить окно: Токены",
+  });
+  const before = await workspace.boundingBox();
+  expect(before).not.toBeNull();
+
+  await handle.hover();
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  await page.mouse.move(handleBox!.x + 32, handleBox!.y + 16);
+  await page.mouse.down();
+  // Move beyond the viewport to exercise the right and bottom clamps while
+  // pointer capture keeps the drag active outside the header.
+  await page.mouse.move(2500, 1800);
+  await page.mouse.up();
+
+  await expect(
+    workspace.getByRole("button", { name: "Сбросить расположение окна" }),
+  ).toBeVisible();
+  const clamped = await workspace.boundingBox();
+  expect(clamped).not.toBeNull();
+  expect(clamped!.x + clamped!.width).toBeLessThanOrEqual(1264);
+  expect(clamped!.y + clamped!.height).toBeLessThanOrEqual(784);
+
+  await workspace
+    .getByRole("button", { name: "Сбросить расположение окна" })
+    .click();
+  await expect(
+    workspace.getByRole("button", { name: "Сбросить расположение окна" }),
+  ).toHaveCount(0);
+  const reset = await workspace.boundingBox();
+  expect(reset).not.toBeNull();
+  expect(reset!.x).toBeCloseTo(before!.x, 0);
+  expect(reset!.y).toBeCloseTo(before!.y, 0);
+
+  // Narrow layouts remain anchored by CSS and deliberately ignore dragging.
+  await page.setViewportSize({ width: 390, height: 840 });
+  const narrowBefore = await workspace.boundingBox();
+  expect(narrowBefore).not.toBeNull();
+  await handle.hover();
+  const narrowHandleBox = await handle.boundingBox();
+  expect(narrowHandleBox).not.toBeNull();
+  await page.mouse.move(narrowHandleBox!.x + 24, narrowHandleBox!.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(360, 400);
+  await page.mouse.up();
+  const narrowAfter = await workspace.boundingBox();
+  expect(narrowAfter).not.toBeNull();
+  expect(narrowAfter!.x).toBeCloseTo(narrowBefore!.x, 0);
+  expect(narrowAfter!.y).toBeCloseTo(narrowBefore!.y, 0);
+});

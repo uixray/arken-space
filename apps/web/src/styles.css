@@ -1303,9 +1303,17 @@ code {
   padding: var(--space-sm) var(--space-md);
   border-bottom: 1px solid var(--line);
 }
-.arken-workspace-window__header h2 {
+.arken-workspace-window__drag-handle {
   flex: 1;
   min-width: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.arken-workspace-window__drag-handle:active {
+  cursor: grabbing;
+}
+.arken-workspace-window__header h2 {
   margin: 0;
   font-size: 1rem;
 }
@@ -1320,6 +1328,19 @@ code {
   justify-content: flex-end;
   border-top: 1px solid var(--line);
   border-bottom: 0;
+}
+@media (max-width: 767px) {
+  .arken-workspace-window {
+    top: 56px !important;
+    right: 12px !important;
+    left: 12px !important;
+    width: auto;
+    max-height: calc(100vh - 68px);
+  }
+  .arken-workspace-window__drag-handle {
+    cursor: default;
+    touch-action: auto;
+  }
 }
 .palette-place {
   display: grid;
