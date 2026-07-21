@@ -176,3 +176,74 @@ describe("GM access rotation", () => {
     expect(newAfterRestart.statusCode, newAfterRestart.body).toBe(200);
   });
 });
+
+describe("starter token placement", () => {
+  it("reuses the starter placement for repeated setup actions", async () => {
+    const [campaign] = await db.select().from(schema.campaigns).limit(1);
+    const [gm] = await db
+      .select()
+      .from(schema.memberships)
+      .where(eq(schema.memberships.role, "GM"))
+      .limit(1);
+    if (!campaign || !gm || !campaign.activeSceneId)
+      throw new Error("seed failed");
+
+    const sessionToken = "g".repeat(40);
+    const [character] = await db
+      .insert(schema.characters)
+      .values({ campaignId: campaign.id, name: "Ed" })
+      .returning();
+    if (!character) throw new Error("character create failed");
+    await db.insert(schema.sessions).values({
+      membershipId: gm.id,
+      tokenHash: hashToken(sessionToken),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const headers = { cookie: `${env.SESSION_COOKIE_NAME}=${sessionToken}` };
+    const payload = {
+      sceneId: campaign.activeSceneId,
+      characterId: character.id,
+      name: character.name,
+      x: 128,
+      y: 128,
+      width: 64,
+      height: 64,
+    };
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/tokens",
+      headers,
+      payload: { ...payload, actionId: crypto.randomUUID() },
+    });
+    expect(first.statusCode, first.body).toBe(201);
+    const repeatedSetup = await app.inject({
+      method: "POST",
+      url: "/api/tokens",
+      headers,
+      payload: { ...payload, actionId: crypto.randomUUID() },
+    });
+    expect(repeatedSetup.statusCode, repeatedSetup.body).toBe(200);
+    expect(repeatedSetup.json().id).toBe(first.json().id);
+
+    const repeatedPlacement = await app.inject({
+      method: "POST",
+      url: `/api/token-definitions/${first.json().definitionId}/placements`,
+      headers,
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: campaign.activeSceneId,
+        x: payload.x,
+        y: payload.y,
+      },
+    });
+    expect(repeatedPlacement.statusCode, repeatedPlacement.body).toBe(200);
+    expect(repeatedPlacement.json().id).toBe(first.json().id);
+
+    const placed = await db
+      .select()
+      .from(schema.tokens)
+      .where(eq(schema.tokens.characterId, character.id));
+    expect(placed).toHaveLength(1);
+  });
+});

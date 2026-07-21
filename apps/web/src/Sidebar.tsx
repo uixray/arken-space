@@ -23,7 +23,10 @@ import { ArkenDialog } from "./ui/ArkenDialog";
 import { ImageUploadField } from "./ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { SceneManagerDialog, type SceneDraft } from "./ui/SceneManagerDialog";
-import { parseComposerInput } from "./chat-composer";
+import {
+  getSlashCommandSuggestions,
+  parseComposerInput,
+} from "./chat-composer";
 
 function formatDiceBreakdown(dice: GameSnapshot["messages"][number]["dice"]) {
   if (!dice) return "";
@@ -342,6 +345,11 @@ function CharacterPanel({
 }) {
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
+  const [rollMode, setRollMode] = useState<
+    "NORMAL" | "ADVANTAGE" | "DISADVANTAGE"
+  >("NORMAL");
+  const [rollPending, setRollPending] = useState(false);
+  const [rollError, setRollError] = useState("");
   const [entryEditor, setEntryEditor] = useState<
     CharacterDto["entries"][number] | null
   >(null);
@@ -374,6 +382,27 @@ function CharacterPanel({
         text="Мастер ещё не назначил вам персонажа."
       />
     );
+  const submitCharacterRoll = async (formula: string, label: string) => {
+    setRollPending(true);
+    setRollError("");
+    try {
+      await onRoll(
+        formula,
+        label,
+        "PUBLIC",
+        character.id,
+        /(?:^|[+\-\s])1?d20(?:$|[+\-\s])/.test(formula) ? rollMode : "NORMAL",
+      );
+    } catch (reason) {
+      setRollError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось выполнить бросок. Повторите попытку.",
+      );
+    } finally {
+      setRollPending(false);
+    }
+  };
   const portrait = snapshot.assets.find(
     (asset) => asset.id === character.portraitAssetId,
   );
@@ -551,6 +580,30 @@ function CharacterPanel({
           }
         />
       </details>
+      <div className="subsection character-roll-controls">
+        <label className="field">
+          Режим броска (d20)
+          <select
+            aria-label="Режим броска в карточке"
+            value={rollMode}
+            disabled={rollPending}
+            onChange={(event) =>
+              setRollMode(
+                event.target.value as "NORMAL" | "ADVANTAGE" | "DISADVANTAGE",
+              )
+            }
+          >
+            <option value="NORMAL">Обычный</option>
+            <option value="ADVANTAGE">С преимуществом</option>
+            <option value="DISADVANTAGE">С помехой</option>
+          </select>
+        </label>
+        {rollError && (
+          <p className="field-error" role="alert">
+            {rollError}
+          </p>
+        )}
+      </div>
       <div className="stats-grid">
         {arkenSystem.stats.map((stat) => (
           <label key={stat.key} className="stat-field">
@@ -570,9 +623,9 @@ function CharacterPanel({
               }
             />
             <Button
-              disabled={!editable}
+              disabled={!editable || rollPending}
               onClick={() =>
-                onRoll(`1d20 + ${stat.key}`, stat.label, "PUBLIC", character.id)
+                void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)
               }
             >
               Бросок
@@ -581,9 +634,8 @@ function CharacterPanel({
         ))}
       </div>
       <Button
-        onClick={() =>
-          onRoll("1d20 + agility", "Инициатива", "PUBLIC", character.id)
-        }
+        disabled={!editable || rollPending}
+        onClick={() => void submitCharacterRoll("1d20 + agility", "Инициатива")}
       >
         Инициатива (d20 + Ловкость)
       </Button>
@@ -594,8 +646,9 @@ function CharacterPanel({
             <Button
               className="action-row"
               key={skill.key}
+              disabled={rollPending}
               onClick={() =>
-                onRoll(skill.formula, skill.name, "PUBLIC", character.id)
+                void submitCharacterRoll(skill.formula, skill.name)
               }
             >
               <span>{skill.name}</span>
@@ -615,8 +668,9 @@ function CharacterPanel({
               <p>{spell.description}</p>
               {spell.formula && (
                 <Button
+                  disabled={rollPending}
                   onClick={() =>
-                    onRoll(spell.formula!, spell.name, "PUBLIC", character.id)
+                    void submitCharacterRoll(spell.formula!, spell.name)
                   }
                 >
                   Бросить {spell.formula}
@@ -885,14 +939,12 @@ function ChatPanel({
 }) {
   const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
-  const [rollMode, setRollMode] = useState<
-    "NORMAL" | "ADVANTAGE" | "DISADVANTAGE"
-  >("NORMAL");
   const [composerError, setComposerError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
   const [newMessageCount, setNewMessageCount] = useState(0);
+  const slashSuggestions = getSlashCommandSuggestions(composer);
   const latestMessageId = snapshot.messages.at(-1)?.id;
   useEffect(() => {
     const list = listRef.current;
@@ -932,7 +984,7 @@ function ChatPanel({
         undefined,
         visibility,
         snapshot.me.characterId,
-        rollMode,
+        "NORMAL",
       );
     else await onChat(intent.body, visibility);
     setComposer("");
@@ -1006,22 +1058,6 @@ function ChatPanel({
         </Button>
       )}
       <div className="chat-tools">
-        <label className="compact-select">
-          Бросок d20
-          <select
-            aria-label="Режим броска"
-            value={rollMode}
-            onChange={(event) =>
-              setRollMode(
-                event.target.value as "NORMAL" | "ADVANTAGE" | "DISADVANTAGE",
-              )
-            }
-          >
-            <option value="NORMAL">обычный</option>
-            <option value="ADVANTAGE">с преимуществом</option>
-            <option value="DISADVANTAGE">с помехой</option>
-          </select>
-        </label>
         <label className="compact-check">
           <FormInput
             type="checkbox"
@@ -1034,19 +1070,45 @@ function ChatPanel({
         </label>
       </div>
       <form className="chat-compose" onSubmit={submit}>
-        <FormTextArea
-          aria-label="Сообщение или бросок"
-          placeholder="Сообщение … или /roll 1d20 + agility"
-          value={composer}
-          onChange={(event) => setComposer(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          rows={3}
-        />
+        <div className="chat-composer-input">
+          <FormTextArea
+            aria-label="Сообщение или бросок"
+            aria-expanded={slashSuggestions.length > 0}
+            aria-controls="chat-slash-suggestions"
+            placeholder="Сообщение … или /roll 1d20 + agility"
+            value={composer}
+            onChange={(event) => setComposer(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            rows={3}
+          />
+          {slashSuggestions.length > 0 && (
+            <div
+              className="slash-command-suggestions"
+              id="chat-slash-suggestions"
+              role="listbox"
+              aria-label="Команды чата"
+            >
+              {slashSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion.command}
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  onClick={() => setComposer(suggestion.insertion)}
+                >
+                  <strong>{suggestion.command}</strong>
+                  <span>{suggestion.description}</span>
+                  <code>{suggestion.example}</code>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <Button className="primary" type="submit">
           Отправить
         </Button>

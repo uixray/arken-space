@@ -26,6 +26,7 @@ export type SceneDraft = {
 };
 
 function draftFromScene(scene?: SceneDto): SceneDraft {
+  const backgroundFrame = scene?.backgroundFrame;
   return {
     name: scene?.name ?? "Новая сцена",
     mapAssetId: scene?.mapAssetId ?? null,
@@ -37,10 +38,12 @@ function draftFromScene(scene?: SceneDto): SceneDraft {
     gridOffsetY: scene?.grid.offsetY ?? 0,
     gridColor: scene?.grid.color ?? "#c8b78b",
     gridOpacity: scene?.grid.opacity ?? 0.22,
-    frameX: scene?.backgroundFrame.x ?? 0,
-    frameY: scene?.backgroundFrame.y ?? 0,
-    frameWidth: scene?.backgroundFrame.width ?? 1920,
-    frameHeight: scene?.backgroundFrame.height ?? 1080,
+    // Older snapshots can contain scenes created before background framing was
+    // persisted. An editor must still open so the GM can configure the scene.
+    frameX: backgroundFrame?.x ?? 0,
+    frameY: backgroundFrame?.y ?? 0,
+    frameWidth: backgroundFrame?.width ?? 1920,
+    frameHeight: backgroundFrame?.height ?? 1080,
   };
 }
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseComposerInput } from "./chat-composer";
+import {
+  getSlashCommandSuggestions,
+  parseComposerInput,
+} from "./chat-composer";
 
 describe("parseComposerInput", () => {
   it("keeps ordinary text separate from explicit roll syntax", () => {
@@ -19,5 +22,24 @@ describe("parseComposerInput", () => {
       kind: "TEXT",
       body: "/roll-call",
     });
+  });
+});
+
+describe("getSlashCommandSuggestions", () => {
+  it("offers supported commands while a slash command is being typed", () => {
+    expect(getSlashCommandSuggestions("/")).toEqual([
+      expect.objectContaining({
+        command: "/roll",
+        example: "/roll 1d20 + agility",
+        insertion: "/roll ",
+      }),
+    ]);
+    expect(getSlashCommandSuggestions("/ro")).toHaveLength(1);
+  });
+
+  it("hides suggestions for messages and completed command arguments", () => {
+    expect(getSlashCommandSuggestions("hello")).toEqual([]);
+    expect(getSlashCommandSuggestions("/roll 1d20")).toEqual([]);
+    expect(getSlashCommandSuggestions("/unknown")).toEqual([]);
   });
 });

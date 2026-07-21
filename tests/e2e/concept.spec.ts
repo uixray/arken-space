@@ -379,6 +379,15 @@ test("chat composer and canvas quick rolls submit explicit, server-safe intents"
   });
 
   const composer = page.locator(".chat-compose textarea");
+  await expect(page.locator(".chat-tools select")).toHaveCount(0);
+  await composer.fill("/");
+  const rollSuggestion = page
+    .getByRole("listbox", { name: "Команды чата" })
+    .getByRole("option");
+  await expect(rollSuggestion).toContainText("/roll");
+  await expect(rollSuggestion).toContainText("/roll 1d20 + agility");
+  await rollSuggestion.click();
+  await expect(composer).toHaveValue("/roll ");
   await composer.fill("Сообщение для группы");
   await composer.press("Enter");
   await expect.poll(() => chatRequests.length).toBe(1);
@@ -713,6 +722,109 @@ test("player opens the character drawer while chat remains visible", async ({
   await page.keyboard.press("Escape");
   await expect(page.locator(".player-character-drawer")).toBeHidden();
   await expect(page.locator(".workspace-menu summary")).toBeFocused();
+});
+
+test("character card submits normal, advantage and disadvantage rolls for GM and player", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]!.id,
+  };
+  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.members = [playerSnapshot.me];
+
+  const requests: Array<Record<string, unknown>> = [];
+  let rejectNext = false;
+  let holdNext = false;
+  let releaseHeldRoll: (() => void) | undefined;
+  let activeSnapshot = playerSnapshot;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(activeSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/dice", async (route) => {
+    requests.push(route.request().postDataJSON());
+    if (holdNext) {
+      await new Promise<void>((resolve) => {
+        releaseHeldRoll = resolve;
+      });
+      holdNext = false;
+    }
+    if (rejectNext)
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "INVALID_DICE_FORMULA",
+          message: "Roll could not be completed",
+        }),
+      });
+    return route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+
+  await page.goto("/");
+  await page.locator(".workspace-menu summary").click();
+  await page.locator(".workspace-menu__content button").first().click();
+
+  const mode = page.locator(".character-roll-controls select");
+  const roll = page.locator(".stats-grid .stat-field button").first();
+  await expect(mode).toHaveValue("NORMAL");
+  holdNext = true;
+  await roll.click();
+  await expect.poll(() => requests.length).toBe(1);
+  await expect(roll).toBeDisabled();
+  await expect(mode).toBeDisabled();
+  releaseHeldRoll?.();
+  await expect(roll).toBeEnabled();
+  await mode.selectOption("ADVANTAGE");
+  await roll.click();
+  rejectNext = true;
+  await mode.selectOption("DISADVANTAGE");
+  await roll.click();
+
+  await expect.poll(() => requests.length).toBe(3);
+  expect(requests.map((request) => request.rollMode)).toEqual([
+    "NORMAL",
+    "ADVANTAGE",
+    "DISADVANTAGE",
+  ]);
+  expect(
+    requests.every(
+      (request) => request.characterId === playerSnapshot.characters[0]!.id,
+    ),
+  ).toBe(true);
+  await expect(page.getByRole("alert")).toContainText(
+    "Roll could not be completed",
+  );
+
+  activeSnapshot = snapshot;
+  rejectNext = false;
+  await page.reload();
+  await page.locator(".workspace-menu summary").click();
+  await page.locator(".workspace-menu__content button").first().click();
+  await page
+    .locator(".character-roll-controls select")
+    .selectOption("ADVANTAGE");
+  await page.locator(".stats-grid .stat-field button").first().click();
+  await expect.poll(() => requests.length).toBe(4);
+  expect(requests[3]).toMatchObject({
+    characterId: snapshot.characters[0]!.id,
+    rollMode: "ADVANTAGE",
+  });
 });
 
 test("wallet queues rapid mutations and ignores unchanged blur", async ({

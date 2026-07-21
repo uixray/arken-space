@@ -1889,7 +1889,32 @@ export function registerRoutes(
       if (controllerMembershipIds.some((id) => !validIds.has(id)))
         return reply.code(404).send({ error: "CONTROLLER_NOT_FOUND" });
     }
-    const token = await db.transaction(async (tx) => {
+    const placement = await db.transaction(async (tx) => {
+      // A character's first placement starts through this legacy route before
+      // the client has received its linked definition. Serialize that setup on
+      // the character so a repeated click cannot create another starter token.
+      if (body.characterId) {
+        await tx.execute(
+          sql`select id from characters where id = ${body.characterId} and campaign_id = ${auth.campaignId} for update`,
+        );
+        const [existing] = await tx
+          .select({ token: tokens })
+          .from(tokens)
+          .innerJoin(
+            tokenDefinitions,
+            eq(tokens.definitionId, tokenDefinitions.id),
+          )
+          .where(
+            and(
+              eq(tokens.sceneId, scene.id),
+              eq(tokenDefinitions.characterId, body.characterId),
+              eq(tokens.x, body.x),
+              eq(tokens.y, body.y),
+            ),
+          )
+          .limit(1);
+        if (existing) return { token: existing.token, created: false };
+      }
       await invalidateRedoBranch(tx, auth, scene.id);
       const [definition] = existingDefinition
         ? [existingDefinition]
@@ -1948,13 +1973,16 @@ export function registerRoutes(
         currentRevision: created.revision,
       });
       return {
-        ...created,
-        definitionId: definition.id,
-        controllerMembershipIds,
+        token: {
+          ...created,
+          definitionId: definition.id,
+          controllerMembershipIds,
+        },
+        created: true,
       };
     });
-    await broadcastSnapshots(io, db, auth.campaignId);
-    return reply.code(201).send(token);
+    if (placement.created) await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(placement.created ? 201 : 200).send(placement.token);
   });
 
   app.post("/api/token-definitions", async (request, reply) => {
@@ -2140,6 +2168,21 @@ export function registerRoutes(
         )
         .limit(1);
       if (!lockedDefinition) return null;
+      if (lockedDefinition.characterId) {
+        const [existing] = await tx
+          .select()
+          .from(tokens)
+          .where(
+            and(
+              eq(tokens.definitionId, lockedDefinition.id),
+              eq(tokens.sceneId, scene.id),
+              eq(tokens.x, x),
+              eq(tokens.y, y),
+            ),
+          )
+          .limit(1);
+        if (existing) return { token: existing, created: false };
+      }
       await invalidateRedoBranch(tx, auth, scene.id);
       const [created] = await tx
         .insert(tokens)
@@ -2180,12 +2223,12 @@ export function registerRoutes(
         afterRevision: created.revision,
         currentRevision: created.revision,
       });
-      return created;
+      return { token: created, created: true };
     });
     if (!placement)
       return reply.code(409).send({ error: "TOKEN_DEFINITION_DELETED" });
-    await broadcastSnapshots(io, db, auth.campaignId);
-    return reply.code(201).send(placement);
+    if (placement.created) await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.code(placement.created ? 201 : 200).send(placement.token);
   });
 
   app.patch("/api/tokens/:id/size", async (request, reply) => {

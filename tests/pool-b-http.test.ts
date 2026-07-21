@@ -1022,6 +1022,31 @@ describe("Pool B HTTP boundaries", () => {
       terms: [expect.objectContaining({ notation: "2d20kl1" })],
     });
     expect(disadvantage.json().body).toContain("помеха");
+
+    const gmNormal = await app.inject({
+      method: "POST",
+      url: "/api/dice",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        formula: "1d20 + agility",
+        rollMode: "NORMAL",
+        visibility: "PUBLIC",
+        characterId: ids.character,
+      },
+    });
+    expect(gmNormal.statusCode).toBe(201);
+    const messages = await db
+      .select()
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.campaignId, ids.campaign));
+    expect(messages.map((message) => message.id)).toEqual(
+      expect.arrayContaining([
+        advantage.json().id,
+        disadvantage.json().id,
+        gmNormal.json().id,
+      ]),
+    );
   });
 
   it("enforces catalog permissions, receipts, assignment snapshots and role filtering", async () => {

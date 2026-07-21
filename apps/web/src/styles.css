@@ -965,6 +965,51 @@ code {
   padding: var(--space-sm) var(--space-md);
   border-top: 1px solid var(--line);
 }
+
+.chat-composer-input {
+  position: relative;
+  min-width: 0;
+}
+
+.slash-command-suggestions {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 4;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.slash-command-suggestions button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  padding: 10px 12px;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.slash-command-suggestions button:hover,
+.slash-command-suggestions button:focus-visible {
+  background: var(--surface-3);
+}
+
+.slash-command-suggestions span {
+  color: var(--text-secondary);
+}
+
+.slash-command-suggestions code {
+  grid-column: 1 / -1;
+  color: var(--accent);
+}
 .chat-compose {
   display: grid;
   grid-template-columns: 1fr auto;
