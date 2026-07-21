@@ -1159,7 +1159,10 @@ export function App() {
         }}
       />
       <div className="workbench">
-        <main className="map-shell">
+        <main
+          className={`map-shell${workspace === "characters" ? " is-workspace-hidden" : ""}`}
+          aria-hidden={workspace === "characters"}
+        >
           <div className="map-toolbar">
             <div className="toolbar-group">
               <button

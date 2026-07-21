@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import type {
   AssetKind,
   AssetDto,
@@ -27,6 +35,11 @@ import {
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "./chat-composer";
+import {
+  characterWorkspaceReducer,
+  createCharacterWorkspaceState,
+  MAX_OPEN_CHARACTER_SHEETS,
+} from "./character-workspace-state";
 
 function formatDiceBreakdown(dice: GameSnapshot["messages"][number]["dice"]) {
   if (!dice) return "";
@@ -195,17 +208,6 @@ export function Sidebar(props: Props) {
   } = props;
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
-  const ownCharacter = props.snapshot.characters.find(
-    (character) => character.ownerMembershipId === props.snapshot.me.id,
-  );
-  const [selectedCharacterId, setSelectedCharacterId] = useState(
-    ownCharacter?.id ?? props.snapshot.characters[0]?.id ?? "",
-  );
-  const selectedCharacter =
-    props.snapshot.characters.find(
-      (character) => character.id === selectedCharacterId,
-    ) ?? ownCharacter;
-
   const openChat = (messageId?: string) => {
     setFocusedMessageId(messageId ?? null);
   };
@@ -235,31 +237,10 @@ export function Sidebar(props: Props) {
           onMessageFocused={() => setFocusedMessageId(null)}
         />
         {props.workspace === "characters" && (
-          <ArkenDialog
-            open
-            footer={false}
-            title="Персонажи"
-            variant="workspace"
-            className={!isGm ? "player-character-drawer" : undefined}
+          <CharacterWorkspace
+            {...props}
             onClose={() => props.onWorkspaceChange(null)}
-          >
-            <CharacterPanel
-              snapshot={props.snapshot}
-              character={selectedCharacter}
-              selectedId={selectedCharacterId}
-              setSelectedId={setSelectedCharacterId}
-              onPatch={props.onPatchCharacter}
-              onRoll={props.onRoll}
-              onAssignEntry={props.onAssignCatalogEntry}
-              onUpdateEntry={props.onUpdateCharacterEntry}
-              onDeleteEntry={props.onDeleteCharacterEntry}
-              onRollEntry={props.onRollEntry}
-              onRechargeEntry={props.onRechargeEntry}
-              onUpdateCounters={props.onUpdateCounters}
-              onCampaignClock={props.onCampaignClock}
-              onUpload={props.onUpload}
-            />
-          </ArkenDialog>
+          />
         )}
         {props.workspace === "tokens" && (
           <ArkenDialog
@@ -312,11 +293,220 @@ export function Sidebar(props: Props) {
   );
 }
 
-function CharacterPanel({
+export function CharacterWorkspace({
+  onClose,
+  ...props
+}: Props & { onClose: () => void }) {
+  const characters = useMemo(
+    () =>
+      props.snapshot.me.role === "GM"
+        ? props.snapshot.characters
+        : props.snapshot.characters.filter(
+            (character) =>
+              character.ownerMembershipId === props.snapshot.me.id ||
+              character.id === props.snapshot.me.characterId,
+          ),
+    [props.snapshot.characters, props.snapshot.me],
+  );
+  const [state, dispatch] = useReducer(
+    characterWorkspaceReducer,
+    characters.map((character) => character.id),
+    createCharacterWorkspaceState,
+  );
+  const workspaceRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => titleRef.current?.focus(), []);
+  useEffect(() => {
+    dispatch({
+      type: "SYNC",
+      ids: characters.map((character) => character.id),
+    });
+  }, [characters]);
+  useEffect(() => {
+    if (!state.activeId) return;
+    workspaceRef.current
+      ?.querySelector<HTMLElement>(
+        `[data-character-sheet-id="${CSS.escape(state.activeId)}"]`,
+      )
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [state.activeId]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if ((event.target as Element | null)?.closest('[role="dialog"]')) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const openCount = state.openIds.length;
+  return createPortal(
+    <main
+      ref={workspaceRef}
+      className="character-workspace"
+      aria-labelledby="character-workspace-title"
+    >
+      <header className="character-workspace__header">
+        <div>
+          <span className="eyebrow">Рабочее пространство</span>
+          <h2 ref={titleRef} id="character-workspace-title" tabIndex={-1}>
+            Персонажи
+          </h2>
+        </div>
+        <p className="muted">
+          Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
+        </p>
+        <button type="button" aria-label="Закрыть персонажей" onClick={onClose}>
+          Закрыть
+        </button>
+      </header>
+      <div className="character-workspace__body">
+        <nav className="character-rail" aria-label="Персонажи кампании">
+          {characters.length === 0 ? (
+            <p className="muted">Нет доступных персонажей.</p>
+          ) : (
+            characters.map((character) => {
+              const isOpen = state.openIds.includes(character.id);
+              const isCollapsed = state.collapsedIds.includes(character.id);
+              const full = !isOpen && openCount >= MAX_OPEN_CHARACTER_SHEETS;
+              return (
+                <div className="character-rail__item" key={character.id}>
+                  <button
+                    type="button"
+                    className={
+                      state.activeId === character.id ? "is-active" : undefined
+                    }
+                    aria-pressed={state.activeId === character.id}
+                    disabled={full}
+                    title={
+                      full
+                        ? "Закройте один из открытых листов, чтобы открыть другой."
+                        : isOpen
+                          ? `Перейти к персонажу ${character.name}`
+                          : `Открыть персонажа ${character.name}`
+                    }
+                    onClick={() => {
+                      if (isOpen) dispatch({ type: "FOCUS", id: character.id });
+                      else dispatch({ type: "OPEN", id: character.id });
+                    }}
+                  >
+                    <strong>{character.name}</strong>
+                    <span>
+                      {isCollapsed ? "свернут" : isOpen ? "открыт" : ""}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <button
+                      type="button"
+                      className="character-rail__close"
+                      aria-label={`Закрыть лист ${character.name}`}
+                      onClick={() =>
+                        dispatch({ type: "CLOSE", id: character.id })
+                      }
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </nav>
+        <div
+          className="character-sheet-deck"
+          aria-label="Открытые листы персонажей"
+        >
+          {state.openIds.length === 0 ? (
+            <div className="character-sheet-deck__empty">
+              <p>Выберите персонажа в списке, чтобы открыть его лист.</p>
+            </div>
+          ) : (
+            state.openIds.map((id) => {
+              const character = characters.find((item) => item.id === id);
+              if (!character) return null;
+              const collapsed = state.collapsedIds.includes(id);
+              return (
+                <article
+                  className={`character-sheet-card${
+                    state.activeId === id ? " is-active" : ""
+                  }${collapsed ? " is-collapsed" : ""}`}
+                  key={id}
+                  data-character-sheet-id={id}
+                  aria-label={`Лист персонажа ${character.name}`}
+                  tabIndex={-1}
+                >
+                  <header className="character-sheet-card__header">
+                    <button
+                      type="button"
+                      className="character-sheet-card__title"
+                      onClick={() => dispatch({ type: "FOCUS", id })}
+                    >
+                      {character.name}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`${collapsed ? "Развернуть" : "Свернуть"} лист ${character.name}`}
+                      onClick={() =>
+                        dispatch({
+                          type: collapsed ? "RESTORE" : "COLLAPSE",
+                          id,
+                        })
+                      }
+                    >
+                      {collapsed ? "Развернуть" : "Свернуть"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Закрыть лист ${character.name}`}
+                      onClick={() => dispatch({ type: "CLOSE", id })}
+                    >
+                      Закрыть
+                    </button>
+                  </header>
+                  <div
+                    className="character-sheet-card__body"
+                    hidden={collapsed}
+                    aria-hidden={collapsed}
+                  >
+                    <CharacterPanel
+                      snapshot={props.snapshot}
+                      character={character}
+                      selectedId={id}
+                      setSelectedId={(nextId) =>
+                        dispatch({ type: "OPEN", id: nextId })
+                      }
+                      showCharacterPicker={false}
+                      onPatch={props.onPatchCharacter}
+                      onRoll={props.onRoll}
+                      onAssignEntry={props.onAssignCatalogEntry}
+                      onUpdateEntry={props.onUpdateCharacterEntry}
+                      onDeleteEntry={props.onDeleteCharacterEntry}
+                      onRollEntry={props.onRollEntry}
+                      onRechargeEntry={props.onRechargeEntry}
+                      onUpdateCounters={props.onUpdateCounters}
+                      onCampaignClock={props.onCampaignClock}
+                      onUpload={props.onUpload}
+                    />
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </main>,
+    document.body,
+  );
+}
+
+export function CharacterPanel({
   snapshot,
   character,
   selectedId,
   setSelectedId,
+  showCharacterPicker = true,
   onPatch,
   onRoll,
   onAssignEntry,
@@ -332,6 +522,7 @@ function CharacterPanel({
   character: CharacterDto | undefined;
   selectedId: string;
   setSelectedId: (value: string) => void;
+  showCharacterPicker?: boolean;
   onPatch: Props["onPatchCharacter"];
   onRoll: Props["onRoll"];
   onAssignEntry: Props["onAssignCatalogEntry"];
@@ -466,7 +657,7 @@ function CharacterPanel({
   };
   return (
     <section className="panel-section">
-      {snapshot.me.role === "GM" && (
+      {showCharacterPicker && snapshot.me.role === "GM" && (
         <label className="field">
           Персонаж
           <FormSelect
@@ -481,6 +672,7 @@ function CharacterPanel({
           </FormSelect>
         </label>
       )}
+      <h3 className="character-block-heading">Личность и портрет</h3>
       <div className="section-heading">
         <div>
           <span className="eyebrow">Карточка</span>
@@ -580,6 +772,7 @@ function CharacterPanel({
           }
         />
       </details>
+      <h3 className="character-block-heading">Основные характеристики</h3>
       <div className="subsection character-roll-controls">
         <label className="field">
           Режим броска (d20)
@@ -633,6 +826,7 @@ function CharacterPanel({
           </label>
         ))}
       </div>
+      <h3 className="character-block-heading">Боевые характеристики</h3>
       <Button
         disabled={!editable || rollPending}
         onClick={() => void submitCharacterRoll("1d20 + agility", "Инициатива")}
@@ -640,7 +834,7 @@ function CharacterPanel({
         Инициатива (d20 + Ловкость)
       </Button>
       <div className="subsection">
-        <h3>Навыки</h3>
+        <h3>Дополнительные навыки</h3>
         {character.skills.length ? (
           character.skills.map((skill) => (
             <Button
@@ -660,7 +854,7 @@ function CharacterPanel({
         )}
       </div>
       <div className="subsection">
-        <h3>Заклинания</h3>
+        <h3>Способности и заклинания</h3>
         {character.spells.length ? (
           character.spells.map((spell) => (
             <div className="plain-row" key={spell.key}>
@@ -788,6 +982,7 @@ function CharacterPanel({
           />
         </ArkenDialog>
       )}
+      <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
       <label className="field">
         Инвентарь (один предмет на строку)
         <FormTextArea
@@ -805,6 +1000,7 @@ function CharacterPanel({
           }
         />
       </label>
+      <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
       <label className="field">
         Ресурсы (JSON: имя → current/maximum)
         <FormTextArea
@@ -892,6 +1088,7 @@ function CharacterPanel({
           </span>
         )}
       </label>
+      <h3 className="character-block-heading">Заметки</h3>
       <label className="field">
         Заметки
         <FormTextArea

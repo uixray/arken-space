@@ -163,10 +163,7 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   await expect(page.getByRole("heading", { name: "Картограф" })).toBeVisible();
   await expect(page.getByText("Наблюдение")).toBeVisible();
 
-  await page
-    .getByRole("dialog", { name: "Персонажи" })
-    .getByRole("button", { name: "Закрыть окно" })
-    .click();
+  await page.getByRole("button", { name: "Закрыть персонажей" }).click();
   await page.getByRole("button", { name: /Чат/ }).click();
   await expect(page.getByText("Сцена готова.")).toBeVisible();
   await page.screenshot({
@@ -233,6 +230,89 @@ test("GM opens token and file workflows without leaving the canvas", async ({
     await expect(filesDialog.getByText(section, { exact: true })).toBeVisible();
   }
   await expect(page.locator("canvas").first()).toBeVisible();
+});
+
+test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
+  const workspaceSnapshot = structuredClone(snapshot);
+  workspaceSnapshot.characters.push({
+    ...workspaceSnapshot.characters[0]!,
+    id: "e49b79b7-4ddf-49fe-9e7d-4ee03806c116",
+    name: "Второй персонаж",
+  });
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(workspaceSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as unknown as { __uix229Canvas: Element | null }).__uix229Canvas =
+      document.querySelector("canvas");
+  });
+
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Персонажи" }).click();
+  const workspace = page.locator(".character-workspace");
+  await expect(workspace).toBeVisible();
+  await expect(
+    workspace.getByRole("heading", { name: "Персонажи" }),
+  ).toBeFocused();
+  await expect(page.getByRole("dialog", { name: "Персонажи" })).toHaveCount(0);
+  await expect(page.locator(".map-shell")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await expect(page.locator("canvas").first()).toBeHidden();
+
+  await workspace.getByRole("button", { name: "Второй персонаж" }).click();
+  await expect(
+    workspace.getByRole("article", { name: "Лист персонажа Второй персонаж" }),
+  ).toBeVisible();
+  const secondSheet = workspace.getByRole("article", {
+    name: "Лист персонажа Второй персонаж",
+  });
+  await secondSheet
+    .getByLabel("Режим броска в карточке")
+    .selectOption("ADVANTAGE");
+  await workspace
+    .getByRole("button", { name: "Свернуть лист Второй персонаж" })
+    .click();
+  await expect(
+    workspace.getByRole("button", { name: "Развернуть лист Второй персонаж" }),
+  ).toBeVisible();
+  await workspace
+    .getByRole("button", { name: "Развернуть лист Второй персонаж" })
+    .click();
+  await expect(secondSheet.getByLabel("Режим броска в карточке")).toHaveValue(
+    "ADVANTAGE",
+  );
+  await workspace
+    .getByRole("article", { name: "Лист персонажа Второй персонаж" })
+    .getByRole("button", { name: "Закрыть лист Второй персонаж" })
+    .click();
+  await expect(
+    workspace.getByRole("article", { name: "Лист персонажа Второй персонаж" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Закрыть персонажей" }).click();
+  await expect(page.locator(".map-shell")).toHaveAttribute(
+    "aria-hidden",
+    "false",
+  );
+  await expect(page.locator("canvas").first()).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __uix229Canvas: Element | null })
+            .__uix229Canvas === document.querySelector("canvas"),
+      ),
+    )
+    .toBe(true);
 });
 
 test("GM controls music from the top bar and opens the library", async ({
@@ -693,7 +773,7 @@ for (const viewport of [
   });
 }
 
-test("player opens the character drawer while chat remains visible", async ({
+test("player opens the character workspace while chat remains visible", async ({
   page,
 }) => {
   const playerSnapshot = structuredClone(snapshot);
@@ -704,6 +784,12 @@ test("player opens the character drawer while chat remains visible", async ({
     characterId: playerSnapshot.characters[0]!.id,
   };
   playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.characters.push({
+    ...playerSnapshot.characters[0]!,
+    id: "a49b79b7-4ddf-49fe-9e7d-4ee03806c116",
+    name: "Чужой персонаж",
+    ownerMembershipId: "a21b4bb6-ae66-47b9-b719-610e0440044c",
+  });
   playerSnapshot.members = [playerSnapshot.me];
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
@@ -716,11 +802,16 @@ test("player opens the character drawer while chat remains visible", async ({
   await expect(page.locator(".chat-compose")).toBeVisible();
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
-  await expect(page.locator(".player-character-drawer")).toBeVisible();
+  await expect(page.locator(".character-workspace")).toBeVisible();
   await expect(page.locator(".chat-compose")).toBeVisible();
   await expect(page.getByRole("button", { name: /Наблюдение/ })).toBeVisible();
+  await expect(
+    page
+      .locator(".character-rail")
+      .getByRole("button", { name: "Чужой персонаж" }),
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(page.locator(".player-character-drawer")).toBeHidden();
+  await expect(page.locator(".character-workspace")).toBeHidden();
   await expect(page.locator(".workspace-menu summary")).toBeFocused();
 });
 
@@ -869,19 +960,19 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
   const goldRow = page
-    .locator(".player-character-drawer .inline-fields")
+    .locator(".character-workspace .inline-fields")
     .filter({ hasText: /^gold/ });
   const input = goldRow.locator('input[type="number"]');
 
   await input.focus();
-  await page.locator(".arken-workspace-window__header h2").click();
+  await page.locator(".character-workspace__header h2").click();
   expect(submittedGold).toEqual([]);
 
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
   await input.focus();
-  await page.locator(".arken-workspace-window__header h2").click();
+  await page.locator(".character-workspace__header h2").click();
   await expect.poll(() => submittedGold).toEqual([1, 2, 3]);
   expect(submittedRevisions).toEqual([1, 2, 3]);
   await expect(input).toHaveValue("3");
@@ -934,10 +1025,10 @@ test("resource conflict replaces the draft with canonical bootstrap data", async
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
   const resources = page
-    .locator(".player-character-drawer textarea:visible")
+    .locator(".character-workspace textarea:visible")
     .nth(1);
   await resources.fill('{"mana":{"current":5,"maximum":10}}');
-  await page.locator(".arken-workspace-window__header h2").click();
+  await page.locator(".character-workspace__header h2").click();
 
   await expect.poll(() => requests).toBe(1);
   await expect(resources).toHaveValue(
@@ -997,7 +1088,7 @@ test("wallet refreshes and safely reapplies a delta after a stale revision", asy
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
   const goldRow = page
-    .locator(".player-character-drawer .inline-fields")
+    .locator(".character-workspace .inline-fields")
     .filter({ hasText: /^gold/ });
   await goldRow.locator("button").last().click();
 
