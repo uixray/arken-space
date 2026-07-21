@@ -31,16 +31,23 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [handoffLink, setHandoffLink] = useState("");
   const [feedbackStatus, setFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [feedbackError, setFeedbackError] = useState("");
   const parts = window.location.pathname.split("/").filter(Boolean);
   const mode = parts[0];
   const token = parts[1] ?? "";
+  const handoffRequested =
+    new URLSearchParams(window.location.search).get("switch-player") === "1";
   const betaPlayer = mode === "play" ? betaPlayerByHandle(token) : undefined;
   const hasInvitation = mode === "gm" || mode === "join" || Boolean(betaPlayer);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (handoffRequested && !hasInvitation) {
+      openPersonalLink();
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -65,6 +72,34 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
       setError(reason instanceof Error ? reason.message : "Не удалось войти");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const openPersonalLink = () => {
+    setError("");
+    try {
+      const destination = new URL(handoffLink.trim(), window.location.origin);
+      const path = destination.pathname.split("/").filter(Boolean);
+      const validPath =
+        path.length === 2 &&
+        (path[0] === "join" || path[0] === "play") &&
+        (path[1]?.length ?? 0) > 0;
+      if (
+        destination.origin !== window.location.origin ||
+        destination.search ||
+        destination.hash ||
+        !validPath
+      )
+        throw new Error(
+          "Используйте личную ссылку Arken Space без параметров.",
+        );
+      window.location.assign(destination.pathname);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось открыть личную ссылку",
+      );
     }
   };
 
@@ -132,7 +167,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
                   ? "Вход в кампанию"
                   : betaPlayer
                     ? `Войти как ${betaPlayer.name}`
-                    : "Выберите игрока"}
+                    : handoffRequested
+                      ? "Передайте компьютер следующему игроку"
+                      : "Выберите игрока"}
             </h2>
           </div>
           <p>
@@ -142,7 +179,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
                 ? "Укажите имя, которое увидят другие участники игры."
                 : betaPlayer
                   ? `Публичный бета-аккаунт @${betaPlayer.handle}.`
-                  : "На время закрытого бета-теста выберите свой аккаунт."}
+                  : handoffRequested
+                    ? "Следующий игрок должен открыть свою личную ссылку. Она не сохраняется на этом компьютере."
+                    : "На время закрытого бета-теста выберите свой аккаунт."}
           </p>
           {mode === "join" && (
             <label>
@@ -173,7 +212,26 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               Войти
             </Button>
           )}
-          {!hasInvitation && (
+          {handoffRequested && !hasInvitation && (
+            <div className="handoff-link-form">
+              <label>
+                Личная ссылка игрока
+                <FormInput
+                  value={handoffLink}
+                  onChange={(event) => setHandoffLink(event.target.value)}
+                  type="password"
+                  autoComplete="off"
+                  inputMode="url"
+                  placeholder="https://arken-space…/join/…"
+                  required
+                />
+              </label>
+              <Button type="submit" view="action" size="l">
+                Открыть ссылку
+              </Button>
+            </div>
+          )}
+          {!hasInvitation && !handoffRequested && (
             <nav className="beta-player-list" aria-label="Постоянные игроки">
               {betaPlayers.map((player) => (
                 <a key={player.handle} href={`/play/${player.handle}`}>

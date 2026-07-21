@@ -26,8 +26,8 @@ import {
   moveTokenSchema,
   rulerUpdateSchema,
 } from "@arken/contracts";
-import type { AuthContext } from "./auth.js";
-import { authFromSessionToken } from "./auth.js";
+import type { AuthContext, SessionAuthContext } from "./auth.js";
+import { authFromSessionToken, sessionIsActive } from "./auth.js";
 import { env } from "./env.js";
 import { buildSnapshot } from "./snapshot.js";
 import { cookieValue } from "./security.js";
@@ -40,6 +40,7 @@ type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
 const campaignRoom = (campaignId: string) => `campaign:${campaignId}`;
 const gmRoom = (campaignId: string) => `campaign:${campaignId}:gm`;
 const memberRoom = (membershipId: string) => `member:${membershipId}`;
+const sessionRoom = (sessionId: string) => `session:${sessionId}`;
 
 type EditableToken = typeof tokens.$inferSelect & {
   controllerMembershipIds: string[];
@@ -185,6 +186,28 @@ export function registerRealtime(
 
   io.on("connection", async (socket) => {
     const auth = socket.data.auth;
+    // Join the session room before any other async setup. Logout can then
+    // target this socket even while the rest of the connection is pending.
+    await socket.join(sessionRoom(auth.sessionId));
+    if (!(await sessionIsActive(db, auth.sessionId)) || !socket.connected) {
+      socket.disconnect(true);
+      return;
+    }
+    // Room-based disconnects handle normal logout. This guard also rejects an
+    // event that was queued while connection setup raced with session removal.
+    socket.use((_event, next) => {
+      void sessionIsActive(db, auth.sessionId).then(
+        (active) => {
+          if (!active) {
+            socket.disconnect(true);
+            next(new Error("AUTH_REQUIRED"));
+            return;
+          }
+          next();
+        },
+        (error) => next(error as Error),
+      );
+    });
     const pending = pendingPresence.get(
       presenceKey(auth.campaignId, auth.membershipId),
     );
@@ -195,7 +218,12 @@ export function registerRealtime(
     await socket.join(campaignRoom(auth.campaignId));
     await socket.join(memberRoom(auth.membershipId));
     if (auth.role === "GM") await socket.join(gmRoom(auth.campaignId));
-    socket.emit("game:snapshot", await buildSnapshot(db, auth));
+    const snapshot = await buildSnapshot(db, auth);
+    if (!(await sessionIsActive(db, auth.sessionId)) || !socket.connected) {
+      socket.disconnect(true);
+      return;
+    }
+    socket.emit("game:snapshot", snapshot);
     await emitPresence(io, db, auth.campaignId);
     log.info(
       {
@@ -757,11 +785,11 @@ export function registerRealtime(
     });
   });
 
-  return { campaignRoom, gmRoom, memberRoom };
+  return { campaignRoom, gmRoom, memberRoom, sessionRoom };
 }
 
 declare module "socket.io" {
   interface SocketData {
-    auth: AuthContext;
+    auth: SessionAuthContext;
   }
 }

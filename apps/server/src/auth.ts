@@ -14,13 +14,18 @@ export interface AuthContext {
   displayName: string;
 }
 
+export interface SessionAuthContext extends AuthContext {
+  sessionId: string;
+}
+
 export async function authFromSessionToken(
   db: Database,
   token: string | null,
-): Promise<AuthContext | null> {
+): Promise<SessionAuthContext | null> {
   if (!token) return null;
   const [row] = await db
     .select({
+      sessionId: sessions.id,
       membershipId: memberships.id,
       campaignId: memberships.campaignId,
       role: memberships.role,
@@ -36,6 +41,18 @@ export async function authFromSessionToken(
     )
     .limit(1);
   return row ?? null;
+}
+
+export async function sessionIsActive(
+  db: Database,
+  sessionId: string,
+): Promise<boolean> {
+  const [session] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
+    .limit(1);
+  return Boolean(session);
 }
 
 export async function requireAuth(

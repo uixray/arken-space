@@ -220,7 +220,9 @@ async function claimInvite(
   await page.goto(inviteUrl);
   await page.getByLabel("Имя").fill(displayName);
   await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page.getByRole("button", { name: "Выйти" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Сменить игрока" }),
+  ).toBeVisible();
   await expect(page.getByText("в сети", { exact: true })).toBeVisible();
   await expect
     .poll(async () => (await bootstrap(context)).me)
@@ -1112,5 +1114,180 @@ test("GM and six isolated players recover authoritative state without security l
   } finally {
     for (const { socket } of connections) socket.disconnect();
     await Promise.all([gm.close(), ...players.map((player) => player.close())]);
+  }
+});
+
+test("a shared browser handoff revokes player A before player B uses their own invite", async ({
+  browser,
+}, testInfo) => {
+  const runTag = "shared-handoff-" + testInfo.retry;
+  const playerAName = runTag + " Player A";
+  const playerBName = runTag + " Player B";
+  const playerAPrivateNote = runTag + " private note A";
+  const playerBPrivateNote = runTag + " private note B";
+  const gm = await browser.newContext();
+  const sharedBrowser = await browser.newContext();
+  let playerAConnection: GameConnection | null = null;
+
+  try {
+    await expectOk(
+      await gm.request.post(baseUrl + "/api/auth/gm", {
+        data: { token: gmToken },
+      }),
+    );
+    await Promise.all(
+      [playerAName, playerBName].map(async (name) =>
+        expectOk(
+          await gm.request.post(baseUrl + "/api/characters", {
+            data: { actionId: actionId(), name },
+          }),
+        ),
+      ),
+    );
+
+    const characters = (await bootstrap(gm)).characters;
+    const playerACharacter = characters.find(
+      (character) => character.name === playerAName,
+    );
+    const playerBCharacter = characters.find(
+      (character) => character.name === playerBName,
+    );
+    if (!playerACharacter || !playerBCharacter)
+      throw new Error("Shared-browser handoff characters were not created");
+
+    await Promise.all([
+      expectOk(
+        await gm.request.patch(
+          baseUrl + "/api/characters/" + playerACharacter.id,
+          {
+            data: {
+              actionId: actionId(),
+              notes: playerAPrivateNote,
+            },
+          },
+        ),
+      ),
+      expectOk(
+        await gm.request.patch(
+          baseUrl + "/api/characters/" + playerBCharacter.id,
+          {
+            data: {
+              actionId: actionId(),
+              notes: playerBPrivateNote,
+            },
+          },
+        ),
+      ),
+    ]);
+
+    const inviteUrls = await Promise.all(
+      [playerACharacter, playerBCharacter].map(async (character) => {
+        const response = await expectOk(
+          await gm.request.post(baseUrl + "/api/invites", {
+            data: {
+              actionId: actionId(),
+              characterId: character.id,
+              label: character.name,
+              expiresInHours: 1,
+            },
+          }),
+        );
+        return ((await response.json()) as { url: string }).url;
+      }),
+    );
+    const [playerAInviteUrl, playerBInviteUrl] = inviteUrls;
+    if (!playerAInviteUrl || !playerBInviteUrl)
+      throw new Error("Shared-browser handoff invites were not created");
+
+    const page = await sharedBrowser.newPage();
+    await page.goto(playerAInviteUrl);
+    await page.getByLabel("Имя").fill(playerAName);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(
+      page.getByText("Вы играете как: " + playerAName),
+    ).toBeVisible();
+
+    const playerASnapshot = await bootstrap(sharedBrowser);
+    expect(playerASnapshot.me).toMatchObject({
+      displayName: playerAName,
+      role: "PLAYER",
+      characterId: playerACharacter.id,
+    });
+    playerAConnection = await connectSocket(sharedBrowser);
+    const playerASocketDisconnected = new Promise<void>((resolve) =>
+      playerAConnection!.socket.once("disconnect", () => resolve()),
+    );
+
+    await page.getByRole("button", { name: "Сменить игрока" }).click();
+    const handoffDialog = page.getByRole("dialog", {
+      name: "Сменить игрока?",
+    });
+    await handoffDialog.getByRole("button", { name: "Сменить игрока" }).click();
+
+    await expect(playerASocketDisconnected).resolves.toBeUndefined();
+    await expect(page).toHaveURL(/\?switch-player=1$/);
+    await expect(
+      page.getByRole("heading", {
+        name: "Передайте компьютер следующему игроку",
+      }),
+    ).toBeVisible();
+    await expect
+      .poll(async () =>
+        (await sharedBrowser.request.get(baseUrl + "/api/bootstrap")).status(),
+      )
+      .toBe(401);
+    const playerAActionAfterHandoff = await sharedBrowser.request.post(
+      baseUrl + "/api/chat",
+      {
+        data: {
+          actionId: actionId(),
+          body: runTag + " A must not send this",
+          visibility: "PUBLIC",
+        },
+      },
+    );
+    expect(playerAActionAfterHandoff.status()).toBe(401);
+
+    await page.getByLabel("Личная ссылка игрока").fill(playerBInviteUrl);
+    await page.getByRole("button", { name: "Открыть ссылку" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(new URL(playerBInviteUrl).pathname + "$"),
+    );
+    await page.getByLabel("Имя").fill(playerBName);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(
+      page.getByText("Вы играете как: " + playerBName),
+    ).toBeVisible();
+
+    const playerBSnapshot = await bootstrap(sharedBrowser);
+    const playerBSerializedSnapshot = JSON.stringify(playerBSnapshot);
+    expect(playerBSnapshot.me).toMatchObject({
+      displayName: playerBName,
+      role: "PLAYER",
+      characterId: playerBCharacter.id,
+    });
+    expect(playerBSnapshot.me.id).not.toBe(playerASnapshot.me.id);
+    expect(playerBSnapshot.members).toHaveLength(1);
+    expect(playerBSnapshot.characters).toHaveLength(1);
+    expect(playerBSnapshot.characters).toMatchObject([
+      { id: playerBCharacter.id, notes: playerBPrivateNote },
+    ]);
+    expect(playerBSerializedSnapshot).not.toContain(playerAPrivateNote);
+    expect(playerBSerializedSnapshot).not.toContain(playerACharacter.id);
+
+    const playerBAction = await sharedBrowser.request.post(
+      baseUrl + "/api/chat",
+      {
+        data: {
+          actionId: actionId(),
+          body: runTag + " B can act",
+          visibility: "PUBLIC",
+        },
+      },
+    );
+    await expectOk(playerBAction);
+  } finally {
+    playerAConnection?.socket.disconnect();
+    await Promise.all([gm.close(), sharedBrowser.close()]);
   }
 });

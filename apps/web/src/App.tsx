@@ -30,6 +30,7 @@ import {
 } from "./toast-state";
 import { notify } from "./ui/notifications";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
+import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { characterTokenPlacementRequest } from "./token-placement";
 
@@ -322,6 +323,9 @@ export function App() {
   const [createSceneOpen, setCreateSceneOpen] = useState(false);
   const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
   const [campaignRenameOpen, setCampaignRenameOpen] = useState(false);
+  const [playerHandoffOpen, setPlayerHandoffOpen] = useState(false);
+  const [playerHandoffPending, setPlayerHandoffPending] = useState(false);
+  const [playerHandoffError, setPlayerHandoffError] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceDestination | null>(null);
   const workspaceMenuRef = useRef<HTMLDetailsElement>(null);
 
@@ -599,6 +603,53 @@ export function App() {
         reason instanceof Error ? reason.message : "Операция не выполнена",
       );
       throw reason;
+    }
+  };
+
+  const handOffToNextPlayer = async () => {
+    const finishHandoff = () => {
+      setSocket(null);
+      setSnapshot(null);
+      setPresence([]);
+      setPreviewSnapshot(null);
+      setWorkspace(null);
+      window.location.replace("/?switch-player=1");
+    };
+
+    setPlayerHandoffError("");
+    setPlayerHandoffPending(true);
+    socket?.disconnect();
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+      finishHandoff();
+    } catch (reason) {
+      try {
+        await api("/api/bootstrap");
+        socket?.connect();
+        setPlayerHandoffError(
+          reason instanceof Error
+            ? reason.message
+            : "Не удалось завершить текущую сессию",
+        );
+        setPlayerHandoffPending(false);
+      } catch (verificationReason) {
+        if (
+          verificationReason instanceof ApiError &&
+          verificationReason.status === 401
+        ) {
+          finishHandoff();
+          return;
+        }
+
+        setSocket(null);
+        setSnapshot(null);
+        setPresence([]);
+        setPreviewSnapshot(null);
+        setWorkspace(null);
+        setError(
+          "Не удалось проверить завершение сессии. Данные игрока скрыты; проверьте соединение и обновите страницу.",
+        );
+      }
     }
   };
 
@@ -1023,10 +1074,18 @@ export function App() {
             v{snapshot.snapshotVersion} ·{" "}
             {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
           </span>
-          <span>
+          <span
+            className={
+              !previewSnapshot && snapshot.me.role === "PLAYER"
+                ? "player-identity"
+                : undefined
+            }
+          >
             {previewSnapshot
               ? `Просмотр: ${viewSnapshot.me.displayName}`
-              : `${snapshot.me.displayName} · ${snapshot.me.role}`}
+              : snapshot.me.role === "PLAYER"
+                ? `Вы играете как: ${snapshot.me.displayName}`
+                : `${snapshot.me.displayName} · ${snapshot.me.role}`}
           </span>
           {!previewSnapshot && (
             <FeedbackReporter
@@ -1040,16 +1099,43 @@ export function App() {
               Вернуться к мастеру
             </button>
           )}
-          <button
-            onClick={async () => {
-              await api("/api/auth/logout", { method: "POST" });
-              window.location.reload();
-            }}
-          >
-            Выйти
-          </button>
+          {snapshot.me.role === "PLAYER" && !previewSnapshot ? (
+            <button onClick={() => setPlayerHandoffOpen(true)}>
+              Сменить игрока
+            </button>
+          ) : (
+            <button
+              onClick={async () => {
+                await api("/api/auth/logout", { method: "POST" });
+                window.location.reload();
+              }}
+            >
+              Выйти
+            </button>
+          )}
         </div>
       </header>
+      <ArkenDialog
+        open={playerHandoffOpen}
+        title="Сменить игрока?"
+        applyLabel="Сменить игрока"
+        loading={playerHandoffPending}
+        error={playerHandoffError}
+        onApply={() => void handOffToNextPlayer()}
+        onClose={() => {
+          if (!playerHandoffPending) {
+            setPlayerHandoffError("");
+            setPlayerHandoffOpen(false);
+          }
+        }}
+      >
+        <p className="arken-dialog-message">
+          Завершите текущие действия перед передачей компьютера: несохранённые
+          данные в открытых формах будут потеряны. Следующий игрок войдёт по
+          своей личной ссылке. На общем экране не открывайте личные заметки или
+          сообщения, которые не должны видеть другие игроки.
+        </p>
+      </ArkenDialog>
       <TextPromptDialog
         open={campaignRenameOpen}
         title="Название кампании"

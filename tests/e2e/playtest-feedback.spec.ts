@@ -164,6 +164,114 @@ test("nickname link exchanges a public beta player session", async ({
   await expect(page).toHaveURL("/");
 });
 
+test("a player can safely hand off a shared computer to the next invite", async ({
+  page,
+}) => {
+  const playerSnapshot: GameSnapshot = {
+    ...baseSnapshot,
+    me: {
+      id: "membership-player",
+      role: "PLAYER",
+      displayName: "Игрок один",
+      characterId: null,
+    },
+  };
+  let authenticated = true;
+  let logoutRequests = 0;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: authenticated ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(authenticated ? playerSnapshot : {}),
+    }),
+  );
+  await page.route("**/api/auth/logout", async (route) => {
+    authenticated = false;
+    logoutRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+
+  await page.goto("/");
+  await expect(page.getByText("Вы играете как: Игрок один")).toBeVisible();
+  await page.getByRole("button", { name: "Сменить игрока" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Сменить игрока?" });
+  await expect(dialog).toContainText("несохранённые данные");
+  await dialog.getByRole("button", { name: "Сменить игрока" }).click();
+
+  await expect.poll(() => logoutRequests).toBe(1);
+  await expect(page).toHaveURL(/\?switch-player=1$/);
+  await expect(
+    page.getByRole("heading", {
+      name: "Передайте компьютер следующему игроку",
+    }),
+  ).toBeVisible();
+
+  await page
+    .getByLabel("Личная ссылка игрока")
+    .fill("https://example.test/join/not-for-this-site");
+  await page.getByRole("button", { name: "Открыть ссылку" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "личную ссылку Arken Space",
+  );
+
+  await page.getByLabel("Личная ссылка игрока").fill("/join/player-token");
+  await page.getByRole("button", { name: "Открыть ссылку" }).click();
+  await expect(page).toHaveURL("/join/player-token");
+});
+
+test("handoff hides the previous player when the logout response is lost", async ({
+  page,
+}) => {
+  const playerSnapshot: GameSnapshot = {
+    ...baseSnapshot,
+    me: {
+      id: "membership-player",
+      role: "PLAYER",
+      displayName: "Игрок один",
+      characterId: null,
+    },
+  };
+  let authenticated = true;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: authenticated ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(authenticated ? playerSnapshot : {}),
+    }),
+  );
+  await page.route("**/api/auth/logout", async (route) => {
+    authenticated = false;
+    await route.abort("failed");
+  });
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+
+  await page.goto("/");
+  await expect(page.getByText("Вы играете как: Игрок один")).toBeVisible();
+  await page.getByRole("button", { name: "Сменить игрока" }).click();
+  await page
+    .getByRole("dialog", { name: "Сменить игрока?" })
+    .getByRole("button", { name: "Сменить игрока" })
+    .click();
+
+  await expect(page).toHaveURL(/\?switch-player=1$/);
+  await expect(
+    page.getByRole("heading", {
+      name: "Передайте компьютер следующему игроку",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Вы играете как: Игрок один")).toHaveCount(0);
+});
+
 for (const invitation of [
   { path: "/gm/gm-token", endpoint: "/api/auth/gm", label: "Вход мастера" },
   {

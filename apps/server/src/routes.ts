@@ -107,6 +107,7 @@ type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
 const campaignRoom = (id: string) => `campaign:${id}`;
 const gmRoom = (id: string) => `campaign:${id}:gm`;
 const memberRoom = (id: string) => `member:${id}`;
+const sessionRoom = (id: string) => `session:${id}`;
 
 async function broadcastSnapshots(
   io: RealtimeServer,
@@ -548,8 +549,14 @@ export function registerRoutes(
 
   app.post("/api/auth/logout", async (request, reply) => {
     const token = request.cookies[env.SESSION_COOKIE_NAME];
-    if (token)
-      await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+    if (token) {
+      const deleted = await db
+        .delete(sessions)
+        .where(eq(sessions.tokenHash, hashToken(token)))
+        .returning({ id: sessions.id });
+      for (const session of deleted)
+        io.in(sessionRoom(session.id)).disconnectSockets(true);
+    }
     reply.clearCookie(env.SESSION_COOKIE_NAME, { path: "/" });
     return { ok: true };
   });
