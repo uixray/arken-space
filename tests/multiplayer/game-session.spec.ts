@@ -499,7 +499,7 @@ test("GM and six isolated players recover authoritative state without security l
       .click();
     await expect(pages[0]!.locator(".token-palette")).toBeVisible();
     await expect(pages[0]!.locator(".palette-card")).toHaveCount(1);
-    await expect(pages[0]!.locator(".palette-place strong")).toHaveText(
+    await expect(pages[0]!.locator(".palette-card__title")).toHaveText(
       runTag + " Player Token 1",
     );
     const controlledDefinitionId = playerTokens[0]!.definitionId;
