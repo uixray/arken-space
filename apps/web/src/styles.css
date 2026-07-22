@@ -1952,3 +1952,24 @@ code {
 .beta-player-list a:hover {
   background: var(--g-color-base-simple-hover);
 }
+
+.map-viewport:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+.map-object-list-trigger {
+  position: absolute;
+  z-index: 14;
+  top: 8px;
+  left: 8px;
+}
+.map-object-list {
+  display: grid;
+  gap: 6px;
+}
+.map-object-list button {
+  text-align: left;
+}
+.map-object-list button[aria-selected="true"] {
+  outline: 2px solid var(--accent);
+}

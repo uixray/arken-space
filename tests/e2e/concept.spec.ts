@@ -1201,3 +1201,119 @@ test("player fog keeps covered foreign tokens hidden while owned tokens remain v
     { animations: "disabled", maxDiffPixelRatio: 0.02 },
   );
 });
+
+test("map keyboard command core is scoped, observable, and accessible", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.goto("/");
+
+  const map = page.getByRole("region", {
+    name: "\u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u0446\u0435\u043d\u044b",
+  });
+  await expect(map).toHaveAttribute("tabindex", "0");
+  await map.focus();
+  await expect(map).toBeFocused();
+
+  const canvas = map.locator("canvas").first();
+  const beforePan = await canvas.screenshot();
+  await page.keyboard.press("ArrowRight");
+  const afterPan = await canvas.screenshot();
+  expect(afterPan.equals(beforePan)).toBe(false);
+
+  const scale = map.getByRole("slider", {
+    name: "\u041c\u0430\u0441\u0448\u0442\u0430\u0431 \u043a\u0430\u0440\u0442\u044b",
+  });
+  await map.focus();
+  await page.keyboard.press("f");
+  const fittedScale = await scale.inputValue();
+  await map.focus();
+  await page.keyboard.press("+");
+  await expect(scale).not.toHaveValue(fittedScale);
+  await map.focus();
+  await page.keyboard.press("0");
+  await expect(scale).toHaveValue(fittedScale);
+  await map.focus();
+  await page.keyboard.press("+");
+  await map.focus();
+  await page.keyboard.press("f");
+  await expect(scale).toHaveValue(fittedScale);
+
+  // A child input keeps native keyboard behaviour; the map command handler
+  // deliberately accepts commands only when the map root itself is targeted.
+  await scale.focus();
+  const inputScale = Number(await scale.inputValue());
+  await page.keyboard.press("ArrowRight");
+  expect(Number(await scale.inputValue())).toBeGreaterThan(inputScale);
+});
+
+test("map object list preserves Escape priority and Delete cancellation", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.goto("/");
+
+  const map = page.getByRole("region", {
+    name: "\u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u0446\u0435\u043d\u044b",
+  });
+  await map.focus();
+  await page.keyboard.press("o");
+
+  const objects = page.getByRole("dialog", {
+    name: "\u041e\u0431\u044a\u0435\u043a\u0442\u044b \u043a\u0430\u0440\u0442\u044b",
+  });
+  await expect(objects).toBeVisible();
+  const token = objects.getByRole("button", {
+    name: /\u0422\u043e\u043a\u0435\u043d:/,
+  });
+  await token.click();
+  await expect(token).toHaveAttribute("aria-pressed", "true");
+
+  // First Escape belongs to the top-most dialog and must not clear selection.
+  await page.keyboard.press("Escape");
+  await expect(objects).toBeHidden();
+  await map.focus();
+  await page.keyboard.press("o");
+  await expect(
+    objects.getByRole("button", { name: /\u0422\u043e\u043a\u0435\u043d:/ }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+
+  await map.focus();
+  await page.keyboard.press("Delete");
+  const confirm = page.getByRole("dialog", {
+    name: "\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043e\u0431\u044a\u0435\u043a\u0442 \u0441 \u043a\u0430\u0440\u0442\u044b?",
+  });
+  await expect(confirm).toBeVisible();
+  await confirm
+    .getByRole("button", { name: "\u041e\u0442\u043c\u0435\u043d\u0430" })
+    .click();
+  await expect(confirm).toBeHidden();
+
+  await map.focus();
+  await page.keyboard.press("o");
+  await expect(
+    objects.getByRole("button", { name: /\u0422\u043e\u043a\u0435\u043d:/ }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    objects.getByRole("button", { name: /\u0422\u043e\u043a\u0435\u043d:/ }),
+  ).toHaveCount(1);
+});

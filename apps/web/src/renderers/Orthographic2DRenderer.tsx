@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   Circle,
@@ -14,6 +14,15 @@ import useImage from "use-image";
 import Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
 import { isRectFullyRevealed } from "./fog";
+import { ArkenDialog } from "../ui/ArkenDialog";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import {
+  createInitialMapInteractionState,
+  createValidatedMapObjectRef,
+  mapInteractionReducer,
+  type MapObjectRef,
+} from "./map-interaction";
+import { selectMapObjects } from "./map-objects";
 
 function Grid({
   width,
@@ -84,6 +93,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const { canvasEditMode, onCanvasEditCancel } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
+  const [interaction, dispatchInteraction] = useReducer(
+    mapInteractionReducer,
+    undefined,
+    createInitialMapInteractionState,
+  );
   const fogMaskRef = useRef<Konva.Group>(null);
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   const [scale, setScale] = useState(1);
@@ -304,6 +318,137 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     });
   };
 
+  const selectableObjects = selectMapObjects(props.tokens, props.drawings, {
+    role: props.role,
+    membershipId: props.membershipId,
+    fogReveals: props.fogReveals,
+    world: worldDraft,
+    showGmLayer,
+  });
+  const selectObject = (ref: MapObjectRef) => {
+    dispatchInteraction({ type: "select", ref });
+    setSelectedTokenIds(ref.kind === "token" ? [ref.objectId] : []);
+    setSelectedDrawingIds(ref.kind === "drawing" ? [ref.objectId] : []);
+    setSelectedDrawingId(ref.kind === "drawing" ? ref.objectId : null);
+  };
+  const resolveCurrentRef = (ref: MapObjectRef | null) => {
+    if (!ref) return null;
+    const candidates =
+      ref.kind === "token"
+        ? selectableObjects.tokens
+        : selectableObjects.drawings;
+    const current = candidates.find(
+      (item) => item.id === ref.objectId && item.revision === ref.revision,
+    );
+    return current ? createValidatedMapObjectRef(ref) : null;
+  };
+  const requestDelete = (ref: MapObjectRef) => {
+    const current = resolveCurrentRef(ref);
+    if (current) dispatchInteraction({ type: "request-delete", ref: current });
+    else dispatchInteraction({ type: "clear-selection" });
+  };
+  const requestSelectedDelete = () => {
+    if (interaction.selectedObject) requestDelete(interaction.selectedObject);
+  };
+  const openSelectedAction = () => {
+    const selected = interaction.selectedObject;
+    if (!selected || selected.kind !== "token") return;
+    if (!resolveCurrentRef(selected)) {
+      dispatchInteraction({ type: "clear-selection" });
+      return;
+    }
+    const token = selectableObjects.tokens.find(
+      (item) =>
+        item.id === selected.objectId && item.revision === selected.revision,
+    );
+    if (token)
+      setTokenMenu({ token, x: viewport.width / 2, y: viewport.height / 2 });
+  };
+  const handleMapKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.target !== event.currentTarget ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    )
+      return;
+    const step = 48;
+    if (event.key === "Escape") {
+      dispatchInteraction({ type: "escape" });
+      setSelectedTokenIds([]);
+      setSelectedDrawingIds([]);
+      setSelectedDrawingId(null);
+      dispatchInteraction({ type: "clear-selection" });
+      setTokenMenu(null);
+    } else if (event.key === "ArrowLeft")
+      setPosition((p) => ({ ...p, x: p.x + step }));
+    else if (event.key === "ArrowRight")
+      setPosition((p) => ({ ...p, x: p.x - step }));
+    else if (event.key === "ArrowUp")
+      setPosition((p) => ({ ...p, y: p.y + step }));
+    else if (event.key === "ArrowDown")
+      setPosition((p) => ({ ...p, y: p.y - step }));
+    else if (event.key === "+" || event.key === "=") zoomAtCenter(scale * 1.1);
+    else if (event.key === "-") zoomAtCenter(scale / 1.1);
+    else if (event.key === "0" || event.key.toLowerCase() === "f") fitMap();
+    else if (event.key.toLowerCase() === "o")
+      dispatchInteraction({ type: "toggle-object-list" });
+    else if (event.key === "Enter") openSelectedAction();
+    else if (event.key === "Delete") requestSelectedDelete();
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  useEffect(() => {
+    const selected = interaction.selectedObject;
+    const candidates =
+      selected?.kind === "token"
+        ? selectableObjects.tokens
+        : selectableObjects.drawings;
+    const stillCurrent =
+      selected &&
+      candidates.some(
+        (item) =>
+          item.id === selected.objectId && item.revision === selected.revision,
+      );
+    if (selected && !stillCurrent) {
+      dispatchInteraction({ type: "clear-selection" });
+      setSelectedTokenIds([]);
+      setSelectedDrawingIds([]);
+      setSelectedDrawingId(null);
+    }
+  }, [
+    interaction.selectedObject,
+    props.tokens,
+    props.drawings,
+    props.fogReveals,
+    props.role,
+    props.membershipId,
+    showGmLayer,
+    worldDraft,
+    selectableObjects.tokens,
+    selectableObjects.drawings,
+  ]);
+
+  const { onDrawingDelete, onTokenDelete } = props;
+  useEffect(() => {
+    const command = interaction.commands[0];
+    if (!command) return;
+    if (command.type === "delete-object") {
+      if (command.ref.kind === "token")
+        void onTokenDelete?.(command.ref.objectId, command.ref.revision);
+      else void onDrawingDelete?.(command.ref.objectId, command.ref.revision);
+      setSelectedTokenIds((ids) =>
+        ids.filter((id) => id !== command.ref.objectId),
+      );
+      setSelectedDrawingIds((ids) =>
+        ids.filter((id) => id !== command.ref.objectId),
+      );
+      setSelectedDrawingId((id) => (id === command.ref.objectId ? null : id));
+    }
+    dispatchInteraction({ type: "consume-command", id: command.id });
+  }, [interaction.commands, onDrawingDelete, onTokenDelete]);
+
   const handleFogDown = () => {
     if ((props.tool !== "FOG" && props.tool !== "COVER") || props.role !== "GM")
       return;
@@ -477,6 +622,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           })
           .map((drawing) => drawing.id),
       );
+      dispatchInteraction({ type: "clear-selection" });
+      setSelectedDrawingId(null);
       setMarquee(null);
       return;
     }
@@ -580,6 +727,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     <div
       className="map-viewport"
       ref={containerRef}
+      tabIndex={0}
+      role="region"
+      aria-label="Интерактивная карта сцены"
+      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 F O Enter Delete Escape"
+      onFocus={() => dispatchInteraction({ type: "focus" })}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          dispatchInteraction({ type: "blur" });
+      }}
+      onKeyDown={handleMapKeyDown}
       onDragOver={(event) => {
         if (
           event.dataTransfer.types.includes(
@@ -602,6 +759,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       }}
       onContextMenu={(event) => event.preventDefault()}
     >
+      <button
+        type="button"
+        className="map-object-list-trigger"
+        onClick={() => dispatchInteraction({ type: "open-object-list" })}
+      >
+        Объекты карты
+      </button>
       <Stage
         ref={stageRef}
         width={viewport.width}
@@ -770,9 +934,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 y={token.y}
                 listening={props.role === "GM"}
                 onClick={() => {
-                  setSelectedTokenIds([token.id]);
-                  setSelectedDrawingIds([]);
-                  setSelectedDrawingId(null);
+                  selectObject({
+                    kind: "token",
+                    objectId: token.id,
+                    revision: token.revision,
+                  });
                 }}
                 onContextMenu={(event) => {
                   event.evt.preventDefault();
@@ -780,6 +946,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   if (props.role !== "GM") return;
                   const rect = containerRef.current?.getBoundingClientRect();
                   if (!rect) return;
+                  selectObject({
+                    kind: "token",
+                    objectId: token.id,
+                    revision: token.revision,
+                  });
                   setTokenMenu({
                     token,
                     x: event.evt.clientX - rect.left,
@@ -904,9 +1075,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 selectedDrawingIds.includes(drawing.id) ? 10 / scale : 0
               }
               onClick={() => {
-                setSelectedDrawingId(drawing.id);
-                setSelectedDrawingIds([drawing.id]);
-                setSelectedTokenIds([]);
+                selectObject({
+                  kind: "drawing",
+                  objectId: drawing.id,
+                  revision: drawing.revision,
+                });
               }}
               onDragEnd={(event) => {
                 if (
@@ -1081,9 +1254,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   onMouseLeave={() => setHoveredTokenId(null)}
                   onClick={(event) => {
                     if (event.evt.button !== 0) return;
-                    setSelectedTokenIds([token.id]);
-                    setSelectedDrawingIds([]);
-                    setSelectedDrawingId(null);
+                    selectObject({
+                      kind: "token",
+                      objectId: token.id,
+                      revision: token.revision,
+                    });
                   }}
                   onContextMenu={(event) => {
                     event.evt.preventDefault();
@@ -1359,13 +1534,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <button
             role="menuitem"
             onClick={() => {
-              void props.onTokenDelete?.(
-                tokenMenu.token.id,
-                tokenMenu.token.revision,
-              );
-              setSelectedTokenIds((current) =>
-                current.filter((id) => id !== tokenMenu.token.id),
-              );
+              requestDelete({
+                kind: "token",
+                objectId: tokenMenu.token.id,
+                revision: tokenMenu.token.revision,
+              });
               setTokenMenu(null);
             }}
           >
@@ -1374,6 +1547,65 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <button onClick={() => setTokenMenu(null)}>Отмена</button>
         </div>
       )}
+      <ArkenDialog
+        open={interaction.objectListOpen}
+        title="Объекты карты"
+        footer={false}
+        onClose={() => dispatchInteraction({ type: "close-object-list" })}
+      >
+        <ul className="map-object-list" aria-label="Доступные объекты карты">
+          {selectableObjects.tokens.map((token) => (
+            <li key={`token:${token.id}:${token.revision}`}>
+              <button
+                type="button"
+                aria-pressed={
+                  interaction.selectedObject?.kind === "token" &&
+                  interaction.selectedObject.objectId === token.id
+                }
+                onClick={() =>
+                  selectObject({
+                    kind: "token",
+                    objectId: token.id,
+                    revision: token.revision,
+                  })
+                }
+              >
+                Токен: {token.name}
+              </button>
+            </li>
+          ))}
+          {selectableObjects.drawings.map((drawing, index) => (
+            <li key={`drawing:${drawing.id}:${drawing.revision}`}>
+              <button
+                type="button"
+                aria-pressed={
+                  interaction.selectedObject?.kind === "drawing" &&
+                  interaction.selectedObject.objectId === drawing.id
+                }
+                onClick={() =>
+                  selectObject({
+                    kind: "drawing",
+                    objectId: drawing.id,
+                    revision: drawing.revision,
+                  })
+                }
+              >
+                Рисунок {index + 1}
+              </button>
+            </li>
+          ))}
+          {selectableObjects.tokens.length +
+            selectableObjects.drawings.length ===
+            0 && <li>Доступных объектов нет.</li>}
+        </ul>
+      </ArkenDialog>
+      <ConfirmDialog
+        open={interaction.deleteRequestedFor !== null}
+        title="Удалить объект с карты?"
+        message="Это действие нельзя отменить."
+        onClose={() => dispatchInteraction({ type: "cancel-delete" })}
+        onConfirm={() => dispatchInteraction({ type: "confirm-delete" })}
+      />
       {props.canvasEditMode === "BACKGROUND" && (
         <label className="aspect-lock">
           <input
@@ -1448,11 +1680,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               </button>
               <button
                 onClick={() => {
-                  setSelectedDrawingId(null);
-                  setSelectedDrawingIds((current) =>
-                    current.filter((id) => id !== drawing.id),
-                  );
-                  void props.onDrawingDelete?.(drawing.id, drawing.revision);
+                  requestDelete({
+                    kind: "drawing",
+                    objectId: drawing.id,
+                    revision: drawing.revision,
+                  });
                 }}
               >
                 Удалить
