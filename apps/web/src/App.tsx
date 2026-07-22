@@ -1835,6 +1835,31 @@ export function App() {
                 }),
               )
             }
+            onSticker={async (target, stickerId) => {
+              const message = await api<
+                import("@arken/contracts").ChatMessageDto
+              >("/api/chat/stickers", {
+                method: "POST",
+                body: JSON.stringify({
+                  actionId: crypto.randomUUID(),
+                  stickerId,
+                  ...target,
+                }),
+              });
+              knownChatMessageIdsRef.current.add(message.id);
+              setSnapshot((current) => {
+                if (!current) return current;
+                return "threadId" in target
+                  ? appendDirectMessageResponse(current, message, {
+                      activeThreadId: activeChatThreadIdRef.current,
+                      ownMembershipId: current.me.id,
+                    })
+                  : appendChatMessage(current, message, message.sequence, {
+                      activeThreadId: message.threadId,
+                      ownMembershipId: current.me.id,
+                    });
+              });
+            }}
             onCreateDirectThread={async (participantMembershipId) => {
               const thread = await api<
                 import("@arken/contracts").DirectChatThreadDto

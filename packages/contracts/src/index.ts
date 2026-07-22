@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 export {
   betaPlayerByHandle,
   betaPlayers,
@@ -22,6 +22,33 @@ export const assetKindSchema = z.enum([
 export const messageVisibilitySchema = z.enum(["PUBLIC", "GM_ONLY"]);
 export const chatStreamSchema = z.enum(["ROLLS", "STORY", "TABLE"]);
 export const chatThreadTypeSchema = z.enum(["STREAM", "DIRECT"]);
+export const stickerPackSubjectSchema = z.enum([
+  "CHARACTER",
+  "PLAYER",
+  "NPC",
+  "CREATURE",
+]);
+export const stickerPackAudienceSchema = z.enum([
+  "CAMPAIGN",
+  "ENTITLED",
+  "GM_ONLY",
+]);
+export const stickerPackSendPolicySchema = z.enum([
+  "ALL_MEMBERS",
+  "ENTITLED_ONLY",
+  "GM_ONLY",
+]);
+export const stickerPackLifecycleSchema = z.enum([
+  "DRAFT",
+  "ACTIVE",
+  "DEPRECATED",
+  "ARCHIVED",
+]);
+export const stickerProvenanceTypeSchema = z.enum([
+  "ORIGINAL",
+  "COMMISSIONED",
+  "IMPORTED",
+]);
 
 export type Role = z.infer<typeof roleSchema>;
 export type Projection = z.infer<typeof projectionSchema>;
@@ -29,6 +56,10 @@ export type AssetKind = z.infer<typeof assetKindSchema>;
 export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
 export type ChatStream = z.infer<typeof chatStreamSchema>;
 export type ChatThreadType = z.infer<typeof chatThreadTypeSchema>;
+export type StickerPackSubject = z.infer<typeof stickerPackSubjectSchema>;
+export type StickerPackAudience = z.infer<typeof stickerPackAudienceSchema>;
+export type StickerPackSendPolicy = z.infer<typeof stickerPackSendPolicySchema>;
+export type StickerPackLifecycle = z.infer<typeof stickerPackLifecycleSchema>;
 
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
@@ -544,7 +575,7 @@ export const createStreamChatMessageSchema = z.union([
   }),
   createStreamChatMessageBaseSchema.extend({
     threadId: z.never().optional(),
-    stream: chatStreamSchema.default("TABLE"),
+    stream: z.enum(["TABLE", "STORY"]).default("TABLE"),
   }),
 ]);
 export type CreateStreamChatMessage = z.infer<
@@ -553,6 +584,34 @@ export type CreateStreamChatMessage = z.infer<
 
 /** @deprecated Use createStreamChatMessageSchema; retained for existing routes. */
 export const createChatMessageSchema = createStreamChatMessageSchema;
+
+/** Sticker sends identify catalog content, never its backing asset. */
+const createStickerMessageBaseSchema = z
+  .object({
+    actionId: actionIdSchema,
+    stickerId: z.string().uuid(),
+  })
+  .strict();
+export const createStickerMessageSchema = z.union([
+  createStickerMessageBaseSchema
+    .extend({ threadId: z.string().uuid() })
+    .strict(),
+  createStickerMessageBaseSchema
+    .extend({ stream: z.enum(["TABLE", "STORY"]) })
+    .strict(),
+]);
+export type CreateStickerMessage = z.infer<typeof createStickerMessageSchema>;
+
+export const stickerPresentationSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    altText: z.string().trim().min(1).max(240),
+    assetUrl: z.string().min(1).max(2048),
+    width: z.number().int().positive().max(4096),
+    height: z.number().int().positive().max(4096),
+  })
+  .strict();
+export type StickerPresentation = z.infer<typeof stickerPresentationSchema>;
 
 export const markChatThreadReadSchema = z.object({
   threadId: z.string().uuid(),
@@ -776,6 +835,31 @@ export interface DrawingDto {
   revision: number;
 }
 
+/** Safe catalog shape returned only after pack authorization. */
+export interface StickerDto {
+  id: string;
+  packId: string;
+  name: string;
+  altText: string;
+  url: string;
+  width: number;
+  height: number;
+  attribution: { authorCredit: string | null; licenseNote: string | null };
+}
+
+/** Entitlement and consent rows are intentionally not exposed. */
+export interface StickerPackDto {
+  id: string;
+  name: string;
+  subject: StickerPackSubject;
+  subjectCharacterId: string | null;
+  subjectMembershipId: string | null;
+  subjectLabel: string | null;
+  lifecycle: "ACTIVE" | "DEPRECATED";
+  canSend: boolean;
+  stickers: StickerDto[];
+}
+
 export interface ChatMessageDto {
   id: string;
   sequence: number;
@@ -788,6 +872,8 @@ export interface ChatMessageDto {
   threadId: string;
   stream: ChatStream | null;
   dice: DiceResult | null;
+  stickerId?: string | null;
+  stickerPresentation?: StickerPresentation | null;
   attachments?: ChatAttachmentMetadata[];
   createdAt: string;
 }

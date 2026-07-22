@@ -134,6 +134,13 @@
       "when": 1784730600000,
       "tag": "0018_direct_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784741400000,
+      "tag": "0019_sticker_packs",
+      "breakpoints": true
     }
   ]
 }

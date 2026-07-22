@@ -39,6 +39,37 @@ export const messageKindEnum = pgEnum("message_kind", [
   "DICE",
   "SYSTEM",
 ]);
+export const stickerPackSubjectEnum = pgEnum("sticker_pack_subject", [
+  "CHARACTER",
+  "PLAYER",
+  "NPC",
+  "CREATURE",
+]);
+export const stickerPackAudienceEnum = pgEnum("sticker_pack_audience", [
+  "CAMPAIGN",
+  "ENTITLED",
+  "GM_ONLY",
+]);
+export const stickerPackSendPolicyEnum = pgEnum("sticker_pack_send_policy", [
+  "ALL_MEMBERS",
+  "ENTITLED_ONLY",
+  "GM_ONLY",
+]);
+export const stickerPackLifecycleEnum = pgEnum("sticker_pack_lifecycle", [
+  "DRAFT",
+  "ACTIVE",
+  "DEPRECATED",
+  "ARCHIVED",
+]);
+export const likenessConsentStatusEnum = pgEnum("likeness_consent_status", [
+  "GRANTED",
+  "REVOKED",
+]);
+export const stickerProvenanceTypeEnum = pgEnum("sticker_provenance_type", [
+  "ORIGINAL",
+  "COMMISSIONED",
+  "IMPORTED",
+]);
 export const chatThreadTypeEnum = pgEnum("chat_thread_type", [
   "STREAM",
   "DIRECT",
@@ -180,26 +211,32 @@ export const feedbackAttachments = pgTable(
   (table) => [index("feedback_attachments_report_idx").on(table.reportId)],
 );
 
-export const assets = pgTable("assets", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  campaignId: uuid("campaign_id")
-    .notNull()
-    .references(() => campaigns.id, { onDelete: "cascade" }),
-  uploadedByMembershipId: uuid("uploaded_by_membership_id")
-    .notNull()
-    .references(() => memberships.id),
-  kind: assetKindEnum("kind").notNull(),
-  name: text("name").notNull(),
-  storageKey: text("storage_key").notNull().unique(),
-  mimeType: text("mime_type").notNull(),
-  sizeBytes: integer("size_bytes").notNull(),
-  width: integer("width"),
-  height: integer("height"),
-  durationSeconds: doublePrecision("duration_seconds"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const assets = pgTable(
+  "assets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    uploadedByMembershipId: uuid("uploaded_by_membership_id")
+      .notNull()
+      .references(() => memberships.id),
+    kind: assetKindEnum("kind").notNull(),
+    name: text("name").notNull(),
+    storageKey: text("storage_key").notNull().unique(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    durationSeconds: doublePrecision("duration_seconds"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("assets_campaign_id_id_idx").on(table.campaignId, table.id),
+  ],
+);
 
 export const characters = pgTable(
   "characters",
@@ -253,7 +290,10 @@ export const characters = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("characters_campaign_idx").on(table.campaignId)],
+  (table) => [
+    index("characters_campaign_idx").on(table.campaignId),
+    uniqueIndex("characters_campaign_id_id_idx").on(table.campaignId, table.id),
+  ],
 );
 
 export const catalogEntries = pgTable(
@@ -561,6 +601,221 @@ export const sessions = pgTable(
   (table) => [uniqueIndex("sessions_token_hash_idx").on(table.tokenHash)],
 );
 
+export const stickerPacks = pgTable(
+  "sticker_packs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    subject: stickerPackSubjectEnum("subject").notNull(),
+    subjectCharacterId: uuid("subject_character_id"),
+    subjectMembershipId: uuid("subject_membership_id"),
+    subjectLabel: text("subject_label"),
+    audience: stickerPackAudienceEnum("audience").notNull().default("CAMPAIGN"),
+    sendPolicy: stickerPackSendPolicyEnum("send_policy")
+      .notNull()
+      .default("ALL_MEMBERS"),
+    lifecycle: stickerPackLifecycleEnum("lifecycle").notNull().default("DRAFT"),
+    revision: integer("revision").notNull().default(0),
+    deprecatedAt: timestamp("deprecated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("sticker_packs_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("sticker_packs_campaign_player_subject_idx").on(
+      table.campaignId,
+      table.id,
+      table.subjectMembershipId,
+    ),
+    index("sticker_packs_campaign_lifecycle_idx").on(
+      table.campaignId,
+      table.lifecycle,
+    ),
+    foreignKey({
+      name: "sticker_packs_campaign_membership_fk",
+      columns: [table.campaignId, table.subjectMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "sticker_packs_campaign_character_fk",
+      columns: [table.campaignId, table.subjectCharacterId],
+      foreignColumns: [characters.campaignId, characters.id],
+    }).onDelete("restrict"),
+    check(
+      "sticker_packs_name_revision_check",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 120 AND ${table.revision} >= 0`,
+    ),
+    check(
+      "sticker_packs_subject_shape_check",
+      sql`(${table.subject} = 'CHARACTER' AND ${table.subjectCharacterId} IS NOT NULL AND ${table.subjectMembershipId} IS NULL AND ${table.subjectLabel} IS NULL) OR (${table.subject} = 'PLAYER' AND ${table.subjectCharacterId} IS NULL AND ${table.subjectMembershipId} IS NOT NULL AND ${table.subjectLabel} IS NULL) OR (${table.subject} IN ('NPC','CREATURE') AND ${table.subjectCharacterId} IS NULL AND ${table.subjectMembershipId} IS NULL AND ${table.subjectLabel} IS NOT NULL AND length(trim(${table.subjectLabel})) BETWEEN 1 AND 80)`,
+    ),
+    check(
+      "sticker_packs_deprecation_check",
+      sql`${table.lifecycle} IS NOT NULL AND ((${table.lifecycle} = 'DEPRECATED' AND ${table.deprecatedAt} IS NOT NULL) OR (${table.lifecycle} <> 'DEPRECATED' AND ${table.deprecatedAt} IS NULL))`,
+    ),
+  ],
+);
+
+export const stickerPackEntitlements = pgTable(
+  "sticker_pack_entitlements",
+  {
+    campaignId: uuid("campaign_id").notNull(),
+    packId: uuid("pack_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("sticker_pack_entitlements_unique_idx").on(
+      table.packId,
+      table.membershipId,
+    ),
+    foreignKey({
+      name: "sticker_pack_entitlements_campaign_pack_fk",
+      columns: [table.campaignId, table.packId],
+      foreignColumns: [stickerPacks.campaignId, stickerPacks.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "sticker_pack_entitlements_campaign_member_fk",
+      columns: [table.campaignId, table.membershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+  ],
+);
+
+export const playerLikenessConsents = pgTable(
+  "player_likeness_consents",
+  {
+    campaignId: uuid("campaign_id").notNull(),
+    packId: uuid("pack_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    status: likenessConsentStatusEnum("status").notNull(),
+    grantedAt: timestamp("granted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("player_likeness_consents_unique_idx").on(
+      table.packId,
+      table.membershipId,
+    ),
+    foreignKey({
+      name: "player_likeness_consents_campaign_pack_fk",
+      columns: [table.campaignId, table.packId, table.membershipId],
+      foreignColumns: [
+        stickerPacks.campaignId,
+        stickerPacks.id,
+        stickerPacks.subjectMembershipId,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "player_likeness_consents_campaign_member_fk",
+      columns: [table.campaignId, table.membershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    check(
+      "player_likeness_consents_status_check",
+      sql`${table.status} IS NOT NULL AND ((${table.status} = 'GRANTED' AND ${table.grantedAt} IS NOT NULL AND ${table.revokedAt} IS NULL) OR (${table.status} = 'REVOKED' AND ${table.grantedAt} IS NOT NULL AND ${table.revokedAt} IS NOT NULL AND ${table.revokedAt} >= ${table.grantedAt}))`,
+    ),
+  ],
+);
+
+export const stickerMedia = pgTable(
+  "sticker_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    uploadedByMembershipId: uuid("uploaded_by_membership_id").notNull(),
+    storageKey: text("storage_key").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    sha256: text("sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("sticker_media_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("sticker_media_storage_key_idx").on(table.storageKey),
+    uniqueIndex("sticker_media_campaign_hash_idx").on(
+      table.campaignId,
+      table.sha256,
+    ),
+    foreignKey({
+      name: "sticker_media_campaign_uploader_fk",
+      columns: [table.campaignId, table.uploadedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "sticker_media_shape_check",
+      sql`${table.sizeBytes} > 0 AND ${table.sizeBytes} <= 5242880 AND ${table.width} BETWEEN 1 AND 4096 AND ${table.height} BETWEEN 1 AND 4096 AND ${table.mimeType} IN ('image/png','image/webp') AND ${table.sha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const stickers = pgTable(
+  "stickers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    packId: uuid("pack_id").notNull(),
+    mediaId: uuid("media_id").notNull(),
+    name: text("name").notNull(),
+    altText: text("alt_text").notNull(),
+    provenanceType: stickerProvenanceTypeEnum("provenance_type").notNull(),
+    sourceReference: text("source_reference"),
+    authorCredit: text("author_credit"),
+    licenseNote: text("license_note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("stickers_campaign_id_id_idx").on(table.campaignId, table.id),
+    uniqueIndex("stickers_pack_media_idx").on(table.packId, table.mediaId),
+    foreignKey({
+      name: "stickers_campaign_pack_fk",
+      columns: [table.campaignId, table.packId],
+      foreignColumns: [stickerPacks.campaignId, stickerPacks.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "stickers_campaign_media_fk",
+      columns: [table.campaignId, table.mediaId],
+      foreignColumns: [stickerMedia.campaignId, stickerMedia.id],
+    }).onDelete("restrict"),
+    check(
+      "stickers_name_check",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 80`,
+    ),
+    check(
+      "stickers_alt_text_check",
+      sql`length(trim(${table.altText})) BETWEEN 1 AND 240`,
+    ),
+    check(
+      "stickers_provenance_check",
+      sql`${table.provenanceType} IS NOT NULL AND length(coalesce(${table.sourceReference}, '')) <= 1000 AND length(coalesce(${table.authorCredit}, '')) <= 200 AND length(coalesce(${table.licenseNote}, '')) <= 1000 AND (${table.provenanceType} <> 'IMPORTED' OR (${table.sourceReference} IS NOT NULL AND length(trim(${table.sourceReference})) > 0 AND ${table.authorCredit} IS NOT NULL AND length(trim(${table.authorCredit})) > 0 AND ${table.licenseNote} IS NOT NULL AND length(trim(${table.licenseNote})) > 0))`,
+    ),
+  ],
+);
+
 export const chatThreads = pgTable(
   "chat_threads",
   {
@@ -631,6 +886,17 @@ export const chatMessages = pgTable(
     visibility: messageVisibilityEnum("visibility").notNull().default("PUBLIC"),
     body: text("body").notNull(),
     dice: jsonb("dice").$type<unknown>(),
+    stickerId: uuid("sticker_id"),
+    stickerPresentation: jsonb("sticker_presentation").$type<{
+      name: string;
+      altText: string;
+      assetUrl: string;
+      width: number;
+      height: number;
+    }>(),
+    stickerViewerMembershipIds: jsonb("sticker_viewer_membership_ids").$type<
+      string[]
+    >(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -641,6 +907,19 @@ export const chatMessages = pgTable(
     index("chat_messages_thread_sequence_idx").on(
       table.threadId,
       table.sequence,
+    ),
+    foreignKey({
+      name: "chat_messages_campaign_sticker_fk",
+      columns: [table.campaignId, table.stickerId],
+      foreignColumns: [stickers.campaignId, stickers.id],
+    }).onDelete("restrict"),
+    check(
+      "chat_messages_sticker_shape_check",
+      sql`(${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL) OR (${table.stickerId} IS NOT NULL AND ${table.stickerPresentation} IS NOT NULL AND ${table.kind} = 'TEXT' AND ${table.dice} IS NULL)`,
+    ),
+    check(
+      "chat_messages_sticker_presentation_check",
+      sql`CASE WHEN ${table.stickerPresentation} IS NULL THEN true WHEN jsonb_typeof(${table.stickerPresentation}) <> 'object' THEN false ELSE coalesce(${table.stickerPresentation} - 'name' - 'altText' - 'assetUrl' - 'width' - 'height' = '{}'::jsonb AND jsonb_typeof(${table.stickerPresentation}->'name') = 'string' AND length(trim(${table.stickerPresentation}->>'name')) BETWEEN 1 AND 80 AND jsonb_typeof(${table.stickerPresentation}->'altText') = 'string' AND length(trim(${table.stickerPresentation}->>'altText')) BETWEEN 1 AND 240 AND jsonb_typeof(${table.stickerPresentation}->'assetUrl') = 'string' AND length(${table.stickerPresentation}->>'assetUrl') BETWEEN 1 AND 2048 AND jsonb_typeof(${table.stickerPresentation}->'width') = 'number' AND (${table.stickerPresentation}->>'width')::numeric BETWEEN 1 AND 4096 AND jsonb_typeof(${table.stickerPresentation}->'height') = 'number' AND (${table.stickerPresentation}->>'height')::numeric BETWEEN 1 AND 4096, false) END`,
     ),
     uniqueIndex("chat_messages_campaign_thread_id_idx").on(
       table.campaignId,

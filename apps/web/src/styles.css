@@ -2055,3 +2055,132 @@ code {
   height: 48px;
   object-fit: cover;
 }
+
+/* Sticker picker */
+.sticker-picker {
+  position: relative;
+  z-index: 1250;
+  isolation: isolate;
+}
+/* The message list owns scrolling, so opening a picker may safely escape the
+   chat shell without putting the entire sidebar above workspace windows. */
+.panel-scroll.chat-scroll:has(.sticker-picker-panel),
+.chat-panel:has(.sticker-picker-panel),
+.chat-compose:has(.sticker-picker-panel) {
+  overflow: visible;
+}
+.chat-compose:has(.sticker-picker-panel) {
+  position: relative;
+  z-index: 1250;
+}
+.sticker-picker-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-xs));
+  z-index: 1250;
+  pointer-events: auto;
+  width: min(340px, calc(100vw - 2rem));
+  max-height: min(520px, 70vh);
+  overflow: auto;
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+}
+.sticker-picker-panel > input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.sticker-categories {
+  display: flex;
+  gap: var(--space-xs);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.sticker-categories button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+}
+.sticker-categories button[aria-selected="true"] {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--surface-2);
+}
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: var(--space-xs);
+}
+.sticker-option {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  place-items: center;
+  padding: var(--space-xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+}
+.sticker-option:hover,
+.sticker-option:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  outline: none;
+}
+.sticker-option img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+.sticker-option span {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+.chat-sticker {
+  margin: var(--space-xs) 0 0;
+}
+.chat-sticker img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(220px, 100%);
+  max-height: 220px;
+  object-fit: contain;
+}
+.chat-sticker figcaption {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.chat-sticker-tombstone {
+  color: var(--muted);
+  font-style: italic;
+}
+@media (max-width: 520px) {
+  .sticker-picker-panel {
+    position: fixed;
+    inset: auto var(--space-sm) var(--space-sm);
+    width: auto;
+    max-height: 60vh;
+  }
+  .direct-compose {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}

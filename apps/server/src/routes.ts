@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import {
@@ -23,6 +23,11 @@ import {
   catalogEntryCommandSchema,
   characterCatalogEntryCommandSchema,
   createChatMessageSchema,
+  createStickerMessageSchema,
+  stickerPackAudienceSchema,
+  stickerPackSendPolicySchema,
+  stickerPackSubjectSchema,
+  stickerProvenanceTypeSchema,
   createDirectChatMessageSchema,
   createOrGetDirectChatThreadSchema,
   markChatThreadReadSchema,
@@ -74,6 +79,11 @@ import {
   chatThreads,
   chatAttachments,
   chatAttachmentUploads,
+  stickerMedia,
+  stickerPackEntitlements,
+  stickerPacks,
+  stickers,
+  playerLikenessConsents,
   drawings,
   fogReveals,
   feedbackAttachments,
@@ -106,6 +116,16 @@ import {
   ensureStreamThread,
   resolveChatThread,
 } from "./chat.js";
+import {
+  canMemberSendPack,
+  canMembersViewPack,
+  resolveSticker,
+  isMatchingStickerReplay,
+  invalidateStickerConsentClients,
+  stickerMessageVisibility,
+  stickerAssetUrl,
+  stickerPresentation,
+} from "./sticker-access.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import {
   normalizeLegacyEntryData,
@@ -4223,6 +4243,735 @@ export function registerRoutes(
     if (!updated) return reply.code(409).send({ error: "SCENE_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return updated;
+  });
+
+  const stickerPackInputSchema = z
+    .object({
+      name: z.string().trim().min(1).max(120),
+      subject: stickerPackSubjectSchema,
+      subjectCharacterId: z.string().uuid().nullable().optional(),
+      subjectMembershipId: z.string().uuid().nullable().optional(),
+      subjectLabel: z.string().trim().min(1).max(80).nullable().optional(),
+      audience: stickerPackAudienceSchema.default("CAMPAIGN"),
+      sendPolicy: stickerPackSendPolicySchema.default("ALL_MEMBERS"),
+    })
+    .strict();
+  const stickerMetadataSchema = z
+    .object({
+      name: z.string().trim().min(1).max(80),
+      altText: z.string().trim().min(1).max(240),
+      provenanceType: stickerProvenanceTypeSchema,
+      sourceReference: z.string().trim().min(1).max(1000).optional(),
+      authorCredit: z.string().trim().min(1).max(200).optional(),
+      licenseNote: z.string().trim().min(1).max(1000).optional(),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      if (
+        value.provenanceType === "IMPORTED" &&
+        (!value.sourceReference || !value.authorCredit || !value.licenseNote)
+      )
+        context.addIssue({
+          code: "custom",
+          message: "Imported stickers require provenance",
+        });
+    });
+  const requireGm = async (
+    request: Parameters<typeof requireAuth>[0],
+    reply: Parameters<typeof requireAuth>[1],
+  ) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth || auth.role !== "GM") {
+      if (auth) reply.code(403).send({ error: "GM_REQUIRED" });
+      return null;
+    }
+    return auth;
+  };
+
+  app.post("/api/sticker-packs", async (request, reply) => {
+    const auth = await requireGm(request, reply);
+    if (!auth) return;
+    const body = stickerPackInputSchema.parse(request.body);
+    const shapeValid =
+      body.subject === "CHARACTER"
+        ? !!body.subjectCharacterId &&
+          !body.subjectMembershipId &&
+          !body.subjectLabel
+        : body.subject === "PLAYER"
+          ? !!body.subjectMembershipId &&
+            !body.subjectCharacterId &&
+            !body.subjectLabel
+          : !!body.subjectLabel &&
+            !body.subjectCharacterId &&
+            !body.subjectMembershipId;
+    if (!shapeValid)
+      return reply.code(422).send({ error: "INVALID_STICKER_PACK_SUBJECT" });
+    if (body.subjectMembershipId) {
+      const [member] = await db
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.campaignId, auth.campaignId),
+            eq(memberships.id, body.subjectMembershipId),
+          ),
+        )
+        .limit(1);
+      if (!member)
+        return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+    }
+    if (body.subjectCharacterId) {
+      const [character] = await db
+        .select({ id: characters.id })
+        .from(characters)
+        .where(
+          and(
+            eq(characters.campaignId, auth.campaignId),
+            eq(characters.id, body.subjectCharacterId),
+          ),
+        )
+        .limit(1);
+      if (!character)
+        return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+    }
+    const [created] = await db
+      .insert(stickerPacks)
+      .values({ campaignId: auth.campaignId, ...body })
+      .returning();
+    return reply.code(201).send(created);
+  });
+
+  app.patch("/api/sticker-packs/:id", async (request, reply) => {
+    const auth = await requireGm(request, reply);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = z
+      .object({
+        revision: z.number().int().nonnegative(),
+        name: z.string().trim().min(1).max(120).optional(),
+        audience: stickerPackAudienceSchema.optional(),
+        sendPolicy: stickerPackSendPolicySchema.optional(),
+      })
+      .strict()
+      .refine(
+        (value) =>
+          value.name !== undefined ||
+          value.audience !== undefined ||
+          value.sendPolicy !== undefined,
+      )
+      .parse(request.body);
+    const [updated] = await db
+      .update(stickerPacks)
+      .set({
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.audience !== undefined ? { audience: body.audience } : {}),
+        ...(body.sendPolicy !== undefined
+          ? { sendPolicy: body.sendPolicy }
+          : {}),
+        revision: body.revision + 1,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(stickerPacks.campaignId, auth.campaignId),
+          eq(stickerPacks.id, id),
+          eq(stickerPacks.lifecycle, "DRAFT"),
+          eq(stickerPacks.revision, body.revision),
+        ),
+      )
+      .returning();
+    if (!updated)
+      return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+    return updated;
+  });
+
+  app.delete("/api/sticker-packs/:id", async (request, reply) => {
+    const auth = await requireGm(request, reply);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const [updated] = await db
+      .update(stickerPacks)
+      .set({ lifecycle: "ARCHIVED", deprecatedAt: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(stickerPacks.campaignId, auth.campaignId),
+          eq(stickerPacks.id, id),
+          inArray(stickerPacks.lifecycle, ["DRAFT", "DEPRECATED"]),
+        ),
+      )
+      .returning({ id: stickerPacks.id });
+    if (!updated)
+      return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+    return reply.code(204).send();
+  });
+
+  app.post("/api/sticker-packs/:id/stickers", async (request, reply) => {
+    const auth = await requireGm(request, reply);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const metadata = stickerMetadataSchema.parse(request.query);
+    const [pack] = await db
+      .select()
+      .from(stickerPacks)
+      .where(
+        and(
+          eq(stickerPacks.campaignId, auth.campaignId),
+          eq(stickerPacks.id, id),
+          eq(stickerPacks.lifecycle, "DRAFT"),
+        ),
+      )
+      .limit(1);
+    if (!pack) return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+    const file = await request.file({
+      limits: { files: 1, fileSize: 5 * 1024 * 1024 },
+    });
+    if (!file) return reply.code(400).send({ error: "UPLOAD_REQUIRED" });
+    const buffer = await file.toBuffer();
+    const [assetUsage, feedbackUsage, chatUsage, stickerUsage] =
+      await Promise.all([
+        db.select({ used: sum(assets.sizeBytes) }).from(assets),
+        db
+          .select({ used: sum(feedbackAttachments.sizeBytes) })
+          .from(feedbackAttachments),
+        db
+          .select({ used: sum(chatAttachmentUploads.sizeBytes) })
+          .from(chatAttachmentUploads),
+        db.select({ used: sum(stickerMedia.sizeBytes) }).from(stickerMedia),
+      ]);
+    await assertStorageCapacity(
+      Number(assetUsage[0]?.used ?? 0) +
+        Number(feedbackUsage[0]?.used ?? 0) +
+        Number(chatUsage[0]?.used ?? 0) +
+        Number(stickerUsage[0]?.used ?? 0),
+      buffer.length,
+    );
+    let stored: Awaited<ReturnType<typeof storeUpload>> | undefined;
+    try {
+      stored = await storeUpload(buffer, "image");
+      if (
+        stored.mimeType !== "image/webp" ||
+        !stored.width ||
+        !stored.height ||
+        stored.width > 4096 ||
+        stored.height > 4096
+      )
+        throw new Error("INVALID_STICKER_MEDIA");
+      const result = await db.transaction(async (tx) => {
+        const [media] = await tx
+          .insert(stickerMedia)
+          .values({
+            campaignId: auth.campaignId,
+            uploadedByMembershipId: auth.membershipId,
+            storageKey: stored!.storageKey,
+            mimeType: stored!.mimeType,
+            sizeBytes: stored!.sizeBytes,
+            width: stored!.width!,
+            height: stored!.height!,
+            sha256: createHash("sha256").update(buffer).digest("hex"),
+          })
+          .returning();
+        const [sticker] = await tx
+          .insert(stickers)
+          .values({
+            campaignId: auth.campaignId,
+            packId: pack.id,
+            mediaId: media!.id,
+            ...metadata,
+          })
+          .returning();
+        return sticker!;
+      });
+      return reply.code(201).send(result);
+    } catch (error) {
+      if (stored) await removeStoredUpload(stored.storageKey);
+      return reply.code(400).send({ error: publicUploadError(error) });
+    }
+  });
+
+  app.post("/api/sticker-packs/:id/publish", async (request, reply) => {
+    const auth = await requireGm(request, reply);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const [pack] = await db
+      .select()
+      .from(stickerPacks)
+      .where(
+        and(
+          eq(stickerPacks.campaignId, auth.campaignId),
+          eq(stickerPacks.id, id),
+          eq(stickerPacks.lifecycle, "DRAFT"),
+        ),
+      )
+      .limit(1);
+    if (!pack) return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+    if (pack.subject === "PLAYER") {
+      const [consent] = await db
+        .select()
+        .from(playerLikenessConsents)
+        .where(
+          and(
+            eq(playerLikenessConsents.campaignId, auth.campaignId),
+            eq(playerLikenessConsents.packId, id),
+            eq(playerLikenessConsents.membershipId, pack.subjectMembershipId!),
+            eq(playerLikenessConsents.status, "GRANTED"),
+          ),
+        )
+        .limit(1);
+      if (!consent)
+        return reply.code(409).send({ error: "LIKENESS_CONSENT_REQUIRED" });
+    }
+    const [item] = await db
+      .select({ id: stickers.id })
+      .from(stickers)
+      .where(
+        and(eq(stickers.campaignId, auth.campaignId), eq(stickers.packId, id)),
+      )
+      .limit(1);
+    if (!item) return reply.code(409).send({ error: "STICKER_PACK_EMPTY" });
+    const [updated] = await db
+      .update(stickerPacks)
+      .set({
+        lifecycle: "ACTIVE",
+        revision: pack.revision + 1,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(stickerPacks.id, id), eq(stickerPacks.revision, pack.revision)),
+      )
+      .returning();
+    return updated ?? reply.code(409).send({ error: "STICKER_PACK_CONFLICT" });
+  });
+
+  app.post("/api/sticker-packs/:id/deprecate", async (request, reply) => {
+    const auth = await requireGm(request, reply);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const [updated] = await db
+      .update(stickerPacks)
+      .set({
+        lifecycle: "DEPRECATED",
+        deprecatedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(stickerPacks.campaignId, auth.campaignId),
+          eq(stickerPacks.id, id),
+          eq(stickerPacks.lifecycle, "ACTIVE"),
+        ),
+      )
+      .returning();
+    if (!updated)
+      return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+    return updated;
+  });
+
+  app.put(
+    "/api/sticker-packs/:id/entitlements/:membershipId",
+    async (request, reply) => {
+      const auth = await requireGm(request, reply);
+      if (!auth) return;
+      const params = z
+        .object({ id: z.string().uuid(), membershipId: z.string().uuid() })
+        .parse(request.params);
+      const body = z
+        .object({ granted: z.boolean() })
+        .strict()
+        .parse(request.body);
+      const [pack] = await db
+        .select({ id: stickerPacks.id })
+        .from(stickerPacks)
+        .where(
+          and(
+            eq(stickerPacks.campaignId, auth.campaignId),
+            eq(stickerPacks.id, params.id),
+          ),
+        )
+        .limit(1);
+      const [member] = await db
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.campaignId, auth.campaignId),
+            eq(memberships.id, params.membershipId),
+          ),
+        )
+        .limit(1);
+      if (!pack || !member)
+        return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+      if (body.granted)
+        await db
+          .insert(stickerPackEntitlements)
+          .values({
+            campaignId: auth.campaignId,
+            packId: params.id,
+            membershipId: params.membershipId,
+          })
+          .onConflictDoNothing();
+      else
+        await db
+          .delete(stickerPackEntitlements)
+          .where(
+            and(
+              eq(stickerPackEntitlements.campaignId, auth.campaignId),
+              eq(stickerPackEntitlements.packId, params.id),
+              eq(stickerPackEntitlements.membershipId, params.membershipId),
+            ),
+          );
+      return reply.code(204).send();
+    },
+  );
+
+  app.put("/api/sticker-packs/:id/consent", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const { granted } = z
+      .object({ granted: z.boolean() })
+      .strict()
+      .parse(request.body);
+    const [pack] = await db
+      .select()
+      .from(stickerPacks)
+      .where(
+        and(
+          eq(stickerPacks.campaignId, auth.campaignId),
+          eq(stickerPacks.id, id),
+          eq(stickerPacks.subject, "PLAYER"),
+          eq(stickerPacks.subjectMembershipId, auth.membershipId),
+        ),
+      )
+      .limit(1);
+    if (!pack) return reply.code(404).send({ error: "STICKER_PACK_NOT_FOUND" });
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(playerLikenessConsents)
+        .values({
+          campaignId: auth.campaignId,
+          packId: id,
+          membershipId: auth.membershipId,
+          status: granted ? "GRANTED" : "REVOKED",
+          grantedAt: now,
+          revokedAt: granted ? null : now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            playerLikenessConsents.packId,
+            playerLikenessConsents.membershipId,
+          ],
+          set: {
+            status: granted ? "GRANTED" : "REVOKED",
+            grantedAt: granted
+              ? now
+              : sql`coalesce(${playerLikenessConsents.grantedAt}, ${now})`,
+            revokedAt: granted ? null : now,
+            updatedAt: now,
+          },
+        });
+      if (!granted)
+        await tx
+          .update(stickerPacks)
+          .set({
+            lifecycle: "DEPRECATED",
+            deprecatedAt: now,
+            revision: pack.revision + 1,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(stickerPacks.id, id),
+              eq(stickerPacks.campaignId, auth.campaignId),
+            ),
+          );
+    });
+    await invalidateStickerConsentClients(
+      (campaignId) => broadcastSnapshots(io, db, campaignId),
+      auth.campaignId,
+    );
+    return reply.code(204).send();
+  });
+
+  app.get("/api/stickers", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const packs = await db
+      .select()
+      .from(stickerPacks)
+      .where(
+        and(
+          eq(stickerPacks.campaignId, auth.campaignId),
+          eq(stickerPacks.lifecycle, "ACTIVE"),
+        ),
+      );
+    const result = [];
+    for (const pack of packs) {
+      if (
+        !(await canMembersViewPack(db, auth.campaignId, pack, [
+          auth.membershipId,
+        ]))
+      )
+        continue;
+      const items = await db
+        .select({ sticker: stickers, media: stickerMedia })
+        .from(stickers)
+        .innerJoin(
+          stickerMedia,
+          and(
+            eq(stickerMedia.id, stickers.mediaId),
+            eq(stickerMedia.campaignId, stickers.campaignId),
+          ),
+        )
+        .where(
+          and(
+            eq(stickers.campaignId, auth.campaignId),
+            eq(stickers.packId, pack.id),
+          ),
+        );
+      result.push({
+        id: pack.id,
+        name: pack.name,
+        subject: pack.subject,
+        subjectCharacterId: pack.subjectCharacterId,
+        subjectMembershipId: pack.subjectMembershipId,
+        subjectLabel: pack.subjectLabel,
+        lifecycle: pack.lifecycle,
+        canSend: await canMemberSendPack(db, auth, pack),
+        stickers: items.map(({ sticker, media }) => ({
+          id: sticker.id,
+          packId: sticker.packId,
+          name: sticker.name,
+          altText: sticker.altText,
+          url: stickerAssetUrl(sticker.id),
+          width: media.width,
+          height: media.height,
+          attribution: {
+            authorCredit: sticker.authorCredit,
+            licenseNote: sticker.licenseNote,
+          },
+        })),
+      });
+    }
+    reply.header("Cache-Control", "private, no-store");
+    return result;
+  });
+
+  app.get("/api/stickers/:id/content", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const row = await resolveSticker(db, auth, id);
+    if (!row || !["ACTIVE", "DEPRECATED"].includes(row.pack.lifecycle))
+      return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+    const [revokedConsent] =
+      row.pack.subject === "PLAYER"
+        ? await db
+            .select({ status: playerLikenessConsents.status })
+            .from(playerLikenessConsents)
+            .where(
+              and(
+                eq(playerLikenessConsents.campaignId, auth.campaignId),
+                eq(playerLikenessConsents.packId, row.pack.id),
+                eq(playerLikenessConsents.status, "REVOKED"),
+              ),
+            )
+            .limit(1)
+        : [];
+    if (revokedConsent)
+      return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+    const currentlyVisible = await canMembersViewPack(
+      db,
+      auth.campaignId,
+      row.pack,
+      [auth.membershipId],
+    );
+    const [historicalMessage] = currentlyVisible
+      ? []
+      : await db
+          .select({
+            id: chatMessages.id,
+            viewers: chatMessages.stickerViewerMembershipIds,
+          })
+          .from(chatMessages)
+          .innerJoin(
+            chatThreads,
+            and(
+              eq(chatThreads.id, chatMessages.threadId),
+              eq(chatThreads.campaignId, chatMessages.campaignId),
+            ),
+          )
+          .where(
+            and(
+              eq(chatMessages.campaignId, auth.campaignId),
+              eq(chatMessages.stickerId, row.sticker.id),
+              chatVisibilityFilter(auth),
+              or(
+                eq(chatThreads.type, "STREAM"),
+                eq(chatThreads.participantAMembershipId, auth.membershipId),
+                eq(chatThreads.participantBMembershipId, auth.membershipId),
+              ),
+            ),
+          )
+          .limit(1);
+    const visibleHistoricalMessage =
+      historicalMessage &&
+      (!historicalMessage.viewers ||
+        historicalMessage.viewers.includes(auth.membershipId));
+    if (!currentlyVisible && !visibleHistoricalMessage)
+      return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+    try {
+      const file = await openStoredFile(
+        row.media.storageKey,
+        request.headers.range,
+      );
+      reply.header("Content-Type", row.media.mimeType);
+      reply.header("Cache-Control", "private, no-store");
+      reply.header("Content-Length", String(file.end - file.start + 1));
+      if (file.partial) {
+        reply.code(206);
+        reply.header(
+          "Content-Range",
+          `bytes ${file.start}-${file.end}/${file.size}`,
+        );
+      }
+      return reply.send(file.stream);
+    } catch {
+      return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+    }
+  });
+
+  app.post("/api/chat/stickers", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const body = createStickerMessageSchema.parse(request.body);
+    let thread;
+    try {
+      thread = await resolveChatThread(db, auth, body, ["TABLE", "STORY"], {
+        allowDirect: true,
+      });
+    } catch {
+      return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+    }
+    if (
+      thread.type === "STREAM" &&
+      (!thread.stream || !canPostToStream(auth, thread.stream))
+    )
+      return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate)
+      return isMatchingStickerReplay(duplicate, {
+        membershipId: auth.membershipId,
+        threadId: thread.id,
+        stickerId: body.stickerId,
+      })
+        ? reply.code(200).send(duplicate.payload)
+        : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    const resolved = await resolveSticker(db, auth, body.stickerId);
+    if (
+      !resolved ||
+      resolved.pack.lifecycle !== "ACTIVE" ||
+      !(await canMemberSendPack(db, auth, resolved.pack))
+    )
+      return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+    const viewers =
+      thread.type === "DIRECT" ? directThreadMemberIds(thread) : [];
+    if (
+      viewers.length &&
+      !(await canMembersViewPack(db, auth.campaignId, resolved.pack, viewers))
+    )
+      return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+    const presentation = stickerPresentation(resolved);
+    let audienceMembershipIds: string[] | null = null;
+    if (thread.type === "DIRECT") {
+      audienceMembershipIds = viewers;
+    } else if (resolved.pack.audience !== "CAMPAIGN") {
+      const recipientRows =
+        resolved.pack.audience === "GM_ONLY"
+          ? await db
+              .select({ id: memberships.id })
+              .from(memberships)
+              .where(
+                and(
+                  eq(memberships.campaignId, auth.campaignId),
+                  eq(memberships.role, "GM"),
+                ),
+              )
+          : await db
+              .select({ id: memberships.id })
+              .from(memberships)
+              .leftJoin(
+                stickerPackEntitlements,
+                and(
+                  eq(
+                    stickerPackEntitlements.campaignId,
+                    memberships.campaignId,
+                  ),
+                  eq(stickerPackEntitlements.membershipId, memberships.id),
+                  eq(stickerPackEntitlements.packId, resolved.pack.id),
+                ),
+              )
+              .where(
+                and(
+                  eq(memberships.campaignId, auth.campaignId),
+                  or(
+                    eq(memberships.role, "GM"),
+                    eq(stickerPackEntitlements.packId, resolved.pack.id),
+                  ),
+                ),
+              );
+      audienceMembershipIds = [
+        ...new Set([
+          ...recipientRows.map((item) => item.id),
+          auth.membershipId,
+        ]),
+      ];
+    }
+    const saved = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(chatMessages)
+        .values({
+          campaignId: auth.campaignId,
+          membershipId: auth.membershipId,
+          characterId: null,
+          kind: "TEXT",
+          threadId: thread.id,
+          visibility: stickerMessageVisibility(resolved.pack.audience),
+          body: "",
+          stickerId: resolved.sticker.id,
+          stickerPresentation: presentation,
+          stickerViewerMembershipIds: audienceMembershipIds,
+        })
+        .returning();
+      const dto = chatMessageDto(row!, auth.displayName, thread.stream);
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "chat.created",
+          entityType: "chat",
+          entityId: row!.id,
+          payload: dto,
+        })
+        .returning();
+      return { dto, event: event! };
+    });
+    const envelope = {
+      sequence: Number(saved.event.sequence),
+      actionId: body.actionId,
+      emittedAt: saved.event.createdAt.toISOString(),
+      data: saved.dto,
+    };
+    if (audienceMembershipIds) {
+      for (const membershipId of audienceMembershipIds)
+        io.to(memberRoom(membershipId)).emit("chat:created", envelope);
+    } else {
+      io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
+    }
+    return reply.code(201).send(saved.dto);
   });
 
   app.post("/api/chat/attachments", async (request, reply) => {

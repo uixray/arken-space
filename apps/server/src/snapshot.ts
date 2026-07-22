@@ -15,6 +15,9 @@ import {
   fogReveals,
   gameEvents,
   memberships,
+  playerLikenessConsents,
+  stickerPacks,
+  stickers,
   scenes,
   tokens,
   tokenControllers,
@@ -34,6 +37,7 @@ import {
   canAccessStream,
   unknownPlayerDisplayName,
 } from "./chat.js";
+import { revokedStickerTombstone } from "./sticker-access.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -191,10 +195,47 @@ export async function buildSnapshot(
         .limit(200),
     ),
   );
-  const messageRows = visibleThreadRows.flatMap((thread, index) =>
-    (messageGroups[index] ?? []).map((message) => ({ message, thread })),
-  );
+  const messageRows = visibleThreadRows
+    .flatMap((thread, index) =>
+      (messageGroups[index] ?? []).map((message) => ({ message, thread })),
+    )
+    .filter(
+      ({ message }) =>
+        !message.stickerViewerMembershipIds ||
+        message.stickerViewerMembershipIds.includes(auth.membershipId),
+    );
   const visibleMessageIds = messageRows.map(({ message }) => message.id);
+  const stickerIds = messageRows.flatMap(({ message }) =>
+    message.stickerId ? [message.stickerId] : [],
+  );
+  const revokedStickerRows = stickerIds.length
+    ? await db
+        .select({ id: stickers.id })
+        .from(stickers)
+        .innerJoin(
+          stickerPacks,
+          and(
+            eq(stickerPacks.id, stickers.packId),
+            eq(stickerPacks.campaignId, stickers.campaignId),
+          ),
+        )
+        .innerJoin(
+          playerLikenessConsents,
+          and(
+            eq(playerLikenessConsents.packId, stickerPacks.id),
+            eq(playerLikenessConsents.campaignId, stickerPacks.campaignId),
+          ),
+        )
+        .where(
+          and(
+            eq(stickers.campaignId, auth.campaignId),
+            inArray(stickers.id, stickerIds),
+            eq(stickerPacks.subject, "PLAYER"),
+            eq(playerLikenessConsents.status, "REVOKED"),
+          ),
+        )
+    : [];
+  const revokedStickerIds = new Set(revokedStickerRows.map((row) => row.id));
   const attachmentRows = visibleMessageIds.length
     ? await db
         .select({ attachment: chatAttachments, upload: chatAttachmentUploads })
@@ -472,6 +513,14 @@ export async function buildSnapshot(
         threadId: message.threadId,
         stream: thread.stream,
         dice: normalizeDiceResult(message.dice),
+        stickerId:
+          message.stickerId && revokedStickerIds.has(message.stickerId)
+            ? null
+            : message.stickerId,
+        stickerPresentation:
+          message.stickerId && revokedStickerIds.has(message.stickerId)
+            ? revokedStickerTombstone
+            : message.stickerPresentation,
         attachments: (attachmentsByMessage.get(message.id) ?? []).map(
           ({ upload }) => ({
             contentId: upload.contentId,

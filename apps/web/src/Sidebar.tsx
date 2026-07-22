@@ -45,6 +45,7 @@ import {
 } from "./character-workspace-state";
 import { buildChatTimeline } from "./chat-date";
 import { normalizeClientDiceResult } from "./dice-result";
+import { StickerPicker } from "./StickerPicker";
 import {
   CHAT_STREAM_LABEL,
   CHAT_STREAM_ORDER,
@@ -122,6 +123,10 @@ type Props = {
     threadId: string,
     body: string,
     attachmentContentIds: string[],
+  ) => Promise<void>;
+  onSticker: (
+    target: { threadId: string } | { stream: "TABLE" | "STORY" },
+    stickerId: string,
   ) => Promise<void>;
   onUploadChatAttachment: (file: File) => Promise<ChatAttachmentMetadata>;
   onMarkChatRead: (threadId: string, sequence: number) => Promise<void>;
@@ -357,6 +362,7 @@ export function Sidebar(props: Props) {
             onActiveThreadChange={setActiveDirectThreadId}
             onCreateThread={props.onCreateDirectThread}
             onDirectChat={props.onDirectChat}
+            onSticker={props.onSticker}
             onUploadAttachment={props.onUploadChatAttachment}
             onMarkChatRead={props.onMarkChatRead}
           />
@@ -364,6 +370,7 @@ export function Sidebar(props: Props) {
           <ChatPanel
             snapshot={props.snapshot}
             onChat={props.onChat}
+            onSticker={props.onSticker}
             onRoll={props.onRoll}
             onMarkChatRead={props.onMarkChatRead}
             activeStream={activeStream}
@@ -1261,6 +1268,29 @@ function ChatMessageBody({
 }: {
   message: GameSnapshot["messages"][number];
 }) {
+  if (message.stickerId || message.stickerPresentation) {
+    const presentation = message.stickerPresentation;
+    if (!message.stickerId || !presentation)
+      return (
+        <p className="chat-sticker-tombstone">
+          {
+            "\u0421\u0442\u0438\u043a\u0435\u0440 \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d"
+          }
+        </p>
+      );
+    return (
+      <figure className="chat-sticker">
+        <img
+          src={`/api/stickers/${message.stickerId}/content`}
+          alt={presentation.altText}
+          width={presentation.width}
+          height={presentation.height}
+          loading="lazy"
+        />
+        <figcaption>{presentation.name}</figcaption>
+      </figure>
+    );
+  }
   const dice = normalizeClientDiceResult(message.dice);
   if (message.kind !== "DICE" || !dice)
     return (
@@ -1297,6 +1327,7 @@ function DirectChatPanel({
   onActiveThreadChange,
   onCreateThread,
   onDirectChat,
+  onSticker,
   onUploadAttachment,
   onMarkChatRead,
 }: {
@@ -1305,6 +1336,7 @@ function DirectChatPanel({
   onActiveThreadChange: (threadId: string | null) => void;
   onCreateThread: Props["onCreateDirectThread"];
   onDirectChat: Props["onDirectChat"];
+  onSticker: Props["onSticker"];
   onUploadAttachment: Props["onUploadChatAttachment"];
   onMarkChatRead: Props["onMarkChatRead"];
 }) {
@@ -1499,6 +1531,12 @@ function DirectChatPanel({
               </div>
             )}
           </div>
+          <StickerPicker
+            disabled={uploading}
+            onSelect={(stickerId) =>
+              onSticker({ threadId: activeThread.id }, stickerId)
+            }
+          />
           <label className="direct-attach-button">
             <span>{uploading ? "Загрузка…" : "Изображение"}</span>
             <input
@@ -1551,6 +1589,7 @@ function DirectChatPanel({
 function ChatPanel({
   snapshot,
   onChat,
+  onSticker,
   onRoll,
   onMarkChatRead,
   activeStream,
@@ -1559,6 +1598,7 @@ function ChatPanel({
 }: {
   snapshot: GameSnapshot;
   onChat: Props["onChat"];
+  onSticker: Props["onSticker"];
   onRoll: Props["onRoll"];
   onMarkChatRead: Props["onMarkChatRead"];
   activeStream: ChatStream;
@@ -1810,6 +1850,14 @@ function ChatPanel({
                 </div>
               )}
             </div>
+            <StickerPicker
+              onSelect={(stickerId) =>
+                onSticker(
+                  { stream: activeStream as "TABLE" | "STORY" },
+                  stickerId,
+                )
+              }
+            />
             <Button className="primary" type="submit">
               {"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c"}
             </Button>

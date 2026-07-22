@@ -166,6 +166,8 @@ export function chatMessageDto(
     threadId: row.threadId,
     stream,
     dice: normalizeDiceResult(row.dice),
+    stickerId: row.stickerId,
+    stickerPresentation: row.stickerPresentation,
     createdAt: row.createdAt.toISOString(),
   };
 }

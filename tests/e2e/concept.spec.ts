@@ -1903,3 +1903,269 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
     );
   }
 });
+
+test("UIX-268 catalog picker routes authorized stickers and respects stream roles", async ({
+  page,
+}) => {
+  const fixture = structuredClone(snapshot);
+  const recipient = {
+    id: "55555555-5555-4555-8555-555555555555",
+    role: "PLAYER" as const,
+    displayName: "Sticker Recipient",
+    characterId: null,
+  };
+  const directId = "88888888-8888-4888-8888-888888888888";
+  fixture.members.push(recipient);
+  fixture.chatThreads.push({
+    id: directId,
+    campaignId: fixture.campaign.id,
+    type: "DIRECT",
+    stream: null,
+    participants: [
+      { membershipId: fixture.me.id, displayName: fixture.me.displayName },
+      { membershipId: recipient.id, displayName: recipient.displayName },
+    ],
+    createdAt: "2026-07-22T08:00:00.000Z",
+    updatedAt: "2026-07-22T08:00:00.000Z",
+  });
+  fixture.chatThreadStates.push({
+    threadId: directId,
+    stream: null,
+    lastReadSequence: 0,
+    latestSequence: 0,
+    unreadCount: 0,
+  });
+  const pack = (
+    id: string,
+    subject: "COMMON" | "CHARACTER" | "PLAYER" | "NPC" | "CREATURE",
+    label: string,
+    names: string[],
+  ) => ({
+    id,
+    name: label + " pack",
+    subject,
+    subjectCharacterId:
+      subject === "CHARACTER" ? fixture.characters[0]!.id : null,
+    subjectMembershipId: subject === "PLAYER" ? recipient.id : null,
+    subjectLabel: label,
+    lifecycle: "ACTIVE" as const,
+    canSend: true,
+    stickers: names.map((name, index) => ({
+      id: id.slice(0, -1) + (index + 1),
+      packId: id,
+      name,
+      altText: label + " " + name,
+      url: "/api/stickers/" + id.slice(0, -1) + (index + 1) + "/content",
+      width: 128,
+      height: 128,
+      attribution: { authorCredit: null, licenseNote: null },
+    })),
+  });
+  const packs = [
+    pack("10000000-0000-4000-8000-000000000000", "COMMON", "Common", ["Wave"]),
+    pack("20000000-0000-4000-8000-000000000000", "CHARACTER", "Cartographer", [
+      "Compass",
+    ]),
+    pack("30000000-0000-4000-8000-000000000000", "PLAYER", "Assigned hero", [
+      "Cheer",
+      "Rest",
+    ]),
+    pack("40000000-0000-4000-8000-000000000000", "NPC", "GM NPC", ["Warning"]),
+    pack("50000000-0000-4000-8000-000000000000", "CREATURE", "GM Creature", [
+      "Roar",
+    ]),
+  ];
+  let catalog = packs;
+  let playerStory = false;
+  const sent: Array<Record<string, unknown>> = [];
+  await page.route("**/api/bootstrap", (route) => {
+    const next = structuredClone(fixture);
+    if (playerStory) {
+      next.me = {
+        id: "44444444-4444-4444-8444-444444444444",
+        role: "PLAYER",
+        displayName: "Player",
+        characterId: null,
+      };
+      next.members.push(next.me);
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(next),
+    });
+  });
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/stickers", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(catalog),
+    }),
+  );
+  await page.route("**/api/stickers/*/content", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>',
+    }),
+  );
+  await page.route("**/api/chat/stickers", async (route) => {
+    const input = route.request().postDataJSON() as Record<string, unknown>;
+    sent.push(input);
+    const isDirect = typeof input.threadId === "string";
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...fixture.messages[0]!,
+        id:
+          sent.length === 1
+            ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3"
+            : "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4",
+        sequence: sent.length + 3,
+        kind: "STICKER",
+        body: "",
+        threadId: isDirect ? directId : fixture.chatThreads[0]!.id,
+        stream: isDirect ? null : "TABLE",
+        stickerId: input.stickerId,
+        stickerPresentation: {
+          name: "Wave",
+          altText: "Common Wave",
+          assetUrl: "catalog-asset",
+          width: 128,
+          height: 128,
+        },
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const picker = page.locator(".chat-compose .sticker-picker");
+  await picker.locator(":scope > button").click();
+  const panel = picker.locator(".sticker-picker-panel");
+  await expect(panel.getByRole("tab")).toHaveCount(5);
+  await panel.getByRole("tab").nth(2).click();
+  await panel.getByRole("searchbox").fill("assigned");
+  const cheer = panel.getByRole("option", { name: "Assigned hero Cheer" });
+  const rest = panel.getByRole("option", { name: "Assigned hero Rest" });
+  await cheer.focus();
+  await cheer.press("ArrowRight");
+  await expect(rest).toBeFocused();
+  await panel.getByRole("searchbox").fill("");
+  await panel.getByRole("tab").first().click();
+  await panel.getByRole("option", { name: "Common Wave" }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toMatchObject({
+    stream: "TABLE",
+    stickerId: "10000000-0000-4000-8000-000000000001",
+  });
+
+  await page.locator("#chat-tab-rolls").click();
+  await expect(page.locator(".sticker-picker")).toHaveCount(0);
+  await page.locator("#chat-tab-story").click();
+  await expect(page.locator(".chat-compose .sticker-picker")).toHaveCount(1);
+  await page.locator("#chat-tab-direct").click();
+  const directPicker = page.locator(".direct-compose .sticker-picker");
+  await directPicker.locator(":scope > button").click();
+  await directPicker.getByRole("option", { name: "Common Wave" }).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toMatchObject({
+    threadId: directId,
+    stickerId: "10000000-0000-4000-8000-000000000001",
+  });
+  expect(sent[1]).not.toHaveProperty("stream");
+
+  playerStory = true;
+  await page.reload();
+  await page.locator("#chat-tab-story").click();
+  await expect(page.locator(".sticker-picker")).toHaveCount(0);
+
+  catalog = [];
+  playerStory = false;
+  await page.reload();
+  await page.locator(".chat-compose .sticker-picker > button").click();
+  await expect(page.locator(".sticker-picker-panel .chat-empty")).toBeVisible();
+});
+
+test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const fixture = structuredClone(snapshot);
+  const stickerId = "60000000-0000-4000-8000-000000000001";
+  fixture.messages.push(
+    {
+      ...fixture.messages[0]!,
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      sequence: 2,
+      kind: "STICKER",
+      body: "",
+      stickerId,
+      stickerPresentation: {
+        name: "Reloaded wave",
+        altText: "Cartographer waves hello",
+        assetUrl: "internal-only-asset-reference",
+        width: 192,
+        height: 128,
+      },
+    },
+    {
+      ...fixture.messages[0]!,
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      sequence: 3,
+      kind: "STICKER",
+      body: "",
+      stickerId: null,
+      stickerPresentation: {
+        name: "Removed sticker",
+        altText: "Removed sticker alt",
+        assetUrl: "must-not-leak",
+        width: 128,
+        height: 128,
+      },
+    },
+  );
+  fixture.chatThreadStates[0] = {
+    ...fixture.chatThreadStates[0]!,
+    latestSequence: 3,
+  };
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(fixture),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/stickers/**/content", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>',
+    }),
+  );
+
+  await page.goto("/");
+  const rendered = page.getByRole("img", { name: "Cartographer waves hello" });
+  await expect(rendered).toHaveAttribute(
+    "src",
+    "/api/stickers/" + stickerId + "/content",
+  );
+  await expect(page.getByText("Reloaded wave")).toBeVisible();
+  await expect(page.locator(".chat-sticker-tombstone")).toHaveCount(1);
+  await expect(page.locator(".chat-sticker-tombstone img")).toHaveCount(0);
+  await expect(page.locator('img[src*="must-not-leak"]')).toHaveCount(0);
+  await expect(page.locator(".chat-sticker")).toHaveCount(1);
+  const box = await page.locator(".chat-sticker").boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.width).toBeLessThanOrEqual(390);
+  await page.reload();
+  await expect(
+    page.getByRole("img", { name: "Cartographer waves hello" }),
+  ).toHaveAttribute("src", "/api/stickers/" + stickerId + "/content");
+});
