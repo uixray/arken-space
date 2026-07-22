@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import type {
   AssetKind,
   AssetDto,
+  ChatStream,
   CatalogEntryDto,
   CharacterDto,
   GameSnapshot,
@@ -42,6 +43,15 @@ import {
 } from "./character-workspace-state";
 import { buildChatTimeline } from "./chat-date";
 import { normalizeClientDiceResult } from "./dice-result";
+import {
+  CHAT_STREAM_LABEL,
+  CHAT_STREAM_ORDER,
+  nextChatStream,
+  messagesForStream,
+  streamForMessage,
+  threadForStream,
+  unreadCountForStream,
+} from "./chat-state";
 
 function formatDiceBreakdown(value: unknown) {
   const dice = normalizeClientDiceResult(value);
@@ -91,7 +101,13 @@ type Props = {
     controllerMembershipIds: string[],
   ) => Promise<void>;
   onPatchCharacter: (id: string, patch: Partial<CharacterDto>) => Promise<void>;
-  onChat: (body: string, visibility: MessageVisibility) => Promise<void>;
+  onChat: (
+    body: string,
+    visibility: MessageVisibility,
+    stream: ChatStream,
+  ) => Promise<void>;
+  onMarkChatRead: (threadId: string, sequence: number) => Promise<void>;
+  onActiveChatThreadChange: (threadId: string | null) => void;
   onRoll: (
     formula: string,
     label?: string,
@@ -208,34 +224,86 @@ export function Sidebar(props: Props) {
     requestedChatMessageId,
     onWorkspaceChange,
     sceneDialogRequest,
+    onActiveChatThreadChange,
   } = props;
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
-  const openChat = (messageId?: string) => {
-    setFocusedMessageId(messageId ?? null);
-  };
+  const [activeStream, setActiveStream] = useState<ChatStream>("TABLE");
   useEffect(() => onChatVisibilityChange(true), [onChatVisibilityChange]);
+  const activeThreadId =
+    threadForStream(props.snapshot, activeStream)?.id ?? null;
+  useEffect(() => {
+    onActiveChatThreadChange(activeThreadId);
+  }, [activeThreadId, onActiveChatThreadChange]);
   useEffect(() => {
     if (!requestedChatMessageId) return;
+    const requestedStream = streamForMessage(
+      props.snapshot.messages,
+      requestedChatMessageId,
+    );
+    if (requestedStream) setActiveStream(requestedStream);
     setFocusedMessageId(requestedChatMessageId);
     onRequestedChatMessageHandled();
-  }, [requestedChatMessageId, onRequestedChatMessageHandled]);
+  }, [
+    requestedChatMessageId,
+    onRequestedChatMessageHandled,
+    props.snapshot.messages,
+  ]);
   useEffect(() => {
     if (sceneDialogRequest > 0 && isGm) onWorkspaceChange("scenes");
   }, [sceneDialogRequest, isGm, onWorkspaceChange]);
 
   return (
     <aside className={`sidebar ${!isGm ? "player-sidebar" : ""}`}>
-      <nav className="tabs" aria-label="Панели">
-        <Button view="flat" aria-pressed="true" onClick={() => openChat()}>
-          Чат <span>{props.snapshot.messages.length}</span>
-        </Button>
+      <nav
+        className="tabs chat-stream-tabs"
+        aria-label="Потоки чата"
+        role="tablist"
+        onKeyDown={(event) => {
+          const nextStream = nextChatStream(activeStream, event.key);
+          if (!nextStream) return;
+          event.preventDefault();
+          setActiveStream(nextStream);
+          requestAnimationFrame(() =>
+            document
+              .getElementById(`chat-tab-${nextStream.toLowerCase()}`)
+              ?.focus(),
+          );
+        }}
+      >
+        {CHAT_STREAM_ORDER.map((stream) => {
+          const unread = unreadCountForStream(props.snapshot, stream);
+          return (
+            <Button
+              key={stream}
+              view="flat"
+              role="tab"
+              id={`chat-tab-${stream.toLowerCase()}`}
+              aria-controls={`chat-panel-${stream.toLowerCase()}`}
+              aria-selected={activeStream === stream}
+              tabIndex={activeStream === stream ? 0 : -1}
+              onClick={() => setActiveStream(stream)}
+            >
+              {CHAT_STREAM_LABEL[stream]}
+              {unread > 0 && (
+                <span
+                  className="chat-unread-badge"
+                  aria-label={`${unread} непрочитанных`}
+                >
+                  {unread}
+                </span>
+              )}
+            </Button>
+          );
+        })}
       </nav>
       <div className="panel-scroll chat-scroll">
         <ChatPanel
           snapshot={props.snapshot}
           onChat={props.onChat}
           onRoll={props.onRoll}
+          onMarkChatRead={props.onMarkChatRead}
+          activeStream={activeStream}
           focusedMessageId={focusedMessageId}
           onMessageFocused={() => setFocusedMessageId(null)}
         />
@@ -1133,7 +1201,7 @@ function ChatMessageBody({
   if (message.kind !== "DICE" || !dice) return <p>{message.body}</p>;
   return (
     <div className="roll-result">
-      <strong className="roll-total" aria-label="???? ??????">
+      <strong className="roll-total" aria-label="Итог броска">
         {dice.total}
       </strong>
       <div className="roll-details">
@@ -1148,58 +1216,95 @@ function ChatPanel({
   snapshot,
   onChat,
   onRoll,
+  onMarkChatRead,
+  activeStream,
   focusedMessageId,
   onMessageFocused,
 }: {
   snapshot: GameSnapshot;
   onChat: Props["onChat"];
   onRoll: Props["onRoll"];
+  onMarkChatRead: Props["onMarkChatRead"];
+  activeStream: ChatStream;
   focusedMessageId: string | null;
   onMessageFocused: () => void;
 }) {
   const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [composerError, setComposerError] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
   const [newMessageCount, setNewMessageCount] = useState(0);
-  const slashSuggestions = getSlashCommandSuggestions(composer);
-  const timeline = buildChatTimeline(snapshot.messages);
-  const latestMessageId = snapshot.messages.at(-1)?.id;
+  const messages = useMemo(
+    () => messagesForStream(snapshot.messages, activeStream),
+    [snapshot.messages, activeStream],
+  );
+  const timeline = buildChatTimeline(messages);
+  const latestMessage = messages.at(-1);
+  const thread = threadForStream(snapshot, activeStream);
+  const threadId = thread?.id;
+  const latestMessageId = latestMessage?.id;
+  const latestSequence = latestMessage?.sequence;
+  const canCompose =
+    activeStream === "TABLE" ||
+    (activeStream === "STORY" && snapshot.me.role === "GM");
+  const slashSuggestions =
+    activeStream === "TABLE" ? getSlashCommandSuggestions(composer) : [];
+
+  useEffect(() => {
+    followRef.current = true;
+    setAtBottom(true);
+    setNewMessageCount(0);
+    requestAnimationFrame(() => {
+      const list = listRef.current;
+      if (list) list.scrollTo({ top: list.scrollHeight });
+    });
+  }, [activeStream]);
+
   useEffect(() => {
     const list = listRef.current;
-    if (!list || !latestMessageId) return;
+    if (!list || !latestMessage) return;
     if (followRef.current) {
       list.scrollTo({ top: list.scrollHeight });
       setNewMessageCount(0);
     } else {
       setNewMessageCount((current) => current + 1);
     }
-  }, [latestMessageId]);
+  }, [latestMessageId, latestMessage]);
+
+  useEffect(() => {
+    if (!threadId || latestSequence === undefined || !atBottom) return;
+    const timer = window.setTimeout(() => {
+      void onMarkChatRead(threadId, latestSequence);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [threadId, latestSequence, atBottom, onMarkChatRead]);
+
   useEffect(() => {
     if (!focusedMessageId) return;
     const message = document.getElementById(`chat-message-${focusedMessageId}`);
     if (!message) return;
     const list = listRef.current;
-    if (list) {
+    if (list)
       list.scrollTo({
         top:
           message.offsetTop - list.clientHeight / 2 + message.clientHeight / 2,
       });
-    }
     message.focus({ preventScroll: true });
     onMessageFocused();
-  }, [focusedMessageId, onMessageFocused]);
+  }, [focusedMessageId, onMessageFocused, activeStream]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canCompose) return;
     const intent = parseComposerInput(composer);
     if (intent.kind === "INVALID") {
       setComposerError(intent.message);
       return;
     }
     setComposerError("");
-    if (intent.kind === "ROLL")
+    if (intent.kind === "ROLL" && activeStream === "TABLE")
       await onRoll(
         intent.formula,
         undefined,
@@ -1207,22 +1312,34 @@ function ChatPanel({
         snapshot.me.characterId,
         "NORMAL",
       );
-    else await onChat(intent.body, visibility);
+    else if (intent.kind === "TEXT")
+      await onChat(intent.body, visibility, activeStream);
     setComposer("");
   };
+
   return (
-    <section className="chat-panel">
+    <section
+      className="chat-panel"
+      role="tabpanel"
+      id={`chat-panel-${activeStream.toLowerCase()}`}
+      aria-labelledby={`chat-tab-${activeStream.toLowerCase()}`}
+    >
       <div
         className="message-list"
         aria-live="polite"
         ref={listRef}
         onScroll={(event) => {
           const list = event.currentTarget;
-          followRef.current =
+          const nextAtBottom =
             list.scrollHeight - list.scrollTop - list.clientHeight < 48;
-          if (followRef.current) setNewMessageCount(0);
+          followRef.current = nextAtBottom;
+          setAtBottom(nextAtBottom);
+          if (nextAtBottom) setNewMessageCount(0);
         }}
       >
+        {timeline.length === 0 && (
+          <p className="chat-empty">В этом потоке пока нет сообщений.</p>
+        )}
         {timeline.map((item) =>
           item.type === "DATE" ? (
             <div className="chat-date-divider" key={`date-${item.key}`}>
@@ -1256,7 +1373,6 @@ function ChatPanel({
             </article>
           ),
         )}
-        <div ref={endRef} aria-hidden="true" />
       </div>
       {newMessageCount > 0 && (
         <Button
@@ -1266,72 +1382,107 @@ function ChatPanel({
             if (list)
               list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
             followRef.current = true;
+            setAtBottom(true);
             setNewMessageCount(0);
           }}
         >
           Новые сообщения · {newMessageCount}
         </Button>
       )}
-      <div className="chat-tools">
-        <label className="compact-check">
-          <FormInput
-            type="checkbox"
-            checked={visibility === "GM_ONLY"}
-            onChange={(event) =>
-              setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
-            }
-          />{" "}
-          Только мастер
-        </label>
-      </div>
-      <form className="chat-compose" onSubmit={submit}>
-        <div className="chat-composer-input">
-          <FormTextArea
-            aria-label="Сообщение или бросок"
-            aria-expanded={slashSuggestions.length > 0}
-            aria-controls="chat-slash-suggestions"
-            placeholder="Сообщение … или /roll 1d20 + agility"
-            value={composer}
-            onChange={(event) => setComposer(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-            rows={3}
-          />
-          {slashSuggestions.length > 0 && (
-            <div
-              className="slash-command-suggestions"
-              id="chat-slash-suggestions"
-              role="listbox"
-              aria-label="Команды чата"
-            >
-              {slashSuggestions.map((suggestion) => (
-                <button
-                  key={suggestion.command}
-                  type="button"
-                  role="option"
-                  aria-selected="false"
-                  onClick={() => setComposer(suggestion.insertion)}
-                >
-                  <strong>{suggestion.command}</strong>
-                  <span>{suggestion.description}</span>
-                  <code>{suggestion.example}</code>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <Button className="primary" type="submit">
-          Отправить
-        </Button>
-      </form>
-      {composerError && (
-        <p className="composer-error" role="alert">
-          {composerError}
+      {activeStream === "ROLLS" && (
+        <p className="chat-stream-note">
+          {
+            "\u0411\u0440\u043e\u0441\u043a\u0438 \u043f\u043e\u044f\u0432\u043b\u044f\u044e\u0442\u0441\u044f \u0437\u0434\u0435\u0441\u044c \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438."
+          }
         </p>
+      )}
+      {activeStream === "STORY" && snapshot.me.role !== "GM" && (
+        <p className="chat-stream-note">
+          {
+            "\u0421\u044e\u0436\u0435\u0442\u043d\u044b\u0439 \u043f\u043e\u0442\u043e\u043a \u0432\u0435\u0434\u0451\u0442 \u043c\u0430\u0441\u0442\u0435\u0440."
+          }
+        </p>
+      )}
+      {canCompose && (
+        <>
+          <div className="chat-tools">
+            <label className="compact-check">
+              <FormInput
+                type="checkbox"
+                checked={visibility === "GM_ONLY"}
+                onChange={(event) =>
+                  setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
+                }
+              />{" "}
+              {
+                "\u0422\u043e\u043b\u044c\u043a\u043e \u043c\u0430\u0441\u0442\u0435\u0440"
+              }
+            </label>
+          </div>
+          <form className="chat-compose" onSubmit={submit}>
+            <div className="chat-composer-input">
+              <FormTextArea
+                aria-label={
+                  activeStream === "STORY"
+                    ? "Сообщение сюжета"
+                    : "Сообщение или бросок"
+                }
+                aria-expanded={slashSuggestions.length > 0}
+                aria-controls={
+                  slashSuggestions.length > 0
+                    ? "chat-slash-suggestions"
+                    : undefined
+                }
+                placeholder={
+                  activeStream === "STORY"
+                    ? "Продолжить историю…"
+                    : "Сообщение … или /roll 1d20 + agility"
+                }
+                value={composer}
+                onChange={(event) => setComposer(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                rows={3}
+              />
+              {slashSuggestions.length > 0 && (
+                <div
+                  className="slash-command-suggestions"
+                  id="chat-slash-suggestions"
+                  role="listbox"
+                  aria-label={
+                    "\u041a\u043e\u043c\u0430\u043d\u0434\u044b \u0447\u0430\u0442\u0430"
+                  }
+                >
+                  {slashSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion.command}
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      onClick={() => setComposer(suggestion.insertion)}
+                    >
+                      <strong>{suggestion.command}</strong>
+                      <span>{suggestion.description}</span>
+                      <code>{suggestion.example}</code>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Button className="primary" type="submit">
+              {"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c"}
+            </Button>
+          </form>
+          {composerError && (
+            <p className="composer-error" role="alert">
+              {composerError}
+            </p>
+          )}
+        </>
       )}
     </section>
   );

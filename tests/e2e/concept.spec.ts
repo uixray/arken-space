@@ -108,8 +108,59 @@ const snapshot: GameSnapshot = {
       body: "Сцена готова.",
       visibility: "PUBLIC",
       kind: "SYSTEM",
+      threadId: "11111111-1111-4111-8111-111111111111",
+      stream: "TABLE",
       dice: null,
       createdAt: new Date().toISOString(),
+    },
+  ],
+  chatThreads: [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      campaignId: "b4c34840-cb11-4a07-884d-680ae85c48db",
+      type: "STREAM",
+      stream: "TABLE",
+      createdAt: "2026-07-22T08:00:00.000Z",
+      updatedAt: "2026-07-22T08:00:00.000Z",
+    },
+    {
+      id: "22222222-2222-4222-8222-222222222222",
+      campaignId: "b4c34840-cb11-4a07-884d-680ae85c48db",
+      type: "STREAM",
+      stream: "STORY",
+      createdAt: "2026-07-22T08:00:00.000Z",
+      updatedAt: "2026-07-22T08:00:00.000Z",
+    },
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      campaignId: "b4c34840-cb11-4a07-884d-680ae85c48db",
+      type: "STREAM",
+      stream: "ROLLS",
+      createdAt: "2026-07-22T08:00:00.000Z",
+      updatedAt: "2026-07-22T08:00:00.000Z",
+    },
+  ],
+  chatThreadStates: [
+    {
+      threadId: "11111111-1111-4111-8111-111111111111",
+      stream: "TABLE",
+      lastReadSequence: 1,
+      latestSequence: 1,
+      unreadCount: 0,
+    },
+    {
+      threadId: "22222222-2222-4222-8222-222222222222",
+      stream: "STORY",
+      lastReadSequence: 0,
+      latestSequence: 0,
+      unreadCount: 0,
+    },
+    {
+      threadId: "33333333-3333-4333-8333-333333333333",
+      stream: "ROLLS",
+      lastReadSequence: 0,
+      latestSequence: 0,
+      unreadCount: 0,
     },
   ],
   assets: [],
@@ -1436,4 +1487,245 @@ test("selected token keyboard moves serialize delayed responses with ack revisio
   );
   expect(requests[1]!.deltaX).toBeGreaterThan(0);
   expect(requests[1]!.deltaY).toBeGreaterThan(requests[1]!.deltaX);
+});
+
+test("UIX-266 GM streams, STORY posting, and keyboard tabs", async ({
+  page,
+}) => {
+  const fixture = structuredClone(snapshot);
+  fixture.messages.push(
+    {
+      ...fixture.messages[0]!,
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      sequence: 2,
+      threadId: fixture.chatThreads[1]!.id,
+      stream: "STORY",
+      kind: "TEXT",
+      body: "STORY_ONLY_MARKER",
+    },
+    {
+      ...fixture.messages[0]!,
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      sequence: 3,
+      threadId: fixture.chatThreads[2]!.id,
+      stream: "ROLLS",
+      kind: "DICE",
+      body: "ROLLS_ONLY_MARKER",
+      dice: {
+        formula: "1d20",
+        resolvedFormula: "1d20",
+        terms: [
+          { notation: "1d20", count: 1, sides: 20, rolls: [12], subtotal: 12 },
+        ],
+        modifiers: [],
+        total: 12,
+      },
+    },
+  );
+  fixture.chatThreadStates[1] = {
+    ...fixture.chatThreadStates[1]!,
+    latestSequence: 2,
+  };
+  fixture.chatThreadStates[2] = {
+    ...fixture.chatThreadStates[2]!,
+    latestSequence: 3,
+  };
+  const chatRequests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(fixture),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/chat/read", async (route) => {
+    const request = route.request().postDataJSON() as {
+      threadId: string;
+      sequence: number;
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        campaignId: fixture.campaign.id,
+        threadId: request.threadId,
+        lastReadSequence: request.sequence,
+        updatedAt: new Date().toISOString(),
+      }),
+    });
+  });
+  await page.route("**/api/chat", async (route) => {
+    chatRequests.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.goto("/");
+  const table = page.locator("#chat-tab-table");
+  const story = page.locator("#chat-tab-story");
+  const rolls = page.locator("#chat-tab-rolls");
+  await expect(table).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("STORY_ONLY_MARKER")).toHaveCount(0);
+  await table.press("ArrowRight");
+  await expect(story).toBeFocused();
+  await expect(page.getByText("STORY_ONLY_MARKER")).toBeVisible();
+  await expect(page.getByText("ROLLS_ONLY_MARKER")).toHaveCount(0);
+  const composer = page.locator(".chat-compose textarea");
+  await composer.fill("NEW_STORY_POST");
+  await composer.press("Enter");
+  await expect.poll(() => chatRequests.length).toBe(1);
+  expect(chatRequests[0]).toMatchObject({
+    body: "NEW_STORY_POST",
+    stream: "STORY",
+    visibility: "PUBLIC",
+  });
+  await story.press("End");
+  await expect(rolls).toBeFocused();
+  await expect(page.getByText("ROLLS_ONLY_MARKER")).toBeVisible();
+  await expect(page.locator(".chat-compose")).toHaveCount(0);
+  await rolls.press("Home");
+  await expect(table).toBeFocused();
+  await table.press("ArrowLeft");
+  await expect(rolls).toBeFocused();
+});
+
+test("UIX-266 PLAYER sees STORY and ROLLS read-only", async ({ page }) => {
+  const fixture = structuredClone(snapshot);
+  fixture.me = {
+    id: "44444444-4444-4444-8444-444444444444",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: null,
+  };
+  fixture.members.push(fixture.me);
+  fixture.messages.push({
+    ...fixture.messages[0]!,
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    sequence: 2,
+    threadId: fixture.chatThreads[1]!.id,
+    stream: "STORY",
+    kind: "TEXT",
+    body: "PLAYER_STORY_MARKER",
+  });
+  fixture.chatThreadStates[1] = {
+    ...fixture.chatThreadStates[1]!,
+    latestSequence: 2,
+  };
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(fixture),
+    }),
+  );
+  await page.route("**/api/chat/read", async (route) => {
+    const request = route.request().postDataJSON() as {
+      threadId: string;
+      sequence: number;
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        campaignId: fixture.campaign.id,
+        threadId: request.threadId,
+        lastReadSequence: request.sequence,
+        updatedAt: new Date().toISOString(),
+      }),
+    });
+  });
+  await page.goto("/");
+  await page.locator("#chat-tab-story").click();
+  await expect(page.getByText("PLAYER_STORY_MARKER")).toBeVisible();
+  await expect(page.locator(".chat-compose")).toHaveCount(0);
+  await expect(page.locator(".chat-stream-note")).toBeVisible();
+  await page.locator("#chat-tab-rolls").click();
+  await expect(page.locator(".chat-compose")).toHaveCount(0);
+  await expect(page.locator(".chat-stream-note")).toBeVisible();
+  await page.locator("#chat-tab-table").click();
+  await expect(page.locator(".chat-compose textarea")).toBeVisible();
+});
+
+test("UIX-266 unread badge reconciles and stays read after reload", async ({
+  page,
+}) => {
+  const fixture = structuredClone(snapshot);
+  const storyThread = fixture.chatThreads[1]!;
+  fixture.messages.push({
+    ...fixture.messages[0]!,
+    id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    sequence: 4,
+    membershipId: "55555555-5555-4555-8555-555555555555",
+    threadId: storyThread.id,
+    stream: "STORY",
+    kind: "TEXT",
+    body: "UNREAD_STORY_MARKER",
+  });
+  fixture.chatThreadStates[1] = {
+    threadId: storyThread.id,
+    stream: "STORY",
+    lastReadSequence: 0,
+    latestSequence: 4,
+    unreadCount: 1,
+  };
+  let storyRead = false;
+  const reads: Array<{ threadId: string; sequence: number }> = [];
+  await page.route("**/api/bootstrap", (route) => {
+    const response = structuredClone(fixture);
+    if (storyRead)
+      response.chatThreadStates[1] = {
+        ...response.chatThreadStates[1]!,
+        lastReadSequence: 4,
+        unreadCount: 0,
+      };
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(response),
+    });
+  });
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/chat/read", async (route) => {
+    const request = route.request().postDataJSON() as {
+      threadId: string;
+      sequence: number;
+    };
+    reads.push(request);
+    if (request.threadId === storyThread.id) storyRead = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        campaignId: fixture.campaign.id,
+        threadId: request.threadId,
+        lastReadSequence: request.sequence,
+        updatedAt: new Date().toISOString(),
+      }),
+    });
+  });
+  await page.goto("/");
+  const story = page.locator("#chat-tab-story");
+  await expect(story.locator(".chat-unread-badge")).toHaveText("1");
+  await story.click();
+  await expect(page.getByText("UNREAD_STORY_MARKER")).toBeVisible();
+  await expect
+    .poll(() =>
+      reads.some(
+        (request) =>
+          request.threadId === storyThread.id && request.sequence === 4,
+      ),
+    )
+    .toBe(true);
+  await expect(story.locator(".chat-unread-badge")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator("#chat-tab-story .chat-unread-badge")).toHaveCount(
+    0,
+  );
 });

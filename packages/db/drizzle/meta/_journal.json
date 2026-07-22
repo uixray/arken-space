@@ -120,6 +120,13 @@
       "when": 1784505600000,
       "tag": "0016_gm_access_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784721600000,
+      "tag": "0017_chat_threads",
+      "breakpoints": true
     }
   ]
 }

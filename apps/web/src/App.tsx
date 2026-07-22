@@ -20,7 +20,7 @@ import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
 import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
-import { appendChatMessage } from "./chat-state";
+import { appendChatMessage, reconcileChatRead } from "./chat-state";
 import {
   addRollToast,
   removeRollToast,
@@ -352,6 +352,7 @@ export function App() {
     setError("");
   }, [error, snapshot]);
   const chatOpenRef = useRef(false);
+  const activeChatThreadIdRef = useRef<string | null>(null);
   const [requestedChatMessageId, setRequestedChatMessageId] = useState<
     string | null
   >(null);
@@ -543,7 +544,10 @@ export function App() {
       // before this envelope without containing this newly committed message.
       setSnapshot((current) =>
         current
-          ? appendChatMessage(current, event.data, event.sequence)
+          ? appendChatMessage(current, event.data, event.sequence, {
+              activeThreadId: activeChatThreadIdRef.current,
+              ownMembershipId: current.me.id,
+            })
           : current,
       );
       if (shouldShowRollToast(unseen, event.data.kind, chatOpenRef.current)) {
@@ -1808,7 +1812,7 @@ export function App() {
               ).then(() => undefined)
             }
             onPatchCharacter={patchCharacter}
-            onChat={async (body, visibility) =>
+            onChat={async (body, visibility, stream) =>
               run(() =>
                 api("/api/chat", {
                   method: "POST",
@@ -1816,11 +1820,30 @@ export function App() {
                     actionId: crypto.randomUUID(),
                     body,
                     visibility,
+                    stream,
                     characterId: snapshot.me.characterId,
                   }),
                 }),
               )
             }
+            onActiveChatThreadChange={(threadId) => {
+              activeChatThreadIdRef.current = threadId;
+            }}
+            onMarkChatRead={async (threadId, sequence) => {
+              const cursor = await api<
+                import("@arken/contracts").ChatReadCursorDto
+              >("/api/chat/read", {
+                method: "POST",
+                body: JSON.stringify({
+                  actionId: crypto.randomUUID(),
+                  threadId,
+                  sequence,
+                }),
+              });
+              setSnapshot((current) =>
+                current ? reconcileChatRead(current, cursor) : current,
+              );
+            }}
             onRoll={submitRoll}
             onCreateCharacter={async (name) =>
               run(

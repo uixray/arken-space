@@ -20,11 +20,13 @@ export const assetKindSchema = z.enum([
   "AUDIO",
 ]);
 export const messageVisibilitySchema = z.enum(["PUBLIC", "GM_ONLY"]);
+export const chatStreamSchema = z.enum(["ROLLS", "STORY", "TABLE"]);
 
 export type Role = z.infer<typeof roleSchema>;
 export type Projection = z.infer<typeof projectionSchema>;
 export type AssetKind = z.infer<typeof assetKindSchema>;
 export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
+export type ChatStream = z.infer<typeof chatStreamSchema>;
 
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
@@ -477,12 +479,28 @@ export const characterCommandSchema = characterUpdateSchema.extend({
   revision: z.number().int().nonnegative().optional(),
 });
 
-export const createChatMessageSchema = z.object({
+const createChatMessageBaseSchema = z.object({
   actionId: actionIdSchema,
   body: z.string().trim().min(1).max(4000),
   visibility: messageVisibilitySchema.default("PUBLIC"),
   characterId: z.string().uuid().nullable().optional(),
 });
+export const createChatMessageSchema = z.union([
+  createChatMessageBaseSchema.extend({
+    threadId: z.string().uuid(),
+    stream: z.never().optional(),
+  }),
+  createChatMessageBaseSchema.extend({
+    threadId: z.never().optional(),
+    stream: chatStreamSchema.default("TABLE"),
+  }),
+]);
+
+export const markChatThreadReadSchema = z.object({
+  threadId: z.string().uuid(),
+  sequence: z.number().int().nonnegative(),
+});
+export type MarkChatThreadRead = z.infer<typeof markChatThreadReadSchema>;
 
 export const diceRequestSchema = z.object({
   actionId: actionIdSchema,
@@ -709,8 +727,34 @@ export interface ChatMessageDto {
   body: string;
   visibility: MessageVisibility;
   kind: "TEXT" | "DICE" | "SYSTEM";
+  threadId: string;
+  stream: ChatStream;
   dice: DiceResult | null;
   createdAt: string;
+}
+
+export interface ChatThreadDto {
+  id: string;
+  campaignId: string;
+  type: "STREAM";
+  stream: ChatStream;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatReadCursorDto {
+  campaignId: string;
+  threadId: string;
+  lastReadSequence: number;
+  updatedAt: string;
+}
+
+export interface ChatThreadStateDto {
+  threadId: string;
+  stream: ChatStream;
+  lastReadSequence: number;
+  latestSequence: number;
+  unreadCount: number;
 }
 
 export interface DiceTerm {
@@ -757,6 +801,8 @@ export interface GameSnapshot {
   fogReveals: FogRevealDto[];
   drawings?: DrawingDto[];
   messages: ChatMessageDto[];
+  chatThreads: ChatThreadDto[];
+  chatThreadStates: ChatThreadStateDto[];
   assets: AssetDto[];
   audio: AudioStateDto;
   snapshotVersion: number;

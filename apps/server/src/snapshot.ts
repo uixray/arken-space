@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, max, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, max } from "drizzle-orm";
 import {
   assets,
   audioStates,
@@ -7,6 +7,8 @@ import {
   characterCatalogEntries,
   characters,
   chatMessages,
+  chatReadCursors,
+  chatThreads,
   drawings,
   fogReveals,
   gameEvents,
@@ -25,6 +27,11 @@ import {
 } from "./entry-data.js";
 import { normalizeDiceResult } from "./dice-result.js";
 import { normalizeAudioDeadline } from "./audio-state.js";
+import {
+  chatVisibilityFilter,
+  canAccessStream,
+  unknownPlayerDisplayName,
+} from "./chat.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -52,7 +59,8 @@ export async function buildSnapshot(
     fogRows,
     drawingRows,
     assetRows,
-    messageRows,
+    threadRows,
+    cursorRows,
     audioRows,
     sequenceRows,
   ] = await Promise.all([
@@ -125,20 +133,18 @@ export async function buildSnapshot(
       .orderBy(desc(assets.createdAt)),
     db
       .select()
-      .from(chatMessages)
+      .from(chatThreads)
+      .where(eq(chatThreads.campaignId, auth.campaignId))
+      .orderBy(asc(chatThreads.stream)),
+    db
+      .select()
+      .from(chatReadCursors)
       .where(
         and(
-          eq(chatMessages.campaignId, auth.campaignId),
-          auth.role === "GM"
-            ? undefined
-            : or(
-                eq(chatMessages.visibility, "PUBLIC"),
-                eq(chatMessages.membershipId, auth.membershipId),
-              ),
+          eq(chatReadCursors.campaignId, auth.campaignId),
+          eq(chatReadCursors.membershipId, auth.membershipId),
         ),
-      )
-      .orderBy(desc(chatMessages.sequence))
-      .limit(200),
+      ),
     db
       .select()
       .from(audioStates)
@@ -149,6 +155,47 @@ export async function buildSnapshot(
       .from(gameEvents)
       .where(eq(gameEvents.campaignId, auth.campaignId)),
   ]);
+
+  const visibleThreadRows = threadRows.filter((thread) =>
+    canAccessStream(auth, thread.stream),
+  );
+  const cursorByThread = new Map(
+    cursorRows.map((cursor) => [cursor.threadId, cursor.lastReadSequence]),
+  );
+  const messageGroups = await Promise.all(
+    visibleThreadRows.map((thread) =>
+      db
+        .select()
+        .from(chatMessages)
+        .where(
+          and(
+            eq(chatMessages.campaignId, auth.campaignId),
+            eq(chatMessages.threadId, thread.id),
+            chatVisibilityFilter(auth),
+          ),
+        )
+        .orderBy(desc(chatMessages.sequence))
+        .limit(200),
+    ),
+  );
+  const messageRows = visibleThreadRows.flatMap((thread, index) =>
+    (messageGroups[index] ?? []).map((message) => ({ message, thread })),
+  );
+  const unreadGroups = await Promise.all(
+    visibleThreadRows.map((thread) =>
+      db
+        .select({ value: count() })
+        .from(chatMessages)
+        .where(
+          and(
+            eq(chatMessages.campaignId, auth.campaignId),
+            eq(chatMessages.threadId, thread.id),
+            gt(chatMessages.sequence, cursorByThread.get(thread.id) ?? 0),
+            chatVisibilityFilter(auth),
+          ),
+        ),
+    ),
+  );
 
   const characterByOwner = new Map(
     characterRows
@@ -372,19 +419,41 @@ export async function buildSnapshot(
         y: drawing.y,
         revision: drawing.revision,
       })),
-    messages: messageRows.reverse().map((message) => ({
-      id: message.id,
-      sequence: message.sequence,
-      membershipId: message.membershipId,
-      displayName:
-        memberNameById.get(message.membershipId) ?? "Неизвестный игрок",
-      characterId: message.characterId,
-      body: message.body,
-      visibility: message.visibility,
-      kind: message.kind,
-      dice: normalizeDiceResult(message.dice),
-      createdAt: message.createdAt.toISOString(),
+    messages: messageRows
+      .sort((left, right) => left.message.sequence - right.message.sequence)
+      .map(({ message, thread }) => ({
+        id: message.id,
+        sequence: message.sequence,
+        membershipId: message.membershipId,
+        displayName:
+          memberNameById.get(message.membershipId) ?? unknownPlayerDisplayName,
+        characterId: message.characterId,
+        body: message.body,
+        visibility: message.visibility,
+        kind: message.kind,
+        threadId: message.threadId,
+        stream: thread.stream,
+        dice: normalizeDiceResult(message.dice),
+        createdAt: message.createdAt.toISOString(),
+      })),
+    chatThreads: visibleThreadRows.map((thread) => ({
+      id: thread.id,
+      campaignId: thread.campaignId,
+      type: thread.type,
+      stream: thread.stream,
+      createdAt: thread.createdAt.toISOString(),
+      updatedAt: thread.updatedAt.toISOString(),
     })),
+    chatThreadStates: visibleThreadRows.map((thread, index) => {
+      const visibleMessages = messageGroups[index] ?? [];
+      return {
+        threadId: thread.id,
+        stream: thread.stream,
+        lastReadSequence: cursorByThread.get(thread.id) ?? 0,
+        latestSequence: visibleMessages[0]?.sequence ?? 0,
+        unreadCount: Number(unreadGroups[index]?.[0]?.value ?? 0),
+      };
+    }),
     assets: visibleAssets.map((asset) => ({
       id: asset.id,
       kind: asset.kind,

@@ -28,6 +28,8 @@ describe("initial PostgreSQL migration", () => {
         "campaigns",
         "characters",
         "chat_messages",
+        "chat_read_cursors",
+        "chat_threads",
         "drawings",
         "fog_reveals",
         "feedback_attachments",
@@ -198,7 +200,7 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
      insert into characters (id,campaign_id,owner_membership_id,name) values ('00000000-0000-0000-0000-000000000006','${c}','${p}','P');
      insert into tokens (scene_id,owner_membership_id,name,x,y) values ('${scene}','${p}','T',0,0);
      insert into fog_reveals (scene_id,x,y,width,height) values ('${scene}',0,0,1,1);
-     insert into chat_messages (campaign_id,membership_id,body) values ('${c}','${p}','hi');
+     insert into chat_messages (campaign_id,membership_id,body,thread_id) select '${c}','${p}','hi',id from chat_threads where campaign_id='${c}' and stream='TABLE';
      insert into player_access_grants (campaign_id,membership_id,label,token_hash) values ('${c}','${p}','P','hash');`,
   );
   await database.exec("begin");
@@ -268,4 +270,133 @@ it("rejects a retained membership that is not the campaign GM", async () => {
     executeGameplayReset({ query: database.query.bind(database) }, c, player),
   ).rejects.toThrow("RETAINED_GM_INVALID");
   await database.close();
+});
+
+describe("chat thread migration", () => {
+  it("creates fixed streams, backfills messages, and persists read cursors", async () => {
+    const database = new PGlite();
+    const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
+    const files = (await readdir(migrationsUrl))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    const target = files.findIndex((file) => file.startsWith("0017_"));
+    expect(target).toBeGreaterThan(0);
+    for (const file of files.slice(0, target))
+      await database.exec(
+        (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
+          "--> statement-breakpoint",
+          "",
+        ),
+      );
+
+    const campaign = "50000000-0000-0000-0000-000000000001";
+    const member = "50000000-0000-0000-0000-000000000002";
+    await database.exec(`
+      insert into campaigns (id,name) values ('${campaign}','Threads');
+      insert into memberships (id,campaign_id,role,display_name) values ('${member}','${campaign}','GM','GM');
+      insert into chat_messages (campaign_id,membership_id,kind,body) values
+        ('${campaign}','${member}','DICE','d20'),
+        ('${campaign}','${member}','TEXT','table'),
+        ('${campaign}','${member}','SYSTEM','system');
+    `);
+    await database.exec(
+      (
+        await readFile(new URL(files[target]!, migrationsUrl), "utf8")
+      ).replaceAll("--> statement-breakpoint", ""),
+    );
+
+    const threads = await database.query<{ id: string; stream: string }>(
+      `select id,stream from chat_threads where campaign_id='${campaign}' order by stream`,
+    );
+    expect(threads.rows.map(({ stream }) => stream)).toEqual([
+      "ROLLS",
+      "STORY",
+      "TABLE",
+    ]);
+    const messages = await database.query<{
+      kind: string;
+      stream: string;
+      thread_id: string;
+    }>(
+      `select message.kind,thread.stream,message.thread_id
+       from chat_messages message join chat_threads thread on thread.id=message.thread_id
+       order by message.sequence`,
+    );
+    expect(messages.rows.map(({ kind, stream }) => ({ kind, stream }))).toEqual(
+      [
+        { kind: "DICE", stream: "ROLLS" },
+        { kind: "TEXT", stream: "TABLE" },
+        { kind: "SYSTEM", stream: "TABLE" },
+      ],
+    );
+    expect(messages.rows.every(({ thread_id }) => Boolean(thread_id))).toBe(
+      true,
+    );
+
+    const rolls = threads.rows.find(({ stream }) => stream === "ROLLS")!;
+    const table = threads.rows.find(({ stream }) => stream === "TABLE")!;
+    await database.exec(
+      `insert into chat_read_cursors (campaign_id,membership_id,thread_id,last_read_sequence) values
+       ('${campaign}','${member}','${rolls.id}',1),
+       ('${campaign}','${member}','${table.id}',2);`,
+    );
+    await expect(
+      database.exec(
+        `insert into chat_read_cursors (campaign_id,membership_id,thread_id) values ('${campaign}','${member}','${table.id}')`,
+      ),
+    ).rejects.toThrow();
+    const cursors = await database.query<{ last_read_sequence: number }>(
+      "select last_read_sequence from chat_read_cursors order by last_read_sequence",
+    );
+    expect(cursors.rows).toEqual([
+      { last_read_sequence: 1 },
+      { last_read_sequence: 2 },
+    ]);
+
+    // Rolling compatibility: an old writer can omit thread_id and the database
+    // resolves the correct fixed stream while the column remains NOT NULL.
+    const legacy = await database.query<{ stream: string }>(
+      `with inserted as (
+         insert into chat_messages (campaign_id,membership_id,kind,body)
+         values ('${campaign}','${member}','DICE','legacy d20') returning thread_id
+       ) select thread.stream from inserted join chat_threads thread on thread.id=inserted.thread_id`,
+    );
+    expect(legacy.rows).toEqual([{ stream: "ROLLS" }]);
+
+    const foreignCampaign = "50000000-0000-0000-0000-000000000010";
+    const foreignMember = "50000000-0000-0000-0000-000000000011";
+    await database.exec(
+      `insert into campaigns (id,name) values ('${foreignCampaign}','Future campaign');
+       insert into memberships (id,campaign_id,role,display_name) values ('${foreignMember}','${foreignCampaign}','PLAYER','Foreign');`,
+    );
+    const futureStreams = await database.query<{ stream: string }>(
+      `select stream from chat_threads where campaign_id='${foreignCampaign}' order by stream`,
+    );
+    expect(futureStreams.rows.map(({ stream }) => stream)).toEqual([
+      "ROLLS",
+      "STORY",
+      "TABLE",
+    ]);
+    const foreignTable = (
+      await database.query<{ id: string }>(
+        `select id from chat_threads where campaign_id='${foreignCampaign}' and stream='TABLE'`,
+      )
+    ).rows[0]!;
+    await expect(
+      database.exec(
+        `insert into chat_messages (campaign_id,membership_id,thread_id,body) values ('${campaign}','${member}','${foreignTable.id}','cross tenant')`,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      database.exec(
+        `insert into chat_read_cursors (campaign_id,membership_id,thread_id) values ('${campaign}','${foreignMember}','${table.id}')`,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      database.exec(
+        `insert into chat_read_cursors (campaign_id,membership_id,thread_id) values ('${campaign}','${member}','${foreignTable.id}')`,
+      ),
+    ).rejects.toThrow();
+    await database.close();
+  });
 });

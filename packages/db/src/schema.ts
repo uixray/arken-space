@@ -1,7 +1,9 @@
 import {
+  bigint,
   bigserial,
   boolean,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -34,6 +36,12 @@ export const messageKindEnum = pgEnum("message_kind", [
   "TEXT",
   "DICE",
   "SYSTEM",
+]);
+export const chatThreadTypeEnum = pgEnum("chat_thread_type", ["STREAM"]);
+export const chatStreamEnum = pgEnum("chat_stream", [
+  "ROLLS",
+  "STORY",
+  "TABLE",
 ]);
 export const tokenLayerEnum = pgEnum("token_layer", ["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindEnum = pgEnum("catalog_entry_kind", [
@@ -88,7 +96,13 @@ export const memberships = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("memberships_campaign_idx").on(table.campaignId)],
+  (table) => [
+    index("memberships_campaign_idx").on(table.campaignId),
+    uniqueIndex("memberships_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+  ],
 );
 
 export const gmAccessCredentials = pgTable("gm_access_credentials", {
@@ -538,6 +552,34 @@ export const sessions = pgTable(
   (table) => [uniqueIndex("sessions_token_hash_idx").on(table.tokenHash)],
 );
 
+export const chatThreads = pgTable(
+  "chat_threads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    type: chatThreadTypeEnum("type").notNull().default("STREAM"),
+    stream: chatStreamEnum("stream").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("chat_threads_campaign_stream_idx").on(
+      table.campaignId,
+      table.stream,
+    ),
+    uniqueIndex("chat_threads_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+  ],
+);
+
 export const chatMessages = pgTable(
   "chat_messages",
   {
@@ -553,6 +595,7 @@ export const chatMessages = pgTable(
       onDelete: "set null",
     }),
     kind: messageKindEnum("kind").notNull().default("TEXT"),
+    threadId: uuid("thread_id").notNull(),
     visibility: messageVisibilityEnum("visibility").notNull().default("PUBLIC"),
     body: text("body").notNull(),
     dice: jsonb("dice").$type<unknown>(),
@@ -563,6 +606,43 @@ export const chatMessages = pgTable(
   (table) => [
     uniqueIndex("chat_sequence_idx").on(table.sequence),
     index("chat_campaign_sequence_idx").on(table.campaignId, table.sequence),
+    index("chat_messages_thread_sequence_idx").on(
+      table.threadId,
+      table.sequence,
+    ),
+  ],
+);
+
+export const chatReadCursors = pgTable(
+  "chat_read_cursors",
+  {
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    membershipId: uuid("membership_id").notNull(),
+    threadId: uuid("thread_id").notNull(),
+    lastReadSequence: bigint("last_read_sequence", { mode: "number" })
+      .notNull()
+      .default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("chat_read_cursors_membership_thread_idx").on(
+      table.membershipId,
+      table.threadId,
+    ),
+    foreignKey({
+      name: "chat_read_cursors_campaign_membership_fk",
+      columns: [table.campaignId, table.membershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "chat_read_cursors_campaign_thread_fk",
+      columns: [table.campaignId, table.threadId],
+      foreignColumns: [chatThreads.campaignId, chatThreads.id],
+    }).onDelete("cascade"),
   ],
 );
 

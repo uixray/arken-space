@@ -34,7 +34,9 @@ beforeAll(async () => {
   const migrations = (await readdir(migrationsUrl))
     .filter((name) => name.endsWith(".sql"))
     .sort();
-  for (const file of migrations.filter((file) => !file.startsWith("0009_"))) {
+  for (const file of migrations.filter(
+    (file) => !file.startsWith("0009_") && !file.startsWith("0017_"),
+  )) {
     const sql = (
       await readFile(new URL(file, migrationsUrl), "utf8")
     ).replaceAll("--> statement-breakpoint", "");
@@ -48,6 +50,10 @@ beforeAll(async () => {
     create unique index chat_sequence_idx on chat_messages (sequence);
     create index chat_campaign_sequence_idx on chat_messages (campaign_id, sequence);
   `);
+  const chatThreadsMigration = (
+    await readFile(new URL("0017_chat_threads.sql", migrationsUrl), "utf8")
+  ).replaceAll("--> statement-breakpoint", "");
+  await database.exec(chatThreadsMigration);
 });
 
 beforeEach(async () => {
@@ -136,6 +142,34 @@ describe("role-filtered snapshots", () => {
     expect(JSON.stringify(snapshot)).not.toContain("gm secret");
   });
 
+  it("shows PUBLIC STORY to players but keeps legacy GM_ONLY hidden", async () => {
+    await database.exec(`
+      insert into chat_messages (campaign_id,membership_id,thread_id,visibility,body,sequence)
+      select '${ids.campaign}','${ids.gm}',id,'PUBLIC','public story',10
+      from chat_threads where campaign_id='${ids.campaign}' and stream='STORY';
+      insert into chat_messages (campaign_id,membership_id,thread_id,visibility,body,sequence)
+      select '${ids.campaign}','${ids.gm}',id,'GM_ONLY','secret story',11
+      from chat_threads where campaign_id='${ids.campaign}' and stream='STORY';
+    `);
+    const db = drizzle(database, { schema });
+    const snapshot = await buildSnapshot(db as never, {
+      membershipId: ids.player,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Player",
+    });
+
+    expect(snapshot.chatThreads.map((thread) => thread.stream)).toContain(
+      "STORY",
+    );
+    expect(snapshot.messages.map((message) => message.body)).toContain(
+      "public story",
+    );
+    expect(snapshot.messages.map((message) => message.body)).not.toContain(
+      "secret story",
+    );
+  });
+
   it("keeps complete campaign state available to the GM", async () => {
     const db = drizzle(database, { schema });
     const snapshot = await buildSnapshot(db as never, {
@@ -152,28 +186,43 @@ describe("role-filtered snapshots", () => {
     expect(snapshot.assets).toHaveLength(2);
   });
 
-  it("reloads the authoritative latest 200 chat messages in sequence order", async () => {
+  it("loads at most 200 ACL-filtered messages per stream", async () => {
     await database.exec(`
       delete from chat_messages where campaign_id = '${ids.campaign}';
-      insert into chat_messages (campaign_id,membership_id,visibility,body,created_at,sequence)
-      select '${ids.campaign}','${ids.gm}','PUBLIC','message-' || value,'2026-01-01T00:00:00Z',value
-      from generate_series(1, 202) value;
+      insert into chat_messages (campaign_id,membership_id,thread_id,visibility,body,created_at,sequence)
+      select '${ids.campaign}','${ids.gm}',thread.id,'PUBLIC','table-' || value,'2026-01-01T00:00:00Z',value
+      from generate_series(1, 202) value
+      cross join chat_threads thread
+      where thread.campaign_id='${ids.campaign}' and thread.stream='TABLE';
+      insert into chat_messages (campaign_id,membership_id,thread_id,visibility,body,created_at,sequence)
+      select '${ids.campaign}','${ids.gm}',thread.id,'PUBLIC','story-' || value,'2026-01-01T00:00:00Z',1000 + value
+      from generate_series(1, 202) value
+      cross join chat_threads thread
+      where thread.campaign_id='${ids.campaign}' and thread.stream='STORY';
     `);
-    const latest = await database.query<{ body: string; sequence: number }>(`
-      select body, sequence from chat_messages
-      where campaign_id = '${ids.campaign}'
-      order by sequence desc
-      limit 200
-    `);
-    const messages = latest.rows.reverse();
-    expect(messages).toHaveLength(200);
-    expect(messages[0]?.body).toBe("message-3");
-    expect(messages.at(-1)?.body).toBe("message-202");
-    expect(messages.map((message) => message.sequence)).toEqual(
-      [...messages]
-        .map((message) => message.sequence)
-        .sort((left, right) => left - right),
+    const db = drizzle(database, { schema });
+    const snapshot = await buildSnapshot(db as never, {
+      membershipId: ids.player,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Player",
+    });
+    const table = snapshot.messages.filter(
+      (message) => message.stream === "TABLE",
     );
+    const story = snapshot.messages.filter(
+      (message) => message.stream === "STORY",
+    );
+    expect(table).toHaveLength(200);
+    expect(story).toHaveLength(200);
+    expect(table[0]?.body).toBe("table-3");
+    expect(story[0]?.body).toBe("story-3");
+    expect(
+      snapshot.chatThreadStates.find((state) => state.stream === "TABLE"),
+    ).toMatchObject({ latestSequence: 202, unreadCount: 202 });
+    expect(
+      snapshot.chatThreadStates.find((state) => state.stream === "STORY"),
+    ).toMatchObject({ latestSequence: 1202, unreadCount: 202 });
   });
 });
 

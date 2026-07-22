@@ -12,6 +12,7 @@ import {
   catalogEntryCommandSchema,
   characterCatalogEntryCommandSchema,
   createChatMessageSchema,
+  markChatThreadReadSchema,
   createFogRevealSchema,
   changeTokenLayerSchema,
   createDrawingSchema,
@@ -56,6 +57,7 @@ import {
   campaigns,
   characters,
   chatMessages,
+  chatReadCursors,
   drawings,
   fogReveals,
   feedbackAttachments,
@@ -77,6 +79,15 @@ import { applyRollMode, DiceFormulaError, rollFormula } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
+import {
+  canPostToStream,
+  chatBroadcastAudience,
+  chatMessageDto,
+  chatVisibilityFilter,
+  clampReadSequence,
+  ensureStreamThread,
+  resolveChatThread,
+} from "./chat.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import {
   normalizeLegacyEntryData,
@@ -4200,6 +4211,18 @@ export function registerRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const body = createChatMessageSchema.parse(request.body);
+    let thread;
+    try {
+      thread = await resolveChatThread(db, auth, body, ["TABLE", "STORY"]);
+      if (!canPostToStream(auth, thread.stream))
+        throw new Error("CHAT_THREAD_FORBIDDEN");
+    } catch (error) {
+      const code =
+        error instanceof Error ? error.message : "CHAT_THREAD_FORBIDDEN";
+      return reply
+        .code(code === "CHAT_THREAD_NOT_FOUND" ? 404 : 403)
+        .send({ error: code });
+    }
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) return reply.code(200).send({ duplicate: true });
     let characterId: string | null = null;
@@ -4229,23 +4252,13 @@ export function registerRoutes(
           campaignId: auth.campaignId,
           membershipId: auth.membershipId,
           characterId,
+          threadId: thread.id,
           body: body.body,
           visibility: body.visibility,
         })
         .returning();
       if (!row) throw new Error("MESSAGE_CREATE_FAILED");
-      const dto = {
-        id: row.id,
-        sequence: row.sequence,
-        membershipId: row.membershipId,
-        displayName: auth.displayName,
-        characterId: row.characterId,
-        body: row.body,
-        visibility: row.visibility,
-        kind: row.kind,
-        dice: null,
-        createdAt: row.createdAt.toISOString(),
-      } as const;
+      const dto = chatMessageDto(row, auth.displayName, thread.stream);
       const [event] = await tx
         .insert(gameEvents)
         .values({
@@ -4268,13 +4281,84 @@ export function registerRoutes(
       emittedAt: event.createdAt.toISOString(),
       data: dto,
     };
-    if (row.visibility === "PUBLIC")
+    if (chatBroadcastAudience(row.visibility) === "CAMPAIGN")
       io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
     else {
       io.to(gmRoom(auth.campaignId)).emit("chat:created", envelope);
       io.to(memberRoom(auth.membershipId)).emit("chat:created", envelope);
     }
     return reply.code(201).send(dto);
+  });
+
+  app.post("/api/chat/read", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const body = markChatThreadReadSchema.parse(request.body);
+    let thread;
+    try {
+      thread = await resolveChatThread(db, auth, { threadId: body.threadId }, [
+        "ROLLS",
+        "STORY",
+        "TABLE",
+      ]);
+    } catch (error) {
+      const code =
+        error instanceof Error ? error.message : "CHAT_THREAD_FORBIDDEN";
+      return reply
+        .code(code === "CHAT_THREAD_NOT_FOUND" ? 404 : 403)
+        .send({ error: code });
+    }
+    const [latest] = await db
+      .select({ sequence: chatMessages.sequence })
+      .from(chatMessages)
+      .where(
+        and(
+          eq(chatMessages.campaignId, auth.campaignId),
+          eq(chatMessages.threadId, thread.id),
+          chatVisibilityFilter(auth),
+        ),
+      )
+      .orderBy(desc(chatMessages.sequence))
+      .limit(1);
+    const [previousCursor] = await db
+      .select({ lastReadSequence: chatReadCursors.lastReadSequence })
+      .from(chatReadCursors)
+      .where(
+        and(
+          eq(chatReadCursors.membershipId, auth.membershipId),
+          eq(chatReadCursors.threadId, thread.id),
+        ),
+      )
+      .limit(1);
+    const nextSequence = clampReadSequence(
+      previousCursor?.lastReadSequence ?? 0,
+      body.sequence,
+      latest?.sequence ?? 0,
+    );
+    const [cursor] = await db
+      .insert(chatReadCursors)
+      .values({
+        campaignId: auth.campaignId,
+        membershipId: auth.membershipId,
+        threadId: thread.id,
+        lastReadSequence: nextSequence,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [chatReadCursors.membershipId, chatReadCursors.threadId],
+        set: {
+          lastReadSequence: sql`greatest(${chatReadCursors.lastReadSequence}, ${nextSequence})`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    if (!cursor) throw new Error("CHAT_CURSOR_UPDATE_FAILED");
+    return {
+      campaignId: cursor.campaignId,
+      threadId: cursor.threadId,
+      lastReadSequence: cursor.lastReadSequence,
+      updatedAt: cursor.updatedAt.toISOString(),
+    };
   });
 
   app.post("/api/campaign/clock", async (request, reply) => {
@@ -4302,6 +4386,7 @@ export function registerRoutes(
     const nextDay = current.day + (body.command === "ADVANCE_DAY" ? 1 : 0);
     const nextBattle =
       current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
+    const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
     let result;
     try {
       result = await db.transaction(async (tx) => {
@@ -4388,6 +4473,7 @@ export function registerRoutes(
             campaignId: auth.campaignId,
             membershipId: auth.membershipId,
             kind: "SYSTEM",
+            threadId: tableThread.id,
             visibility: "PUBLIC",
             body:
               recharged > 0
@@ -4517,6 +4603,7 @@ export function registerRoutes(
       .filter(Boolean)
       .join("; ");
     if (!changes) return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
+    const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
     const result = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(characters)
@@ -4541,6 +4628,7 @@ export function registerRoutes(
           membershipId: auth.membershipId,
           characterId: id,
           kind: "SYSTEM",
+          threadId: tableThread.id,
           visibility: "PUBLIC",
           body: `${character.name} — ${changes}`,
         })
@@ -4603,6 +4691,11 @@ export function registerRoutes(
       );
       if (!parsed.success || !parsed.data.uses)
         return reply.code(400).send({ error: "ENTRY_HAS_NO_USES" });
+      const tableThread = await ensureStreamThread(
+        db,
+        auth.campaignId,
+        "TABLE",
+      );
       const result = await db.transaction(async (tx) => {
         const [clock] = await tx
           .select({
@@ -4649,6 +4742,7 @@ export function registerRoutes(
             membershipId: auth.membershipId,
             characterId: row.character.id,
             kind: "SYSTEM",
+            threadId: tableThread.id,
             visibility: "PUBLIC",
             body: `${auth.displayName}: ${row.entry.name} перезаряжена (${parsed.data.uses!.max}/${parsed.data.uses!.max})`,
           })
@@ -4750,6 +4844,16 @@ export function registerRoutes(
       const consumeUse = action.consumeUse;
       if (consumeUse && (!uses || uses.current < 1))
         return reply.code(409).send({ error: "NO_ABILITY_USES" });
+      const tableThread = await ensureStreamThread(
+        db,
+        auth.campaignId,
+        "TABLE",
+      );
+      const rollsThread = await ensureStreamThread(
+        db,
+        auth.campaignId,
+        "ROLLS",
+      );
       const saved = await db.transaction(async (tx) => {
         let systemMessage = null;
         if (consumeUse && uses) {
@@ -4779,6 +4883,7 @@ export function registerRoutes(
               membershipId: auth.membershipId,
               characterId: row.character.id,
               kind: "SYSTEM",
+              threadId: tableThread.id,
               visibility: "PUBLIC",
               body: `${auth.displayName}: ${row.entry.name} — использования ${uses.current} → ${uses.current - 1}`,
             })
@@ -4806,6 +4911,7 @@ export function registerRoutes(
             membershipId: auth.membershipId,
             characterId: row.character.id,
             kind: "DICE",
+            threadId: rollsThread.id,
             visibility: body.visibility,
             body: [action.label, row.entry.description, parsedData.data.notes]
               .filter(Boolean)
@@ -4843,6 +4949,7 @@ export function registerRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const body = diceRequestSchema.parse(request.body);
+    const rollsThread = await ensureStreamThread(db, auth.campaignId, "ROLLS");
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) return reply.code(200).send({ duplicate: true });
     let character = null;
@@ -4896,24 +5003,14 @@ export function registerRoutes(
             membershipId: auth.membershipId,
             characterId: character?.id ?? null,
             kind: "DICE",
+            threadId: rollsThread.id,
             visibility: body.visibility,
             body: rollLabel,
             dice: result,
           })
           .returning();
         if (!row) throw new Error("ROLL_SAVE_FAILED");
-        const dto = {
-          id: row.id,
-          sequence: row.sequence,
-          membershipId: row.membershipId,
-          displayName: auth.displayName,
-          characterId: row.characterId,
-          body: row.body,
-          visibility: row.visibility,
-          kind: row.kind,
-          dice: result,
-          createdAt: row.createdAt.toISOString(),
-        } as const;
+        const dto = chatMessageDto(row, auth.displayName, rollsThread.stream);
         const [event] = await tx
           .insert(gameEvents)
           .values({
@@ -4936,7 +5033,7 @@ export function registerRoutes(
         emittedAt: event.createdAt.toISOString(),
         data: dto,
       };
-      if (row.visibility === "PUBLIC")
+      if (chatBroadcastAudience(row.visibility) === "CAMPAIGN")
         io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
       else {
         io.to(gmRoom(auth.campaignId)).emit("chat:created", envelope);
