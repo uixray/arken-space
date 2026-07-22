@@ -19,6 +19,16 @@ const slashCommands: SlashCommandSuggestion[] = [
   },
 ];
 
+const bareDiceExpression =
+  /^[+-]?(?:\d{0,3}d\d{1,4}(?:kh1|kl1)?|\d+)(?:[+-](?:\d{0,3}d\d{1,4}(?:kh1|kl1)?|\d+))*$/;
+
+function parseBareDiceFormula(body: string): string | null {
+  const compact = body.replace(/\s+/g, "").toLocaleLowerCase("en-US");
+  return bareDiceExpression.test(compact) && compact.includes("d")
+    ? compact
+    : null;
+}
+
 export function getSlashCommandSuggestions(
   value: string,
 ): SlashCommandSuggestion[] {
@@ -38,6 +48,8 @@ export function parseComposerInput(value: string): ComposerIntent {
   const body = value.trim();
   if (!body)
     return { kind: "INVALID", message: "Введите сообщение или бросок." };
+  const bareFormula = parseBareDiceFormula(body);
+  if (bareFormula) return { kind: "ROLL", formula: bareFormula };
   if (!/^\/roll(?:\s|$)/i.test(body)) return { kind: "TEXT", body };
   const match = /^\/roll(?:\s+(.+))?$/i.exec(body);
   if (!match?.[1]?.trim())

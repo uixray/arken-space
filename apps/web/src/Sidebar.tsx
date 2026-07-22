@@ -40,8 +40,11 @@ import {
   createCharacterWorkspaceState,
   MAX_OPEN_CHARACTER_SHEETS,
 } from "./character-workspace-state";
+import { buildChatTimeline } from "./chat-date";
+import { normalizeClientDiceResult } from "./dice-result";
 
-function formatDiceBreakdown(dice: GameSnapshot["messages"][number]["dice"]) {
+function formatDiceBreakdown(value: unknown) {
+  const dice = normalizeClientDiceResult(value);
   if (!dice) return "";
   const terms = dice.terms.map(
     (term) => `${term.notation} (${term.rolls.join(", ")})`,
@@ -1121,6 +1124,26 @@ export function CharacterPanel({
   );
 }
 
+function ChatMessageBody({
+  message,
+}: {
+  message: GameSnapshot["messages"][number];
+}) {
+  const dice = normalizeClientDiceResult(message.dice);
+  if (message.kind !== "DICE" || !dice) return <p>{message.body}</p>;
+  return (
+    <div className="roll-result">
+      <strong className="roll-total" aria-label="???? ??????">
+        {dice.total}
+      </strong>
+      <div className="roll-details">
+        <div>{message.body}</div>
+        <small>{formatDiceBreakdown(dice)}</small>
+      </div>
+    </div>
+  );
+}
+
 function ChatPanel({
   snapshot,
   onChat,
@@ -1142,6 +1165,7 @@ function ChatPanel({
   const followRef = useRef(true);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const slashSuggestions = getSlashCommandSuggestions(composer);
+  const timeline = buildChatTimeline(snapshot.messages);
   const latestMessageId = snapshot.messages.at(-1)?.id;
   useEffect(() => {
     const list = listRef.current;
@@ -1199,45 +1223,39 @@ function ChatPanel({
           if (followRef.current) setNewMessageCount(0);
         }}
       >
-        {snapshot.messages.map((message) => (
-          <article
-            id={`chat-message-${message.id}`}
-            className={`message ${message.kind.toLowerCase()}`}
-            key={message.id}
-            tabIndex={-1}
-          >
-            <header>
-              <strong>{message.displayName}</strong>
-              {message.characterId && (
-                <span className="message-character">
-                  {snapshot.characters.find(
-                    (character) => character.id === message.characterId,
-                  )?.name ?? "Персонаж"}
-                </span>
-              )}
-              <time>
-                {new Date(message.createdAt).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </time>
-              {message.visibility === "GM_ONLY" && <span>мастеру</span>}
-            </header>
-            {message.kind === "DICE" && message.dice ? (
-              <div className="roll-result">
-                <strong className="roll-total" aria-label="Итог броска">
-                  {message.dice.total}
-                </strong>
-                <div className="roll-details">
-                  <div>{message.body}</div>
-                  <small>{formatDiceBreakdown(message.dice)}</small>
-                </div>
-              </div>
-            ) : (
-              <p>{message.body}</p>
-            )}
-          </article>
-        ))}
+        {timeline.map((item) =>
+          item.type === "DATE" ? (
+            <div className="chat-date-divider" key={`date-${item.key}`}>
+              <span>{item.label}</span>
+            </div>
+          ) : (
+            <article
+              key={item.message.id}
+              id={`chat-message-${item.message.id}`}
+              className={`message ${item.message.kind.toLowerCase()}`}
+              tabIndex={-1}
+            >
+              <header>
+                <strong>{item.message.displayName}</strong>
+                {item.message.characterId && (
+                  <span className="message-character">
+                    {snapshot.characters.find(
+                      (character) => character.id === item.message.characterId,
+                    )?.name ?? "Персонаж"}
+                  </span>
+                )}
+                <time>
+                  {new Date(item.message.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </time>
+                {item.message.visibility === "GM_ONLY" && <span>мастеру</span>}
+              </header>
+              <ChatMessageBody message={item.message} />
+            </article>
+          ),
+        )}
         <div ref={endRef} aria-hidden="true" />
       </div>
       {newMessageCount > 0 && (

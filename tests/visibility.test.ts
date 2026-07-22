@@ -91,6 +91,29 @@ afterAll(async () => {
 });
 
 describe("role-filtered snapshots", () => {
+  it("keeps malformed stored dice history readable", async () => {
+    await database.exec(`
+      update chat_messages
+      set kind = 'DICE', dice = '{"total":20}'
+      where id = '${ids.publicMessage}';
+    `);
+    const db = drizzle(database, { schema });
+    const snapshot = await buildSnapshot(db as never, {
+      membershipId: ids.player,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Player",
+    });
+
+    expect(snapshot.messages).toContainEqual(
+      expect.objectContaining({
+        id: ids.publicMessage,
+        kind: "DICE",
+        dice: null,
+      }),
+    );
+  });
+
   it("does not expose GM state to a player", async () => {
     const db = drizzle(database, { schema });
     const snapshot = await buildSnapshot(db as never, {

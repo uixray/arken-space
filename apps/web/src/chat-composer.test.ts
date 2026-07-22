@@ -14,6 +14,18 @@ describe("parseComposerInput", () => {
       kind: "ROLL",
       formula: "1d20 + agility",
     });
+    expect(parseComposerInput("d20")).toEqual({
+      kind: "ROLL",
+      formula: "d20",
+    });
+    expect(parseComposerInput(" 2D6 + 3 ")).toEqual({
+      kind: "ROLL",
+      formula: "2d6+3",
+    });
+    expect(parseComposerInput("Бросаю d20")).toEqual({
+      kind: "TEXT",
+      body: "Бросаю d20",
+    });
   });
 
   it("does not treat incomplete or arbitrary slash text as dice", () => {

@@ -10,6 +10,13 @@ import {
 describe("server telemetry safety", () => {
   it("accepts only known browser events", () => {
     expect(
+      clientEventSchema.safeParse({
+        level: "error",
+        event: "app.render_failed",
+        context: { code: "UI-2025B9F3", errorName: "TypeError" },
+      }).success,
+    ).toBe(true);
+    expect(
       clientEventSchema.safeParse({ level: "error", event: "window.error" })
         .success,
     ).toBe(true);
@@ -30,7 +37,10 @@ describe("server telemetry safety", () => {
         code: privateText,
         arbitrary: { nested: "data" },
       }),
-    ).toEqual({ operation: "wallet.update", status: 409 });
+    ).toEqual({
+      operation: "wallet.update",
+      status: 409,
+    });
     const parsed = clientEventSchema.parse({
       level: "error",
       event: "window.error",
@@ -41,6 +51,55 @@ describe("server telemetry safety", () => {
     expect(loggedMessage).not.toContain("Эльрис");
     expect(loggedMessage).not.toContain("заметка");
     expect(loggedMessage).not.toContain("ОГЛУШАЮЩИЙ УДАР");
+  });
+
+  it("uses a generic log message for render failures", () => {
+    const parsed = clientEventSchema.parse({
+      level: "error",
+      event: "app.render_failed",
+      context: {
+        code: "UI-2025B9F3",
+        errorName: "TypeError",
+      },
+    });
+    expect(safeClientMessage(parsed.event)).toBe(
+      "Application interface render failed",
+    );
+    expect(sanitizeClientContext(parsed.context)).toEqual({
+      code: "UI-2025B9F3",
+      errorName: "TypeError",
+    });
+    expect(
+      sanitizeClientContext({ errorName: "Custom error with private details" }),
+    ).toEqual({});
+    for (const unsafe of [
+      {
+        level: "error",
+        event: "app.render_failed",
+        message: "private",
+        context: { code: "UI-2025B9F3", errorName: "TypeError" },
+      },
+      {
+        level: "error",
+        event: "app.render_failed",
+        context: {
+          code: "UI-2025B9F3",
+          errorName: "TypeError",
+          componentStack: "private",
+        },
+      },
+      {
+        level: "error",
+        event: "app.render_failed",
+        context: { code: "bad", errorName: "TypeError" },
+      },
+      {
+        level: "error",
+        event: "app.render_failed",
+        context: { code: "UI-2025B9F3", errorName: "PrivateError" },
+      },
+    ])
+      expect(clientEventSchema.safeParse(unsafe).success).toBe(false);
   });
 
   it("only correlates valid action IDs", () => {

@@ -446,6 +446,7 @@ test("chat composer and canvas quick rolls submit explicit, server-safe intents"
   });
   await page.goto("/");
 
+  await expect(page.locator(".chat-date-divider")).toHaveCount(1);
   const quickRolls = page.locator(".canvas-roll-overlay");
   await expect(quickRolls).toBeVisible();
   await quickRolls
@@ -480,6 +481,56 @@ test("chat composer and canvas quick rolls submit explicit, server-safe intents"
     formula: "1d20 + agility",
     rollMode: "NORMAL",
   });
+
+  await composer.fill("d20");
+  await composer.press("Enter");
+  await expect.poll(() => diceRequests.length).toBe(3);
+  expect(diceRequests[2]).toMatchObject({
+    formula: "d20",
+    rollMode: "NORMAL",
+  });
+  expect(chatRequests).toHaveLength(1);
+});
+
+test("chat survives malformed client dice and renders local date boundaries", async ({
+  page,
+}) => {
+  const unsafeSnapshot = structuredClone(snapshot);
+  unsafeSnapshot.messages = [
+    {
+      ...unsafeSnapshot.messages[0]!,
+      id: "date-one",
+      createdAt: "2026-07-21T08:00:00.000Z",
+    },
+    {
+      ...unsafeSnapshot.messages[0]!,
+      id: "date-two",
+      sequence: 2,
+      kind: "DICE",
+      body: "?????? ??????",
+      createdAt: "2026-07-22T08:00:00.000Z",
+      dice: { total: 20 } as unknown as NonNullable<
+        GameSnapshot["messages"][number]["dice"]
+      >,
+    },
+  ];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(unsafeSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+
+  await page.goto("/");
+
+  await expect(page.locator(".chat-date-divider")).toHaveCount(2);
+  await expect(page.getByText("?????? ??????")).toBeVisible();
+  await expect(page.locator(".app-fatal-error")).toHaveCount(0);
+  await expect(page.locator(".roll-result")).toHaveCount(0);
 });
 
 test("GM shell keeps essential controls accessible across desktop widths", async ({

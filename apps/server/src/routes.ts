@@ -734,24 +734,32 @@ export function registerRoutes(
     return updated;
   });
 
-  app.post("/api/client-logs", async (request, reply) => {
-    const auth = await requireAuth(request, reply, db);
-    if (!auth) return;
-    const body = clientEventSchema.parse(request.body);
-    app.log[body.level](
-      {
-        source: "browser",
-        membershipId: auth.membershipId,
-        campaignId: auth.campaignId,
-        event: body.event,
-        message: safeClientMessage(body.event),
-        context: sanitizeClientContext(body.context),
-        requestId: request.id,
-      },
-      "client.event",
-    );
-    return reply.code(202).send({ ok: true });
-  });
+  app.post(
+    "/api/client-logs",
+    {
+      bodyLimit: 4 * 1024,
+      config: { rateLimit: { max: 120, timeWindow: "1 hour" } },
+    },
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      const body = clientEventSchema.parse(request.body);
+      app.log[body.level](
+        {
+          source: "browser",
+          buildRevision: env.BUILD_REVISION,
+          membershipId: auth.membershipId,
+          campaignId: auth.campaignId,
+          event: body.event,
+          message: safeClientMessage(body.event),
+          context: sanitizeClientContext(body.context),
+          requestId: request.id,
+        },
+        "client.event",
+      );
+      return reply.code(202).send({ ok: true });
+    },
+  );
 
   app.post(
     "/api/feedback/suggestions",

@@ -23,6 +23,7 @@ import {
   normalizeLegacyEntryData,
   normalizeLegacyStats,
 } from "./entry-data.js";
+import { normalizeDiceResult } from "./dice-result.js";
 import { normalizeAudioDeadline } from "./audio-state.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
@@ -381,7 +382,7 @@ export async function buildSnapshot(
       body: message.body,
       visibility: message.visibility,
       kind: message.kind,
-      dice: (message.dice as GameSnapshot["messages"][number]["dice"]) ?? null,
+      dice: normalizeDiceResult(message.dice),
       createdAt: message.createdAt.toISOString(),
     })),
     assets: visibleAssets.map((asset) => ({

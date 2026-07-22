@@ -33,6 +33,7 @@ import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { characterTokenPlacementRequest } from "./token-placement";
+import { normalizeClientDiceResult } from "./dice-result";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -1648,7 +1649,9 @@ export function App() {
                     <strong>
                       {message.displayName}: {message.body}
                     </strong>
-                    <span>{message.dice?.total ?? "—"}</span>
+                    <span>
+                      {normalizeClientDiceResult(message.dice)?.total ?? "—"}
+                    </span>
                   </button>
                   <button
                     className="roll-toast-close"

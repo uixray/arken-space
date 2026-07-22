@@ -1,5 +1,6 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ReactNode } from "react";
 import { Button } from "@gravity-ui/uikit";
+import { reportRenderFailure } from "./app-error-report";
 
 type State = { error: Error | null; code: string };
 
@@ -16,12 +17,9 @@ export class AppErrorBoundary extends Component<
     };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("app.render_failed", {
-      code: this.state.code,
-      error,
-      componentStack: info.componentStack,
-    });
+  componentDidCatch(error: Error) {
+    console.error("app.render_failed", { code: this.state.code });
+    reportRenderFailure(this.state.code, error.name);
   }
 
   render() {

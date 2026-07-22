@@ -903,6 +903,25 @@ code {
   overflow: auto;
   overscroll-behavior: contain;
 }
+.chat-date-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  text-align: center;
+}
+.chat-date-divider::before,
+.chat-date-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+  content: "";
+}
+.chat-date-divider span {
+  padding: 0 var(--space-xs);
+}
 .message {
   display: flex;
   flex-direction: column;

@@ -1,15 +1,16 @@
 import { z } from "zod";
 
-const clientEventNames = [
-  "window.error",
-  "window.unhandled_rejection",
-  "realtime.disconnected",
-  "api.request_failed",
-] as const;
+type ClientEventName =
+  | "app.render_failed"
+  | "window.error"
+  | "window.unhandled_rejection"
+  | "realtime.disconnected"
+  | "api.request_failed";
 
 const allowedContextKeys = new Set([
   "actionId",
   "code",
+  "errorName",
   "filename",
   "line",
   "operation",
@@ -18,13 +19,59 @@ const allowedContextKeys = new Set([
 ]);
 
 const sensitiveKey = /authorization|cookie|password|secret|token/i;
+const allowedErrorNames = new Set([
+  "AggregateError",
+  "Error",
+  "EvalError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "TypeError",
+  "URIError",
+]);
 
-export const clientEventSchema = z.object({
-  level: z.enum(["info", "warn", "error"]),
-  event: z.enum(clientEventNames),
-  message: z.string().trim().max(500).optional(),
-  context: z.record(z.string(), z.unknown()).optional(),
-});
+const nativeErrorNameSchema = z.enum([
+  "AggregateError",
+  "Error",
+  "EvalError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "TypeError",
+  "URIError",
+]);
+
+const renderFailureEventSchema = z
+  .object({
+    level: z.literal("error"),
+    event: z.literal("app.render_failed"),
+    context: z
+      .object({
+        code: z.string().regex(/^UI-[0-9A-F]{8}$/),
+        errorName: nativeErrorNameSchema,
+      })
+      .strict(),
+  })
+  .strict();
+
+const standardClientEventSchema = z
+  .object({
+    level: z.enum(["info", "warn", "error"]),
+    event: z.enum([
+      "window.error",
+      "window.unhandled_rejection",
+      "realtime.disconnected",
+      "api.request_failed",
+    ]),
+    message: z.string().trim().max(500).optional(),
+    context: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+export const clientEventSchema = z.union([
+  renderFailureEventSchema,
+  standardClientEventSchema,
+]);
 
 function safeContextValue(key: string, value: unknown) {
   if (["line", "status"].includes(key))
@@ -32,6 +79,8 @@ function safeContextValue(key: string, value: unknown) {
       ? value
       : undefined;
   if (typeof value !== "string") return undefined;
+  if (key === "errorName")
+    return allowedErrorNames.has(value) ? value : undefined;
   const normalized =
     key === "filename" ? (value.split(/[?#]/, 1)[0] ?? "") : value;
   if (!/^[a-zA-Z0-9_./:-]{1,160}$/.test(normalized)) return undefined;
@@ -48,8 +97,9 @@ export function sanitizeClientContext(context: Record<string, unknown> = {}) {
   return safe;
 }
 
-export function safeClientMessage(event: (typeof clientEventNames)[number]) {
-  const labels: Record<(typeof clientEventNames)[number], string> = {
+export function safeClientMessage(event: ClientEventName) {
+  const labels: Record<ClientEventName, string> = {
+    "app.render_failed": "Application interface render failed",
     "window.error": "Browser runtime error",
     "window.unhandled_rejection": "Unhandled browser rejection",
     "realtime.disconnected": "Realtime connection interrupted",
