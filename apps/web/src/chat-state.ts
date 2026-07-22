@@ -3,6 +3,7 @@ import type {
   ChatReadCursorDto,
   ChatStream,
   GameSnapshot,
+  ChatThreadDto,
 } from "@arken/contracts";
 
 export const CHAT_STREAM_ORDER: readonly ChatStream[] = [
@@ -19,20 +20,36 @@ export const CHAT_STREAM_LABEL: Record<ChatStream, string> = {
 export function messagesForStream(
   messages: readonly ChatMessageDto[],
   stream: ChatStream,
+  threads: readonly ChatThreadDto[] = [],
 ) {
+  const directThreadIds = new Set(
+    threads
+      .filter((thread) => thread.type === "DIRECT")
+      .map((thread) => thread.id),
+  );
   return messages
-    .filter((message) => (message.stream ?? "TABLE") === stream)
+    .filter(
+      (message) =>
+        !directThreadIds.has(message.threadId) &&
+        (message.stream ?? "TABLE") === stream,
+    )
     .sort((a, b) => a.sequence - b.sequence);
 }
 
 export function streamForMessage(
   messages: readonly ChatMessageDto[],
   messageId: string,
+  threads: readonly ChatThreadDto[] = [],
 ) {
-  return (
-    messages.find((message) => message.id === messageId)?.stream ??
-    (messages.some((message) => message.id === messageId) ? "TABLE" : null)
-  );
+  const message = messages.find((item) => item.id === messageId);
+  if (!message) return null;
+  if (
+    threads.some(
+      (thread) => thread.type === "DIRECT" && thread.id === message.threadId,
+    )
+  )
+    return null;
+  return message.stream ?? "TABLE";
 }
 
 export function nextChatStream(

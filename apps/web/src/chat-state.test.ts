@@ -133,6 +133,21 @@ describe("appendChatMessage", () => {
     expect(streamForMessage([table, rolls], "missing")).toBeNull();
   });
 
+  it("never projects DIRECT stream:null messages into TABLE", () => {
+    const direct = {
+      ...messageAt("private", 3),
+      threadId: "direct-thread",
+      stream: null,
+    };
+    const threads = [
+      { id: "direct-thread", type: "DIRECT", stream: null },
+    ] as unknown as GameSnapshot["chatThreads"];
+    expect(messagesForStream([message, direct], "TABLE", threads)).toEqual([
+      message,
+    ]);
+    expect(streamForMessage([direct], direct.id, threads)).toBeNull();
+  });
+
   it("increments unread only for another member in an inactive thread", () => {
     const incoming = { ...messageAt("incoming", 4), membershipId: "other" };
     const unread = appendChatMessage(snapshot, incoming, 21, {

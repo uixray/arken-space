@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { AuthContext } from "./auth.js";
 import {
+  canAccessChatThread,
   canAccessStream,
   canPostToStream,
   chatBroadcastAudience,
   clampReadSequence,
+  directThreadMemberIds,
   unknownPlayerDisplayName,
 } from "./chat.js";
 
@@ -19,6 +21,33 @@ describe("chat stream policy", () => {
     expect(canPostToStream(gm, "STORY")).toBe(true);
     expect(canAccessStream(player, "TABLE")).toBe(true);
     expect(canAccessStream(player, "ROLLS")).toBe(true);
+  });
+
+  it("keeps direct threads participant-only without a GM bypass", () => {
+    const thread = {
+      type: "DIRECT",
+      participantAMembershipId: "member-a",
+      participantBMembershipId: "member-b",
+    } as Parameters<typeof canAccessChatThread>[1];
+    expect(
+      canAccessChatThread({ membershipId: "member-a" } as AuthContext, thread),
+    ).toBe(true);
+    expect(
+      canAccessChatThread({ membershipId: "member-b" } as AuthContext, thread),
+    ).toBe(true);
+    expect(
+      canAccessChatThread(
+        { membershipId: "member-c", role: "PLAYER" } as AuthContext,
+        thread,
+      ),
+    ).toBe(false);
+    expect(
+      canAccessChatThread(
+        { membershipId: "gm", role: "GM" } as AuthContext,
+        thread,
+      ),
+    ).toBe(false);
+    expect(directThreadMemberIds(thread)).toEqual(["member-a", "member-b"]);
   });
 
   it("clamps read cursors to latest and never moves backwards", () => {

@@ -2001,3 +2001,57 @@ code {
 .chat-stream-note {
   border-top: 1px solid var(--line);
 }
+
+.direct-thread-toolbar {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--line);
+}
+.direct-thread-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+}
+.direct-compose {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+}
+.direct-attach-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.direct-attach-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.direct-attachment-preview,
+.chat-attachment {
+  display: grid;
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0 0;
+}
+.direct-attachment-preview {
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+}
+.direct-attachment-preview img,
+.chat-attachment img {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+.direct-attachment-preview img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+}

@@ -1729,3 +1729,177 @@ test("UIX-266 unread badge reconciles and stays read after reload", async ({
     0,
   );
 });
+
+test("UIX-267 direct chat stays private across sender and recipient reloads", async ({
+  page,
+}) => {
+  const sender = {
+    id: "44444444-4444-4444-8444-444444444444",
+    role: "PLAYER" as const,
+    displayName: "Direct Sender",
+    characterId: null,
+  };
+  const recipient = {
+    id: "55555555-5555-4555-8555-555555555555",
+    role: "PLAYER" as const,
+    displayName: "Direct Recipient",
+    characterId: null,
+  };
+  const playerC = {
+    id: "66666666-6666-4666-8666-666666666666",
+    role: "PLAYER" as const,
+    displayName: "Player C",
+    characterId: null,
+  };
+  const otherGm = {
+    id: "77777777-7777-4777-8777-777777777777",
+    role: "GM" as const,
+    displayName: "Other GM",
+    characterId: null,
+  };
+  const threadId = "88888888-8888-4888-8888-888888888888";
+  const direct = {
+    id: threadId,
+    campaignId: snapshot.campaign.id,
+    type: "DIRECT" as const,
+    stream: null,
+    participants: [
+      { membershipId: sender.id, displayName: sender.displayName },
+      { membershipId: recipient.id, displayName: recipient.displayName },
+    ] as [
+      { membershipId: string; displayName: string },
+      { membershipId: string; displayName: string },
+    ],
+    createdAt: "2026-07-22T10:00:00.000Z",
+    updatedAt: "2026-07-22T10:00:00.000Z",
+  };
+  let viewer: "sender" | "recipient" | "player-c" | "gm" = "sender";
+  let saved = false;
+  const requests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/bootstrap", (route) => {
+    const fixture = structuredClone(snapshot);
+    fixture.members = [sender, recipient, playerC, otherGm];
+    fixture.me =
+      viewer === "sender"
+        ? sender
+        : viewer === "recipient"
+          ? recipient
+          : viewer === "player-c"
+            ? playerC
+            : otherGm;
+    if (viewer === "sender" || viewer === "recipient") {
+      fixture.chatThreads.push(direct);
+      fixture.chatThreadStates.push({
+        threadId,
+        stream: null,
+        lastReadSequence: 0,
+        latestSequence: saved ? 2 : 0,
+        unreadCount: viewer === "recipient" && saved ? 1 : 0,
+      });
+      if (saved)
+        fixture.messages.push({
+          ...fixture.messages[0]!,
+          id: "99999999-9999-4999-8999-999999999999",
+          sequence: 2,
+          membershipId: sender.id,
+          displayName: sender.displayName,
+          body: "UIX267_PRIVATE_MARKER",
+          kind: "TEXT",
+          threadId,
+          stream: null,
+        });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(fixture),
+    });
+  });
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/chat/direct", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      participantMembershipId: recipient.id,
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(direct),
+    });
+  });
+  await page.route("**/api/chat/direct/messages", async (route) => {
+    requests.push(route.request().postDataJSON() as Record<string, unknown>);
+    saved = true;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.route("**/api/chat/read", async (route) => {
+    const input = route.request().postDataJSON() as {
+      threadId: string;
+      sequence: number;
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        campaignId: snapshot.campaign.id,
+        threadId: input.threadId,
+        lastReadSequence: input.sequence,
+        updatedAt: new Date().toISOString(),
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const directTab = page.locator("#chat-tab-direct");
+  await directTab.click();
+  await page
+    .getByRole("combobox", {
+      name: "\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c \u043b\u0438\u0447\u043d\u043e\u0433\u043e \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u044f",
+    })
+    .click();
+  await page.getByRole("option", { name: recipient.displayName }).click();
+  await page
+    .getByRole("button", {
+      name: "\u041e\u0442\u043a\u0440\u044b\u0442\u044c",
+      exact: true,
+    })
+    .click();
+  await page.locator(".direct-compose textarea").fill("UIX267_PRIVATE_MARKER");
+  await page.locator(".direct-compose button.primary").click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]).toMatchObject({
+    threadId,
+    body: "UIX267_PRIVATE_MARKER",
+    attachmentContentIds: [],
+  });
+  expect(requests[0]).not.toHaveProperty("stream");
+  expect(requests[0]).not.toHaveProperty("visibility");
+
+  viewer = "recipient";
+  await page.reload();
+  await page.locator("#chat-tab-table").click();
+  await expect(page.getByText("UIX267_PRIVATE_MARKER")).toHaveCount(0);
+  await directTab.focus();
+  await directTab.press("Enter");
+  await expect(directTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("UIX267_PRIVATE_MARKER")).toBeVisible();
+
+  for (const next of ["player-c", "gm"] as const) {
+    viewer = next;
+    await page.reload();
+    await page.locator("#chat-tab-direct").click();
+    await expect(page.getByText("UIX267_PRIVATE_MARKER")).toHaveCount(0);
+    await expect(
+      page.getByRole("combobox", {
+        name: "\u041e\u0442\u043a\u0440\u044b\u0442\u044b\u0439 \u043b\u0438\u0447\u043d\u044b\u0439 \u0434\u0438\u0430\u043b\u043e\u0433",
+      }),
+    ).toContainText(
+      "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0438\u0430\u043b\u043e\u0433",
+    );
+  }
+});

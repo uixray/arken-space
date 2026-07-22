@@ -127,6 +127,13 @@
       "when": 1784721600000,
       "tag": "0017_chat_threads",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784730600000,
+      "tag": "0018_direct_chat",
+      "breakpoints": true
     }
   ]
 }

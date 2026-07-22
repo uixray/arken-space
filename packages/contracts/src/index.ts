@@ -21,12 +21,14 @@ export const assetKindSchema = z.enum([
 ]);
 export const messageVisibilitySchema = z.enum(["PUBLIC", "GM_ONLY"]);
 export const chatStreamSchema = z.enum(["ROLLS", "STORY", "TABLE"]);
+export const chatThreadTypeSchema = z.enum(["STREAM", "DIRECT"]);
 
 export type Role = z.infer<typeof roleSchema>;
 export type Projection = z.infer<typeof projectionSchema>;
 export type AssetKind = z.infer<typeof assetKindSchema>;
 export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
 export type ChatStream = z.infer<typeof chatStreamSchema>;
+export type ChatThreadType = z.infer<typeof chatThreadTypeSchema>;
 
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
@@ -479,22 +481,78 @@ export const characterCommandSchema = characterUpdateSchema.extend({
   revision: z.number().int().nonnegative().optional(),
 });
 
-const createChatMessageBaseSchema = z.object({
+export const chatAttachmentContentIdSchema = z.string().uuid();
+export const chatAttachmentMetadataSchema = z
+  .object({
+    contentId: chatAttachmentContentIdSchema,
+    fileName: z.string().trim().min(1).max(255),
+    mimeType: z.string().trim().min(1).max(127),
+    sizeBytes: z.number().int().positive(),
+    width: z.number().int().positive().nullable(),
+    height: z.number().int().positive().nullable(),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+export type ChatAttachmentMetadata = z.infer<
+  typeof chatAttachmentMetadataSchema
+>;
+
+export const createOrGetDirectChatThreadSchema = z.object({
+  participantMembershipId: z.string().uuid(),
+});
+export type CreateOrGetDirectChatThread = z.infer<
+  typeof createOrGetDirectChatThreadSchema
+>;
+
+const createChatMessageCommonSchema = z.object({
   actionId: actionIdSchema,
   body: z.string().trim().min(1).max(4000),
-  visibility: messageVisibilitySchema.default("PUBLIC"),
   characterId: z.string().uuid().nullable().optional(),
+  attachmentContentIds: z
+    .array(chatAttachmentContentIdSchema)
+    .max(10)
+    .refine(
+      (ids) => new Set(ids).size === ids.length,
+      "Duplicate attachment content ID",
+    )
+    .default([]),
 });
-export const createChatMessageSchema = z.union([
-  createChatMessageBaseSchema.extend({
+
+export const createDirectChatMessageSchema =
+  createChatMessageCommonSchema.extend({
+    threadId: z.string().uuid(),
+    stream: z.never().optional(),
+    visibility: z.never().optional(),
+  });
+export type CreateDirectChatMessage = z.infer<
+  typeof createDirectChatMessageSchema
+>;
+
+const createStreamChatMessageBaseSchema = createChatMessageCommonSchema.extend({
+  visibility: messageVisibilitySchema.default("PUBLIC"),
+});
+
+/**
+ * The threadId variant is stream-only. The server must resolve the thread and
+ * reject DIRECT threads before creating a message. Participant membership is
+ * an authorization boundary and cannot be expressed by this input schema.
+ */
+export const createStreamChatMessageSchema = z.union([
+  createStreamChatMessageBaseSchema.extend({
     threadId: z.string().uuid(),
     stream: z.never().optional(),
   }),
-  createChatMessageBaseSchema.extend({
+  createStreamChatMessageBaseSchema.extend({
     threadId: z.never().optional(),
     stream: chatStreamSchema.default("TABLE"),
   }),
 ]);
+export type CreateStreamChatMessage = z.infer<
+  typeof createStreamChatMessageSchema
+>;
+
+/** @deprecated Use createStreamChatMessageSchema; retained for existing routes. */
+export const createChatMessageSchema = createStreamChatMessageSchema;
 
 export const markChatThreadReadSchema = z.object({
   threadId: z.string().uuid(),
@@ -728,12 +786,18 @@ export interface ChatMessageDto {
   visibility: MessageVisibility;
   kind: "TEXT" | "DICE" | "SYSTEM";
   threadId: string;
-  stream: ChatStream;
+  stream: ChatStream | null;
   dice: DiceResult | null;
+  attachments?: ChatAttachmentMetadata[];
   createdAt: string;
 }
 
-export interface ChatThreadDto {
+export interface ChatThreadParticipantDto {
+  membershipId: string;
+  displayName: string;
+}
+
+export interface StreamChatThreadDto {
   id: string;
   campaignId: string;
   type: "STREAM";
@@ -741,6 +805,19 @@ export interface ChatThreadDto {
   createdAt: string;
   updatedAt: string;
 }
+
+/** Returned only from participant-authorized direct-thread endpoints. */
+export interface DirectChatThreadDto {
+  id: string;
+  campaignId: string;
+  type: "DIRECT";
+  stream: null;
+  participants: [ChatThreadParticipantDto, ChatThreadParticipantDto];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ChatThreadDto = StreamChatThreadDto | DirectChatThreadDto;
 
 export interface ChatReadCursorDto {
   campaignId: string;
@@ -751,7 +828,7 @@ export interface ChatReadCursorDto {
 
 export interface ChatThreadStateDto {
   threadId: string;
-  stream: ChatStream;
+  stream: ChatStream | null;
   lastReadSequence: number;
   latestSequence: number;
   unreadCount: number;
@@ -849,6 +926,10 @@ export interface ServerToClientEvents {
     event: EventEnvelope<{ fogRevealId: string; sceneId: string }>,
   ) => void;
   "chat:created": (event: EventEnvelope<ChatMessageDto>) => void;
+  "chat:thread_created": (event: {
+    thread: DirectChatThreadDto;
+    state: ChatThreadStateDto;
+  }) => void;
   "character:updated": (event: EventEnvelope<CharacterDto>) => void;
   "audio:state": (event: EventEnvelope<AudioStateDto>) => void;
   "map:ping": (ping: MapPing) => void;

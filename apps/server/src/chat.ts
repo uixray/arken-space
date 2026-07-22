@@ -1,5 +1,5 @@
 import { and, eq, or } from "drizzle-orm";
-import type { ChatMessageDto, ChatStream } from "@arken/contracts";
+import type { ChatStream } from "@arken/contracts";
 import { chatMessages, chatThreads } from "@arken/db";
 import type { AuthContext } from "./auth.js";
 import { normalizeDiceResult } from "./dice-result.js";
@@ -17,6 +17,32 @@ export function chatVisibilityFilter(auth: AuthContext) {
 
 export function canAccessStream(_auth: AuthContext, _stream: ChatStream) {
   return true;
+}
+
+type ThreadRow = typeof chatThreads.$inferSelect;
+
+/** Direct threads are participant-only. A GM who is not A/B gets no bypass. */
+export function canAccessChatThread(auth: AuthContext, thread: ThreadRow) {
+  if (thread.type === "STREAM") return true;
+  return (
+    thread.participantAMembershipId === auth.membershipId ||
+    thread.participantBMembershipId === auth.membershipId
+  );
+}
+
+export function directThreadMemberIds(thread: ThreadRow): string[] {
+  if (
+    thread.type !== "DIRECT" ||
+    !thread.participantAMembershipId ||
+    !thread.participantBMembershipId
+  )
+    return [];
+  return [
+    ...new Set([
+      thread.participantAMembershipId,
+      thread.participantBMembershipId,
+    ]),
+  ];
 }
 
 export function canPostToStream(auth: AuthContext, stream: ChatStream) {
@@ -53,6 +79,7 @@ export async function resolveChatThread(
   auth: AuthContext,
   input: { threadId?: string; stream?: ChatStream },
   allowedStreams: readonly ChatStream[],
+  options: { allowDirect?: boolean } = {},
 ) {
   const thread = input.threadId
     ? (
@@ -73,18 +100,60 @@ export async function resolveChatThread(
         input.stream ?? allowedStreams[0] ?? "TABLE",
       );
   if (!thread) throw new Error("CHAT_THREAD_NOT_FOUND");
-  if (!allowedStreams.includes(thread.stream))
-    throw new Error("CHAT_STREAM_FORBIDDEN");
-  if (!canAccessStream(auth, thread.stream))
-    throw new Error("CHAT_THREAD_FORBIDDEN");
+  if (thread.type === "DIRECT") {
+    if (!options.allowDirect || !canAccessChatThread(auth, thread))
+      throw new Error("CHAT_THREAD_NOT_FOUND");
+  } else {
+    if (!thread.stream || !allowedStreams.includes(thread.stream))
+      throw new Error("CHAT_STREAM_FORBIDDEN");
+    if (!canAccessStream(auth, thread.stream))
+      throw new Error("CHAT_THREAD_FORBIDDEN");
+  }
   return thread;
+}
+
+/** Caller must first verify that otherMembershipId belongs to auth.campaignId. */
+export async function createOrGetDirectThread(
+  db: Database,
+  auth: AuthContext,
+  otherMembershipId: string,
+) {
+  if (otherMembershipId === auth.membershipId)
+    throw new Error("CHAT_THREAD_NOT_FOUND");
+  const pair = [auth.membershipId, otherMembershipId].sort();
+  const participantA = pair[0]!;
+  const participantB = pair[1]!;
+  const inserted = await db
+    .insert(chatThreads)
+    .values({
+      campaignId: auth.campaignId,
+      type: "DIRECT",
+      stream: null,
+      participantAMembershipId: participantA,
+      participantBMembershipId: participantB,
+    })
+    .onConflictDoNothing()
+    .returning({ id: chatThreads.id });
+  const [thread] = await db
+    .select()
+    .from(chatThreads)
+    .where(
+      and(
+        eq(chatThreads.campaignId, auth.campaignId),
+        eq(chatThreads.participantAMembershipId, participantA),
+        eq(chatThreads.participantBMembershipId, participantB),
+      ),
+    )
+    .limit(1);
+  if (!thread) throw new Error("CHAT_THREAD_NOT_FOUND");
+  return { thread, created: inserted.length === 1 };
 }
 
 export function chatMessageDto(
   row: MessageRow,
   displayName: string,
-  stream: ChatStream,
-): ChatMessageDto {
+  stream: ChatStream | null,
+) {
   return {
     id: row.id,
     sequence: row.sequence,

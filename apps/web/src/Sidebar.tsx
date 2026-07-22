@@ -12,6 +12,8 @@ import type {
   AssetDto,
   ChatStream,
   CatalogEntryDto,
+  ChatAttachmentMetadata,
+  DirectChatThreadDto,
   CharacterDto,
   GameSnapshot,
   MessageVisibility,
@@ -52,6 +54,13 @@ import {
   threadForStream,
   unreadCountForStream,
 } from "./chat-state";
+import {
+  directThreadLabel,
+  directThreads,
+  directUnreadCount,
+  eligibleDirectRecipients,
+  messagesForDirectThread,
+} from "./direct-chat-state";
 
 function formatDiceBreakdown(value: unknown) {
   const dice = normalizeClientDiceResult(value);
@@ -106,6 +115,15 @@ type Props = {
     visibility: MessageVisibility,
     stream: ChatStream,
   ) => Promise<void>;
+  onCreateDirectThread: (
+    participantMembershipId: string,
+  ) => Promise<DirectChatThreadDto>;
+  onDirectChat: (
+    threadId: string,
+    body: string,
+    attachmentContentIds: string[],
+  ) => Promise<void>;
+  onUploadChatAttachment: (file: File) => Promise<ChatAttachmentMetadata>;
   onMarkChatRead: (threadId: string, sequence: number) => Promise<void>;
   onActiveChatThreadChange: (threadId: string | null) => void;
   onRoll: (
@@ -229,9 +247,14 @@ export function Sidebar(props: Props) {
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const [activeStream, setActiveStream] = useState<ChatStream>("TABLE");
+  const [directMode, setDirectMode] = useState(false);
+  const [activeDirectThreadId, setActiveDirectThreadId] = useState<
+    string | null
+  >(null);
   useEffect(() => onChatVisibilityChange(true), [onChatVisibilityChange]);
-  const activeThreadId =
-    threadForStream(props.snapshot, activeStream)?.id ?? null;
+  const activeThreadId = directMode
+    ? activeDirectThreadId
+    : (threadForStream(props.snapshot, activeStream)?.id ?? null);
   useEffect(() => {
     onActiveChatThreadChange(activeThreadId);
   }, [activeThreadId, onActiveChatThreadChange]);
@@ -240,6 +263,7 @@ export function Sidebar(props: Props) {
     const requestedStream = streamForMessage(
       props.snapshot.messages,
       requestedChatMessageId,
+      props.snapshot.chatThreads,
     );
     if (requestedStream) setActiveStream(requestedStream);
     setFocusedMessageId(requestedChatMessageId);
@@ -248,6 +272,7 @@ export function Sidebar(props: Props) {
     requestedChatMessageId,
     onRequestedChatMessageHandled,
     props.snapshot.messages,
+    props.snapshot.chatThreads,
   ]);
   useEffect(() => {
     if (sceneDialogRequest > 0 && isGm) onWorkspaceChange("scenes");
@@ -280,9 +305,12 @@ export function Sidebar(props: Props) {
               role="tab"
               id={`chat-tab-${stream.toLowerCase()}`}
               aria-controls={`chat-panel-${stream.toLowerCase()}`}
-              aria-selected={activeStream === stream}
-              tabIndex={activeStream === stream ? 0 : -1}
-              onClick={() => setActiveStream(stream)}
+              aria-selected={!directMode && activeStream === stream}
+              tabIndex={!directMode && activeStream === stream ? 0 : -1}
+              onClick={() => {
+                setDirectMode(false);
+                setActiveStream(stream);
+              }}
             >
               {CHAT_STREAM_LABEL[stream]}
               {unread > 0 && (
@@ -296,17 +324,53 @@ export function Sidebar(props: Props) {
             </Button>
           );
         })}
+        <Button
+          view="flat"
+          role="tab"
+          id="chat-tab-direct"
+          aria-controls="chat-panel-direct"
+          aria-selected={directMode}
+          tabIndex={directMode ? 0 : -1}
+          onClick={() => setDirectMode(true)}
+        >
+          Личные
+          {directThreads(props.snapshot).reduce(
+            (total, thread) =>
+              total + directUnreadCount(props.snapshot, thread.id),
+            0,
+          ) > 0 && (
+            <span className="chat-unread-badge" aria-label="Есть непрочитанные">
+              {directThreads(props.snapshot).reduce(
+                (total, thread) =>
+                  total + directUnreadCount(props.snapshot, thread.id),
+                0,
+              )}
+            </span>
+          )}
+        </Button>
       </nav>
       <div className="panel-scroll chat-scroll">
-        <ChatPanel
-          snapshot={props.snapshot}
-          onChat={props.onChat}
-          onRoll={props.onRoll}
-          onMarkChatRead={props.onMarkChatRead}
-          activeStream={activeStream}
-          focusedMessageId={focusedMessageId}
-          onMessageFocused={() => setFocusedMessageId(null)}
-        />
+        {directMode ? (
+          <DirectChatPanel
+            snapshot={props.snapshot}
+            activeThreadId={activeDirectThreadId}
+            onActiveThreadChange={setActiveDirectThreadId}
+            onCreateThread={props.onCreateDirectThread}
+            onDirectChat={props.onDirectChat}
+            onUploadAttachment={props.onUploadChatAttachment}
+            onMarkChatRead={props.onMarkChatRead}
+          />
+        ) : (
+          <ChatPanel
+            snapshot={props.snapshot}
+            onChat={props.onChat}
+            onRoll={props.onRoll}
+            onMarkChatRead={props.onMarkChatRead}
+            activeStream={activeStream}
+            focusedMessageId={focusedMessageId}
+            onMessageFocused={() => setFocusedMessageId(null)}
+          />
+        )}
         {props.workspace === "characters" && (
           <CharacterWorkspace
             {...props}
@@ -1198,7 +1262,22 @@ function ChatMessageBody({
   message: GameSnapshot["messages"][number];
 }) {
   const dice = normalizeClientDiceResult(message.dice);
-  if (message.kind !== "DICE" || !dice) return <p>{message.body}</p>;
+  if (message.kind !== "DICE" || !dice)
+    return (
+      <>
+        <p>{message.body}</p>
+        {message.attachments?.map((attachment) => (
+          <figure className="chat-attachment" key={attachment.contentId}>
+            <img
+              src={`/api/chat/attachments/${attachment.contentId}/content`}
+              alt={`Вложение ${attachment.fileName}`}
+              loading="lazy"
+            />
+            <figcaption>{attachment.fileName}</figcaption>
+          </figure>
+        ))}
+      </>
+    );
   return (
     <div className="roll-result">
       <strong className="roll-total" aria-label="Итог броска">
@@ -1209,6 +1288,263 @@ function ChatMessageBody({
         <small>{formatDiceBreakdown(dice)}</small>
       </div>
     </div>
+  );
+}
+
+function DirectChatPanel({
+  snapshot,
+  activeThreadId,
+  onActiveThreadChange,
+  onCreateThread,
+  onDirectChat,
+  onUploadAttachment,
+  onMarkChatRead,
+}: {
+  snapshot: GameSnapshot;
+  activeThreadId: string | null;
+  onActiveThreadChange: (threadId: string | null) => void;
+  onCreateThread: Props["onCreateDirectThread"];
+  onDirectChat: Props["onDirectChat"];
+  onUploadAttachment: Props["onUploadChatAttachment"];
+  onMarkChatRead: Props["onMarkChatRead"];
+}) {
+  const threads = directThreads(snapshot);
+  const activeThread =
+    threads.find((thread) => thread.id === activeThreadId) ??
+    threads[0] ??
+    null;
+  const [recipientId, setRecipientId] = useState("");
+  const [composer, setComposer] = useState("");
+  const [attachment, setAttachment] = useState<ChatAttachmentMetadata | null>(
+    null,
+  );
+  const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState("");
+  const attachmentPreviewUrlRef = useRef("");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const messages = activeThread
+    ? messagesForDirectThread(snapshot, activeThread.id)
+    : [];
+  const latestSequence = messages.at(-1)?.sequence;
+
+  useEffect(() => {
+    attachmentPreviewUrlRef.current = attachmentPreviewUrl;
+  }, [attachmentPreviewUrl]);
+  useEffect(
+    () => () => {
+      if (attachmentPreviewUrlRef.current)
+        URL.revokeObjectURL(attachmentPreviewUrlRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!activeThreadId && activeThread) onActiveThreadChange(activeThread.id);
+  }, [activeThread, activeThreadId, onActiveThreadChange]);
+
+  useEffect(() => {
+    if (!activeThread || latestSequence === undefined) return;
+    const timer = window.setTimeout(
+      () => void onMarkChatRead(activeThread.id, latestSequence),
+      350,
+    );
+    return () => window.clearTimeout(timer);
+  }, [activeThread, latestSequence, onMarkChatRead]);
+
+  async function createThread() {
+    if (!recipientId) return;
+    setError("");
+    try {
+      const thread = await onCreateThread(recipientId);
+      onActiveThreadChange(thread.id);
+      setRecipientId("");
+    } catch {
+      setError("Не удалось открыть личный диалог.");
+    }
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const body = composer.trim();
+    if (!activeThread || (!body && !attachment)) return;
+    setError("");
+    try {
+      await onDirectChat(
+        activeThread.id,
+        body || "Изображение",
+        attachment ? [attachment.contentId] : [],
+      );
+      setComposer("");
+      setAttachment(null);
+      if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
+      setAttachmentPreviewUrl("");
+    } catch {
+      setError("Не удалось отправить личное сообщение.");
+    }
+  }
+
+  return (
+    <section
+      className="chat-panel direct-chat-panel"
+      role="tabpanel"
+      id="chat-panel-direct"
+      aria-labelledby="chat-tab-direct"
+    >
+      <div className="direct-thread-toolbar">
+        <FormSelect
+          aria-label="Открытый личный диалог"
+          value={activeThread?.id ?? ""}
+          onChange={(event) => onActiveThreadChange(event.target.value || null)}
+        >
+          <option value="">Выберите диалог</option>
+          {threads.map((thread) => (
+            <option key={thread.id} value={thread.id}>
+              {directThreadLabel(thread, snapshot.me.id)}
+              {directUnreadCount(snapshot, thread.id)
+                ? ` · ${directUnreadCount(snapshot, thread.id)}`
+                : ""}
+            </option>
+          ))}
+        </FormSelect>
+        <div className="direct-thread-create">
+          <FormSelect
+            aria-label="Получатель личного сообщения"
+            value={recipientId}
+            onChange={(event) => setRecipientId(event.target.value)}
+          >
+            <option value="">Новый диалог…</option>
+            {eligibleDirectRecipients(snapshot.members, snapshot.me.id).map(
+              (member) => (
+                <option key={member.id} value={member.id}>
+                  {member.displayName}
+                </option>
+              ),
+            )}
+          </FormSelect>
+          <Button
+            type="button"
+            disabled={!recipientId}
+            onClick={() => void createThread()}
+          >
+            Открыть
+          </Button>
+        </div>
+      </div>
+      <div className="message-list" aria-live="polite">
+        {!activeThread && (
+          <p className="chat-empty">
+            Выберите получателя, чтобы начать личный диалог.
+          </p>
+        )}
+        {activeThread && messages.length === 0 && (
+          <p className="chat-empty">
+            В диалоге с {directThreadLabel(activeThread, snapshot.me.id)} пока
+            нет сообщений.
+          </p>
+        )}
+        {buildChatTimeline(messages).map((item) =>
+          item.type === "DATE" ? (
+            <div className="chat-date-divider" key={`direct-date-${item.key}`}>
+              <span>{item.label}</span>
+            </div>
+          ) : (
+            <article
+              key={item.message.id}
+              className="message text"
+              data-thread-id={activeThread?.id}
+            >
+              <header>
+                <strong>{item.message.displayName}</strong>
+                <time>
+                  {new Date(item.message.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </time>
+              </header>
+              <ChatMessageBody message={item.message} />
+            </article>
+          ),
+        )}
+      </div>
+      {activeThread && (
+        <form className="chat-compose direct-compose" onSubmit={submit}>
+          <div className="chat-composer-input">
+            <FormTextArea
+              aria-label={`Личное сообщение: ${directThreadLabel(activeThread, snapshot.me.id)}`}
+              placeholder={`Сообщение для ${directThreadLabel(activeThread, snapshot.me.id)}…`}
+              value={composer}
+              onChange={(event) => setComposer(event.target.value)}
+              rows={3}
+            />
+            {attachment && (
+              <div className="direct-attachment-preview">
+                <img
+                  src={attachmentPreviewUrl}
+                  alt={`Вложение ${attachment.fileName}`}
+                />
+                <span>{attachment.fileName}</span>
+                <Button
+                  view="flat"
+                  type="button"
+                  onClick={() => {
+                    setAttachment(null);
+                    if (attachmentPreviewUrl)
+                      URL.revokeObjectURL(attachmentPreviewUrl);
+                    setAttachmentPreviewUrl("");
+                  }}
+                >
+                  Убрать
+                </Button>
+              </div>
+            )}
+          </div>
+          <label className="direct-attach-button">
+            <span>{uploading ? "Загрузка…" : "Изображение"}</span>
+            <input
+              type="file"
+              accept="image/*"
+              disabled={uploading}
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                event.currentTarget.value = "";
+                if (!file) return;
+                setUploading(true);
+                setError("");
+                try {
+                  const previewUrl = URL.createObjectURL(file);
+                  try {
+                    setAttachment(await onUploadAttachment(file));
+                    if (attachmentPreviewUrl)
+                      URL.revokeObjectURL(attachmentPreviewUrl);
+                    setAttachmentPreviewUrl(previewUrl);
+                  } catch (error) {
+                    URL.revokeObjectURL(previewUrl);
+                    throw error;
+                  }
+                } catch {
+                  setError("Не удалось загрузить изображение.");
+                } finally {
+                  setUploading(false);
+                }
+              }}
+            />
+          </label>
+          <Button
+            className="primary"
+            type="submit"
+            disabled={uploading || (!composer.trim() && !attachment)}
+          >
+            Отправить
+          </Button>
+        </form>
+      )}
+      {error && (
+        <p className="composer-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -1237,8 +1573,9 @@ function ChatPanel({
   const [atBottom, setAtBottom] = useState(true);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const messages = useMemo(
-    () => messagesForStream(snapshot.messages, activeStream),
-    [snapshot.messages, activeStream],
+    () =>
+      messagesForStream(snapshot.messages, activeStream, snapshot.chatThreads),
+    [snapshot.messages, snapshot.chatThreads, activeStream],
   );
   const timeline = buildChatTimeline(messages);
   const latestMessage = messages.at(-1);

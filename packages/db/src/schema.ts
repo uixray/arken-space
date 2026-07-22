@@ -2,6 +2,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   doublePrecision,
   foreignKey,
   index,
@@ -14,6 +15,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const roleEnum = pgEnum("role", ["GM", "PLAYER"]);
 export const projectionEnum = pgEnum("projection", [
@@ -37,12 +39,19 @@ export const messageKindEnum = pgEnum("message_kind", [
   "DICE",
   "SYSTEM",
 ]);
-export const chatThreadTypeEnum = pgEnum("chat_thread_type", ["STREAM"]);
+export const chatThreadTypeEnum = pgEnum("chat_thread_type", [
+  "STREAM",
+  "DIRECT",
+]);
 export const chatStreamEnum = pgEnum("chat_stream", [
   "ROLLS",
   "STORY",
   "TABLE",
 ]);
+export const chatAttachmentUploadStatusEnum = pgEnum(
+  "chat_attachment_upload_status",
+  ["STAGED", "CLAIMED", "EXPIRED"],
+);
 export const tokenLayerEnum = pgEnum("token_layer", ["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindEnum = pgEnum("catalog_entry_kind", [
   "SKILL",
@@ -560,7 +569,9 @@ export const chatThreads = pgTable(
       .notNull()
       .references(() => campaigns.id, { onDelete: "cascade" }),
     type: chatThreadTypeEnum("type").notNull().default("STREAM"),
-    stream: chatStreamEnum("stream").notNull(),
+    stream: chatStreamEnum("stream"),
+    participantAMembershipId: uuid("participant_a_membership_id"),
+    participantBMembershipId: uuid("participant_b_membership_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -573,9 +584,30 @@ export const chatThreads = pgTable(
       table.campaignId,
       table.stream,
     ),
+    uniqueIndex("chat_threads_campaign_direct_pair_idx")
+      .on(
+        table.campaignId,
+        table.participantAMembershipId,
+        table.participantBMembershipId,
+      )
+      .where(sql`${table.stream} IS NULL`),
     uniqueIndex("chat_threads_campaign_id_id_idx").on(
       table.campaignId,
       table.id,
+    ),
+    foreignKey({
+      name: "chat_threads_campaign_participant_a_fk",
+      columns: [table.campaignId, table.participantAMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "chat_threads_campaign_participant_b_fk",
+      columns: [table.campaignId, table.participantBMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    check(
+      "chat_threads_shape_check",
+      sql`(${table.type}::text = 'STREAM' AND ${table.stream} IS NOT NULL AND ${table.participantAMembershipId} IS NULL AND ${table.participantBMembershipId} IS NULL) OR (${table.type}::text = 'DIRECT' AND ${table.stream} IS NULL AND ${table.participantAMembershipId} IS NOT NULL AND ${table.participantBMembershipId} IS NOT NULL AND ${table.participantAMembershipId} < ${table.participantBMembershipId})`,
     ),
   ],
 );
@@ -610,6 +642,96 @@ export const chatMessages = pgTable(
       table.threadId,
       table.sequence,
     ),
+    uniqueIndex("chat_messages_campaign_thread_id_idx").on(
+      table.campaignId,
+      table.threadId,
+      table.id,
+    ),
+  ],
+);
+
+export const chatAttachmentUploads = pgTable(
+  "chat_attachment_uploads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contentId: uuid("content_id").defaultRandom().notNull(),
+    campaignId: uuid("campaign_id").notNull(),
+    uploadedByMembershipId: uuid("uploaded_by_membership_id").notNull(),
+    fileName: text("file_name").notNull(),
+    storageKey: text("storage_key").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    status: chatAttachmentUploadStatusEnum("status")
+      .notNull()
+      .default("STAGED"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("chat_attachment_uploads_content_id_idx").on(table.contentId),
+    uniqueIndex("chat_attachment_uploads_campaign_content_idx").on(
+      table.campaignId,
+      table.contentId,
+    ),
+    uniqueIndex("chat_attachment_uploads_storage_key_idx").on(table.storageKey),
+    index("chat_attachment_uploads_expiry_idx").on(
+      table.status,
+      table.expiresAt,
+    ),
+    foreignKey({
+      name: "chat_attachment_uploads_campaign_uploader_fk",
+      columns: [table.campaignId, table.uploadedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    check("chat_attachment_uploads_size_check", sql`${table.sizeBytes} > 0`),
+    check(
+      "chat_attachment_uploads_dimensions_check",
+      sql`(${table.width} IS NULL OR ${table.width} > 0) AND (${table.height} IS NULL OR ${table.height} > 0)`,
+    ),
+  ],
+);
+
+export const chatAttachments = pgTable(
+  "chat_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contentId: uuid("content_id").notNull(),
+    campaignId: uuid("campaign_id").notNull(),
+    threadId: uuid("thread_id").notNull(),
+    messageId: uuid("message_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("chat_attachments_content_id_idx").on(table.contentId),
+    index("chat_attachments_message_idx").on(table.messageId),
+    foreignKey({
+      name: "chat_attachments_campaign_upload_fk",
+      columns: [table.campaignId, table.contentId],
+      foreignColumns: [
+        chatAttachmentUploads.campaignId,
+        chatAttachmentUploads.contentId,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "chat_attachments_campaign_thread_fk",
+      columns: [table.campaignId, table.threadId],
+      foreignColumns: [chatThreads.campaignId, chatThreads.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "chat_attachments_campaign_thread_message_fk",
+      columns: [table.campaignId, table.threadId, table.messageId],
+      foreignColumns: [
+        chatMessages.campaignId,
+        chatMessages.threadId,
+        chatMessages.id,
+      ],
+    }).onDelete("cascade"),
   ],
 );
 

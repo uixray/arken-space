@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, max } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, max, or } from "drizzle-orm";
 import {
   assets,
   audioStates,
@@ -7,6 +7,8 @@ import {
   characterCatalogEntries,
   characters,
   chatMessages,
+  chatAttachments,
+  chatAttachmentUploads,
   chatReadCursors,
   chatThreads,
   drawings,
@@ -134,7 +136,16 @@ export async function buildSnapshot(
     db
       .select()
       .from(chatThreads)
-      .where(eq(chatThreads.campaignId, auth.campaignId))
+      .where(
+        and(
+          eq(chatThreads.campaignId, auth.campaignId),
+          or(
+            eq(chatThreads.type, "STREAM"),
+            eq(chatThreads.participantAMembershipId, auth.membershipId),
+            eq(chatThreads.participantBMembershipId, auth.membershipId),
+          ),
+        ),
+      )
       .orderBy(asc(chatThreads.stream)),
     db
       .select()
@@ -156,8 +167,10 @@ export async function buildSnapshot(
       .where(eq(gameEvents.campaignId, auth.campaignId)),
   ]);
 
-  const visibleThreadRows = threadRows.filter((thread) =>
-    canAccessStream(auth, thread.stream),
+  const visibleThreadRows = threadRows.filter(
+    (thread) =>
+      thread.type === "DIRECT" ||
+      (thread.stream !== null && canAccessStream(auth, thread.stream)),
   );
   const cursorByThread = new Map(
     cursorRows.map((cursor) => [cursor.threadId, cursor.lastReadSequence]),
@@ -181,6 +194,31 @@ export async function buildSnapshot(
   const messageRows = visibleThreadRows.flatMap((thread, index) =>
     (messageGroups[index] ?? []).map((message) => ({ message, thread })),
   );
+  const visibleMessageIds = messageRows.map(({ message }) => message.id);
+  const attachmentRows = visibleMessageIds.length
+    ? await db
+        .select({ attachment: chatAttachments, upload: chatAttachmentUploads })
+        .from(chatAttachments)
+        .innerJoin(
+          chatAttachmentUploads,
+          and(
+            eq(chatAttachmentUploads.campaignId, chatAttachments.campaignId),
+            eq(chatAttachmentUploads.contentId, chatAttachments.contentId),
+          ),
+        )
+        .where(
+          and(
+            eq(chatAttachments.campaignId, auth.campaignId),
+            inArray(chatAttachments.messageId, visibleMessageIds),
+          ),
+        )
+    : [];
+  const attachmentsByMessage = new Map<string, typeof attachmentRows>();
+  for (const item of attachmentRows) {
+    const items = attachmentsByMessage.get(item.attachment.messageId) ?? [];
+    items.push(item);
+    attachmentsByMessage.set(item.attachment.messageId, items);
+  }
   const unreadGroups = await Promise.all(
     visibleThreadRows.map((thread) =>
       db
@@ -434,16 +472,60 @@ export async function buildSnapshot(
         threadId: message.threadId,
         stream: thread.stream,
         dice: normalizeDiceResult(message.dice),
+        attachments: (attachmentsByMessage.get(message.id) ?? []).map(
+          ({ upload }) => ({
+            contentId: upload.contentId,
+            fileName: upload.fileName,
+            mimeType: upload.mimeType,
+            sizeBytes: upload.sizeBytes,
+            width: upload.width,
+            height: upload.height,
+            createdAt: upload.createdAt.toISOString(),
+          }),
+        ),
         createdAt: message.createdAt.toISOString(),
       })),
-    chatThreads: visibleThreadRows.map((thread) => ({
-      id: thread.id,
-      campaignId: thread.campaignId,
-      type: thread.type,
-      stream: thread.stream,
-      createdAt: thread.createdAt.toISOString(),
-      updatedAt: thread.updatedAt.toISOString(),
-    })),
+    chatThreads: visibleThreadRows.map((thread) => {
+      const common = {
+        id: thread.id,
+        campaignId: thread.campaignId,
+        createdAt: thread.createdAt.toISOString(),
+        updatedAt: thread.updatedAt.toISOString(),
+      };
+      if (
+        thread.type === "DIRECT" &&
+        thread.participantAMembershipId &&
+        thread.participantBMembershipId
+      ) {
+        return {
+          ...common,
+          type: "DIRECT" as const,
+          stream: null,
+          participants: [
+            {
+              membershipId: thread.participantAMembershipId,
+              displayName:
+                memberNameById.get(thread.participantAMembershipId) ??
+                unknownPlayerDisplayName,
+            },
+            {
+              membershipId: thread.participantBMembershipId,
+              displayName:
+                memberNameById.get(thread.participantBMembershipId) ??
+                unknownPlayerDisplayName,
+            },
+          ] as [
+            { membershipId: string; displayName: string },
+            { membershipId: string; displayName: string },
+          ],
+        };
+      }
+      return {
+        ...common,
+        type: "STREAM" as const,
+        stream: thread.stream!,
+      };
+    }),
     chatThreadStates: visibleThreadRows.map((thread, index) => {
       const visibleMessages = messageGroups[index] ?? [];
       return {

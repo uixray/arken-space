@@ -1,7 +1,18 @@
 import { randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { and, desc, eq, gt, inArray, isNull, sql, sum } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+  sum,
+} from "drizzle-orm";
 import { z } from "zod";
 import {
   activateSceneSchema,
@@ -12,6 +23,8 @@ import {
   catalogEntryCommandSchema,
   characterCatalogEntryCommandSchema,
   createChatMessageSchema,
+  createDirectChatMessageSchema,
+  createOrGetDirectChatThreadSchema,
   markChatThreadReadSchema,
   createFogRevealSchema,
   changeTokenLayerSchema,
@@ -58,6 +71,9 @@ import {
   characters,
   chatMessages,
   chatReadCursors,
+  chatThreads,
+  chatAttachments,
+  chatAttachmentUploads,
   drawings,
   fogReveals,
   feedbackAttachments,
@@ -81,6 +97,8 @@ import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
 import {
   canPostToStream,
+  createOrGetDirectThread,
+  directThreadMemberIds,
   chatBroadcastAudience,
   chatMessageDto,
   chatVisibilityFilter,
@@ -4207,6 +4225,349 @@ export function registerRoutes(
     return updated;
   });
 
+  app.post("/api/chat/attachments", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const expired = await db
+      .select({
+        id: chatAttachmentUploads.id,
+        storageKey: chatAttachmentUploads.storageKey,
+      })
+      .from(chatAttachmentUploads)
+      .where(
+        and(
+          eq(chatAttachmentUploads.status, "STAGED"),
+          lt(chatAttachmentUploads.expiresAt, new Date()),
+        ),
+      )
+      .limit(25);
+    if (expired.length) {
+      await Promise.all(
+        expired.map((item) => removeStoredUpload(item.storageKey)),
+      );
+      await db.delete(chatAttachmentUploads).where(
+        inArray(
+          chatAttachmentUploads.id,
+          expired.map((item) => item.id),
+        ),
+      );
+    }
+    const file = await request.file({
+      limits: { files: 1, fileSize: env.MAX_IMAGE_BYTES },
+    });
+    if (!file) return reply.code(400).send({ error: "UPLOAD_REQUIRED" });
+    const buffer = await file.toBuffer();
+    if (file.file.truncated)
+      return reply.code(400).send({ error: "IMAGE_TOO_LARGE" });
+    const [assetUsage, feedbackUsage, chatUsage] = await Promise.all([
+      db.select({ used: sum(assets.sizeBytes) }).from(assets),
+      db
+        .select({ used: sum(feedbackAttachments.sizeBytes) })
+        .from(feedbackAttachments),
+      db
+        .select({ used: sum(chatAttachmentUploads.sizeBytes) })
+        .from(chatAttachmentUploads),
+    ]);
+    const usedBytes =
+      Number(assetUsage[0]?.used ?? 0) +
+      Number(feedbackUsage[0]?.used ?? 0) +
+      Number(chatUsage[0]?.used ?? 0);
+    await assertStorageCapacity(usedBytes, buffer.length);
+    let stored: Awaited<ReturnType<typeof storeUpload>> | undefined;
+    try {
+      stored = await storeUpload(buffer, "image");
+      const [upload] = await db
+        .insert(chatAttachmentUploads)
+        .values({
+          campaignId: auth.campaignId,
+          uploadedByMembershipId: auth.membershipId,
+          fileName: file.filename.slice(0, 255),
+          storageKey: stored.storageKey,
+          mimeType: stored.mimeType,
+          sizeBytes: stored.sizeBytes,
+          width: stored.width,
+          height: stored.height,
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        })
+        .returning();
+      if (!upload) throw new Error("UPLOAD_FAILED");
+      return reply.code(201).send({
+        contentId: upload.contentId,
+        fileName: upload.fileName,
+        mimeType: upload.mimeType,
+        sizeBytes: upload.sizeBytes,
+        width: upload.width,
+        height: upload.height,
+        createdAt: upload.createdAt.toISOString(),
+      });
+    } catch (error) {
+      if (stored) await removeStoredUpload(stored.storageKey);
+      return reply.code(400).send({ error: publicUploadError(error) });
+    }
+  });
+
+  app.get(
+    "/api/chat/attachments/:contentId/content",
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      const { contentId } = z
+        .object({ contentId: z.string().uuid() })
+        .parse(request.params);
+      const [item] = await db
+        .select({ upload: chatAttachmentUploads, thread: chatThreads })
+        .from(chatAttachments)
+        .innerJoin(
+          chatAttachmentUploads,
+          and(
+            eq(chatAttachmentUploads.campaignId, chatAttachments.campaignId),
+            eq(chatAttachmentUploads.contentId, chatAttachments.contentId),
+          ),
+        )
+        .innerJoin(
+          chatThreads,
+          and(
+            eq(chatThreads.campaignId, chatAttachments.campaignId),
+            eq(chatThreads.id, chatAttachments.threadId),
+          ),
+        )
+        .where(
+          and(
+            eq(chatAttachments.campaignId, auth.campaignId),
+            eq(chatAttachments.contentId, contentId),
+            or(
+              and(
+                eq(chatThreads.type, "STREAM"),
+                eq(
+                  chatAttachmentUploads.uploadedByMembershipId,
+                  auth.membershipId,
+                ),
+              ),
+              eq(chatThreads.participantAMembershipId, auth.membershipId),
+              eq(chatThreads.participantBMembershipId, auth.membershipId),
+            ),
+          ),
+        )
+        .limit(1);
+      if (!item) return reply.code(404).send({ error: "NOT_FOUND" });
+      try {
+        const opened = await openStoredFile(item.upload.storageKey, undefined);
+        reply.header("Content-Type", item.upload.mimeType);
+        reply.header("Content-Length", String(opened.size));
+        reply.header("Cache-Control", "private, no-store");
+        return reply.send(opened.stream);
+      } catch {
+        return reply.code(404).send({ error: "NOT_FOUND" });
+      }
+    },
+  );
+
+  app.post("/api/chat/direct", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const body = createOrGetDirectChatThreadSchema.parse(request.body);
+    const [participant] = await db
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.campaignId, auth.campaignId),
+          eq(memberships.id, body.participantMembershipId),
+        ),
+      )
+      .limit(1);
+    if (!participant || participant.id === auth.membershipId)
+      return reply.code(404).send({ error: "CHAT_THREAD_NOT_FOUND" });
+    const { thread, created } = await createOrGetDirectThread(
+      db,
+      auth,
+      participant.id,
+    );
+    const participantIds = directThreadMemberIds(thread);
+    const participantRows = await db
+      .select({
+        membershipId: memberships.id,
+        displayName: memberships.displayName,
+      })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.campaignId, auth.campaignId),
+          inArray(memberships.id, participantIds),
+        ),
+      );
+    const byId = new Map(
+      participantRows.map((item) => [item.membershipId, item]),
+    );
+    const dto = {
+      id: thread.id,
+      campaignId: thread.campaignId,
+      type: "DIRECT" as const,
+      stream: null,
+      participants: participantIds
+        .map((id) => byId.get(id)!)
+        .filter(Boolean) as [
+        { membershipId: string; displayName: string },
+        { membershipId: string; displayName: string },
+      ],
+      createdAt: thread.createdAt.toISOString(),
+      updatedAt: thread.updatedAt.toISOString(),
+    };
+    if (created) {
+      const event = {
+        thread: dto,
+        state: {
+          threadId: thread.id,
+          stream: null,
+          lastReadSequence: 0,
+          latestSequence: 0,
+          unreadCount: 0,
+        },
+      };
+      for (const membershipId of participantIds)
+        io.to(memberRoom(membershipId)).emit("chat:thread_created", event);
+    }
+    return reply.code(created ? 201 : 200).send(dto);
+  });
+
+  app.post("/api/chat/direct/messages", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const body = createDirectChatMessageSchema.parse(request.body);
+    let thread;
+    try {
+      thread = await resolveChatThread(
+        db,
+        auth,
+        { threadId: body.threadId },
+        [],
+        { allowDirect: true },
+      );
+    } catch {
+      return reply.code(404).send({ error: "CHAT_THREAD_NOT_FOUND" });
+    }
+    if (thread.type !== "DIRECT")
+      return reply.code(404).send({ error: "CHAT_THREAD_NOT_FOUND" });
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) {
+      if (
+        duplicate.membershipId === auth.membershipId &&
+        duplicate.type === "chat.created" &&
+        duplicate.payload &&
+        typeof duplicate.payload === "object" &&
+        "threadId" in duplicate.payload &&
+        duplicate.payload.threadId === thread.id
+      )
+        return reply.code(200).send(duplicate.payload);
+      return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    }
+    let saved;
+    try {
+      saved = await db.transaction(async (tx) => {
+        const attachmentIds = body.attachmentContentIds;
+        const staged = attachmentIds.length
+          ? await tx
+              .select()
+              .from(chatAttachmentUploads)
+              .where(
+                and(
+                  eq(chatAttachmentUploads.campaignId, auth.campaignId),
+                  eq(
+                    chatAttachmentUploads.uploadedByMembershipId,
+                    auth.membershipId,
+                  ),
+                  eq(chatAttachmentUploads.status, "STAGED"),
+                  gt(chatAttachmentUploads.expiresAt, new Date()),
+                  inArray(chatAttachmentUploads.contentId, attachmentIds),
+                ),
+              )
+          : [];
+        if (staged.length !== attachmentIds.length)
+          throw new Error("CHAT_ATTACHMENT_NOT_FOUND");
+        const [row] = await tx
+          .insert(chatMessages)
+          .values({
+            campaignId: auth.campaignId,
+            membershipId: auth.membershipId,
+            characterId: null,
+            threadId: thread.id,
+            body: body.body,
+            visibility: "PUBLIC",
+          })
+          .returning();
+        if (!row) throw new Error("MESSAGE_CREATE_FAILED");
+        if (staged.length) {
+          await tx.insert(chatAttachments).values(
+            staged.map((upload) => ({
+              contentId: upload.contentId,
+              campaignId: auth.campaignId,
+              threadId: thread.id,
+              messageId: row.id,
+            })),
+          );
+          await tx
+            .update(chatAttachmentUploads)
+            .set({ status: "CLAIMED" })
+            .where(inArray(chatAttachmentUploads.contentId, attachmentIds));
+        }
+        const dto = {
+          ...chatMessageDto(row, auth.displayName, null),
+          attachments: staged.map((upload) => ({
+            contentId: upload.contentId,
+            fileName: upload.fileName,
+            mimeType: upload.mimeType,
+            sizeBytes: upload.sizeBytes,
+            width: upload.width,
+            height: upload.height,
+            createdAt: upload.createdAt.toISOString(),
+          })),
+        };
+        const [event] = await tx
+          .insert(gameEvents)
+          .values({
+            campaignId: auth.campaignId,
+            actionId: body.actionId,
+            membershipId: auth.membershipId,
+            type: "chat.created",
+            entityType: "chat",
+            entityId: row.id,
+            payload: dto,
+          })
+          .returning();
+        if (!event) throw new Error("EVENT_RECORD_FAILED");
+        return { dto, event };
+      });
+    } catch (error) {
+      const replay = await findAction(db, auth.campaignId, body.actionId);
+      if (
+        replay?.membershipId === auth.membershipId &&
+        replay.type === "chat.created" &&
+        replay.payload &&
+        typeof replay.payload === "object" &&
+        "threadId" in replay.payload &&
+        replay.payload.threadId === thread.id
+      )
+        return reply.code(200).send(replay.payload);
+      if (replay) return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+      if (
+        error instanceof Error &&
+        error.message === "CHAT_ATTACHMENT_NOT_FOUND"
+      )
+        return reply.code(404).send({ error: "CHAT_ATTACHMENT_NOT_FOUND" });
+      throw error;
+    }
+
+    const envelope = {
+      sequence: Number(saved.event.sequence),
+      actionId: body.actionId,
+      emittedAt: saved.event.createdAt.toISOString(),
+      data: saved.dto,
+    };
+    for (const membershipId of directThreadMemberIds(thread))
+      io.to(memberRoom(membershipId)).emit("chat:created", envelope);
+    return reply.code(201).send(saved.dto);
+  });
+
   app.post("/api/chat", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -4214,6 +4575,8 @@ export function registerRoutes(
     let thread;
     try {
       thread = await resolveChatThread(db, auth, body, ["TABLE", "STORY"]);
+      if (thread.type !== "STREAM" || !thread.stream)
+        throw new Error("CHAT_THREAD_NOT_FOUND");
       if (!canPostToStream(auth, thread.stream))
         throw new Error("CHAT_THREAD_FORBIDDEN");
     } catch (error) {
@@ -4296,11 +4659,13 @@ export function registerRoutes(
     const body = markChatThreadReadSchema.parse(request.body);
     let thread;
     try {
-      thread = await resolveChatThread(db, auth, { threadId: body.threadId }, [
-        "ROLLS",
-        "STORY",
-        "TABLE",
-      ]);
+      thread = await resolveChatThread(
+        db,
+        auth,
+        { threadId: body.threadId },
+        ["ROLLS", "STORY", "TABLE"],
+        { allowDirect: true },
+      );
     } catch (error) {
       const code =
         error instanceof Error ? error.message : "CHAT_THREAD_FORBIDDEN";

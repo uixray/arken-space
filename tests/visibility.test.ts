@@ -35,7 +35,10 @@ beforeAll(async () => {
     .filter((name) => name.endsWith(".sql"))
     .sort();
   for (const file of migrations.filter(
-    (file) => !file.startsWith("0009_") && !file.startsWith("0017_"),
+    (file) =>
+      !file.startsWith("0009_") &&
+      !file.startsWith("0017_") &&
+      !file.startsWith("0018_"),
   )) {
     const sql = (
       await readFile(new URL(file, migrationsUrl), "utf8")
@@ -50,10 +53,12 @@ beforeAll(async () => {
     create unique index chat_sequence_idx on chat_messages (sequence);
     create index chat_campaign_sequence_idx on chat_messages (campaign_id, sequence);
   `);
-  const chatThreadsMigration = (
-    await readFile(new URL("0017_chat_threads.sql", migrationsUrl), "utf8")
-  ).replaceAll("--> statement-breakpoint", "");
-  await database.exec(chatThreadsMigration);
+  for (const file of ["0017_chat_threads.sql", "0018_direct_chat.sql"]) {
+    const chatThreadsMigration = (
+      await readFile(new URL(file, migrationsUrl), "utf8")
+    ).replaceAll("--> statement-breakpoint", "");
+    await database.exec(chatThreadsMigration);
+  }
 });
 
 beforeEach(async () => {

@@ -22,6 +22,10 @@ import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
 import { appendChatMessage, reconcileChatRead } from "./chat-state";
 import {
+  appendDirectMessageResponse,
+  upsertDirectThread,
+} from "./direct-chat-state";
+import {
   addRollToast,
   removeRollToast,
   scheduleRollToastRemoval,
@@ -536,6 +540,11 @@ export function App() {
         ),
       ),
     );
+    next.on("chat:thread_created", ({ thread, state }) => {
+      setSnapshot((current) =>
+        current ? upsertDirectThread(current, thread, state) : current,
+      );
+    });
     next.on("chat:created", (event) => {
       const unseen = !knownChatMessageIdsRef.current.has(event.data.id);
       if (unseen) knownChatMessageIdsRef.current.add(event.data.id);
@@ -1826,6 +1835,49 @@ export function App() {
                 }),
               )
             }
+            onCreateDirectThread={async (participantMembershipId) => {
+              const thread = await api<
+                import("@arken/contracts").DirectChatThreadDto
+              >("/api/chat/direct", {
+                method: "POST",
+                body: JSON.stringify({ participantMembershipId }),
+              });
+              setSnapshot((current) =>
+                current ? upsertDirectThread(current, thread) : current,
+              );
+              return thread;
+            }}
+            onDirectChat={async (threadId, body, attachmentContentIds) => {
+              const message = await api<
+                import("@arken/contracts").ChatMessageDto
+              >("/api/chat/direct/messages", {
+                method: "POST",
+                body: JSON.stringify({
+                  actionId: crypto.randomUUID(),
+                  threadId,
+                  body,
+                  characterId: snapshot.me.characterId,
+                  attachmentContentIds,
+                }),
+              });
+              knownChatMessageIdsRef.current.add(message.id);
+              setSnapshot((current) =>
+                current
+                  ? appendDirectMessageResponse(current, message, {
+                      activeThreadId: activeChatThreadIdRef.current,
+                      ownMembershipId: current.me.id,
+                    })
+                  : current,
+              );
+            }}
+            onUploadChatAttachment={async (file) => {
+              const form = new FormData();
+              form.append("file", file);
+              return api<import("@arken/contracts").ChatAttachmentMetadata>(
+                "/api/chat/attachments",
+                { method: "POST", body: form },
+              );
+            }}
             onActiveChatThreadChange={(threadId) => {
               activeChatThreadIdRef.current = threadId;
             }}
