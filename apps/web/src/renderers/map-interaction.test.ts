@@ -3,6 +3,7 @@ import {
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
+  resolveMapToolShortcut,
   type MapInteractionAction,
   type MapInteractionState,
   type MapObjectRef,
@@ -61,6 +62,23 @@ describe("mapInteractionReducer", () => {
       expect(mapInteractionReducer(initial, action)).toBe(initial);
     },
   );
+
+  it("queues validated tool selection and gates fog shortcuts by role", () => {
+    expect(resolveMapToolShortcut("v", false, "PLAYER")).toBe("PAN");
+    expect(resolveMapToolShortcut("D", false, "PLAYER")).toBe("DRAW");
+    expect(resolveMapToolShortcut("r", false, "PLAYER")).toBe("RULER");
+    expect(resolveMapToolShortcut("p", false, "PLAYER")).toBe("PING");
+    expect(resolveMapToolShortcut("g", false, "PLAYER")).toBeNull();
+    expect(resolveMapToolShortcut("g", false, "GM")).toBe("FOG");
+    expect(resolveMapToolShortcut("G", true, "GM")).toBe("COVER");
+    expect(resolveMapToolShortcut("d", true, "GM")).toBeNull();
+    expect(resolveMapToolShortcut("Delete", false, "GM")).toBeNull();
+
+    const state = reduce({ type: "select-tool", tool: "PING" });
+    expect(state.commands).toEqual([
+      { id: 1, type: "select-tool", tool: "PING" },
+    ]);
+  });
 
   it("coordinates typed selection, object list, and object menu", () => {
     const listed = reduce(

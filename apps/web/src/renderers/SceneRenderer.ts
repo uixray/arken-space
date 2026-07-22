@@ -8,6 +8,8 @@ import type {
   TokenDto,
 } from "@arken/contracts";
 import type { GameSocket } from "../realtime";
+import type { MapMoveAck, MapMoveTarget } from "./map-move-queue";
+import type { MapTool } from "./map-interaction";
 
 export interface SceneRendererProps {
   scene: SceneDto;
@@ -18,7 +20,8 @@ export interface SceneRendererProps {
   role: Role;
   membershipId: string;
   socket: GameSocket | null;
-  tool: "PAN" | "FOG" | "COVER" | "DRAW" | "RULER" | "PING";
+  tool: MapTool;
+  onToolSelect: (tool: MapTool) => void;
   pings: MapPing[];
   rulers: Array<{
     sceneId: string;
@@ -69,9 +72,9 @@ export interface SceneRendererProps {
   onDrawingDelete?: (drawingId: string, revision: number) => Promise<void>;
   onDrawingCopy?: (drawingId: string, revision: number) => Promise<void>;
   onBulkMove?: (
-    selection: { tokenIds: string[]; drawingIds: string[] },
+    targets: MapMoveTarget[],
     delta: { x: number; y: number },
-  ) => Promise<void>;
+  ) => Promise<MapMoveAck>;
   onBulkDelete?: (selection: {
     tokenIds: string[];
     drawingIds: string[];

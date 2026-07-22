@@ -1,3 +1,7 @@
+import type { Role } from "@arken/contracts";
+
+export type MapTool = "PAN" | "FOG" | "COVER" | "DRAW" | "RULER" | "PING";
+
 export type Point = Readonly<{ x: number; y: number }>;
 
 export type MapObjectKind = "token" | "drawing";
@@ -38,15 +42,18 @@ const sameRef = (left: MapObjectRef | null, right: MapObjectRef) =>
 export type ViewportIntent =
   | Readonly<{ type: "pan"; delta: Point }>
   | Readonly<{ type: "zoom"; factor: number; anchor: Point }>
-  | Readonly<{ type: "fit" }>;
+  | Readonly<{ type: "fit" }>
+  | Readonly<{ type: "select-tool"; tool: MapTool }>;
 
 export type MapInteractionCommand =
   | Readonly<{ id: number; type: "viewport"; intent: ViewportIntent }>
-  | Readonly<{ id: number; type: "delete-object"; ref: ValidatedMapObjectRef }>;
+  | Readonly<{ id: number; type: "delete-object"; ref: ValidatedMapObjectRef }>
+  | Readonly<{ id: number; type: "select-tool"; tool: MapTool }>;
 
 type PendingMapInteractionCommand =
   | Readonly<{ type: "viewport"; intent: ViewportIntent }>
-  | Readonly<{ type: "delete-object"; ref: ValidatedMapObjectRef }>;
+  | Readonly<{ type: "delete-object"; ref: ValidatedMapObjectRef }>
+  | Readonly<{ type: "select-tool"; tool: MapTool }>;
 
 export interface ObjectMenuState {
   ref: MapObjectRef;
@@ -69,6 +76,7 @@ export type MapInteractionAction =
   | Readonly<{ type: "pan"; delta: Point }>
   | Readonly<{ type: "zoom"; factor: number; anchor: Point }>
   | Readonly<{ type: "fit" }>
+  | Readonly<{ type: "select-tool"; tool: MapTool }>
   | Readonly<{ type: "select"; ref: MapObjectRef }>
   | Readonly<{ type: "clear-selection" }>
   | Readonly<{ type: "open-object-list" }>
@@ -139,6 +147,8 @@ export function mapInteractionReducer(
       });
     case "fit":
       return enqueue(state, { type: "viewport", intent: { type: "fit" } });
+    case "select-tool":
+      return enqueue(state, { type: "select-tool", tool: action.tool });
     case "select":
       return { ...state, selectedObject: action.ref, objectMenu: null };
     case "clear-selection":
@@ -199,4 +209,27 @@ export function mapInteractionReducer(
         commands: state.commands.filter((command) => command.id !== action.id),
       };
   }
+}
+
+const TOOL_SHORTCUTS: Readonly<Record<string, MapTool>> = {
+  v: "PAN",
+  d: "DRAW",
+  r: "RULER",
+  p: "PING",
+};
+
+/** Resolves only renderer-scoped tool shortcuts and applies the GM permission gate. */
+export function resolveMapToolShortcut(
+  key: string,
+  shiftKey: boolean,
+  role: Role,
+): MapTool | null {
+  if (key.length !== 1) return null;
+  const normalized = key.toLowerCase();
+  if (normalized === "g") {
+    if (role !== "GM") return null;
+    return shiftKey ? "COVER" : "FOG";
+  }
+  if (shiftKey) return null;
+  return TOOL_SHORTCUTS[normalized] ?? null;
 }

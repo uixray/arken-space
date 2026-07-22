@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   Circle,
@@ -20,9 +20,15 @@ import {
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
+  resolveMapToolShortcut,
   type MapObjectRef,
 } from "./map-interaction";
 import { selectMapObjects } from "./map-objects";
+import {
+  MapMoveQueue,
+  mapMoveSelectionKey,
+  type MapMoveTarget,
+} from "./map-move-queue";
 
 function Grid({
   width,
@@ -90,7 +96,8 @@ function TokenImage({
 }
 
 export function Orthographic2DRenderer(props: SceneRendererProps) {
-  const { canvasEditMode, onCanvasEditCancel } = props;
+  const { canvasEditMode, onCanvasEditCancel, onBulkMove, onToolSelect } =
+    props;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [interaction, dispatchInteraction] = useReducer(
@@ -98,6 +105,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     undefined,
     createInitialMapInteractionState,
   );
+  const moveQueue = useMemo(
+    () =>
+      new MapMoveQueue(async () => {
+        throw new Error("MOVE_UNAVAILABLE");
+      }),
+    [],
+  );
+  useEffect(() => {
+    moveQueue.setExecutor(async ({ targets, delta }) => {
+      if (!onBulkMove) throw new Error("MOVE_UNAVAILABLE");
+      return onBulkMove(targets, delta);
+    });
+  }, [moveQueue, onBulkMove]);
   const fogMaskRef = useRef<Konva.Group>(null);
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   const [scale, setScale] = useState(1);
@@ -325,6 +345,44 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     world: worldDraft,
     showGmLayer,
   });
+  const movableTargets = useMemo<MapMoveTarget[]>(
+    () => [
+      ...selectableObjects.tokens
+        .filter(
+          (token) =>
+            selectedTokenIds.includes(token.id) &&
+            !token.locked &&
+            (props.role === "GM" ||
+              token.controllerMembershipIds.includes(props.membershipId)),
+        )
+        .map((token) => ({
+          targetType: "TOKEN" as const,
+          targetId: token.id,
+          revision: token.revision,
+        })),
+      ...selectableObjects.drawings
+        .filter((drawing) => selectedDrawingIds.includes(drawing.id))
+        .map((drawing) => ({
+          targetType: "DRAWING" as const,
+          targetId: drawing.id,
+          revision: drawing.revision,
+        })),
+    ],
+    [
+      selectableObjects.tokens,
+      selectableObjects.drawings,
+      selectedTokenIds,
+      selectedDrawingIds,
+      props.role,
+      props.membershipId,
+    ],
+  );
+  const moveScope = mapMoveSelectionKey(props.scene.id, movableTargets);
+  useEffect(() => {
+    moveQueue.reset(moveScope, movableTargets);
+  }, [moveQueue, moveScope, movableTargets]);
+  const enqueueMove = (delta: { x: number; y: number }) =>
+    moveQueue.enqueue(movableTargets, delta);
   const selectObject = (ref: MapObjectRef) => {
     dispatchInteraction({ type: "select", ref });
     setSelectedTokenIds(ref.kind === "token" ? [ref.objectId] : []);
@@ -380,17 +438,41 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setSelectedDrawingId(null);
       dispatchInteraction({ type: "clear-selection" });
       setTokenMenu(null);
-    } else if (event.key === "ArrowLeft")
-      setPosition((p) => ({ ...p, x: p.x + step }));
-    else if (event.key === "ArrowRight")
-      setPosition((p) => ({ ...p, x: p.x - step }));
-    else if (event.key === "ArrowUp")
-      setPosition((p) => ({ ...p, y: p.y + step }));
-    else if (event.key === "ArrowDown")
-      setPosition((p) => ({ ...p, y: p.y - step }));
-    else if (event.key === "+" || event.key === "=") zoomAtCenter(scale * 1.1);
+    } else if (event.key.startsWith("Arrow")) {
+      if (movableTargets.length) {
+        const moveStep =
+          (props.scene.grid.enabled ? props.scene.grid.size : 8) *
+          (event.shiftKey ? 5 : 1);
+        enqueueMove({
+          x:
+            event.key === "ArrowLeft"
+              ? -moveStep
+              : event.key === "ArrowRight"
+                ? moveStep
+                : 0,
+          y:
+            event.key === "ArrowUp"
+              ? -moveStep
+              : event.key === "ArrowDown"
+                ? moveStep
+                : 0,
+        });
+      } else if (event.key === "ArrowLeft")
+        setPosition((p) => ({ ...p, x: p.x + step }));
+      else if (event.key === "ArrowRight")
+        setPosition((p) => ({ ...p, x: p.x - step }));
+      else if (event.key === "ArrowUp")
+        setPosition((p) => ({ ...p, y: p.y + step }));
+      else setPosition((p) => ({ ...p, y: p.y - step }));
+    } else if (event.key === "+" || event.key === "=")
+      zoomAtCenter(scale * 1.1);
     else if (event.key === "-") zoomAtCenter(scale / 1.1);
     else if (event.key === "0" || event.key.toLowerCase() === "f") fitMap();
+    else if (resolveMapToolShortcut(event.key, event.shiftKey, props.role))
+      dispatchInteraction({
+        type: "select-tool",
+        tool: resolveMapToolShortcut(event.key, event.shiftKey, props.role)!,
+      });
     else if (event.key.toLowerCase() === "o")
       dispatchInteraction({ type: "toggle-object-list" });
     else if (event.key === "Enter") openSelectedAction();
@@ -405,17 +487,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       selected?.kind === "token"
         ? selectableObjects.tokens
         : selectableObjects.drawings;
-    const stillCurrent =
-      selected &&
-      candidates.some(
-        (item) =>
-          item.id === selected.objectId && item.revision === selected.revision,
-      );
-    if (selected && !stillCurrent) {
+    const current =
+      selected && candidates.find((item) => item.id === selected.objectId);
+    if (selected && !current) {
       dispatchInteraction({ type: "clear-selection" });
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
+    } else if (selected && current && current.revision !== selected.revision) {
+      dispatchInteraction({
+        type: "select",
+        ref: createValidatedMapObjectRef({
+          kind: selected.kind,
+          objectId: selected.objectId,
+          revision: current.revision,
+        })!,
+      });
     }
   }, [
     interaction.selectedObject,
@@ -434,6 +521,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   useEffect(() => {
     const command = interaction.commands[0];
     if (!command) return;
+    if (command.type === "select-tool") onToolSelect(command.tool);
     if (command.type === "delete-object") {
       if (command.ref.kind === "token")
         void onTokenDelete?.(command.ref.objectId, command.ref.revision);
@@ -447,7 +535,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setSelectedDrawingId((id) => (id === command.ref.objectId ? null : id));
     }
     dispatchInteraction({ type: "consume-command", id: command.id });
-  }, [interaction.commands, onDrawingDelete, onTokenDelete]);
+  }, [interaction.commands, onDrawingDelete, onTokenDelete, onToolSelect]);
 
   const handleFogDown = () => {
     if ((props.tool !== "FOG" && props.tool !== "COVER") || props.role !== "GM")
@@ -730,7 +818,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       tabIndex={0}
       role="region"
       aria-label="Интерактивная карта сцены"
-      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 F O Enter Delete Escape"
+      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 F O V D R P G Shift+G Enter Delete Escape"
       onFocus={() => dispatchInteraction({ type: "focus" })}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget))
@@ -1087,16 +1175,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   selectedTokenIds.length + selectedDrawingIds.length > 1 &&
                   props.onBulkMove
                 ) {
-                  void props.onBulkMove(
-                    {
-                      tokenIds: selectedTokenIds,
-                      drawingIds: selectedDrawingIds,
-                    },
-                    {
-                      x: event.target.x() - drawing.x,
-                      y: event.target.y() - drawing.y,
-                    },
-                  );
+                  enqueueMove({
+                    x: event.target.x() - drawing.x,
+                    y: event.target.y() - drawing.y,
+                  });
                   return;
                 }
                 void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
@@ -1198,20 +1280,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
                 const x = snap(event.target.x());
                 const y = snap(event.target.y());
-                const bulkSelection = {
-                  tokenIds: selectedTokenIds,
-                  drawingIds: selectedDrawingIds,
-                };
                 if (
                   selectedTokenIds.includes(token.id) &&
                   selectedTokenIds.length + selectedDrawingIds.length > 1 &&
                   props.onBulkMove
                 ) {
                   event.target.position({ x, y });
-                  void props.onBulkMove(bulkSelection, {
-                    x: x - token.x,
-                    y: y - token.y,
-                  });
+                  enqueueMove({ x: x - token.x, y: y - token.y });
                   return;
                 }
                 event.target.position({ x, y });

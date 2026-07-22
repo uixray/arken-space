@@ -11,7 +11,7 @@
 
 - Base: `9ac29dd` (`origin/main`).
 - Branch: `codex/uix256-map-command-core`.
-- Pool changes are ready to commit; UIX-256 remains in progress.
+- Core pool commit: `0b722af`; final movement/tool pool pending commit.
 
 ## Changed files
 
@@ -22,15 +22,19 @@
 - `apps/web/src/renderers/Orthographic2DRenderer.tsx`
 - `apps/web/src/styles.css`
 - `tests/e2e/concept.spec.ts`
+- `apps/web/src/renderers/map-move-queue.ts`
+- `apps/web/src/renderers/map-move-queue.test.ts`
+- `apps/web/src/renderers/SceneRenderer.ts`
+- `apps/web/src/App.tsx`
 
 ## Verification
 
 - PASS: lint.
-- PASS: web typecheck.
-- PASS: focused reducer/selector tests ? 18/18.
+- PASS: full workspace typecheck.
 - PASS: production build.
-- PASS: focused browser regressions ? 6/6, including two new keyboard/object-list scenarios.
-- Full Vitest attempt: 30 files / 195 tests passed; six unrelated PGlite-heavy suites timed out concurrently during setup. No UIX-256 focused failure.
+- PASS: full low-contention Vitest ? 37 files / 209 tests.
+- PASS: focused reducer/selector/movement tests ? 25/25.
+- PASS: focused browser regressions ? 4/4 (keyboard core, PLAYER permission gate, object dialog/delete, delayed movement revisions).
 - PASS: `git diff --check`.
 
 ## Review fixes
@@ -44,11 +48,9 @@
 
 ## Blockers / remaining
 
-- Add serialized keyboard movement for selected token(s) across revision acknowledgements.
-- Define/test tool-selection shortcuts if retained in PR1 acceptance criteria.
-- Repeat full Vitest gate in a lower-contention environment before marking Done.
-- No production deployment without a separate gate.
+- No implementation blocker remains for PR1.
+- Production deployment still requires a separate release gate.
 
 ## Next action
 
-Implement the revision-aware selected-token movement queue, then run the final full gate and combined review.
+Commit and publish the final pool, merge to `main`, then close UIX-256 after GitHub/Linear stage gates.

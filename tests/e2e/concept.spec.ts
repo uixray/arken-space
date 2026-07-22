@@ -1221,6 +1221,7 @@ test("map keyboard command core is scoped, observable, and accessible", async ({
     name: "\u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u0446\u0435\u043d\u044b",
   });
   await expect(map).toHaveAttribute("tabindex", "0");
+  await expect(map).toHaveAttribute("aria-keyshortcuts", /V D R P G Shift\+G/);
   await map.focus();
   await expect(map).toBeFocused();
 
@@ -1248,12 +1249,65 @@ test("map keyboard command core is scoped, observable, and accessible", async ({
   await page.keyboard.press("f");
   await expect(scale).toHaveValue(fittedScale);
 
+  await map.focus();
+  await page.keyboard.press("d");
+  await expect(
+    page.getByRole("button", {
+      name: "\u0420\u0438\u0441\u043e\u0432\u0430\u043d\u0438\u0435",
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await map.focus();
+  await page.keyboard.press("g");
+  await expect(
+    page.getByRole("button", {
+      name: "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0442\u0443\u043c\u0430\u043d",
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await map.focus();
+  await page.keyboard.press("Shift+g");
+  await expect(
+    page.getByRole("button", {
+      name: "\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0442\u0443\u043c\u0430\u043d",
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+
   // A child input keeps native keyboard behaviour; the map command handler
   // deliberately accepts commands only when the map root itself is targeted.
   await scale.focus();
   const inputScale = Number(await scale.inputValue());
   await page.keyboard.press("ArrowRight");
   expect(Number(await scale.inputValue())).toBeGreaterThan(inputScale);
+});
+
+test("player fog shortcut is permission-gated", async ({ page }) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = { ...playerSnapshot.me, role: "PLAYER" };
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.goto("/");
+  const map = page.getByRole("region", {
+    name: "\u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u0446\u0435\u043d\u044b",
+  });
+  await expect(
+    page.getByRole("button", {
+      name: "\u041f\u0435\u0440\u0435\u043c\u0435\u0449\u0435\u043d\u0438\u0435",
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await map.focus();
+  await page.keyboard.press("g");
+  await expect(
+    page.getByRole("button", {
+      name: "\u041f\u0435\u0440\u0435\u043c\u0435\u0449\u0435\u043d\u0438\u0435",
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("map object list preserves Escape priority and Delete cancellation", async ({
@@ -1316,4 +1370,70 @@ test("map object list preserves Escape priority and Delete cancellation", async 
   await expect(
     objects.getByRole("button", { name: /\u0422\u043e\u043a\u0435\u043d:/ }),
   ).toHaveCount(1);
+});
+
+test("selected token keyboard moves serialize delayed responses with ack revisions", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ enabled: true }),
+    }),
+  );
+  const requests: Array<{
+    deltaX: number;
+    deltaY: number;
+    targets: Array<{ targetId: string; revision: number }>;
+  }> = [];
+  await page.route("**/api/canvas/bulk", async (route) => {
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    if (requests.length === 1)
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    const revision = body.targets[0].revision + 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        revisions: {
+          tokens: { [body.targets[0].targetId]: revision },
+          drawings: {},
+        },
+      }),
+    });
+  });
+  await page.goto("/");
+  const map = page.getByRole("region", {
+    name: "\u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u0446\u0435\u043d\u044b",
+  });
+  await map.focus();
+  await page.keyboard.press("o");
+  const objects = page.getByRole("dialog", {
+    name: "\u041e\u0431\u044a\u0435\u043a\u0442\u044b \u043a\u0430\u0440\u0442\u044b",
+  });
+  await objects
+    .getByRole("button", { name: /\u0422\u043e\u043a\u0435\u043d:/ })
+    .first()
+    .click();
+  await page.keyboard.press("Escape");
+  await map.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]!.targets[0]!.revision).toBe(
+    requests[0]!.targets[0]!.revision + 1,
+  );
+  expect(requests[1]!.deltaX).toBeGreaterThan(0);
+  expect(requests[1]!.deltaY).toBeGreaterThan(requests[1]!.deltaX);
 });

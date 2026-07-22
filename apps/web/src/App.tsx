@@ -34,6 +34,7 @@ import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { characterTokenPlacementRequest } from "./token-placement";
 import { normalizeClientDiceResult } from "./dice-result";
+import type { MapTool } from "./renderers/map-interaction";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -284,9 +285,7 @@ export function App() {
   const [connection, setConnection] = useState<
     "CONNECTING" | "ONLINE" | "RECONNECTING" | "RESYNCING" | "OFFLINE"
   >("CONNECTING");
-  const [tool, setTool] = useState<
-    "PAN" | "FOG" | "COVER" | "DRAW" | "RULER" | "PING"
-  >("PAN");
+  const [tool, setTool] = useState<MapTool>("PAN");
   const [gmFogOpacity, setGmFogOpacity] = useState(() => {
     const stored = Number(localStorage.getItem("arken.gmFogOpacity") ?? 0.35);
     return Number.isFinite(stored) ? Math.min(1, Math.max(0, stored)) : 0.35;
@@ -602,6 +601,20 @@ export function App() {
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Операция не выполнена",
+      );
+      throw reason;
+    }
+  };
+
+  const runResult = async <T,>(action: () => Promise<T>): Promise<T> => {
+    try {
+      setError("");
+      return await action();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "\u041e\u043f\u0435\u0440\u0430\u0446\u0438\u044f \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430",
       );
       throw reason;
     }
@@ -1357,6 +1370,7 @@ export function App() {
                 membershipId={viewSnapshot.me.id}
                 socket={socket}
                 tool={tool}
+                onToolSelect={setTool}
                 pings={pings.filter((ping) => ping.sceneId === activeScene.id)}
                 rulers={rulers.filter(
                   (ruler) => ruler.sceneId === activeScene.id,
@@ -1533,9 +1547,14 @@ export function App() {
                     }),
                   )
                 }
-                onBulkMove={(selection, delta) =>
-                  run(() =>
-                    api("/api/canvas/bulk", {
+                onBulkMove={(targets, delta) =>
+                  runResult(() =>
+                    api<{
+                      revisions: {
+                        tokens: Record<string, number>;
+                        drawings: Record<string, number>;
+                      };
+                    }>("/api/canvas/bulk", {
                       method: "POST",
                       body: JSON.stringify({
                         actionId: crypto.randomUUID(),
@@ -1543,36 +1562,7 @@ export function App() {
                         operation: "MOVE",
                         deltaX: delta.x,
                         deltaY: delta.y,
-                        targets: [
-                          ...selection.tokenIds.flatMap((id) => {
-                            const token = activeTokens.find(
-                              (item) => item.id === id,
-                            );
-                            return token
-                              ? [
-                                  {
-                                    targetType: "TOKEN" as const,
-                                    targetId: id,
-                                    revision: token.revision,
-                                  },
-                                ]
-                              : [];
-                          }),
-                          ...selection.drawingIds.flatMap((id) => {
-                            const drawing = activeDrawings.find(
-                              (item) => item.id === id,
-                            );
-                            return drawing
-                              ? [
-                                  {
-                                    targetType: "DRAWING" as const,
-                                    targetId: id,
-                                    revision: drawing.revision,
-                                  },
-                                ]
-                              : [];
-                          }),
-                        ],
+                        targets,
                       }),
                     }),
                   )
