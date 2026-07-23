@@ -49,6 +49,11 @@ import {
 } from "./character-workspace-state";
 import { buildChatTimeline } from "./chat-date";
 import { normalizeClientDiceResult } from "./dice-result";
+import {
+  CharacterActionCard,
+  parseSkillCard,
+  SkillChatCard,
+} from "./SkillCards";
 import { StickerPicker } from "./StickerPicker";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import {
@@ -211,7 +216,11 @@ type Props = {
   onRollEntry: (
     characterId: string,
     entryId: string,
-    rollActionId: string,
+    input: {
+      mode: "EXECUTE" | "SHARE";
+      rollActionId?: string;
+      entryRevision: number;
+    },
   ) => Promise<void>;
   onRechargeEntry: (
     characterId: string,
@@ -1129,41 +1138,21 @@ export function CharacterPanel({
         {character.entries.length ? (
           character.entries.map((entry) => (
             <div className="plain-row" key={entry.id}>
-              <strong>{entry.name}</strong>
-              <span className="eyebrow">
-                {entry.kind === "SKILL" ? "Навык" : "Способность"}
-              </span>
-              {entry.description && <p>{entry.description}</p>}
+              <CharacterActionCard
+                entry={entry}
+                disabled={!editable}
+                onAction={(input) => onRollEntry(character.id, entry.id, input)}
+              />
               {entry.data.uses && (
-                <p>
-                  {entry.data.uses.current}/{entry.data.uses.max} ·{" "}
-                  {entry.data.uses.recharge}
-                  {entry.data.uses.progressText
-                    ? ` · ${entry.data.uses.progressText}`
-                    : ""}
-                  <Button
-                    disabled={!editable}
-                    onClick={() =>
-                      onRechargeEntry(character.id, entry.id, entry.revision)
-                    }
-                  >
-                    Перезарядить
-                  </Button>
-                </p>
+                <Button
+                  disabled={!editable}
+                  onClick={() =>
+                    onRechargeEntry(character.id, entry.id, entry.revision)
+                  }
+                >
+                  Перезарядить
+                </Button>
               )}
-              {[...(entry.data.rollActions ?? [])]
-                .sort((a, b) => a.order - b.order)
-                .map((action) => (
-                  <Button
-                    key={action.id}
-                    disabled={!editable || (entry.data.uses?.current ?? 1) < 1}
-                    onClick={() =>
-                      onRollEntry(character.id, entry.id, action.id)
-                    }
-                  >
-                    {action.label} · {action.kind}
-                  </Button>
-                ))}
               {snapshot.me.role === "GM" && (
                 <div className="inline-fields">
                   <Button onClick={() => setEntryEditor(entry)}>
@@ -1354,8 +1343,10 @@ export function CharacterPanel({
 
 function ChatMessageBody({
   message,
+  catalogEntryIds,
 }: {
   message: GameSnapshot["messages"][number];
+  catalogEntryIds?: ReadonlySet<string>;
 }) {
   if (message.stickerId || message.stickerPresentation) {
     const presentation = message.stickerPresentation;
@@ -1380,6 +1371,23 @@ function ChatMessageBody({
       </figure>
     );
   }
+  const skillCard = parseSkillCard(
+    message.skillCard ? { skillCard: message.skillCard } : message.dice,
+  );
+  if (message.kind === "DICE" && skillCard)
+    return (
+      <SkillChatCard
+        card={skillCard}
+        sourceRemoved={
+          skillCard.entry.sourceRemoved ||
+          Boolean(
+            skillCard.entry.sourceCatalogEntryId &&
+            catalogEntryIds &&
+            !catalogEntryIds.has(skillCard.entry.sourceCatalogEntryId),
+          )
+        }
+      />
+    );
   const dice = normalizeClientDiceResult(message.dice);
   if (message.kind !== "DICE" || !dice)
     return (
@@ -1707,6 +1715,10 @@ function ChatPanel({
     [snapshot.messages, snapshot.chatThreads, activeStream],
   );
   const timeline = buildChatTimeline(messages);
+  const catalogEntryIds = useMemo(
+    () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
+    [snapshot.catalogEntries],
+  );
   const latestMessage = messages.at(-1);
   const thread = threadForStream(snapshot, activeStream);
   const threadId = thread?.id;
@@ -1835,7 +1847,12 @@ function ChatPanel({
                 </time>
                 {item.message.visibility === "GM_ONLY" && <span>мастеру</span>}
               </header>
-              <ChatMessageBody message={item.message} />
+              <ChatMessageBody
+                message={item.message}
+                catalogEntryIds={
+                  snapshot.me.role === "GM" ? catalogEntryIds : undefined
+                }
+              />
             </article>
           ),
         )}

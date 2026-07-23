@@ -2233,8 +2233,9 @@ export function App() {
                 true,
               )
             }
-            onRollEntry={(characterId, entryId, rollActionId) =>
-              run(
+            onRollEntry={(characterId, entryId, input) => {
+              const { mode, ...request } = input;
+              return run(
                 () =>
                   api(
                     `/api/characters/${characterId}/catalog/${entryId}/roll`,
@@ -2242,14 +2243,15 @@ export function App() {
                       method: "POST",
                       body: JSON.stringify({
                         actionId: crypto.randomUUID(),
-                        rollActionId,
+                        ...request,
+                        ...(mode === "SHARE" ? { mode } : {}),
                         visibility: "PUBLIC",
                       }),
                     },
                   ),
                 true,
-              )
-            }
+              );
+            }}
             onRechargeEntry={(characterId, entryId, revision) =>
               run(
                 () =>

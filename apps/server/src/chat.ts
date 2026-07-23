@@ -2,7 +2,7 @@ import { and, eq, or } from "drizzle-orm";
 import type { ChatStream } from "@arken/contracts";
 import { chatMessages, chatThreads } from "@arken/db";
 import type { AuthContext } from "./auth.js";
-import { normalizeDiceResult } from "./dice-result.js";
+import { normalizeDiceResult, normalizeSkillCard } from "./dice-result.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type MessageRow = typeof chatMessages.$inferSelect;
@@ -166,6 +166,7 @@ export function chatMessageDto(
     threadId: row.threadId,
     stream,
     dice: normalizeDiceResult(row.dice),
+    skillCard: normalizeSkillCard(row.dice),
     stickerId: row.stickerId,
     stickerPresentation: row.stickerPresentation,
     createdAt: row.createdAt.toISOString(),

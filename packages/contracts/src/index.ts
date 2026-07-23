@@ -857,11 +857,24 @@ export const audioStateUpdateSchema = z.union([
   audioCommandSchema,
   legacyAudioStateUpdateSchema,
 ]);
-export const entryRollRequestSchema = z.object({
+const entryCardRequestBaseSchema = z.object({
   actionId: actionIdSchema,
-  rollActionId: z.string(),
+  entryRevision: z.number().int().nonnegative().optional(),
   visibility: messageVisibilitySchema.default("PUBLIC"),
 });
+export const entryCardExecuteRequestSchema = entryCardRequestBaseSchema.extend({
+  mode: z.literal("EXECUTE").optional(),
+  rollActionId: z.string().min(1).max(40),
+});
+export const entryCardShareRequestSchema = entryCardRequestBaseSchema.extend({
+  mode: z.literal("SHARE"),
+  rollActionId: z.never().optional(),
+});
+export const entryRollRequestSchema = z.union([
+  entryCardExecuteRequestSchema,
+  entryCardShareRequestSchema,
+]);
+export type EntryCardRequest = z.infer<typeof entryRollRequestSchema>;
 export const campaignClockCommandSchema = z.object({
   actionId: actionIdSchema,
   command: z.enum(["ADVANCE_DAY", "START_BATTLE", "END_BATTLE"]),
@@ -1108,6 +1121,8 @@ export interface ChatMessageDto {
   threadId: string;
   stream: ChatStream | null;
   dice: DiceResult | null;
+  /** Immutable v1 skill/ability card stored with the message, when present. */
+  skillCard?: SkillCardSnapshot | null;
   stickerId?: string | null;
   stickerPresentation?: StickerPresentation | null;
   attachments?: ChatAttachmentMetadata[];
@@ -1169,6 +1184,46 @@ export interface DiceResult {
   modifiers: Array<{ source: string; value: number }>;
   total: number;
   label?: string;
+}
+
+export interface SkillCardEntrySnapshot {
+  id: string;
+  revision: number;
+  sourceCatalogEntryId: string | null;
+  kind: "SKILL" | "ABILITY";
+  name: string;
+  description: string;
+  notes: string | null;
+}
+export interface SkillCardActionSnapshot {
+  id: string;
+  kind: "HIT" | "DAMAGE" | "CUSTOM";
+  label: string;
+  dice: string;
+  advantage: boolean;
+  consumeUse: boolean;
+}
+/** Stored with the message; never rebuilt from mutable catalog rows. */
+export interface SkillCardSnapshot {
+  version: 1;
+  execution: "EXECUTED" | "SHARED";
+  entry: SkillCardEntrySnapshot;
+  actor: {
+    membershipId: string;
+    displayName: string;
+    characterId: string;
+    characterName: string;
+  };
+  action: SkillCardActionSnapshot | null;
+  formula: string | null;
+  result: DiceResult | null;
+  uses: {
+    before: number;
+    after: number;
+    max: number;
+    recharge: "DAY" | "BATTLE" | "WEEK";
+  } | null;
+  visibility: MessageVisibility;
 }
 
 export interface AudioStateDto {

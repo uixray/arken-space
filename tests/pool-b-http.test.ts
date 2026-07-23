@@ -1352,11 +1352,27 @@ describe("Pool B HTTP boundaries", () => {
     expect(roll.statusCode).toBe(201);
     expect(roll.json()).toMatchObject({
       formula: "2d20kh1 + modifier_0",
-      source: { entryName: "Stun", actionKind: "HIT" },
-      actor: { membershipId: ids.player },
-      characterId: ids.character,
+      skillCard: {
+        version: 1,
+        execution: "EXECUTED",
+        entry: { id: entry.id, name: "Stun", kind: "ABILITY" },
+        actor: { membershipId: ids.player, characterId: ids.character },
+        action: { id: "hit", kind: "HIT" },
+        uses: { before: 1, after: 1, max: 1, recharge: "DAY" },
+      },
     });
     expect(roll.json().terms[0].rolls).toHaveLength(2);
+    const playerGmOnly = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        rollActionId: "hit",
+        visibility: "GM_ONLY",
+      },
+    });
+    expect(playerGmOnly.statusCode).toBe(403);
     const snapshot = await app.inject({
       method: "GET",
       url: "/api/bootstrap",
@@ -1366,19 +1382,30 @@ describe("Pool B HTTP boundaries", () => {
     expect(snapshot.json().messages.at(-1)).toMatchObject({
       kind: "DICE",
       body: expect.stringContaining("Lowers initiative"),
+      skillCard: expect.objectContaining({ version: 1, execution: "EXECUTED" }),
     });
     const damageActionId = crypto.randomUUID();
-    const damage = await app.inject({
-      method: "POST",
-      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
-      headers: headers(secrets.player),
-      payload: {
-        actionId: damageActionId,
-        rollActionId: "damage",
-        visibility: "PUBLIC",
-      },
+    const damageRequest = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId: damageActionId,
+          rollActionId: "damage",
+          visibility: "PUBLIC",
+        },
+      });
+    const [damage, concurrentDamage] = await Promise.all([
+      damageRequest(),
+      damageRequest(),
+    ]);
+    expect([damage.statusCode, concurrentDamage.statusCode].sort()).toEqual([
+      200, 201,
+    ]);
+    expect([damage.json(), concurrentDamage.json()]).toContainEqual({
+      duplicate: true,
     });
-    expect(damage.statusCode).toBe(201);
     const afterDamage = await app.inject({
       method: "GET",
       url: "/api/bootstrap",
@@ -1388,9 +1415,35 @@ describe("Pool B HTTP boundaries", () => {
       0,
     );
     expect(afterDamage.json().messages.slice(-2)).toEqual([
-      expect.objectContaining({ kind: "SYSTEM", visibility: "PUBLIC" }),
       expect.objectContaining({ kind: "DICE", visibility: "PUBLIC" }),
+      expect.objectContaining({
+        kind: "DICE",
+        visibility: "PUBLIC",
+        skillCard: expect.objectContaining({
+          uses: { before: 1, after: 0, max: 1, recharge: "DAY" },
+        }),
+      }),
     ]);
+    const shared = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        mode: "SHARE",
+        entryRevision: 1,
+        visibility: "PUBLIC",
+      },
+    });
+    expect(shared.statusCode).toBe(201);
+    expect(shared.json()).toMatchObject({
+      skillCard: {
+        execution: "SHARED",
+        action: null,
+        result: null,
+        uses: { before: 0, after: 0 },
+      },
+    });
     const replay = await app.inject({
       method: "POST",
       url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,

@@ -30,7 +30,7 @@ import {
   normalizeLegacyEntryData,
   normalizeLegacyStats,
 } from "./entry-data.js";
-import { normalizeDiceResult } from "./dice-result.js";
+import { normalizeDiceResult, normalizeSkillCard } from "./dice-result.js";
 import { normalizeAudioDeadline } from "./audio-state.js";
 import {
   chatVisibilityFilter,
@@ -519,6 +519,7 @@ export async function buildSnapshot(
         threadId: message.threadId,
         stream: thread.stream,
         dice: normalizeDiceResult(message.dice),
+        skillCard: normalizeSkillCard(message.dice),
         stickerId:
           message.stickerId && revokedStickerIds.has(message.stickerId)
             ? null

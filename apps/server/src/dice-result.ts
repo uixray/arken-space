@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { DiceResult } from "@arken/contracts";
+import type { DiceResult, SkillCardSnapshot } from "@arken/contracts";
 
 const diceResultSchema = z.object({
   formula: z.string().max(160),
@@ -33,4 +33,53 @@ const diceResultSchema = z.object({
 export function normalizeDiceResult(value: unknown): DiceResult | null {
   const result = diceResultSchema.safeParse(value);
   return result.success ? result.data : null;
+}
+
+const skillCardSchema = z.object({
+  version: z.literal(1),
+  execution: z.enum(["EXECUTED", "SHARED"]),
+  entry: z.object({
+    id: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    sourceCatalogEntryId: z.string().uuid().nullable(),
+    kind: z.enum(["SKILL", "ABILITY"]),
+    name: z.string().min(1).max(120),
+    description: z.string().max(10000),
+    notes: z.string().max(10000).nullable(),
+  }),
+  actor: z.object({
+    membershipId: z.string().uuid(),
+    displayName: z.string().min(1).max(40),
+    characterId: z.string().uuid(),
+    characterName: z.string().min(1).max(80),
+  }),
+  action: z
+    .object({
+      id: z.string().min(1).max(40),
+      kind: z.enum(["HIT", "DAMAGE", "CUSTOM"]),
+      label: z.string().min(1).max(100),
+      dice: z.string().max(16),
+      advantage: z.boolean(),
+      consumeUse: z.boolean(),
+    })
+    .nullable(),
+  formula: z.string().max(160).nullable(),
+  result: diceResultSchema.nullable(),
+  uses: z
+    .object({
+      before: z.number().int().nonnegative(),
+      after: z.number().int().nonnegative(),
+      max: z.number().int().positive(),
+      recharge: z.enum(["DAY", "BATTLE", "WEEK"]),
+    })
+    .nullable(),
+  visibility: z.enum(["PUBLIC", "GM_ONLY"]),
+});
+/** Cards are an additive payload in the established DICE JSON column. */
+export function normalizeSkillCard(value: unknown): SkillCardSnapshot | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = skillCardSchema.safeParse(
+    (value as Record<string, unknown>).skillCard,
+  );
+  return parsed.success ? parsed.data : null;
 }

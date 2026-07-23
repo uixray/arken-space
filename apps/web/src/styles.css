@@ -2436,3 +2436,102 @@ code {
     text-overflow: ellipsis;
   }
 }
+
+.character-action-card,
+.skill-chat-card {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.character-action-card__summary,
+.skill-chat-card__heading,
+.character-action-card__action,
+.skill-chat-card__result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+.character-action-card__summary > div,
+.skill-chat-card__heading {
+  display: grid;
+  gap: 2px;
+}
+.character-action-card__uses,
+.skill-chat-card__uses {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.character-action-card__action > span,
+.skill-chat-card__result > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.character-action-card code,
+.skill-chat-card code {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.character-action-card__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.character-action-card__details,
+.skill-chat-card__details {
+  display: grid;
+  gap: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--line);
+}
+.character-action-card__details p,
+.skill-chat-card__details p,
+.skill-chat-card > p {
+  margin: 0;
+  line-height: 1.45;
+}
+.skill-chat-card {
+  max-width: 640px;
+}
+.skill-chat-card__result > strong {
+  display: grid;
+  place-items: center;
+  min-width: 42px;
+  min-height: 42px;
+  color: var(--accent);
+  font-size: 1.45rem;
+  line-height: 1;
+}
+@media (min-width: 960px) and (max-width: 1279px) {
+  .character-sheet-deck {
+    grid-auto-columns: minmax(300px, 1fr);
+  }
+  .character-action-card__action {
+    align-items: flex-start;
+  }
+  .character-action-card__action > button {
+    flex: 0 0 auto;
+  }
+  .skill-chat-card {
+    max-width: none;
+  }
+}
+@media (max-width: 520px) {
+  .character-action-card__action,
+  .skill-chat-card__result {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .character-action-card__action > button {
+    width: 100%;
+  }
+}
