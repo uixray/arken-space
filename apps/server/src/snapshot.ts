@@ -38,6 +38,7 @@ import {
   unknownPlayerDisplayName,
 } from "./chat.js";
 import { revokedStickerTombstone } from "./sticker-access.js";
+import { buildWorldMapsSnapshot } from "./world-maps.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -170,6 +171,8 @@ export async function buildSnapshot(
       .from(gameEvents)
       .where(eq(gameEvents.campaignId, auth.campaignId)),
   ]);
+
+  const worldMapProjection = await buildWorldMapsSnapshot(db, auth);
 
   const visibleThreadRows = threadRows.filter(
     (thread) =>
@@ -344,6 +347,8 @@ export async function buildSnapshot(
       visibleAssetIds.add(character.portraitAssetId);
   }
   if (audio?.assetId) visibleAssetIds.add(audio.assetId);
+  for (const assetId of worldMapProjection.backgroundAssetIds)
+    visibleAssetIds.add(assetId);
   const visibleAssets =
     auth.role === "GM"
       ? assetRows
@@ -498,6 +503,7 @@ export async function buildSnapshot(
         y: drawing.y,
         revision: drawing.revision,
       })),
+    worldMaps: worldMapProjection.snapshot,
     messages: messageRows
       .sort((left, right) => left.message.sequence - right.message.sequence)
       .map(({ message, thread }) => ({

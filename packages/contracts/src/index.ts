@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 export {
   betaPlayerByHandle,
   betaPlayers,
@@ -49,6 +49,26 @@ export const stickerProvenanceTypeSchema = z.enum([
   "COMMISSIONED",
   "IMPORTED",
 ]);
+export const worldMapLifecycleSchema = z.enum([
+  "DRAFT",
+  "PUBLISHED",
+  "ARCHIVED",
+]);
+export const worldMapVisibilitySchema = z.enum(["CAMPAIGN", "GM_ONLY"]);
+/** Maps have a scope label but MVP deliberately has no editable parent hierarchy. */
+export const worldMapScopeSchema = z.enum(["WORLD", "REGION"]);
+export const worldMapLocationKindSchema = z.enum([
+  "SETTLEMENT",
+  "LANDMARK",
+  "REGION",
+  "OTHER",
+]);
+/** DISCOVERED is campaign-wide in the MVP; future per-player discovery needs a new model. */
+export const worldMapLocationVisibilitySchema = z.enum([
+  "PUBLIC",
+  "DISCOVERED",
+  "GM_ONLY",
+]);
 
 export type Role = z.infer<typeof roleSchema>;
 export type Projection = z.infer<typeof projectionSchema>;
@@ -60,6 +80,13 @@ export type StickerPackSubject = z.infer<typeof stickerPackSubjectSchema>;
 export type StickerPackAudience = z.infer<typeof stickerPackAudienceSchema>;
 export type StickerPackSendPolicy = z.infer<typeof stickerPackSendPolicySchema>;
 export type StickerPackLifecycle = z.infer<typeof stickerPackLifecycleSchema>;
+export type WorldMapLifecycle = z.infer<typeof worldMapLifecycleSchema>;
+export type WorldMapVisibility = z.infer<typeof worldMapVisibilitySchema>;
+export type WorldMapScope = z.infer<typeof worldMapScopeSchema>;
+export type WorldMapLocationKind = z.infer<typeof worldMapLocationKindSchema>;
+export type WorldMapLocationVisibility = z.infer<
+  typeof worldMapLocationVisibilitySchema
+>;
 
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
@@ -585,6 +612,168 @@ export type CreateStreamChatMessage = z.infer<
 /** @deprecated Use createStreamChatMessageSchema; retained for existing routes. */
 export const createChatMessageSchema = createStreamChatMessageSchema;
 
+/** Position on an approved world-map background, normalized to its visible bounds. */
+export const worldMapCoordinateSchema = z.number().finite().min(0).max(1);
+
+export const createWorldMapSchema = z
+  .object({
+    actionId: actionIdSchema,
+    name: z.string().trim().min(1).max(120),
+    scope: worldMapScopeSchema.default("REGION"),
+    visibility: worldMapVisibilitySchema.default("CAMPAIGN"),
+  })
+  .strict();
+export type CreateWorldMap = z.infer<typeof createWorldMapSchema>;
+
+export const updateWorldMapSchema = z
+  .object({
+    actionId: actionIdSchema,
+    mapId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    name: z.string().trim().min(1).max(120).optional(),
+    scope: worldMapScopeSchema.optional(),
+    visibility: worldMapVisibilitySchema.optional(),
+  })
+  .strict()
+  .refine(
+    (command) =>
+      command.name !== undefined ||
+      command.scope !== undefined ||
+      command.visibility !== undefined,
+    "At least one map field is required",
+  );
+export type UpdateWorldMap = z.infer<typeof updateWorldMapSchema>;
+
+/** This only changes a draft candidate. Approval and publication are separate GM actions. */
+export const setWorldMapDraftBackgroundSchema = z
+  .object({
+    actionId: actionIdSchema,
+    mapId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    backgroundAssetId: z.string().uuid().nullable(),
+  })
+  .strict();
+export type SetWorldMapDraftBackground = z.infer<
+  typeof setWorldMapDraftBackgroundSchema
+>;
+
+export const approveWorldMapBackgroundSchema = z
+  .object({
+    actionId: actionIdSchema,
+    mapId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ApproveWorldMapBackground = z.infer<
+  typeof approveWorldMapBackgroundSchema
+>;
+
+export const publishWorldMapSchema = z
+  .object({
+    actionId: actionIdSchema,
+    mapId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type PublishWorldMap = z.infer<typeof publishWorldMapSchema>;
+
+export const archiveWorldMapSchema = z
+  .object({
+    actionId: actionIdSchema,
+    mapId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ArchiveWorldMap = z.infer<typeof archiveWorldMapSchema>;
+
+export const createWorldMapLocationSchema = z
+  .object({
+    actionId: actionIdSchema,
+    mapId: z.string().uuid(),
+    name: z.string().trim().min(1).max(120),
+    kind: worldMapLocationKindSchema.default("OTHER"),
+    /** Player-safe location-card text. */
+    summary: z.string().trim().max(2000).default(""),
+    /** Server must never project this field to a player snapshot. */
+    gmNotes: z.string().max(10000).default(""),
+    visibility: worldMapLocationVisibilitySchema.default("GM_ONLY"),
+    x: worldMapCoordinateSchema,
+    y: worldMapCoordinateSchema,
+  })
+  .strict();
+export type CreateWorldMapLocation = z.infer<
+  typeof createWorldMapLocationSchema
+>;
+
+export const updateWorldMapLocationSchema = z
+  .object({
+    actionId: actionIdSchema,
+    locationId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    name: z.string().trim().min(1).max(120).optional(),
+    kind: worldMapLocationKindSchema.optional(),
+    summary: z.string().trim().max(2000).optional(),
+    gmNotes: z.string().max(10000).optional(),
+    visibility: worldMapLocationVisibilitySchema.optional(),
+    x: worldMapCoordinateSchema.optional(),
+    y: worldMapCoordinateSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (command) =>
+      command.name !== undefined ||
+      command.kind !== undefined ||
+      command.summary !== undefined ||
+      command.gmNotes !== undefined ||
+      command.visibility !== undefined ||
+      command.x !== undefined ||
+      command.y !== undefined,
+    "At least one location field is required",
+  );
+export type UpdateWorldMapLocation = z.infer<
+  typeof updateWorldMapLocationSchema
+>;
+
+export const deleteWorldMapLocationSchema = z
+  .object({
+    actionId: actionIdSchema,
+    locationId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type DeleteWorldMapLocation = z.infer<
+  typeof deleteWorldMapLocationSchema
+>;
+
+export const linkWorldMapLocationSceneSchema = z
+  .object({
+    actionId: actionIdSchema,
+    locationId: z.string().uuid(),
+    sceneId: z.string().uuid(),
+  })
+  .strict();
+export type LinkWorldMapLocationScene = z.infer<
+  typeof linkWorldMapLocationSceneSchema
+>;
+
+export const unlinkWorldMapLocationSceneSchema =
+  linkWorldMapLocationSceneSchema;
+export type UnlinkWorldMapLocationScene = z.infer<
+  typeof unlinkWorldMapLocationSceneSchema
+>;
+
+/** `revision: null` is the explicit create-position case; it is never travel state. */
+export const setWorldMapPartyPositionSchema = z
+  .object({
+    actionId: actionIdSchema,
+    mapId: z.string().uuid(),
+    locationId: z.string().uuid(),
+    revision: z.number().int().nonnegative().nullable().default(null),
+  })
+  .strict();
+export type SetWorldMapPartyPosition = z.infer<
+  typeof setWorldMapPartyPositionSchema
+>;
 /** Sticker sends identify catalog content, never its backing asset. */
 const createStickerMessageBaseSchema = z
   .object({
@@ -835,6 +1024,53 @@ export interface DrawingDto {
   revision: number;
 }
 
+/** Map rows are returned only after server-side lifecycle and visibility filtering. */
+export interface WorldMapDto {
+  id: string;
+  name: string;
+  scope: WorldMapScope;
+  visibility: WorldMapVisibility;
+  lifecycle: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  /** Never an Eagle URL; this is a campaign asset approved by the GM. */
+  backgroundAssetId: string | null;
+  revision: number;
+}
+
+/** Location cards contain no inferred routes, distances, or travel state. */
+export interface WorldMapLocationDto {
+  id: string;
+  mapId: string;
+  name: string;
+  kind: WorldMapLocationKind;
+  /** Player-safe card text. */
+  summary: string;
+  visibility: WorldMapLocationVisibility;
+  x: number;
+  y: number;
+  revision: number;
+  /** Server filters inaccessible tactical-scene links before projection. */
+  sceneIds: string[];
+}
+
+/** GM-only extension: never place `gmNotes` in a player projection. */
+export interface WorldMapGmLocationDto extends WorldMapLocationDto {
+  gmNotes: string;
+}
+
+export interface WorldMapPartyPositionDto {
+  mapId: string;
+  locationId: string;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface WorldMapsSnapshotDto {
+  maps: WorldMapDto[];
+  locations: WorldMapLocationDto[];
+  /** Present only in GM projections; player snapshots never receive notes. */
+  gmLocations?: WorldMapGmLocationDto[];
+  partyPosition: WorldMapPartyPositionDto | null;
+}
 /** Safe catalog shape returned only after pack authorization. */
 export interface StickerDto {
   id: string;
@@ -963,6 +1199,8 @@ export interface GameSnapshot {
   tokenDefinitions?: TokenDefinitionDto[];
   fogReveals: FogRevealDto[];
   drawings?: DrawingDto[];
+  /** Filtered world/region map projection; absent until the feature is loaded. */
+  worldMaps?: WorldMapsSnapshotDto;
   messages: ChatMessageDto[];
   chatThreads: ChatThreadDto[];
   chatThreadStates: ChatThreadStateDto[];

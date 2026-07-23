@@ -105,6 +105,7 @@ import { applyRollMode, DiceFormulaError, rollFormula } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
+import { registerWorldMapRoutes } from "./world-map-routes.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -473,6 +474,10 @@ export function registerRoutes(
   db: Database,
   io: RealtimeServer,
 ) {
+  registerWorldMapRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
+
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
       await db.execute(sql`select 1`);

@@ -19,6 +19,10 @@ import type {
   MessageVisibility,
   PlayerAccessDto,
   PlayerAccessSecretDto,
+  WorldMapDto,
+  WorldMapLocationDto,
+  WorldMapScope,
+  WorldMapVisibility,
 } from "@arken/contracts";
 import { arkenSystem } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
@@ -46,6 +50,7 @@ import {
 import { buildChatTimeline } from "./chat-date";
 import { normalizeClientDiceResult } from "./dice-result";
 import { StickerPicker } from "./StickerPicker";
+import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import {
   CHAT_STREAM_LABEL,
   CHAT_STREAM_ORDER,
@@ -234,10 +239,72 @@ type Props = {
   requestedChatMessageId: string | null;
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
-  workspace: "characters" | "tokens" | "scenes" | "setup" | "media" | null;
+  workspace:
+    | "characters"
+    | "tokens"
+    | "scenes"
+    | "setup"
+    | "media"
+    | "world-maps"
+    | null;
   onWorkspaceChange: (
-    workspace: "characters" | "tokens" | "scenes" | "setup" | "media" | null,
+    workspace:
+      | "characters"
+      | "tokens"
+      | "scenes"
+      | "setup"
+      | "media"
+      | "world-maps"
+      | null,
   ) => void;
+  onCreateWorldMap: (input: {
+    name: string;
+    scope: WorldMapScope;
+    visibility: WorldMapVisibility;
+  }) => Promise<void>;
+  onSetWorldMapDraftBackground: (
+    map: WorldMapDto,
+    assetId: string | null,
+  ) => Promise<void>;
+  onApproveWorldMapBackground: (map: WorldMapDto) => Promise<void>;
+  onPublishWorldMap: (map: WorldMapDto) => Promise<void>;
+  onArchiveWorldMap: (map: WorldMapDto) => Promise<void>;
+  onCreateWorldMapLocation: (input: {
+    mapId: string;
+    name: string;
+    kind: WorldMapLocationDto["kind"];
+    summary: string;
+    gmNotes: string;
+    visibility: WorldMapLocationDto["visibility"];
+    x: number;
+    y: number;
+  }) => Promise<void>;
+  onUpdateWorldMapLocation: (
+    location: WorldMapLocationDto,
+    input: {
+      name: string;
+      kind: WorldMapLocationDto["kind"];
+      summary: string;
+      gmNotes: string;
+      visibility: WorldMapLocationDto["visibility"];
+      x: number;
+      y: number;
+    },
+  ) => Promise<void>;
+  onLinkWorldMapLocationScene: (
+    location: WorldMapLocationDto,
+    sceneId: string,
+  ) => Promise<void>;
+  onUnlinkWorldMapLocationScene: (
+    location: WorldMapLocationDto,
+    sceneId: string,
+  ) => Promise<void>;
+  onSetWorldMapPartyPosition: (
+    mapId: string,
+    locationId: string,
+    revision: number | null,
+  ) => Promise<void>;
+  onClearWorldMapPartyPosition: (revision: number) => Promise<void>;
 };
 
 export function Sidebar(props: Props) {
@@ -417,6 +484,28 @@ export function Sidebar(props: Props) {
             onPublish={props.onActivateScene}
             onSave={props.onSaveScene}
             onUpload={props.onUpload}
+          />
+        )}
+        {props.workspace === "world-maps" && (
+          <WorldMapsWorkspace
+            open
+            snapshot={props.snapshot}
+            onClose={() => props.onWorkspaceChange(null)}
+            onOpenScene={(sceneId) => {
+              props.onViewScene(sceneId);
+              props.onWorkspaceChange(null);
+            }}
+            onCreateMap={props.onCreateWorldMap}
+            onSetDraftBackground={props.onSetWorldMapDraftBackground}
+            onApproveBackground={props.onApproveWorldMapBackground}
+            onPublishMap={props.onPublishWorldMap}
+            onArchiveMap={props.onArchiveWorldMap}
+            onCreateLocation={props.onCreateWorldMapLocation}
+            onUpdateLocation={props.onUpdateWorldMapLocation}
+            onLinkLocationScene={props.onLinkWorldMapLocationScene}
+            onUnlinkLocationScene={props.onUnlinkWorldMapLocationScene}
+            onSetPartyPosition={props.onSetWorldMapPartyPosition}
+            onClearPartyPosition={props.onClearWorldMapPartyPosition}
           />
         )}
         {props.workspace === "media" && (

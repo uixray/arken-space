@@ -70,6 +70,30 @@ export const stickerProvenanceTypeEnum = pgEnum("sticker_provenance_type", [
   "COMMISSIONED",
   "IMPORTED",
 ]);
+/** World/region aggregate lifecycle. A published map has an explicitly approved background. */
+export const worldMapLifecycleEnum = pgEnum("world_map_lifecycle", [
+  "DRAFT",
+  "PUBLISHED",
+  "ARCHIVED",
+]);
+/** Visibility is evaluated by the server before projecting a map or marker. */
+export const worldMapVisibilityEnum = pgEnum("world_map_visibility", [
+  "CAMPAIGN",
+  "GM_ONLY",
+]);
+/** Deliberately not a parent relation: hierarchy editing is outside the MVP. */
+export const worldMapScopeEnum = pgEnum("world_map_scope", ["WORLD", "REGION"]);
+export const worldMapLocationKindEnum = pgEnum("world_map_location_kind", [
+  "SETTLEMENT",
+  "LANDMARK",
+  "REGION",
+  "OTHER",
+]);
+/** Distinct from map visibility: DISCOVERED is campaign-wide in the MVP. */
+export const worldMapLocationVisibilityEnum = pgEnum(
+  "world_map_location_visibility",
+  ["PUBLIC", "DISCOVERED", "GM_ONLY"],
+);
 export const chatThreadTypeEnum = pgEnum("chat_thread_type", [
   "STREAM",
   "DIRECT",
@@ -238,6 +262,67 @@ export const assets = pgTable(
   ],
 );
 
+export const worldMaps = pgTable(
+  "world_maps",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    scope: worldMapScopeEnum("scope").notNull().default("REGION"),
+    visibility: worldMapVisibilityEnum("visibility")
+      .notNull()
+      .default("CAMPAIGN"),
+    lifecycle: worldMapLifecycleEnum("lifecycle").notNull().default("DRAFT"),
+    /** A staged MAP asset; publication requires its explicit approval. */
+    backgroundAssetId: uuid("background_asset_id"),
+    backgroundAssetApprovedByMembershipId: uuid(
+      "background_asset_approved_by_membership_id",
+    ),
+    backgroundAssetApprovedAt: timestamp("background_asset_approved_at", {
+      withTimezone: true,
+    }),
+    revision: integer("revision").notNull().default(0),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("world_maps_campaign_id_id_idx").on(table.campaignId, table.id),
+    index("world_maps_campaign_lifecycle_idx").on(
+      table.campaignId,
+      table.lifecycle,
+    ),
+    foreignKey({
+      name: "world_maps_campaign_background_asset_fk",
+      columns: [table.campaignId, table.backgroundAssetId],
+      foreignColumns: [assets.campaignId, assets.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "world_maps_campaign_background_approver_fk",
+      columns: [table.campaignId, table.backgroundAssetApprovedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "world_maps_name_revision_check",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 120 AND ${table.revision} >= 0`,
+    ),
+    check(
+      "world_maps_background_approval_shape_check",
+      sql`(${table.backgroundAssetApprovedByMembershipId} IS NULL AND ${table.backgroundAssetApprovedAt} IS NULL) OR (${table.backgroundAssetId} IS NOT NULL AND ${table.backgroundAssetApprovedByMembershipId} IS NOT NULL AND ${table.backgroundAssetApprovedAt} IS NOT NULL)`,
+    ),
+    check(
+      "world_maps_lifecycle_shape_check",
+      sql`(${table.lifecycle} = 'DRAFT' AND ${table.publishedAt} IS NULL AND ${table.archivedAt} IS NULL) OR (${table.lifecycle} = 'PUBLISHED' AND ${table.backgroundAssetId} IS NOT NULL AND ${table.backgroundAssetApprovedByMembershipId} IS NOT NULL AND ${table.backgroundAssetApprovedAt} IS NOT NULL AND ${table.publishedAt} IS NOT NULL AND ${table.archivedAt} IS NULL) OR (${table.lifecycle} = 'ARCHIVED' AND ${table.archivedAt} IS NOT NULL)`,
+    ),
+  ],
+);
 export const characters = pgTable(
   "characters",
   {
@@ -393,9 +478,135 @@ export const scenes = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("scenes_campaign_idx").on(table.campaignId)],
+  (table) => [
+    index("scenes_campaign_idx").on(table.campaignId),
+    uniqueIndex("scenes_campaign_id_id_idx").on(table.campaignId, table.id),
+  ],
 );
 
+export const worldMapLocations = pgTable(
+  "world_map_locations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    mapId: uuid("map_id").notNull(),
+    name: text("name").notNull(),
+    kind: worldMapLocationKindEnum("kind").notNull().default("OTHER"),
+    /** Player-safe short card text. */
+    summary: text("summary").notNull().default(""),
+    /** Never project this field to players. */
+    gmNotes: text("gm_notes").notNull().default(""),
+    visibility: worldMapLocationVisibilityEnum("visibility")
+      .notNull()
+      .default("GM_ONLY"),
+    /** Coordinates are normalized to the approved background: 0 <= x,y <= 1. */
+    x: doublePrecision("x").notNull(),
+    y: doublePrecision("y").notNull(),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("world_map_locations_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("world_map_locations_campaign_map_id_id_idx").on(
+      table.campaignId,
+      table.mapId,
+      table.id,
+    ),
+    index("world_map_locations_map_visibility_idx").on(
+      table.mapId,
+      table.visibility,
+    ),
+    foreignKey({
+      name: "world_map_locations_campaign_map_fk",
+      columns: [table.campaignId, table.mapId],
+      foreignColumns: [worldMaps.campaignId, worldMaps.id],
+    }).onDelete("cascade"),
+    check(
+      "world_map_locations_shape_check",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 120 AND length(${table.summary}) <= 2000 AND length(${table.gmNotes}) <= 10000 AND ${table.x} >= 0 AND ${table.x} <= 1 AND ${table.y} >= 0 AND ${table.y} <= 1 AND ${table.revision} >= 0`,
+    ),
+  ],
+);
+
+/** Explicit tactical-scene links; there are no routes or travel semantics in this table. */
+export const worldMapLocationScenes = pgTable(
+  "world_map_location_scenes",
+  {
+    campaignId: uuid("campaign_id").notNull(),
+    locationId: uuid("location_id").notNull(),
+    sceneId: uuid("scene_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("world_map_location_scenes_unique_idx").on(
+      table.locationId,
+      table.sceneId,
+    ),
+    index("world_map_location_scenes_scene_idx").on(table.sceneId),
+    foreignKey({
+      name: "world_map_location_scenes_campaign_location_fk",
+      columns: [table.campaignId, table.locationId],
+      foreignColumns: [worldMapLocations.campaignId, worldMapLocations.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "world_map_location_scenes_campaign_scene_fk",
+      columns: [table.campaignId, table.sceneId],
+      foreignColumns: [scenes.campaignId, scenes.id],
+    }).onDelete("cascade"),
+  ],
+);
+
+/** Exactly one current, location-only party position per campaign. */
+export const worldMapPartyPosition = pgTable(
+  "world_map_party_position",
+  {
+    campaignId: uuid("campaign_id")
+      .primaryKey()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    mapId: uuid("map_id").notNull(),
+    locationId: uuid("location_id").notNull(),
+    updatedByMembershipId: uuid("updated_by_membership_id").notNull(),
+    revision: integer("revision").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "world_map_party_position_campaign_map_fk",
+      columns: [table.campaignId, table.mapId],
+      foreignColumns: [worldMaps.campaignId, worldMaps.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "world_map_party_position_campaign_map_location_fk",
+      columns: [table.campaignId, table.mapId, table.locationId],
+      foreignColumns: [
+        worldMapLocations.campaignId,
+        worldMapLocations.mapId,
+        worldMapLocations.id,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "world_map_party_position_campaign_updater_fk",
+      columns: [table.campaignId, table.updatedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "world_map_party_position_revision_check",
+      sql`${table.revision} >= 0`,
+    ),
+  ],
+);
 export const tokenDefinitions = pgTable(
   "token_definitions",
   {

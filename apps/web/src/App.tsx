@@ -47,7 +47,7 @@ const Orthographic2DRenderer = lazy(() =>
 );
 
 type WorkspaceDestination =
-  "characters" | "tokens" | "scenes" | "setup" | "media";
+  "characters" | "tokens" | "scenes" | "setup" | "media" | "world-maps";
 
 type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
 
@@ -619,6 +619,17 @@ export function App() {
     }
   };
 
+  /** World-map commands always reconcile the authoritative snapshot. A conflict
+   * means another GM changed a revision, so reload before exposing retry UI. */
+  const runWorldMapMutation = async (action: () => Promise<unknown>) => {
+    try {
+      await run(action, true);
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 409) await load();
+      throw reason;
+    }
+  };
+
   const runResult = async <T,>(action: () => Promise<T>): Promise<T> => {
     try {
       setError("");
@@ -1044,6 +1055,12 @@ export function App() {
                 </button>
               </>
             ) : null}
+            <button
+              type="button"
+              onClick={() => handleWorkspaceChange("world-maps")}
+            >
+              World maps
+            </button>
             <button
               type="button"
               onClick={() => handleWorkspaceChange("media")}
@@ -2250,6 +2267,131 @@ export function App() {
               )
             }
             onUpdateCounters={updateCharacterCounters}
+            onCreateWorldMap={(input) =>
+              runWorldMapMutation(() =>
+                api("/api/world-maps", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    ...input,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onSetWorldMapDraftBackground={(map, assetId) =>
+              runWorldMapMutation(() =>
+                api(`/api/world-maps/${map.id}/draft-background`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    backgroundAssetId: assetId,
+                    revision: map.revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onApproveWorldMapBackground={(map) =>
+              runWorldMapMutation(() =>
+                api(`/api/world-maps/${map.id}/approve-background`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    revision: map.revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onPublishWorldMap={(map) =>
+              runWorldMapMutation(() =>
+                api(`/api/world-maps/${map.id}/publish`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    revision: map.revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onArchiveWorldMap={(map) =>
+              runWorldMapMutation(() =>
+                api(`/api/world-maps/${map.id}/archive`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    revision: map.revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onCreateWorldMapLocation={(input) =>
+              runWorldMapMutation(() =>
+                api("/api/world-maps/locations", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    ...input,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onUpdateWorldMapLocation={(location, input) =>
+              runWorldMapMutation(() =>
+                api(`/api/world-maps/locations/${location.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    ...input,
+                    revision: location.revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onLinkWorldMapLocationScene={(location, sceneId) =>
+              runWorldMapMutation(() =>
+                api(
+                  `/api/world-maps/locations/${location.id}/scenes/${sceneId}`,
+                  {
+                    method: "POST",
+                    body: JSON.stringify({ actionId: crypto.randomUUID() }),
+                  },
+                ),
+              )
+            }
+            onUnlinkWorldMapLocationScene={(location, sceneId) =>
+              runWorldMapMutation(() =>
+                api(
+                  `/api/world-maps/locations/${location.id}/scenes/${sceneId}`,
+                  {
+                    method: "DELETE",
+                    body: JSON.stringify({ actionId: crypto.randomUUID() }),
+                  },
+                ),
+              )
+            }
+            onSetWorldMapPartyPosition={(mapId, locationId, revision) =>
+              runWorldMapMutation(() =>
+                api("/api/world-maps/party-position", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    mapId,
+                    locationId,
+                    revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onClearWorldMapPartyPosition={(revision) =>
+              runWorldMapMutation(() =>
+                api("/api/world-maps/party-position", {
+                  method: "DELETE",
+                  body: JSON.stringify({
+                    revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
             onCampaignClock={(command, revision) =>
               run(
                 () =>
