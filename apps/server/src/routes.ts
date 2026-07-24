@@ -32,6 +32,7 @@ import {
   createOrGetDirectChatThreadSchema,
   markChatThreadReadSchema,
   createFogRevealSchema,
+  generateTokenAssetSchema,
   changeTokenLayerSchema,
   createDrawingSchema,
   canvasBulkCommandSchema,
@@ -142,9 +143,13 @@ import {
 } from "./telemetry.js";
 import {
   assertStorageCapacity,
+  assertStorageQuota,
   displayNameFromUpload,
   openStoredFile,
+  readStoredImage,
   removeStoredUpload,
+  renderTokenAsset,
+  storeGeneratedToken,
   storeUpload,
 } from "./storage.js";
 import {
@@ -1869,6 +1874,7 @@ export function registerRoutes(
           and(
             eq(assets.id, body.assetId),
             eq(assets.campaignId, auth.campaignId),
+            eq(assets.kind, "TOKEN"),
           ),
         )
         .limit(1);
@@ -6244,6 +6250,149 @@ export function registerRoutes(
           .code(400)
           .send({ error: "INVALID_DICE_FORMULA", message: error.message });
       throw error;
+    }
+  });
+
+  app.post("/api/assets/:sourceAssetId/token", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { sourceAssetId } = z
+      .object({ sourceAssetId: z.string().uuid() })
+      .parse(request.params);
+    const actionId = actionIdSchema.parse(request.headers["x-action-id"]);
+    const body = generateTokenAssetSchema.parse(request.body);
+
+    const replayAsset = async () => {
+      const event = await findAction(db, auth.campaignId, actionId);
+      if (
+        !event ||
+        event.membershipId !== auth.membershipId ||
+        event.type !== "asset.created" ||
+        event.entityType !== "asset" ||
+        !event.entityId ||
+        !event.payload ||
+        typeof event.payload !== "object" ||
+        !("sourceAssetId" in event.payload) ||
+        event.payload.sourceAssetId !== sourceAssetId
+      )
+        return null;
+      const [asset] = await db
+        .select()
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, event.entityId),
+            eq(assets.campaignId, auth.campaignId),
+            eq(assets.kind, "TOKEN"),
+          ),
+        )
+        .limit(1);
+      return asset ?? null;
+    };
+    const dto = (asset: typeof assets.$inferSelect) => ({
+      id: asset.id,
+      kind: asset.kind,
+      name: asset.name,
+      mimeType: asset.mimeType,
+      sizeBytes: asset.sizeBytes,
+      width: asset.width,
+      height: asset.height,
+      durationSeconds: asset.durationSeconds,
+      url: `/api/assets/${asset.id}/content`,
+      createdAt: asset.createdAt.toISOString(),
+    });
+
+    const replay = await replayAsset();
+    if (replay) return reply.code(200).send(dto(replay));
+    if (await findAction(db, auth.campaignId, actionId))
+      return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
+
+    const [source] = await db
+      .select()
+      .from(assets)
+      .where(
+        and(
+          eq(assets.id, sourceAssetId),
+          eq(assets.campaignId, auth.campaignId),
+          eq(assets.kind, "IMAGE"),
+        ),
+      )
+      .limit(1);
+    if (!source)
+      return reply.code(404).send({ error: "SOURCE_IMAGE_NOT_FOUND" });
+
+    let stored: Awaited<ReturnType<typeof storeGeneratedToken>> | undefined;
+    try {
+      const sourceBuffer = await readStoredImage(source.storageKey);
+      const rendered = await renderTokenAsset(sourceBuffer, body);
+      const [usage] = await db
+        .select({ used: sum(assets.sizeBytes) })
+        .from(assets)
+        .where(eq(assets.campaignId, auth.campaignId));
+      await assertStorageCapacity(Number(usage?.used ?? 0), rendered.length);
+      stored = await storeGeneratedToken(rendered);
+      const created = await db.transaction(async (tx) => {
+        // Serialize the final quota check so concurrent derivatives cannot
+        // jointly push the campaign beyond its configured media allowance.
+        await tx.execute(
+          sql`select id from campaigns where id = ${auth.campaignId} for update`,
+        );
+        const [lockedUsage] = await tx
+          .select({ used: sum(assets.sizeBytes) })
+          .from(assets)
+          .where(eq(assets.campaignId, auth.campaignId));
+        assertStorageQuota(Number(lockedUsage?.used ?? 0), stored!.sizeBytes);
+        const [asset] = await tx
+          .insert(assets)
+          .values({
+            campaignId: auth.campaignId,
+            uploadedByMembershipId: auth.membershipId,
+            kind: "TOKEN",
+            name:
+              body.name ?? `${source.name.slice(0, 94)} token`.slice(0, 100),
+            ...stored!,
+          })
+          .returning();
+        if (!asset) throw new Error("ASSET_CREATE_FAILED");
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId,
+          membershipId: auth.membershipId,
+          type: "asset.created",
+          entityType: "asset",
+          entityId: asset.id,
+          payload: {
+            assetId: asset.id,
+            kind: asset.kind,
+            sourceAssetId,
+            transform: body,
+          },
+        });
+        return asset;
+      });
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return reply.code(201).send(dto(created));
+    } catch (error) {
+      if (stored) await removeStoredUpload(stored.storageKey);
+      const concurrentReplay = await replayAsset();
+      if (concurrentReplay) return reply.code(200).send(dto(concurrentReplay));
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "ENOENT"
+      )
+        return reply
+          .code(404)
+          .send({ error: "SOURCE_IMAGE_CONTENT_NOT_FOUND" });
+      const errorCode = publicUploadError(error);
+      request.log.warn(
+        { errorCode, actionId },
+        "asset.token_generation_rejected",
+      );
+      return reply.code(400).send({ error: errorCode });
     }
   });
 
