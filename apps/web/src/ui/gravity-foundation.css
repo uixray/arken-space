@@ -1,4 +1,14 @@
 :root {
+  /* Gravity UI preview tokens stay namespaced because this is a separate
+   * surface. Their scale and typography deliberately reference the app
+   * foundation, while the preview palette remains independent. */
+  --arken-font-sans: var(--font-sans, system-ui, sans-serif);
+  --arken-space-sm: var(--space-sm, 8px);
+  --arken-space-md: var(--space-md, 12px);
+  --arken-space-lg: var(--space-lg, 16px);
+  --arken-radius-sm: var(--radius-sm, 3px);
+  --arken-focus-ring-width: var(--focus-ring-width, 2px);
+  --arken-focus-ring-offset: var(--focus-ring-offset, 1px);
   --arken-ui-bg: oklch(0.17 0.008 75);
   --arken-ui-surface: oklch(0.21 0.01 75);
   --arken-ui-surface-raised: oklch(0.25 0.014 75);

@@ -1,32 +1,73 @@
 :root {
+  /* Design foundation: keep shared values here so visual edits do not require
+   * hunting through component selectors. The short variables below remain as
+   * compatibility aliases for the existing application styles. */
   color-scheme: dark;
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  font-size: 14px;
-  color: #e8e4da;
-  background: #181816;
-  --bg: #181816;
-  --surface: #20201d;
-  --surface-2: #292824;
-  --surface-3: #34322c;
-  --line: #47443b;
-  --line-strong: #696356;
-  --text: #e8e4da;
-  --muted: #aaa598;
-  --faint: #777267;
-  --accent: #c46f49;
-  --accent-hover: #d57d55;
-  --danger: #da6b61;
-  --ok: #7ba77a;
+  --font-sans:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-size-root: 14px;
+  --font-size-caption: 0.68rem;
+  --font-size-label: 0.72rem;
+  --font-size-body-sm: 0.75rem;
+  --font-size-body: 0.8rem;
+  --font-size-heading-sm: 0.82rem;
+  --font-size-heading-md: 1.25rem;
+  --font-size-heading-lg: 1.5rem;
+
+  --color-canvas: #181816;
+  --color-surface: #20201d;
+  --color-surface-raised: #292824;
+  --color-surface-hover: #34322c;
+  --color-surface-active: #34322c;
+  --color-border: #47443b;
+  --color-border-hover: #696356;
+  --color-text: #e8e4da;
+  --color-text-muted: #aaa598;
+  --color-text-faint: #777267;
+  --color-accent: #c46f49;
+  --color-accent-hover: #d57d55;
+  --color-accent-active: #d57d55;
+  --color-danger: #da6b61;
+  --color-success: #7ba77a;
+  --color-focus: var(--color-accent);
+  --color-focus-strong: var(--color-accent-hover);
+
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
   --space-lg: 16px;
   --space-xl: 24px;
+  --space-2xl: 32px;
+
+  --control-height: 32px;
+  --topbar-height: 44px;
+  --app-min-width: 960px;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* Existing component vocabulary. Do not remove until selectors have been
+   * migrated deliberately; aliases keep this foundation non-breaking. */
+  --bg: var(--color-canvas);
+  --surface: var(--color-surface);
+  --surface-2: var(--color-surface-raised);
+  --surface-3: var(--color-surface-hover);
+  --line: var(--color-border);
+  --line-strong: var(--color-border-hover);
+  --text: var(--color-text);
+  --muted: var(--color-text-muted);
+  --faint: var(--color-text-faint);
+  --accent: var(--color-accent);
+  --accent-hover: var(--color-accent-hover);
+  --danger: var(--color-danger);
+  --ok: var(--color-success);
+
+  font-family: var(--font-sans);
+  font-size: var(--font-size-root);
+  color: var(--color-text);
+  background: var(--color-canvas);
 }
 
 * {
@@ -41,7 +82,7 @@ body,
   overflow: hidden;
 }
 body {
-  min-width: 960px;
+  min-width: var(--app-min-width);
 }
 button,
 input,
@@ -56,10 +97,10 @@ input,
 textarea {
   border: 1px solid var(--line);
   background: var(--surface-2);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 button {
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 5px 10px;
   cursor: pointer;
 }
@@ -71,8 +112,8 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
 }
 button:disabled {
   opacity: 0.45;
@@ -120,13 +161,13 @@ h3 {
   color: var(--muted);
 }
 code {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   color: #d9c68d;
 }
 
 .app-shell {
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-rows: var(--topbar-height) minmax(0, 1fr);
   height: 100%;
   background: var(--bg);
 }
@@ -2702,5 +2743,116 @@ code {
   }
   .story-composer__actions > button {
     width: 100%;
+  }
+}
+
+/* UIX-255: local, programmatic token-frame previews; no external frame assets. */
+.token-image-generator {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.token-image-generator--empty {
+  color: var(--muted);
+}
+.token-image-generator h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.token-image-generator > label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.token-image-preview {
+  position: relative;
+  width: min(100%, 264px);
+  aspect-ratio: 1;
+  justify-self: center;
+  overflow: hidden;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  background-color: #e5e7eb;
+  background-image: conic-gradient(
+    #c6cbd5 25%,
+    transparent 0 50%,
+    #c6cbd5 0 75%,
+    transparent 0
+  );
+  background-size: 20px 20px;
+  box-shadow:
+    0 0 0 1px var(--line),
+    inset 0 0 0 1px rgb(255 255 255 / 20%);
+}
+.token-image-preview:active {
+  cursor: grabbing;
+}
+.token-image-preview:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+.token-image-preview img {
+  position: absolute;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  user-select: none;
+  pointer-events: none;
+}
+.token-image-preview__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.token-image-generator__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.token-image-generator__frames {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.token-image-generator__frames > div,
+.token-image-generator__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.token-image-generator__frame-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.token-image-generator__frame-option:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.token-image-generator__actions {
+  justify-content: flex-end;
+}
+@media (max-width: 520px) {
+  .token-image-preview {
+    width: min(100%, 216px);
+  }
+  .token-image-generator__actions > button {
+    flex: 1 1 132px;
+  }
+  .token-image-generator__frame-option {
+    flex: 1 1 42%;
   }
 }

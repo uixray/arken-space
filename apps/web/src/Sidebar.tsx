@@ -34,6 +34,8 @@ import {
 } from "./CatalogEntryForm";
 import type { GameSocket } from "./realtime";
 import { ApiError } from "./api";
+import { TokenImageGenerator } from "./TokenImageGenerator";
+import type { TokenFramePreset } from "./token-image-editor-state";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
@@ -194,6 +196,14 @@ type Props = {
   ) => Promise<void>;
   onCreateToken: (characterId: string) => Promise<void>;
   onUpload: (file: File, kind: AssetKind) => Promise<AssetDto>;
+  onGenerateTokenImage: (input: {
+    sourceAssetId: string;
+    cropX: number;
+    cropY: number;
+    zoom: number;
+    frame: TokenFramePreset;
+    name?: string;
+  }) => Promise<AssetDto>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
   onCreateCatalogEntry: (input: {
     kind: "SKILL" | "ABILITY";
@@ -339,10 +349,8 @@ export function Sidebar(props: Props) {
     onActiveChatThreadChange,
     onMarkChatRead,
   } = props;
-  const {
-    messages: snapshotMessages,
-    chatThreads: snapshotChatThreads,
-  } = props.snapshot;
+  const { messages: snapshotMessages, chatThreads: snapshotChatThreads } =
+    props.snapshot;
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const storyReadSequenceRef = useRef(new Map<string, number>());
@@ -366,7 +374,9 @@ export function Sidebar(props: Props) {
       snapshotChatThreads,
     ).at(-1)?.sequence;
     if (latestSequence === undefined) return;
-    if ((storyReadSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence)
+    if (
+      (storyReadSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence
+    )
       return;
     storyReadSequenceRef.current.set(activeThreadId, latestSequence);
     void onMarkChatRead(activeThreadId, latestSequence).catch(() => {
@@ -1265,6 +1275,7 @@ export function CharacterPanel({
       <label className="field">
         Инвентарь (один предмет на строку)
         <FormTextArea
+          key={`${character.id}:${character.revision}`}
           defaultValue={character.inventory.join("\n")}
           disabled={!editable}
           rows={5}
@@ -2153,6 +2164,7 @@ function PalettePanel(props: Props) {
           snapshot={props.snapshot}
           definition={editor === "NEW" ? undefined : editor}
           onUpload={props.onUpload}
+          onGenerateTokenImage={props.onGenerateTokenImage}
           onCancel={() => setEditor(null)}
           onCreate={props.onCreateTokenDefinition}
           onPatch={props.onPatchTokenDefinition}
@@ -2239,6 +2251,7 @@ function TokenDefinitionEditor({
   snapshot,
   definition,
   onUpload,
+  onGenerateTokenImage,
   onCancel,
   onCreate,
   onPatch,
@@ -2247,6 +2260,7 @@ function TokenDefinitionEditor({
   snapshot: GameSnapshot;
   definition?: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
   onUpload: Props["onUpload"];
+  onGenerateTokenImage: Props["onGenerateTokenImage"];
   onCancel: () => void;
   onCreate: Props["onCreateTokenDefinition"];
   onPatch: Props["onPatchTokenDefinition"];
@@ -2346,6 +2360,14 @@ function TokenDefinitionEditor({
               ))}
           </FormSelect>
         </label>
+        <TokenImageGenerator
+          imageAssets={snapshot.assets.filter(
+            (asset) => asset.kind === "IMAGE",
+          )}
+          disabled={saving}
+          onGenerate={onGenerateTokenImage}
+          onGenerated={(asset) => setAssetId(asset.id)}
+        />
         <ImageUploadField
           label="Загрузить новое изображение"
           value={image}

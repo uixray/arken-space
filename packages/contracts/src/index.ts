@@ -19,6 +19,12 @@ export const assetKindSchema = z.enum([
   "IMAGE",
   "AUDIO",
 ]);
+export const tokenFramePresetSchema = z.enum([
+  "NONE",
+  "BRONZE",
+  "SILVER",
+  "OBSIDIAN",
+]);
 export const messageVisibilitySchema = z.enum(["PUBLIC", "GM_ONLY"]);
 export const chatStreamSchema = z.enum(["ROLLS", "STORY", "TABLE"]);
 export const chatThreadTypeSchema = z.enum(["STREAM", "DIRECT"]);
@@ -93,6 +99,7 @@ export const worldMapLocationVisibilitySchema = z.enum([
 export type Role = z.infer<typeof roleSchema>;
 export type Projection = z.infer<typeof projectionSchema>;
 export type AssetKind = z.infer<typeof assetKindSchema>;
+export type TokenFramePreset = z.infer<typeof tokenFramePresetSchema>;
 export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
 export type ChatStream = z.infer<typeof chatStreamSchema>;
 export type ChatThreadType = z.infer<typeof chatThreadTypeSchema>;
@@ -356,6 +363,21 @@ export const placeTokenDefinitionSchema = z.object({
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
 });
+/**
+ * The crop coordinates are the normalized center of a square crop in the
+ * auto-oriented source image. The server clamps the square to image bounds.
+ */
+export const generateTokenAssetSchema = z
+  .object({
+    cropX: z.number().finite().min(0).max(1),
+    cropY: z.number().finite().min(0).max(1),
+    zoom: z.number().finite().min(1).max(8),
+    frame: tokenFramePresetSchema,
+    name: z.string().trim().min(1).max(100).optional(),
+  })
+  .strict();
+export type GenerateTokenAssetInput = z.infer<typeof generateTokenAssetSchema>;
+
 export const resizeTokenSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
