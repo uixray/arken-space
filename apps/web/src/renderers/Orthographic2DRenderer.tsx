@@ -29,6 +29,7 @@ import {
   mapMoveSelectionKey,
   type MapMoveTarget,
 } from "./map-move-queue";
+import { CANVAS_VISUAL_TOKENS as visual } from "./canvas-visual-tokens";
 
 function Grid({
   width,
@@ -55,7 +56,7 @@ function Grid({
         points={[x, 0, x, height]}
         stroke={color}
         opacity={opacity}
-        strokeWidth={1}
+        strokeWidth={visual.stroke.grid}
         listening={false}
       />,
     );
@@ -66,7 +67,7 @@ function Grid({
         points={[0, y, width, y]}
         stroke={color}
         opacity={opacity}
-        strokeWidth={1}
+        strokeWidth={visual.stroke.grid}
         listening={false}
       />,
     );
@@ -724,7 +725,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (props.tool === "DRAW" && completedDrawing.length >= 4)
       await props.onDrawingCreate({
         points: completedDrawing,
-        color: "#f0c75e",
+        color: visual.color.edit,
       });
     if (props.tool === "RULER")
       props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
@@ -784,7 +785,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         <Rect
           width={worldDraft.width}
           height={worldDraft.height}
-          fill="#080807"
+          fill={visual.color.fog}
         />
         {props.fogReveals.map((fog) => (
           <Rect
@@ -793,7 +794,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             y={fog.y}
             width={fog.width}
             height={fog.height}
-            fill="#000"
+            fill={visual.color.fogCover}
             globalCompositeOperation={
               fog.operation === "COVER" ? "source-over" : "destination-out"
             }
@@ -803,9 +804,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       {fogDraft && (
         <Rect
           {...fogDraft}
-          fill="#d9c07e"
-          opacity={0.35}
-          stroke="#f2dfaa"
+          fill={visual.color.fogDraft}
+          opacity={visual.opacity.fogDraft}
+          stroke={visual.color.editHighlight}
           strokeWidth={2 / scale}
         />
       )}
@@ -879,7 +880,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <Rect
             width={worldDraft.width}
             height={worldDraft.height}
-            fill="#282824"
+            fill={visual.color.mapBackdrop}
           />
           {mapImage && (
             <Image
@@ -906,7 +907,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               <Group>
                 <Rect
                   {...backgroundDraft}
-                  stroke="#f0c75e"
+                  stroke={visual.color.edit}
                   strokeWidth={2 / scale}
                   dash={[8 / scale, 5 / scale]}
                   draggable
@@ -940,7 +941,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           : backgroundDraft.y + backgroundDraft.height
                       }
                       radius={7 / scale}
-                      fill="#f0c75e"
+                      fill={visual.color.edit}
                       draggable
                       onDragMove={(event) => {
                         const oppositeX = left
@@ -987,7 +988,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   y={0}
                   width={worldDraft.width}
                   height={worldDraft.height}
-                  stroke="#7ee0ff"
+                  stroke={visual.color.selection}
                   strokeWidth={2 / scale}
                   dash={[8 / scale, 5 / scale]}
                 />
@@ -995,7 +996,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   x={worldDraft.width}
                   y={worldDraft.height}
                   radius={8 / scale}
-                  fill="#7ee0ff"
+                  fill={visual.color.selection}
                   draggable
                   onDragMove={(event) =>
                     setWorldDraft({
@@ -1052,7 +1053,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     y={-4 / scale}
                     width={token.width + 8 / scale}
                     height={token.height + 8 / scale}
-                    stroke="#7ee0ff"
+                    stroke={visual.color.selection}
                     strokeWidth={2 / scale}
                     dash={[6 / scale, 3 / scale]}
                     listening={false}
@@ -1098,8 +1099,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       x={token.width}
                       y={token.height}
                       radius={7 / scale}
-                      fill="#7ee0ff"
-                      stroke="#102027"
+                      fill={visual.color.selection}
+                      stroke={visual.color.selectionOutline}
                       strokeWidth={1 / scale}
                       draggable
                       onMouseDown={(event) => {
@@ -1157,7 +1158,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               }
               hitStrokeWidth={14 / scale}
               shadowColor={
-                selectedDrawingIds.includes(drawing.id) ? "#7ee0ff" : undefined
+                selectedDrawingIds.includes(drawing.id)
+                  ? visual.color.selection
+                  : undefined
               }
               shadowBlur={
                 selectedDrawingIds.includes(drawing.id) ? 10 / scale : 0
@@ -1191,7 +1194,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           {drawingPoints.length >= 4 && (
             <Line
               points={drawingPoints}
-              stroke="#f0c75e"
+              stroke={visual.color.edit}
               strokeWidth={3 / scale}
               lineCap="round"
               lineJoin="round"
@@ -1206,9 +1209,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               y={marquee.y}
               width={marquee.width}
               height={marquee.height}
-              fill="#7ee0ff"
-              opacity={0.12}
-              stroke="#7ee0ff"
+              fill={visual.color.selection}
+              opacity={visual.opacity.marqueeFill}
+              stroke={visual.color.selection}
               strokeWidth={1 / scale}
               dash={[6 / scale, 4 / scale]}
             />
@@ -1354,7 +1357,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       y={-4 / scale}
                       width={token.width + 8 / scale}
                       height={token.height + 8 / scale}
-                      stroke="#7ee0ff"
+                      stroke={visual.color.selection}
                       strokeWidth={2 / scale}
                       dash={[6 / scale, 3 / scale]}
                       listening={false}
@@ -1370,7 +1373,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       x={token.width / 2}
                       y={token.height / 2}
                       radius={Math.max(token.width, token.height) / 2 + 5}
-                      stroke="#ffcc66"
+                      stroke={visual.color.attention}
                       strokeWidth={3 / scale}
                       dash={[5 / scale, 4 / scale]}
                       listening={false}
@@ -1396,7 +1399,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                         y={token.height / 2}
                         radius={Math.min(token.width, token.height) / 2}
                         fill={token.baseColor}
-                        stroke={token.frameColor ?? "#e2d4b4"}
+                        stroke={
+                          token.frameColor ?? visual.color.tokenFrameDefault
+                        }
                         strokeWidth={2}
                       />
                       <Text
@@ -1405,7 +1410,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                         height={token.height}
                         align="center"
                         verticalAlign="middle"
-                        fill="#f0e7d4"
+                        fill={visual.color.tokenLabel}
                         fontSize={Math.max(12, token.width / 3)}
                       />
                     </Group>
@@ -1432,7 +1437,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           }`
                         : ""
                     }`}
-                    fill="#eee6d5"
+                    fill={visual.color.tokenName}
                     fontSize={13}
                     listening={false}
                     visible={
@@ -1453,8 +1458,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                         x={token.width}
                         y={token.height}
                         radius={7 / scale}
-                        fill="#7ee0ff"
-                        stroke="#102027"
+                        fill={visual.color.selection}
+                        stroke={visual.color.selectionOutline}
                         strokeWidth={1 / scale}
                         draggable
                         onMouseDown={(event) => {
@@ -1492,14 +1497,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             <Group key={ruler.membershipId}>
               <Line
                 points={[ruler.startX, ruler.startY, ruler.endX, ruler.endY]}
-                stroke="#7ee0ff"
+                stroke={visual.color.selection}
                 strokeWidth={2 / scale}
               />
               <Text
                 x={ruler.endX}
                 y={ruler.endY}
                 text={`${ruler.displayName}: ${ruler.distance.toFixed(1)}`}
-                fill="#7ee0ff"
+                fill={visual.color.selection}
                 fontSize={13 / scale}
               />
             </Group>
@@ -1510,14 +1515,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 x={ping.x}
                 y={ping.y}
                 radius={22 / scale}
-                stroke="#f0c75e"
+                stroke={visual.color.edit}
                 strokeWidth={3 / scale}
               />
               <Text
                 x={ping.x + 28 / scale}
                 y={ping.y - 8 / scale}
                 text={ping.displayName}
-                fill="#f0c75e"
+                fill={visual.color.edit}
                 fontSize={14 / scale}
               />
             </Group>
@@ -1579,7 +1584,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             Рамка
             <input
               type="color"
-              value={tokenMenu.token.frameColor ?? "#e2d4b4"}
+              value={
+                tokenMenu.token.frameColor ?? visual.color.tokenFrameDefault
+              }
               onChange={(event) => {
                 setTokenMenu(null);
                 void props.onTokenAppearanceChange?.(
@@ -1740,7 +1747,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               <button
                 onClick={() =>
                   void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
-                    color: drawing.color === "#f0c75e" ? "#5ecbf0" : "#f0c75e",
+                    color:
+                      drawing.color === visual.color.edit
+                        ? visual.color.drawingAlternate
+                        : visual.color.edit,
                   })
                 }
               >
