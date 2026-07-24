@@ -339,10 +339,8 @@ export function Sidebar(props: Props) {
     onActiveChatThreadChange,
     onMarkChatRead,
   } = props;
-  const {
-    messages: snapshotMessages,
-    chatThreads: snapshotChatThreads,
-  } = props.snapshot;
+  const { messages: snapshotMessages, chatThreads: snapshotChatThreads } =
+    props.snapshot;
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const storyReadSequenceRef = useRef(new Map<string, number>());
@@ -366,7 +364,9 @@ export function Sidebar(props: Props) {
       snapshotChatThreads,
     ).at(-1)?.sequence;
     if (latestSequence === undefined) return;
-    if ((storyReadSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence)
+    if (
+      (storyReadSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence
+    )
       return;
     storyReadSequenceRef.current.set(activeThreadId, latestSequence);
     void onMarkChatRead(activeThreadId, latestSequence).catch(() => {
@@ -1265,6 +1265,7 @@ export function CharacterPanel({
       <label className="field">
         Инвентарь (один предмет на строку)
         <FormTextArea
+          key={`${character.id}:${character.revision}`}
           defaultValue={character.inventory.join("\n")}
           disabled={!editable}
           rows={5}

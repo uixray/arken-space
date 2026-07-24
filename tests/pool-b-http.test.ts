@@ -963,6 +963,122 @@ describe("Pool B HTTP boundaries", () => {
     expect(foreign.statusCode).toBe(404);
   });
 
+  it("keeps inventory patches owner-scoped, revision-safe, and private in snapshots", async () => {
+    const otherPlayerId = crypto.randomUUID();
+    const otherCharacterId = crypto.randomUUID();
+    const otherSecret = "o".repeat(40);
+    await db.insert(schema.memberships).values({
+      id: otherPlayerId,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Other player",
+    });
+    await db.insert(schema.sessions).values({
+      membershipId: otherPlayerId,
+      tokenHash: hashToken(otherSecret),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await db.insert(schema.characters).values({
+      id: otherCharacterId,
+      campaignId: ids.campaign,
+      ownerMembershipId: otherPlayerId,
+      name: "Other hero",
+      inventory: ["Private other inventory"],
+    });
+
+    const ownerSave = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        inventory: ["Rope", "Torch"],
+      },
+    });
+    expect(ownerSave.statusCode, ownerSave.body).toBe(200);
+    expect(ownerSave.json()).toMatchObject({
+      inventory: ["Rope", "Torch"],
+      revision: 1,
+    });
+
+    const staleOwnerSave = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        inventory: ["Stale item"],
+      },
+    });
+    expect(staleOwnerSave.statusCode).toBe(409);
+    expect(staleOwnerSave.json()).toEqual({ error: "CHARACTER_CONFLICT" });
+
+    const otherPlayerSave = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(otherSecret),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        inventory: ["Stolen item"],
+      },
+    });
+    expect(otherPlayerSave.statusCode).toBe(403);
+    expect(otherPlayerSave.json()).toEqual({ error: "CHARACTER_FORBIDDEN" });
+
+    const gmSave = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        inventory: ["GM-issued lantern"],
+      },
+    });
+    expect(gmSave.statusCode, gmSave.body).toBe(200);
+    expect(gmSave.json()).toMatchObject({
+      inventory: ["GM-issued lantern"],
+      revision: 2,
+    });
+
+    const ownerSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(ownerSnapshot.statusCode).toBe(200);
+    expect(ownerSnapshot.json().characters).toEqual([
+      expect.objectContaining({
+        id: ids.character,
+        inventory: ["GM-issued lantern"],
+        revision: 2,
+      }),
+    ]);
+    expect(ownerSnapshot.body).not.toContain("Private other inventory");
+
+    const gmSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(gmSnapshot.statusCode).toBe(200);
+    expect(gmSnapshot.json().characters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: ids.character,
+          inventory: ["GM-issued lantern"],
+        }),
+        expect.objectContaining({
+          id: otherCharacterId,
+          inventory: ["Private other inventory"],
+        }),
+      ]),
+    );
+  });
+
   it("normalizes legacy spirit formulas to willpower", async () => {
     const roll = await app.inject({
       method: "POST",
