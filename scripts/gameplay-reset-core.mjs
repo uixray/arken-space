@@ -6,6 +6,7 @@ export function assertVerifiedRehearsal(report, snapshotId) {
   const required = [
     "database-dump-checksum",
     "media-checksums",
+    "database-migration-ledger",
     "database-counts",
     "restored-application-health",
     "compose-cleanup",

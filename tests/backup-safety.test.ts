@@ -5,7 +5,12 @@ import {
   assertIsolatedComposeConfig,
   buildDatabaseCountsQuery,
   compareDatabaseCounts,
+  compareMigrationLedger,
+  compareMigrationLedgerPrefix,
+  describeDatabaseCountCoverage,
   parseDatabaseCounts,
+  parseMigrationLedger,
+  readExpectedMigrationLedger,
   resolveRestoredPath,
   selectResticSnapshot,
   validateRestoreProjectName,
@@ -69,7 +74,7 @@ describe("backup and restore safety", () => {
     expect(() => parseDatabaseCounts("campaigns|-1")).toThrow(/Invalid/);
   });
 
-  it("queries exactly the tables recorded by a pre-upgrade backup", () => {
+  it("labels pre-upgrade manifests as sampled coverage", () => {
     const oldManifest = parseDatabaseCounts(
       "assets|2\naudio_states|1\ncampaigns|1\ncharacters|6\n" +
         "chat_messages|12\nfog_reveals|3\ngame_events|20\ninvites|0\n" +
@@ -82,6 +87,101 @@ describe("backup and restore safety", () => {
     expect(query).not.toContain("FROM catalog_entries");
     expect(query).not.toContain("FROM token_definitions");
     expect(query).toMatch(/ORDER BY 1;\n$/);
+    expect(describeDatabaseCountCoverage(oldManifest)).toMatchObject({
+      mode: "sampled",
+      countedTables: 12,
+      knownPersistedTables: 40,
+    });
+  });
+
+  it("fully counts every current persisted Drizzle feature table", () => {
+    const schema = readFileSync(
+      path.join(root, "packages", "db", "src", "schema.ts"),
+      "utf8",
+    );
+    const persistedTables = [...schema.matchAll(/pgTable\(\s*"([^"]+)"/g)]
+      .map((match) => match[1])
+      .sort();
+    const countsSql = readFileSync(
+      path.join(root, "infra", "backup", "database-counts.sql"),
+      "utf8",
+    );
+    const countedTables = [...countsSql.matchAll(/^\s+\('([^']+)'\),?$/gm)]
+      .map((match) => match[1])
+      .sort();
+    const syntheticCounts = Object.fromEntries(
+      countedTables.map((table) => [table, 0]),
+    );
+
+    expect(countedTables).toEqual(persistedTables);
+    expect(describeDatabaseCountCoverage(syntheticCounts)).toEqual({
+      mode: "full",
+      countedTables: 40,
+      knownPersistedTables: 40,
+      missingTables: [],
+    });
+  });
+
+  it("verifies all migration identities from 0000 through 0021", () => {
+    const migrationsDirectory = path.join(root, "packages", "db", "drizzle");
+    const expected = readExpectedMigrationLedger({
+      journalPath: path.join(migrationsDirectory, "meta", "_journal.json"),
+      migrationsDirectory,
+    });
+    const databaseOutput = expected
+      .map((entry, index) => `${index + 1}|${entry.hash}|${entry.createdAt}`)
+      .join("\n");
+    const actual = parseMigrationLedger(databaseOutput);
+
+    expect(expected).toHaveLength(22);
+    expect(expected[0].tag).toBe("0000_nasty_emma_frost");
+    expect(expected.at(-1)?.tag).toBe("0021_story_posts");
+    expect(() => compareMigrationLedger(expected, actual)).not.toThrow();
+    expect(() =>
+      compareMigrationLedgerPrefix(expected, actual.slice(0, 16)),
+    ).not.toThrow();
+    expect(() =>
+      compareMigrationLedgerPrefix(expected, [
+        ...actual.slice(0, 15),
+        { ...actual[15], hash: "0".repeat(64) },
+      ]),
+    ).toThrow(/prefix differs at/);
+    expect(() =>
+      compareMigrationLedgerPrefix(expected, [
+        ...actual,
+        { ...actual.at(-1)!, id: actual.length + 1 },
+      ]),
+    ).toThrow(/exceeds checkout/);
+    expect(() =>
+      compareMigrationLedger(expected, [
+        ...actual.slice(0, -1),
+        { ...actual.at(-1)!, hash: "0".repeat(64) },
+      ]),
+    ).toThrow(/identity differs at 0021_story_posts/);
+  });
+
+  it("writes migration and coverage evidence without invoking restore in tests", () => {
+    const runner = readFileSync(
+      path.join(root, "scripts", "run-restore-rehearsal.mjs"),
+      "utf8",
+    );
+
+    expect(runner).toContain('record("database-migration-ledger", "passed"');
+    expect(runner).toContain('record("database-migration-prefix", "passed"');
+    expect(runner).toContain("report.databaseMigrations =");
+    expect(runner).toContain("report.databaseCountCoverage =");
+    expect(runner).toContain("compareMigrationLedger(");
+    expect(runner).toContain("compareMigrationLedgerPrefix(");
+  });
+
+  it("builds counts only for existing allowlisted tables", () => {
+    const countsSql = readFileSync(
+      path.join(root, "infra", "backup", "database-counts.sql"),
+      "utf8",
+    );
+    expect(countsSql).toContain("WHERE to_regclass(");
+    expect(countsSql).toContain("\\gexec");
+    expect(countsSql).not.toMatch(/^SELECT 'world_maps'.*FROM world_maps$/m);
   });
 
   it("rejects unknown manifest tables instead of interpolating them", () => {
@@ -327,6 +427,7 @@ it("requires an exact fully verified rehearsal before reset", () => {
   const names = [
     "database-dump-checksum",
     "media-checksums",
+    "database-migration-ledger",
     "database-counts",
     "restored-application-health",
     "compose-cleanup",
@@ -341,6 +442,17 @@ it("requires an exact fully verified rehearsal before reset", () => {
   expect(() =>
     assertVerifiedRehearsal({ ...report, steps: steps.slice(1) }, "snap-1"),
   ).toThrow(/Missing verified/);
+  expect(() =>
+    assertVerifiedRehearsal(
+      {
+        ...report,
+        steps: steps.filter(
+          (step) => step.name !== "database-migration-ledger",
+        ),
+      },
+      "snap-1",
+    ),
+  ).toThrow(/database-migration-ledger/);
 });
 it("keeps assets and GM membership outside the reset plan", () => {
   const sql = gameplayResetStatements("campaign", "gm")
@@ -374,6 +486,7 @@ describe("operator gameplay reset orchestration", () => {
   const names = [
     "database-dump-checksum",
     "media-checksums",
+    "database-migration-ledger",
     "database-counts",
     "restored-application-health",
     "compose-cleanup",

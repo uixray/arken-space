@@ -53,6 +53,7 @@ export default {
       steps: [
         "database-dump-checksum",
         "media-checksums",
+        "database-migration-ledger",
         "database-counts",
         "compose-cleanup",
         "resource-leak-check",

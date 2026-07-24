@@ -93,7 +93,7 @@ export function appendChatMessage(
   const messages = [...otherThreads, ...threadMessages].sort(
     (left, right) => left.sequence - right.sequence,
   );
-  const chatThreadStates = snapshot.chatThreadStates.map((state) =>
+  const chatThreadStates = (snapshot.chatThreadStates ?? []).map((state) =>
     state.threadId !== message.threadId
       ? state
       : {
@@ -118,7 +118,7 @@ export function reconcileChatRead(
   snapshot: GameSnapshot,
   cursor: ChatReadCursorDto,
 ) {
-  const chatThreadStates = snapshot.chatThreadStates.map((state) =>
+  const chatThreadStates = (snapshot.chatThreadStates ?? []).map((state) =>
     state.threadId === cursor.threadId
       ? {
           ...state,
@@ -134,7 +134,7 @@ export function reconcileChatRead(
       : state,
   );
   return chatThreadStates.every(
-    (state, index) => state === snapshot.chatThreadStates[index],
+    (state, index) => state === snapshot.chatThreadStates?.[index],
   )
     ? snapshot
     : { ...snapshot, chatThreadStates };
@@ -145,13 +145,13 @@ export function unreadCountForStream(
   stream: ChatStream,
 ) {
   return (
-    snapshot.chatThreadStates.find((state) => state.stream === stream)
+    snapshot.chatThreadStates?.find((state) => state.stream === stream)
       ?.unreadCount ?? 0
   );
 }
 
 export function threadForStream(snapshot: GameSnapshot, stream: ChatStream) {
   return (
-    snapshot.chatThreads.find((thread) => thread.stream === stream) ?? null
+    snapshot.chatThreads?.find((thread) => thread.stream === stream) ?? null
   );
 }

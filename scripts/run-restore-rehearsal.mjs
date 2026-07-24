@@ -22,7 +22,12 @@ import {
   assertIsolatedComposeConfig,
   buildDatabaseCountsQuery,
   compareDatabaseCounts,
+  compareMigrationLedger,
+  compareMigrationLedgerPrefix,
+  describeDatabaseCountCoverage,
   parseDatabaseCounts,
+  parseMigrationLedger,
+  readExpectedMigrationLedger,
   resolveRestoredPath,
   selectResticSnapshot,
   validateRestoreProjectName,
@@ -32,6 +37,11 @@ const gibibyte = 1024 ** 3;
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const composeFile = path.join(projectRoot, "docker-compose.restore.yml");
 const reportDirectory = path.join(projectRoot, "test-results", "restore");
+const migrationsDirectory = path.join(projectRoot, "packages", "db", "drizzle");
+const expectedMigrationLedger = readExpectedMigrationLedger({
+  journalPath: path.join(migrationsDirectory, "meta", "_journal.json"),
+  migrationsDirectory,
+});
 const productionHealthUrl =
   process.env.ARKEN_PRODUCTION_HEALTH_URL ??
   "https://arken.uixray.tech/healthz";
@@ -299,6 +309,31 @@ function readRestoredCounts(expectedCounts) {
   return parseDatabaseCounts(output);
 }
 
+function readRestoredMigrationLedger() {
+  const output = captureDocker(
+    [
+      ...composeBase(),
+      "exec",
+      "-T",
+      "postgres",
+      "psql",
+      "--username",
+      "arken",
+      "--dbname",
+      "arken",
+      "--no-align",
+      "--tuples-only",
+      "--field-separator=|",
+    ],
+    {
+      env: composeEnvironment(),
+      input:
+        'SELECT id::bigint, hash, created_at::bigint FROM drizzle."__drizzle_migrations" ORDER BY created_at, id;\n',
+    },
+  );
+  return parseMigrationLedger(output);
+}
+
 function inspectLeftovers() {
   const containers = captureDocker([
     "ps",
@@ -473,13 +508,25 @@ try {
   restoreDatabase(dumps[0]);
   record("postgresql-restore", "passed");
 
+  const restoredMigrationPrefix = readRestoredMigrationLedger();
+  compareMigrationLedgerPrefix(
+    expectedMigrationLedger,
+    restoredMigrationPrefix,
+  );
+  report.databaseMigrationPrefix = restoredMigrationPrefix;
+  record("database-migration-prefix", "passed", {
+    restoredCount: restoredMigrationPrefix.length,
+    checkoutCount: expectedMigrationLedger.length,
+  });
+
   const expectedCounts = parseDatabaseCounts(
     readFileSync(manifests.databaseCounts, "utf8"),
   );
   const restoredCounts = readRestoredCounts(expectedCounts);
   compareDatabaseCounts(expectedCounts, restoredCounts);
   report.databaseCounts = restoredCounts;
-  record("database-counts", "passed", restoredCounts);
+  report.databaseCountCoverage = describeDatabaseCountCoverage(restoredCounts);
+  record("database-counts", "passed", report.databaseCountCoverage);
 
   const serverUp = runDocker(
     [...composeBase(), "up", "--detach", "--build", "--wait", "server"],
@@ -488,6 +535,18 @@ try {
   if (serverUp !== 0)
     throw new Error("Isolated server startup exited " + serverUp);
   record("isolated-server", "passed");
+
+  const migratedLedger = readRestoredMigrationLedger();
+  compareMigrationLedger(expectedMigrationLedger, migratedLedger);
+  report.databaseMigrations = expectedMigrationLedger.map((entry, index) => ({
+    ...entry,
+    databaseId: migratedLedger[index].id,
+  }));
+  record("database-migration-ledger", "passed", {
+    count: report.databaseMigrations.length,
+    first: report.databaseMigrations[0].tag,
+    last: report.databaseMigrations.at(-1).tag,
+  });
 
   const healthScript =
     "fetch('http://127.0.0.1:4100/healthz')" +

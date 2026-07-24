@@ -7,6 +7,8 @@ import type {
 } from "@arken/contracts";
 import {
   directThreadLabel,
+  directThreads,
+  directUnreadCount,
   directThreadPeer,
   eligibleDirectRecipients,
   appendDirectMessageResponse,
@@ -42,6 +44,19 @@ describe("direct chat presentation", () => {
     expect(
       eligibleDirectRecipients(members, "a").map((item) => item.id),
     ).toEqual(["b", "gm"]);
+  });
+
+  it("treats legacy snapshots without direct chat projections as empty", () => {
+    const legacySnapshot = {
+      messages: [],
+      snapshotVersion: 4,
+    } as unknown as GameSnapshot;
+
+    expect(directThreads(legacySnapshot)).toEqual([]);
+    expect(directUnreadCount(legacySnapshot, thread.id)).toBe(0);
+    const result = upsertDirectThread(legacySnapshot, thread);
+    expect(result.chatThreads).toEqual([thread]);
+    expect(result.chatThreadStates).toHaveLength(1);
   });
 
   it("upserts a participant-scoped brand-new thread with initial unread state", () => {

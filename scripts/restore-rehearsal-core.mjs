@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const restoreProjectPattern = /^arken-restore-[a-z0-9][a-z0-9_-]*$/;
 
-const applicationCountTables = new Set([
+const applicationCountTableNames = [
   "action_journal",
   "assets",
   "audio_states",
@@ -10,19 +12,41 @@ const applicationCountTables = new Set([
   "catalog_entries",
   "character_catalog_entries",
   "characters",
+  "chat_attachment_uploads",
+  "chat_attachments",
   "chat_messages",
+  "chat_read_cursors",
+  "chat_threads",
   "drawings",
+  "feedback_attachments",
+  "feedback_reports",
   "fog_reveals",
   "game_events",
+  "gm_access_credentials",
   "invites",
   "memberships",
   "player_access_grants",
+  "player_likeness_consents",
   "scenes",
   "sessions",
+  "sticker_media",
+  "sticker_pack_entitlements",
+  "sticker_packs",
+  "stickers",
+  "story_import_batches",
+  "story_import_sources",
+  "story_post_media",
+  "story_post_revisions",
+  "story_posts",
   "token_controllers",
   "token_definitions",
   "tokens",
-]);
+  "world_map_location_scenes",
+  "world_map_locations",
+  "world_map_party_position",
+  "world_maps",
+];
+const applicationCountTables = new Set(applicationCountTableNames);
 
 function environmentObject(value) {
   if (!value) return {};
@@ -91,15 +115,29 @@ export function compareDatabaseCounts(expected, actual) {
     );
 }
 
-export function buildDatabaseCountsQuery(expectedCounts) {
-  const tables = Object.keys(expectedCounts).sort();
-  if (tables.length === 0) throw new Error("Database count manifest is empty");
+export function describeDatabaseCountCoverage(counts) {
+  const tables = Object.keys(counts).sort();
   for (const table of tables) {
     if (!applicationCountTables.has(table))
       throw new Error(
         `Database count manifest contains unknown table: ${table}`,
       );
   }
+  const missingTables = applicationCountTableNames.filter(
+    (table) => !Object.hasOwn(counts, table),
+  );
+  return {
+    mode: missingTables.length === 0 ? "full" : "sampled",
+    countedTables: tables.length,
+    knownPersistedTables: applicationCountTableNames.length,
+    missingTables,
+  };
+}
+
+export function buildDatabaseCountsQuery(expectedCounts) {
+  const tables = Object.keys(expectedCounts).sort();
+  if (tables.length === 0) throw new Error("Database count manifest is empty");
+  describeDatabaseCountCoverage(expectedCounts);
   return (
     tables
       .map(
@@ -108,6 +146,101 @@ export function buildDatabaseCountsQuery(expectedCounts) {
       )
       .join("\n") + "\nORDER BY 1;\n"
   );
+}
+
+export function readExpectedMigrationLedger({
+  journalPath,
+  migrationsDirectory,
+}) {
+  const journal = JSON.parse(readFileSync(journalPath, "utf8"));
+  if (
+    journal?.dialect !== "postgresql" ||
+    !Array.isArray(journal.entries) ||
+    journal.entries.length === 0
+  )
+    throw new Error("Invalid PostgreSQL Drizzle migration journal");
+
+  return journal.entries.map((entry, index) => {
+    if (
+      entry?.idx !== index ||
+      !/^\d{4}_[a-z0-9_]+$/.test(entry?.tag ?? "") ||
+      !Number.isSafeInteger(entry?.when) ||
+      entry.when < 0
+    )
+      throw new Error(
+        `Invalid Drizzle migration journal entry at index ${index}`,
+      );
+    const sql = readFileSync(
+      path.join(migrationsDirectory, `${entry.tag}.sql`),
+      "utf8",
+    );
+    return {
+      index,
+      tag: entry.tag,
+      createdAt: entry.when,
+      hash: createHash("sha256").update(sql).digest("hex"),
+    };
+  });
+}
+
+export function parseMigrationLedger(value) {
+  const entries = [];
+  for (const rawLine of value.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const [idText, hash, createdAtText, extra] = line.split("|");
+    const id = Number(idText);
+    const createdAt = Number(createdAtText);
+    if (
+      extra !== undefined ||
+      !Number.isSafeInteger(id) ||
+      id < 1 ||
+      !/^[0-9a-f]{64}$/i.test(hash ?? "") ||
+      !Number.isSafeInteger(createdAt) ||
+      createdAt < 0
+    )
+      throw new Error("Invalid migration ledger line: " + line);
+    entries.push({ id, hash: hash.toLowerCase(), createdAt });
+  }
+  if (entries.length === 0)
+    throw new Error("Restored migration ledger is empty");
+  return entries;
+}
+
+export function compareMigrationLedger(expected, actual) {
+  if (expected.length !== actual.length)
+    throw new Error(
+      `Restored migration count differs from checkout: expected ${expected.length}, got ${actual.length}`,
+    );
+  for (let index = 0; index < expected.length; index += 1) {
+    const expectedEntry = expected[index];
+    const actualEntry = actual[index];
+    if (
+      expectedEntry.createdAt !== actualEntry.createdAt ||
+      expectedEntry.hash !== actualEntry.hash
+    )
+      throw new Error(
+        `Restored migration identity differs at ${expectedEntry.tag}`,
+      );
+  }
+}
+
+export function compareMigrationLedgerPrefix(expected, actual) {
+  if (actual.length > expected.length)
+    throw new Error(
+      `Restored migration count exceeds checkout: expected at most ${expected.length}, got ${actual.length}`,
+    );
+  for (let index = 0; index < actual.length; index += 1) {
+    const expectedEntry = expected[index];
+    const actualEntry = actual[index];
+    if (
+      expectedEntry.createdAt !== actualEntry.createdAt ||
+      expectedEntry.hash !== actualEntry.hash
+    )
+      throw new Error(
+        `Restored migration prefix differs at ${expectedEntry.tag}`,
+      );
+  }
 }
 
 export function selectResticSnapshot(

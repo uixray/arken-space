@@ -6,6 +6,8 @@ import {
   streamForMessage,
   nextChatStream,
   reconcileChatRead,
+  threadForStream,
+  unreadCountForStream,
 } from "./chat-state";
 
 describe("appendChatMessage", () => {
@@ -202,5 +204,15 @@ describe("appendChatMessage", () => {
     expect(nextChatStream("STORY", "Home")).toBe("TABLE");
     expect(nextChatStream("STORY", "End")).toBe("ROLLS");
     expect(nextChatStream("TABLE", "Enter")).toBeNull();
+  });
+
+  it("treats legacy snapshots without chat threads as having no stream thread", () => {
+    const legacySnapshot = {
+      ...snapshot,
+      chatThreads: undefined,
+    } as unknown as GameSnapshot;
+
+    expect(threadForStream(legacySnapshot, "TABLE")).toBeNull();
+    expect(unreadCountForStream(legacySnapshot, "TABLE")).toBe(0);
   });
 });

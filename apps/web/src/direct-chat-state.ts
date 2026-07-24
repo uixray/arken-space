@@ -8,7 +8,7 @@ import type {
 import { appendChatMessage } from "./chat-state";
 
 export function directThreads(snapshot: GameSnapshot) {
-  return snapshot.chatThreads.filter(
+  return (snapshot.chatThreads ?? []).filter(
     (thread): thread is DirectChatThreadDto => thread.type === "DIRECT",
   );
 }
@@ -58,7 +58,7 @@ export function messagesForDirectThread(
 
 export function directUnreadCount(snapshot: GameSnapshot, threadId: string) {
   return (
-    snapshot.chatThreadStates.find((state) => state.threadId === threadId)
+    snapshot.chatThreadStates?.find((state) => state.threadId === threadId)
       ?.unreadCount ?? 0
   );
 }
@@ -68,20 +68,20 @@ export function upsertDirectThread(
   thread: DirectChatThreadDto,
   initialState?: ChatThreadStateDto,
 ) {
-  const found = snapshot.chatThreads.some((item) => item.id === thread.id);
-  const stateFound = snapshot.chatThreadStates.some(
+  const chatThreads = snapshot.chatThreads ?? [];
+  const chatThreadStates = snapshot.chatThreadStates ?? [];
+  const found = chatThreads.some((item) => item.id === thread.id);
+  const stateFound = chatThreadStates.some(
     (state) => state.threadId === thread.id,
   );
   if (found && stateFound) return snapshot;
   return {
     ...snapshot,
-    chatThreads: found
-      ? snapshot.chatThreads
-      : [...snapshot.chatThreads, thread],
+    chatThreads: found ? chatThreads : [...chatThreads, thread],
     chatThreadStates: stateFound
-      ? snapshot.chatThreadStates
+      ? chatThreadStates
       : [
-          ...snapshot.chatThreadStates,
+          ...chatThreadStates,
           initialState ?? {
             threadId: thread.id,
             stream: null,
