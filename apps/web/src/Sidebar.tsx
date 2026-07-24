@@ -19,6 +19,8 @@ import type {
   MessageVisibility,
   PlayerAccessDto,
   PlayerAccessSecretDto,
+  StoryPostAdminDto,
+  StoryPostDto,
   WorldMapDto,
   WorldMapLocationDto,
   WorldMapScope,
@@ -55,6 +57,7 @@ import {
   SkillChatCard,
 } from "./SkillCards";
 import { StickerPicker } from "./StickerPicker";
+import { StoryChannel, type StoryDraftInput } from "./StoryChannel";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import {
   CHAT_STREAM_LABEL,
@@ -139,6 +142,14 @@ type Props = {
     stickerId: string,
   ) => Promise<void>;
   onUploadChatAttachment: (file: File) => Promise<ChatAttachmentMetadata>;
+  storyPosts: Array<StoryPostDto | StoryPostAdminDto>;
+  onCreateStoryDraft: (input: StoryDraftInput) => Promise<void>;
+  onPublishStoryPost: (post: StoryPostAdminDto) => Promise<void>;
+  onUpdateStoryPost: (
+    post: StoryPostAdminDto,
+    input: StoryDraftInput,
+  ) => Promise<void>;
+  onArchiveStoryPost: (post: StoryPostAdminDto) => Promise<void>;
   onMarkChatRead: (threadId: string, sequence: number) => Promise<void>;
   onActiveChatThreadChange: (threadId: string | null) => void;
   onRoll: (
@@ -441,6 +452,21 @@ export function Sidebar(props: Props) {
             onSticker={props.onSticker}
             onUploadAttachment={props.onUploadChatAttachment}
             onMarkChatRead={props.onMarkChatRead}
+          />
+        ) : activeStream === "STORY" ? (
+          <StoryChannel
+            posts={props.storyPosts}
+            legacyMessages={messagesForStream(
+              props.snapshot.messages,
+              "STORY",
+              props.snapshot.chatThreads,
+            )}
+            isGm={isGm}
+            onCreateDraft={isGm ? props.onCreateStoryDraft : undefined}
+            onPublish={isGm ? props.onPublishStoryPost : undefined}
+            onUpdate={isGm ? props.onUpdateStoryPost : undefined}
+            onArchive={isGm ? props.onArchiveStoryPost : undefined}
+            onUploadImage={isGm ? props.onUploadChatAttachment : undefined}
           />
         ) : (
           <ChatPanel

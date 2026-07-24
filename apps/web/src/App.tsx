@@ -13,11 +13,14 @@ import type {
   GameSnapshot,
   MapPing,
   MessageVisibility,
+  StoryPostAdminDto,
+  StoryPostDto,
 } from "@arken/contracts";
 import { api, ApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
+import type { StoryDraftInput } from "./StoryChannel";
 import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
 import { appendChatMessage, reconcileChatRead } from "./chat-state";
@@ -281,6 +284,9 @@ function GridSettings({
 
 export function App() {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
+  const [storyPosts, setStoryPosts] = useState<
+    Array<StoryPostDto | StoryPostAdminDto>
+  >([]);
   const [authRequired, setAuthRequired] = useState(false);
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [presence, setPresence] = useState<
@@ -385,6 +391,14 @@ export function App() {
       knownChatMessageIdsRef.current.add(message.id);
   }, [snapshot]);
 
+  const loadStoryPosts = useCallback(async () => {
+    const page = await api<{
+      posts: Array<StoryPostDto | StoryPostAdminDto>;
+      nextCursor: number | null;
+    }>("/api/story/posts?limit=50");
+    setStoryPosts(page.posts);
+  }, []);
+
   const load = useCallback(async () => {
     try {
       setError("");
@@ -406,6 +420,19 @@ export function App() {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (!campaignId) {
+      setStoryPosts([]);
+      return;
+    }
+    void loadStoryPosts().catch((reason) =>
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0441\u044e\u0436\u0435\u0442\u043d\u044b\u0439 \u043a\u0430\u043d\u0430\u043b",
+      ),
+    );
+  }, [campaignId, loadStoryPosts]);
   useEffect(() => {
     if (!campaignId) return;
     const onError = (event: ErrorEvent) =>
@@ -540,6 +567,9 @@ export function App() {
         ),
       ),
     );
+    next.on("story:changed", () => {
+      void loadStoryPosts().catch(() => undefined);
+    });
     next.on("chat:thread_created", ({ thread, state }) => {
       setSnapshot((current) =>
         current ? upsertDirectThread(current, thread, state) : current,
@@ -604,7 +634,7 @@ export function App() {
       next.disconnect();
       setSocket(null);
     };
-  }, [authRequired, campaignId]);
+  }, [authRequired, campaignId, loadStoryPosts]);
 
   const run = async (action: () => Promise<unknown>, refresh = false) => {
     try {
@@ -1838,6 +1868,48 @@ export function App() {
               ).then(() => undefined)
             }
             onPatchCharacter={patchCharacter}
+            storyPosts={storyPosts}
+            onCreateStoryDraft={async (input: StoryDraftInput) => {
+              await api("/api/story/posts", {
+                method: "POST",
+                body: JSON.stringify({
+                  ...input,
+                  actionId: crypto.randomUUID(),
+                }),
+              });
+              await loadStoryPosts();
+            }}
+            onUpdateStoryPost={async (post, input) => {
+              await api(`/api/story/posts/${post.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  ...input,
+                  actionId: crypto.randomUUID(),
+                  revision: post.revision,
+                }),
+              });
+              await loadStoryPosts();
+            }}
+            onPublishStoryPost={async (post) => {
+              await api(`/api/story/posts/${post.id}/publish`, {
+                method: "POST",
+                body: JSON.stringify({
+                  actionId: crypto.randomUUID(),
+                  revision: post.revision,
+                }),
+              });
+              await loadStoryPosts();
+            }}
+            onArchiveStoryPost={async (post) => {
+              await api(`/api/story/posts/${post.id}/archive`, {
+                method: "POST",
+                body: JSON.stringify({
+                  actionId: crypto.randomUUID(),
+                  revision: post.revision,
+                }),
+              });
+              await loadStoryPosts();
+            }}
             onChat={async (body, visibility, stream) =>
               run(() =>
                 api("/api/chat", {

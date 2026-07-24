@@ -40,7 +40,8 @@ beforeAll(async () => {
       !file.startsWith("0017_") &&
       !file.startsWith("0018_") &&
       !file.startsWith("0019_") &&
-      !file.startsWith("0020_"),
+      !file.startsWith("0020_") &&
+      !file.startsWith("0021_"),
   )) {
     const sql = (
       await readFile(new URL(file, migrationsUrl), "utf8")
@@ -60,6 +61,7 @@ beforeAll(async () => {
     "0018_direct_chat.sql",
     "0019_sticker_packs.sql",
     "0020_world_maps.sql",
+    "0021_story_posts.sql",
   ]) {
     const chatThreadsMigration = (
       await readFile(new URL(file, migrationsUrl), "utf8")

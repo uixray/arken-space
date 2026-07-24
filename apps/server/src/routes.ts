@@ -106,6 +106,7 @@ import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
+import { registerStoryRoutes } from "./story.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -477,6 +478,7 @@ export function registerRoutes(
   registerWorldMapRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
+  registerStoryRoutes(app, db, io);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {

@@ -49,6 +49,26 @@ export const stickerProvenanceTypeSchema = z.enum([
   "COMMISSIONED",
   "IMPORTED",
 ]);
+export const storyPostLifecycleSchema = z.enum([
+  "DRAFT",
+  "PUBLISHED",
+  "CORRECTED",
+  "ARCHIVED",
+]);
+/** Rights are verified by the GM during the review-first import workflow. */
+export const storyRightsStatusSchema = z.enum([
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+export const storyEntityLinkKindSchema = z.enum([
+  "WORLD_MAP",
+  "LOCATION",
+  "SCENE",
+  "CHRONICLE",
+]);
+export const storyImportProviderSchema = z.literal("TELEGRAM");
+
 export const worldMapLifecycleSchema = z.enum([
   "DRAFT",
   "PUBLISHED",
@@ -80,6 +100,10 @@ export type StickerPackSubject = z.infer<typeof stickerPackSubjectSchema>;
 export type StickerPackAudience = z.infer<typeof stickerPackAudienceSchema>;
 export type StickerPackSendPolicy = z.infer<typeof stickerPackSendPolicySchema>;
 export type StickerPackLifecycle = z.infer<typeof stickerPackLifecycleSchema>;
+export type StoryPostLifecycle = z.infer<typeof storyPostLifecycleSchema>;
+export type StoryRightsStatus = z.infer<typeof storyRightsStatusSchema>;
+export type StoryEntityLinkKind = z.infer<typeof storyEntityLinkKindSchema>;
+export type StoryImportProvider = z.infer<typeof storyImportProviderSchema>;
 export type WorldMapLifecycle = z.infer<typeof worldMapLifecycleSchema>;
 export type WorldMapVisibility = z.infer<typeof worldMapVisibilitySchema>;
 export type WorldMapScope = z.infer<typeof worldMapScopeSchema>;
@@ -538,6 +562,237 @@ export const characterCommandSchema = characterUpdateSchema.extend({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative().optional(),
 });
+
+/** Entity references are IDs only; labels are resolved server-side and never trusted from a client. */
+export const storyEntityLinkSchema = z
+  .object({
+    kind: storyEntityLinkKindSchema,
+    entityId: z.string().uuid(),
+  })
+  .strict();
+export type StoryEntityLink = z.infer<typeof storyEntityLinkSchema>;
+
+export const storyPostMediaInputSchema = z
+  .object({
+    contentId: z.string().uuid(),
+    order: z.number().int().min(0).max(99),
+    altText: z.string().trim().min(1).max(240),
+    caption: z.string().trim().max(2000).default(""),
+  })
+  .strict();
+export type StoryPostMediaInput = z.infer<typeof storyPostMediaInputSchema>;
+
+const storyPostContentSchema = z
+  .object({
+    title: z.string().trim().max(160).default(""),
+    body: z.string().trim().max(20000).default(""),
+    entityLinks: z.array(storyEntityLinkSchema).max(20).default([]),
+    media: z.array(storyPostMediaInputSchema).max(10).default([]),
+  })
+  .strict()
+  .superRefine((post, context) => {
+    if (!post.body && !post.media.length)
+      context.addIssue({
+        code: "custom",
+        message: "Story post requires body or media",
+        path: ["body"],
+      });
+    const mediaOrder = new Set<number>();
+    for (const [index, media] of post.media.entries()) {
+      if (mediaOrder.has(media.order))
+        context.addIssue({
+          code: "custom",
+          message: "Story media order must be unique",
+          path: ["media", index, "order"],
+        });
+      mediaOrder.add(media.order);
+    }
+    const links = new Set<string>();
+    for (const [index, link] of post.entityLinks.entries()) {
+      const key = `${link.kind}:${link.entityId}`;
+      if (links.has(key))
+        context.addIssue({
+          code: "custom",
+          message: "Duplicate story entity link",
+          path: ["entityLinks", index],
+        });
+      links.add(key);
+    }
+  });
+
+/** GM-only. New posts are drafts; publication is a separate, reviewable transition. */
+export const createStoryPostSchema = storyPostContentSchema.extend({
+  actionId: actionIdSchema,
+  gmNotes: z.string().max(10000).default(""),
+});
+export type CreateStoryPost = z.infer<typeof createStoryPostSchema>;
+
+/** GM-only CAS patch. Supplying content replaces the current revision as one atomic snapshot. */
+export const updateStoryPostSchema = z
+  .object({
+    actionId: actionIdSchema,
+    postId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    title: z.string().trim().max(160).optional(),
+    body: z.string().trim().max(20000).optional(),
+    entityLinks: z.array(storyEntityLinkSchema).max(20).optional(),
+    media: z.array(storyPostMediaInputSchema).max(10).optional(),
+    gmNotes: z.string().max(10000).optional(),
+  })
+  .strict()
+  .refine(
+    (command) =>
+      command.title !== undefined ||
+      command.body !== undefined ||
+      command.entityLinks !== undefined ||
+      command.media !== undefined ||
+      command.gmNotes !== undefined,
+    "At least one story post field is required",
+  );
+export type UpdateStoryPost = z.infer<typeof updateStoryPostSchema>;
+
+export const storyPostTransitionSchema = z
+  .object({
+    actionId: actionIdSchema,
+    postId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type StoryPostTransition = z.infer<typeof storyPostTransitionSchema>;
+
+/** A Telegram export is input data, never a URL for the server to fetch or scrape. */
+export const telegramStoryImportRecordSchema = z
+  .object({
+    sourceMessageId: z.string().trim().min(1).max(128),
+    sourceAuthor: z.string().trim().min(1).max(200),
+    sourceTimestamp: z.string().datetime(),
+    sourceUrl: z.string().trim().min(1).max(2048).optional(),
+    body: z.string().max(20000).default(""),
+    media: z
+      .array(
+        z
+          .object({
+            sourceMediaId: z.string().trim().min(1).max(200),
+            sourceUrl: z.string().trim().min(1).max(2048).optional(),
+            caption: z.string().trim().max(2000).default(""),
+            order: z.number().int().min(0).max(99),
+          })
+          .strict(),
+      )
+      .max(10)
+      .default([]),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (!record.body.trim() && !record.media.length)
+      context.addIssue({
+        code: "custom",
+        message: "Imported story record requires body or media",
+        path: ["body"],
+      });
+    const mediaOrder = new Set<number>();
+    for (const [index, media] of record.media.entries()) {
+      if (mediaOrder.has(media.order))
+        context.addIssue({
+          code: "custom",
+          message: "Imported media order must be unique",
+          path: ["media", index, "order"],
+        });
+      mediaOrder.add(media.order);
+    }
+  });
+
+/** GM-only dry-run; a small user-approved export is required and no network fetch occurs. */
+export const dryRunTelegramStoryImportSchema = z
+  .object({
+    actionId: actionIdSchema,
+    records: z.array(telegramStoryImportRecordSchema).min(1).max(25),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    const ids = new Set<string>();
+    for (const [index, record] of input.records.entries()) {
+      if (ids.has(record.sourceMessageId))
+        context.addIssue({
+          code: "custom",
+          message: "Duplicate source message ID in import batch",
+          path: ["records", index, "sourceMessageId"],
+        });
+      ids.add(record.sourceMessageId);
+    }
+  });
+export type DryRunTelegramStoryImport = z.infer<
+  typeof dryRunTelegramStoryImportSchema
+>;
+
+export const commitTelegramStoryImportSchema = z
+  .object({
+    actionId: actionIdSchema,
+    importBatchId: z.string().uuid(),
+    /** Re-submit the reviewed local export; the server never fetches Telegram. */
+    records: z.array(telegramStoryImportRecordSchema).min(1).max(25),
+    /** Explicit per-source rights decisions. Approval is required before publication, never at import. */
+    rights: z
+      .array(
+        z
+          .object({
+            sourceMessageId: z.string().trim().min(1).max(128),
+            status: storyRightsStatusSchema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(25),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    const sourceMessageIds = new Set<string>();
+    for (const [index, record] of input.records.entries()) {
+      if (sourceMessageIds.has(record.sourceMessageId))
+        context.addIssue({
+          code: "custom",
+          message: "Duplicate source message ID in import batch",
+          path: ["records", index, "sourceMessageId"],
+        });
+      sourceMessageIds.add(record.sourceMessageId);
+    }
+    const rightsIds = new Set<string>();
+    for (const [index, right] of input.rights.entries()) {
+      if (rightsIds.has(right.sourceMessageId))
+        context.addIssue({
+          code: "custom",
+          message: "Duplicate source message ID in rights decisions",
+          path: ["rights", index, "sourceMessageId"],
+        });
+      if (!sourceMessageIds.has(right.sourceMessageId))
+        context.addIssue({
+          code: "custom",
+          message: "Rights decision has no matching import record",
+          path: ["rights", index, "sourceMessageId"],
+        });
+      rightsIds.add(right.sourceMessageId);
+    }
+    for (const [index, record] of input.records.entries()) {
+      if (!rightsIds.has(record.sourceMessageId))
+        context.addIssue({
+          code: "custom",
+          message: "Import record requires a rights decision",
+          path: ["records", index, "sourceMessageId"],
+        });
+    }
+  });
+export type CommitTelegramStoryImport = z.infer<
+  typeof commitTelegramStoryImportSchema
+>;
+
+export const listStoryPostsSchema = z
+  .object({
+    /** Opaque {updatedAt,id} cursor, encoded by the server. */
+    cursor: z.string().min(1).max(256).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+  })
+  .strict();
+export type ListStoryPosts = z.infer<typeof listStoryPostsSchema>;
 
 export const chatAttachmentContentIdSchema = z.string().uuid();
 export const chatAttachmentMetadataSchema = z
@@ -1109,6 +1364,64 @@ export interface StickerPackDto {
   stickers: StickerDto[];
 }
 
+/** Player-safe current projection. It deliberately omits gmNotes and import provenance. */
+export interface StoryPostDto {
+  id: string;
+  threadId: string;
+  authorMembershipId: string;
+  title: string;
+  body: string;
+  lifecycle: Exclude<StoryPostLifecycle, "DRAFT" | "ARCHIVED">;
+  revision: number;
+  entityLinks: StoryEntityLink[];
+  media: Array<
+    StoryPostMediaInput & {
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      width: number | null;
+      height: number | null;
+      createdAt: string;
+    }
+  >;
+  publishedAt: string;
+  correctedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GM-only editing projection. Do not reuse it in player snapshots or realtime events. */
+export interface StoryPostAdminDto extends Omit<
+  StoryPostDto,
+  "lifecycle" | "publishedAt"
+> {
+  lifecycle: StoryPostLifecycle;
+  publishedAt: string | null;
+  archivedAt: string | null;
+  gmNotes: string;
+  importProvenance?: {
+    provider: StoryImportProvider;
+    sourceMessageId: string;
+    sourceAuthor: string;
+    sourceTimestamp: string;
+    sourceUrl: string | null;
+    rightsStatus: StoryRightsStatus;
+  } | null;
+}
+
+export interface StoryImportDryRunItemDto {
+  sourceMessageId: string;
+  action: "CREATE_DRAFT" | "ALREADY_IMPORTED";
+  existingPostId: string | null;
+  rightsStatus: StoryRightsStatus | null;
+}
+
+export interface StoryImportDryRunDto {
+  importBatchId: string;
+  provider: StoryImportProvider;
+  items: StoryImportDryRunItemDto[];
+}
+
 export interface ChatMessageDto {
   id: string;
   sequence: number;
@@ -1292,6 +1605,11 @@ export interface MapPing {
   createdAt: string;
 }
 
+export interface StoryChangedEvent {
+  campaignId: string;
+  postId: string | null;
+}
+
 export interface ServerToClientEvents {
   "game:snapshot": (snapshot: GameSnapshot) => void;
   "presence:updated": (
@@ -1305,6 +1623,7 @@ export interface ServerToClientEvents {
     event: EventEnvelope<{ fogRevealId: string; sceneId: string }>,
   ) => void;
   "chat:created": (event: EventEnvelope<ChatMessageDto>) => void;
+  "story:changed": (event: StoryChangedEvent) => void;
   "chat:thread_created": (event: {
     thread: DirectChatThreadDto;
     state: ChatThreadStateDto;

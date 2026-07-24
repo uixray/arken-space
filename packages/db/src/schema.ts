@@ -107,6 +107,20 @@ export const chatAttachmentUploadStatusEnum = pgEnum(
   "chat_attachment_upload_status",
   ["STAGED", "CLAIMED", "EXPIRED"],
 );
+export const storyPostLifecycleEnum = pgEnum("story_post_lifecycle", [
+  "DRAFT",
+  "PUBLISHED",
+  "CORRECTED",
+  "ARCHIVED",
+]);
+export const storyRightsStatusEnum = pgEnum("story_rights_status", [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+export const storyImportProviderEnum = pgEnum("story_import_provider", [
+  "TELEGRAM",
+]);
 export const tokenLayerEnum = pgEnum("token_layer", ["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindEnum = pgEnum("catalog_entry_kind", [
   "SKILL",
@@ -1222,6 +1236,259 @@ export const chatAttachments = pgTable(
         chatMessages.id,
       ],
     }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * Canonical STORY content. It is deliberately independent of generic chat
+ * messages so draft/edit/archive lifecycle and player-safe projection do not
+ * widen the chat authorization boundary.
+ */
+export const storyPosts = pgTable(
+  "story_posts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    threadId: uuid("thread_id").notNull(),
+    authorMembershipId: uuid("author_membership_id").notNull(),
+    title: text("title").notNull().default(""),
+    body: text("body").notNull().default(""),
+    /** GM-only editorial context; never project this to a player. */
+    gmNotes: text("gm_notes").notNull().default(""),
+    entityLinks: jsonb("entity_links").$type<unknown>().notNull().default([]),
+    lifecycle: storyPostLifecycleEnum("lifecycle").notNull().default("DRAFT"),
+    /** Drafts/archives are GM-only; published/corrected posts are PUBLIC. */
+    visibility: messageVisibilityEnum("visibility")
+      .notNull()
+      .default("GM_ONLY"),
+    revision: integer("revision").notNull().default(0),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    correctedAt: timestamp("corrected_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("story_posts_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    index("story_posts_campaign_visibility_updated_idx").on(
+      table.campaignId,
+      table.visibility,
+      table.updatedAt,
+      table.id,
+    ),
+    foreignKey({
+      name: "story_posts_campaign_thread_fk",
+      columns: [table.campaignId, table.threadId],
+      foreignColumns: [chatThreads.campaignId, chatThreads.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "story_posts_campaign_author_fk",
+      columns: [table.campaignId, table.authorMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "story_posts_shape_check",
+      sql`length(trim(${table.title})) <= 160 AND length(${table.body}) <= 20000 AND length(${table.gmNotes}) <= 10000 AND ${table.revision} >= 0 AND ((${table.lifecycle}::text = 'DRAFT' AND ${table.visibility}::text = 'GM_ONLY' AND ${table.publishedAt} IS NULL AND ${table.archivedAt} IS NULL) OR (${table.lifecycle}::text IN ('PUBLISHED','CORRECTED') AND ${table.visibility}::text = 'PUBLIC' AND ${table.publishedAt} IS NOT NULL AND ${table.archivedAt} IS NULL) OR (${table.lifecycle}::text = 'ARCHIVED' AND ${table.visibility}::text = 'GM_ONLY' AND ${table.archivedAt} IS NOT NULL)))`,
+    ),
+  ],
+);
+
+/** Immutable snapshots make corrections auditable and preserve prior media references. */
+export const storyPostRevisions = pgTable(
+  "story_post_revisions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    postId: uuid("post_id").notNull(),
+    revision: integer("revision").notNull(),
+    lifecycle: storyPostLifecycleEnum("lifecycle").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    gmNotes: text("gm_notes").notNull(),
+    entityLinks: jsonb("entity_links").$type<unknown>().notNull().default([]),
+    changedByMembershipId: uuid("changed_by_membership_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("story_post_revisions_campaign_post_revision_idx").on(
+      table.campaignId,
+      table.postId,
+      table.revision,
+    ),
+    foreignKey({
+      name: "story_post_revisions_campaign_post_fk",
+      columns: [table.campaignId, table.postId],
+      foreignColumns: [storyPosts.campaignId, storyPosts.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "story_post_revisions_campaign_changer_fk",
+      columns: [table.campaignId, table.changedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "story_post_revisions_shape_check",
+      sql`${table.revision} >= 0 AND length(trim(${table.title})) <= 160 AND length(${table.body}) <= 20000 AND length(${table.gmNotes}) <= 10000`,
+    ),
+  ],
+);
+
+/** Media rows are revision-scoped: a correction may add/remove media without mutating earlier snapshots. */
+export const storyPostMedia = pgTable(
+  "story_post_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    postId: uuid("post_id").notNull(),
+    revision: integer("revision").notNull(),
+    contentId: uuid("content_id").notNull(),
+    sortOrder: integer("sort_order").notNull(),
+    altText: text("alt_text").notNull(),
+    caption: text("caption").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("story_post_media_post_revision_order_idx").on(
+      table.postId,
+      table.revision,
+      table.sortOrder,
+    ),
+    uniqueIndex("story_post_media_post_revision_content_idx").on(
+      table.postId,
+      table.revision,
+      table.contentId,
+    ),
+    index("story_post_media_campaign_content_idx").on(
+      table.campaignId,
+      table.contentId,
+    ),
+    foreignKey({
+      name: "story_post_media_campaign_revision_fk",
+      columns: [table.campaignId, table.postId, table.revision],
+      foreignColumns: [
+        storyPostRevisions.campaignId,
+        storyPostRevisions.postId,
+        storyPostRevisions.revision,
+      ],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "story_post_media_campaign_upload_fk",
+      columns: [table.campaignId, table.contentId],
+      foreignColumns: [
+        chatAttachmentUploads.campaignId,
+        chatAttachmentUploads.contentId,
+      ],
+    }).onDelete("restrict"),
+    check(
+      "story_post_media_shape_check",
+      sql`${table.sortOrder} BETWEEN 0 AND 99 AND length(trim(${table.altText})) BETWEEN 1 AND 240 AND length(${table.caption}) <= 2000`,
+    ),
+  ],
+);
+
+/** A short-lived, GM-owned dry-run that binds a reviewed local export to commit. */
+export const storyImportBatches = pgTable(
+  "story_import_batches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    createdByMembershipId: uuid("created_by_membership_id").notNull(),
+    recordFingerprint: text("record_fingerprint").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("story_import_batches_campaign_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    index("story_import_batches_expiry_idx").on(
+      table.campaignId,
+      table.expiresAt,
+    ),
+    foreignKey({
+      name: "story_import_batches_campaign_creator_fk",
+      columns: [table.campaignId, table.createdByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "story_import_batches_fingerprint_check",
+      sql`length(${table.recordFingerprint}) = 64`,
+    ),
+  ],
+);
+/** GM-only provenance and review state for idempotent, export-driven imports. */
+export const storyImportSources = pgTable(
+  "story_import_sources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    postId: uuid("post_id").notNull(),
+    provider: storyImportProviderEnum("provider").notNull(),
+    sourceMessageId: text("source_message_id").notNull(),
+    sourceAuthor: text("source_author").notNull(),
+    sourceTimestamp: timestamp("source_timestamp", {
+      withTimezone: true,
+    }).notNull(),
+    sourceUrl: text("source_url"),
+    /** Original import payload, including source media ordering; never player-projected. */
+    sourcePayload: jsonb("source_payload")
+      .$type<unknown>()
+      .notNull()
+      .default({}),
+    rightsStatus: storyRightsStatusEnum("rights_status")
+      .notNull()
+      .default("PENDING"),
+    importBatchId: uuid("import_batch_id").notNull(),
+    importedByMembershipId: uuid("imported_by_membership_id").notNull(),
+    importedAt: timestamp("imported_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("story_import_sources_campaign_provider_message_idx").on(
+      table.campaignId,
+      table.provider,
+      table.sourceMessageId,
+    ),
+    index("story_import_sources_campaign_batch_idx").on(
+      table.campaignId,
+      table.importBatchId,
+    ),
+    foreignKey({
+      name: "story_import_sources_campaign_post_fk",
+      columns: [table.campaignId, table.postId],
+      foreignColumns: [storyPosts.campaignId, storyPosts.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "story_import_sources_campaign_importer_fk",
+      columns: [table.campaignId, table.importedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "story_import_sources_campaign_batch_fk",
+      columns: [table.campaignId, table.importBatchId],
+      foreignColumns: [storyImportBatches.campaignId, storyImportBatches.id],
+    }).onDelete("restrict"),
+    check(
+      "story_import_sources_shape_check",
+      sql`length(trim(${table.sourceMessageId})) BETWEEN 1 AND 128 AND length(trim(${table.sourceAuthor})) BETWEEN 1 AND 200 AND length(coalesce(${table.sourceUrl}, '')) <= 2048`,
+    ),
   ],
 );
 
