@@ -47,7 +47,9 @@ Implementation and verification complete; awaiting commit/publication decision.
 - Production build: PASS (existing bundle-size warning only).
 - Full Vitest: 57 files / 296 tests PASS.
 - STORY contract/server integration subset: 17/17 PASS.
-- Chromium STORY QA: 2/2 PASS at 960 px.
+- Chromium STORY QA: 3/3 PASS at 960 px (lifecycle, player safety, pagination/read cursor/ARIA).
+- Final review P1 fixes: load-more pagination, legacy STORY read cursor and tabpanel ARIA.
+- Sequential affected Vitest rerun: 4 files / 25 tests PASS.
 - `git diff --check`: PASS.
 - No `ts-nocheck` suppression remains.
 

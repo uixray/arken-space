@@ -287,6 +287,7 @@ export function App() {
   const [storyPosts, setStoryPosts] = useState<
     Array<StoryPostDto | StoryPostAdminDto>
   >([]);
+  const [storyNextCursor, setStoryNextCursor] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [presence, setPresence] = useState<
@@ -391,13 +392,24 @@ export function App() {
       knownChatMessageIdsRef.current.add(message.id);
   }, [snapshot]);
 
-  const loadStoryPosts = useCallback(async () => {
-    const page = await api<{
-      posts: Array<StoryPostDto | StoryPostAdminDto>;
-      nextCursor: number | null;
-    }>("/api/story/posts?limit=50");
-    setStoryPosts(page.posts);
-  }, []);
+  const loadStoryPosts = useCallback(
+    async (cursor?: string) => {
+      const query = new URLSearchParams({ limit: "50" });
+      if (cursor) query.set("cursor", cursor);
+      const page = await api<{
+        posts: Array<StoryPostDto | StoryPostAdminDto>;
+        nextCursor: string | null;
+      }>(`/api/story/posts?${query.toString()}`);
+      setStoryPosts((current) => {
+        if (!cursor) return page.posts;
+        const byId = new Map(current.map((post) => [post.id, post]));
+        for (const post of page.posts) byId.set(post.id, post);
+        return [...byId.values()];
+      });
+      setStoryNextCursor(page.nextCursor);
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -423,6 +435,7 @@ export function App() {
   useEffect(() => {
     if (!campaignId) {
       setStoryPosts([]);
+      setStoryNextCursor(null);
       return;
     }
     void loadStoryPosts().catch((reason) =>
@@ -1869,6 +1882,10 @@ export function App() {
             }
             onPatchCharacter={patchCharacter}
             storyPosts={storyPosts}
+            storyNextCursor={storyNextCursor}
+            onLoadMoreStoryPosts={async () => {
+              if (storyNextCursor) await loadStoryPosts(storyNextCursor);
+            }}
             onCreateStoryDraft={async (input: StoryDraftInput) => {
               await api("/api/story/posts", {
                 method: "POST",

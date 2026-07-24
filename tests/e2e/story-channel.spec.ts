@@ -1,4 +1,4 @@
-﻿import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import type { GameSnapshot, StoryPostAdminDto, StoryPostDto } from "@arken/contracts";
 
 const ids = {
@@ -145,5 +145,75 @@ test("player sees only safe published story cards in a read-only channel", async
   await expect(page.locator(".story-post__actions")).toHaveCount(0);
 });
 
+test("STORY tab loads older pages, exposes a tabpanel and marks legacy history read", async ({ page }) => {
+  const snapshot = snapshotFor("GM");
+  snapshot.messages = [
+    {
+      id: "88888888-8888-4888-8888-888888888888",
+      sequence: 9,
+      membershipId: ids.gm,
+      displayName: "Master",
+      characterId: null,
+      body: "Legacy chronicle entry",
+      visibility: "PUBLIC",
+      kind: "TEXT",
+      threadId: ids.storyThread,
+      stream: "STORY",
+      dice: null,
+      createdAt: now,
+    },
+  ];
+  snapshot.chatThreadStates[1] = {
+    threadId: ids.storyThread,
+    stream: "STORY",
+    lastReadSequence: 0,
+    latestSequence: 9,
+    unreadCount: 1,
+  };
+  const newer = adminPost("PUBLISHED", "Newest page", 2);
+  const older = {
+    ...adminPost("PUBLISHED", "Older page", 2),
+    id: "99999999-9999-4999-8999-999999999999",
+  };
+  let markedSequence = 0;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/story/posts?*", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        cursor
+          ? { posts: [older], nextCursor: null }
+          : { posts: [newer], nextCursor: "opaque-cursor" },
+      ),
+    });
+  });
+  await page.route("**/api/chat/read", async (route) => {
+    markedSequence = route.request().postDataJSON().sequence;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        campaignId: ids.campaign,
+        threadId: ids.storyThread,
+        lastReadSequence: markedSequence,
+        updatedAt: now,
+      }),
+    });
+  });
 
-
+  await page.goto("/");
+  await openStory(page);
+  await expect(page.locator("#chat-panel-story")).toHaveAttribute("role", "tabpanel");
+  await expect(page.locator("#chat-panel-story")).toHaveAttribute("aria-labelledby", "chat-tab-story");
+  await expect(page.getByText("Legacy chronicle entry")).toBeVisible();
+  await expect.poll(() => markedSequence).toBe(9);
+  await page.locator(".story-channel__load-more").click();
+  await expect(page.getByText("Older page")).toBeVisible();
+});

@@ -242,6 +242,8 @@ export function StoryPost({
 export function StoryChannel({
   posts,
   legacyMessages = [],
+  nextCursor = null,
+  onLoadMore,
   isGm,
   pending = false,
   onCreateDraft,
@@ -253,6 +255,8 @@ export function StoryChannel({
 }: {
   posts: readonly StoryPostView[];
   legacyMessages?: readonly ChatMessageDto[];
+  nextCursor?: string | null;
+  onLoadMore?: () => Promise<void>;
   isGm: boolean;
   pending?: boolean;
   onCreateDraft?: (input: StoryDraftInput) => Promise<void>;
@@ -341,7 +345,9 @@ export function StoryChannel({
   return (
     <section
       className="story-channel"
-      aria-label="\u0421\u044e\u0436\u0435\u0442 \u043a\u0430\u043c\u043f\u0430\u043d\u0438\u0438"
+      role="tabpanel"
+      id="chat-panel-story"
+      aria-labelledby="chat-tab-story"
     >
       <header className="story-channel__header">
         <div>
@@ -398,6 +404,16 @@ export function StoryChannel({
           ))
         )}
       </div>
+      {nextCursor && onLoadMore && (
+        <button
+          type="button"
+          className="story-channel__load-more"
+          disabled={busy}
+          onClick={() => void onLoadMore()}
+        >
+          {"\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0431\u043e\u043b\u044c\u0448\u0435"}
+        </button>
+      )}
       {isGm && onCreateDraft && (
         <form className="story-composer" onSubmit={submit}>
           <label>

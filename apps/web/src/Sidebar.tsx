@@ -143,6 +143,8 @@ type Props = {
   ) => Promise<void>;
   onUploadChatAttachment: (file: File) => Promise<ChatAttachmentMetadata>;
   storyPosts: Array<StoryPostDto | StoryPostAdminDto>;
+  storyNextCursor: string | null;
+  onLoadMoreStoryPosts: () => Promise<void>;
   onCreateStoryDraft: (input: StoryDraftInput) => Promise<void>;
   onPublishStoryPost: (post: StoryPostAdminDto) => Promise<void>;
   onUpdateStoryPost: (
@@ -335,9 +337,15 @@ export function Sidebar(props: Props) {
     onWorkspaceChange,
     sceneDialogRequest,
     onActiveChatThreadChange,
+    onMarkChatRead,
   } = props;
+  const {
+    messages: snapshotMessages,
+    chatThreads: snapshotChatThreads,
+  } = props.snapshot;
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
+  const storyReadSequenceRef = useRef(new Map<string, number>());
   const [activeStream, setActiveStream] = useState<ChatStream>("TABLE");
   const [directMode, setDirectMode] = useState(false);
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
@@ -350,6 +358,29 @@ export function Sidebar(props: Props) {
   useEffect(() => {
     onActiveChatThreadChange(activeThreadId);
   }, [activeThreadId, onActiveChatThreadChange]);
+  useEffect(() => {
+    if (directMode || activeStream !== "STORY" || !activeThreadId) return;
+    const latestSequence = messagesForStream(
+      snapshotMessages,
+      "STORY",
+      snapshotChatThreads,
+    ).at(-1)?.sequence;
+    if (latestSequence === undefined) return;
+    if ((storyReadSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence)
+      return;
+    storyReadSequenceRef.current.set(activeThreadId, latestSequence);
+    void onMarkChatRead(activeThreadId, latestSequence).catch(() => {
+      storyReadSequenceRef.current.delete(activeThreadId);
+    });
+  }, [
+    activeDirectThreadId,
+    activeStream,
+    activeThreadId,
+    directMode,
+    onMarkChatRead,
+    snapshotChatThreads,
+    snapshotMessages,
+  ]);
   useEffect(() => {
     if (!requestedChatMessageId) return;
     const requestedStream = streamForMessage(
@@ -456,6 +487,8 @@ export function Sidebar(props: Props) {
         ) : activeStream === "STORY" ? (
           <StoryChannel
             posts={props.storyPosts}
+            nextCursor={props.storyNextCursor}
+            onLoadMore={props.onLoadMoreStoryPosts}
             legacyMessages={messagesForStream(
               props.snapshot.messages,
               "STORY",
