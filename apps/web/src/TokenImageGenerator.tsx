@@ -1,7 +1,10 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { AssetDto } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
-import { resolveTokenImagePreviewCrop } from "./token-image-preview";
+import {
+  TOKEN_FRAME_PREVIEW_COLORS,
+  resolveTokenImagePreviewCrop,
+} from "./token-image-preview";
 import {
   DEFAULT_TOKEN_IMAGE_TRANSFORM,
   TOKEN_FRAME_PRESETS,
@@ -58,6 +61,52 @@ type Props = {
 
 function sourceName(asset: AssetDto) {
   return asset.name.replace(/\.[^/.]+$/, "").slice(0, 90) || undefined;
+}
+
+function TokenFramePreview({ frame }: { frame: TokenFramePreset }) {
+  if (frame === "NONE") return null;
+  const [shadow, middle, highlight] = TOKEN_FRAME_PREVIEW_COLORS[frame];
+  const gradientId = `token-frame-${frame.toLowerCase()}`;
+  return (
+    <svg
+      className="token-image-preview__frame"
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={highlight} />
+          <stop offset="0.48" stopColor={middle} />
+          <stop offset="1" stopColor={shadow} />
+        </linearGradient>
+      </defs>
+      <circle
+        cx="256"
+        cy="256"
+        r="244"
+        fill="none"
+        stroke={shadow}
+        strokeWidth="23"
+      />
+      <circle
+        cx="256"
+        cy="256"
+        r="243"
+        fill="none"
+        stroke={`url(#${gradientId})`}
+        strokeWidth="17"
+      />
+      <circle
+        cx="256"
+        cy="256"
+        r="237"
+        fill="none"
+        stroke={highlight}
+        strokeOpacity=".62"
+        strokeWidth="2"
+      />
+    </svg>
+  );
 }
 
 export function TokenImageGenerator({
@@ -202,7 +251,7 @@ export function TokenImageGenerator({
         {source && (
           <img src={source.url} alt="" draggable={false} style={imageStyle} />
         )}
-        <span className="token-image-preview__frame" aria-hidden="true" />
+        <TokenFramePreview frame={transform.frame} />
       </div>
       <p className="token-image-generator__hint">{copy.hint}</p>
       <label>

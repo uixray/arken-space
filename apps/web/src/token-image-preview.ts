@@ -16,6 +16,12 @@ export type TokenImagePreviewCrop = {
   imageTopPercent: number;
 };
 
+export const TOKEN_FRAME_PREVIEW_COLORS = {
+  BRONZE: ["#5b2f18", "#d79a52", "#f2c078"],
+  SILVER: ["#505861", "#c7d0d8", "#f4f7fa"],
+  OBSIDIAN: ["#090b10", "#313948", "#747f91"],
+} as const;
+
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
 }
@@ -28,9 +34,17 @@ export function resolveTokenImagePreviewCrop({
   cropY,
   zoom,
 }: TokenImagePreviewCropInput): TokenImagePreviewCrop {
-  const cropSize = Math.min(width, height) / zoom;
-  const left = clamp(cropX * width - cropSize / 2, 0, width - cropSize);
-  const top = clamp(cropY * height - cropSize / 2, 0, height - cropSize);
+  const cropSize = Math.max(1, Math.floor(Math.min(width, height) / zoom));
+  const left = clamp(
+    Math.round(cropX * width - cropSize / 2),
+    0,
+    width - cropSize,
+  );
+  const top = clamp(
+    Math.round(cropY * height - cropSize / 2),
+    0,
+    height - cropSize,
+  );
   return {
     cropSize,
     left,

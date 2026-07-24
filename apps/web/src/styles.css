@@ -2807,30 +2807,9 @@ code {
 .token-image-preview__frame {
   position: absolute;
   inset: 0;
-  border: 0 solid transparent;
-  border-radius: inherit;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-}
-.token-image-preview--bronze .token-image-preview__frame {
-  border-width: 12px;
-  border-color: #a8672b;
-  box-shadow:
-    inset 0 0 0 3px #e0a459,
-    inset 0 0 0 6px #623914;
-}
-.token-image-preview--silver .token-image-preview__frame {
-  border-width: 12px;
-  border-color: #aeb8c5;
-  box-shadow:
-    inset 0 0 0 3px #edf3fa,
-    inset 0 0 0 6px #67717c;
-}
-.token-image-preview--obsidian .token-image-preview__frame {
-  border-width: 12px;
-  border-color: #17141d;
-  box-shadow:
-    inset 0 0 0 3px #50465f,
-    inset 0 0 0 6px #08070a;
 }
 .token-image-generator__hint {
   margin: 0;
