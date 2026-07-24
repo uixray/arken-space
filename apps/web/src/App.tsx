@@ -392,24 +392,21 @@ export function App() {
       knownChatMessageIdsRef.current.add(message.id);
   }, [snapshot]);
 
-  const loadStoryPosts = useCallback(
-    async (cursor?: string) => {
-      const query = new URLSearchParams({ limit: "50" });
-      if (cursor) query.set("cursor", cursor);
-      const page = await api<{
-        posts: Array<StoryPostDto | StoryPostAdminDto>;
-        nextCursor: string | null;
-      }>(`/api/story/posts?${query.toString()}`);
-      setStoryPosts((current) => {
-        if (!cursor) return page.posts;
-        const byId = new Map(current.map((post) => [post.id, post]));
-        for (const post of page.posts) byId.set(post.id, post);
-        return [...byId.values()];
-      });
-      setStoryNextCursor(page.nextCursor);
-    },
-    [],
-  );
+  const loadStoryPosts = useCallback(async (cursor?: string) => {
+    const query = new URLSearchParams({ limit: "50" });
+    if (cursor) query.set("cursor", cursor);
+    const page = await api<{
+      posts: Array<StoryPostDto | StoryPostAdminDto>;
+      nextCursor: string | null;
+    }>(`/api/story/posts?${query.toString()}`);
+    setStoryPosts((current) => {
+      if (!cursor) return page.posts;
+      const byId = new Map(current.map((post) => [post.id, post]));
+      for (const post of page.posts) byId.set(post.id, post);
+      return [...byId.values()];
+    });
+    setStoryNextCursor(page.nextCursor);
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -2235,6 +2232,18 @@ export function App() {
                 url: `/api/assets/${asset.id}/content`,
                 createdAt: String(asset.createdAt),
               };
+            }}
+            onGenerateTokenImage={async ({ sourceAssetId, ...transform }) => {
+              const asset = await api<AssetDto>(
+                `/api/assets/${sourceAssetId}/token`,
+                {
+                  method: "POST",
+                  headers: { "x-action-id": crypto.randomUUID() },
+                  body: JSON.stringify(transform),
+                },
+              );
+              await load();
+              return asset;
             }}
             onPreviewPlayer={async (membershipId) => {
               const playerView = await api<GameSnapshot>(
