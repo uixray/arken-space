@@ -22,6 +22,7 @@ let database: PGlite;
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 let mediaRoot: string;
+let broadcastFailure: Error | null;
 const originalMediaRoot = env.MEDIA_ROOT;
 const originalMinFree = env.MIN_FREE_DISK_BYTES;
 const originalQuota = env.MEDIA_QUOTA_BYTES;
@@ -50,6 +51,7 @@ const transform = {
 
 beforeEach(async () => {
   mediaRoot = await mkdtemp(join(tmpdir(), "arken-token-generator-"));
+  broadcastFailure = null;
   env.MEDIA_ROOT = mediaRoot;
   env.MIN_FREE_DISK_BYTES = 1;
   env.MEDIA_QUOTA_BYTES = 50 * 1024 * 1024;
@@ -165,7 +167,12 @@ beforeEach(async () => {
     app,
     db as never,
     {
-      in: () => ({ fetchSockets: async () => [] }),
+      in: () => ({
+        fetchSockets: async () => {
+          if (broadcastFailure) throw broadcastFailure;
+          return [];
+        },
+      }),
       to: () => ({ emit() {} }),
     } as never,
   );
@@ -247,6 +254,37 @@ describe("UIX-255 token generator HTTP", () => {
     );
     expect(generatedContent.subarray(0, 4).toString("ascii")).toBe("RIFF");
     expect(generatedContent.subarray(8, 12).toString("ascii")).toBe("WEBP");
+  });
+
+  it("keeps committed media when snapshot broadcast fails", async () => {
+    const actionId = crypto.randomUUID();
+    broadcastFailure = new Error("BROADCAST_FAILED");
+    const failedResponse = await app.inject({
+      method: "POST",
+      url: `/api/assets/${ids.image}/token`,
+      headers: headers(secrets.gm, actionId),
+      payload: transform,
+    });
+    expect(failedResponse.statusCode).toBe(500);
+
+    const allAssets = await db.select().from(schema.assets);
+    const committed = allAssets.find(
+      (asset) => asset.kind === "TOKEN" && asset.id !== ids.token,
+    );
+    expect(committed).toBeDefined();
+    await expect(
+      readFile(join(mediaRoot, committed!.storageKey)),
+    ).resolves.not.toHaveLength(0);
+
+    broadcastFailure = null;
+    const replay = await app.inject({
+      method: "POST",
+      url: `/api/assets/${ids.image}/token`,
+      headers: headers(secrets.gm, actionId),
+      payload: transform,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().id).toBe(committed!.id);
   });
 
   it("cleans the losing file when identical actions race", async () => {

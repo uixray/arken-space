@@ -6324,6 +6324,7 @@ export function registerRoutes(
       return reply.code(404).send({ error: "SOURCE_IMAGE_NOT_FOUND" });
 
     let stored: Awaited<ReturnType<typeof storeGeneratedToken>> | undefined;
+    let committed = false;
     try {
       const sourceBuffer = await readStoredImage(source.storageKey);
       const rendered = await renderTokenAsset(sourceBuffer, body);
@@ -6372,9 +6373,13 @@ export function registerRoutes(
         });
         return asset;
       });
+      committed = true;
       await broadcastSnapshots(io, db, auth.campaignId);
       return reply.code(201).send(dto(created));
     } catch (error) {
+      // Once the transaction commits, the file is authoritative media and
+      // must survive best-effort realtime notification failures.
+      if (committed) throw error;
       if (stored) await removeStoredUpload(stored.storageKey);
       const concurrentReplay = await replayAsset();
       if (concurrentReplay) return reply.code(200).send(dto(concurrentReplay));
