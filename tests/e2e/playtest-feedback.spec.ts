@@ -368,3 +368,43 @@ for (const role of ["GM", "PLAYER"] as const) {
     expect(reportBody).toContain('name="diagnostics"');
   });
 }
+
+test("drawing color picker controls the next drawing", async ({ page }) => {
+  await mockAuthenticatedApp(page);
+  let createPayload: Record<string, unknown> | undefined;
+  await page.route("**/api/drawings", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    createPayload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "drawing-new",
+        sceneId: "scene-1",
+        authorMembershipId: "membership-gm",
+        points: createPayload.points,
+        x: 0,
+        y: 0,
+        color: createPayload.color,
+        revision: 0,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.locator(".map-toolbar button", { hasText: "Рисование" }).click();
+
+  const color = page.getByLabel("Цвет рисунка");
+  await expect(color).toBeVisible();
+  await color.fill("#123456");
+
+  const canvas = page.locator(".map-viewport canvas").last();
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + 150, box!.y + 150);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 190, box!.y + 190, { steps: 4 });
+  await page.mouse.up();
+
+  await expect.poll(() => createPayload?.color).toBe("#123456");
+});

@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { Button, FilePreview, Icon } from "@gravity-ui/uikit";
+import { Button, Icon } from "@gravity-ui/uikit";
 import { TrashBin } from "@gravity-ui/icons";
 
 export interface ImageUploadFieldProps {
@@ -56,18 +56,25 @@ export function ImageUploadField({
         onChange={(event) => onUpdate(event.currentTarget.files?.[0])}
       />
       {value ? (
-        <FilePreview
-          file={value}
-          imageSrc={previewUrl}
-          description={`${Math.ceil(value.size / 1024)} КБ`}
-          actions={[
-            {
-              title: "Удалить",
-              icon: <Icon data={TrashBin} size={16} />,
-              onClick: () => onUpdate(undefined),
-            },
-          ]}
-        />
+        <figure className="arken-upload-field__preview">
+          {previewUrl ? (
+            <img src={previewUrl} alt={`Предпросмотр ${value.name}`} />
+          ) : null}
+          <figcaption>
+            <span>
+              <strong>{value.name}</strong>
+              <small>{Math.ceil(value.size / 1024)} КБ</small>
+            </span>
+            <Button
+              view="flat-danger"
+              aria-label={`Удалить ${value.name}`}
+              disabled={disabled}
+              onClick={() => onUpdate(undefined)}
+            >
+              <Icon data={TrashBin} size={16} />
+            </Button>
+          </figcaption>
+        </figure>
       ) : (
         <div className="arken-upload-field__empty">
           Предпросмотр появится после выбора файла

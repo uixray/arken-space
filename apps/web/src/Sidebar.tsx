@@ -2169,6 +2169,14 @@ function PalettePanel(props: Props) {
           onCreate={props.onCreateTokenDefinition}
           onPatch={props.onPatchTokenDefinition}
           onReplaceControllers={props.onReplaceTokenControllers}
+          onOpenCharacters={() => {
+            setEditor(null);
+            props.onWorkspaceChange("setup");
+          }}
+          onOpenMedia={() => {
+            setEditor(null);
+            props.onWorkspaceChange("media");
+          }}
         />
       )}
       <ConfirmDialog
@@ -2256,6 +2264,8 @@ function TokenDefinitionEditor({
   onCreate,
   onPatch,
   onReplaceControllers,
+  onOpenCharacters,
+  onOpenMedia,
 }: {
   snapshot: GameSnapshot;
   definition?: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
@@ -2265,6 +2275,8 @@ function TokenDefinitionEditor({
   onCreate: Props["onCreateTokenDefinition"];
   onPatch: Props["onPatchTokenDefinition"];
   onReplaceControllers: Props["onReplaceTokenControllers"];
+  onOpenCharacters: () => void;
+  onOpenMedia: () => void;
 }) {
   const [name, setName] = useState(definition?.name ?? "");
   const [characterId, setCharacterId] = useState(definition?.characterId ?? "");
@@ -2335,6 +2347,16 @@ function TokenDefinitionEditor({
           <FormSelect
             value={characterId}
             onChange={(event) => setCharacterId(event.target.value)}
+            emptyMessage={
+              snapshot.characters.length === 0
+                ? "Персонажей пока нет"
+                : undefined
+            }
+            createAction={
+              snapshot.characters.length === 0
+                ? { label: "Создать персонажа", onSelect: onOpenCharacters }
+                : undefined
+            }
           >
             <option value="">Без персонажа</option>
             {snapshot.characters.map((character) => (
@@ -2349,6 +2371,16 @@ function TokenDefinitionEditor({
           <FormSelect
             value={assetId}
             onChange={(event) => setAssetId(event.target.value)}
+            emptyMessage={
+              snapshot.assets.every((asset) => asset.kind !== "TOKEN")
+                ? "Изображений токенов пока нет"
+                : undefined
+            }
+            createAction={
+              snapshot.assets.every((asset) => asset.kind !== "TOKEN")
+                ? { label: "Добавить изображение", onSelect: onOpenMedia }
+                : undefined
+            }
           >
             <option value="">Без изображения</option>
             {snapshot.assets

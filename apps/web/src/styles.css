@@ -677,6 +677,29 @@ code {
   min-height: 28px;
   padding: 3px;
 }
+.drawing-color-controls {
+  display: grid;
+  gap: 4px;
+}
+.drawing-color-picker {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+.drawing-color-picker input[type="color"] {
+  width: 34px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+.drawing-color-picker input[type="color"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 .canvas-roll-overlay {
   position: absolute;
   z-index: 13;

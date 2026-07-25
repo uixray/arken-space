@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import {
   Circle,
   Group,
@@ -30,6 +29,10 @@ import {
   type MapMoveTarget,
 } from "./map-move-queue";
 import { CANVAS_VISUAL_TOKENS as visual } from "./canvas-visual-tokens";
+import {
+  clearDrawingDraftIfCurrent,
+  persistDrawingDraft,
+} from "./drawing-draft";
 
 function Grid({
   width,
@@ -163,6 +166,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   } | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
   const drawingPointsRef = useRef<number[]>([]);
+  const [drawingColor, setDrawingColor] = useState<string>(visual.color.edit);
   const [backgroundDraft, setBackgroundDraft] = useState(
     props.scene.backgroundFrame,
   );
@@ -717,16 +721,26 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       return;
     }
     const completedDrawing = drawingPointsRef.current;
-    // Clear synchronously before the async command so a trailing preview can
-    // never survive the pointer-up frame.
-    drawingPointsRef.current = [];
-    flushSync(() => setDrawingPoints([]));
     await handleFogUp();
-    if (props.tool === "DRAW" && completedDrawing.length >= 4)
-      await props.onDrawingCreate({
-        points: completedDrawing,
-        color: visual.color.edit,
-      });
+    if (props.tool === "DRAW" && completedDrawing.length >= 4) {
+      // Keep the local stroke visible while the server persists it. Clearing
+      // it before the command resolves creates a noticeable blank frame
+      // between the draft and the reconciled drawing from the snapshot.
+      await persistDrawingDraft(
+        {
+          points: completedDrawing,
+          color: drawingColor,
+        },
+        props.onDrawingCreate,
+        () =>
+          clearDrawingDraftIfCurrent(drawingPointsRef, completedDrawing, () =>
+            setDrawingPoints([]),
+          ),
+      );
+    } else {
+      drawingPointsRef.current = [];
+      setDrawingPoints([]);
+    }
     if (props.tool === "RULER")
       props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
     setRulerStart(null);
@@ -1194,7 +1208,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           {drawingPoints.length >= 4 && (
             <Line
               points={drawingPoints}
-              stroke={visual.color.edit}
+              stroke={drawingColor}
               strokeWidth={3 / scale}
               lineCap="round"
               lineJoin="round"
@@ -1735,45 +1749,54 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           const drawing = props.drawings.find(
             (item) => item.id === selectedDrawingId,
           );
-          if (
-            !drawing ||
-            (props.role !== "GM" &&
-              (!props.membershipId ||
-                drawing.authorMembershipId !== props.membershipId))
-          )
-            return null;
+          const canEditDrawing =
+            drawing &&
+            (props.role === "GM" ||
+              (!!props.membershipId &&
+                drawing.authorMembershipId === props.membershipId));
+          if (!canEditDrawing && props.tool !== "DRAW") return null;
           return (
-            <span>
-              <button
-                onClick={() =>
-                  void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
-                    color:
-                      drawing.color === visual.color.edit
-                        ? visual.color.drawingAlternate
-                        : visual.color.edit,
-                  })
-                }
-              >
-                Цвет
-              </button>
-              <button
-                onClick={() =>
-                  void props.onDrawingCopy?.(drawing.id, drawing.revision)
-                }
-              >
-                Копировать
-              </button>
-              <button
-                onClick={() => {
-                  requestDelete({
-                    kind: "drawing",
-                    objectId: drawing.id,
-                    revision: drawing.revision,
-                  });
-                }}
-              >
-                Удалить
-              </button>
+            <span className="drawing-color-controls">
+              <label className="drawing-color-picker">
+                <span>Цвет</span>
+                <input
+                  type="color"
+                  aria-label="Цвет рисунка"
+                  value={canEditDrawing ? drawing.color : drawingColor}
+                  onChange={(event) => {
+                    const color = event.target.value;
+                    setDrawingColor(color);
+                    if (canEditDrawing)
+                      void props.onDrawingUpdate?.(
+                        drawing.id,
+                        drawing.revision,
+                        { color },
+                      );
+                  }}
+                />
+              </label>
+              {canEditDrawing && (
+                <>
+                  <button
+                    onClick={() =>
+                      void props.onDrawingCopy?.(drawing.id, drawing.revision)
+                    }
+                  >
+                    Копировать
+                  </button>
+                  <button
+                    onClick={() => {
+                      requestDelete({
+                        kind: "drawing",
+                        objectId: drawing.id,
+                        revision: drawing.revision,
+                      });
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </>
+              )}
             </span>
           );
         })()}
