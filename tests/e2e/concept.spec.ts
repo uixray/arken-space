@@ -543,6 +543,7 @@ test("chat composer and canvas quick rolls submit explicit, server-safe intents"
     rollMode: "ADVANTAGE",
   });
 
+  await page.locator("#chat-tab-table").click();
   const composer = page.locator(".chat-compose textarea");
   await expect(page.locator(".chat-tools select")).toHaveCount(0);
   await composer.fill("/");
@@ -868,6 +869,7 @@ for (const viewport of [
     await page.goto("/");
     await page.getByRole("button", { name: /Чат/ }).click();
 
+    await page.locator("#chat-tab-table").click();
     await expect(page.locator(".chat-tools")).toBeVisible();
     await expect(page.locator(".chat-compose")).toBeVisible();
     const dimensions = await page
@@ -1622,10 +1624,15 @@ test("UIX-266 GM streams, STORY posting, and keyboard tabs", async ({
     });
   });
   await page.goto("/");
+  const activity = page.locator("#chat-tab-activity");
   const table = page.locator("#chat-tab-table");
   const story = page.locator("#chat-tab-story");
   const rolls = page.locator("#chat-tab-rolls");
-  await expect(table).toHaveAttribute("aria-selected", "true");
+  await expect(activity).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("STORY_ONLY_MARKER")).toBeVisible();
+  await expect(page.getByText("ROLLS_ONLY_MARKER")).toBeVisible();
+  await activity.press("ArrowRight");
+  await expect(table).toBeFocused();
   await expect(page.getByText("STORY_ONLY_MARKER")).toHaveCount(0);
   await table.press("ArrowRight");
   await expect(story).toBeFocused();
@@ -1645,8 +1652,8 @@ test("UIX-266 GM streams, STORY posting, and keyboard tabs", async ({
   await expect(page.getByText("ROLLS_ONLY_MARKER")).toBeVisible();
   await expect(page.locator(".chat-compose")).toHaveCount(0);
   await rolls.press("Home");
-  await expect(table).toBeFocused();
-  await table.press("ArrowLeft");
+  await expect(activity).toBeFocused();
+  await activity.press("ArrowLeft");
   await expect(rolls).toBeFocused();
 });
 

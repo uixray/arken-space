@@ -1084,6 +1084,45 @@ code {
   position: relative;
   min-width: 0;
 }
+.chat-composer-input textarea {
+  padding-right: 76px;
+}
+.chat-composer-actions {
+  position: absolute;
+  right: var(--space-xs);
+  bottom: var(--space-xs);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.composer-icon {
+  display: grid;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.composer-icon:hover,
+.composer-icon:focus-visible {
+  color: var(--text);
+  background: var(--surface-3);
+}
+.composer-slash-action {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.activity-feed .message-list {
+  gap: var(--space-md);
+}
+.activity-stream-label {
+  color: var(--muted);
+  text-transform: uppercase;
+}
 
 .slash-command-suggestions {
   position: absolute;

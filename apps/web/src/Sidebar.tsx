@@ -59,7 +59,12 @@ import {
   SkillChatCard,
 } from "./SkillCards";
 import { StickerPicker } from "./StickerPicker";
-import { StoryChannel, type StoryDraftInput } from "./StoryChannel";
+import { StoryChannel, StoryPost, type StoryDraftInput } from "./StoryChannel";
+import {
+  buildActivityFeed,
+  buildActivityTimeline,
+  type ActivityStoryPost,
+} from "./activity-feed";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import {
   changeWalletValue,
@@ -70,7 +75,6 @@ import {
 import {
   CHAT_STREAM_LABEL,
   CHAT_STREAM_ORDER,
-  nextChatStream,
   messagesForStream,
   streamForMessage,
   threadForStream,
@@ -83,6 +87,28 @@ import {
   eligibleDirectRecipients,
   messagesForDirectThread,
 } from "./direct-chat-state";
+
+type SidebarFeed = "ACTIVITY" | ChatStream;
+
+const CHAT_FEED_ORDER: readonly SidebarFeed[] = [
+  "ACTIVITY",
+  ...CHAT_STREAM_ORDER,
+];
+
+function nextChatFeed(current: SidebarFeed, key: string): SidebarFeed | null {
+  const index = CHAT_FEED_ORDER.indexOf(current);
+  if (key === "Home") return CHAT_FEED_ORDER[0] ?? null;
+  if (key === "End") return CHAT_FEED_ORDER.at(-1) ?? null;
+  if (key === "ArrowRight")
+    return CHAT_FEED_ORDER[(index + 1) % CHAT_FEED_ORDER.length] ?? null;
+  if (key === "ArrowLeft")
+    return (
+      CHAT_FEED_ORDER[
+        (index - 1 + CHAT_FEED_ORDER.length) % CHAT_FEED_ORDER.length
+      ] ?? null
+    );
+  return null;
+}
 
 function formatDiceBreakdown(value: unknown) {
   const dice = normalizeClientDiceResult(value);
@@ -360,7 +386,7 @@ export function Sidebar(props: Props) {
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const storyReadSequenceRef = useRef(new Map<string, number>());
-  const [activeStream, setActiveStream] = useState<ChatStream>("TABLE");
+  const [activeFeed, setActiveFeed] = useState<SidebarFeed>("ACTIVITY");
   const [directMode, setDirectMode] = useState(false);
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
     string | null
@@ -368,12 +394,14 @@ export function Sidebar(props: Props) {
   useEffect(() => onChatVisibilityChange(true), [onChatVisibilityChange]);
   const activeThreadId = directMode
     ? activeDirectThreadId
-    : (threadForStream(props.snapshot, activeStream)?.id ?? null);
+    : activeFeed === "ACTIVITY"
+      ? null
+      : (threadForStream(props.snapshot, activeFeed)?.id ?? null);
   useEffect(() => {
     onActiveChatThreadChange(activeThreadId);
   }, [activeThreadId, onActiveChatThreadChange]);
   useEffect(() => {
-    if (directMode || activeStream !== "STORY" || !activeThreadId) return;
+    if (directMode || activeFeed !== "STORY" || !activeThreadId) return;
     const latestSequence = messagesForStream(
       snapshotMessages,
       "STORY",
@@ -390,7 +418,7 @@ export function Sidebar(props: Props) {
     });
   }, [
     activeDirectThreadId,
-    activeStream,
+    activeFeed,
     activeThreadId,
     directMode,
     onMarkChatRead,
@@ -404,7 +432,7 @@ export function Sidebar(props: Props) {
       requestedChatMessageId,
       props.snapshot.chatThreads,
     );
-    if (requestedStream) setActiveStream(requestedStream);
+    if (requestedStream) setActiveFeed(requestedStream);
     setFocusedMessageId(requestedChatMessageId);
     onRequestedChatMessageHandled();
   }, [
@@ -424,17 +452,31 @@ export function Sidebar(props: Props) {
         aria-label="Потоки чата"
         role="tablist"
         onKeyDown={(event) => {
-          const nextStream = nextChatStream(activeStream, event.key);
-          if (!nextStream) return;
+          const nextFeed = nextChatFeed(activeFeed, event.key);
+          if (!nextFeed) return;
           event.preventDefault();
-          setActiveStream(nextStream);
+          setActiveFeed(nextFeed);
           requestAnimationFrame(() =>
             document
-              .getElementById(`chat-tab-${nextStream.toLowerCase()}`)
+              .getElementById(`chat-tab-${nextFeed.toLowerCase()}`)
               ?.focus(),
           );
         }}
       >
+        <Button
+          view="flat"
+          role="tab"
+          id="chat-tab-activity"
+          aria-controls="chat-panel-activity"
+          aria-selected={!directMode && activeFeed === "ACTIVITY"}
+          tabIndex={!directMode && activeFeed === "ACTIVITY" ? 0 : -1}
+          onClick={() => {
+            setDirectMode(false);
+            setActiveFeed("ACTIVITY");
+          }}
+        >
+          {"\u0421\u043e\u0431\u044b\u0442\u0438\u044f"}
+        </Button>
         {CHAT_STREAM_ORDER.map((stream) => {
           const unread = unreadCountForStream(props.snapshot, stream);
           return (
@@ -444,18 +486,18 @@ export function Sidebar(props: Props) {
               role="tab"
               id={`chat-tab-${stream.toLowerCase()}`}
               aria-controls={`chat-panel-${stream.toLowerCase()}`}
-              aria-selected={!directMode && activeStream === stream}
-              tabIndex={!directMode && activeStream === stream ? 0 : -1}
+              aria-selected={!directMode && activeFeed === stream}
+              tabIndex={!directMode && activeFeed === stream ? 0 : -1}
               onClick={() => {
                 setDirectMode(false);
-                setActiveStream(stream);
+                setActiveFeed(stream);
               }}
             >
               {CHAT_STREAM_LABEL[stream]}
               {unread > 0 && (
                 <span
                   className="chat-unread-badge"
-                  aria-label={`${unread} непрочитанных`}
+                  aria-label={`${unread} \u043d\u0435\u043f\u0440\u043e\u0447\u0438\u0442\u0430\u043d\u043d\u044b\u0445`}
                 >
                   {unread}
                 </span>
@@ -500,7 +542,13 @@ export function Sidebar(props: Props) {
             onUploadAttachment={props.onUploadChatAttachment}
             onMarkChatRead={props.onMarkChatRead}
           />
-        ) : activeStream === "STORY" ? (
+        ) : activeFeed === "ACTIVITY" ? (
+          <ActivityPanel
+            snapshot={props.snapshot}
+            storyPosts={props.storyPosts}
+            onMarkChatRead={props.onMarkChatRead}
+          />
+        ) : activeFeed === "STORY" ? (
           <StoryChannel
             posts={props.storyPosts}
             nextCursor={props.storyNextCursor}
@@ -524,7 +572,7 @@ export function Sidebar(props: Props) {
             onSticker={props.onSticker}
             onRoll={props.onRoll}
             onMarkChatRead={props.onMarkChatRead}
-            activeStream={activeStream}
+            activeStream={activeFeed}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
           />
@@ -1494,6 +1542,128 @@ function ChatMessageBody({
   );
 }
 
+function ActivityPanel({
+  snapshot,
+  storyPosts,
+  onMarkChatRead,
+}: {
+  snapshot: GameSnapshot;
+  storyPosts: readonly ActivityStoryPost[];
+  onMarkChatRead: Props["onMarkChatRead"];
+}) {
+  const activityEvents = useMemo(
+    () =>
+      buildActivityFeed(snapshot.messages, snapshot.chatThreads, storyPosts),
+    [snapshot.messages, snapshot.chatThreads, storyPosts],
+  );
+  const timeline = useMemo(
+    () => buildActivityTimeline(activityEvents),
+    [activityEvents],
+  );
+  const readSequencesRef = useRef(new Map<string, number>());
+  const catalogEntryIds = useMemo(
+    () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
+    [snapshot.catalogEntries],
+  );
+
+  useEffect(() => {
+    const latestByThread = new Map<string, number>();
+    for (const event of activityEvents) {
+      if (event.type !== "MESSAGE") continue;
+      latestByThread.set(
+        event.message.threadId,
+        Math.max(
+          latestByThread.get(event.message.threadId) ?? 0,
+          event.message.sequence,
+        ),
+      );
+    }
+    for (const [threadId, sequence] of latestByThread) {
+      if ((readSequencesRef.current.get(threadId) ?? 0) >= sequence) continue;
+      readSequencesRef.current.set(threadId, sequence);
+      void onMarkChatRead(threadId, sequence).catch(() => {
+        readSequencesRef.current.delete(threadId);
+      });
+    }
+  }, [activityEvents, onMarkChatRead]);
+
+  return (
+    <section
+      className="chat-panel activity-feed"
+      role="tabpanel"
+      id="chat-panel-activity"
+      aria-labelledby="chat-tab-activity"
+    >
+      <div className="message-list" aria-live="polite">
+        {timeline.length === 0 && (
+          <p className="chat-empty">
+            {
+              "\u0412 \u043b\u0435\u043d\u0442\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u0439 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0439, \u0441\u044e\u0436\u0435\u0442\u043d\u044b\u0445 \u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0446\u0438\u0439 \u0438\u043b\u0438 \u0431\u0440\u043e\u0441\u043a\u043e\u0432."
+            }
+          </p>
+        )}
+        {timeline.map((item) => {
+          if (item.type === "DATE")
+            return (
+              <div
+                className="chat-date-divider"
+                key={`activity-date-${item.key}`}
+              >
+                <span>{item.label}</span>
+              </div>
+            );
+          if (item.event.type === "STORY_POST")
+            return (
+              <StoryPost
+                key={`activity-story-${item.event.id}`}
+                post={item.event.post}
+                isGm={false}
+              />
+            );
+          const { message, stream, id, occurredAt } = item.event;
+          return (
+            <article
+              key={`activity-message-${id}`}
+              className={`message ${message.kind.toLowerCase()}`}
+              data-activity-stream={stream}
+            >
+              <header>
+                <strong>{message.displayName}</strong>
+                <span className="activity-stream-label">
+                  {CHAT_STREAM_LABEL[stream]}
+                </span>
+                {message.characterId && (
+                  <span className="message-character">
+                    {snapshot.characters.find(
+                      (character) => character.id === message.characterId,
+                    )?.name ??
+                      "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436"}
+                  </span>
+                )}
+                <time>
+                  {new Date(occurredAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </time>
+                {message.visibility === "GM_ONLY" && (
+                  <span>{"\u043c\u0430\u0441\u0442\u0435\u0440\u0443"}</span>
+                )}
+              </header>
+              <ChatMessageBody
+                message={message}
+                catalogEntryIds={
+                  snapshot.me.role === "GM" ? catalogEntryIds : undefined
+                }
+              />
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function DirectChatPanel({
   snapshot,
   activeThreadId,
@@ -1781,6 +1951,7 @@ function ChatPanel({
   const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [composerError, setComposerError] = useState("");
+  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -1804,7 +1975,11 @@ function ChatPanel({
     activeStream === "TABLE" ||
     (activeStream === "STORY" && snapshot.me.role === "GM");
   const slashSuggestions =
-    activeStream === "TABLE" ? getSlashCommandSuggestions(composer) : [];
+    activeStream === "TABLE"
+      ? slashHelpOpen
+        ? getSlashCommandSuggestions("/")
+        : getSlashCommandSuggestions(composer)
+      : [];
 
   useEffect(() => {
     followRef.current = true;
@@ -1998,7 +2173,10 @@ function ChatPanel({
                     : "Сообщение … или /roll 1d20 + agility"
                 }
                 value={composer}
-                onChange={(event) => setComposer(event.target.value)}
+                onChange={(event) => {
+                  setSlashHelpOpen(false);
+                  setComposer(event.target.value);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -2007,6 +2185,30 @@ function ChatPanel({
                 }}
                 rows={3}
               />
+              <div className="chat-composer-actions">
+                {!composer.trim() && (
+                  <StickerPicker
+                    iconOnly
+                    onSelect={(stickerId) =>
+                      onSticker(
+                        { stream: activeStream as "TABLE" | "STORY" },
+                        stickerId,
+                      )
+                    }
+                  />
+                )}
+                <Button
+                  className="composer-icon composer-slash-action"
+                  type="button"
+                  view="flat"
+                  aria-label="\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u043a\u043e\u043c\u0430\u043d\u0434\u044b"
+                  title="\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u043a\u043e\u043c\u0430\u043d\u0434\u044b"
+                  aria-expanded={slashSuggestions.length > 0}
+                  onClick={() => setSlashHelpOpen((open) => !open)}
+                >
+                  <span aria-hidden="true">/</span>
+                </Button>
+              </div>
               {slashSuggestions.length > 0 && (
                 <div
                   className="slash-command-suggestions"
@@ -2022,7 +2224,10 @@ function ChatPanel({
                       type="button"
                       role="option"
                       aria-selected="false"
-                      onClick={() => setComposer(suggestion.insertion)}
+                      onClick={() => {
+                        setComposer(suggestion.insertion);
+                        setSlashHelpOpen(false);
+                      }}
                     >
                       <strong>{suggestion.command}</strong>
                       <span>{suggestion.description}</span>
@@ -2032,14 +2237,6 @@ function ChatPanel({
                 </div>
               )}
             </div>
-            <StickerPicker
-              onSelect={(stickerId) =>
-                onSticker(
-                  { stream: activeStream as "TABLE" | "STORY" },
-                  stickerId,
-                )
-              }
-            />
             <Button className="primary" type="submit">
               {"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c"}
             </Button>
