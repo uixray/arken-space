@@ -573,6 +573,16 @@ code {
   display: grid;
   gap: 4px;
 }
+.fog-view-controls .compact-check,
+.fog-view-controls label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fog-view-controls .compact-check input,
+.fog-view-controls label:has(input[type="checkbox"]) input {
+  flex: 0 0 auto;
+}
 .grid-settings,
 .resize-settings {
   position: relative;
@@ -1561,8 +1571,9 @@ code {
   position: fixed;
   /* Workspace windows must stay below Gravity's modal editor/dialog layer. */
   z-index: 1200;
-  top: max(60px, 8vh);
-  right: clamp(16px, 4vw, 64px);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(720px, calc(100vw - 32px));
@@ -1570,6 +1581,9 @@ code {
   border: 1px solid var(--line-strong);
   background: var(--surface);
   box-shadow: 0 16px 48px #000a;
+}
+.arken-workspace-window[data-positioned="true"] {
+  transform: none;
 }
 .arken-workspace-window__header,
 .arken-workspace-window__footer {
@@ -1609,6 +1623,7 @@ code {
   .arken-workspace-window {
     top: 56px !important;
     right: 12px !important;
+    transform: none !important;
     left: 12px !important;
     width: auto;
     max-height: calc(100vh - 68px);
@@ -2097,15 +2112,67 @@ code {
   top: 8px;
   left: 8px;
 }
+.map-object-list-popover {
+  position: absolute;
+  z-index: 15;
+  top: 44px;
+  left: 8px;
+  width: min(340px, calc(100% - 16px));
+  max-height: min(420px, calc(100% - 56px));
+  overflow: auto;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 12px 32px #0009;
+}
 .map-object-list {
   display: grid;
   gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.map-object-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 4px;
+  align-items: center;
 }
 .map-object-list button {
+  min-width: 0;
   text-align: left;
 }
-.map-object-list button[aria-selected="true"] {
+.map-object-list button[aria-pressed="true"] {
   outline: 2px solid var(--accent);
+}
+.map-object-list__action {
+  padding-inline: 8px;
+}
+.entity-form {
+  display: grid;
+  gap: var(--space-md);
+}
+.entity-form > label,
+.entity-form > fieldset,
+.entity-form > .inline-fields,
+.entity-form > .dialog-actions {
+  margin: 0;
+}
+.token-dimensions__hint {
+  margin: calc(var(--space-xs) * -1) 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.token-dimensions .inline-fields {
+  align-items: end;
+}
+.token-dimensions .aspect-lock {
+  position: static;
+  align-self: end;
+  padding: 0 0 7px;
+  border: 0;
+  background: transparent;
 }
 
 .chat-stream-tabs button[aria-selected="true"] {

@@ -219,12 +219,38 @@ function GridSettings({
   onPreview: (grid: import("@arken/contracts").SceneDto["grid"] | null) => void;
 }) {
   const [draft, setDraft] = useState(scene.grid);
+  const settingsRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => setDraft(scene.grid), [scene]);
+  useEffect(() => {
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const details = settingsRef.current;
+      if (details?.open && !details.contains(event.target as Node)) {
+        details.open = false;
+        setDraft(scene.grid);
+        onPreview(null);
+      }
+    };
+    window.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () =>
+      window.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [onPreview, scene.grid]);
+  const resetGrid = () => {
+    const next = {
+      enabled: true,
+      size: 64,
+      offsetX: 0,
+      offsetY: 0,
+      color: "#c8b78b",
+      opacity: 0.22,
+    };
+    setDraft(next);
+    onPreview(next);
+  };
   return (
-    <details className="grid-settings">
+    <details className="grid-settings" ref={settingsRef}>
       <summary
-        aria-label="Настройки сетки"
-        title="Настройки сетки"
+        aria-label="????????? ?????"
+        title="????????? ?????"
         className="toolbar-detail-trigger"
         data-tool="GRID"
       >
@@ -270,18 +296,25 @@ function GridSettings({
           />
         </label>
         <div className="inline-fields">
+          <button type="button" onClick={resetGrid}>
+            {"\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c"}
+          </button>
           <button
+            type="button"
             onClick={() => {
               void onSave(draft);
               onPreview(null);
+              if (settingsRef.current) settingsRef.current.open = false;
             }}
           >
             Сохранить
           </button>
           <button
+            type="button"
             onClick={() => {
               setDraft(scene.grid);
               onPreview(null);
+              if (settingsRef.current) settingsRef.current.open = false;
             }}
           >
             Отмена

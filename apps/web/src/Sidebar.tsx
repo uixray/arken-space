@@ -2481,11 +2481,19 @@ function TokenDefinitionEditor({
   onOpenCharacters: () => void;
   onOpenMedia: () => void;
 }) {
+  const activeScene = snapshot.scenes.find((scene) => scene.active);
+  const gridSize = activeScene?.grid.enabled ? activeScene.grid.size : 64;
+  const initialWidth = (definition?.defaultWidth ?? 64) / gridSize;
+  const initialHeight = (definition?.defaultHeight ?? 64) / gridSize;
   const [name, setName] = useState(definition?.name ?? "");
   const [characterId, setCharacterId] = useState(definition?.characterId ?? "");
   const [assetId, setAssetId] = useState(definition?.defaultAssetId ?? "");
-  const [width, setWidth] = useState(definition?.defaultWidth ?? 64);
-  const [height, setHeight] = useState(definition?.defaultHeight ?? 64);
+  const [width, setWidth] = useState(initialWidth);
+  const [height, setHeight] = useState(initialHeight);
+  const [lockAspect, setLockAspect] = useState(true);
+  const aspectRatio = useRef(
+    initialHeight > 0 ? initialWidth / initialHeight : 1,
+  );
   const [controllers, setControllers] = useState<string[]>(
     definition?.controllerMembershipIds ?? [],
   );
@@ -2505,8 +2513,10 @@ function TokenDefinitionEditor({
         name: name.trim(),
         characterId: characterId || null,
         defaultAssetId: selectedAssetId,
-        defaultWidth: width,
-        defaultHeight: height,
+        // The API keeps pixel values for backwards compatibility. The editor
+        // exposes grid units, so a token follows the active scene's grid.
+        defaultWidth: Math.round(width * gridSize),
+        defaultHeight: Math.round(height * gridSize),
         controllerMembershipIds: controllers,
       };
       if (!definition) await onCreate(input);
@@ -2609,28 +2619,69 @@ function TokenDefinitionEditor({
           onUpdate={setImage}
           disabled={saving}
         />
-        <div className="inline-fields">
-          <label>
-            Ширина
-            <FormInput
-              type="number"
-              min={16}
-              max={1024}
-              value={width}
-              onChange={(event) => setWidth(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            Высота
-            <FormInput
-              type="number"
-              min={16}
-              max={1024}
-              value={height}
-              onChange={(event) => setHeight(Number(event.target.value))}
-            />
-          </label>
-        </div>
+        <section
+          className="token-dimensions"
+          aria-label={
+            "\u0420\u0430\u0437\u043c\u0435\u0440 \u0442\u043e\u043a\u0435\u043d\u0430"
+          }
+        >
+          <p className="token-dimensions__hint">
+            {
+              "\u0420\u0430\u0437\u043c\u0435\u0440 \u0432 \u043a\u043b\u0435\u0442\u043a\u0430\u0445 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u0441\u0435\u0442\u043a\u0438"
+            }{" "}
+            ({gridSize}
+            {" px \u043d\u0430 \u043a\u043b\u0435\u0442\u043a\u0443"}).
+          </p>
+          <div className="inline-fields">
+            <label>
+              {
+                "\u0428\u0438\u0440\u0438\u043d\u0430, \u043a\u043b\u0435\u0442\u043a\u0438"
+              }
+              <FormInput
+                type="number"
+                min={0.25}
+                max={16}
+                step={0.25}
+                value={width}
+                onChange={(event) => {
+                  const next = Math.max(0.25, Number(event.target.value));
+                  setWidth(next);
+                  if (lockAspect) setHeight(next / aspectRatio.current);
+                }}
+              />
+            </label>
+            <label>
+              {
+                "\u0412\u044b\u0441\u043e\u0442\u0430, \u043a\u043b\u0435\u0442\u043a\u0438"
+              }
+              <FormInput
+                type="number"
+                min={0.25}
+                max={16}
+                step={0.25}
+                value={height}
+                onChange={(event) => {
+                  const next = Math.max(0.25, Number(event.target.value));
+                  setHeight(next);
+                  if (lockAspect) setWidth(next * aspectRatio.current);
+                }}
+              />
+            </label>
+            <label className="aspect-lock">
+              <FormInput
+                type="checkbox"
+                checked={lockAspect}
+                onChange={(event) => {
+                  setLockAspect(event.target.checked);
+                  if (height > 0) aspectRatio.current = width / height;
+                }}
+              />
+              {
+                "\u0421\u043e\u0445\u0440\u0430\u043d\u044f\u0442\u044c \u043f\u0440\u043e\u043f\u043e\u0440\u0446\u0438\u0438"
+              }
+            </label>
+          </div>
+        </section>
         <fieldset>
           <legend>Управление игроками</legend>
           {snapshot.members

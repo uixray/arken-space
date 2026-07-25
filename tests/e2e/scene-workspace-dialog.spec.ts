@@ -221,3 +221,22 @@ test("a desktop workspace window drags by its labelled header handle and resets 
   expect(narrowAfter!.x).toBeCloseTo(narrowBefore!.x, 0);
   expect(narrowAfter!.y).toBeCloseTo(narrowBefore!.y, 0);
 });
+
+test("grid settings reset their draft and close outside the popover", async ({
+  page,
+}) => {
+  await mockBootstrap(page, snapshot);
+  await page.goto("/");
+
+  const settings = page.locator("details.grid-settings");
+  await settings.locator("summary").click();
+  await expect(settings).toHaveAttribute("open", "");
+
+  const size = settings.locator('input[type="number"]').first();
+  await size.fill("96");
+  await settings.locator(".grid-settings-popover button").first().click();
+  await expect(size).toHaveValue("64");
+
+  await page.locator(".map-viewport").click({ position: { x: 500, y: 300 } });
+  await expect(settings).not.toHaveAttribute("open", "");
+});

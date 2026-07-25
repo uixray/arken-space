@@ -13,7 +13,6 @@ import useImage from "use-image";
 import Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
 import { isRectFullyRevealed } from "./fog";
-import { ArkenDialog } from "../ui/ArkenDialog";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   createInitialMapInteractionState,
@@ -115,6 +114,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const { canvasEditMode, onCanvasEditCancel, onBulkMove, onToolSelect } =
     props;
   const containerRef = useRef<HTMLDivElement>(null);
+  const objectListRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [interaction, dispatchInteraction] = useReducer(
     mapInteractionReducer,
@@ -218,6 +218,17 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       window.removeEventListener("pointerdown", close);
     };
   }, [tokenMenu]);
+  useEffect(() => {
+    if (!interaction.objectListOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const list = objectListRef.current;
+      if (list && !list.contains(event.target as Node))
+        dispatchInteraction({ type: "close-object-list" });
+    };
+    window.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () =>
+      window.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [interaction.objectListOpen]);
   useEffect(() => {
     setBackgroundDraft(props.scene.backgroundFrame);
     setWorldDraft({ width: props.scene.width, height: props.scene.height });
@@ -941,6 +952,140 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       >
         РћР±СЉРµРєС‚С‹ РєР°СЂС‚С‹
       </button>
+      {interaction.objectListOpen && (
+        <div
+          ref={objectListRef}
+          className="map-object-list-popover"
+          role="region"
+          aria-label={
+            "\u041e\u0431\u044a\u0435\u043a\u0442\u044b \u043a\u0430\u0440\u0442\u044b"
+          }
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <ul className="map-object-list">
+            {selectableObjects.tokens.map((token) => (
+              <li key={`token:${token.id}:${token.revision}`}>
+                <button
+                  type="button"
+                  aria-pressed={
+                    interaction.selectedObject?.kind === "token" &&
+                    interaction.selectedObject.objectId === token.id
+                  }
+                  onClick={() =>
+                    selectObject({
+                      kind: "token",
+                      objectId: token.id,
+                      revision: token.revision,
+                    })
+                  }
+                >
+                  {token.name}
+                </button>
+                <button
+                  className="map-object-list__action"
+                  type="button"
+                  aria-label={`\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c: ${token.name}`}
+                  title={
+                    "\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c"
+                  }
+                  onClick={() =>
+                    void props.onPlaceTokenDefinition?.(token.definitionId, {
+                      x:
+                        token.x +
+                        (props.scene.grid.enabled ? props.scene.grid.size : 32),
+                      y:
+                        token.y +
+                        (props.scene.grid.enabled ? props.scene.grid.size : 32),
+                    })
+                  }
+                >
+                  {"\u2398"}
+                </button>
+                <button
+                  className="map-object-list__action"
+                  type="button"
+                  aria-label={`\u0423\u0434\u0430\u043b\u0438\u0442\u044c: ${token.name}`}
+                  title={"\u0423\u0434\u0430\u043b\u0438\u0442\u044c"}
+                  onClick={() =>
+                    requestDelete({
+                      kind: "token",
+                      objectId: token.id,
+                      revision: token.revision,
+                    })
+                  }
+                >
+                  {"\u00d7"}
+                </button>
+              </li>
+            ))}
+            {selectableObjects.drawings.map((drawing, index) => {
+              const canCopy =
+                props.role === "GM" ||
+                drawing.authorMembershipId === props.membershipId;
+              const label = `\u0420\u0438\u0441\u0443\u043d\u043e\u043a ${index + 1}`;
+              return (
+                <li key={`drawing:${drawing.id}:${drawing.revision}`}>
+                  <button
+                    type="button"
+                    aria-pressed={
+                      interaction.selectedObject?.kind === "drawing" &&
+                      interaction.selectedObject.objectId === drawing.id
+                    }
+                    onClick={() =>
+                      selectObject({
+                        kind: "drawing",
+                        objectId: drawing.id,
+                        revision: drawing.revision,
+                      })
+                    }
+                  >
+                    {label}
+                  </button>
+                  <button
+                    className="map-object-list__action"
+                    type="button"
+                    disabled={!canCopy}
+                    aria-label={`\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c: ${label}`}
+                    title={
+                      "\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c"
+                    }
+                    onClick={() =>
+                      void props.onDrawingCopy?.(drawing.id, drawing.revision)
+                    }
+                  >
+                    {"\u2398"}
+                  </button>
+                  <button
+                    className="map-object-list__action"
+                    type="button"
+                    disabled={!canCopy}
+                    aria-label={`\u0423\u0434\u0430\u043b\u0438\u0442\u044c: ${label}`}
+                    title={"\u0423\u0434\u0430\u043b\u0438\u0442\u044c"}
+                    onClick={() =>
+                      requestDelete({
+                        kind: "drawing",
+                        objectId: drawing.id,
+                        revision: drawing.revision,
+                      })
+                    }
+                  >
+                    {"\u00d7"}
+                  </button>
+                </li>
+              );
+            })}
+            {selectableObjects.tokens.length +
+              selectableObjects.drawings.length ===
+              0 && (
+              <li>
+                {
+                  "\u041d\u0430 \u043a\u0430\u0440\u0442\u0435 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442 \u043e\u0431\u044a\u0435\u043a\u0442\u043e\u0432."
+                }
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
       <Stage
         ref={stageRef}
         width={viewport.width}
@@ -1726,61 +1871,6 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <button onClick={() => setTokenMenu(null)}>РћС‚РјРµРЅР°</button>
         </div>
       )}
-      <ArkenDialog
-        open={interaction.objectListOpen}
-        title="РћР±СЉРµРєС‚С‹ РєР°СЂС‚С‹"
-        footer={false}
-        onClose={() => dispatchInteraction({ type: "close-object-list" })}
-      >
-        <ul
-          className="map-object-list"
-          aria-label="Р”РѕСЃС‚СѓРїРЅС‹Рµ РѕР±СЉРµРєС‚С‹ РєР°СЂС‚С‹"
-        >
-          {selectableObjects.tokens.map((token) => (
-            <li key={`token:${token.id}:${token.revision}`}>
-              <button
-                type="button"
-                aria-pressed={
-                  interaction.selectedObject?.kind === "token" &&
-                  interaction.selectedObject.objectId === token.id
-                }
-                onClick={() =>
-                  selectObject({
-                    kind: "token",
-                    objectId: token.id,
-                    revision: token.revision,
-                  })
-                }
-              >
-                РўРѕРєРµРЅ: {token.name}
-              </button>
-            </li>
-          ))}
-          {selectableObjects.drawings.map((drawing, index) => (
-            <li key={`drawing:${drawing.id}:${drawing.revision}`}>
-              <button
-                type="button"
-                aria-pressed={
-                  interaction.selectedObject?.kind === "drawing" &&
-                  interaction.selectedObject.objectId === drawing.id
-                }
-                onClick={() =>
-                  selectObject({
-                    kind: "drawing",
-                    objectId: drawing.id,
-                    revision: drawing.revision,
-                  })
-                }
-              >
-                Рисунок {index + 1}
-              </button>
-            </li>
-          ))}
-          {selectableObjects.tokens.length +
-            selectableObjects.drawings.length ===
-            0 && <li>Р”РѕСЃС‚СѓРїРЅС‹С… РѕР±СЉРµРєС‚РѕРІ РЅРµС‚.</li>}
-        </ul>
-      </ArkenDialog>
       <ConfirmDialog
         open={interaction.deleteRequestedFor !== null}
         title="РЈРґР°Р»РёС‚СЊ РѕР±СЉРµРєС‚ СЃ РєР°СЂС‚С‹?"

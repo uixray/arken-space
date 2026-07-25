@@ -65,6 +65,7 @@ export function ArkenDialog({
           .join(" ")}
         role="dialog"
         aria-labelledby={titleId}
+        data-positioned={position ? "true" : "false"}
         style={{
           ...(position ?? {}),
           zIndex,
