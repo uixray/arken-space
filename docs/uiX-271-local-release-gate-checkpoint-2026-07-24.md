@@ -1,9 +1,9 @@
-﻿# UIX-271 checkpoint — local release gate
+﻿# UIX-271 checkpoint — automated release gate
 
-- **Decision:** feature base `b806d78bb94810dff16ffd79d515af66c4664021`; final `RELEASE_SHA` is assigned only after the release-control changes are committed and every automated gate is rerun.
-- **Revision:** branch `codex/uix271-release-gate`, uncommitted release-control changes on feature base `b806d78`.
-- **Changed files:** legacy chat snapshot compatibility and tests; migration-ledger restore verification; schema-safe backup counts; reset gate; release candidate, preflight, and 39-row feature matrix docs.
-- **Verification:** lint PASS; typecheck PASS; Vitest 62 files / 327 tests PASS; focused release-safety tests PASS; key Chromium batch 21/21 PASS; `git diff --check` PASS.
-- **Findings fixed:** old API snapshots omitted `chatThreads` / `chatThreadStates`; restore must accept an exact migration prefix before candidate startup and require the exact complete ledger after candidate migration; pre-migration backup counts must skip tables not yet present.
-- **Blockers before production:** commit and assign `RELEASE_SHA`; rerun build and complete automated gate at that SHA; fresh production backup; isolated restore + rollback rehearsal; multiplayer and human GM + six-player matrix; explicit production GO. Linear stage-gate update is pending because the connector is unavailable.
-- **Next action:** commit the release-control revision, rerun final-SHA gates, then prepare the evidence bundle. Do not deploy without explicit approval.
+- **Decision:** feature base `b806d78bb94810dff16ffd79d515af66c4664021`; the authoritative `RELEASE_SHA` is the clean commit produced from this release-control pool and recorded by the final gate runner.
+- **Revision:** branch `codex/uix271-release-gate`; release-control commit `93186dd` plus test-only multiplayer compatibility updates pending the final clean commit.
+- **Changed files:** legacy chat snapshot compatibility and tests; migration-ledger restore verification; schema-safe backup counts; reset gate; release candidate, preflight, 39-row feature matrix; multiplayer assertions aligned with the current asset contract, character workspace, and chat streams.
+- **Verification before final clean commit:** lint PASS; typecheck PASS; build PASS; Vitest 62 files / 327 tests PASS; key Chromium batch 21/21 PASS; isolated Docker multiplayer 2/2 PASS with backend restart, cleanup, and resource-leak checks; `git diff --check` PASS.
+- **Findings fixed:** old snapshots omitted chat collections; restore must accept an exact migration prefix before candidate startup and require the complete ledger after migration; pre-migration counts must skip absent tables; the multiplayer test still used a MAP asset as token artwork and stale pre-UIX-229/pre-stream selectors.
+- **Blockers before production:** fresh production backup; isolated restore; explicit rollback rehearsal decision/evidence; human GM + six-player matrix; fresh live `PREVIOUS_SHA`; explicit production GO. Linear stage-gate update is pending because the connector is unavailable.
+- **Next action:** create the clean candidate commit, rerun the exact-revision multiplayer gate, then obtain a fresh exact production snapshot for isolated restore. Do not deploy without explicit approval.

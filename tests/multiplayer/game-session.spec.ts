@@ -136,10 +136,9 @@ function waitForPing(
 async function expectPingOverlay(page: Page, before: Buffer) {
   const viewport = page.locator(".map-viewport");
   await expect
-    .poll(
-      async () => !(await viewport.screenshot()).equals(before),
-      { timeout: 3_000 },
-    )
+    .poll(async () => !(await viewport.screenshot()).equals(before), {
+      timeout: 3_000,
+    })
     .toBe(true);
   await viewport.screenshot({
     path: "test-results/multiplayer/live-ping-over-covered-fog.png",
@@ -376,7 +375,6 @@ test("GM and six isolated players recover authoritative state without security l
         data: {
           actionId: actionId(),
           sceneId: recoveryScene.id,
-          assetId: recoveryAsset.id,
           name: recoveryTokenName,
           x: 256,
           y: 256,
@@ -537,7 +535,13 @@ test("GM and six isolated players recover authoritative state without security l
           ).length,
       )
       .toBe(placementsBefore + 1);
-    await expect(pages[0]!.locator(".tabs > button")).toHaveCount(1);
+    await pages[0]!.locator(".workspace-menu summary").click();
+    await pages[0]!
+      .getByRole("button", { name: "Персонажи", exact: true })
+      .click();
+    await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(1);
+    await expect(pages[0]!.locator(".character-sheet-card")).toHaveCount(1);
+    await pages[0]!.getByRole("button", { name: "Закрыть персонажей" }).click();
     await pages[0]!.locator(".workspace-menu summary").click();
     await expect(
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
@@ -818,14 +822,18 @@ test("GM and six isolated players recover authoritative state without security l
       .getByRole("dialog", { name: "Токены" })
       .getByRole("button", { name: "Закрыть окно" })
       .click();
+    await pages[0]!.locator("#chat-tab-rolls").click();
     await expect(
       pages[0]!.locator(".message", { hasText: publicMarkers[1] }),
     ).toBeVisible();
     await pages[0]!.locator(".message-list").evaluate((element) => {
       element.scrollTop = 0;
     });
+    await pages[0]!.locator("#chat-tab-table").click();
     await expect(pages[0]!.locator(".chat-compose textarea")).toBeVisible();
-    await expect(pages[0]!.locator(".chat-compose button")).toBeVisible();
+    await expect(
+      pages[0]!.getByRole("button", { name: "Отправить", exact: true }),
+    ).toBeVisible();
 
     for (let index = 0; index < players.length; index += 1) {
       const snapshot = await bootstrap(players[index]);
