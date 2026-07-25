@@ -223,6 +223,39 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   });
 });
 
+test("GM compact chrome keeps actions discoverable at release width", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.setViewportSize({ width: 1343, height: 945 });
+  await page.goto("/");
+
+  await expect(page.locator(".workspace-menu__chevron")).toBeVisible();
+  await expect(page.locator(".campaign-name-button__icon")).toBeVisible();
+  await expect(page.locator(".scene-token-count")).toBeHidden();
+  await expect(page.locator(".map-toolbar .map-tool")).toHaveCount(8);
+  await expect(
+    page.locator('.map-toolbar .map-tool[data-tool="PAN"]'),
+  ).toHaveAttribute("title", /./);
+  await expect(page.locator(".music-topbar__title")).toBeVisible();
+
+  await page.locator(".music-overflow summary").click();
+  await expect(page.locator(".music-overflow__menu")).toBeVisible();
+  await page.locator(".account-menu summary").click();
+  await expect(page.locator(".account-menu__content")).toBeVisible();
+  await expect(page.locator(".account-menu__content .status")).toBeVisible();
+  await expect(page.locator(".account-menu__content .g-button")).toHaveCount(1);
+});
+
 test("GM opens token and file workflows without leaving the canvas", async ({
   page,
 }) => {

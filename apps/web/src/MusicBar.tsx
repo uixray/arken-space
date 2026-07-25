@@ -163,28 +163,24 @@ export function MusicBar({
         }}
       />
       <section className="music-topbar" aria-label="Музыка">
-        <div className="music-now-playing" title={current?.name}>
-          <span>Музыка</span>
-          <strong>{current?.name ?? "Трек не выбран"}</strong>
-        </div>
-        {role === "GM" ? (
-          <>
-            <Button size="s" disabled={!current} onClick={togglePlayback}>
-              {audio.playing ? "Пауза" : "Играть"}
-            </Button>
-            <Button size="s" view="flat" onClick={() => setLibraryOpen(true)}>
-              Библиотека
-            </Button>
-          </>
-        ) : !enabled ? (
-          <Button size="s" view="action" onClick={() => setEnabled(true)}>
-            Включить звук
-          </Button>
-        ) : null}
-        {enabled ? (
-          <>
-            <label className="music-local-volume">
-              <span className="visually-hidden">Личная громкость</span>
+        <strong className="music-topbar__title">Музыка</strong>
+        <button
+          type="button"
+          className="music-icon-button"
+          aria-label={audio.playing ? "Пауза" : "Играть"}
+          title={audio.playing ? "Пауза" : "Играть"}
+          disabled={role !== "GM" || !current}
+          onClick={togglePlayback}
+        >
+          <span aria-hidden="true">{audio.playing ? "⏸" : "▶"}</span>
+        </button>
+        <details className="music-volume-control">
+          <summary aria-label="Громкость" title="Громкость">
+            <span aria-hidden="true">&#x1f50a;</span>
+          </summary>
+          <div className="music-volume-popover">
+            <label>
+              <span>Громкость</span>
               <input
                 aria-label="Личная громкость"
                 type="range"
@@ -195,19 +191,62 @@ export function MusicBar({
                 onChange={(event) => setVolume(Number(event.target.value))}
               />
             </label>
-            <Button
-              size="s"
-              view="flat"
-              aria-label="Выключить звук лично для себя"
-              onClick={() => setEnabled(false)}
-            >
-              Выкл.
-            </Button>
-          </>
-        ) : role === "GM" ? (
-          <Button size="s" view="flat" onClick={() => setEnabled(true)}>
-            Включить звук
-          </Button>
+            {enabled ? (
+              <button type="button" onClick={() => setEnabled(false)}>
+                Выключить звук
+              </button>
+            ) : (
+              <button type="button" onClick={() => setEnabled(true)}>
+                Включить звук
+              </button>
+            )}
+          </div>
+        </details>
+        {role === "GM" ? (
+          <details className="music-overflow">
+            <summary aria-label="Меню музыки" title="Меню музыки">
+              <span aria-hidden="true">&#x22ef;</span>
+            </summary>
+            <div className="music-overflow__menu">
+              <span className="music-overflow__now-playing">
+                {current?.name ?? "Трек не выбран"}
+              </span>
+              {tracks.length ? (
+                tracks.map((track) => (
+                  <button
+                    key={track.id}
+                    type="button"
+                    className={
+                      track.id === current?.id ? "is-selected" : undefined
+                    }
+                    onClick={(event) => {
+                      sendCommand({ command: "SELECT", assetId: track.id });
+                      event.currentTarget
+                        .closest("details")
+                        ?.removeAttribute("open");
+                    }}
+                  >
+                    {track.name}
+                  </button>
+                ))
+              ) : (
+                <span className="music-overflow__empty">
+                  Нет доступных треков
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={(event) => {
+                  setLibraryOpen(true);
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open");
+                }}
+              >
+                Открыть библиотеку
+              </button>
+            </div>
+          </details>
         ) : null}
       </section>
       {role === "GM" ? (

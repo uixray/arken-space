@@ -186,20 +186,24 @@ function CanvasHistoryControls({
   return (
     <>
       <button
+        className="map-tool"
+        data-tool="UNDO"
         aria-label="Отменить последнее действие"
         title="Отменить последнее действие"
         disabled={disabled || !canUndo}
         onClick={() => void act("undo")}
       >
-        Отменить
+        <span aria-hidden="true">&#x21b6;</span>
       </button>
       <button
+        className="map-tool"
+        data-tool="REDO"
         aria-label="Повторить отменённое действие"
         title="Повторить отменённое действие"
         disabled={disabled || !canRedo}
         onClick={() => void act("redo")}
       >
-        Повторить
+        <span aria-hidden="true">&#x21b7;</span>
       </button>
     </>
   );
@@ -218,7 +222,12 @@ function GridSettings({
   useEffect(() => setDraft(scene.grid), [scene]);
   return (
     <details className="grid-settings">
-      <summary aria-label="Настройки сетки" title="Настройки сетки">
+      <summary
+        aria-label="Настройки сетки"
+        title="Настройки сетки"
+        className="toolbar-detail-trigger"
+        data-tool="GRID"
+      >
         Сетка
       </summary>
       <div className="grid-settings-popover">
@@ -1006,6 +1015,9 @@ export function App() {
               onClick={() => setCampaignRenameOpen(true)}
             >
               {viewSnapshot.campaign.name}
+              <span className="campaign-name-button__icon" aria-hidden="true">
+                &#x270e;
+              </span>
             </button>
           ) : (
             <span>{viewSnapshot.campaign.name}</span>
@@ -1022,21 +1034,30 @@ export function App() {
             disabled={Boolean(previewSnapshot) || snapshot.me.role !== "GM"}
             onChange={(event) => setViewedSceneId(event.target.value)}
           >
-            {viewSnapshot.scenes.map((scene) => (
-              <option key={scene.id} value={scene.id}>
-                {scene.name}
-              </option>
-            ))}
+            {viewSnapshot.scenes.map((scene) => {
+              const tokenCount = viewSnapshot.tokens.filter(
+                (token) => token.sceneId === scene.id,
+              ).length;
+              return (
+                <option key={scene.id} value={scene.id}>
+                  {scene.name} · {tokenCount} токенов
+                </option>
+              );
+            })}
           </select>
-          {activeScene && (
-            <span className="scene-token-count">
-              {activeTokens.length} токенов
-            </span>
-          )}
           {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
             <button
-              className="publish-scene"
-              title="Опубликовать выбранную сцену для игроков"
+              className="topbar-icon-button publish-scene"
+              aria-label={
+                activeScene.id === broadcastScene?.id
+                  ? "Сцена уже показана игрокам"
+                  : "Показать выбранную сцену игрокам"
+              }
+              title={
+                activeScene.id === broadcastScene?.id
+                  ? "Сцена у игроков"
+                  : "Показать выбранную сцену игрокам"
+              }
               disabled={activeScene.id === broadcastScene?.id}
               onClick={() =>
                 void run(() =>
@@ -1050,24 +1071,26 @@ export function App() {
                 )
               }
             >
-              {activeScene.id === broadcastScene?.id
-                ? "У игроков"
-                : "Показать игрокам"}
+              <span aria-hidden="true">&#x25c9;</span>
             </button>
           )}
           {!previewSnapshot && snapshot.me.role === "GM" && (
             <button
+              className="topbar-icon-button"
               aria-label="Создать сцену"
               title="Создать новую сцену"
               onClick={() => setSceneDialogRequest((value) => value + 1)}
             >
-              +
+              <span aria-hidden="true">&#xff0b;</span>
             </button>
           )}
         </div>
         <details ref={workspaceMenuRef} className="workspace-menu">
           <summary aria-label="Открыть рабочее пространство">
-            Рабочее пространство
+            <span>Рабочее пространство</span>
+            <span className="workspace-menu__chevron" aria-hidden="true">
+              &#x2304;
+            </span>
           </summary>
           <div className="workspace-menu__content">
             <button
@@ -1134,72 +1157,74 @@ export function App() {
               };
             }}
           />
-          <span
-            className={connection === "ONLINE" ? "status online" : "status"}
-          >
-            {connection === "ONLINE"
-              ? "в сети"
-              : connection === "RESYNCING"
-                ? "синхронизация"
-                : connection === "OFFLINE"
-                  ? "нет связи"
-                  : "переподключение"}
-          </span>
-          {connection !== "ONLINE" && (
-            <button
-              onClick={() => {
-                setConnection("RESYNCING");
-                socket?.emit("game:resync", snapshot.snapshotVersion);
-              }}
-            >
-              Синхронизировать
-            </button>
-          )}
-          <span
-            title={`Схема ${snapshot.schemaVersion}, сборка ${snapshot.buildVersion}, Git ${snapshot.buildRevision ?? "unknown"}`}
-          >
-            v{snapshot.snapshotVersion} ·{" "}
-            {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
-          </span>
-          <span
-            className={
-              !previewSnapshot && snapshot.me.role === "PLAYER"
-                ? "player-identity"
-                : undefined
-            }
-          >
-            {previewSnapshot
-              ? `Просмотр: ${viewSnapshot.me.displayName}`
-              : snapshot.me.role === "PLAYER"
-                ? `Вы играете как: ${snapshot.me.displayName}`
-                : `${snapshot.me.displayName} · ${snapshot.me.role}`}
-          </span>
-          {!previewSnapshot && (
-            <FeedbackReporter
-              buildVersion={snapshot.buildVersion}
-              buildRevision={snapshot.buildRevision}
-              connection={connection}
-            />
-          )}
-          {previewSnapshot && (
-            <button onClick={() => setPreviewSnapshot(null)}>
-              Вернуться к мастеру
-            </button>
-          )}
-          {snapshot.me.role === "PLAYER" && !previewSnapshot ? (
-            <button onClick={() => setPlayerHandoffOpen(true)}>
-              Сменить игрока
-            </button>
-          ) : (
-            <button
-              onClick={async () => {
-                await api("/api/auth/logout", { method: "POST" });
-                window.location.reload();
-              }}
-            >
-              Выйти
-            </button>
-          )}
+          <details className="account-menu">
+            <summary aria-label="Меню сеанса" title="Меню сеанса">
+              <span aria-hidden="true">&#x2630;</span>
+            </summary>
+            <div className="account-menu__content">
+              <span
+                className={connection === "ONLINE" ? "status online" : "status"}
+              >
+                {connection === "ONLINE"
+                  ? "в сети"
+                  : connection === "RESYNCING"
+                    ? "синхронизация"
+                    : connection === "OFFLINE"
+                      ? "нет связи"
+                      : "переподключение"}
+              </span>
+              {connection !== "ONLINE" && (
+                <button
+                  onClick={() => {
+                    setConnection("RESYNCING");
+                    socket?.emit("game:resync", snapshot.snapshotVersion);
+                  }}
+                >
+                  Синхронизировать
+                </button>
+              )}
+              <span className="account-menu__identity">
+                {previewSnapshot
+                  ? `Просмотр: ${viewSnapshot.me.displayName}`
+                  : snapshot.me.role === "PLAYER"
+                    ? `Вы играете как: ${snapshot.me.displayName}`
+                    : `${snapshot.me.displayName} · ${snapshot.me.role}`}
+              </span>
+              <span
+                className="account-menu__build"
+                title={`Схема ${snapshot.schemaVersion}, сборка ${snapshot.buildVersion}, Git ${snapshot.buildRevision ?? "unknown"}`}
+              >
+                v{snapshot.snapshotVersion} ·{" "}
+                {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
+              </span>
+              {!previewSnapshot && (
+                <FeedbackReporter
+                  buildVersion={snapshot.buildVersion}
+                  buildRevision={snapshot.buildRevision}
+                  connection={connection}
+                />
+              )}
+              {previewSnapshot && (
+                <button onClick={() => setPreviewSnapshot(null)}>
+                  Вернуться к мастеру
+                </button>
+              )}
+              {snapshot.me.role === "PLAYER" && !previewSnapshot ? (
+                <button onClick={() => setPlayerHandoffOpen(true)}>
+                  Сменить игрока
+                </button>
+              ) : (
+                <button
+                  onClick={async () => {
+                    await api("/api/auth/logout", { method: "POST" });
+                    window.location.reload();
+                  }}
+                >
+                  Выйти
+                </button>
+              )}
+            </div>
+          </details>
         </div>
       </header>
       <ArkenDialog
@@ -1255,6 +1280,8 @@ export function App() {
               <button
                 aria-label="Перемещение"
                 title="Перемещение по карте (средняя кнопка мыши)"
+                className="map-tool"
+                data-tool="PAN"
                 aria-pressed={tool === "PAN"}
                 onClick={() => setTool("PAN")}
               >
@@ -1265,6 +1292,8 @@ export function App() {
                   <button
                     aria-label="Открыть туман"
                     title="Открыть выбранную область тумана"
+                    className="map-tool"
+                    data-tool="FOG"
                     aria-pressed={tool === "FOG"}
                     onClick={() => setTool("FOG")}
                   >
@@ -1273,6 +1302,8 @@ export function App() {
                   <button
                     aria-label="Закрыть туман"
                     title="Закрыть выбранную область туманом"
+                    className="map-tool"
+                    data-tool="COVER"
                     aria-pressed={tool === "COVER"}
                     onClick={() => setTool("COVER")}
                   >
@@ -1283,6 +1314,8 @@ export function App() {
               <button
                 aria-label="Рисование"
                 title="Нарисовать линию на карте"
+                className="map-tool"
+                data-tool="DRAW"
                 aria-pressed={tool === "DRAW"}
                 onClick={() => setTool("DRAW")}
               >
@@ -1291,6 +1324,8 @@ export function App() {
               <button
                 aria-label="Линейка"
                 title="Измерить расстояние на карте"
+                className="map-tool"
+                data-tool="RULER"
                 aria-pressed={tool === "RULER"}
                 onClick={() => setTool("RULER")}
               >
@@ -1299,6 +1334,8 @@ export function App() {
               <button
                 aria-label="Пинг"
                 title="Показать точку группе"
+                className="map-tool"
+                data-tool="PING"
                 aria-pressed={tool === "PING"}
                 onClick={() => setTool("PING")}
               >
@@ -1326,6 +1363,8 @@ export function App() {
                     <summary
                       aria-label="Настройки размера карты"
                       title="Настройки размера карты"
+                      className="toolbar-detail-trigger"
+                      data-tool="RESIZE"
                     >
                       Размер карты
                     </summary>

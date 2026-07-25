@@ -345,6 +345,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
 
     await page.goto("/");
+    await page.locator(".account-menu summary").click();
     await page.getByRole("button", { name: "Сообщить" }).click();
 
     const dialog = page.getByRole("dialog", {
