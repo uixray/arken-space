@@ -1031,9 +1031,19 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
     characterId: playerSnapshot.characters[0]!.id,
   };
   playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  // A legacy snapshot may predate the SP wallet field. Rapid deltas must
+  // normalize it before the first queued request instead of producing NaN.
+  delete (
+    playerSnapshot.characters[0]!.wallet as Partial<
+      (typeof playerSnapshot.characters)[0]["wallet"]
+    >
+  ).sp;
   playerSnapshot.members = [playerSnapshot.me];
   const submittedGold: number[] = [];
+  const submittedSp: number[] = [];
   const submittedRevisions: number[] = [];
+  const renderErrors: Error[] = [];
+  page.on("pageerror", (error) => renderErrors.push(error));
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
@@ -1047,6 +1057,7 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
       revision: number;
     };
     submittedGold.push(payload.wallet.gold);
+    submittedSp.push(payload.wallet.sp);
     submittedRevisions.push(payload.revision);
     if (submittedGold.length === 1)
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1083,6 +1094,18 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   await goldRow.locator("button").last().click();
   await expect.poll(() => submittedGold).toEqual([1, 2, 3, 6]);
   await expect(input).toHaveValue("6");
+
+  const spRow = page
+    .locator(".character-workspace .inline-fields")
+    .filter({ hasText: /^sp/ });
+  for (let index = 0; index < 12; index += 1)
+    await spRow.locator("button").last().click();
+  await expect.poll(() => submittedSp.at(-1)).toBe(12);
+  await expect(spRow.locator('input[type="number"]')).toHaveValue("12");
+  await expect(page.getByText("????????? ???????? ??????????")).toHaveCount(0);
+  expect(renderErrors.filter((error) => error.name === "TypeError")).toEqual(
+    [],
+  );
 });
 
 test("resource conflict replaces the draft with canonical bootstrap data", async ({

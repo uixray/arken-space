@@ -42,6 +42,7 @@ import { ErrorState, LoadingState } from "./ui/EntityState";
 import { characterTokenPlacementRequest } from "./token-placement";
 import { normalizeClientDiceResult } from "./dice-result";
 import type { MapTool } from "./renderers/map-interaction";
+import { normalizeWallet } from "./wallet";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -853,18 +854,20 @@ export function App() {
     const operation = previous.then(async (queuedCharacter) => {
       let canonical = queuedCharacter;
       const submit = async (base: import("@arken/contracts").CharacterDto) => {
+        const baseWallet = normalizeWallet(base.wallet);
         const nextPatch = intent?.walletDelta
           ? {
               wallet: {
-                ...base.wallet,
+                ...baseWallet,
                 [intent.walletDelta.key]: Math.max(
                   0,
-                  base.wallet[intent.walletDelta.key] +
-                    intent.walletDelta.delta,
+                  baseWallet[intent.walletDelta.key] + intent.walletDelta.delta,
                 ),
               },
             }
-          : patch;
+          : patch.wallet
+            ? { ...patch, wallet: normalizeWallet(patch.wallet) }
+            : patch;
         return api<import("@arken/contracts").CharacterDto>(
           `/api/characters/${characterId}/counters`,
           {

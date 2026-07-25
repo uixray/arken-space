@@ -62,6 +62,12 @@ import { StickerPicker } from "./StickerPicker";
 import { StoryChannel, type StoryDraftInput } from "./StoryChannel";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import {
+  changeWalletValue,
+  EMPTY_WALLET,
+  normalizeWallet,
+  normalizeWalletValue,
+} from "./wallet";
+import {
   CHAT_STREAM_LABEL,
   CHAT_STREAM_ORDER,
   nextChatStream,
@@ -855,8 +861,8 @@ export function CharacterPanel({
   >(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [portraitUpload, setPortraitUpload] = useState<File>();
-  const [walletDraft, setWalletDraft] = useState(
-    () => character?.wallet ?? { gold: 0, silver: 0, copper: 0, sp: 0 },
+  const [walletDraft, setWalletDraft] = useState(() =>
+    normalizeWallet(character?.wallet ?? EMPTY_WALLET),
   );
   const walletDraftRef = useRef(walletDraft);
   const walletInputDirtyRef = useRef(false);
@@ -865,9 +871,10 @@ export function CharacterPanel({
   );
   useEffect(() => {
     if (character && countersPending === 0) {
-      walletDraftRef.current = character.wallet;
+      const nextWallet = normalizeWallet(character.wallet);
+      walletDraftRef.current = nextWallet;
       walletInputDirtyRef.current = false;
-      setWalletDraft(character.wallet);
+      setWalletDraft(nextWallet);
       setResourcesDraft(JSON.stringify(character.resources, null, 2));
     }
   }, [character, countersPending]);
@@ -907,10 +914,12 @@ export function CharacterPanel({
     (asset) => asset.id === character.portraitAssetId,
   );
   const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
+    nextWallet = normalizeWallet(nextWallet);
     if (!walletInputDirtyRef.current) return;
+    const canonicalWallet = normalizeWallet(character.wallet);
     if (
       (Object.keys(nextWallet) as Array<keyof CharacterDto["wallet"]>).every(
-        (key) => nextWallet[key] === character.wallet[key],
+        (key) => nextWallet[key] === canonicalWallet[key],
       )
     ) {
       walletInputDirtyRef.current = false;
@@ -936,11 +945,11 @@ export function CharacterPanel({
     }
   };
   const changeWallet = (key: keyof CharacterDto["wallet"], delta: number) => {
-    const current = walletDraftRef.current;
-    const nextValue = Math.max(0, current[key] + delta);
+    const current = normalizeWallet(walletDraftRef.current);
+    const next = changeWalletValue(current, key, delta);
+    const nextValue = next[key];
     const appliedDelta = nextValue - current[key];
     if (appliedDelta === 0) return;
-    const next = { ...current, [key]: nextValue };
     walletDraftRef.current = next;
     setWalletDraft(next);
     setCountersPending((count) => count + 1);
@@ -1351,10 +1360,7 @@ export function CharacterPanel({
               onChange={(event) => {
                 const next = {
                   ...walletDraftRef.current,
-                  [key]: Math.max(
-                    0,
-                    Number.parseInt(event.target.value || "0", 10),
-                  ),
+                  [key]: normalizeWalletValue(event.target.value),
                 };
                 walletDraftRef.current = next;
                 walletInputDirtyRef.current = true;

@@ -117,6 +117,7 @@ export function FormSelect({
       name={name}
       aria-label={ariaLabel}
       disabled={disabled}
+      popupClassName="arken-form-select-popup"
       options={options}
       value={[String(selected)]}
       onUpdate={(next) => {

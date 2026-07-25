@@ -681,6 +681,37 @@ code {
   display: grid;
   gap: 4px;
 }
+.drawing-color-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  gap: 3px;
+}
+.drawing-color-swatch {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.drawing-color-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+@media (pointer: coarse) {
+  .drawing-color-presets {
+    grid-template-columns: repeat(3, 44px);
+  }
+  .drawing-color-swatch {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+}
 .drawing-color-picker {
   display: grid;
   justify-items: center;

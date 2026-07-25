@@ -29,6 +29,12 @@
   z-index: var(--arken-layer-dialog);
 }
 
+/* Select renders its menu in a document-level portal. Keep menus opened from
+ * modal forms above the modal layer instead of invisibly behind its backdrop. */
+.arken-form-select-popup {
+  z-index: calc(var(--arken-layer-dialog) + 1);
+}
+
 .gravity-preview {
   min-height: 100%;
   padding: 32px;
