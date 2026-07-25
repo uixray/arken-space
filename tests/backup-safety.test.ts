@@ -8,9 +8,11 @@ import {
   compareMigrationLedger,
   compareMigrationLedgerPrefix,
   describeDatabaseCountCoverage,
+  isTransientPostgresStartupError,
   parseDatabaseCounts,
   parseMigrationLedger,
   readExpectedMigrationLedger,
+  resolvePostgresReadinessPolicy,
   resolveRestoredPath,
   selectResticSnapshot,
   validateRestoreProjectName,
@@ -172,6 +174,36 @@ describe("backup and restore safety", () => {
     expect(runner).toContain("report.databaseCountCoverage =");
     expect(runner).toContain("compareMigrationLedger(");
     expect(runner).toContain("compareMigrationLedgerPrefix(");
+  });
+
+  it("bounds PostgreSQL readiness and retries only startup failures", () => {
+    expect(
+      isTransientPostgresStartupError(
+        "FATAL: the database system is starting up",
+      ),
+    ).toBe(true);
+    expect(
+      isTransientPostgresStartupError(
+        'pg_restore: ERROR: relation "x" does not exist',
+      ),
+    ).toBe(false);
+    expect(resolvePostgresReadinessPolicy({})).toEqual({
+      timeoutMs: 60_000,
+      retryDelayMs: 1_000,
+      restoreAttempts: 3,
+    });
+    expect(() =>
+      resolvePostgresReadinessPolicy({
+        ARKEN_RESTORE_POSTGRES_RESTORE_ATTEMPTS: "0",
+      }),
+    ).toThrow(/RESTORE_ATTEMPTS/);
+
+    const runner = readFileSync(
+      path.join(root, "scripts", "run-restore-rehearsal.mjs"),
+      "utf8",
+    );
+    expect(runner).toContain("waitForPostgresReady()");
+    expect(runner).toContain('"postgresql-restore-retry", "waiting"');
   });
 
   it("builds counts only for existing allowlisted tables", () => {

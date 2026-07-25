@@ -336,3 +336,42 @@ export function assertIsolatedComposeConfig(
   if (!/@postgres:5432\/arken$/.test(serverEnvironment.DATABASE_URL ?? ""))
     throw new Error("Restore database URL must target isolated postgres");
 }
+
+export function isTransientPostgresStartupError(output) {
+  return /(?:database system is starting up|the database system is starting up|the database system is not yet accepting connections)/i.test(
+    String(output ?? ""),
+  );
+}
+
+export function resolvePostgresReadinessPolicy(environment = {}) {
+  const timeoutMs = Number(
+    environment.ARKEN_RESTORE_POSTGRES_READY_TIMEOUT_MS ?? 60_000,
+  );
+  const retryDelayMs = Number(
+    environment.ARKEN_RESTORE_POSTGRES_RETRY_DELAY_MS ?? 1_000,
+  );
+  const restoreAttempts = Number(
+    environment.ARKEN_RESTORE_POSTGRES_RESTORE_ATTEMPTS ?? 3,
+  );
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 5_000 || timeoutMs > 300_000)
+    throw new Error(
+      "ARKEN_RESTORE_POSTGRES_READY_TIMEOUT_MS must be an integer from 5000 to 300000",
+    );
+  if (
+    !Number.isInteger(retryDelayMs) ||
+    retryDelayMs < 100 ||
+    retryDelayMs > 10_000
+  )
+    throw new Error(
+      "ARKEN_RESTORE_POSTGRES_RETRY_DELAY_MS must be an integer from 100 to 10000",
+    );
+  if (
+    !Number.isInteger(restoreAttempts) ||
+    restoreAttempts < 1 ||
+    restoreAttempts > 5
+  )
+    throw new Error(
+      "ARKEN_RESTORE_POSTGRES_RESTORE_ATTEMPTS must be an integer from 1 to 5",
+    );
+  return { timeoutMs, retryDelayMs, restoreAttempts };
+}

@@ -28,6 +28,8 @@ import {
   parseDatabaseCounts,
   parseMigrationLedger,
   readExpectedMigrationLedger,
+  isTransientPostgresStartupError,
+  resolvePostgresReadinessPolicy,
   resolveRestoredPath,
   selectResticSnapshot,
   validateRestoreProjectName,
@@ -62,6 +64,7 @@ const backupMediaRoot =
   "/home/uixray/apps/arken-space-data/media";
 const restorePassword =
   process.env.RESTORE_POSTGRES_PASSWORD ?? randomBytes(24).toString("hex");
+const postgresReadinessPolicy = resolvePostgresReadinessPolicy(process.env);
 const workingDirectory = mkdtempSync(
   path.join(tmpdir(), "arken-restore-data-"),
 );
@@ -151,6 +154,61 @@ function captureDocker(args, options = {}) {
 
 function runDocker(args, options = {}) {
   return run(docker.command, dockerArgs(args), options);
+}
+
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function waitForPostgresReady() {
+  const deadline = Date.now() + postgresReadinessPolicy.timeoutMs;
+  let consecutiveSuccesses = 0;
+  let attempts = 0;
+  let lastError = "no readiness probe completed";
+  while (Date.now() < deadline) {
+    attempts += 1;
+    const probe = execute(
+      docker.command,
+      dockerArgs([
+        ...composeBase(),
+        "exec",
+        "-T",
+        "postgres",
+        "psql",
+        "--username",
+        "arken",
+        "--dbname",
+        "arken",
+        "--no-align",
+        "--tuples-only",
+        "--command",
+        "SELECT 1;",
+      ]),
+      { env: composeEnvironment() },
+    );
+    if (
+      !probe.error &&
+      (probe.status ?? 1) === 0 &&
+      probe.stdout.trim() === "1"
+    ) {
+      consecutiveSuccesses += 1;
+      if (consecutiveSuccesses >= 2) return { attempts };
+    } else {
+      consecutiveSuccesses = 0;
+      lastError =
+        probe.error?.message ||
+        probe.stderr?.trim() ||
+        probe.stdout?.trim() ||
+        "readiness probe exited " + probe.status;
+    }
+    sleep(postgresReadinessPolicy.retryDelayMs);
+  }
+  throw new Error(
+    "Isolated PostgreSQL did not become stably ready within " +
+      postgresReadinessPolicy.timeoutMs +
+      "ms: " +
+      lastError,
+  );
 }
 
 function freeBytes(location) {
@@ -254,33 +312,53 @@ function verifyChecksums(dumpFile, manifests, restoredMedia) {
 }
 
 function restoreDatabase(dumpFile) {
-  const descriptor = openSync(dumpFile, "r");
-  try {
-    const status = runDocker(
-      [
-        ...composeBase(),
-        "exec",
-        "-T",
-        "postgres",
-        "pg_restore",
-        "--exit-on-error",
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-privileges",
-        "--username",
-        "arken",
-        "--dbname",
-        "arken",
-      ],
-      {
-        env: composeEnvironment(),
-        stdio: [descriptor, "inherit", "inherit"],
-      },
-    );
-    if (status !== 0) throw new Error("pg_restore exited " + status);
-  } finally {
-    closeSync(descriptor);
+  for (
+    let attempt = 1;
+    attempt <= postgresReadinessPolicy.restoreAttempts;
+    attempt += 1
+  ) {
+    const descriptor = openSync(dumpFile, "r");
+    let result;
+    try {
+      result = execute(
+        docker.command,
+        dockerArgs([
+          ...composeBase(),
+          "exec",
+          "-T",
+          "postgres",
+          "pg_restore",
+          "--exit-on-error",
+          "--clean",
+          "--if-exists",
+          "--no-owner",
+          "--no-privileges",
+          "--username",
+          "arken",
+          "--dbname",
+          "arken",
+        ]),
+        { env: composeEnvironment(), stdio: [descriptor, "pipe", "pipe"] },
+      );
+    } finally {
+      closeSync(descriptor);
+    }
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    if (result.error) throw result.error;
+    if ((result.status ?? 1) === 0) return { attempts: attempt };
+    const output = (result.stderr ?? "") + "\n" + (result.stdout ?? "");
+    if (
+      attempt >= postgresReadinessPolicy.restoreAttempts ||
+      !isTransientPostgresStartupError(output)
+    )
+      throw commandError("pg_restore", result);
+    record("postgresql-restore-retry", "waiting", {
+      attempt,
+      reason: "database-starting-up",
+    });
+    sleep(postgresReadinessPolicy.retryDelayMs);
+    waitForPostgresReady();
   }
 }
 
@@ -503,10 +581,14 @@ try {
   );
   if (postgresUp !== 0)
     throw new Error("Isolated PostgreSQL startup exited " + postgresUp);
-  record("isolated-postgres", "passed");
+  const postgresReady = waitForPostgresReady();
+  record("isolated-postgres", "passed", {
+    stableReadinessProbes: 2,
+    attempts: postgresReady.attempts,
+  });
 
-  restoreDatabase(dumps[0]);
-  record("postgresql-restore", "passed");
+  const restoreResult = restoreDatabase(dumps[0]);
+  record("postgresql-restore", "passed", { attempts: restoreResult.attempts });
 
   const restoredMigrationPrefix = readRestoredMigrationLedger();
   compareMigrationLedgerPrefix(
