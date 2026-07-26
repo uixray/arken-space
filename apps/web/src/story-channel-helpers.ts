@@ -22,10 +22,10 @@ export function canCreateStoryDraft(input: {
 
 export function storyPostStatus(post: StoryPostView) {
   if (post.lifecycle === "DRAFT")
-    return "\u0427\u0435\u0440\u043d\u043e\u0432\u0438\u043a";
+    return "Черновик";
   if (post.lifecycle === "ARCHIVED")
-    return "\u0412 \u0430\u0440\u0445\u0438\u0432\u0435";
+    return "В архиве";
   if (post.lifecycle === "CORRECTED")
-    return "\u0418\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u043e";
-  return "\u041e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u043d\u043e";
+    return "Исправлено";
+  return "Опубликовано";
 }

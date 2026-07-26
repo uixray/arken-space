@@ -756,7 +756,7 @@ test("chat survives malformed client dice and renders local date boundaries", as
       id: "date-two",
       sequence: 2,
       kind: "DICE",
-      body: "?????? ??????",
+      body: "Сломанный бросок",
       createdAt: "2026-07-22T08:00:00.000Z",
       dice: { total: 20 } as unknown as NonNullable<
         GameSnapshot["messages"][number]["dice"]
@@ -777,7 +777,7 @@ test("chat survives malformed client dice and renders local date boundaries", as
   await page.goto("/");
 
   await expect(page.locator(".chat-date-divider")).toHaveCount(2);
-  await expect(page.getByText("?????? ??????")).toBeVisible();
+  await expect(page.getByText("Сломанный бросок")).toBeVisible();
   await expect(page.locator(".app-fatal-error")).toHaveCount(0);
   await expect(page.locator(".roll-result")).toHaveCount(0);
 });
@@ -855,7 +855,22 @@ test("GM shell keeps essential controls accessible across desktop widths", async
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Подготовка" }).click();
   await expect(page.getByRole("dialog", { name: "Подготовка" })).toBeVisible();
-  await expect(page.locator("canvas").first()).toBeVisible();
+  await expect(page.locator(".map-shell")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await expect(
+    page.locator(".setup-workspace .arken-workspace-window__drag-handle"),
+  ).toHaveAttribute("data-draggable", "false");
+  await expect(
+    page.getByRole("navigation", { name: "Разделы подготовки" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Общий каталог", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Добавить навык или способность" }),
+  ).toBeVisible();
 });
 
 test("GM prepares a scene locally before publishing it to players", async ({
@@ -1328,7 +1343,7 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
     await spRow.locator("button").last().click();
   await expect.poll(() => submittedSp.at(-1)).toBe(12);
   await expect(spRow.locator('input[type="number"]')).toHaveValue("12");
-  await expect(page.getByText("????????? ???????? ??????????")).toHaveCount(0);
+  await expect(page.getByText("Интерфейс временно остановлен")).toHaveCount(0);
   expect(renderErrors.filter((error) => error.name === "TypeError")).toEqual(
     [],
   );

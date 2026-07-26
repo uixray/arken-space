@@ -52,3 +52,20 @@ export function normalizeClientDiceResult(value: unknown): DiceResult | null {
   });
   return terms && modifiers ? (dice as unknown as DiceResult) : null;
 }
+
+export function formatDiceBreakdown(value: unknown) {
+  const dice = normalizeClientDiceResult(value);
+  if (!dice) return "";
+  const terms = dice.terms.map(
+    (term) => `${term.notation} (${term.rolls.join(", ")})`,
+  );
+  const modifiers = dice.modifiers
+    .filter((modifier) => modifier.value !== 0)
+    .map((modifier) =>
+      modifier.value > 0 ? `+${modifier.value}` : String(modifier.value),
+    );
+  const pool = dice.poolTotals
+    ? `Выпало: ${dice.poolTotals.join(" и ")} \u2192 выбран ${dice.poolTotals[dice.selectedPool ?? 0]}`
+    : "";
+  return [...terms, ...modifiers, pool].filter(Boolean).join(" \u00b7 ");
+}

@@ -2292,7 +2292,7 @@ code {
   padding: var(--space-sm);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--surface-1);
+  background: #211f1c;
   box-shadow: var(--shadow-lg);
 }
 .sticker-picker-panel > input {
@@ -3304,4 +3304,40 @@ code {
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
+}
+
+/* Full-canvas workspaces replace the scene while the sidebar remains available. */
+.setup-workspace,
+.world-maps-workspace {
+  position: fixed;
+  z-index: 900;
+  top: 44px;
+  right: 360px;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-height: none;
+  transform: none;
+  border-width: 0 1px 0 0;
+  box-shadow: none;
+}
+.arken-workspace-window__drag-handle[data-draggable="false"] {
+  cursor: default;
+  touch-action: auto;
+}
+.setup-tabs {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 0;
+  background: var(--surface);
+}
+
+.character-rail__create {
+  width: 100%;
+  min-height: 36px;
+  margin-bottom: 8px;
 }

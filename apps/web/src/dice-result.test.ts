@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { normalizeClientDiceResult } from "./dice-result";
+﻿import { describe, expect, it } from "vitest";
+import { formatDiceBreakdown, normalizeClientDiceResult } from "./dice-result";
 
 const valid = {
   formula: "1d20",
@@ -24,5 +24,20 @@ describe("normalizeClientDiceResult", () => {
         terms: [{ ...valid.terms[0], rolls: Array(101).fill(1) }],
       }),
     ).toBeNull();
+  });
+});
+
+describe("formatDiceBreakdown", () => {
+  it("shows both advantage pools and the selected result", () => {
+    expect(
+      formatDiceBreakdown({
+        ...valid,
+        total: 16,
+        terms: [{ notation: "1d20", rolls: [16], subtotal: 16 }],
+        rollMode: "ADVANTAGE",
+        poolTotals: [7, 16],
+        selectedPool: 1,
+      }),
+    ).toBe("1d20 (16) · Выпало: 7 и 16 → выбран 16");
   });
 });

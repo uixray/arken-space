@@ -98,7 +98,7 @@ export function StoryPost({
       setUpdateError(
         reason instanceof Error
           ? reason.message
-          : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435.",
+          : "Не удалось сохранить исправление.",
       );
     } finally {
       setPending(null);
@@ -110,7 +110,7 @@ export function StoryPost({
       <header className="story-post__header">
         <div>
           <span className="eyebrow">
-            {"\u0421\u044e\u0436\u0435\u0442 \u00b7 "}
+            {"Сюжет \u00b7 "}
             {storyPostStatus(post)}
           </span>
           {post.title && <strong>{post.title}</strong>}
@@ -125,7 +125,7 @@ export function StoryPost({
       {editing ? (
         <label className="story-post__edit">
           {
-            "\u0422\u0435\u043a\u0441\u0442 \u0441\u044e\u0436\u0435\u0442\u0430"
+            "Текст сюжета"
           }
           <textarea
             value={draftBody}
@@ -147,7 +147,7 @@ export function StoryPost({
             rel="noreferrer"
           >
             {
-              "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435: "
+              "Открыть изображение: "
             }
             {media.fileName}
           </a>
@@ -183,8 +183,8 @@ export function StoryPost({
               onClick={() => void transition("publish")}
             >
               {pending === "publish"
-                ? "\u041f\u0443\u0431\u043b\u0438\u043a\u0443\u0435\u043c\u2026"
-                : "\u041e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u0442\u044c"}
+                ? "Публикуем\u2026"
+                : "Опубликовать"}
             </button>
           )}
           {adminPost.lifecycle !== "ARCHIVED" && onUpdate && !editing && (
@@ -198,7 +198,7 @@ export function StoryPost({
             >
               {" "}
               {
-                "\u0418\u0441\u043f\u0440\u0430\u0432\u0438\u0442\u044c"
+                "Исправить"
               }{" "}
             </button>
           )}
@@ -210,7 +210,7 @@ export function StoryPost({
                 onClick={() => void saveCorrection()}
               >
                 {
-                  "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c"
+                  "Сохранить"
                 }
               </button>
               <button
@@ -218,7 +218,7 @@ export function StoryPost({
                 disabled={pending !== null}
                 onClick={() => setEditing(false)}
               >
-                {"\u041e\u0442\u043c\u0435\u043d\u0430"}
+                {"Отмена"}
               </button>
             </>
           )}
@@ -229,8 +229,8 @@ export function StoryPost({
               onClick={() => void transition("archive")}
             >
               {pending === "archive"
-                ? "\u0410\u0440\u0445\u0438\u0432\u0438\u0440\u0443\u0435\u043c\u2026"
-                : "\u0412 \u0430\u0440\u0445\u0438\u0432"}
+                ? "Архивируем\u2026"
+                : "В архив"}
             </button>
           )}
         </div>
@@ -279,7 +279,7 @@ export function StoryChannel({
     if (!file || !onUploadImage || busy) return;
     if (!file.type.startsWith("image/")) {
       setError(
-        "\u041c\u043e\u0436\u043d\u043e \u043f\u0440\u0438\u043a\u0440\u0435\u043f\u0438\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435.",
+        "Можно прикрепить только изображение.",
       );
       return;
     }
@@ -302,7 +302,7 @@ export function StoryChannel({
       setError(
         reason instanceof Error
           ? reason.message
-          : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435.",
+          : "Не удалось загрузить изображение.",
       );
     } finally {
       setLocalPending(false);
@@ -335,7 +335,7 @@ export function StoryChannel({
       setError(
         reason instanceof Error
           ? reason.message
-          : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0447\u0435\u0440\u043d\u043e\u0432\u0438\u043a.",
+          : "Не удалось сохранить черновик.",
       );
     } finally {
       setLocalPending(false);
@@ -352,14 +352,14 @@ export function StoryChannel({
       <header className="story-channel__header">
         <div>
           <span className="eyebrow">
-            {"\u041b\u0435\u0442\u043e\u043f\u0438\u0441\u044c \u043a\u0430\u043c\u043f\u0430\u043d\u0438\u0438"}
+            {"Летопись кампании"}
           </span>
-          <h2>{"\u0421\u044e\u0436\u0435\u0442"}</h2>
+          <h2>{"Сюжет"}</h2>
         </div>
         {!isGm && (
           <span className="story-channel__read-only">
             {
-              "\u0421\u044e\u0436\u0435\u0442 \u0432\u0435\u0434\u0451\u0442 \u043c\u0430\u0441\u0442\u0435\u0440"
+              "Сюжет ведёт мастер"
             }
           </span>
         )}
@@ -370,7 +370,7 @@ export function StoryChannel({
             <header className="story-post__header">
               <div>
                 <span className="eyebrow">
-                  {"\u0420\u0430\u043d\u0435\u0435 \u0432 \u0441\u044e\u0436\u0435\u0442\u0435"}
+                  {"Ранее в сюжете"}
                 </span>
                 <strong>{message.displayName}</strong>
               </div>
@@ -387,7 +387,7 @@ export function StoryChannel({
         {posts.length === 0 && legacyMessages.length === 0 ? (
           <p className="chat-empty">
             {
-              "\u0412 \u0441\u044e\u0436\u0435\u0442\u043d\u043e\u0439 \u043b\u0435\u043d\u0442\u0435 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442 \u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0446\u0438\u0439."
+              "В сюжетной ленте пока нет публикаций."
             }
           </p>
         ) : (
@@ -411,13 +411,13 @@ export function StoryChannel({
           disabled={busy}
           onClick={() => void onLoadMore()}
         >
-          {"\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0431\u043e\u043b\u044c\u0448\u0435"}
+          {"Показать больше"}
         </button>
       )}
       {isGm && onCreateDraft && (
         <form className="story-composer" onSubmit={submit}>
           <label>
-            {"\u0417\u0430\u0433\u043e\u043b\u043e\u0432\u043e\u043a"}{" "}
+            {"Заголовок"}{" "}
             <input
               value={title}
               disabled={busy}
@@ -427,12 +427,12 @@ export function StoryChannel({
           </label>
           <label>
             {
-              "\u041d\u043e\u0432\u0430\u044f \u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0446\u0438\u044f"
+              "Новая публикация"
             }
             <textarea
               value={body}
               disabled={busy}
-              placeholder="\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c \u0438\u0441\u0442\u043e\u0440\u0438\u044e\u2026"
+              placeholder="Продолжить историю\u2026"
               rows={4}
               onChange={(event) => setBody(event.target.value)}
               onKeyDown={(event) => {
@@ -446,13 +446,13 @@ export function StoryChannel({
           {media.length > 0 && (
             <ul
               className="story-composer__attachments"
-              aria-label="\u041f\u0440\u0438\u043a\u0440\u0435\u043f\u043b\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f"
+              aria-label="Прикреплённые изображения"
             >
               {media.map((item) => (
                 <li key={item.contentId}>
                   <span>{item.fileName}</span>
                   <label>
-                    {"\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435"}{" "}
+                    {"Описание"}{" "}
                     <input
                       value={item.altText}
                       disabled={busy}
@@ -469,7 +469,7 @@ export function StoryChannel({
                     />
                   </label>
                   <label>
-                    {"\u041f\u043e\u0434\u043f\u0438\u0441\u044c"}{" "}
+                    {"Подпись"}{" "}
                     <input
                       value={item.caption}
                       disabled={busy}
@@ -496,7 +496,7 @@ export function StoryChannel({
                       )
                     }
                   >
-                    {"\u0423\u0431\u0440\u0430\u0442\u044c"}
+                    {"Убрать"}
                   </button>
                 </li>
               ))}
@@ -504,7 +504,7 @@ export function StoryChannel({
           )}
           <label className="story-composer__gm-notes">
             {
-              "\u0417\u0430\u043c\u0435\u0442\u043a\u0438 \u043c\u0430\u0441\u0442\u0435\u0440\u0430"
+              "Заметки мастера"
             }{" "}
             <textarea
               value={gmNotes}
@@ -534,7 +534,7 @@ export function StoryChannel({
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {
-                    "\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435"
+                    "Добавить изображение"
                   }
                 </button>
               </>
@@ -544,8 +544,8 @@ export function StoryChannel({
               disabled={busy || !canCreateStoryDraft({ body, media })}
             >
               {busy
-                ? "\u0421\u043e\u0445\u0440\u0430\u043d\u044f\u0435\u043c\u2026"
-                : "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0447\u0435\u0440\u043d\u043e\u0432\u0438\u043a"}
+                ? "Сохраняем\u2026"
+                : "Сохранить черновик"}
             </button>
           </div>
           {error && (

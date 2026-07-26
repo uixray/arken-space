@@ -110,10 +110,10 @@ export function StickerPicker({
         view="flat"
         disabled={disabled}
         aria-label={
-          iconOnly ? "\u0421\u0442\u0438\u043a\u0435\u0440\u044b" : undefined
+          iconOnly ? "Стикеры" : undefined
         }
         title={
-          iconOnly ? "\u0421\u0442\u0438\u043a\u0435\u0440\u044b" : undefined
+          iconOnly ? "Стикеры" : undefined
         }
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -122,7 +122,7 @@ export function StickerPicker({
         {iconOnly ? (
           <span aria-hidden="true">{"\u263A"}</span>
         ) : (
-          "\u0421\u0442\u0438\u043a\u0435\u0440\u044b"
+          "Стикеры"
         )}
       </Button>
       {open && (

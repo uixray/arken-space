@@ -14,6 +14,8 @@ export interface ArkenDialogProps {
   footer?: boolean;
   /** A workspace window keeps the map available; confirmations stay modal. */
   variant?: "modal" | "workspace";
+  /** Full-canvas workspaces are fixed; floating utility windows stay draggable. */
+  workspaceDraggable?: boolean;
   className?: string;
   onApply?: () => void;
   onClose: () => void;
@@ -30,6 +32,7 @@ export function ArkenDialog({
   error,
   footer = true,
   variant = "modal",
+  workspaceDraggable = true,
   className,
   onApply,
   onClose,
@@ -46,7 +49,7 @@ export function ArkenDialog({
     onDragMove,
     stopDragging,
     resetLayout,
-  } = useWorkspaceWindow(open && variant === "workspace");
+  } = useWorkspaceWindow(open && variant === "workspace" && workspaceDraggable);
 
   useEffect(() => {
     if (!open || variant !== "workspace") return;
@@ -80,6 +83,7 @@ export function ArkenDialog({
           <div
             className="arken-workspace-window__drag-handle"
             role="group"
+            data-draggable={workspaceDraggable ? "true" : "false"}
             aria-label={`Перетащить окно: ${title}`}
             title="Перетащить окно"
             onPointerDown={onDragStart}

@@ -34,11 +34,19 @@ describe("parseComposerInput", () => {
       kind: "ROLL",
       formula: "1d20 + agility",
       label:
-        "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430: \u041b\u043e\u0432\u043a\u043e\u0441\u0442\u044c",
+        "Проверка: Ловкость",
     });
     expect(parseComposerInput("/knowledge", stats)).toEqual({
       kind: "TEXT",
       body: "/knowledge",
+    });
+  });
+
+  it("turns the dedicated d20 command into an ordinary roll", () => {
+    expect(parseComposerInput("/d20")).toEqual({
+      kind: "ROLL",
+      formula: "1d20",
+      label: "d20",
     });
   });
 
@@ -55,17 +63,24 @@ describe("getSlashCommandSuggestions", () => {
   it("offers supported commands while a slash command is being typed", () => {
     expect(getSlashCommandSuggestions("/")).toEqual([
       expect.objectContaining({
+        command: "/d20",
+        insertion: "/d20",
+      }),
+      expect.objectContaining({
         command: "/roll",
         example: "/roll 1d20 + agility",
         insertion: "/roll ",
       }),
+    ]);
+    expect(getSlashCommandSuggestions("/d")).toEqual([
+      expect.objectContaining({ command: "/d20" }),
     ]);
     expect(getSlashCommandSuggestions("/ro")).toHaveLength(1);
     expect(getSlashCommandSuggestions("/ag", { agility: 4 })).toEqual([
       expect.objectContaining({
         command: "/agility",
         description:
-          "\u041b\u043e\u0432\u043a\u043e\u0441\u0442\u044c: \u0431\u0440\u043e\u0441\u043e\u043a 1d20 + 4",
+          "Ловкость: бросок 1d20 + 4",
         insertion: "/agility",
       }),
     ]);

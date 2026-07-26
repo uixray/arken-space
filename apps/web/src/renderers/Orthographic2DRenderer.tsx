@@ -981,7 +981,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           className="map-object-list-popover"
           role="region"
           aria-label={
-            "\u041e\u0431\u044a\u0435\u043a\u0442\u044b \u043a\u0430\u0440\u0442\u044b"
+            "Объекты карты"
           }
           onPointerDown={(event) => event.stopPropagation()}
         >
@@ -1007,9 +1007,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 <button
                   className="map-object-list__action"
                   type="button"
-                  aria-label={`\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c: ${token.name}`}
+                  aria-label={`Дублировать: ${token.name}`}
                   title={
-                    "\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c"
+                    "Дублировать"
                   }
                   onClick={() =>
                     void props.onPlaceTokenDefinition?.(token.definitionId, {
@@ -1027,8 +1027,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 <button
                   className="map-object-list__action"
                   type="button"
-                  aria-label={`\u0423\u0434\u0430\u043b\u0438\u0442\u044c: ${token.name}`}
-                  title={"\u0423\u0434\u0430\u043b\u0438\u0442\u044c"}
+                  aria-label={`Удалить: ${token.name}`}
+                  title={"Удалить"}
                   onClick={() =>
                     requestDelete({
                       kind: "token",
@@ -1045,7 +1045,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               const canCopy =
                 props.role === "GM" ||
                 drawing.authorMembershipId === props.membershipId;
-              const label = `\u0420\u0438\u0441\u0443\u043d\u043e\u043a ${index + 1}`;
+              const label = `Рисунок ${index + 1}`;
               return (
                 <li key={`drawing:${drawing.id}:${drawing.revision}`}>
                   <button
@@ -1068,9 +1068,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     className="map-object-list__action"
                     type="button"
                     disabled={!canCopy}
-                    aria-label={`\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c: ${label}`}
+                    aria-label={`Дублировать: ${label}`}
                     title={
-                      "\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c"
+                      "Дублировать"
                     }
                     onClick={() =>
                       void props.onDrawingCopy?.(drawing.id, drawing.revision)
@@ -1082,8 +1082,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     className="map-object-list__action"
                     type="button"
                     disabled={!canCopy}
-                    aria-label={`\u0423\u0434\u0430\u043b\u0438\u0442\u044c: ${label}`}
-                    title={"\u0423\u0434\u0430\u043b\u0438\u0442\u044c"}
+                    aria-label={`Удалить: ${label}`}
+                    title={"Удалить"}
                     onClick={() =>
                       requestDelete({
                         kind: "drawing",
@@ -1102,7 +1102,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               0 && (
               <li>
                 {
-                  "\u041d\u0430 \u043a\u0430\u0440\u0442\u0435 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442 \u043e\u0431\u044a\u0435\u043a\u0442\u043e\u0432."
+                  "На карте пока нет объектов."
                 }
               </li>
             )}
@@ -1373,15 +1373,32 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       onDragMove={(event) => {
                         const aspect = token.width / token.height;
                         const width = Math.max(16, event.target.x());
-                        event.target.position({
-                          x: width,
-                          y: Math.max(16, width / aspect),
-                        });
+                        const height = Math.max(16, width / aspect);
+                        event.target.position({ x: width, y: height });
+                        event.target
+                          .getParent()
+                          ?.getChildren()
+                          .filter((child) => child !== event.target)
+                          .forEach((child) =>
+                            child.scale({
+                              x: width / token.width,
+                              y: height / token.height,
+                            }),
+                          );
                       }}
                       onDragEnd={(event) => {
                         const width = Math.round(
                           Math.max(16, event.target.x()),
                         );
+                        event.target
+                          .getParent()
+                          ?.getChildren()
+                          .filter((child) => child !== event.target)
+                          .forEach((child) => child.scale({ x: 1, y: 1 }));
+                        event.target.position({
+                          x: token.width,
+                          y: token.height,
+                        });
                         void props.onTokenResize?.(token.id, token.revision, {
                           width,
                           height: Math.round(
@@ -1739,10 +1756,18 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                         onDragMove={(event) => {
                           const aspect = token.width / token.height;
                           const width = Math.max(16, event.target.x());
-                          event.target.position({
-                            x: width,
-                            y: Math.max(16, width / aspect),
-                          });
+                          const height = Math.max(16, width / aspect);
+                          event.target.position({ x: width, y: height });
+                          event.target
+                            .getParent()
+                            ?.getChildren()
+                            .filter((child) => child !== event.target)
+                            .forEach((child) =>
+                              child.scale({
+                                x: width / token.width,
+                                y: height / token.height,
+                              }),
+                            );
                         }}
                         onDragEnd={(event) => {
                           const width = Math.round(
@@ -1751,6 +1776,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           const height = Math.round(
                             width / (token.width / token.height),
                           );
+                          event.target
+                            .getParent()
+                            ?.getChildren()
+                            .filter((child) => child !== event.target)
+                            .forEach((child) => child.scale({ x: 1, y: 1 }));
+                          event.target.position({
+                            x: token.width,
+                            y: token.height,
+                          });
                           void props.onTokenResize?.(token.id, token.revision, {
                             width,
                             height,
@@ -1931,7 +1965,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <aside
             className="drawing-color-panel"
             aria-label={
-              "\u041f\u0430\u043d\u0435\u043b\u044c \u0446\u0432\u0435\u0442\u0430 \u0440\u0438\u0441\u0443\u043d\u043a\u0430"
+              "Панель цвета рисунка"
             }
           >
             <span className="drawing-color-controls">

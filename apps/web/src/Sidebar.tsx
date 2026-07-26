@@ -1,4 +1,4 @@
-import {
+﻿import {
   useEffect,
   useMemo,
   useReducer,
@@ -52,7 +52,7 @@ import {
   MAX_OPEN_CHARACTER_SHEETS,
 } from "./character-workspace-state";
 import { buildChatTimeline } from "./chat-date";
-import { normalizeClientDiceResult } from "./dice-result";
+import { formatDiceBreakdown, normalizeClientDiceResult } from "./dice-result";
 import {
   CharacterActionCard,
   parseSkillCard,
@@ -110,20 +110,6 @@ function nextChatFeed(current: SidebarFeed, key: string): SidebarFeed | null {
       ] ?? null
     );
   return null;
-}
-
-function formatDiceBreakdown(value: unknown) {
-  const dice = normalizeClientDiceResult(value);
-  if (!dice) return "";
-  const terms = dice.terms.map(
-    (term) => `${term.notation} (${term.rolls.join(", ")})`,
-  );
-  const modifiers = dice.modifiers
-    .filter((modifier) => modifier.value !== 0)
-    .map((modifier) =>
-      modifier.value > 0 ? `+${modifier.value}` : String(modifier.value),
-    );
-  return [...terms, ...modifiers].join(" ");
 }
 
 type Props = {
@@ -411,9 +397,7 @@ export function Sidebar(props: Props) {
       snapshotChatThreads,
     ).at(-1)?.sequence;
     if (latestSequence === undefined) return;
-    if (
-      (readSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence
-    )
+    if ((readSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence)
       return;
     readSequenceRef.current.set(activeThreadId, latestSequence);
     void onMarkChatRead(activeThreadId, latestSequence).catch(() => {
@@ -466,7 +450,7 @@ export function Sidebar(props: Props) {
     <aside className={`sidebar ${!isGm ? "player-sidebar" : ""}`}>
       <nav
         className="tabs chat-stream-tabs"
-        aria-label="Потоки С‡ата"
+        aria-label="Потоки чата"
         role="tablist"
         onKeyDown={(event) => {
           const nextFeed = nextChatFeed(activeFeed, event.key);
@@ -492,7 +476,7 @@ export function Sidebar(props: Props) {
             setActiveFeed("ACTIVITY");
           }}
         >
-          {"\u0421\u043e\u0431\u044b\u0442\u0438\u044f"}
+          {"События"}
         </Button>
         {CHAT_STREAM_ORDER.filter((stream) => stream !== "TABLE").map(
           (stream) => {
@@ -515,7 +499,7 @@ export function Sidebar(props: Props) {
                 {unread > 0 && (
                   <span
                     className="chat-unread-badge"
-                    aria-label={`${unread} \u043d\u0435\u043f\u0440\u043e\u0447\u0438\u0442\u0430\u043d\u043d\u044b\u0445`}
+                    aria-label={`${unread} непрочитанных`}
                   >
                     {unread}
                   </span>
@@ -533,13 +517,13 @@ export function Sidebar(props: Props) {
           tabIndex={directMode ? 0 : -1}
           onClick={() => setDirectMode(true)}
         >
-          Р›РёС‡ные
+          Личные
           {directThreads(props.snapshot).reduce(
             (total, thread) =>
               total + directUnreadCount(props.snapshot, thread.id),
             0,
           ) > 0 && (
-            <span className="chat-unread-badge" aria-label="Р•сть РЅРµРїСЂРѕС‡итанные">
+            <span className="chat-unread-badge" aria-label="Есть непрочитанные">
               {directThreads(props.snapshot).reduce(
                 (total, thread) =>
                   total + directUnreadCount(props.snapshot, thread.id),
@@ -623,6 +607,8 @@ export function Sidebar(props: Props) {
             footer={false}
             title="Подготовка"
             variant="workspace"
+            className="setup-workspace"
+            workspaceDraggable={false}
             onClose={() => props.onWorkspaceChange(null)}
           >
             <SetupPanel {...props} />
@@ -667,7 +653,7 @@ export function Sidebar(props: Props) {
           <ArkenDialog
             open
             footer={false}
-            title="Р¤Р°Р№лы"
+            title="Файлы"
             variant="workspace"
             onClose={() => props.onWorkspaceChange(null)}
           >
@@ -701,6 +687,7 @@ export function CharacterWorkspace({
   );
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
 
   useEffect(() => titleRef.current?.focus(), []);
   useEffect(() => {
@@ -736,7 +723,7 @@ export function CharacterWorkspace({
     >
       <header className="character-workspace__header">
         <div>
-          <span className="eyebrow">Р Р°Р±РѕС‡ее пространство</span>
+          <span className="eyebrow">Рабочее пространство</span>
           <h2 ref={titleRef} id="character-workspace-title" tabIndex={-1}>
             Персонажи
           </h2>
@@ -744,12 +731,27 @@ export function CharacterWorkspace({
         <p className="muted">
           Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
         </p>
-        <button type="button" aria-label="Р—акрыть персонажей" onClick={onClose}>
-          Р—акрыть
+        <button
+          type="button"
+          aria-label="Закрыть персонажей"
+          title="Закрыть рабочее пространство персонажей"
+          onClick={onClose}
+        >
+          <span aria-hidden="true">×</span>
         </button>
       </header>
       <div className="character-workspace__body">
         <nav className="character-rail" aria-label="Персонажи кампании">
+          {props.snapshot.me.role === "GM" && (
+            <button
+              type="button"
+              className="character-rail__create"
+              onClick={() => setCreateCharacterOpen(true)}
+            >
+              <span aria-hidden="true">＋</span>
+              Создать персонажа
+            </button>
+          )}
           {characters.length === 0 ? (
             <p className="muted">Нет доступных персонажей.</p>
           ) : (
@@ -768,9 +770,9 @@ export function CharacterWorkspace({
                     disabled={full}
                     title={
                       full
-                        ? "Р—Р°РєСЂРѕР№те один из открытых листов, С‡тобы открыть другой."
+                        ? "Закройте один из открытых листов, чтобы открыть другой."
                         : isOpen
-                          ? `РџРµСЂРµР№ти к персонажу ${character.name}`
+                          ? `Перейти к персонажу ${character.name}`
                           : `Открыть персонажа ${character.name}`
                     }
                     onClick={() => {
@@ -787,12 +789,13 @@ export function CharacterWorkspace({
                     <button
                       type="button"
                       className="character-rail__close"
-                      aria-label={`Р—акрыть лист ${character.name}`}
+                      aria-label={`Закрыть лист ${character.name}`}
+                      title={`Закрыть лист ${character.name}`}
                       onClick={() =>
                         dispatch({ type: "CLOSE", id: character.id })
                       }
                     >
-                      Г—
+                      ×
                     </button>
                   )}
                 </div>
@@ -806,7 +809,7 @@ export function CharacterWorkspace({
         >
           {state.openIds.length === 0 ? (
             <div className="character-sheet-deck__empty">
-              <p>Выберите персонажа в списке, С‡тобы открыть его лист.</p>
+              <p>Выберите персонажа в списке, чтобы открыть его лист.</p>
             </div>
           ) : (
             state.openIds.map((id) => {
@@ -820,7 +823,7 @@ export function CharacterWorkspace({
                   }${collapsed ? " is-collapsed" : ""}`}
                   key={id}
                   data-character-sheet-id={id}
-                  aria-label={`Р›ист персонажа ${character.name}`}
+                  aria-label={`Лист персонажа ${character.name}`}
                   tabIndex={-1}
                 >
                   <header className="character-sheet-card__header">
@@ -845,10 +848,10 @@ export function CharacterWorkspace({
                     </button>
                     <button
                       type="button"
-                      aria-label={`Р—акрыть лист ${character.name}`}
+                      aria-label={`Закрыть лист ${character.name}`}
                       onClick={() => dispatch({ type: "CLOSE", id })}
                     >
-                      Р—акрыть
+                      Закрыть
                     </button>
                   </header>
                   <div
@@ -882,6 +885,17 @@ export function CharacterWorkspace({
           )}
         </div>
       </div>
+      <TextPromptDialog
+        open={createCharacterOpen}
+        title="Новый персонаж"
+        label="Имя персонажа"
+        applyLabel="Создать"
+        onApply={async (name) => {
+          await props.onCreateCharacter(name);
+          setCreateCharacterOpen(false);
+        }}
+        onClose={() => setCreateCharacterOpen(false)}
+      />
     </main>,
     document.body,
   );
@@ -956,7 +970,7 @@ export function CharacterPanel({
     return (
       <Empty
         title="Нет персонажа"
-        text="Мастер ещё не РЅР°Р·РЅР°С‡ил вам персонажа."
+        text="Мастер ещё не назначил вам персонажа."
       />
     );
   const submitCharacterRoll = async (formula: string, label: string) => {
@@ -1001,8 +1015,8 @@ export function CharacterPanel({
     } catch (reason) {
       setCountersError(
         reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
-          ? "Кошелёк уже изменён в другой сессии. Р—РЅР°С‡ения обновлены — повторите РґРµР№ствие."
-          : "Не удалось сохранить кошелёк. Проверьте соединение и повторите РґРµР№ствие.",
+          ? "Кошелёк уже изменён в другой сессии. Значения обновлены — повторите действие."
+          : "Не удалось сохранить кошелёк. Проверьте соединение и повторите действие.",
       );
     } finally {
       setCountersPending((current) => Math.max(0, current - 1));
@@ -1032,7 +1046,7 @@ export function CharacterPanel({
         setCountersError(
           reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
             ? "Кошелёк изменён в другой сессии. Данные обновлены; повторите изменение, если оно всё ещё нужно."
-            : "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите РґРµР№ствие.",
+            : "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите действие.",
         );
       })
       .finally(() => setCountersPending((count) => Math.max(0, count - 1)));
@@ -1054,10 +1068,10 @@ export function CharacterPanel({
           </FormSelect>
         </label>
       )}
-      <h3 className="character-block-heading">Р›РёС‡ность и портрет</h3>
+      <h3 className="character-block-heading">Личность и портрет</h3>
       <div className="section-heading">
         <div>
-          <span className="eyebrow">РљР°СЂС‚РѕС‡ка</span>
+          <span className="eyebrow">Карточка</span>
           <h2>{character.name}</h2>
         </div>
         <div className="inline-fields">
@@ -1094,7 +1108,7 @@ export function CharacterPanel({
         </FormSelect>
       </label>
       <ImageUploadField
-        label="Р—агрузить портрет для персонажа"
+        label="Загрузить портрет для персонажа"
         value={portraitUpload}
         onUpdate={setPortraitUpload}
       />
@@ -1110,7 +1124,7 @@ export function CharacterPanel({
           setPortraitUpload(undefined);
         }}
       >
-        Р—агрузить и РЅР°Р·РЅР°С‡ить
+        Загрузить и назначить
       </Button>
       {snapshot.me.role === "GM" && (
         <div className="subsection">
@@ -1136,7 +1150,7 @@ export function CharacterPanel({
               )
             }
           >
-            {snapshot.campaign.battleActive ? "Р—авершить бой" : "РќР°С‡ать бой"}
+            {snapshot.campaign.battleActive ? "Завершить бой" : "Начать бой"}
           </Button>
         </div>
       )}
@@ -1160,9 +1174,7 @@ export function CharacterPanel({
           value={rollMode}
           onChange={setRollMode}
           disabled={rollPending}
-          label={
-            "\u0420\u0435\u0436\u0438\u043c \u0431\u0440\u043e\u0441\u043a\u0430"
-          }
+          label={"Режим броска"}
         />
         {rollError && (
           <p className="field-error" role="alert">
@@ -1202,9 +1214,9 @@ export function CharacterPanel({
       <h3 className="character-block-heading">Боевые характеристики</h3>
       <Button
         disabled={!editable || rollPending}
-        onClick={() => void submitCharacterRoll("1d20 + agility", "РРЅРёС†иатива")}
+        onClick={() => void submitCharacterRoll("1d20 + agility", "Инициатива")}
       >
-        РРЅРёС†иатива (d20 + Р›овкость)
+        Инициатива (d20 + Ловкость)
       </Button>
       <div className="subsection">
         <h3>Дополнительные навыки</h3>
@@ -1246,7 +1258,7 @@ export function CharacterPanel({
             </div>
           ))
         ) : (
-          <p className="muted">Р—аклинания ещё не добавлены.</p>
+          <p className="muted">Заклинания ещё не добавлены.</p>
         )}
       </div>
       <div className="subsection">
@@ -1260,7 +1272,7 @@ export function CharacterPanel({
               event.target.value = "";
             }}
           >
-            <option value="">РќР°Р·РЅР°С‡ить из общего каталога…</option>
+            <option value="">Назначить из общего каталога…</option>
             {snapshot.catalogEntries.map((entry) => (
               <option key={entry.id} value={entry.id}>
                 {entry.name}
@@ -1315,7 +1327,7 @@ export function CharacterPanel({
           ))
         ) : (
           <p className="muted">
-            Мастер ещё не РЅР°Р·РЅР°С‡ил навыки или способности.
+            Мастер ещё не назначил навыки или способности.
           </p>
         )}
       </div>
@@ -1340,9 +1352,9 @@ export function CharacterPanel({
           />
         </ArkenDialog>
       )}
-      <h3 className="character-block-heading">Рнвентарь и снаряжение</h3>
+      <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
       <label className="field">
-        Рнвентарь (один предмет на строку)
+        Инвентарь (один предмет на строку)
         <FormTextArea
           key={`${character.id}:${character.revision}`}
           defaultValue={character.inventory.join("\n")}
@@ -1386,7 +1398,7 @@ export function CharacterPanel({
                   setCountersError(
                     reason instanceof ApiError &&
                       reason.code === "CHARACTER_CONFLICT"
-                      ? "Ресурсы изменены в другой сессии. Показаны актуальные Р·РЅР°С‡ения — повторите правку при необходимости."
+                      ? "Ресурсы изменены в другой сессии. Показаны актуальные значения — повторите правку при необходимости."
                       : "Не удалось сохранить ресурсы. Проверьте данные и соединение.",
                   );
                 })
@@ -1400,7 +1412,7 @@ export function CharacterPanel({
         />
       </label>
       <label className="field">
-        Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; Р·РЅР°С‡ения не
+        Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не
         нормализуются)
         {(["gold", "silver", "copper", "sp"] as const).map((key) => (
           <span className="inline-fields" key={key}>
@@ -1444,9 +1456,9 @@ export function CharacterPanel({
           </span>
         )}
       </label>
-      <h3 className="character-block-heading">Р—аметки</h3>
+      <h3 className="character-block-heading">Заметки</h3>
       <label className="field">
-        Р—аметки
+        Заметки
         <FormTextArea
           defaultValue={character.notes}
           disabled={!editable}
@@ -1462,7 +1474,7 @@ export function CharacterPanel({
       <TextPromptDialog
         open={renameOpen}
         title="Переименовать персонажа"
-        label="Рмя персонажа"
+        label="Имя персонажа"
         initialValue={character.name}
         onClose={() => setRenameOpen(false)}
         onApply={async (name) => {
@@ -1488,11 +1500,7 @@ function ChatMessageBody({
     const presentation = message.stickerPresentation;
     if (!message.stickerId || !presentation)
       return (
-        <p className="chat-sticker-tombstone">
-          {
-            "\u0421\u0442\u0438\u043a\u0435\u0440 \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d"
-          }
-        </p>
+        <p className="chat-sticker-tombstone">{"Стикер больше недоступен"}</p>
       );
     return (
       <figure className="chat-sticker">
@@ -1543,7 +1551,7 @@ function ChatMessageBody({
     );
   return (
     <div className="roll-result">
-      <strong className="roll-total" aria-label="Ртог броска">
+      <strong className="roll-total" aria-label="Итог броска">
         {dice.total}
       </strong>
       <div className="roll-details">
@@ -1590,16 +1598,24 @@ function ActivityPanel({
       return;
     }
     setComposerError("");
-    if (intent.kind === "ROLL")
-      await onRoll(
-        intent.formula,
-        intent.label,
-        visibility,
-        snapshot.me.characterId,
-        "NORMAL",
+    try {
+      if (intent.kind === "ROLL")
+        await onRoll(
+          intent.formula,
+          intent.label,
+          visibility,
+          snapshot.me.characterId,
+          "NORMAL",
+        );
+      else await onChat(intent.body, visibility, "TABLE");
+      setComposer("");
+    } catch {
+      setComposerError(
+        intent.kind === "ROLL"
+          ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
+          : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
       );
-    else await onChat(intent.body, visibility, "TABLE");
-    setComposer("");
+    }
   };
   const activityEvents = useMemo(
     () =>
@@ -1639,7 +1655,7 @@ function ActivityPanel({
         {timeline.length === 0 && (
           <p className="chat-empty">
             {
-              "\u0412 \u043b\u0435\u043d\u0442\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u0439 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0439, \u0441\u044e\u0436\u0435\u0442\u043d\u044b\u0445 \u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0446\u0438\u0439 \u0438\u043b\u0438 \u0431\u0440\u043e\u0441\u043a\u043e\u0432."
+              "В ленте событий пока нет сообщений, сюжетных публикаций или бросков."
             }
           </p>
         )}
@@ -1679,8 +1695,7 @@ function ActivityPanel({
                   <span className="message-character">
                     {snapshot.characters.find(
                       (character) => character.id === message.characterId,
-                    )?.name ??
-                      "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436"}
+                    )?.name ?? "Персонаж"}
                   </span>
                 )}
                 <time>
@@ -1689,9 +1704,7 @@ function ActivityPanel({
                     minute: "2-digit",
                   })}
                 </time>
-                {message.visibility === "GM_ONLY" && (
-                  <span>{"\u043c\u0430\u0441\u0442\u0435\u0440\u0443"}</span>
-                )}
+                {message.visibility === "GM_ONLY" && <span>{"мастеру"}</span>}
               </header>
               <ChatMessageBody
                 message={message}
@@ -1712,22 +1725,20 @@ function ActivityPanel({
               setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
             }
           />{" "}
-          {
-            "\u0422\u043e\u043b\u044c\u043a\u043e \u043c\u0430\u0441\u0442\u0435\u0440"
-          }
+          {"Только мастер"}
         </label>
       </div>
       <form className="chat-compose" onSubmit={submit}>
         <div className="chat-composer-input">
           <FormTextArea
-            aria-label="\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0438\u043b\u0438 \u0431\u0440\u043e\u0441\u043e\u043a"
+            aria-label="Сообщение или бросок"
             aria-expanded={slashSuggestions.length > 0}
             aria-controls={
               slashSuggestions.length > 0
                 ? "activity-slash-suggestions"
                 : undefined
             }
-            placeholder="\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u2026 \u0438\u043b\u0438 /roll 1d20 + agility"
+            placeholder={"Сообщение? Введите / для быстрых команд"}
             value={composer}
             onChange={(event) => {
               setSlashHelpOpen(false);
@@ -1754,8 +1765,8 @@ function ActivityPanel({
               className="composer-icon composer-slash-action"
               type="button"
               view="flat"
-              aria-label="\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u043a\u043e\u043c\u0430\u043d\u0434\u044b"
-              title="\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u043a\u043e\u043c\u0430\u043d\u0434\u044b"
+              aria-label="Быстрые команды"
+              title="Быстрые команды"
               aria-expanded={slashSuggestions.length > 0}
               onClick={() => setSlashHelpOpen((open) => !open)}
             >
@@ -1767,7 +1778,7 @@ function ActivityPanel({
               className="slash-command-suggestions"
               id="activity-slash-suggestions"
               role="listbox"
-              aria-label="\u041a\u043e\u043c\u0430\u043d\u0434\u044b \u0447\u0430\u0442\u0430"
+              aria-label="Команды чата"
             >
               {slashSuggestions.map((suggestion) => (
                 <button
@@ -1789,7 +1800,7 @@ function ActivityPanel({
           )}
         </div>
         <Button className="primary" type="submit">
-          {"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c"}
+          {"Отправить"}
         </Button>
       </form>
       {composerError && (
@@ -1883,7 +1894,7 @@ function DirectChatPanel({
     try {
       await onDirectChat(
         activeThread.id,
-        body || "Рзображение",
+        body || "Изображение",
         attachment ? [attachment.contentId] : [],
       );
       setComposer("");
@@ -1891,7 +1902,7 @@ function DirectChatPanel({
       if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
       setAttachmentPreviewUrl("");
     } catch {
-      setError("Не удалось отправить Р»РёС‡ное сообщение.");
+      setError("Не удалось отправить личное сообщение.");
     }
   }
 
@@ -1920,9 +1931,15 @@ function DirectChatPanel({
         </FormSelect>
         <div className="direct-thread-create">
           <FormSelect
-            aria-label="РџРѕР»СѓС‡атель Р»РёС‡ного сообщения"
+            aria-label="Получатель личного сообщения"
             value={recipientId}
             onChange={(event) => setRecipientId(event.target.value)}
+            emptyMessage={
+              eligibleDirectRecipients(snapshot.members, snapshot.me.id)
+                .length === 0
+                ? "Нет доступных получателей"
+                : undefined
+            }
           >
             <option value="">Новый диалог…</option>
             {eligibleDirectRecipients(snapshot.members, snapshot.me.id).map(
@@ -1945,7 +1962,7 @@ function DirectChatPanel({
       <div className="message-list" aria-live="polite">
         {!activeThread && (
           <p className="chat-empty">
-            Выберите РїРѕР»СѓС‡ателя, С‡тобы РЅР°С‡ать личный диалог.
+            Выберите получателя, чтобы начать личный диалог.
           </p>
         )}
         {activeThread && messages.length === 0 && (
@@ -1983,7 +2000,7 @@ function DirectChatPanel({
         <form className="chat-compose direct-compose" onSubmit={submit}>
           <div className="chat-composer-input">
             <FormTextArea
-              aria-label={`Р›РёС‡ное сообщение: ${directThreadLabel(activeThread, snapshot.me.id)}`}
+              aria-label={`Личное сообщение: ${directThreadLabel(activeThread, snapshot.me.id)}`}
               placeholder={`Сообщение для ${directThreadLabel(activeThread, snapshot.me.id)}…`}
               value={composer}
               onChange={(event) => setComposer(event.target.value)}
@@ -2018,7 +2035,7 @@ function DirectChatPanel({
             }
           />
           <label className="direct-attach-button">
-            <span>{uploading ? "Р—агрузка…" : "Рзображение"}</span>
+            <span>{uploading ? "Загрузка…" : "Изображение"}</span>
             <input
               type="file"
               accept="image/*"
@@ -2262,17 +2279,11 @@ function ChatPanel({
       )}
       {activeStream === "ROLLS" && (
         <p className="chat-stream-note">
-          {
-            "\u0411\u0440\u043e\u0441\u043a\u0438 \u043f\u043e\u044f\u0432\u043b\u044f\u044e\u0442\u0441\u044f \u0437\u0434\u0435\u0441\u044c \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438."
-          }
+          {"Броски появляются здесь автоматически."}
         </p>
       )}
       {activeStream === "STORY" && snapshot.me.role !== "GM" && (
-        <p className="chat-stream-note">
-          {
-            "\u0421\u044e\u0436\u0435\u0442\u043d\u044b\u0439 \u043f\u043e\u0442\u043e\u043a \u0432\u0435\u0434\u0451\u0442 \u043c\u0430\u0441\u0442\u0435\u0440."
-          }
-        </p>
+        <p className="chat-stream-note">{"Сюжетный поток ведёт мастер."}</p>
       )}
       {canCompose && (
         <>
@@ -2285,9 +2296,7 @@ function ChatPanel({
                   setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
                 }
               />{" "}
-              {
-                "\u0422\u043e\u043b\u044c\u043a\u043e \u043c\u0430\u0441\u0442\u0435\u0440"
-              }
+              {"Только мастер"}
             </label>
           </div>
           <form className="chat-compose" onSubmit={submit}>
@@ -2338,8 +2347,8 @@ function ChatPanel({
                   className="composer-icon composer-slash-action"
                   type="button"
                   view="flat"
-                  aria-label="\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u043a\u043e\u043c\u0430\u043d\u0434\u044b"
-                  title="\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u043a\u043e\u043c\u0430\u043d\u0434\u044b"
+                  aria-label="Быстрые команды"
+                  title="Быстрые команды"
                   aria-expanded={slashSuggestions.length > 0}
                   onClick={() => setSlashHelpOpen((open) => !open)}
                 >
@@ -2351,9 +2360,7 @@ function ChatPanel({
                   className="slash-command-suggestions"
                   id="chat-slash-suggestions"
                   role="listbox"
-                  aria-label={
-                    "\u041a\u043e\u043c\u0430\u043d\u0434\u044b \u0447\u0430\u0442\u0430"
-                  }
+                  aria-label={"Команды чата"}
                 >
                   {slashSuggestions.map((suggestion) => (
                     <button
@@ -2375,7 +2382,7 @@ function ChatPanel({
               )}
             </div>
             <Button className="primary" type="submit">
-              {"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c"}
+              {"Отправить"}
             </Button>
           </form>
           {composerError && (
@@ -2419,7 +2426,7 @@ function PalettePanel(props: Props) {
         </Button>
       )}
       <p className="muted">
-        Нажмите, С‡тобы поставить токен в С†ентр карты, или перетащите его на
+        Нажмите, чтобы поставить токен в центр карты, или перетащите его на
         нужное место.
       </p>
       <div className="palette-grid">
@@ -2443,7 +2450,7 @@ function PalettePanel(props: Props) {
               <Button
                 className="palette-place"
                 onClick={() => props.onPlaceTokenDefinition(definition.id)}
-                title="Поставить экземпляр токена на активную СЃС†ену"
+                title="Поставить экземпляр токена на активную сцену"
               >
                 {asset ? (
                   <img src={asset.url} alt="" />
@@ -2455,7 +2462,7 @@ function PalettePanel(props: Props) {
               </Button>
               <strong className="palette-card__title">{definition.name}</strong>
               <FormSelect
-                aria-label={`Рзображение токена ${definition.name}`}
+                aria-label={`Изображение токена ${definition.name}`}
                 value={definition.defaultAssetId ?? ""}
                 onChange={(event) =>
                   void props.onPatchTokenDefinition(
@@ -2524,7 +2531,7 @@ function PalettePanel(props: Props) {
         title="Удалить определение токена?"
         message={
           deleteDefinition
-            ? `Определение «${deleteDefinition.name}» и все его размещения на СЃС†енах будут удалены. Это не удаление одного токена с карты.`
+            ? `Определение «${deleteDefinition.name}» и все его размещения на сценах будут удалены. Это не удаление одного токена с карты.`
             : ""
         }
         confirmLabel="Удалить"
@@ -2566,7 +2573,7 @@ function TokenImageAssignment({
       setError(
         reason instanceof Error
           ? reason.message
-          : "Не удалось РЅР°Р·РЅР°С‡ить изображение токену.",
+          : "Не удалось назначить изображение токену.",
       );
     } finally {
       setSaving(false);
@@ -2588,7 +2595,7 @@ function TokenImageAssignment({
         loading={saving}
         onClick={() => void assign()}
       >
-        Р—агрузить и РЅР°Р·РЅР°С‡ить
+        Загрузить и назначить
       </Button>
       {error && <div className="field-error">{error}</div>}
     </div>
@@ -2681,7 +2688,7 @@ function TokenDefinitionEditor({
     <ArkenDialog
       open
       footer={false}
-      title={definition ? `РќР°СЃС‚СЂРѕР№ка ${definition.name}` : "Новый токен"}
+      title={definition ? `Настройка ${definition.name}` : "Новый токен"}
       onClose={onCancel}
     >
       <form className="entity-form" onSubmit={submit}>
@@ -2717,13 +2724,13 @@ function TokenDefinitionEditor({
           </FormSelect>
         </label>
         <label>
-          Рзображение из С„Р°Р№лов
+          Изображение из файлов
           <FormSelect
             value={assetId}
             onChange={(event) => setAssetId(event.target.value)}
             emptyMessage={
               snapshot.assets.every((asset) => asset.kind !== "TOKEN")
-                ? "РР·РѕР±СЂР°Р¶РµРЅРёР№ токенов пока нет"
+                ? "Изображений токенов пока нет"
                 : undefined
             }
             createAction={
@@ -2751,29 +2758,19 @@ function TokenDefinitionEditor({
           onGenerated={(asset) => setAssetId(asset.id)}
         />
         <ImageUploadField
-          label="Р—агрузить новое изображение"
+          label="Загрузить новое изображение"
           value={image}
           onUpdate={setImage}
           disabled={saving}
         />
-        <section
-          className="token-dimensions"
-          aria-label={
-            "\u0420\u0430\u0437\u043c\u0435\u0440 \u0442\u043e\u043a\u0435\u043d\u0430"
-          }
-        >
+        <section className="token-dimensions" aria-label={"Размер токена"}>
           <p className="token-dimensions__hint">
-            {
-              "\u0420\u0430\u0437\u043c\u0435\u0440 \u0432 \u043a\u043b\u0435\u0442\u043a\u0430\u0445 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u0441\u0435\u0442\u043a\u0438"
-            }{" "}
-            ({gridSize}
-            {" px \u043d\u0430 \u043a\u043b\u0435\u0442\u043a\u0443"}).
+            {"Размер в клетках активной сетки"} ({gridSize}
+            {" px на клетку"}).
           </p>
           <div className="inline-fields">
             <label>
-              {
-                "\u0428\u0438\u0440\u0438\u043d\u0430, \u043a\u043b\u0435\u0442\u043a\u0438"
-              }
+              {"Ширина, клетки"}
               <FormInput
                 type="number"
                 min={0.25}
@@ -2788,9 +2785,7 @@ function TokenDefinitionEditor({
               />
             </label>
             <label>
-              {
-                "\u0412\u044b\u0441\u043e\u0442\u0430, \u043a\u043b\u0435\u0442\u043a\u0438"
-              }
+              {"Высота, клетки"}
               <FormInput
                 type="number"
                 min={0.25}
@@ -2813,9 +2808,7 @@ function TokenDefinitionEditor({
                   if (height > 0) aspectRatio.current = width / height;
                 }}
               />
-              {
-                "\u0421\u043e\u0445\u0440\u0430\u043d\u044f\u0442\u044c \u043f\u0440\u043e\u043f\u043e\u0440\u0446\u0438\u0438"
-              }
+              {"Сохранять пропорции"}
             </label>
           </div>
         </section>
@@ -2855,6 +2848,9 @@ function TokenDefinitionEditor({
 }
 
 function SetupPanel(props: Props) {
+  const [activeSetupTab, setActiveSetupTab] = useState<
+    "OVERVIEW" | "CHARACTERS" | "CATALOG"
+  >("OVERVIEW");
   const [characterName, setCharacterName] = useState("");
   const [sceneName, setSceneName] = useState("");
   const [renameMember, setRenameMember] = useState<
@@ -2898,8 +2894,26 @@ function SetupPanel(props: Props) {
           <h2>Подготовка</h2>
         </div>
       </div>
-      <div className="subsection">
-        <h3>Ргроки РѕРЅР»Р°Р№н</h3>
+      <nav className="setup-tabs" aria-label="Разделы подготовки">
+        {[
+          ["OVERVIEW", "Обзор"],
+          ["CHARACTERS", "Персонажи и доступ"],
+          ["CATALOG", "Общий каталог"],
+        ].map(([id, label]) => (
+          <Button
+            key={id}
+            view={activeSetupTab === id ? "action" : "normal"}
+            aria-pressed={activeSetupTab === id}
+            onClick={() =>
+              setActiveSetupTab(id as "OVERVIEW" | "CHARACTERS" | "CATALOG")
+            }
+          >
+            {label}
+          </Button>
+        ))}
+      </nav>
+      <div className="subsection" hidden={activeSetupTab !== "OVERVIEW"}>
+        <h3>Игроки онлайн</h3>
         <div className="stack-list">
           {props.snapshot.members
             .filter((member) => member.role === "PLAYER")
@@ -2915,7 +2929,7 @@ function SetupPanel(props: Props) {
             })}
         </div>
       </div>
-      <div className="subsection">
+      <div className="subsection" hidden={activeSetupTab !== "CATALOG"}>
         <h3>Общий каталог</h3>
         <Button onClick={() => setCatalogEditor("NEW")}>
           Добавить навык или способность
@@ -2996,7 +3010,7 @@ function SetupPanel(props: Props) {
             value={catalogData}
             onChange={(event) => setCatalogData(event.target.value)}
             rows={8}
-            aria-label="Данные и РґРµР№ствия JSON"
+            aria-label="Данные и действия JSON"
           />
           <Button
             onClick={() =>
@@ -3105,10 +3119,10 @@ function SetupPanel(props: Props) {
           ))}
         </div>
       </div>
-      <div className="subsection">
+      <div className="subsection" hidden={activeSetupTab !== "OVERVIEW"}>
         <h3>Проверка видимости</h3>
         <label className="field">
-          Ргрок
+          Игрок
           <FormSelect
             value={previewMembership}
             onChange={(event) => setPreviewMembership(event.target.value)}
@@ -3131,7 +3145,7 @@ function SetupPanel(props: Props) {
         </Button>
       </div>
       <div className="subsection" hidden aria-hidden="true">
-        <h3>РЎС†ены (устаревшее управление)</h3>
+        <h3>Сцены (устаревшее управление)</h3>
         <label className="field">
           Активная
           <FormSelect
@@ -3147,7 +3161,7 @@ function SetupPanel(props: Props) {
         </label>
         {activeScene && (
           <Button onClick={() => setRenameSceneOpen(true)}>
-            Переименовать СЃС†ену
+            Переименовать сцену
           </Button>
         )}
         {activeScene && (
@@ -3178,14 +3192,14 @@ function SetupPanel(props: Props) {
           }}
         >
           <FormInput
-            placeholder="Название СЃС†ены"
+            placeholder="Название сцены"
             value={sceneName}
             onChange={(event) => setSceneName(event.target.value)}
           />
           <Button>Создать</Button>
         </form>
       </div>
-      <div className="subsection">
+      <div className="subsection" hidden={activeSetupTab !== "CHARACTERS"}>
         <h3>Персонажи</h3>
         <form
           className="inline-fields"
@@ -3197,7 +3211,7 @@ function SetupPanel(props: Props) {
           }}
         >
           <FormInput
-            placeholder="Рмя персонажа"
+            placeholder="Имя персонажа"
             value={characterName}
             onChange={(event) => setCharacterName(event.target.value)}
           />
@@ -3220,10 +3234,10 @@ function SetupPanel(props: Props) {
           onClick={() => props.onCreateToken(tokenCharacter)}
           disabled={!tokenCharacter || !activeScene}
         >
-          Добавить токен в С†ентр
+          Добавить токен в центр
         </Button>
       </div>
-      <div className="subsection">
+      <div className="subsection" hidden={activeSetupTab !== "CHARACTERS"}>
         <h3>Постоянные ссылки игроков</h3>
         <label className="field">
           Персонаж
@@ -3244,7 +3258,7 @@ function SetupPanel(props: Props) {
               inviteCharacter,
               props.snapshot.characters.find(
                 (item) => item.id === inviteCharacter,
-              )?.name ?? "Ргрок",
+              )?.name ?? "Игрок",
             );
             setInviteUrl(result.url ?? "");
             await refreshPlayerAccess();
@@ -3276,7 +3290,7 @@ function SetupPanel(props: Props) {
                     await refreshPlayerAccess();
                   }}
                 >
-                  Р—аменить ссылку
+                  Заменить ссылку
                 </Button>
                 <Button
                   onClick={async () => {
@@ -3295,7 +3309,7 @@ function SetupPanel(props: Props) {
       <TextPromptDialog
         open={Boolean(renameMember)}
         title="Переименовать игрока"
-        label="Рмя игрока"
+        label="Имя игрока"
         initialValue={renameMember?.displayName ?? ""}
         onClose={() => setRenameMember(null)}
         onApply={async (name) => {
@@ -3307,8 +3321,8 @@ function SetupPanel(props: Props) {
       />
       <TextPromptDialog
         open={renameSceneOpen}
-        title="Переименовать СЃС†ену"
-        label="Название СЃС†ены"
+        title="Переименовать сцену"
+        label="Название сцены"
         initialValue={activeScene?.name ?? ""}
         onClose={() => setRenameSceneOpen(false)}
         onApply={async (name) => {
@@ -3344,7 +3358,7 @@ function MediaPanel({
   );
   const labels: Record<AssetKind, string> = {
     MAP: "Карты",
-    TOKEN: "Рзображения токенов",
+    TOKEN: "Изображения токенов",
     PORTRAIT: "Портреты персонажей",
     IMAGE: "Другие изображения",
     AUDIO: "Музыка и звуки",
@@ -3359,7 +3373,7 @@ function MediaPanel({
       setDrafts((current) => ({ ...current, [kind]: undefined }));
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Не удалось загрузить С„Р°Р№л.",
+        reason instanceof Error ? reason.message : "Не удалось загрузить файл.",
       );
     } finally {
       setUploading(null);
@@ -3370,7 +3384,7 @@ function MediaPanel({
       <div className="section-heading">
         <div>
           <span className="eyebrow">Хранилище</span>
-          <h2>Р¤Р°Р№лы</h2>
+          <h2>Файлы</h2>
         </div>
         <span className="revision">{snapshot.assets.length}</span>
       </div>
@@ -3397,7 +3411,7 @@ function MediaPanel({
               loading={uploading === kind}
               onClick={() => void upload(kind)}
             >
-              Р—агрузить
+              Загрузить
             </Button>
           </section>
         ))}

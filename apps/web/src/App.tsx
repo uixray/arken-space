@@ -98,7 +98,7 @@ function CanvasRollOverlay({
         value={rollMode}
         onChange={setRollMode}
         label={
-          "\u0420\u0435\u0436\u0438\u043c \u0431\u044b\u0441\u0442\u0440\u043e\u0433\u043e \u0431\u0440\u043e\u0441\u043a\u0430"
+          "Режим быстрого броска"
         }
       />
       <label className="compact-check">
@@ -281,7 +281,7 @@ function GridSettings({
         </label>
         <div className="inline-fields">
           <button type="button" onClick={resetGrid}>
-            {"\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c"}
+            {"Сбросить"}
           </button>
           <button
             type="button"
@@ -466,7 +466,7 @@ export function App() {
       setError(
         reason instanceof Error
           ? reason.message
-          : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0441\u044e\u0436\u0435\u0442\u043d\u044b\u0439 \u043a\u0430\u043d\u0430\u043b",
+          : "Не удалось загрузить сюжетный канал",
       ),
     );
   }, [campaignId, loadStoryPosts]);
@@ -705,7 +705,7 @@ export function App() {
       setError(
         reason instanceof Error
           ? reason.message
-          : "\u041e\u043f\u0435\u0440\u0430\u0446\u0438\u044f \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430",
+          : "Операция не выполнена",
       );
       throw reason;
     }
@@ -918,7 +918,7 @@ export function App() {
         );
         if (!replayed)
           throw new Error(
-            "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436 \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435 \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d. \u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443.",
+            "Персонаж больше не доступен. Обновите страницу.",
           );
         return replayed;
       };
@@ -1078,19 +1078,26 @@ export function App() {
                   : "Показать выбранную сцену игрокам"
               }
               aria-pressed={activeScene.id === broadcastScene?.id}
-              onClick={() =>
-                void run(() =>
-                  api("/api/scenes/activate", {
+              onClick={() => {
+                void run(async () => {
+                  await api("/api/scenes/activate", {
                     method: "POST",
                     body: JSON.stringify({
                       actionId: crypto.randomUUID(),
                       sceneId: activeScene.id,
                     }),
-                  }),
-                )
-              }
+                  });
+                  notify({
+                    title: "Игроки перемещены",
+                    message: `Активная сцена: ${activeScene.name}`,
+                    tone: "success",
+                  });
+                });
+              }}
             >
-              <span aria-hidden="true">&#x25c9;</span>
+              <span aria-hidden="true">
+                {activeScene.id === broadcastScene?.id ? "⇥" : "◉"}
+              </span>
             </button>
           )}
           {!previewSnapshot && snapshot.me.role === "GM" && (
@@ -1291,8 +1298,18 @@ export function App() {
       />
       <div className="workbench">
         <main
-          className={`map-shell${workspace === "characters" ? " is-workspace-hidden" : ""}`}
-          aria-hidden={workspace === "characters"}
+          className={`map-shell${
+            workspace === "characters" ||
+            workspace === "setup" ||
+            workspace === "world-maps"
+              ? " is-workspace-hidden"
+              : ""
+          }`}
+          aria-hidden={
+            workspace === "characters" ||
+            workspace === "setup" ||
+            workspace === "world-maps"
+          }
         >
           <div className="map-toolbar">
             <div className="toolbar-group">
@@ -1783,7 +1800,7 @@ export function App() {
                       )
                     }
                   >
-                    Г—
+                    ×
                   </button>
                 </div>
               ))}

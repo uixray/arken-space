@@ -44,7 +44,7 @@ function dateKey(value: string) {
 function dateLabel(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime()))
-    return "\u0411\u0435\u0437 \u0434\u0430\u0442\u044b";
+    return "Без даты";
   return new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "long",
