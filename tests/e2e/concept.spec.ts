@@ -292,6 +292,25 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
   ).toHaveAttribute("title", /./);
   await expect(page.locator(".music-topbar__title")).toBeVisible();
 
+  const iconOnlyControls = page.locator(
+    [
+      ".topbar-icon-button",
+      ".account-menu summary",
+      ".music-icon-button",
+      ".music-volume-control summary",
+      ".music-overflow summary",
+      ".map-toolbar .map-tool",
+      ".grid-settings .toolbar-detail-trigger",
+      ".resize-settings .toolbar-detail-trigger",
+      ".toolbar-overflow summary",
+    ].join(", "),
+  );
+  await expect(iconOnlyControls).toHaveCount(17);
+  for (const control of await iconOnlyControls.all()) {
+    await expect(control).toHaveCSS("width", "30px");
+    await expect(control).toHaveCSS("height", "30px");
+  }
+
   await page.locator(".music-overflow summary").click();
   await expect(page.locator(".music-overflow__menu")).toBeVisible();
   await page.locator(".account-menu summary").click();

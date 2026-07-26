@@ -3051,13 +3051,19 @@ code {
   font-size: 14px;
 }
 .topbar-icon-button,
+.scene-switcher .topbar-icon-button,
 .account-menu summary,
 .music-icon-button,
 .music-volume-control summary,
-.music-overflow summary {
+.music-overflow summary,
+.toolbar-overflow summary,
+.map-toolbar .map-tool,
+.grid-settings .toolbar-detail-trigger,
+.resize-settings .toolbar-detail-trigger {
   display: inline-grid;
   place-items: center;
   width: 30px;
+  height: 30px;
   min-width: 30px;
   min-height: 30px;
   padding: 0;
@@ -3177,12 +3183,6 @@ code {
 .map-toolbar .map-tool,
 .grid-settings .toolbar-detail-trigger,
 .resize-settings .toolbar-detail-trigger {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  padding: 0;
   font-size: 0;
 }
 .map-toolbar .map-tool::before,

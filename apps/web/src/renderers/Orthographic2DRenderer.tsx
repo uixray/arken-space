@@ -897,7 +897,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       ref={containerRef}
       tabIndex={0}
       role="region"
-      aria-label="РРЅС‚РµСЂР°РєС‚РёРІРЅР°СЏ РєР°СЂС‚Р° СЃС†РµРЅС‹"
+      aria-label="Интерактивная карта сцены"
       aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 F O V D R P G Shift+G Enter Delete Escape"
       onPointerDownCapture={(event) => {
         if (
@@ -950,7 +950,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         className="map-object-list-trigger"
         onClick={() => dispatchInteraction({ type: "open-object-list" })}
       >
-        РћР±СЉРµРєС‚С‹ РєР°СЂС‚С‹
+        Объекты карты
       </button>
       {interaction.objectListOpen && (
         <div
@@ -1781,9 +1781,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <strong>{tokenMenu.token.name}</strong>
           {(
             [
-              ["MAP", "РЎР»РѕР№ РєР°СЂС‚С‹"],
-              ["PLAYER", "РРіСЂРѕРІРѕР№ СЃР»РѕР№"],
-              ["GM", "РЎР»РѕР№ РјР°СЃС‚РµСЂР°"],
+              ["MAP", "Слой карты"],
+              ["PLAYER", "Игровой слой"],
+              ["GM", "Слой мастера"],
             ] as const
           ).map(([layer, label]) => (
             <button
@@ -1805,7 +1805,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             </button>
           ))}
           <label>
-            Р¦РІРµС‚
+            Цвет
             <input
               type="color"
               value={tokenMenu.token.baseColor}
@@ -1852,7 +1852,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 );
               }}
             >
-              Р‘РµР· СЂР°РјРєРё
+              Без рамки
             </button>
           </label>
           <button
@@ -1866,15 +1866,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               setTokenMenu(null);
             }}
           >
-            РЈРґР°Р»РёС‚СЊ СЃ РєР°СЂС‚С‹
+            Удалить с карты
           </button>
-          <button onClick={() => setTokenMenu(null)}>РћС‚РјРµРЅР°</button>
+          <button onClick={() => setTokenMenu(null)}>Отмена</button>
         </div>
       )}
       <ConfirmDialog
         open={interaction.deleteRequestedFor !== null}
-        title="РЈРґР°Р»РёС‚СЊ РѕР±СЉРµРєС‚ СЃ РєР°СЂС‚С‹?"
-        message="Р­С‚Рѕ РґРµР№СЃС‚РІРёРµ РЅРµР»СЊР·СЏ РѕС‚РјРµРЅРёС‚СЊ."
+        title="Удалить объект с карты?"
+        message="Это действие нельзя отменить."
         onClose={() => dispatchInteraction({ type: "cancel-delete" })}
         onConfirm={() => dispatchInteraction({ type: "confirm-delete" })}
       />
@@ -1885,18 +1885,18 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             checked={lockAspect}
             onChange={(event) => setLockAspect(event.target.checked)}
           />
-          РЎРѕС…СЂР°РЅСЏС‚СЊ РїСЂРѕРїРѕСЂС†РёРё
+          Сохранять пропорции
         </label>
       )}
       <div className="map-scale">
         <button
-          aria-label="РЈРІРµР»РёС‡РёС‚СЊ РјР°СЃС€С‚Р°Р±"
+          aria-label="Увеличить масштаб"
           onClick={() => zoomAtCenter(scale + 0.1)}
         >
           +
         </button>
         <input
-          aria-label="РњР°СЃС€С‚Р°Р± РєР°СЂС‚С‹"
+          aria-label="Масштаб карты"
           type="range"
           min="0.25"
           max="3"
@@ -1905,13 +1905,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           onChange={(event) => zoomAtCenter(Number(event.target.value))}
         />
         <button
-          aria-label="РЈРјРµРЅСЊС€РёС‚СЊ РјР°СЃС€С‚Р°Р±"
+          aria-label="Уменьшить масштаб"
           onClick={() => zoomAtCenter(scale - 0.1)}
         >
           в€’
         </button>
         {Math.round(scale * 100)}%
-        <button onClick={fitMap}>Р’РїРёСЃР°С‚СЊ</button>
+        <button onClick={fitMap}>Вписать</button>
         {props.role === "GM" && (
           <label>
             <input
@@ -1937,7 +1937,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               <span
                 className="drawing-color-presets"
                 role="group"
-                aria-label="Р“РѕС‚РѕРІС‹Рµ С†РІРµС‚Р°"
+                aria-label="Готовые цвета"
               >
                 {DRAWING_COLOR_PRESETS.map(({ value, name }) => (
                   <button
@@ -1962,10 +1962,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 ))}
               </span>
               <label className="drawing-color-picker">
-                <span>Р¦РІРµС‚</span>
+                <span>Цвет</span>
                 <input
                   type="color"
-                  aria-label="Р¦РІРµС‚ СЂРёСЃСѓРЅРєР°"
+                  aria-label="Цвет рисунка"
                   value={canEditDrawing ? drawing.color : drawingColor}
                   onChange={(event) => {
                     const color = event.target.value;
@@ -1986,7 +1986,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       void props.onDrawingCopy?.(drawing.id, drawing.revision)
                     }
                   >
-                    РљРѕРїРёСЂРѕРІР°С‚СЊ
+                    Копировать
                   </button>
                   <button
                     onClick={() => {
@@ -1997,7 +1997,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       });
                     }}
                   >
-                    РЈРґР°Р»РёС‚СЊ
+                    Удалить
                   </button>
                 </>
               )}
@@ -2016,7 +2016,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               setSelectedDrawingId(null);
             }}
           >
-            РЈРґР°Р»РёС‚СЊ РІС‹Р±СЂР°РЅРЅРѕРµ
+            Удалить выбранное
           </button>
         )}
       </div>
