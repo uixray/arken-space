@@ -687,9 +687,24 @@ code {
   min-height: 28px;
   padding: 3px;
 }
+.drawing-color-panel {
+  position: absolute;
+  z-index: 14;
+  top: 8px;
+  right: 8px;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
+  color: var(--muted);
+  pointer-events: auto;
+}
 .drawing-color-controls {
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 .drawing-color-presets {
   display: grid;
@@ -747,7 +762,6 @@ code {
   bottom: 12px;
   left: 50%;
   display: grid;
-  grid-template-columns: auto auto;
   gap: 6px;
   max-width: min(620px, calc(100% - 140px));
   padding: 8px;
@@ -762,19 +776,9 @@ code {
   flex-wrap: wrap;
   gap: 4px;
 }
-.canvas-roll-dice button,
-.canvas-roll-custom button {
+.canvas-roll-dice button {
   min-height: 28px;
   padding: 3px 7px;
-}
-.canvas-roll-custom {
-  display: flex;
-  min-width: 0;
-  gap: 4px;
-}
-.canvas-roll-custom input {
-  width: 112px;
-  min-width: 0;
 }
 .canvas-roll-overlay > label {
   display: flex;

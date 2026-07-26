@@ -5,7 +5,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type FormEvent,
 } from "react";
 import type {
   AssetKind,
@@ -44,6 +43,11 @@ import { normalizeClientDiceResult } from "./dice-result";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import { RollModeControl, type RollMode } from "./RollModeControl";
+import {
+  applyCharacterMutationToSnapshot,
+  mergeCharacterMutationResponse,
+  reconcileGameSnapshot,
+} from "./character-mutation";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -67,14 +71,8 @@ function CanvasRollOverlay({
     rollMode?: RollMode,
   ) => Promise<void>;
 }) {
-  const [formula, setFormula] = useState("1d20");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (formula.trim())
-      void onRoll(formula, "Быстрый бросок", visibility, characterId, rollMode);
-  };
   return (
     <section className="canvas-roll-overlay" aria-label="Быстрые броски">
       <div className="canvas-roll-dice" aria-label="Кости">
@@ -96,14 +94,6 @@ function CanvasRollOverlay({
           </button>
         ))}
       </div>
-      <form className="canvas-roll-custom" onSubmit={submit}>
-        <input
-          aria-label="Своя формула броска"
-          value={formula}
-          onChange={(event) => setFormula(event.target.value)}
-        />
-        <button type="submit">Бросить</button>
-      </form>
       <RollModeControl
         value={rollMode}
         onChange={setRollMode}
@@ -521,7 +511,7 @@ export function App() {
     next.io.on("reconnect_attempt", () => setConnection("RECONNECTING"));
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
     next.on("game:snapshot", (nextSnapshot) => {
-      setSnapshot(nextSnapshot);
+      setSnapshot((current) => reconcileGameSnapshot(current, nextSnapshot));
       setConnection("ONLINE");
     });
     next.on("scene:activated", (event) =>
@@ -904,7 +894,7 @@ export function App() {
           : patch.wallet
             ? { ...patch, wallet: normalizeWallet(patch.wallet) }
             : patch;
-        return api<import("@arken/contracts").CharacterDto>(
+        const response = await api<unknown>(
           `/api/characters/${characterId}/counters`,
           {
             method: "PATCH",
@@ -915,10 +905,26 @@ export function App() {
             }),
           },
         );
+        const updated = mergeCharacterMutationResponse(base, response);
+        if (updated) return updated;
+
+        // Older servers returned `{ duplicate: true }` for a successfully
+        // replayed request. Reconcile the canonical DTO rather than placing
+        // that placeholder in React state and tripping the error boundary.
+        const refreshed = await api<GameSnapshot>("/api/bootstrap");
+        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
+        const replayed = refreshed.characters.find(
+          (character) => character.id === characterId,
+        );
+        if (!replayed)
+          throw new Error(
+            "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436 \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435 \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d. \u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443.",
+          );
+        return replayed;
       };
       if (!canonical) {
         const refreshed = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot(refreshed);
+        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
         canonical = refreshed.characters.find(
           (character) => character.id === characterId,
         );
@@ -931,14 +937,7 @@ export function App() {
           revision: canonical.revision ?? requestedRevision,
         });
         setSnapshot((current) =>
-          current
-            ? {
-                ...current,
-                characters: current.characters.map((character) =>
-                  character.id === characterId ? updated : character,
-                ),
-              }
-            : current,
+          applyCharacterMutationToSnapshot(current, updated),
         );
         return updated;
       } catch (reason) {
@@ -948,21 +947,14 @@ export function App() {
         )
           throw reason;
         const refreshed = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot(refreshed);
+        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
         const freshCharacter = refreshed.characters.find(
           (character) => character.id === characterId,
         );
         if (!freshCharacter || !intent?.walletDelta) throw reason;
         const updated = await submit(freshCharacter);
         setSnapshot((current) =>
-          current
-            ? {
-                ...current,
-                characters: current.characters.map((character) =>
-                  character.id === characterId ? updated : character,
-                ),
-              }
-            : current,
+          applyCharacterMutationToSnapshot(current, updated),
         );
         return updated;
       }
@@ -970,7 +962,7 @@ export function App() {
     const queueTail = operation
       .catch(async () => {
         const refreshed = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot(refreshed);
+        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
         return refreshed.characters.find(
           (character) => character.id === characterId,
         );
@@ -1085,7 +1077,7 @@ export function App() {
                   ? "Сцена у игроков"
                   : "Показать выбранную сцену игрокам"
               }
-              disabled={activeScene.id === broadcastScene?.id}
+              aria-pressed={activeScene.id === broadcastScene?.id}
               onClick={() =>
                 void run(() =>
                   api("/api/scenes/activate", {

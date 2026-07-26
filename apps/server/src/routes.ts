@@ -106,6 +106,7 @@ import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
+import { characterDto, normalizeCharacterWallet } from "./character-dto.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
 import {
@@ -6036,28 +6037,68 @@ export function registerRoutes(
     if (!auth) return;
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = characterCountersCommandSchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
-    const [character] = await db
-      .select()
-      .from(characters)
-      .where(
-        and(eq(characters.id, id), eq(characters.campaignId, auth.campaignId)),
-      )
-      .limit(1);
-    if (
-      !character ||
-      (auth.role !== "GM" && character.ownerMembershipId !== auth.membershipId)
-    )
+    const loadCharacter = async () => {
+      const [row] = await db
+        .select()
+        .from(characters)
+        .where(
+          and(
+            eq(characters.id, id),
+            eq(characters.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      return row;
+    };
+    const canEditCharacter = (
+      character: typeof characters.$inferSelect | undefined,
+    ) =>
+      Boolean(
+        character &&
+        (auth.role === "GM" ||
+          character.ownerMembershipId === auth.membershipId),
+      );
+    const sendReplay = async (
+      action: NonNullable<Awaited<ReturnType<typeof findAction>>>,
+    ) => {
+      if (action.type !== "character.counters" || action.entityId !== id)
+        return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+      // The action may have committed after this request read the character.
+      // Reload after observing the receipt so replay always returns the
+      // canonical post-commit revision/wallet, never that stale pre-read row.
+      const canonical = await loadCharacter();
+      if (!canEditCharacter(canonical))
+        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+      const assignedEntries = await db
+        .select()
+        .from(characterCatalogEntries)
+        .where(eq(characterCatalogEntries.characterId, id));
+      return reply.code(200).send(characterDto(canonical!, assignedEntries));
+    };
+
+    // Check the receipt before loading the entity. This ordering guarantees a
+    // normal replay reads its character after the original transaction commit.
+    const priorAction = await findAction(db, auth.campaignId, body.actionId);
+    const character = await loadCharacter();
+    if (!canEditCharacter(character))
       return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
-    if (character.revision !== body.revision)
+    if (priorAction) return sendReplay(priorAction);
+    if (character!.revision !== body.revision) {
+      const racedAction = await findAction(db, auth.campaignId, body.actionId);
+      if (racedAction) return sendReplay(racedAction);
       return reply
         .code(409)
-        .send({ error: "CHARACTER_CONFLICT", revision: character.revision });
+        .send({ error: "CHARACTER_CONFLICT", revision: character!.revision });
+    }
     const changes = [
-      body.wallet ? formatWalletChanges(character.wallet, body.wallet) : "",
+      body.wallet
+        ? formatWalletChanges(
+            normalizeCharacterWallet(character!.wallet),
+            body.wallet,
+          )
+        : "",
       body.resources
-        ? formatResourceChanges(character.resources, body.resources)
+        ? formatResourceChanges(character!.resources, body.resources)
         : "",
     ]
       .filter(Boolean)
@@ -6070,13 +6111,13 @@ export function registerRoutes(
         .set({
           ...(body.wallet ? { wallet: body.wallet } : {}),
           ...(body.resources ? { resources: body.resources } : {}),
-          revision: character.revision + 1,
+          revision: character!.revision + 1,
           updatedAt: new Date(),
         })
         .where(
           and(
             eq(characters.id, id),
-            eq(characters.revision, character.revision),
+            eq(characters.revision, character!.revision),
           ),
         )
         .returning();
@@ -6090,7 +6131,7 @@ export function registerRoutes(
           kind: "SYSTEM",
           threadId: tableThread.id,
           visibility: "PUBLIC",
-          body: `${character.name} — ${changes}`,
+          body: `${character!.name} \u2014 ${changes}`,
         })
         .returning();
       await tx.insert(gameEvents).values({
@@ -6105,9 +6146,17 @@ export function registerRoutes(
       });
       return { updated, message };
     });
-    if (!result) return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
+    if (!result) {
+      const racedAction = await findAction(db, auth.campaignId, body.actionId);
+      if (racedAction) return sendReplay(racedAction);
+      return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
+    }
     await broadcastSnapshots(io, db, auth.campaignId);
-    return result.updated;
+    const assignedEntries = await db
+      .select()
+      .from(characterCatalogEntries)
+      .where(eq(characterCatalogEntries.characterId, id));
+    return characterDto(result.updated, assignedEntries);
   });
 
   app.post(

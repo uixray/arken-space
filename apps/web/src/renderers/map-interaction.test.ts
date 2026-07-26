@@ -1,9 +1,12 @@
 ﻿import { describe, expect, it } from "vitest";
 import {
+  canMoveMapToken,
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
   resolveMapToolShortcut,
+  resolveMapWheelGesture,
+  shouldBeginMapPan,
   type MapInteractionAction,
   type MapInteractionState,
   type MapObjectRef,
@@ -78,6 +81,63 @@ describe("mapInteractionReducer", () => {
     expect(state.commands).toEqual([
       { id: 1, type: "select-tool", tool: "PING" },
     ]);
+  });
+
+  it("reserves right and middle drag for panning and pans empty canvas in PAN", () => {
+    expect(shouldBeginMapPan(2, "DRAW", false)).toBe(true);
+    expect(shouldBeginMapPan(1, "RULER", false)).toBe(true);
+    expect(shouldBeginMapPan(0, "PAN", true)).toBe(true);
+    expect(shouldBeginMapPan(0, "PAN", false)).toBe(false);
+    expect(shouldBeginMapPan(0, "DRAW", true)).toBe(false);
+  });
+
+  it("uses touchpad scroll for pan and modifier pinch for zoom", () => {
+    expect(
+      resolveMapWheelGesture({
+        deltaX: 24,
+        deltaY: -12,
+        ctrlKey: false,
+        metaKey: false,
+      }),
+    ).toEqual({ type: "pan", delta: { x: -24, y: 12 } });
+    expect(
+      resolveMapWheelGesture({
+        deltaX: 0,
+        deltaY: -2,
+        ctrlKey: true,
+        metaKey: false,
+      }),
+    ).toEqual({ type: "zoom", direction: "in" });
+  });
+
+  it("lets a GM move every unlocked token in PAN", () => {
+    expect(
+      canMoveMapToken({
+        tool: "PAN",
+        role: "GM",
+        locked: false,
+        membershipId: "gm",
+        controllerMembershipIds: [],
+      }),
+    ).toBe(true);
+    expect(
+      canMoveMapToken({
+        tool: "DRAW",
+        role: "GM",
+        locked: false,
+        membershipId: "gm",
+        controllerMembershipIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      canMoveMapToken({
+        tool: "PAN",
+        role: "GM",
+        locked: true,
+        membershipId: "gm",
+        controllerMembershipIds: [],
+      }),
+    ).toBe(false);
   });
 
   it("coordinates typed selection, object list, and object menu", () => {

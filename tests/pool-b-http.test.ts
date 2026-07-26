@@ -1612,7 +1612,66 @@ describe("Pool B HTTP boundaries", () => {
     expect(exhausted.statusCode).toBe(409);
   });
 
+  it("returns one canonical DTO to concurrent counter action replays", async () => {
+    const actionId = crypto.randomUUID();
+    const request = () =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/characters/${ids.character}/counters`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId,
+          revision: 0,
+          wallet: { gold: 3, silver: 2, copper: 1, sp: 4 },
+        },
+      });
+
+    const responses = await Promise.all([request(), request()]);
+    expect(responses.map((response) => response.statusCode)).toEqual([
+      200, 200,
+    ]);
+    for (const response of responses)
+      expect(response.json()).toMatchObject({
+        id: ids.character,
+        revision: 1,
+        wallet: { gold: 3, silver: 2, copper: 1, sp: 4 },
+        entries: expect.any(Array),
+      });
+
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(snapshot.json().characters[0]).toMatchObject({
+      revision: 1,
+      wallet: { gold: 3, silver: 2, copper: 1, sp: 4 },
+    });
+    expect(
+      snapshot
+        .json()
+        .messages.filter(
+          (message: { kind: string; characterId: string | null }) =>
+            message.kind === "SYSTEM" && message.characterId === ids.character,
+        ),
+    ).toHaveLength(1);
+  });
+
   it("updates clock, cooldowns, resources and wallet with public system audit", async () => {
+    await database.exec(
+      `update characters set wallet = '{"gold":0,"silver":0,"copper":0}'::jsonb where id = '${ids.character}'`,
+    );
+    const legacyWalletSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(legacyWalletSnapshot.json().characters[0].wallet).toEqual({
+      gold: 0,
+      silver: 0,
+      copper: 0,
+      sp: 0,
+    });
     await db.insert(schema.characterCatalogEntries).values([
       {
         characterId: ids.character,
@@ -1712,7 +1771,12 @@ describe("Pool B HTTP boundaries", () => {
         wallet: { gold: 9, silver: 9, copper: 9, sp: 9 },
       },
     });
-    expect(countersReplay.json()).toEqual({ duplicate: true });
+    expect(countersReplay.json()).toMatchObject({
+      id: ids.character,
+      wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+      revision: 1,
+      entries: expect.any(Array),
+    });
     const advanceActionId = crypto.randomUUID();
     const advance = await app.inject({
       method: "POST",

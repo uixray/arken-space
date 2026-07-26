@@ -1279,10 +1279,20 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
       await new Promise((resolve) => setTimeout(resolve, 100));
     playerSnapshot.characters[0]!.wallet = payload.wallet;
     playerSnapshot.characters[0]!.revision += 1;
+    const response =
+      submittedGold.length === 2
+        ? { duplicate: true }
+        : submittedGold.length === 1
+          ? Object.fromEntries(
+              Object.entries(playerSnapshot.characters[0]!).filter(
+                ([key]) => key !== "entries",
+              ),
+            )
+          : playerSnapshot.characters[0];
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(playerSnapshot.characters[0]),
+      body: JSON.stringify(response),
     });
   });
   await page.goto("/");
@@ -2438,4 +2448,126 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
   await expect(
     page.getByRole("img", { name: "Cartographer waves hello" }),
   ).toHaveAttribute("src", "/api/stickers/" + stickerId + "/content");
+});
+
+test("GM can move tokens, pan the map, choose drawing color, and republish the active scene", async ({
+  page,
+}) => {
+  let publishRequests = 0;
+  let socketConnected = false;
+  let movedToken: { tokenId: string; x: number; y: number } | null = null;
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      const packet = message.toString();
+      if (packet === "40") {
+        socketConnected = true;
+        socket.send('40{"sid":"concept-test-socket"}');
+        return;
+      }
+      if (!packet.startsWith("42")) return;
+      const payloadStart = packet.indexOf("[");
+      if (payloadStart < 0) return;
+      const payload = JSON.parse(packet.slice(payloadStart)) as [
+        string,
+        Record<string, unknown>,
+      ];
+      if (payload[0] === "token:moved")
+        movedToken = {
+          tokenId: String(payload[1].tokenId),
+          x: Number(payload[1].x),
+          y: Number(payload[1].y),
+        };
+      const acknowledgementId = packet.slice(2, payloadStart);
+      if (acknowledgementId) socket.send(`43${acknowledgementId}[{"ok":true}]`);
+    });
+    socket.send(
+      '0{"sid":"concept-test-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/scenes/activate", async (route) => {
+    publishRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.goto("/");
+
+  const viewport = page.locator(".map-viewport");
+  const bounds = await viewport.boundingBox();
+  expect(bounds).not.toBeNull();
+  const canvasState = () =>
+    viewport
+      .locator("canvas")
+      .evaluateAll((canvases) =>
+        canvases.map((canvas) => canvas.toDataURL()).join("|"),
+      );
+
+  await expect.poll(() => socketConnected).toBe(true);
+  await page.mouse.move(bounds!.x + 416, bounds!.y + 352);
+  await page.mouse.down({ button: "left" });
+  await page.mouse.move(bounds!.x + 480, bounds!.y + 416, { steps: 5 });
+  await page.mouse.up({ button: "left" });
+  await expect
+    .poll(() => movedToken)
+    .toMatchObject({
+      tokenId: snapshot.tokens[0]!.id,
+      x: 448,
+      y: 384,
+    });
+
+  const beforeRightPan = await canvasState();
+  await page.mouse.move(bounds!.x + 240, bounds!.y + 180);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(bounds!.x + 300, bounds!.y + 220, { steps: 4 });
+  await page.mouse.up({ button: "right" });
+  await expect.poll(canvasState).not.toBe(beforeRightPan);
+  await expect(page.locator(".token-menu")).toHaveCount(0);
+
+  await page.mouse.move(bounds!.x + 120, bounds!.y + 120);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(bounds!.x + bounds!.width + 24, bounds!.y + 120, {
+    steps: 4,
+  });
+  await page.mouse.up({ button: "right" });
+  const afterOutsideRelease = await canvasState();
+  await page.mouse.move(bounds!.x + 160, bounds!.y + 160, { steps: 3 });
+  await expect.poll(canvasState).toBe(afterOutsideRelease);
+
+  const beforeTouchpadPan = await canvasState();
+  await page.locator(".konvajs-content").dispatchEvent("wheel", {
+    deltaX: 32,
+    deltaY: 18,
+    ctrlKey: false,
+  });
+  await expect.poll(canvasState).not.toBe(beforeTouchpadPan);
+
+  await page.locator('.map-tool[data-tool="DRAW"]').click();
+  const colorPanel = page.locator(".drawing-color-panel");
+  await expect(colorPanel).toBeVisible();
+  const panelBox = await colorPanel.boundingBox();
+  const viewportBox = await viewport.boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect(viewportBox).not.toBeNull();
+  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(
+    viewportBox!.x + viewportBox!.width,
+  );
+  expect(panelBox!.y).toBeLessThan(viewportBox!.y + viewportBox!.height / 2);
+
+  const publish = page.locator(".publish-scene");
+  await expect(publish).toBeEnabled();
+  await expect(publish).toHaveAttribute("aria-pressed", "true");
+  await publish.click();
+  await expect.poll(() => publishRequests).toBe(1);
 });

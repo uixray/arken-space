@@ -15,10 +15,13 @@ import type { SceneRendererProps } from "./SceneRenderer";
 import { isRectFullyRevealed } from "./fog";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
+  canMoveMapToken,
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
   resolveMapToolShortcut,
+  resolveMapWheelGesture,
+  shouldBeginMapPan,
   type MapObjectRef,
 } from "./map-interaction";
 import { selectMapObjects } from "./map-objects";
@@ -322,11 +325,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     event.evt.preventDefault();
     const stage = stageRef.current;
     const pointer = stage?.getPointerPosition();
-    if (!stage || !pointer) return;
+    if (!stage) return;
+    // A two-finger touchpad gesture scrolls the canvas. Browsers expose a
+    // touchpad pinch as ctrl/meta + wheel, so keep that gesture for zooming.
+    const gesture = resolveMapWheelGesture(event.evt);
+    if (gesture.type === "pan") {
+      setPosition((current) => ({
+        x: current.x + gesture.delta.x,
+        y: current.y + gesture.delta.y,
+      }));
+      return;
+    }
+    if (!pointer) return;
     const oldScale = scale;
     const nextScale = Math.min(
       3,
-      Math.max(0.25, oldScale * (event.evt.deltaY > 0 ? 0.9 : 1.1)),
+      Math.max(0.25, oldScale * (gesture.direction === "out" ? 0.9 : 1.1)),
     );
     const mousePoint = {
       x: (pointer.x - position.x) / oldScale,
@@ -601,30 +615,35 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (point) props.onPing(point);
   };
 
-  const handlePointerDown = (event: Konva.KonvaEventObject<MouseEvent>) => {
-    if (event.evt.button === 1) {
-      event.evt.preventDefault();
-      const pointer = stageRef.current?.getPointerPosition();
-      if (pointer)
-        panStartRef.current = {
-          pointerX: pointer.x,
-          pointerY: pointer.y,
-          stageX: position.x,
-          stageY: position.y,
-        };
-      return;
-    }
-    if (event.evt.button === 2 && event.target === stageRef.current) {
-      const point = pointerInWorld();
-      if (point)
-        setMarquee({
-          startX: point.x,
-          startY: point.y,
-          x: point.x,
-          y: point.y,
-          width: 0,
-          height: 0,
-        });
+  const beginPan = (
+    event: Konva.KonvaEventObject<MouseEvent | PointerEvent>,
+  ) => {
+    event.evt.preventDefault();
+    event.cancelBubble = true;
+    const pointer = stageRef.current?.getPointerPosition();
+    if (pointer)
+      panStartRef.current = {
+        pointerX: pointer.x,
+        pointerY: pointer.y,
+        stageX: position.x,
+        stageY: position.y,
+      };
+  };
+
+  const handlePointerDown = (
+    event: Konva.KonvaEventObject<MouseEvent | PointerEvent>,
+  ) => {
+    const targetIsCanvas =
+      event.target === stageRef.current ||
+      event.target.name() === "map-interaction-hit-plane";
+    if (shouldBeginMapPan(event.evt.button, props.tool, targetIsCanvas)) {
+      beginPan(event);
+      if (event.evt.button === 0) {
+        setSelectedTokenIds([]);
+        setSelectedDrawingIds([]);
+        setSelectedDrawingId(null);
+        setTokenMenu(null);
+      }
       return;
     }
     if (event.evt.button !== 0) return;
@@ -795,6 +814,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const trackOutsideStage = (event: MouseEvent) =>
       trackDrawingRef.current(event);
     const finishOutsideStage = () => {
+      // Pointer capture is not guaranteed for mouse right/middle drags. Always
+      // terminate a pending pan when release/cancel happens outside the Stage,
+      // otherwise the next hover move would resume the stale gesture.
+      panStartRef.current = null;
       if (drawingActiveRef.current) finishDrawingRef.current();
     };
     window.addEventListener("mousemove", trackOutsideStage, true);
@@ -1096,9 +1119,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         scaleY={scale}
         draggable={false}
         onWheel={handleWheel}
-        onMouseDown={handlePointerDown}
-        onMouseMove={handlePointerMove}
-        onMouseUp={handlePointerUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
         onClick={handleClick}
       >
         <Layer
@@ -1126,6 +1149,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               y={backgroundDraft.y}
               width={backgroundDraft.width}
               height={backgroundDraft.height}
+              listening={false}
             />
           )}
           {props.scene.grid.enabled &&
@@ -1484,11 +1508,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
             )
             .map((token) => {
-              const canMove =
-                props.tool === "PAN" &&
-                !token.locked &&
-                (props.role === "GM" ||
-                  token.controllerMembershipIds.includes(props.membershipId));
+              const canMove = canMoveMapToken({
+                tool: props.tool,
+                role: props.role,
+                locked: token.locked,
+                membershipId: props.membershipId,
+                controllerMembershipIds: token.controllerMembershipIds,
+              });
               const url = assetUrl(token.assetId);
               const dragPosition = dragPositions[token.id];
               const common = {
@@ -1582,7 +1608,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   onContextMenu={(event) => {
                     event.evt.preventDefault();
                     event.cancelBubble = true;
-                    if (props.role !== "GM") return;
+                    // Right-button drag is reserved for panning. The legacy
+                    // token menu remains available through Shift+right-click
+                    // and the keyboard/object-list actions.
+                    if (props.role !== "GM" || !event.evt.shiftKey) return;
                     const rect = containerRef.current?.getBoundingClientRect();
                     if (!rect) return;
                     setTokenMenu({
@@ -1888,51 +1917,23 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           Сохранять пропорции
         </label>
       )}
-      <div className="map-scale">
-        <button
-          aria-label="Увеличить масштаб"
-          onClick={() => zoomAtCenter(scale + 0.1)}
-        >
-          +
-        </button>
-        <input
-          aria-label="Масштаб карты"
-          type="range"
-          min="0.25"
-          max="3"
-          step="0.05"
-          value={scale}
-          onChange={(event) => zoomAtCenter(Number(event.target.value))}
-        />
-        <button
-          aria-label="Уменьшить масштаб"
-          onClick={() => zoomAtCenter(scale - 0.1)}
-        >
-          в€’
-        </button>
-        {Math.round(scale * 100)}%
-        <button onClick={fitMap}>Вписать</button>
-        {props.role === "GM" && (
-          <label>
-            <input
-              type="checkbox"
-              checked={showGmLayer}
-              onChange={(event) => setShowGmLayer(event.target.checked)}
-            />
-            GM
-          </label>
-        )}
-        {(() => {
-          const drawing = props.drawings.find(
-            (item) => item.id === selectedDrawingId,
-          );
-          const canEditDrawing =
-            drawing &&
-            (props.role === "GM" ||
-              (!!props.membershipId &&
-                drawing.authorMembershipId === props.membershipId));
-          if (!canEditDrawing && props.tool !== "DRAW") return null;
-          return (
+      {(() => {
+        const drawing = props.drawings.find(
+          (item) => item.id === selectedDrawingId,
+        );
+        const canEditDrawing =
+          drawing &&
+          (props.role === "GM" ||
+            (!!props.membershipId &&
+              drawing.authorMembershipId === props.membershipId));
+        if (!canEditDrawing && props.tool !== "DRAW") return null;
+        return (
+          <aside
+            className="drawing-color-panel"
+            aria-label={
+              "\u041f\u0430\u043d\u0435\u043b\u044c \u0446\u0432\u0435\u0442\u0430 \u0440\u0438\u0441\u0443\u043d\u043a\u0430"
+            }
+          >
             <span className="drawing-color-controls">
               <span
                 className="drawing-color-presets"
@@ -2002,8 +2003,42 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 </>
               )}
             </span>
-          );
-        })()}
+          </aside>
+        );
+      })()}
+      <div className="map-scale">
+        <button
+          aria-label="Увеличить масштаб"
+          onClick={() => zoomAtCenter(scale + 0.1)}
+        >
+          +
+        </button>
+        <input
+          aria-label="Масштаб карты"
+          type="range"
+          min="0.25"
+          max="3"
+          step="0.05"
+          value={scale}
+          onChange={(event) => zoomAtCenter(Number(event.target.value))}
+        />
+        <button
+          aria-label="Уменьшить масштаб"
+          onClick={() => zoomAtCenter(scale - 0.1)}
+        >
+          в€’
+        </button>
+        {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
+        {props.role === "GM" && (
+          <label>
+            <input
+              type="checkbox"
+              checked={showGmLayer}
+              onChange={(event) => setShowGmLayer(event.target.checked)}
+            />
+            GM
+          </label>
+        )}
         {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
           <button
             onClick={() => {

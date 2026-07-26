@@ -4,6 +4,49 @@ export type MapTool = "PAN" | "FOG" | "COVER" | "DRAW" | "RULER" | "PING";
 
 export type Point = Readonly<{ x: number; y: number }>;
 
+export function shouldBeginMapPan(
+  button: number,
+  tool: MapTool,
+  targetIsCanvas: boolean,
+): boolean {
+  return (
+    button === 1 ||
+    button === 2 ||
+    (button === 0 && tool === "PAN" && targetIsCanvas)
+  );
+}
+
+export function resolveMapWheelGesture(input: {
+  deltaX: number;
+  deltaY: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+}):
+  | Readonly<{ type: "pan"; delta: Point }>
+  | Readonly<{ type: "zoom"; direction: "in" | "out" }> {
+  if (input.ctrlKey || input.metaKey)
+    return { type: "zoom", direction: input.deltaY > 0 ? "out" : "in" };
+  return {
+    type: "pan",
+    delta: { x: -input.deltaX, y: -input.deltaY },
+  };
+}
+
+export function canMoveMapToken(input: {
+  tool: MapTool;
+  role: Role;
+  locked: boolean;
+  membershipId: string;
+  controllerMembershipIds: readonly string[];
+}): boolean {
+  return (
+    input.tool === "PAN" &&
+    !input.locked &&
+    (input.role === "GM" ||
+      input.controllerMembershipIds.includes(input.membershipId))
+  );
+}
+
 export type MapObjectKind = "token" | "drawing";
 export type MapObjectRef = Readonly<{
   kind: MapObjectKind;

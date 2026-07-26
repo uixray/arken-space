@@ -88,12 +88,13 @@ import {
   eligibleDirectRecipients,
   messagesForDirectThread,
 } from "./direct-chat-state";
+import { activityTableReadTarget, feedForChatStream } from "./sidebar-feed";
 
 type SidebarFeed = "ACTIVITY" | ChatStream;
 
 const CHAT_FEED_ORDER: readonly SidebarFeed[] = [
   "ACTIVITY",
-  ...CHAT_STREAM_ORDER,
+  ...CHAT_STREAM_ORDER.filter((stream) => stream !== "TABLE"),
 ];
 
 function nextChatFeed(current: SidebarFeed, key: string): SidebarFeed | null {
@@ -387,7 +388,7 @@ export function Sidebar(props: Props) {
     props.snapshot;
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
-  const storyReadSequenceRef = useRef(new Map<string, number>());
+  const readSequenceRef = useRef(new Map<string, number>());
   const [activeFeed, setActiveFeed] = useState<SidebarFeed>("ACTIVITY");
   const [directMode, setDirectMode] = useState(false);
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
@@ -411,12 +412,12 @@ export function Sidebar(props: Props) {
     ).at(-1)?.sequence;
     if (latestSequence === undefined) return;
     if (
-      (storyReadSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence
+      (readSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence
     )
       return;
-    storyReadSequenceRef.current.set(activeThreadId, latestSequence);
+    readSequenceRef.current.set(activeThreadId, latestSequence);
     void onMarkChatRead(activeThreadId, latestSequence).catch(() => {
-      storyReadSequenceRef.current.delete(activeThreadId);
+      readSequenceRef.current.delete(activeThreadId);
     });
   }, [
     activeDirectThreadId,
@@ -428,13 +429,27 @@ export function Sidebar(props: Props) {
     snapshotMessages,
   ]);
   useEffect(() => {
+    if (directMode || activeFeed !== "ACTIVITY") return;
+    const target = activityTableReadTarget(props.snapshot);
+    if (!target) return;
+    if ((readSequenceRef.current.get(target.threadId) ?? 0) >= target.sequence)
+      return;
+    readSequenceRef.current.set(target.threadId, target.sequence);
+    void onMarkChatRead(target.threadId, target.sequence).catch(() => {
+      readSequenceRef.current.delete(target.threadId);
+    });
+  }, [activeFeed, directMode, onMarkChatRead, props.snapshot]);
+  useEffect(() => {
     if (!requestedChatMessageId) return;
     const requestedStream = streamForMessage(
       props.snapshot.messages,
       requestedChatMessageId,
       props.snapshot.chatThreads,
     );
-    if (requestedStream) setActiveFeed(requestedStream);
+    if (requestedStream) {
+      setDirectMode(false);
+      setActiveFeed(feedForChatStream(requestedStream));
+    }
     setFocusedMessageId(requestedChatMessageId);
     onRequestedChatMessageHandled();
   }, [
@@ -479,34 +494,36 @@ export function Sidebar(props: Props) {
         >
           {"\u0421\u043e\u0431\u044b\u0442\u0438\u044f"}
         </Button>
-        {CHAT_STREAM_ORDER.map((stream) => {
-          const unread = unreadCountForStream(props.snapshot, stream);
-          return (
-            <Button
-              key={stream}
-              view="flat"
-              role="tab"
-              id={`chat-tab-${stream.toLowerCase()}`}
-              aria-controls={`chat-panel-${stream.toLowerCase()}`}
-              aria-selected={!directMode && activeFeed === stream}
-              tabIndex={!directMode && activeFeed === stream ? 0 : -1}
-              onClick={() => {
-                setDirectMode(false);
-                setActiveFeed(stream);
-              }}
-            >
-              {CHAT_STREAM_LABEL[stream]}
-              {unread > 0 && (
-                <span
-                  className="chat-unread-badge"
-                  aria-label={`${unread} \u043d\u0435\u043f\u0440\u043e\u0447\u0438\u0442\u0430\u043d\u043d\u044b\u0445`}
-                >
-                  {unread}
-                </span>
-              )}
-            </Button>
-          );
-        })}
+        {CHAT_STREAM_ORDER.filter((stream) => stream !== "TABLE").map(
+          (stream) => {
+            const unread = unreadCountForStream(props.snapshot, stream);
+            return (
+              <Button
+                key={stream}
+                view="flat"
+                role="tab"
+                id={`chat-tab-${stream.toLowerCase()}`}
+                aria-controls={`chat-panel-${stream.toLowerCase()}`}
+                aria-selected={!directMode && activeFeed === stream}
+                tabIndex={!directMode && activeFeed === stream ? 0 : -1}
+                onClick={() => {
+                  setDirectMode(false);
+                  setActiveFeed(stream);
+                }}
+              >
+                {CHAT_STREAM_LABEL[stream]}
+                {unread > 0 && (
+                  <span
+                    className="chat-unread-badge"
+                    aria-label={`${unread} \u043d\u0435\u043f\u0440\u043e\u0447\u0438\u0442\u0430\u043d\u043d\u044b\u0445`}
+                  >
+                    {unread}
+                  </span>
+                )}
+              </Button>
+            );
+          },
+        )}
         <Button
           view="flat"
           role="tab"
@@ -548,6 +565,11 @@ export function Sidebar(props: Props) {
           <ActivityPanel
             snapshot={props.snapshot}
             storyPosts={props.storyPosts}
+            onChat={props.onChat}
+            onSticker={props.onSticker}
+            onRoll={props.onRoll}
+            focusedMessageId={focusedMessageId}
+            onMessageFocused={() => setFocusedMessageId(null)}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel
@@ -1535,10 +1557,50 @@ function ChatMessageBody({
 function ActivityPanel({
   snapshot,
   storyPosts,
+  onChat,
+  onSticker,
+  onRoll,
+  focusedMessageId,
+  onMessageFocused,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
+  onChat: Props["onChat"];
+  onSticker: Props["onSticker"];
+  onRoll: Props["onRoll"];
+  focusedMessageId: string | null;
+  onMessageFocused: () => void;
 }) {
+  const [composer, setComposer] = useState("");
+  const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
+  const [composerError, setComposerError] = useState("");
+  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
+  const characterStats =
+    snapshot.characters.find(
+      (character) => character.id === snapshot.me.characterId,
+    )?.stats ?? {};
+  const slashSuggestions = slashHelpOpen
+    ? getSlashCommandSuggestions("/", characterStats)
+    : getSlashCommandSuggestions(composer, characterStats);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const intent = parseComposerInput(composer, characterStats);
+    if (intent.kind === "INVALID") {
+      setComposerError(intent.message);
+      return;
+    }
+    setComposerError("");
+    if (intent.kind === "ROLL")
+      await onRoll(
+        intent.formula,
+        intent.label,
+        visibility,
+        snapshot.me.characterId,
+        "NORMAL",
+      );
+    else await onChat(intent.body, visibility, "TABLE");
+    setComposer("");
+  };
   const activityEvents = useMemo(
     () =>
       buildActivityFeed(snapshot.messages, snapshot.chatThreads, storyPosts),
@@ -1552,6 +1614,20 @@ function ActivityPanel({
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
   );
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focusedMessageId) return;
+    const message = document.getElementById(`chat-message-${focusedMessageId}`);
+    if (!message) return;
+    const list = listRef.current;
+    if (list)
+      list.scrollTo({
+        top:
+          message.offsetTop - list.clientHeight / 2 + message.clientHeight / 2,
+      });
+    message.focus({ preventScroll: true });
+    onMessageFocused();
+  }, [focusedMessageId, onMessageFocused, timeline]);
   return (
     <section
       className="chat-panel activity-feed"
@@ -1559,7 +1635,7 @@ function ActivityPanel({
       id="chat-panel-activity"
       aria-labelledby="chat-tab-activity"
     >
-      <div className="message-list" aria-live="polite">
+      <div className="message-list" aria-live="polite" ref={listRef}>
         {timeline.length === 0 && (
           <p className="chat-empty">
             {
@@ -1589,8 +1665,10 @@ function ActivityPanel({
           return (
             <article
               key={`activity-message-${id}`}
+              id={`chat-message-${id}`}
               className={`message ${message.kind.toLowerCase()}`}
               data-activity-stream={stream}
+              tabIndex={-1}
             >
               <header>
                 <strong>{message.displayName}</strong>
@@ -1625,6 +1703,100 @@ function ActivityPanel({
           );
         })}
       </div>
+      <div className="chat-tools">
+        <label className="compact-check">
+          <FormInput
+            type="checkbox"
+            checked={visibility === "GM_ONLY"}
+            onChange={(event) =>
+              setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
+            }
+          />{" "}
+          {
+            "\u0422\u043e\u043b\u044c\u043a\u043e \u043c\u0430\u0441\u0442\u0435\u0440"
+          }
+        </label>
+      </div>
+      <form className="chat-compose" onSubmit={submit}>
+        <div className="chat-composer-input">
+          <FormTextArea
+            aria-label="\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0438\u043b\u0438 \u0431\u0440\u043e\u0441\u043e\u043a"
+            aria-expanded={slashSuggestions.length > 0}
+            aria-controls={
+              slashSuggestions.length > 0
+                ? "activity-slash-suggestions"
+                : undefined
+            }
+            placeholder="\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u2026 \u0438\u043b\u0438 /roll 1d20 + agility"
+            value={composer}
+            onChange={(event) => {
+              setSlashHelpOpen(false);
+              setComposer(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            rows={3}
+          />
+          <div className="chat-composer-actions">
+            {!composer.trim() && (
+              <StickerPicker
+                iconOnly
+                onSelect={(stickerId) =>
+                  onSticker({ stream: "TABLE" }, stickerId)
+                }
+              />
+            )}
+            <Button
+              className="composer-icon composer-slash-action"
+              type="button"
+              view="flat"
+              aria-label="\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u043a\u043e\u043c\u0430\u043d\u0434\u044b"
+              title="\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u043a\u043e\u043c\u0430\u043d\u0434\u044b"
+              aria-expanded={slashSuggestions.length > 0}
+              onClick={() => setSlashHelpOpen((open) => !open)}
+            >
+              <span aria-hidden="true">/</span>
+            </Button>
+          </div>
+          {slashSuggestions.length > 0 && (
+            <div
+              className="slash-command-suggestions"
+              id="activity-slash-suggestions"
+              role="listbox"
+              aria-label="\u041a\u043e\u043c\u0430\u043d\u0434\u044b \u0447\u0430\u0442\u0430"
+            >
+              {slashSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion.command}
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  onClick={() => {
+                    setComposer(suggestion.insertion);
+                    setSlashHelpOpen(false);
+                  }}
+                >
+                  <strong>{suggestion.command}</strong>
+                  <span>{suggestion.description}</span>
+                  <code>{suggestion.example}</code>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <Button className="primary" type="submit">
+          {"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c"}
+        </Button>
+      </form>
+      {composerError && (
+        <p className="composer-error" role="alert">
+          {composerError}
+        </p>
+      )}
     </section>
   );
 }

@@ -26,10 +26,7 @@ import {
 import type { AuthContext } from "./auth.js";
 import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import { env } from "./env.js";
-import {
-  normalizeLegacyEntryData,
-  normalizeLegacyStats,
-} from "./entry-data.js";
+import { normalizeLegacyEntryData } from "./entry-data.js";
 import { normalizeDiceResult, normalizeSkillCard } from "./dice-result.js";
 import { normalizeAudioDeadline } from "./audio-state.js";
 import {
@@ -39,6 +36,7 @@ import {
 } from "./chat.js";
 import { revokedStickerTombstone } from "./sticker-access.js";
 import { buildWorldMapsSnapshot } from "./world-maps.js";
+import { characterDto } from "./character-dto.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -385,36 +383,9 @@ export async function buildSnapshot(
       characterId: characterByOwner.get(member.id) ?? null,
       revision: member.revision,
     })),
-    characters: visibleCharacters.map((character) => ({
-      id: character.id,
-      name: character.name,
-      ownerMembershipId: character.ownerMembershipId,
-      portraitAssetId: character.portraitAssetId,
-      stats: normalizeLegacyStats(character.stats),
-      skills: Array.isArray(character.skills) ? character.skills : [],
-      spells: Array.isArray(character.spells) ? character.spells : [],
-      notes: character.notes,
-      backstory: character.backstory,
-      inventory: Array.isArray(character.inventory) ? character.inventory : [],
-      resources:
-        character.resources && typeof character.resources === "object"
-          ? character.resources
-          : {},
-      wallet:
-        character.wallet && typeof character.wallet === "object"
-          ? character.wallet
-          : { gold: 0, silver: 0, copper: 0, sp: 0 },
-      entries: (entriesByCharacter.get(character.id) ?? []).map((entry) => ({
-        id: entry.id,
-        sourceCatalogEntryId: entry.sourceCatalogEntryId,
-        kind: entry.kind,
-        name: entry.name,
-        description: entry.description,
-        data: normalizeLegacyEntryData(entry.data) as CatalogEntryDto["data"],
-        revision: entry.revision,
-      })),
-      revision: character.revision,
-    })),
+    characters: visibleCharacters.map((character) =>
+      characterDto(character, entriesByCharacter.get(character.id) ?? []),
+    ),
     scenes: visibleScenes.map((scene) => ({
       id: scene.id,
       name: scene.name,

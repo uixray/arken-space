@@ -28,6 +28,20 @@ describe("parseComposerInput", () => {
     });
   });
 
+  it("turns an available characteristic slash command into a d20 check", () => {
+    const stats = { agility: 3, strength: 1 };
+    expect(parseComposerInput("/agility", stats)).toEqual({
+      kind: "ROLL",
+      formula: "1d20 + agility",
+      label:
+        "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430: \u041b\u043e\u0432\u043a\u043e\u0441\u0442\u044c",
+    });
+    expect(parseComposerInput("/knowledge", stats)).toEqual({
+      kind: "TEXT",
+      body: "/knowledge",
+    });
+  });
+
   it("does not treat incomplete or arbitrary slash text as dice", () => {
     expect(parseComposerInput("/roll").kind).toBe("INVALID");
     expect(parseComposerInput("/roll-call")).toEqual({
@@ -47,6 +61,14 @@ describe("getSlashCommandSuggestions", () => {
       }),
     ]);
     expect(getSlashCommandSuggestions("/ro")).toHaveLength(1);
+    expect(getSlashCommandSuggestions("/ag", { agility: 4 })).toEqual([
+      expect.objectContaining({
+        command: "/agility",
+        description:
+          "\u041b\u043e\u0432\u043a\u043e\u0441\u0442\u044c: \u0431\u0440\u043e\u0441\u043e\u043a 1d20 + 4",
+        insertion: "/agility",
+      }),
+    ]);
   });
 
   it("hides suggestions for messages and completed command arguments", () => {
