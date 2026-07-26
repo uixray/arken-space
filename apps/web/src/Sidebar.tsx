@@ -58,6 +58,7 @@ import {
   parseSkillCard,
   SkillChatCard,
 } from "./SkillCards";
+import { RollModeControl, type RollMode } from "./RollModeControl";
 import { StickerPicker } from "./StickerPicker";
 import { StoryChannel, StoryPost, type StoryDraftInput } from "./StoryChannel";
 import {
@@ -275,6 +276,7 @@ type Props = {
       mode: "EXECUTE" | "SHARE";
       rollActionId?: string;
       entryRevision: number;
+      rollMode?: RollMode;
     },
   ) => Promise<void>;
   onRechargeEntry: (
@@ -449,7 +451,7 @@ export function Sidebar(props: Props) {
     <aside className={`sidebar ${!isGm ? "player-sidebar" : ""}`}>
       <nav
         className="tabs chat-stream-tabs"
-        aria-label="Потоки чата"
+        aria-label="Потоки С‡ата"
         role="tablist"
         onKeyDown={(event) => {
           const nextFeed = nextChatFeed(activeFeed, event.key);
@@ -514,13 +516,13 @@ export function Sidebar(props: Props) {
           tabIndex={directMode ? 0 : -1}
           onClick={() => setDirectMode(true)}
         >
-          Личные
+          Р›РёС‡ные
           {directThreads(props.snapshot).reduce(
             (total, thread) =>
               total + directUnreadCount(props.snapshot, thread.id),
             0,
           ) > 0 && (
-            <span className="chat-unread-badge" aria-label="Есть непрочитанные">
+            <span className="chat-unread-badge" aria-label="Р•сть РЅРµРїСЂРѕС‡итанные">
               {directThreads(props.snapshot).reduce(
                 (total, thread) =>
                   total + directUnreadCount(props.snapshot, thread.id),
@@ -546,7 +548,6 @@ export function Sidebar(props: Props) {
           <ActivityPanel
             snapshot={props.snapshot}
             storyPosts={props.storyPosts}
-            onMarkChatRead={props.onMarkChatRead}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel
@@ -644,7 +645,7 @@ export function Sidebar(props: Props) {
           <ArkenDialog
             open
             footer={false}
-            title="Файлы"
+            title="Р¤Р°Р№лы"
             variant="workspace"
             onClose={() => props.onWorkspaceChange(null)}
           >
@@ -713,7 +714,7 @@ export function CharacterWorkspace({
     >
       <header className="character-workspace__header">
         <div>
-          <span className="eyebrow">Рабочее пространство</span>
+          <span className="eyebrow">Р Р°Р±РѕС‡ее пространство</span>
           <h2 ref={titleRef} id="character-workspace-title" tabIndex={-1}>
             Персонажи
           </h2>
@@ -721,8 +722,8 @@ export function CharacterWorkspace({
         <p className="muted">
           Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
         </p>
-        <button type="button" aria-label="Закрыть персонажей" onClick={onClose}>
-          Закрыть
+        <button type="button" aria-label="Р—акрыть персонажей" onClick={onClose}>
+          Р—акрыть
         </button>
       </header>
       <div className="character-workspace__body">
@@ -745,9 +746,9 @@ export function CharacterWorkspace({
                     disabled={full}
                     title={
                       full
-                        ? "Закройте один из открытых листов, чтобы открыть другой."
+                        ? "Р—Р°РєСЂРѕР№те один из открытых листов, С‡тобы открыть другой."
                         : isOpen
-                          ? `Перейти к персонажу ${character.name}`
+                          ? `РџРµСЂРµР№ти к персонажу ${character.name}`
                           : `Открыть персонажа ${character.name}`
                     }
                     onClick={() => {
@@ -764,12 +765,12 @@ export function CharacterWorkspace({
                     <button
                       type="button"
                       className="character-rail__close"
-                      aria-label={`Закрыть лист ${character.name}`}
+                      aria-label={`Р—акрыть лист ${character.name}`}
                       onClick={() =>
                         dispatch({ type: "CLOSE", id: character.id })
                       }
                     >
-                      ×
+                      Г—
                     </button>
                   )}
                 </div>
@@ -783,7 +784,7 @@ export function CharacterWorkspace({
         >
           {state.openIds.length === 0 ? (
             <div className="character-sheet-deck__empty">
-              <p>Выберите персонажа в списке, чтобы открыть его лист.</p>
+              <p>Выберите персонажа в списке, С‡тобы открыть его лист.</p>
             </div>
           ) : (
             state.openIds.map((id) => {
@@ -797,7 +798,7 @@ export function CharacterWorkspace({
                   }${collapsed ? " is-collapsed" : ""}`}
                   key={id}
                   data-character-sheet-id={id}
-                  aria-label={`Лист персонажа ${character.name}`}
+                  aria-label={`Р›ист персонажа ${character.name}`}
                   tabIndex={-1}
                 >
                   <header className="character-sheet-card__header">
@@ -822,10 +823,10 @@ export function CharacterWorkspace({
                     </button>
                     <button
                       type="button"
-                      aria-label={`Закрыть лист ${character.name}`}
+                      aria-label={`Р—акрыть лист ${character.name}`}
                       onClick={() => dispatch({ type: "CLOSE", id })}
                     >
-                      Закрыть
+                      Р—акрыть
                     </button>
                   </header>
                   <div
@@ -899,9 +900,8 @@ export function CharacterPanel({
 }) {
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
-  const [rollMode, setRollMode] = useState<
-    "NORMAL" | "ADVANTAGE" | "DISADVANTAGE"
-  >("NORMAL");
+  // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
+  const [rollMode, setRollMode] = useState<RollMode>();
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
   const [entryEditor, setEntryEditor] = useState<
@@ -934,20 +934,14 @@ export function CharacterPanel({
     return (
       <Empty
         title="Нет персонажа"
-        text="Мастер ещё не назначил вам персонажа."
+        text="Мастер ещё не РЅР°Р·РЅР°С‡ил вам персонажа."
       />
     );
   const submitCharacterRoll = async (formula: string, label: string) => {
     setRollPending(true);
     setRollError("");
     try {
-      await onRoll(
-        formula,
-        label,
-        "PUBLIC",
-        character.id,
-        /(?:^|[+\-\s])1?d20(?:$|[+\-\s])/.test(formula) ? rollMode : "NORMAL",
-      );
+      await onRoll(formula, label, "PUBLIC", character.id, rollMode);
     } catch (reason) {
       setRollError(
         reason instanceof Error
@@ -985,8 +979,8 @@ export function CharacterPanel({
     } catch (reason) {
       setCountersError(
         reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
-          ? "Кошелёк уже изменён в другой сессии. Значения обновлены — повторите действие."
-          : "Не удалось сохранить кошелёк. Проверьте соединение и повторите действие.",
+          ? "Кошелёк уже изменён в другой сессии. Р—РЅР°С‡ения обновлены — повторите РґРµР№ствие."
+          : "Не удалось сохранить кошелёк. Проверьте соединение и повторите РґРµР№ствие.",
       );
     } finally {
       setCountersPending((current) => Math.max(0, current - 1));
@@ -1016,7 +1010,7 @@ export function CharacterPanel({
         setCountersError(
           reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
             ? "Кошелёк изменён в другой сессии. Данные обновлены; повторите изменение, если оно всё ещё нужно."
-            : "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите действие.",
+            : "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите РґРµР№ствие.",
         );
       })
       .finally(() => setCountersPending((count) => Math.max(0, count - 1)));
@@ -1038,10 +1032,10 @@ export function CharacterPanel({
           </FormSelect>
         </label>
       )}
-      <h3 className="character-block-heading">Личность и портрет</h3>
+      <h3 className="character-block-heading">Р›РёС‡ность и портрет</h3>
       <div className="section-heading">
         <div>
-          <span className="eyebrow">Карточка</span>
+          <span className="eyebrow">РљР°СЂС‚РѕС‡ка</span>
           <h2>{character.name}</h2>
         </div>
         <div className="inline-fields">
@@ -1078,7 +1072,7 @@ export function CharacterPanel({
         </FormSelect>
       </label>
       <ImageUploadField
-        label="Загрузить портрет для персонажа"
+        label="Р—агрузить портрет для персонажа"
         value={portraitUpload}
         onUpdate={setPortraitUpload}
       />
@@ -1094,7 +1088,7 @@ export function CharacterPanel({
           setPortraitUpload(undefined);
         }}
       >
-        Загрузить и назначить
+        Р—агрузить и РЅР°Р·РЅР°С‡ить
       </Button>
       {snapshot.me.role === "GM" && (
         <div className="subsection">
@@ -1120,7 +1114,7 @@ export function CharacterPanel({
               )
             }
           >
-            {snapshot.campaign.battleActive ? "Завершить бой" : "Начать бой"}
+            {snapshot.campaign.battleActive ? "Р—авершить бой" : "РќР°С‡ать бой"}
           </Button>
         </div>
       )}
@@ -1140,23 +1134,14 @@ export function CharacterPanel({
       </details>
       <h3 className="character-block-heading">Основные характеристики</h3>
       <div className="subsection character-roll-controls">
-        <label className="field">
-          Режим броска (d20)
-          <select
-            aria-label="Режим броска в карточке"
-            value={rollMode}
-            disabled={rollPending}
-            onChange={(event) =>
-              setRollMode(
-                event.target.value as "NORMAL" | "ADVANTAGE" | "DISADVANTAGE",
-              )
-            }
-          >
-            <option value="NORMAL">Обычный</option>
-            <option value="ADVANTAGE">С преимуществом</option>
-            <option value="DISADVANTAGE">С помехой</option>
-          </select>
-        </label>
+        <RollModeControl
+          value={rollMode}
+          onChange={setRollMode}
+          disabled={rollPending}
+          label={
+            "\u0420\u0435\u0436\u0438\u043c \u0431\u0440\u043e\u0441\u043a\u0430"
+          }
+        />
         {rollError && (
           <p className="field-error" role="alert">
             {rollError}
@@ -1195,9 +1180,9 @@ export function CharacterPanel({
       <h3 className="character-block-heading">Боевые характеристики</h3>
       <Button
         disabled={!editable || rollPending}
-        onClick={() => void submitCharacterRoll("1d20 + agility", "Инициатива")}
+        onClick={() => void submitCharacterRoll("1d20 + agility", "РРЅРёС†иатива")}
       >
-        Инициатива (d20 + Ловкость)
+        РРЅРёС†иатива (d20 + Р›овкость)
       </Button>
       <div className="subsection">
         <h3>Дополнительные навыки</h3>
@@ -1239,7 +1224,7 @@ export function CharacterPanel({
             </div>
           ))
         ) : (
-          <p className="muted">Заклинания ещё не добавлены.</p>
+          <p className="muted">Р—аклинания ещё не добавлены.</p>
         )}
       </div>
       <div className="subsection">
@@ -1253,7 +1238,7 @@ export function CharacterPanel({
               event.target.value = "";
             }}
           >
-            <option value="">Назначить из общего каталога…</option>
+            <option value="">РќР°Р·РЅР°С‡ить из общего каталога…</option>
             {snapshot.catalogEntries.map((entry) => (
               <option key={entry.id} value={entry.id}>
                 {entry.name}
@@ -1267,7 +1252,12 @@ export function CharacterPanel({
               <CharacterActionCard
                 entry={entry}
                 disabled={!editable}
-                onAction={(input) => onRollEntry(character.id, entry.id, input)}
+                onAction={(input) =>
+                  onRollEntry(character.id, entry.id, {
+                    ...input,
+                    ...(rollMode ? { rollMode } : {}),
+                  })
+                }
               />
               {entry.data.uses && (
                 <Button
@@ -1303,7 +1293,7 @@ export function CharacterPanel({
           ))
         ) : (
           <p className="muted">
-            Мастер ещё не назначил навыки или способности.
+            Мастер ещё не РЅР°Р·РЅР°С‡ил навыки или способности.
           </p>
         )}
       </div>
@@ -1328,9 +1318,9 @@ export function CharacterPanel({
           />
         </ArkenDialog>
       )}
-      <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
+      <h3 className="character-block-heading">Рнвентарь и снаряжение</h3>
       <label className="field">
-        Инвентарь (один предмет на строку)
+        Рнвентарь (один предмет на строку)
         <FormTextArea
           key={`${character.id}:${character.revision}`}
           defaultValue={character.inventory.join("\n")}
@@ -1374,7 +1364,7 @@ export function CharacterPanel({
                   setCountersError(
                     reason instanceof ApiError &&
                       reason.code === "CHARACTER_CONFLICT"
-                      ? "Ресурсы изменены в другой сессии. Показаны актуальные значения — повторите правку при необходимости."
+                      ? "Ресурсы изменены в другой сессии. Показаны актуальные Р·РЅР°С‡ения — повторите правку при необходимости."
                       : "Не удалось сохранить ресурсы. Проверьте данные и соединение.",
                   );
                 })
@@ -1388,7 +1378,7 @@ export function CharacterPanel({
         />
       </label>
       <label className="field">
-        Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не
+        Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; Р·РЅР°С‡ения не
         нормализуются)
         {(["gold", "silver", "copper", "sp"] as const).map((key) => (
           <span className="inline-fields" key={key}>
@@ -1432,9 +1422,9 @@ export function CharacterPanel({
           </span>
         )}
       </label>
-      <h3 className="character-block-heading">Заметки</h3>
+      <h3 className="character-block-heading">Р—аметки</h3>
       <label className="field">
-        Заметки
+        Р—аметки
         <FormTextArea
           defaultValue={character.notes}
           disabled={!editable}
@@ -1450,7 +1440,7 @@ export function CharacterPanel({
       <TextPromptDialog
         open={renameOpen}
         title="Переименовать персонажа"
-        label="Имя персонажа"
+        label="Рмя персонажа"
         initialValue={character.name}
         onClose={() => setRenameOpen(false)}
         onApply={async (name) => {
@@ -1531,7 +1521,7 @@ function ChatMessageBody({
     );
   return (
     <div className="roll-result">
-      <strong className="roll-total" aria-label="Итог броска">
+      <strong className="roll-total" aria-label="Ртог броска">
         {dice.total}
       </strong>
       <div className="roll-details">
@@ -1545,11 +1535,9 @@ function ChatMessageBody({
 function ActivityPanel({
   snapshot,
   storyPosts,
-  onMarkChatRead,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
-  onMarkChatRead: Props["onMarkChatRead"];
 }) {
   const activityEvents = useMemo(
     () =>
@@ -1560,33 +1548,10 @@ function ActivityPanel({
     () => buildActivityTimeline(activityEvents),
     [activityEvents],
   );
-  const readSequencesRef = useRef(new Map<string, number>());
   const catalogEntryIds = useMemo(
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
   );
-
-  useEffect(() => {
-    const latestByThread = new Map<string, number>();
-    for (const event of activityEvents) {
-      if (event.type !== "MESSAGE") continue;
-      latestByThread.set(
-        event.message.threadId,
-        Math.max(
-          latestByThread.get(event.message.threadId) ?? 0,
-          event.message.sequence,
-        ),
-      );
-    }
-    for (const [threadId, sequence] of latestByThread) {
-      if ((readSequencesRef.current.get(threadId) ?? 0) >= sequence) continue;
-      readSequencesRef.current.set(threadId, sequence);
-      void onMarkChatRead(threadId, sequence).catch(() => {
-        readSequencesRef.current.delete(threadId);
-      });
-    }
-  }, [activityEvents, onMarkChatRead]);
-
   return (
     <section
       className="chat-panel activity-feed"
@@ -1746,7 +1711,7 @@ function DirectChatPanel({
     try {
       await onDirectChat(
         activeThread.id,
-        body || "Изображение",
+        body || "Рзображение",
         attachment ? [attachment.contentId] : [],
       );
       setComposer("");
@@ -1754,7 +1719,7 @@ function DirectChatPanel({
       if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
       setAttachmentPreviewUrl("");
     } catch {
-      setError("Не удалось отправить личное сообщение.");
+      setError("Не удалось отправить Р»РёС‡ное сообщение.");
     }
   }
 
@@ -1783,7 +1748,7 @@ function DirectChatPanel({
         </FormSelect>
         <div className="direct-thread-create">
           <FormSelect
-            aria-label="Получатель личного сообщения"
+            aria-label="РџРѕР»СѓС‡атель Р»РёС‡ного сообщения"
             value={recipientId}
             onChange={(event) => setRecipientId(event.target.value)}
           >
@@ -1808,7 +1773,7 @@ function DirectChatPanel({
       <div className="message-list" aria-live="polite">
         {!activeThread && (
           <p className="chat-empty">
-            Выберите получателя, чтобы начать личный диалог.
+            Выберите РїРѕР»СѓС‡ателя, С‡тобы РЅР°С‡ать личный диалог.
           </p>
         )}
         {activeThread && messages.length === 0 && (
@@ -1846,7 +1811,7 @@ function DirectChatPanel({
         <form className="chat-compose direct-compose" onSubmit={submit}>
           <div className="chat-composer-input">
             <FormTextArea
-              aria-label={`Личное сообщение: ${directThreadLabel(activeThread, snapshot.me.id)}`}
+              aria-label={`Р›РёС‡ное сообщение: ${directThreadLabel(activeThread, snapshot.me.id)}`}
               placeholder={`Сообщение для ${directThreadLabel(activeThread, snapshot.me.id)}…`}
               value={composer}
               onChange={(event) => setComposer(event.target.value)}
@@ -1881,7 +1846,7 @@ function DirectChatPanel({
             }
           />
           <label className="direct-attach-button">
-            <span>{uploading ? "Загрузка…" : "Изображение"}</span>
+            <span>{uploading ? "Р—агрузка…" : "Рзображение"}</span>
             <input
               type="file"
               accept="image/*"
@@ -2282,7 +2247,7 @@ function PalettePanel(props: Props) {
         </Button>
       )}
       <p className="muted">
-        Нажмите, чтобы поставить токен в центр карты, или перетащите его на
+        Нажмите, С‡тобы поставить токен в С†ентр карты, или перетащите его на
         нужное место.
       </p>
       <div className="palette-grid">
@@ -2306,7 +2271,7 @@ function PalettePanel(props: Props) {
               <Button
                 className="palette-place"
                 onClick={() => props.onPlaceTokenDefinition(definition.id)}
-                title="Поставить экземпляр токена на активную сцену"
+                title="Поставить экземпляр токена на активную СЃС†ену"
               >
                 {asset ? (
                   <img src={asset.url} alt="" />
@@ -2318,7 +2283,7 @@ function PalettePanel(props: Props) {
               </Button>
               <strong className="palette-card__title">{definition.name}</strong>
               <FormSelect
-                aria-label={`Изображение токена ${definition.name}`}
+                aria-label={`Рзображение токена ${definition.name}`}
                 value={definition.defaultAssetId ?? ""}
                 onChange={(event) =>
                   void props.onPatchTokenDefinition(
@@ -2387,7 +2352,7 @@ function PalettePanel(props: Props) {
         title="Удалить определение токена?"
         message={
           deleteDefinition
-            ? `Определение «${deleteDefinition.name}» и все его размещения на сценах будут удалены. Это не удаление одного токена с карты.`
+            ? `Определение «${deleteDefinition.name}» и все его размещения на СЃС†енах будут удалены. Это не удаление одного токена с карты.`
             : ""
         }
         confirmLabel="Удалить"
@@ -2429,7 +2394,7 @@ function TokenImageAssignment({
       setError(
         reason instanceof Error
           ? reason.message
-          : "Не удалось назначить изображение токену.",
+          : "Не удалось РЅР°Р·РЅР°С‡ить изображение токену.",
       );
     } finally {
       setSaving(false);
@@ -2451,7 +2416,7 @@ function TokenImageAssignment({
         loading={saving}
         onClick={() => void assign()}
       >
-        Загрузить и назначить
+        Р—агрузить и РЅР°Р·РЅР°С‡ить
       </Button>
       {error && <div className="field-error">{error}</div>}
     </div>
@@ -2544,7 +2509,7 @@ function TokenDefinitionEditor({
     <ArkenDialog
       open
       footer={false}
-      title={definition ? `Настройка ${definition.name}` : "Новый токен"}
+      title={definition ? `РќР°СЃС‚СЂРѕР№ка ${definition.name}` : "Новый токен"}
       onClose={onCancel}
     >
       <form className="entity-form" onSubmit={submit}>
@@ -2580,13 +2545,13 @@ function TokenDefinitionEditor({
           </FormSelect>
         </label>
         <label>
-          Изображение из файлов
+          Рзображение из С„Р°Р№лов
           <FormSelect
             value={assetId}
             onChange={(event) => setAssetId(event.target.value)}
             emptyMessage={
               snapshot.assets.every((asset) => asset.kind !== "TOKEN")
-                ? "Изображений токенов пока нет"
+                ? "РР·РѕР±СЂР°Р¶РµРЅРёР№ токенов пока нет"
                 : undefined
             }
             createAction={
@@ -2614,7 +2579,7 @@ function TokenDefinitionEditor({
           onGenerated={(asset) => setAssetId(asset.id)}
         />
         <ImageUploadField
-          label="Загрузить новое изображение"
+          label="Р—агрузить новое изображение"
           value={image}
           onUpdate={setImage}
           disabled={saving}
@@ -2762,7 +2727,7 @@ function SetupPanel(props: Props) {
         </div>
       </div>
       <div className="subsection">
-        <h3>Игроки онлайн</h3>
+        <h3>Ргроки РѕРЅР»Р°Р№н</h3>
         <div className="stack-list">
           {props.snapshot.members
             .filter((member) => member.role === "PLAYER")
@@ -2859,7 +2824,7 @@ function SetupPanel(props: Props) {
             value={catalogData}
             onChange={(event) => setCatalogData(event.target.value)}
             rows={8}
-            aria-label="Данные и действия JSON"
+            aria-label="Данные и РґРµР№ствия JSON"
           />
           <Button
             onClick={() =>
@@ -2971,7 +2936,7 @@ function SetupPanel(props: Props) {
       <div className="subsection">
         <h3>Проверка видимости</h3>
         <label className="field">
-          Игрок
+          Ргрок
           <FormSelect
             value={previewMembership}
             onChange={(event) => setPreviewMembership(event.target.value)}
@@ -2994,7 +2959,7 @@ function SetupPanel(props: Props) {
         </Button>
       </div>
       <div className="subsection" hidden aria-hidden="true">
-        <h3>Сцены (устаревшее управление)</h3>
+        <h3>РЎС†ены (устаревшее управление)</h3>
         <label className="field">
           Активная
           <FormSelect
@@ -3010,7 +2975,7 @@ function SetupPanel(props: Props) {
         </label>
         {activeScene && (
           <Button onClick={() => setRenameSceneOpen(true)}>
-            Переименовать сцену
+            Переименовать СЃС†ену
           </Button>
         )}
         {activeScene && (
@@ -3041,7 +3006,7 @@ function SetupPanel(props: Props) {
           }}
         >
           <FormInput
-            placeholder="Название сцены"
+            placeholder="Название СЃС†ены"
             value={sceneName}
             onChange={(event) => setSceneName(event.target.value)}
           />
@@ -3060,7 +3025,7 @@ function SetupPanel(props: Props) {
           }}
         >
           <FormInput
-            placeholder="Имя персонажа"
+            placeholder="Рмя персонажа"
             value={characterName}
             onChange={(event) => setCharacterName(event.target.value)}
           />
@@ -3083,7 +3048,7 @@ function SetupPanel(props: Props) {
           onClick={() => props.onCreateToken(tokenCharacter)}
           disabled={!tokenCharacter || !activeScene}
         >
-          Добавить токен в центр
+          Добавить токен в С†ентр
         </Button>
       </div>
       <div className="subsection">
@@ -3107,7 +3072,7 @@ function SetupPanel(props: Props) {
               inviteCharacter,
               props.snapshot.characters.find(
                 (item) => item.id === inviteCharacter,
-              )?.name ?? "Игрок",
+              )?.name ?? "Ргрок",
             );
             setInviteUrl(result.url ?? "");
             await refreshPlayerAccess();
@@ -3139,7 +3104,7 @@ function SetupPanel(props: Props) {
                     await refreshPlayerAccess();
                   }}
                 >
-                  Заменить ссылку
+                  Р—аменить ссылку
                 </Button>
                 <Button
                   onClick={async () => {
@@ -3158,7 +3123,7 @@ function SetupPanel(props: Props) {
       <TextPromptDialog
         open={Boolean(renameMember)}
         title="Переименовать игрока"
-        label="Имя игрока"
+        label="Рмя игрока"
         initialValue={renameMember?.displayName ?? ""}
         onClose={() => setRenameMember(null)}
         onApply={async (name) => {
@@ -3170,8 +3135,8 @@ function SetupPanel(props: Props) {
       />
       <TextPromptDialog
         open={renameSceneOpen}
-        title="Переименовать сцену"
-        label="Название сцены"
+        title="Переименовать СЃС†ену"
+        label="Название СЃС†ены"
         initialValue={activeScene?.name ?? ""}
         onClose={() => setRenameSceneOpen(false)}
         onApply={async (name) => {
@@ -3207,7 +3172,7 @@ function MediaPanel({
   );
   const labels: Record<AssetKind, string> = {
     MAP: "Карты",
-    TOKEN: "Изображения токенов",
+    TOKEN: "Рзображения токенов",
     PORTRAIT: "Портреты персонажей",
     IMAGE: "Другие изображения",
     AUDIO: "Музыка и звуки",
@@ -3222,7 +3187,7 @@ function MediaPanel({
       setDrafts((current) => ({ ...current, [kind]: undefined }));
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Не удалось загрузить файл.",
+        reason instanceof Error ? reason.message : "Не удалось загрузить С„Р°Р№л.",
       );
     } finally {
       setUploading(null);
@@ -3233,7 +3198,7 @@ function MediaPanel({
       <div className="section-heading">
         <div>
           <span className="eyebrow">Хранилище</span>
-          <h2>Файлы</h2>
+          <h2>Р¤Р°Р№лы</h2>
         </div>
         <span className="revision">{snapshot.assets.length}</span>
       </div>
@@ -3260,7 +3225,7 @@ function MediaPanel({
               loading={uploading === kind}
               onClick={() => void upload(kind)}
             >
-              Загрузить
+              Р—агрузить
             </Button>
           </section>
         ))}

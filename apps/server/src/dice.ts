@@ -7,33 +7,6 @@ export class DiceFormulaError extends Error {}
 
 export type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
 
-/**
- * Converts a single ordinary d20 term into a server-resolved advantage or
- * disadvantage roll. The raw formula remains an expression only: all random
- * values are still generated in `rollFormula` on the server.
- */
-export function applyRollMode(formula: string, rollMode: RollMode): string {
-  const compact = formula.replace(/\s+/g, "");
-  if (rollMode === "NORMAL") return compact;
-  const tokens = compact.match(/[+-]?[^+-]+/g);
-  if (!tokens?.length) throw new DiceFormulaError("Формула пуста");
-  const d20Indexes = tokens
-    .map((token, index) => ({ token, index }))
-    .filter(
-      ({ token }) =>
-        token.replace(/^[+-]/, "") === "1d20" ||
-        token.replace(/^[+-]/, "") === "d20",
-    );
-  if (d20Indexes.length !== 1)
-    throw new DiceFormulaError(
-      "Преимущество и помеха доступны для одного обычного d20 в формуле",
-    );
-  const { index, token } = d20Indexes[0]!;
-  const sign = token.startsWith("-") ? "-" : token.startsWith("+") ? "+" : "";
-  tokens[index] = `${sign}2d20${rollMode === "ADVANTAGE" ? "kh1" : "kl1"}`;
-  return tokens.join("");
-}
-
 export function rollFormula(
   formula: string,
   stats: Record<string, number>,
@@ -105,5 +78,38 @@ export function rollFormula(
     modifiers,
     total,
     ...(label ? { label } : {}),
+  };
+}
+
+/**
+ * Applies one semantic to every supported formula: normal rolls one complete
+ * pool; advantage/disadvantage roll the complete pool twice and keep the
+ * higher/lower total. Ties deterministically keep the first pool.
+ */
+export function rollFormulaWithMode(
+  formula: string,
+  stats: Record<string, number>,
+  rollMode: RollMode,
+  randomInt: (maxExclusive: number) => number = (max) =>
+    Math.floor(Math.random() * max),
+  label?: string,
+): DiceResult {
+  const first = rollFormula(formula, stats, randomInt, label);
+  if (rollMode === "NORMAL") return { ...first, rollMode };
+  const second = rollFormula(formula, stats, randomInt, label);
+  const selectedPool =
+    rollMode === "ADVANTAGE"
+      ? second.total > first.total
+        ? 1
+        : 0
+      : second.total < first.total
+        ? 1
+        : 0;
+  const selected = selectedPool === 0 ? first : second;
+  return {
+    ...selected,
+    rollMode,
+    poolTotals: [first.total, second.total],
+    selectedPool,
   };
 }

@@ -23,6 +23,9 @@ const diceResultSchema = z.object({
     .max(160),
   total: z.number().finite(),
   label: z.string().max(100).optional(),
+  rollMode: z.enum(["NORMAL", "ADVANTAGE", "DISADVANTAGE"]).optional(),
+  poolTotals: z.tuple([z.number().finite(), z.number().finite()]).optional(),
+  selectedPool: z.union([z.literal(0), z.literal(1)]).optional(),
 });
 
 /**

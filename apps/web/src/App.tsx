@@ -43,6 +43,7 @@ import { characterTokenPlacementRequest } from "./token-placement";
 import { normalizeClientDiceResult } from "./dice-result";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
+import { RollModeControl, type RollMode } from "./RollModeControl";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -52,8 +53,6 @@ const Orthographic2DRenderer = lazy(() =>
 
 type WorkspaceDestination =
   "characters" | "tokens" | "scenes" | "setup" | "media" | "world-maps";
-
-type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
 
 function CanvasRollOverlay({
   characterId,
@@ -89,7 +88,7 @@ function CanvasRollOverlay({
                 `d${sides}`,
                 visibility,
                 characterId,
-                sides === 20 ? rollMode : "NORMAL",
+                rollMode,
               )
             }
           >
@@ -99,24 +98,19 @@ function CanvasRollOverlay({
       </div>
       <form className="canvas-roll-custom" onSubmit={submit}>
         <input
-          aria-label="Своя формула броска"
+          aria-label="Своя С„ормула броска"
           value={formula}
           onChange={(event) => setFormula(event.target.value)}
         />
         <button type="submit">Бросить</button>
       </form>
-      <label>
-        Режим d20
-        <select
-          aria-label="Режим быстрого броска"
-          value={rollMode}
-          onChange={(event) => setRollMode(event.target.value as RollMode)}
-        >
-          <option value="NORMAL">обычный</option>
-          <option value="ADVANTAGE">с преимуществом</option>
-          <option value="DISADVANTAGE">с помехой</option>
-        </select>
-      </label>
+      <RollModeControl
+        value={rollMode}
+        onChange={setRollMode}
+        label={
+          "\u0420\u0435\u0436\u0438\u043c \u0431\u044b\u0441\u0442\u0440\u043e\u0433\u043e \u0431\u0440\u043e\u0441\u043a\u0430"
+        }
+      />
       <label className="compact-check">
         <input
           type="checkbox"
@@ -188,8 +182,8 @@ function CanvasHistoryControls({
       <button
         className="map-tool"
         data-tool="UNDO"
-        aria-label="Отменить последнее действие"
-        title="Отменить последнее действие"
+        aria-label="Отменить последнее РґРµР№ствие"
+        title="Отменить последнее РґРµР№ствие"
         disabled={disabled || !canUndo}
         onClick={() => void act("undo")}
       >
@@ -198,8 +192,8 @@ function CanvasHistoryControls({
       <button
         className="map-tool"
         data-tool="REDO"
-        aria-label="Повторить отменённое действие"
-        title="Повторить отменённое действие"
+        aria-label="Повторить отменённое РґРµР№ствие"
+        title="Повторить отменённое РґРµР№ствие"
         disabled={disabled || !canRedo}
         onClick={() => void act("redo")}
       >
@@ -249,8 +243,8 @@ function GridSettings({
   return (
     <details className="grid-settings" ref={settingsRef}>
       <summary
-        aria-label="????????? ?????"
-        title="????????? ?????"
+        aria-label="Настройки сетки"
+        title="Настройки сетки"
         className="toolbar-detail-trigger"
         data-tool="GRID"
       >
@@ -399,7 +393,7 @@ export function App() {
   useEffect(() => {
     if (!error || !snapshot) return;
     notify({
-      title: "Не удалось выполнить действие",
+      title: "Не удалось выполнить РґРµР№ствие",
       message: error,
       tone: "danger",
     });
@@ -696,7 +690,7 @@ export function App() {
       if (refresh) await load();
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Операция не выполнена",
+        reason instanceof Error ? reason.message : "РћРїРµСЂР°С†ия не выполнена",
       );
       throw reason;
     }
@@ -768,7 +762,7 @@ export function App() {
         setPreviewSnapshot(null);
         setWorkspace(null);
         setError(
-          "Не удалось проверить завершение сессии. Данные игрока скрыты; проверьте соединение и обновите страницу.",
+          "Не удалось проверить завершение сессии. Данные игрока скрыты; проверьте соединение и обновите СЃС‚СЂР°РЅРёС†у.",
         );
       }
     }
@@ -930,7 +924,7 @@ export function App() {
         );
       }
       if (!canonical)
-        throw new Error("Персонаж больше не доступен. Обновите страницу.");
+        throw new Error("Персонаж больше не доступен. Обновите СЃС‚СЂР°РЅРёС†у.");
       try {
         const updated = await submit({
           ...canonical,
@@ -1010,7 +1004,7 @@ export function App() {
         {error ? (
           <ErrorState description={error} onRetry={load} />
         ) : (
-          <LoadingState label="Загружаем кампанию…" />
+          <LoadingState label="Р—агружаем кампанию…" />
         )}
       </main>
     );
@@ -1060,8 +1054,8 @@ export function App() {
           <select
             aria-label={
               snapshot.me.role === "GM"
-                ? "Просматриваемая сцена"
-                : "Активная сцена"
+                ? "Просматриваемая СЃС†ена"
+                : "Активная СЃС†ена"
             }
             value={activeScene?.id ?? ""}
             disabled={Boolean(previewSnapshot) || snapshot.me.role !== "GM"}
@@ -1083,13 +1077,13 @@ export function App() {
               className="topbar-icon-button publish-scene"
               aria-label={
                 activeScene.id === broadcastScene?.id
-                  ? "Сцена уже показана игрокам"
-                  : "Показать выбранную сцену игрокам"
+                  ? "РЎС†ена уже показана игрокам"
+                  : "Показать выбранную СЃС†ену игрокам"
               }
               title={
                 activeScene.id === broadcastScene?.id
-                  ? "Сцена у игроков"
-                  : "Показать выбранную сцену игрокам"
+                  ? "РЎС†ена у игроков"
+                  : "Показать выбранную СЃС†ену игрокам"
               }
               disabled={activeScene.id === broadcastScene?.id}
               onClick={() =>
@@ -1110,8 +1104,8 @@ export function App() {
           {!previewSnapshot && snapshot.me.role === "GM" && (
             <button
               className="topbar-icon-button"
-              aria-label="Создать сцену"
-              title="Создать новую сцену"
+              aria-label="Создать СЃС†ену"
+              title="Создать новую СЃС†ену"
               onClick={() => setSceneDialogRequest((value) => value + 1)}
             >
               <span aria-hidden="true">&#xff0b;</span>
@@ -1119,8 +1113,8 @@ export function App() {
           )}
         </div>
         <details ref={workspaceMenuRef} className="workspace-menu">
-          <summary aria-label="Открыть рабочее пространство">
-            <span>Рабочее пространство</span>
+          <summary aria-label="Открыть СЂР°Р±РѕС‡ее пространство">
+            <span>Р Р°Р±РѕС‡ее пространство</span>
             <span className="workspace-menu__chevron" aria-hidden="true">
               &#x2304;
             </span>
@@ -1144,7 +1138,7 @@ export function App() {
                   type="button"
                   onClick={() => handleWorkspaceChange("scenes")}
                 >
-                  Сцены
+                  РЎС†ены
                 </button>
                 <button
                   type="button"
@@ -1164,7 +1158,7 @@ export function App() {
               type="button"
               onClick={() => handleWorkspaceChange("media")}
             >
-              Файлы
+              Р¤Р°Р№лы
             </button>
           </div>
         </details>
@@ -1201,10 +1195,10 @@ export function App() {
                 {connection === "ONLINE"
                   ? "в сети"
                   : connection === "RESYNCING"
-                    ? "синхронизация"
+                    ? "СЃРёРЅС…СЂРѕРЅРёР·Р°С†ия"
                     : connection === "OFFLINE"
                       ? "нет связи"
-                      : "переподключение"}
+                      : "РїРµСЂРµРїРѕРґРєР»СЋС‡ение"}
               </span>
               {connection !== "ONLINE" && (
                 <button
@@ -1253,7 +1247,7 @@ export function App() {
                     window.location.reload();
                   }}
                 >
-                  Выйти
+                  Р’С‹Р№ти
                 </button>
               )}
             </div>
@@ -1275,9 +1269,9 @@ export function App() {
         }}
       >
         <p className="arken-dialog-message">
-          Завершите текущие действия перед передачей компьютера: несохранённые
-          данные в открытых формах будут потеряны. Следующий игрок войдёт по
-          своей личной ссылке. На общем экране не открывайте личные заметки или
+          Р—авершите текущие РґРµР№ствия перед передачей компьютера: несохранённые
+          данные в открытых С„ормах будут потеряны. Следующий игрок РІРѕР№дёт по
+          своей личной ссылке. На общем экране не РѕС‚РєСЂС‹РІР°Р№те Р»РёС‡ные заметки или
           сообщения, которые не должны видеть другие игроки.
         </p>
       </ArkenDialog>
@@ -1333,14 +1327,14 @@ export function App() {
                     Открыть туман
                   </button>
                   <button
-                    aria-label="Закрыть туман"
-                    title="Закрыть выбранную область туманом"
+                    aria-label="Р—акрыть туман"
+                    title="Р—акрыть выбранную область туманом"
                     className="map-tool"
                     data-tool="COVER"
                     aria-pressed={tool === "COVER"}
                     onClick={() => setTool("COVER")}
                   >
-                    Закрыть туман
+                    Р—акрыть туман
                   </button>
                 </>
               )}
@@ -1355,18 +1349,18 @@ export function App() {
                 Рисование
               </button>
               <button
-                aria-label="Линейка"
-                title="Измерить расстояние на карте"
+                aria-label="Р›РёРЅРµР№ка"
+                title="Рзмерить расстояние на карте"
                 className="map-tool"
                 data-tool="RULER"
                 aria-pressed={tool === "RULER"}
                 onClick={() => setTool("RULER")}
               >
-                Линейка
+                Р›РёРЅРµР№ка
               </button>
               <button
                 aria-label="Пинг"
-                title="Показать точку группе"
+                title="Показать С‚РѕС‡ку группе"
                 className="map-tool"
                 data-tool="PING"
                 aria-pressed={tool === "PING"}
@@ -1394,8 +1388,8 @@ export function App() {
                   />
                   <details className="resize-settings">
                     <summary
-                      aria-label="Настройки размера карты"
-                      title="Настройки размера карты"
+                      aria-label="РќР°СЃС‚СЂРѕР№ки размера карты"
+                      title="РќР°СЃС‚СЂРѕР№ки размера карты"
                       className="toolbar-detail-trigger"
                       data-tool="RESIZE"
                     >
@@ -1409,7 +1403,7 @@ export function App() {
                           setCanvasEditMode("BACKGROUND");
                         }}
                       >
-                        Изображение
+                        Рзображение
                       </button>
                       <button
                         aria-pressed={canvasEditMode === "WORLD"}
@@ -1474,7 +1468,7 @@ export function App() {
                         Показывать туман
                       </label>
                       <label>
-                        Прозрачность мастера
+                        РџСЂРѕР·СЂР°С‡ность мастера
                         <input
                           type="range"
                           min="0"
@@ -1499,7 +1493,7 @@ export function App() {
           </div>
           {activeScene ? (
             <Suspense
-              fallback={<div className="empty-map">Загружаем карту…</div>}
+              fallback={<div className="empty-map">Р—агружаем карту…</div>}
             >
               <Orthographic2DRenderer
                 scene={
@@ -1757,7 +1751,7 @@ export function App() {
               />
             </Suspense>
           ) : (
-            <div className="empty-map">Мастер ещё не создал сцену.</div>
+            <div className="empty-map">Мастер ещё не создал СЃС†ену.</div>
           )}
           {!previewSnapshot && (
             <CanvasRollOverlay
@@ -1790,14 +1784,14 @@ export function App() {
                   </button>
                   <button
                     className="roll-toast-close"
-                    aria-label="Закрыть уведомление"
+                    aria-label="Р—акрыть уведомление"
                     onClick={() =>
                       setRollToasts((current) =>
                         removeRollToast(current, message.id),
                       )
                     }
                   >
-                    ×
+                    Г—
                   </button>
                 </div>
               ))}
@@ -1812,8 +1806,8 @@ export function App() {
                 {(snapshot.tokenDefinitions?.length ?? 0) === 0 && (
                   <p className="muted">
                     {snapshot.me.role === "GM"
-                      ? "Создайте токен персонажа в подготовке."
-                      : "Мастер ещё не назначил вам доступные токены."}
+                      ? "РЎРѕР·РґР°Р№те токен персонажа в подготовке."
+                      : "Мастер ещё не РЅР°Р·РЅР°С‡ил вам доступные токены."}
                   </p>
                 )}
                 {(snapshot.tokenDefinitions ?? []).map((definition) => {
@@ -1867,11 +1861,11 @@ export function App() {
                 <span className="eyebrow">Режим мастера</span>
                 <h2>Глазами игрока</h2>
                 <p>
-                  Сейчас показаны только активная сцена, видимые токены и файлы,
+                  РЎРµР№С‡ас показаны только активная СЃС†ена, видимые токены и С„Р°Р№лы,
                   доступные игроку {viewSnapshot.me.displayName}.
                 </p>
                 <button onClick={() => setPreviewSnapshot(null)}>
-                  Завершить просмотр
+                  Р—авершить просмотр
                 </button>
               </section>
             </div>
@@ -2586,8 +2580,8 @@ export function App() {
       </div>
       <TextPromptDialog
         open={createSceneOpen}
-        title="Новая сцена"
-        label="Название сцены"
+        title="Новая СЃС†ена"
+        label="Название СЃС†ены"
         applyLabel="Создать"
         onClose={() => setCreateSceneOpen(false)}
         onApply={async (name) => {

@@ -102,7 +102,7 @@ import {
 } from "@arken/db";
 import { createStarterCharacter } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
-import { applyRollMode, DiceFormulaError, rollFormula } from "./dice.js";
+import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot } from "./snapshot.js";
@@ -475,6 +475,39 @@ async function createPlayerAccess(
   });
   return { ...result, token: result.created ? token : null };
 }
+type SceneTokenGeometrySnapshot = {
+  tokens: Array<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    revision: number;
+  }>;
+};
+
+const MIN_TOKEN_LENGTH = 16;
+const MAX_TOKEN_LENGTH = 1024;
+const roundedCanvasValue = (value: number) =>
+  Math.round(value * 1_000_000) / 1_000_000;
+class SceneGridTokenBoundsError extends Error {
+  constructor(
+    readonly tokenId: string,
+    readonly width: number,
+    readonly height: number,
+  ) {
+    super("SCENE_GRID_TOKEN_BOUNDS");
+  }
+}
+const scaledTokenLength = (value: number, scale: number) =>
+  roundedCanvasValue(value * scale);
+const scaledGridCoordinate = (
+  value: number,
+  previousOffset: number,
+  nextOffset: number,
+  scale: number,
+) => roundedCanvasValue(nextOffset + (value - previousOffset) * scale);
+
 export function registerRoutes(
   app: FastifyInstance,
   db: Database,
@@ -1967,6 +2000,17 @@ export function registerRoutes(
         return reply.code(404).send({ error: "CONTROLLER_NOT_FOUND" });
     }
     const placement = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select id from scenes where id = ${scene.id} and campaign_id = ${auth.campaignId} for update`,
+      );
+      const [lockedScene] = await tx
+        .select({ id: scenes.id })
+        .from(scenes)
+        .where(
+          and(eq(scenes.id, scene.id), eq(scenes.campaignId, auth.campaignId)),
+        )
+        .limit(1);
+      if (!lockedScene) return null;
       // A character's first placement starts through this legacy route before
       // the client has received its linked definition. Serialize that setup on
       // the character so a repeated click cannot create another starter token.
@@ -2058,6 +2102,7 @@ export function registerRoutes(
         created: true,
       };
     });
+    if (!placement) return reply.code(409).send({ error: "SCENE_CONFLICT" });
     if (placement.created) await broadcastSnapshots(io, db, auth.campaignId);
     return reply.code(placement.created ? 201 : 200).send(placement.token);
   });
@@ -2222,15 +2267,18 @@ export function registerRoutes(
       !controllers.some((item) => item.membershipId === auth.membershipId)
     )
       return reply.code(403).send({ error: "TOKEN_DEFINITION_FORBIDDEN" });
-    const snap = (value: number) =>
-      scene.grid.enabled
-        ? Math.round((value - scene.grid.offsetX) / scene.grid.size) *
-            scene.grid.size +
-          scene.grid.offsetX
-        : value;
-    const x = snap(body.x ?? scene.width / 2 - definition.defaultWidth / 2);
-    const y = snap(body.y ?? scene.height / 2 - definition.defaultHeight / 2);
     const placement = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select id from scenes where id = ${scene.id} and campaign_id = ${auth.campaignId} for update`,
+      );
+      const [lockedScene] = await tx
+        .select()
+        .from(scenes)
+        .where(
+          and(eq(scenes.id, scene.id), eq(scenes.campaignId, auth.campaignId)),
+        )
+        .limit(1);
+      if (!lockedScene) return null;
       await tx.execute(
         sql`select id from token_definitions where id = ${definition.id} and campaign_id = ${auth.campaignId} for update`,
       );
@@ -2245,6 +2293,28 @@ export function registerRoutes(
         )
         .limit(1);
       if (!lockedDefinition) return null;
+      const snapX = (value: number) =>
+        lockedScene.grid.enabled
+          ? Math.round(
+              (value - lockedScene.grid.offsetX) / lockedScene.grid.size,
+            ) *
+              lockedScene.grid.size +
+            lockedScene.grid.offsetX
+          : value;
+      const snapY = (value: number) =>
+        lockedScene.grid.enabled
+          ? Math.round(
+              (value - lockedScene.grid.offsetY) / lockedScene.grid.size,
+            ) *
+              lockedScene.grid.size +
+            lockedScene.grid.offsetY
+          : value;
+      const x = snapX(
+        body.x ?? lockedScene.width / 2 - lockedDefinition.defaultWidth / 2,
+      );
+      const y = snapY(
+        body.y ?? lockedScene.height / 2 - lockedDefinition.defaultHeight / 2,
+      );
       if (lockedDefinition.characterId) {
         const [existing] = await tx
           .select()
@@ -3536,7 +3606,7 @@ export function registerRoutes(
       if (await findAction(db, auth.campaignId, body.actionId))
         return reply.code(200).send({ duplicate: true });
       const desiredStatus = direction === "undo" ? "APPLIED" : "UNDONE";
-      const [command] = await db
+      const [candidateCommand] = await db
         .select()
         .from(actionJournal)
         .where(
@@ -3554,11 +3624,27 @@ export function registerRoutes(
         )
         .orderBy(desc(actionJournal.transitionSequence))
         .limit(1);
-      if (!command)
+      if (!candidateCommand)
         return reply.code(404).send({ error: "HISTORY_ACTION_NOT_FOUND" });
-      const snapshot = direction === "undo" ? command.before : command.after;
       const saved = await db
         .transaction(async (tx) => {
+          // Every canvas mutation that can create or restore tokens takes the
+          // scene lock first. Grid rescale uses the same lock, making token
+          // placement and history replay linearizable with the rescale.
+          await tx.execute(
+            sql`select id from scenes where id = ${body.sceneId} and campaign_id = ${auth.campaignId} for update`,
+          );
+          await tx.execute(
+            sql`select sequence from action_journal where sequence = ${candidateCommand.sequence} for update`,
+          );
+          const [command] = await tx
+            .select()
+            .from(actionJournal)
+            .where(eq(actionJournal.sequence, candidateCommand.sequence))
+            .limit(1);
+          if (!command || command.status !== desiredStatus) return null;
+          const snapshot =
+            direction === "undo" ? command.before : command.after;
           let targetRevision = command.currentRevision;
           if (command.targetType === "CANVAS_BULK") {
             const conflict = (): never => {
@@ -4032,7 +4118,11 @@ export function registerRoutes(
                 width: number;
                 height: number;
               };
+              tokenGeometry?: SceneTokenGeometrySnapshot;
             };
+            const expectedValues = (
+              direction === "undo" ? command.after : command.before
+            ) as typeof values;
             const [currentScene] = await tx
               .select({ revision: scenes.revision })
               .from(scenes)
@@ -4043,7 +4133,82 @@ export function registerRoutes(
                 ),
               )
               .limit(1);
-            if (!currentScene) return null;
+            if (
+              !currentScene ||
+              (command.currentRevision !== null &&
+                currentScene.revision !== command.currentRevision)
+            )
+              return null;
+            if (
+              Boolean(values.tokenGeometry) !==
+              Boolean(expectedValues.tokenGeometry)
+            )
+              return null;
+            if (values.tokenGeometry && expectedValues.tokenGeometry) {
+              const desired = values.tokenGeometry;
+              const expected = expectedValues.tokenGeometry;
+              const desiredTokenIds = desired.tokens
+                .map((row) => row.id)
+                .sort();
+              const expectedTokenIds = expected.tokens
+                .map((row) => row.id)
+                .sort();
+              if (desiredTokenIds.join() !== expectedTokenIds.join())
+                return null;
+              const currentTokens = desiredTokenIds.length
+                ? await tx
+                    .select({
+                      id: tokens.id,
+                      revision: tokens.revision,
+                    })
+                    .from(tokens)
+                    .where(inArray(tokens.id, desiredTokenIds))
+                : [];
+              const expectedTokens = new Map(
+                expected.tokens.map((row) => [row.id, row]),
+              );
+              if (
+                currentTokens.length !== desiredTokenIds.length ||
+                currentTokens.some(
+                  (row) =>
+                    row.revision !== expectedTokens.get(row.id)?.revision,
+                )
+              )
+                return null;
+              const nextTokens: SceneTokenGeometrySnapshot["tokens"] = [];
+              for (const token of desired.tokens) {
+                const expectedRevision = expectedTokens.get(token.id)!.revision;
+                const [saved] = await tx
+                  .update(tokens)
+                  .set({
+                    x: token.x,
+                    y: token.y,
+                    width: token.width,
+                    height: token.height,
+                    revision: expectedRevision + 1,
+                    updatedAt: new Date(),
+                  })
+                  .where(
+                    and(
+                      eq(tokens.id, token.id),
+                      eq(tokens.revision, expectedRevision),
+                    ),
+                  )
+                  .returning({
+                    id: tokens.id,
+                    x: tokens.x,
+                    y: tokens.y,
+                    width: tokens.width,
+                    height: tokens.height,
+                    revision: tokens.revision,
+                  });
+                if (!saved) throw new Error("SCENE_GRID_HISTORY_CONFLICT");
+                nextTokens.push(saved);
+              }
+              values.tokenGeometry = { tokens: nextTokens };
+              if (direction === "undo") command.before = values;
+              else command.after = values;
+            }
             const [updated] = await tx
               .update(scenes)
               .set({
@@ -4075,7 +4240,7 @@ export function registerRoutes(
                 ),
               )
               .returning();
-            if (!updated) return null;
+            if (!updated) throw new Error("SCENE_GRID_HISTORY_CONFLICT");
             targetRevision = updated.revision;
           } else return null;
           const nextStatus = direction === "undo" ? "UNDONE" : "APPLIED";
@@ -4084,7 +4249,7 @@ export function registerRoutes(
             .set({
               status: nextStatus,
               currentRevision: targetRevision,
-              ...(command.targetType === "CANVAS_BULK"
+              ...(["CANVAS_BULK", "SCENE"].includes(command.targetType)
                 ? { before: command.before, after: command.after }
                 : {}),
               transitionSequence: sql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
@@ -4097,7 +4262,7 @@ export function registerRoutes(
               ),
             )
             .returning();
-          if (!journal) return null;
+          if (!journal) throw new Error("HISTORY_JOURNAL_CONFLICT");
           const [event] = await tx
             .insert(gameEvents)
             .values({
@@ -4116,7 +4281,11 @@ export function registerRoutes(
         })
         .catch((error: unknown) =>
           error instanceof Error &&
-          error.message === "CANVAS_BULK_HISTORY_CONFLICT"
+          [
+            "CANVAS_BULK_HISTORY_CONFLICT",
+            "SCENE_GRID_HISTORY_CONFLICT",
+            "HISTORY_JOURNAL_CONFLICT",
+          ].includes(error.message)
             ? null
             : Promise.reject(error),
         );
@@ -4140,14 +4309,6 @@ export function registerRoutes(
     const body = sceneCanvasConfigSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
-    const [current] = await db
-      .select()
-      .from(scenes)
-      .where(and(eq(scenes.id, id), eq(scenes.campaignId, auth.campaignId)))
-      .limit(1);
-    if (!current) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    if (current.revision !== body.revision)
-      return reply.code(409).send({ error: "SCENE_CONFLICT" });
     if (body.mapAssetId) {
       const [mapAsset] = await db
         .select({ kind: assets.kind })
@@ -4163,99 +4324,271 @@ export function registerRoutes(
       if (mapAsset.kind !== "MAP")
         return reply.code(422).send({ error: "MAP_ASSET_REQUIRED" });
     }
-    const [updated] = await db.transaction(async (tx) => {
-      await invalidateRedoBranch(tx, auth, id);
-      const [next] = await tx
-        .update(scenes)
-        .set({
-          ...(body.name !== undefined ? { name: body.name } : {}),
-          ...(body.mapAssetId !== undefined
-            ? { mapAssetId: body.mapAssetId }
-            : {}),
-          ...(body.grid ? { grid: body.grid } : {}),
-          ...(body.mapScale !== undefined ? { mapScale: body.mapScale } : {}),
-          ...(body.world
-            ? { width: body.world.width, height: body.world.height }
-            : {}),
-          ...(body.backgroundFrame
-            ? {
-                backgroundX: body.backgroundFrame.x,
-                backgroundY: body.backgroundFrame.y,
-                backgroundWidth: body.backgroundFrame.width,
-                backgroundHeight: body.backgroundFrame.height,
-              }
-            : {}),
-          revision: current.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(scenes.id, id), eq(scenes.revision, current.revision)))
-        .returning();
-      if (!next) return [];
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "scene.canvas",
-        entityType: "scene",
-        entityId: id,
-        entityRevision: next.revision,
-        payload: {
-          name: next.name,
-          mapAssetId: next.mapAssetId,
-          grid: next.grid,
-          mapScale: next.mapScale,
-          world: { width: next.width, height: next.height },
-          backgroundFrame: {
-            x: next.backgroundX,
-            y: next.backgroundY,
-            width: next.backgroundWidth,
-            height: next.backgroundHeight,
+    const result = await db
+      .transaction(async (tx) => {
+        // Scene mutation, token placement, and token-restoring history all use
+        // this same row lock. The token set below is therefore a complete,
+        // linearizable snapshot for this rescale.
+        await tx.execute(
+          sql`select id from scenes where id = ${id} and campaign_id = ${auth.campaignId} for update`,
+        );
+        const [current] = await tx
+          .select()
+          .from(scenes)
+          .where(and(eq(scenes.id, id), eq(scenes.campaignId, auth.campaignId)))
+          .limit(1);
+        if (!current) return { status: "not_found" as const };
+        if (current.revision !== body.revision)
+          return { status: "conflict" as const };
+
+        const shouldRescaleTokenGeometry = Boolean(
+          body.grid &&
+          current.grid.enabled &&
+          body.grid.enabled &&
+          current.grid.size !== body.grid.size,
+        );
+        const currentTokenGeometry = shouldRescaleTokenGeometry
+          ? await tx
+              .select({
+                id: tokens.id,
+                x: tokens.x,
+                y: tokens.y,
+                width: tokens.width,
+                height: tokens.height,
+                revision: tokens.revision,
+              })
+              .from(tokens)
+              .where(eq(tokens.sceneId, id))
+          : [];
+        const scale =
+          shouldRescaleTokenGeometry && body.grid
+            ? body.grid.size / current.grid.size
+            : 1;
+        const plannedTokenGeometry = currentTokenGeometry.map((token) => ({
+          ...token,
+          x: scaledGridCoordinate(
+            token.x,
+            current.grid.offsetX,
+            body.grid!.offsetX,
+            scale,
+          ),
+          y: scaledGridCoordinate(
+            token.y,
+            current.grid.offsetY,
+            body.grid!.offsetY,
+            scale,
+          ),
+          width: scaledTokenLength(token.width, scale),
+          height: scaledTokenLength(token.height, scale),
+        }));
+        const outOfBounds = plannedTokenGeometry.find(
+          (token) =>
+            token.width < MIN_TOKEN_LENGTH ||
+            token.width > MAX_TOKEN_LENGTH ||
+            token.height < MIN_TOKEN_LENGTH ||
+            token.height > MAX_TOKEN_LENGTH,
+        );
+        if (outOfBounds)
+          throw new SceneGridTokenBoundsError(
+            outOfBounds.id,
+            outOfBounds.width,
+            outOfBounds.height,
+          );
+
+        await invalidateRedoBranch(tx, auth, id);
+        const [next] = await tx
+          .update(scenes)
+          .set({
+            ...(body.name !== undefined ? { name: body.name } : {}),
+            ...(body.mapAssetId !== undefined
+              ? { mapAssetId: body.mapAssetId }
+              : {}),
+            ...(body.grid ? { grid: body.grid } : {}),
+            ...(body.mapScale !== undefined ? { mapScale: body.mapScale } : {}),
+            ...(body.world
+              ? { width: body.world.width, height: body.world.height }
+              : {}),
+            ...(body.backgroundFrame
+              ? {
+                  backgroundX: body.backgroundFrame.x,
+                  backgroundY: body.backgroundFrame.y,
+                  backgroundWidth: body.backgroundFrame.width,
+                  backgroundHeight: body.backgroundFrame.height,
+                }
+              : {}),
+            revision: current.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(scenes.id, id),
+              eq(scenes.campaignId, auth.campaignId),
+              eq(scenes.revision, current.revision),
+            ),
+          )
+          .returning();
+        if (!next) throw new Error("SCENE_GRID_RESCALE_CONFLICT");
+
+        let beforeTokenGeometry: SceneTokenGeometrySnapshot | undefined;
+        let afterTokenGeometry: SceneTokenGeometrySnapshot | undefined;
+        if (shouldRescaleTokenGeometry && body.grid) {
+          beforeTokenGeometry = { tokens: currentTokenGeometry };
+          const nextTokens: SceneTokenGeometrySnapshot["tokens"] = [];
+          for (const token of plannedTokenGeometry) {
+            const [saved] = await tx
+              .update(tokens)
+              .set({
+                x: token.x,
+                y: token.y,
+                width: token.width,
+                height: token.height,
+                revision: token.revision + 1,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(tokens.id, token.id),
+                  eq(tokens.revision, token.revision),
+                ),
+              )
+              .returning({
+                id: tokens.id,
+                x: tokens.x,
+                y: tokens.y,
+                width: tokens.width,
+                height: tokens.height,
+                revision: tokens.revision,
+              });
+            if (!saved) throw new Error("SCENE_GRID_RESCALE_CONFLICT");
+            nextTokens.push(saved);
+          }
+          afterTokenGeometry = { tokens: nextTokens };
+          // Earlier token snapshots use the previous grid coordinate system.
+          // Retire them so later history never replays stale pixel geometry;
+          // drawing and fog actions remain independently undoable.
+          if (nextTokens.length)
+            await tx
+              .update(actionJournal)
+              .set({
+                status: "INVALIDATED",
+                transitionSequence: sql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(actionJournal.campaignId, auth.campaignId),
+                  eq(actionJournal.sceneId, id),
+                  eq(actionJournal.targetType, "TOKEN"),
+                  inArray(
+                    actionJournal.targetId,
+                    nextTokens.map((token) => token.id),
+                  ),
+                  eq(actionJournal.status, "APPLIED"),
+                ),
+              );
+        }
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "scene.canvas",
+          entityType: "scene",
+          entityId: id,
+          entityRevision: next.revision,
+          payload: {
+            name: next.name,
+            mapAssetId: next.mapAssetId,
+            grid: next.grid,
+            mapScale: next.mapScale,
+            world: { width: next.width, height: next.height },
+            backgroundFrame: {
+              x: next.backgroundX,
+              y: next.backgroundY,
+              width: next.backgroundWidth,
+              height: next.backgroundHeight,
+            },
+            ...(afterTokenGeometry
+              ? { rescaledTokens: afterTokenGeometry.tokens.length }
+              : {}),
           },
-        },
+        });
+        await tx.insert(actionJournal).values({
+          campaignId: auth.campaignId,
+          sceneId: id,
+          actorMembershipId: auth.membershipId,
+          actionId: body.actionId,
+          type: "SCENE_CANVAS",
+          targetType: "SCENE",
+          targetId: id,
+          before: {
+            name: current.name,
+            mapAssetId: current.mapAssetId,
+            grid: current.grid,
+            mapScale: current.mapScale,
+            world: { width: current.width, height: current.height },
+            backgroundFrame: {
+              x: current.backgroundX,
+              y: current.backgroundY,
+              width: current.backgroundWidth,
+              height: current.backgroundHeight,
+            },
+            ...(beforeTokenGeometry
+              ? { tokenGeometry: beforeTokenGeometry }
+              : {}),
+          },
+          after: {
+            name: next.name,
+            mapAssetId: next.mapAssetId,
+            grid: next.grid,
+            mapScale: next.mapScale,
+            world: { width: next.width, height: next.height },
+            backgroundFrame: {
+              x: next.backgroundX,
+              y: next.backgroundY,
+              width: next.backgroundWidth,
+              height: next.backgroundHeight,
+            },
+            ...(afterTokenGeometry
+              ? { tokenGeometry: afterTokenGeometry }
+              : {}),
+          },
+          beforeRevision: current.revision,
+          afterRevision: next.revision,
+          currentRevision: next.revision,
+        });
+        return { status: "ok" as const, scene: next };
+      })
+      .catch((error: unknown) => {
+        if (error instanceof SceneGridTokenBoundsError)
+          return {
+            status: "bounds" as const,
+            tokenId: error.tokenId,
+            width: error.width,
+            height: error.height,
+          };
+        if (
+          error instanceof Error &&
+          error.message === "SCENE_GRID_RESCALE_CONFLICT"
+        )
+          return { status: "conflict" as const };
+        return Promise.reject(error);
       });
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: id,
-        actorMembershipId: auth.membershipId,
-        actionId: body.actionId,
-        type: "SCENE_CANVAS",
-        targetType: "SCENE",
-        targetId: id,
-        before: {
-          name: current.name,
-          mapAssetId: current.mapAssetId,
-          grid: current.grid,
-          mapScale: current.mapScale,
-          world: { width: current.width, height: current.height },
-          backgroundFrame: {
-            x: current.backgroundX,
-            y: current.backgroundY,
-            width: current.backgroundWidth,
-            height: current.backgroundHeight,
-          },
-        },
-        after: {
-          name: next.name,
-          mapAssetId: next.mapAssetId,
-          grid: next.grid,
-          mapScale: next.mapScale,
-          world: { width: next.width, height: next.height },
-          backgroundFrame: {
-            x: next.backgroundX,
-            y: next.backgroundY,
-            width: next.backgroundWidth,
-            height: next.backgroundHeight,
-          },
-        },
-        beforeRevision: current.revision,
-        afterRevision: next.revision,
-        currentRevision: next.revision,
+    if (result.status === "not_found")
+      return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (result.status === "conflict")
+      return reply.code(409).send({ error: "SCENE_CONFLICT" });
+    if (result.status === "bounds")
+      return reply.code(422).send({
+        error: "SCENE_GRID_TOKEN_BOUNDS",
+        policy: "REJECT",
+        min: MIN_TOKEN_LENGTH,
+        max: MAX_TOKEN_LENGTH,
+        tokenId: result.tokenId,
+        width: result.width,
+        height: result.height,
       });
-      return [next];
-    });
-    if (!updated) return reply.code(409).send({ error: "SCENE_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
-    return updated;
+    return result.scene;
   });
 
   const stickerPackInputSchema = z
@@ -5946,7 +6279,7 @@ export function registerRoutes(
       let action:
         NonNullable<typeof parsedData.data.rollActions>[number] | undefined;
       let formula: string | null = null;
-      let result: ReturnType<typeof rollFormula> | null = null;
+      let result: ReturnType<typeof rollFormulaWithMode> | null = null;
       if (mode === "EXECUTE") {
         action = parsedData.data.rollActions?.find(
           (candidate) => candidate.id === body.rollActionId,
@@ -5954,11 +6287,7 @@ export function registerRoutes(
         if (!action)
           return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
         const values: Record<string, number> = {};
-        const formulaParts = [
-          action.advantage && /^1?d20$/.test(action.dice)
-            ? "2d20kh1"
-            : action.dice,
-        ];
+        const formulaParts = [action.dice];
         for (const [index, source] of action.modifiers.entries()) {
           if (source.type === "CONSTANT") {
             formulaParts.push(String(source.value));
@@ -5988,7 +6317,13 @@ export function registerRoutes(
           formulaParts.push(key);
         }
         formula = formulaParts.join(" + ");
-        result = rollFormula(formula, values, randomInt, action.label);
+        result = rollFormulaWithMode(
+          formula,
+          values,
+          body.rollMode ?? (action.advantage ? "ADVANTAGE" : "NORMAL"),
+          randomInt,
+          action.label,
+        );
         if (
           action.consumeUse &&
           (!parsedData.data.uses || parsedData.data.uses.current < 1)
@@ -6182,10 +6517,7 @@ export function registerRoutes(
         .limit(1);
     }
     try {
-      const normalizedFormula = applyRollMode(
-        normalizeLegacyFormula(body.formula),
-        body.rollMode ?? "NORMAL",
-      );
+      const normalizedFormula = normalizeLegacyFormula(body.formula);
       const modeLabel =
         body.rollMode === "ADVANTAGE"
           ? "преимущество"
@@ -6193,9 +6525,10 @@ export function registerRoutes(
             ? "помеха"
             : null;
       const rollLabel = `${body.label ?? body.formula}${modeLabel ? ` · ${modeLabel}` : ""}`;
-      const result = rollFormula(
+      const result = rollFormulaWithMode(
         normalizedFormula,
         normalizeLegacyStats(character?.stats),
+        body.rollMode ?? "NORMAL",
         randomInt,
         rollLabel,
       );

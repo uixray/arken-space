@@ -1116,10 +1116,14 @@ describe("Pool B HTTP boundaries", () => {
     expect(advantage.statusCode).toBe(201);
     const advantagePayload = advantage.json();
     expect(advantagePayload.dice).toMatchObject({
-      terms: [expect.objectContaining({ notation: "2d20kh1" })],
+      rollMode: "ADVANTAGE",
+      poolTotals: [expect.any(Number), expect.any(Number)],
+      selectedPool: expect.any(Number),
+      terms: [expect.objectContaining({ notation: "1d20" })],
     });
+    expect([0, 1]).toContain(advantagePayload.dice.selectedPool);
     expect(advantagePayload.body).toContain("преимущество");
-    expect(advantagePayload.dice.terms[0].rolls).toHaveLength(2);
+    expect(advantagePayload.dice.terms[0].rolls).toHaveLength(1);
 
     const disadvantage = await app.inject({
       method: "POST",
@@ -1135,8 +1139,12 @@ describe("Pool B HTTP boundaries", () => {
     });
     expect(disadvantage.statusCode).toBe(201);
     expect(disadvantage.json().dice).toMatchObject({
-      terms: [expect.objectContaining({ notation: "2d20kl1" })],
+      rollMode: "DISADVANTAGE",
+      poolTotals: [expect.any(Number), expect.any(Number)],
+      selectedPool: expect.any(Number),
+      terms: [expect.objectContaining({ notation: "1d20" })],
     });
+    expect([0, 1]).toContain(disadvantage.json().dice.selectedPool);
     expect(disadvantage.json().body).toContain("помеха");
 
     const gmNormal = await app.inject({
@@ -1461,13 +1469,14 @@ describe("Pool B HTTP boundaries", () => {
       headers: headers(secrets.player),
       payload: {
         actionId: crypto.randomUUID(),
+        // Omit the client override: stored legacy action.advantage must still apply.
         rollActionId: "hit",
         visibility: "PUBLIC",
       },
     });
     expect(roll.statusCode).toBe(201);
     expect(roll.json()).toMatchObject({
-      formula: "2d20kh1 + modifier_0",
+      formula: "1d20 + modifier_0",
       skillCard: {
         version: 1,
         execution: "EXECUTED",
@@ -1477,7 +1486,13 @@ describe("Pool B HTTP boundaries", () => {
         uses: { before: 1, after: 1, max: 1, recharge: "DAY" },
       },
     });
-    expect(roll.json().terms[0].rolls).toHaveLength(2);
+    expect(roll.json()).toMatchObject({
+      rollMode: "ADVANTAGE",
+      poolTotals: [expect.any(Number), expect.any(Number)],
+      selectedPool: expect.any(Number),
+    });
+    expect([0, 1]).toContain(roll.json().selectedPool);
+    expect(roll.json().terms[0].rolls).toHaveLength(1);
     const playerGmOnly = await app.inject({
       method: "POST",
       url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
@@ -1509,6 +1524,7 @@ describe("Pool B HTTP boundaries", () => {
         payload: {
           actionId: damageActionId,
           rollActionId: "damage",
+          rollMode: "DISADVANTAGE",
           visibility: "PUBLIC",
         },
       });
@@ -1522,6 +1538,17 @@ describe("Pool B HTTP boundaries", () => {
     expect([damage.json(), concurrentDamage.json()]).toContainEqual({
       duplicate: true,
     });
+    const appliedDamage = [damage.json(), concurrentDamage.json()].find(
+      (payload) => payload.duplicate !== true,
+    );
+    expect(appliedDamage).toMatchObject({
+      formula: "1d8 + modifier_0",
+      rollMode: "DISADVANTAGE",
+      poolTotals: [expect.any(Number), expect.any(Number)],
+      selectedPool: expect.any(Number),
+      terms: [expect.objectContaining({ notation: "1d8" })],
+    });
+    expect([0, 1]).toContain(appliedDamage.selectedPool);
     const afterDamage = await app.inject({
       method: "GET",
       url: "/api/bootstrap",
@@ -2198,6 +2225,30 @@ describe("Pool B HTTP boundaries", () => {
       revision: 1,
       grid: { size: 32, offsetX: 4, offsetY: 8 },
     });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokens)
+          .where(eq(schema.tokens.id, ids.token))
+      )[0],
+    ).toMatchObject({ x: 4, y: 8, width: 32, height: 32, revision: 2 });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokenDefinitions)
+          .where(eq(schema.tokenDefinitions.id, ids.definition))
+      )[0],
+    ).toMatchObject({ defaultWidth: 64, defaultHeight: 64, revision: 0 });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.actionJournal)
+          .where(eq(schema.actionJournal.targetId, ids.token))
+      )[0],
+    ).toMatchObject({ type: "TOKEN_LAYER", status: "INVALIDATED" });
     const undoScene = await app.inject({
       method: "POST",
       url: "/api/canvas/undo",
@@ -2215,6 +2266,22 @@ describe("Pool B HTTP boundaries", () => {
       height: 1080,
       backgroundFrame: { x: 0, y: 0, width: 1920, height: 1080 },
     });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokens)
+          .where(eq(schema.tokens.id, ids.token))
+      )[0],
+    ).toMatchObject({ x: 0, y: 0, width: 64, height: 64, revision: 3 });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokenDefinitions)
+          .where(eq(schema.tokenDefinitions.id, ids.definition))
+      )[0],
+    ).toMatchObject({ defaultWidth: 64, defaultHeight: 64, revision: 0 });
     const redoScene = await app.inject({
       method: "POST",
       url: "/api/canvas/redo",
@@ -2232,6 +2299,365 @@ describe("Pool B HTTP boundaries", () => {
       height: 1440,
       backgroundFrame: { x: 120, y: 80, width: 2048, height: 1024 },
     });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokens)
+          .where(eq(schema.tokens.id, ids.token))
+      )[0],
+    ).toMatchObject({ x: 4, y: 8, width: 32, height: 32, revision: 4 });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokenDefinitions)
+          .where(eq(schema.tokenDefinitions.id, ids.definition))
+      )[0],
+    ).toMatchObject({ defaultWidth: 64, defaultHeight: 64, revision: 0 });
+  });
+
+  it("rescales only scene instances when a token definition is shared across scenes and history", async () => {
+    const otherSceneId = crypto.randomUUID();
+    const otherTokenId = crypto.randomUUID();
+    await db.insert(schema.scenes).values({
+      id: otherSceneId,
+      campaignId: ids.campaign,
+      name: "Other map",
+      grid: {
+        enabled: true,
+        size: 64,
+        offsetX: 0,
+        offsetY: 0,
+        color: "#ffffff",
+        opacity: 0.2,
+      },
+    });
+    await db.insert(schema.tokens).values({
+      id: otherTokenId,
+      definitionId: ids.definition,
+      sceneId: otherSceneId,
+      name: "Shared hero",
+      x: 64,
+      y: 64,
+      width: 64,
+      height: 64,
+    });
+
+    const rescaled = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${ids.scene}/canvas`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        grid: {
+          enabled: true,
+          size: 32,
+          offsetX: 4,
+          offsetY: 8,
+          color: "#ffffff",
+          opacity: 0.2,
+        },
+      },
+    });
+    expect(rescaled.statusCode).toBe(200);
+    const readTokens = async () =>
+      db
+        .select()
+        .from(schema.tokens)
+        .where(eq(schema.tokens.definitionId, ids.definition));
+    let byId = new Map((await readTokens()).map((token) => [token.id, token]));
+    expect(byId.get(ids.token)).toMatchObject({
+      x: 4,
+      y: 8,
+      width: 32,
+      height: 32,
+      revision: 1,
+    });
+    expect(byId.get(otherTokenId)).toMatchObject({
+      x: 64,
+      y: 64,
+      width: 64,
+      height: 64,
+      revision: 0,
+    });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokenDefinitions)
+          .where(eq(schema.tokenDefinitions.id, ids.definition))
+      )[0],
+    ).toMatchObject({ defaultWidth: 64, defaultHeight: 64, revision: 0 });
+
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undo.statusCode).toBe(200);
+    byId = new Map((await readTokens()).map((token) => [token.id, token]));
+    expect(byId.get(ids.token)).toMatchObject({
+      x: 0,
+      y: 0,
+      width: 64,
+      height: 64,
+      revision: 2,
+    });
+    expect(byId.get(otherTokenId)).toMatchObject({ revision: 0 });
+
+    const redo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/redo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(redo.statusCode).toBe(200);
+    byId = new Map((await readTokens()).map((token) => [token.id, token]));
+    expect(byId.get(ids.token)).toMatchObject({
+      x: 4,
+      y: 8,
+      width: 32,
+      height: 32,
+      revision: 3,
+    });
+    expect(byId.get(otherTokenId)).toMatchObject({ revision: 0 });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokenDefinitions)
+          .where(eq(schema.tokenDefinitions.id, ids.definition))
+      )[0],
+    ).toMatchObject({ defaultWidth: 64, defaultHeight: 64, revision: 0 });
+  });
+
+  it("leaves redo history and geometry untouched when the scene CAS is stale", async () => {
+    const redoActionId = crypto.randomUUID();
+    await db.insert(schema.actionJournal).values({
+      campaignId: ids.campaign,
+      sceneId: ids.scene,
+      actorMembershipId: ids.gm,
+      actionId: redoActionId,
+      type: "TOKEN_MOVE",
+      targetType: "TOKEN",
+      targetId: ids.token,
+      before: { x: 0, y: 0 },
+      after: { x: 64, y: 64 },
+      currentRevision: 0,
+      status: "UNDONE",
+    });
+    const failedActionId = crypto.randomUUID();
+    const failed = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${ids.scene}/canvas`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: failedActionId,
+        revision: 1,
+        grid: {
+          enabled: true,
+          size: 32,
+          offsetX: 0,
+          offsetY: 0,
+          color: "#ffffff",
+          opacity: 0.2,
+        },
+      },
+    });
+    expect(failed.statusCode).toBe(409);
+    expect(failed.json()).toEqual({ error: "SCENE_CONFLICT" });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.actionJournal)
+          .where(eq(schema.actionJournal.actionId, redoActionId))
+      )[0],
+    ).toMatchObject({ status: "UNDONE" });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.scenes)
+          .where(eq(schema.scenes.id, ids.scene))
+      )[0],
+    ).toMatchObject({ revision: 0, grid: { size: 64 } });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokens)
+          .where(eq(schema.tokens.id, ids.token))
+      )[0],
+    ).toMatchObject({ x: 0, y: 0, width: 64, height: 64, revision: 0 });
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, failedActionId)),
+    ).toEqual([]);
+  });
+
+  it("rejects grid rescale at both token size boundaries instead of clamping", async () => {
+    await db
+      .update(schema.tokens)
+      .set({ width: 16, height: 16 })
+      .where(eq(schema.tokens.id, ids.token));
+    const lower = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${ids.scene}/canvas`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        grid: {
+          enabled: true,
+          size: 16,
+          offsetX: 0,
+          offsetY: 0,
+          color: "#ffffff",
+          opacity: 0.2,
+        },
+      },
+    });
+    expect(lower.statusCode).toBe(422);
+    expect(lower.json()).toMatchObject({
+      error: "SCENE_GRID_TOKEN_BOUNDS",
+      policy: "REJECT",
+      min: 16,
+      max: 1024,
+      tokenId: ids.token,
+      width: 4,
+      height: 4,
+    });
+
+    await db
+      .update(schema.tokens)
+      .set({ width: 1024, height: 1024 })
+      .where(eq(schema.tokens.id, ids.token));
+    const upper = await app.inject({
+      method: "PATCH",
+      url: `/api/scenes/${ids.scene}/canvas`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        grid: {
+          enabled: true,
+          size: 256,
+          offsetX: 0,
+          offsetY: 0,
+          color: "#ffffff",
+          opacity: 0.2,
+        },
+      },
+    });
+    expect(upper.statusCode).toBe(422);
+    expect(upper.json()).toMatchObject({
+      error: "SCENE_GRID_TOKEN_BOUNDS",
+      policy: "REJECT",
+      min: 16,
+      max: 1024,
+      tokenId: ids.token,
+      width: 4096,
+      height: 4096,
+    });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.scenes)
+          .where(eq(schema.scenes.id, ids.scene))
+      )[0],
+    ).toMatchObject({ revision: 0, grid: { size: 64 } });
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tokens)
+          .where(eq(schema.tokens.id, ids.token))
+      )[0],
+    ).toMatchObject({ width: 1024, height: 1024, revision: 0 });
+  });
+
+  it("serializes concurrent reusable-token placement with grid rescale", async () => {
+    const definitionId = crypto.randomUUID();
+    await db.insert(schema.tokenDefinitions).values({
+      id: definitionId,
+      campaignId: ids.campaign,
+      name: "Concurrent token",
+      defaultWidth: 64,
+      defaultHeight: 64,
+    });
+    const placeActionId = crypto.randomUUID();
+    const rescaleActionId = crypto.randomUUID();
+    const [placement, rescale] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: `/api/token-definitions/${definitionId}/placements`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: placeActionId,
+          sceneId: ids.scene,
+          x: 80,
+          y: 80,
+        },
+      }),
+      app.inject({
+        method: "PATCH",
+        url: `/api/scenes/${ids.scene}/canvas`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: rescaleActionId,
+          revision: 0,
+          grid: {
+            enabled: true,
+            size: 32,
+            offsetX: 0,
+            offsetY: 0,
+            color: "#ffffff",
+            opacity: 0.2,
+          },
+        },
+      }),
+    ]);
+    expect(placement.statusCode).toBe(201);
+    expect(rescale.statusCode).toBe(200);
+    const placedId = placement.json().id as string;
+    const [placed] = await db
+      .select()
+      .from(schema.tokens)
+      .where(eq(schema.tokens.id, placedId));
+    const [placementEvent] = await db
+      .select({ sequence: schema.gameEvents.sequence })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, placeActionId));
+    const [rescaleEvent] = await db
+      .select({ sequence: schema.gameEvents.sequence })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, rescaleActionId));
+    expect(placementEvent).toBeDefined();
+    expect(rescaleEvent).toBeDefined();
+    if (placementEvent!.sequence < rescaleEvent!.sequence) {
+      expect(placed).toMatchObject({
+        x: 32,
+        y: 32,
+        width: 32,
+        height: 32,
+        revision: 1,
+      });
+    } else {
+      expect(placed).toMatchObject({
+        x: 96,
+        y: 96,
+        width: 64,
+        height: 64,
+        revision: 0,
+      });
+    }
   });
 
   it("replays two player undos in durable transition LIFO order across snapshot recovery", async () => {

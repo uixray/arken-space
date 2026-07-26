@@ -496,6 +496,7 @@ export const sceneCanvasConfigSchema = z.object({
   revision: z.number().int().nonnegative(),
   name: z.string().trim().min(1).max(100).optional(),
   mapAssetId: z.string().uuid().nullable().optional(),
+  /** A size change preserves in-scene token cell coordinates and the defaults of referenced definitions. */
   grid: gridSchema.optional(),
   mapScale: z.number().finite().min(0.1).max(10).optional(),
   world: z
@@ -1088,7 +1089,7 @@ export type MarkChatThreadRead = z.infer<typeof markChatThreadReadSchema>;
 export const diceRequestSchema = z.object({
   actionId: actionIdSchema,
   formula: z.string().trim().min(1).max(160),
-  /** The server expands one d20 into a kept pair; the client never rolls it. */
+  /** The server rolls the complete formula once or twice and selects by total. */
   rollMode: z.enum(["NORMAL", "ADVANTAGE", "DISADVANTAGE"]).default("NORMAL"),
   visibility: messageVisibilitySchema.default("PUBLIC"),
   characterId: z.string().uuid().nullable().optional(),
@@ -1138,6 +1139,8 @@ const entryCardRequestBaseSchema = z.object({
   actionId: actionIdSchema,
   entryRevision: z.number().int().nonnegative().optional(),
   visibility: messageVisibilitySchema.default("PUBLIC"),
+  /** Executes the complete formula twice and keeps one pool by total. */
+  rollMode: z.enum(["NORMAL", "ADVANTAGE", "DISADVANTAGE"]).optional(),
 });
 export const entryCardExecuteRequestSchema = entryCardRequestBaseSchema.extend({
   mode: z.literal("EXECUTE").optional(),
@@ -1519,6 +1522,10 @@ export interface DiceResult {
   modifiers: Array<{ source: string; value: number }>;
   total: number;
   label?: string;
+  /** Whole-pool selection metadata; absent on legacy stored results. */
+  rollMode?: "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
+  poolTotals?: [number, number];
+  selectedPool?: 0 | 1;
 }
 
 export interface SkillCardEntrySnapshot {

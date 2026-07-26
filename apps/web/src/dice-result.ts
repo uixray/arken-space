@@ -16,7 +16,18 @@ export function normalizeClientDiceResult(value: unknown): DiceResult | null {
     dice.terms.length > 80 ||
     !Array.isArray(dice.modifiers) ||
     dice.modifiers.length > 160 ||
-    (dice.label !== undefined && !boundedString(dice.label, 100))
+    (dice.label !== undefined && !boundedString(dice.label, 100)) ||
+    (dice.rollMode !== undefined &&
+      !["NORMAL", "ADVANTAGE", "DISADVANTAGE"].includes(
+        String(dice.rollMode),
+      )) ||
+    (dice.poolTotals !== undefined &&
+      (!Array.isArray(dice.poolTotals) ||
+        dice.poolTotals.length !== 2 ||
+        !dice.poolTotals.every(finiteNumber))) ||
+    (dice.selectedPool !== undefined &&
+      dice.selectedPool !== 0 &&
+      dice.selectedPool !== 1)
   )
     return null;
 
