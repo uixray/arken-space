@@ -5,7 +5,7 @@ export type SidebarFeed = "ACTIVITY" | ChatStream;
 
 /** TABLE is authored in the unified activity feed instead of a separate tab. */
 export function feedForChatStream(stream: ChatStream): SidebarFeed {
-  return stream === "TABLE" ? "ACTIVITY" : stream;
+  return stream === "TABLE" || stream === "ROLLS" ? "ACTIVITY" : stream;
 }
 
 export function activityTableReadTarget(snapshot: GameSnapshot): {

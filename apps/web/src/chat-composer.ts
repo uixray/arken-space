@@ -13,30 +13,31 @@ export type SlashCommandSuggestion = {
 const slashCommands: SlashCommandSuggestion[] = [
   {
     command: "/d20",
-    description:
-      "Обычный бросок d20",
+    description: "Обычный бросок d20",
     example: "/d20",
     insertion: "/d20",
   },
   {
     command: "/roll",
-    description:
-      "Выполнить публичный бросок по формуле",
+    description: "Выполнить публичный бросок по формуле",
     example: "/roll 1d20 + agility",
-    insertion: "/roll ",
+    insertion: "/roll 1d20 + agility",
   },
 ];
 
 const characteristicLabels: Record<string, string> = {
   strength: "Сила",
   agility: "Ловкость",
-  endurance:
-    "Выносливость",
+  endurance: "Выносливость",
   vitality: "Живучесть",
   knowledge: "Знания",
   intelligence: "Интеллект",
   willpower: "Воля",
   charisma: "Харизма",
+  reaction: "Реакция",
+  attention:
+    "Внимательность",
+  magicPower: "Сила магии",
 };
 
 function supportedCharacteristics(stats: Record<string, number> = {}) {
@@ -88,8 +89,7 @@ export function parseComposerInput(
   if (!body)
     return {
       kind: "INVALID",
-      message:
-        "Введите сообщение или бросок.",
+      message: "Введите сообщение или бросок.",
     };
   const bareFormula = parseBareDiceFormula(body);
   if (bareFormula) return { kind: "ROLL", formula: bareFormula };
@@ -98,14 +98,16 @@ export function parseComposerInput(
   const characteristic = /^\/([a-z_][a-z0-9_]*)$/i
     .exec(body)?.[1]
     ?.toLocaleLowerCase("en-US");
-  if (
-    characteristic &&
-    supportedCharacteristics(stats).some(([key]) => key === characteristic)
-  ) {
+  const characteristicKey = characteristic
+    ? supportedCharacteristics(stats).find(
+        ([key]) => key.toLocaleLowerCase("en-US") === characteristic,
+      )?.[0]
+    : undefined;
+  if (characteristicKey) {
     return {
       kind: "ROLL",
-      formula: `1d20 + ${characteristic}`,
-      label: `Проверка: ${characteristicLabels[characteristic]}`,
+      formula: `1d20 + ${characteristicKey}`,
+      label: `Проверка: ${characteristicLabels[characteristicKey]}`,
     };
   }
   if (!/^\/roll(?:\s|$)/i.test(body)) return { kind: "TEXT", body };
@@ -113,8 +115,7 @@ export function parseComposerInput(
   if (!match?.[1]?.trim())
     return {
       kind: "INVALID",
-      message:
-        "Укажите формулу после /roll, например /roll 1d20 + agility.",
+      message: "Укажите формулу после /roll, например /roll 1d20 + agility.",
     };
   return { kind: "ROLL", formula: match[1].trim() };
 }

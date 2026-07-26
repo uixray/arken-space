@@ -1612,6 +1612,115 @@ describe("Pool B HTTP boundaries", () => {
     expect(exhausted.statusCode).toBe(409);
   });
 
+  it("spends an entry resource atomically and never double-spends a replay", async () => {
+    await db
+      .update(schema.characters)
+      .set({
+        resources: { physicalPower: { current: 3, maximum: 3 } },
+      })
+      .where(eq(schema.characters.id, ids.character));
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "SKILL",
+        name: "Heavy strike",
+        description: "Costs physical power",
+        data: {
+          rollActions: [
+            {
+              id: "strike",
+              kind: "HIT",
+              label: "Strike",
+              dice: "1d20",
+              modifiers: [],
+              order: 0,
+              advantage: false,
+              consumeUse: false,
+              cost: { type: "physical", amount: 2 },
+            },
+          ],
+        },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        catalogEntryId: created.json().id,
+      },
+    });
+    expect(assigned.statusCode).toBe(201);
+    const entryId = assigned.json().id as string;
+    const actionId = crypto.randomUUID();
+    const execute = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId,
+          rollActionId: "strike",
+          visibility: "PUBLIC",
+        },
+      });
+    const first = await execute();
+    expect(first.statusCode).toBe(201);
+    const replay = await execute();
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ duplicate: true });
+
+    const [afterSuccess] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(afterSuccess!.resources).toMatchObject({
+      physicalPower: { current: 1, maximum: 3 },
+    });
+    const successEvents = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(successEvents).toHaveLength(1);
+    expect(successEvents[0]!.payload).toMatchObject({
+      resourceCost: { type: "physical", amount: 2, before: 3, after: 1 },
+    });
+
+    const insufficientActionId = crypto.randomUUID();
+    const insufficient = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: insufficientActionId,
+        rollActionId: "strike",
+        visibility: "PUBLIC",
+      },
+    });
+    expect(insufficient.statusCode).toBe(409);
+    expect(insufficient.json()).toMatchObject({
+      error: "INSUFFICIENT_CHARACTER_RESOURCE",
+      resource: "physical",
+      required: 2,
+      available: 1,
+    });
+    const [afterFailure] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(afterFailure!.resources).toEqual(afterSuccess!.resources);
+    const failureEvents = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, insufficientActionId));
+    expect(failureEvents).toHaveLength(0);
+  });
+
   it("returns one canonical DTO to concurrent counter action replays", async () => {
     const actionId = crypto.randomUUID();
     const request = () =>

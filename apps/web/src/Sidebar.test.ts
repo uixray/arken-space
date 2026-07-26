@@ -28,7 +28,7 @@ const message = (id: string, stream: "TABLE" | "ROLLS", sequence: number) =>
 describe("unified activity feed routing", () => {
   it("maps TABLE notification and deep-link requests to the activity feed", () => {
     expect(feedForChatStream("TABLE")).toBe("ACTIVITY");
-    expect(feedForChatStream("ROLLS")).toBe("ROLLS");
+    expect(feedForChatStream("ROLLS")).toBe("ACTIVITY");
   });
 
   it("reads the latest visible TABLE sequence while the activity feed is active", () => {

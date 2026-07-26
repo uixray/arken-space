@@ -40,6 +40,9 @@ describe("normalizeLegacyStats", () => {
     ).toEqual({
       intelligence: 9,
       willpower: 5,
+      reaction: 0,
+      attention: 0,
+      magicPower: 0,
     });
   });
 });

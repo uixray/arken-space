@@ -6379,6 +6379,40 @@ export function registerRoutes(
         )
           return reply.code(409).send({ error: "NO_ABILITY_USES" });
       }
+      const cost = mode === "EXECUTE" ? action?.cost : undefined;
+      const resourceKey =
+        cost?.type === "physical"
+          ? "physicalPower"
+          : cost?.type === "magic"
+            ? "magicPower"
+            : null;
+      const resources =
+        row.character.resources && typeof row.character.resources === "object"
+          ? (row.character.resources as Record<
+              string,
+              { current: number; maximum?: number }
+            >)
+          : {};
+      const resourceBefore = resourceKey
+        ? (resources[resourceKey]?.current ?? 0)
+        : null;
+      if (cost && resourceBefore !== null && resourceBefore < cost.amount)
+        return reply.code(409).send({
+          error: "INSUFFICIENT_CHARACTER_RESOURCE",
+          resource: cost.type,
+          required: cost.amount,
+          available: resourceBefore,
+        });
+      const afterResources =
+        cost && resourceKey && resourceBefore !== null
+          ? {
+              ...resources,
+              [resourceKey]: {
+                ...resources[resourceKey],
+                current: resourceBefore - cost.amount,
+              },
+            }
+          : resources;
       const uses = parsedData.data.uses;
       const afterUses =
         mode === "EXECUTE" && action?.consumeUse && uses
@@ -6411,6 +6445,7 @@ export function registerRoutes(
               dice: action.dice,
               advantage: action.advantage,
               consumeUse: action.consumeUse,
+              cost: action.cost,
             }
           : null,
         formula,
@@ -6431,6 +6466,23 @@ export function registerRoutes(
       } | null;
       try {
         saved = await db.transaction(async (tx) => {
+          if (cost && resourceKey) {
+            const [resourceUpdated] = await tx
+              .update(characters)
+              .set({
+                resources: afterResources,
+                revision: row.character.revision + 1,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(characters.id, row.character.id),
+                  eq(characters.revision, row.character.revision),
+                ),
+              )
+              .returning({ id: characters.id });
+            if (!resourceUpdated) return null;
+          }
           if (mode === "EXECUTE" && action?.consumeUse) {
             const [updated] = await tx
               .update(characterCatalogEntries)
@@ -6481,7 +6533,18 @@ export function registerRoutes(
                 mode === "EXECUTE" && action?.consumeUse
                   ? row.entry.revision + 1
                   : row.entry.revision,
-              payload: { skillCard, messageId: message.id },
+              payload: {
+                skillCard,
+                messageId: message.id,
+                resourceCost: cost
+                  ? {
+                      type: cost.type,
+                      amount: cost.amount,
+                      before: resourceBefore,
+                      after: resourceBefore! - cost.amount,
+                    }
+                  : null,
+              },
             })
             .returning();
           if (!event) throw new Error("EVENT_RECORD_FAILED");

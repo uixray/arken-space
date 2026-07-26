@@ -33,8 +33,7 @@ describe("parseComposerInput", () => {
     expect(parseComposerInput("/agility", stats)).toEqual({
       kind: "ROLL",
       formula: "1d20 + agility",
-      label:
-        "Проверка: Ловкость",
+      label: "Проверка: Ловкость",
     });
     expect(parseComposerInput("/knowledge", stats)).toEqual({
       kind: "TEXT",
@@ -69,7 +68,7 @@ describe("getSlashCommandSuggestions", () => {
       expect.objectContaining({
         command: "/roll",
         example: "/roll 1d20 + agility",
-        insertion: "/roll ",
+        insertion: "/roll 1d20 + agility",
       }),
     ]);
     expect(getSlashCommandSuggestions("/d")).toEqual([
@@ -79,11 +78,23 @@ describe("getSlashCommandSuggestions", () => {
     expect(getSlashCommandSuggestions("/ag", { agility: 4 })).toEqual([
       expect.objectContaining({
         command: "/agility",
-        description:
-          "Ловкость: бросок 1d20 + 4",
+        description: "Ловкость: бросок 1d20 + 4",
         insertion: "/agility",
       }),
     ]);
+  });
+
+  it("offers the standard magic power characteristic without duplicates", () => {
+    const suggestions = getSlashCommandSuggestions("/", { magicPower: 5 });
+    expect(
+      suggestions.filter((item) => item.command === "/magicPower"),
+    ).toHaveLength(1);
+    expect(parseComposerInput("/magicPower", { magicPower: 5 })).toEqual({
+      kind: "ROLL",
+      formula: "1d20 + magicPower",
+      label:
+        "Проверка: Сила магии",
+    });
   });
 
   it("hides suggestions for messages and completed command arguments", () => {

@@ -7,11 +7,13 @@ export function RollModeControl({
   onChange,
   disabled = false,
   label = "Режим броска",
+  iconOnly = false,
 }: {
   value: RollMode | undefined;
   onChange: (value: RollMode) => void;
   disabled?: boolean;
   label?: string;
+  iconOnly?: boolean;
 }) {
   const labelId = useId();
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -33,13 +35,15 @@ export function RollModeControl({
 
   return (
     <fieldset
-      className="roll-mode-control"
+      className={`roll-mode-control${iconOnly ? " roll-mode-control--icons" : ""}`}
       role="radiogroup"
       aria-labelledby={labelId}
       aria-disabled={disabled || undefined}
       disabled={disabled}
     >
-      <legend id={labelId}>{label}</legend>
+      <legend id={labelId} className={iconOnly ? "sr-only" : undefined}>
+        {label}
+      </legend>
       <div className="roll-mode-segments">
         {rollModeOptions.map((option, index) => (
           <button
@@ -52,10 +56,18 @@ export function RollModeControl({
             aria-checked={value === option.value}
             tabIndex={index === tabStopIndex ? 0 : -1}
             className={value === option.value ? "is-active" : undefined}
+            aria-label={option.label}
+            title={option.label}
             onClick={() => onChange(option.value)}
             onKeyDown={selectFromKeyboard}
           >
-            {option.label}
+            {iconOnly
+              ? option.value === "ADVANTAGE"
+                ? "↑"
+                : option.value === "DISADVANTAGE"
+                  ? "↓"
+                  : "●"
+              : option.label}
           </button>
         ))}
       </div>

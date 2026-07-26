@@ -162,6 +162,12 @@ export const rollActionSchema = z.object({
   order: z.number().int().min(0).max(1000),
   advantage: z.boolean().default(false),
   consumeUse: z.boolean().default(false),
+  cost: z
+    .object({
+      type: z.enum(["physical", "magic"]),
+      amount: z.number().int().positive().max(100000),
+    })
+    .optional(),
 });
 export const rechargePeriodSchema = z.enum(["DAY", "BATTLE", "WEEK"]);
 export const abilityUsesSchema = z
@@ -212,6 +218,9 @@ export const fixedCharacteristicsSchema = z.object({
   intelligence: z.number().finite(),
   willpower: z.number().finite(),
   charisma: z.number().finite(),
+  reaction: z.number().finite(),
+  attention: z.number().finite(),
+  magicPower: z.number().finite(),
 });
 
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });

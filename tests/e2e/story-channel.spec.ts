@@ -81,8 +81,9 @@ test("GM drafts, publishes, corrects and archives a story post through refreshed
   });
   await page.route(`**/api/story/posts/${ids.post}/publish`, async (route) => {
     expect(route.request().method()).toBe("POST");
-    expect(route.request().postDataJSON()).toMatchObject({ revision: 1 });
-    posts = [adminPost("PUBLISHED", posts[0].body, 2)];
+    const revision = (route.request().postDataJSON() as { revision: number }).revision;
+    expect([1, 4]).toContain(revision);
+    posts = [adminPost("PUBLISHED", posts[0].body, revision + 1)];
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(posts[0]) });
   });
   await page.route(`**/api/story/posts/${ids.post}`, async (route) => {
@@ -129,6 +130,8 @@ test("GM drafts, publishes, corrects and archives a story post through refreshed
   await expect(post).toContainText("The gates open for the whole party.");
   await post.locator(".story-post__actions button").last().click();
   await expect(post).toHaveAttribute("data-story-lifecycle", "ARCHIVED");
+  await post.getByRole("button", { name: "Восстановить" }).click();
+  await expect(post).toHaveAttribute("data-story-lifecycle", "PUBLISHED");
 });
 
 test("player sees only safe published story cards in a read-only channel", async ({ page }) => {

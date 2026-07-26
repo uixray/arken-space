@@ -176,15 +176,20 @@ export function StoryPost({
       )}
       {isGm && adminPost && (
         <div className="story-post__actions">
-          {adminPost.lifecycle === "DRAFT" && onPublish && (
+          {(adminPost.lifecycle === "DRAFT" || adminPost.lifecycle === "ARCHIVED") &&
+            onPublish && (
             <button
               type="button"
               disabled={pending !== null}
               onClick={() => void transition("publish")}
             >
               {pending === "publish"
-                ? "Публикуем\u2026"
-                : "Опубликовать"}
+                ? adminPost.lifecycle === "ARCHIVED"
+                  ? "Восстанавливаем…"
+                  : "Публикуем…"
+                : adminPost.lifecycle === "ARCHIVED"
+                  ? "Восстановить"
+                  : "Опубликовать"}
             </button>
           )}
           {adminPost.lifecycle !== "ARCHIVED" && onUpdate && !editing && (
@@ -432,7 +437,7 @@ export function StoryChannel({
             <textarea
               value={body}
               disabled={busy}
-              placeholder="Продолжить историю\u2026"
+              placeholder="Текст новой публикации…"
               rows={4}
               onChange={(event) => setBody(event.target.value)}
               onKeyDown={(event) => {

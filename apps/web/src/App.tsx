@@ -14,6 +14,7 @@ import type {
   MessageVisibility,
   StoryPostAdminDto,
   StoryPostDto,
+  TokenDto,
 } from "@arken/contracts";
 import { api, ApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
@@ -75,42 +76,48 @@ function CanvasRollOverlay({
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
   return (
     <section className="canvas-roll-overlay" aria-label="Быстрые броски">
-      <div className="canvas-roll-dice" aria-label="Кости">
-        {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
-          <button
-            key={sides}
-            type="button"
-            onClick={() =>
-              void onRoll(
-                `1d${sides}`,
-                `d${sides}`,
-                visibility,
-                characterId,
-                rollMode,
-              )
-            }
-          >
-            d{sides}
-          </button>
-        ))}
-      </div>
-      <RollModeControl
-        value={rollMode}
-        onChange={setRollMode}
-        label={
-          "Режим быстрого броска"
-        }
-      />
-      <label className="compact-check">
-        <input
-          type="checkbox"
-          checked={visibility === "GM_ONLY"}
-          onChange={(event) =>
-            setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
-          }
+      <div className="canvas-roll-row">
+        <RollModeControl
+          value={rollMode}
+          onChange={setRollMode}
+          label="Режим броска"
+          iconOnly
         />
-        Только мастеру
-      </label>
+        <div className="canvas-roll-dice" aria-label="Кости">
+          {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
+            <button
+              key={sides}
+              type="button"
+              title={`Бросить d${sides}`}
+              onClick={() =>
+                void onRoll(
+                  `1d${sides}`,
+                  `d${sides}`,
+                  visibility,
+                  characterId,
+                  rollMode,
+                )
+              }
+            >
+              d{sides}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="canvas-roll-gm-toggle"
+          aria-label="Бросок только мастеру"
+          title="Бросок только мастеру"
+          aria-pressed={visibility === "GM_ONLY"}
+          onClick={() =>
+            setVisibility((current) =>
+              current === "GM_ONLY" ? "PUBLIC" : "GM_ONLY",
+            )
+          }
+        >
+          <span aria-hidden="true">◆</span>
+        </button>
+      </div>
     </section>
   );
 }
@@ -338,6 +345,17 @@ export function App() {
   // A GM may inspect and prepare another scene without moving the players.
   // The server-side `active` flag remains the broadcast scene.
   const [viewedSceneId, setViewedSceneId] = useState<string | null>(null);
+  const [recentlyPublishedSceneId, setRecentlyPublishedSceneId] = useState<
+    string | null
+  >(null);
+  useEffect(() => {
+    if (!recentlyPublishedSceneId) return;
+    const timeout = window.setTimeout(
+      () => setRecentlyPublishedSceneId(null),
+      4000,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [recentlyPublishedSceneId]);
   const [gridPreview, setGridPreview] = useState<
     import("@arken/contracts").SceneDto["grid"] | null
   >(null);
@@ -651,9 +669,10 @@ export function App() {
           ? {
               ...current,
               snapshotVersion: event.sequence,
-              characters: current.characters.map((item) =>
-                item.id === event.data.id ? event.data : item,
-              ),
+              characters: current.characters.map((item) => {
+                if (item.id !== event.data.id) return item;
+                return mergeCharacterMutationResponse(item, event.data) ?? item;
+              }),
             }
           : current,
       ),
@@ -703,9 +722,7 @@ export function App() {
       return await action();
     } catch (reason) {
       setError(
-        reason instanceof Error
-          ? reason.message
-          : "Операция не выполнена",
+        reason instanceof Error ? reason.message : "Операция не выполнена",
       );
       throw reason;
     }
@@ -808,26 +825,28 @@ export function App() {
       characterMutationQueuesRef.current.get(id) ?? Promise.resolve(undefined);
     const operation = previous.then(async (previousCharacter) => {
       const { revision: _revision, ...updates } = patch;
-      const updated = await api<import("@arken/contracts").CharacterDto>(
-        `/api/characters/${id}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            ...updates,
-            actionId: crypto.randomUUID(),
-            revision: previousCharacter?.revision ?? requestedRevision,
-          }),
-        },
-      );
+      const base =
+        previousCharacter ??
+        snapshot?.characters.find((character) => character.id === id);
+      if (!base) throw new Error("CHARACTER_NOT_FOUND");
+      const response = await api<unknown>(`/api/characters/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...updates,
+          actionId: crypto.randomUUID(),
+          revision: base.revision ?? requestedRevision,
+        }),
+      });
+      let updated = mergeCharacterMutationResponse(base, response);
+      if (!updated) {
+        const refreshed = await api<GameSnapshot>("/api/bootstrap");
+        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
+        updated =
+          refreshed.characters.find((character) => character.id === id) ?? null;
+      }
+      if (!updated) throw new Error("CHARACTER_NOT_FOUND");
       setSnapshot((current) =>
-        current
-          ? {
-              ...current,
-              characters: current.characters.map((character) =>
-                character.id === id ? updated : character,
-              ),
-            }
-          : current,
+        applyCharacterMutationToSnapshot(current, updated),
       );
       return updated;
     });
@@ -917,9 +936,7 @@ export function App() {
           (character) => character.id === characterId,
         );
         if (!replayed)
-          throw new Error(
-            "Персонаж больше не доступен. Обновите страницу.",
-          );
+          throw new Error("Персонаж больше не доступен. Обновите страницу.");
         return replayed;
       };
       if (!canonical) {
@@ -1043,41 +1060,102 @@ export function App() {
           )}
         </div>
         <div className="scene-switcher">
-          <select
-            aria-label={
-              snapshot.me.role === "GM"
-                ? "Просматриваемая сцена"
-                : "Активная сцена"
-            }
-            value={activeScene?.id ?? ""}
-            disabled={Boolean(previewSnapshot) || snapshot.me.role !== "GM"}
-            onChange={(event) => setViewedSceneId(event.target.value)}
-          >
-            {viewSnapshot.scenes.map((scene) => {
-              const tokenCount = viewSnapshot.tokens.filter(
-                (token) => token.sceneId === scene.id,
-              ).length;
-              return (
-                <option key={scene.id} value={scene.id}>
-                  {scene.name} · {tokenCount} токенов
-                </option>
-              );
-            })}
-          </select>
+          {snapshot.me.role === "GM" && !previewSnapshot ? (
+            <details className="scene-picker">
+              <summary
+                aria-label="Выбрать просматриваемую сцену"
+                aria-haspopup="listbox"
+              >
+                {activeScene?.mapAssetId &&
+                viewSnapshot.assets.find(
+                  (asset) => asset.id === activeScene.mapAssetId,
+                ) ? (
+                  <img
+                    src={
+                      viewSnapshot.assets.find(
+                        (asset) => asset.id === activeScene.mapAssetId,
+                      )!.url
+                    }
+                    alt=""
+                  />
+                ) : (
+                  <span
+                    className="scene-picker__placeholder"
+                    aria-hidden="true"
+                  />
+                )}
+                <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
+                <span aria-hidden="true">⌄</span>
+              </summary>
+              <div
+                className="scene-picker__menu"
+                role="listbox"
+                aria-label="Сцены"
+              >
+                {viewSnapshot.scenes.map((scene) => {
+                  const background = viewSnapshot.assets.find(
+                    (asset) => asset.id === scene.mapAssetId,
+                  );
+                  const tokenCount = viewSnapshot.tokens.filter(
+                    (token) => token.sceneId === scene.id,
+                  ).length;
+                  return (
+                    <button
+                      key={scene.id}
+                      type="button"
+                      role="option"
+                      aria-selected={scene.id === activeScene?.id}
+                      onClick={(event) => {
+                        setViewedSceneId(scene.id);
+                        event.currentTarget
+                          .closest("details")
+                          ?.removeAttribute("open");
+                      }}
+                    >
+                      {background ? (
+                        <img src={background.url} alt="" />
+                      ) : (
+                        <span
+                          className="scene-picker__placeholder"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span>
+                        <strong>{scene.name}</strong>
+                        <small>{tokenCount} токенов</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </details>
+          ) : (
+            <div
+              className="scene-picker scene-picker--readonly"
+              aria-label="Активная сцена"
+            >
+              <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
+            </div>
+          )}
           {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
             <button
               className="topbar-icon-button publish-scene"
               aria-label={
-                activeScene.id === broadcastScene?.id
+                activeScene.id === broadcastScene?.id ||
+                activeScene.id === recentlyPublishedSceneId
                   ? "Сцена уже показана игрокам"
                   : "Показать выбранную сцену игрокам"
               }
               title={
-                activeScene.id === broadcastScene?.id
+                activeScene.id === broadcastScene?.id ||
+                activeScene.id === recentlyPublishedSceneId
                   ? "Сцена у игроков"
                   : "Показать выбранную сцену игрокам"
               }
-              aria-pressed={activeScene.id === broadcastScene?.id}
+              aria-pressed={
+                activeScene.id === broadcastScene?.id ||
+                activeScene.id === recentlyPublishedSceneId
+              }
               onClick={() => {
                 void run(async () => {
                   await api("/api/scenes/activate", {
@@ -1087,6 +1165,7 @@ export function App() {
                       sceneId: activeScene.id,
                     }),
                   });
+                  setRecentlyPublishedSceneId(activeScene.id);
                   notify({
                     title: "Игроки перемещены",
                     message: `Активная сцена: ${activeScene.name}`,
@@ -1637,18 +1716,33 @@ export function App() {
                     }),
                   )
                 }
-                onTokenResize={(tokenId, revision, size) =>
-                  run(() =>
-                    api(`/api/tokens/${tokenId}/size`, {
-                      method: "PATCH",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision,
-                        ...size,
+                onTokenResize={async (tokenId, revision, size) => {
+                  try {
+                    const updated = await runResult(() =>
+                      api<TokenDto>(`/api/tokens/${tokenId}/size`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          revision,
+                          ...size,
+                        }),
                       }),
-                    }),
-                  )
-                }
+                    );
+                    setSnapshot((current) =>
+                      current
+                        ? {
+                            ...current,
+                            tokens: current.tokens.map((token) =>
+                              token.id === updated.id ? updated : token,
+                            ),
+                          }
+                        : current,
+                    );
+                  } catch (reason) {
+                    await load();
+                    throw reason;
+                  }
+                }}
                 onTokenAppearanceChange={(tokenId, revision, appearance) =>
                   run(() =>
                     api(`/api/tokens/${tokenId}/appearance`, {
@@ -2002,7 +2096,7 @@ export function App() {
               });
               await loadStoryPosts();
             }}
-            onChat={async (body, visibility, stream) =>
+            onChat={async (body, visibility, stream, characterId) =>
               run(() =>
                 api("/api/chat", {
                   method: "POST",
@@ -2011,7 +2105,7 @@ export function App() {
                     body,
                     visibility,
                     stream,
-                    characterId: snapshot.me.characterId,
+                    characterId: characterId ?? snapshot.me.characterId,
                   }),
                 }),
               )

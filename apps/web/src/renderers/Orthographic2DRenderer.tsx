@@ -16,6 +16,7 @@ import { isRectFullyRevealed } from "./fog";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   canMoveMapToken,
+  clearSettledTokenResizeDraft,
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
@@ -170,6 +171,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [dragPositions, setDragPositions] = useState<
     Record<string, { x: number; y: number; revision: number }>
   >({});
+  const [resizeDrafts, setResizeDrafts] = useState<
+    Record<string, { width: number; height: number; revision: number }>
+  >({});
   const [fogStart, setFogStart] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -252,6 +256,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           pending &&
           (token.revision > pending.revision ||
             (token.x === pending.x && token.y === pending.y))
+        ) {
+          delete next[token.id];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [props.tokens]);
+  useEffect(() => {
+    setResizeDrafts((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const token of props.tokens) {
+        const pending = next[token.id];
+        if (
+          pending &&
+          (token.revision > pending.revision ||
+            (token.width === pending.width && token.height === pending.height))
         ) {
           delete next[token.id];
           changed = true;
@@ -980,9 +1002,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           ref={objectListRef}
           className="map-object-list-popover"
           role="region"
-          aria-label={
-            "Объекты карты"
-          }
+          aria-label={"Объекты карты"}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <ul className="map-object-list">
@@ -1008,9 +1028,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   className="map-object-list__action"
                   type="button"
                   aria-label={`Дублировать: ${token.name}`}
-                  title={
-                    "Дублировать"
-                  }
+                  title={"Дублировать"}
                   onClick={() =>
                     void props.onPlaceTokenDefinition?.(token.definitionId, {
                       x:
@@ -1069,9 +1087,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     type="button"
                     disabled={!canCopy}
                     aria-label={`Дублировать: ${label}`}
-                    title={
-                      "Дублировать"
-                    }
+                    title={"Дублировать"}
                     onClick={() =>
                       void props.onDrawingCopy?.(drawing.id, drawing.revision)
                     }
@@ -1099,13 +1115,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             })}
             {selectableObjects.tokens.length +
               selectableObjects.drawings.length ===
-              0 && (
-              <li>
-                {
-                  "На карте пока нет объектов."
-                }
-              </li>
-            )}
+              0 && <li>{"На карте пока нет объектов."}</li>}
           </ul>
         </div>
       )}
@@ -1524,7 +1534,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             .sort((a, b) =>
               a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
             )
-            .map((token) => {
+            .map((sourceToken) => {
+              const token = resizeDrafts[sourceToken.id]
+                ? { ...sourceToken, ...resizeDrafts[sourceToken.id] }
+                : sourceToken;
               const canMove = canMoveMapToken({
                 tool: props.tool,
                 role: props.role,
@@ -1757,17 +1770,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           const aspect = token.width / token.height;
                           const width = Math.max(16, event.target.x());
                           const height = Math.max(16, width / aspect);
-                          event.target.position({ x: width, y: height });
-                          event.target
-                            .getParent()
-                            ?.getChildren()
-                            .filter((child) => child !== event.target)
-                            .forEach((child) =>
-                              child.scale({
-                                x: width / token.width,
-                                y: height / token.height,
-                              }),
-                            );
+                          setResizeDrafts((current) => ({
+                            ...current,
+                            [token.id]: {
+                              width,
+                              height,
+                              revision: token.revision,
+                            },
+                          }));
                         }}
                         onDragEnd={(event) => {
                           const width = Math.round(
@@ -1776,19 +1786,36 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           const height = Math.round(
                             width / (token.width / token.height),
                           );
-                          event.target
-                            .getParent()
-                            ?.getChildren()
-                            .filter((child) => child !== event.target)
-                            .forEach((child) => child.scale({ x: 1, y: 1 }));
-                          event.target.position({
-                            x: token.width,
-                            y: token.height,
-                          });
-                          void props.onTokenResize?.(token.id, token.revision, {
+
+                          const expected = {
                             width,
                             height,
-                          });
+                            revision: token.revision,
+                          };
+                          const request = props.onTokenResize?.(
+                            token.id,
+                            token.revision,
+                            { width, height },
+                          );
+                          if (!request) {
+                            setResizeDrafts((current) =>
+                              clearSettledTokenResizeDraft(
+                                current,
+                                token.id,
+                                expected,
+                              ),
+                            );
+                            return;
+                          }
+                          void request.catch(() =>
+                            setResizeDrafts((current) =>
+                              clearSettledTokenResizeDraft(
+                                current,
+                                token.id,
+                                expected,
+                              ),
+                            ),
+                          );
                         }}
                       />
                     )}
@@ -1964,9 +1991,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         return (
           <aside
             className="drawing-color-panel"
-            aria-label={
-              "Панель цвета рисунка"
-            }
+            aria-label={"Панель цвета рисунка"}
           >
             <span className="drawing-color-controls">
               <span
@@ -2060,12 +2085,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           aria-label="Уменьшить масштаб"
           onClick={() => zoomAtCenter(scale - 0.1)}
         >
-          в€’
+          −
         </button>
         {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
         {props.role === "GM" && (
           <label>
             <input
+              aria-label="Показывать скрытый слой мастера"
+              title="Показывать скрытый слой мастера"
               type="checkbox"
               checked={showGmLayer}
               onChange={(event) => setShowGmLayer(event.target.checked)}

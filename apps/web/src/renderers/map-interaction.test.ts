@@ -1,6 +1,7 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   canMoveMapToken,
+  clearSettledTokenResizeDraft,
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
@@ -201,5 +202,17 @@ describe("mapInteractionReducer", () => {
     state = mapInteractionReducer(state, { type: "escape" });
     expect(state.selectedObject).toBeNull();
     expect(mapInteractionReducer(state, { type: "escape" })).toBe(state);
+  });
+  it("clears only the resize request that actually settled", () => {
+    const latest = { width: 96, height: 96, revision: 4 };
+    const drafts = { token: latest };
+    expect(
+      clearSettledTokenResizeDraft(drafts, "token", {
+        width: 64,
+        height: 64,
+        revision: 3,
+      }),
+    ).toBe(drafts);
+    expect(clearSettledTokenResizeDraft(drafts, "token", latest)).toEqual({});
   });
 });

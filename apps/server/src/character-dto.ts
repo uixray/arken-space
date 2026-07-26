@@ -1,4 +1,5 @@
 import type { CharacterDto } from "@arken/contracts";
+import { arkenSystem } from "@arken/system";
 import { characterCatalogEntries, characters } from "@arken/db";
 import {
   normalizeLegacyEntryData,
@@ -38,7 +39,14 @@ export function characterDto(
     ownerMembershipId: character.ownerMembershipId,
     portraitAssetId: character.portraitAssetId,
     stats: normalizeLegacyStats(character.stats),
-    skills: Array.isArray(character.skills) ? character.skills : [],
+    skills: (() => {
+      const existing = Array.isArray(character.skills) ? character.skills : [];
+      const keys = new Set(existing.map((skill) => skill.key));
+      return [
+        ...existing,
+        ...arkenSystem.starterSkills.filter((skill) => !keys.has(skill.key)),
+      ];
+    })(),
     spells: Array.isArray(character.spells) ? character.spells : [],
     notes: character.notes,
     backstory: character.backstory,

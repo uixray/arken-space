@@ -276,3 +276,27 @@ export function resolveMapToolShortcut(
   if (shiftKey) return null;
   return TOOL_SHORTCUTS[normalized] ?? null;
 }
+
+export type TokenResizeDraft = {
+  width: number;
+  height: number;
+  revision: number;
+};
+
+export function clearSettledTokenResizeDraft(
+  drafts: Readonly<Record<string, TokenResizeDraft>>,
+  tokenId: string,
+  expected: TokenResizeDraft,
+): Record<string, TokenResizeDraft> {
+  const current = drafts[tokenId];
+  if (
+    !current ||
+    current.revision !== expected.revision ||
+    current.width !== expected.width ||
+    current.height !== expected.height
+  )
+    return drafts;
+  const next = { ...drafts };
+  delete next[tokenId];
+  return next;
+}

@@ -921,8 +921,8 @@ test("GM prepares a scene locally before publishing it to players", async ({
     hasText: "Тайная комната",
   });
   await secretCard.getByRole("button", { name: "Открыть для мастера" }).click();
-  await expect(page.locator(".scene-switcher select")).toHaveValue(
-    "8476b502-02f8-4cd6-9c55-3816d70d44dc",
+  await expect(page.locator(".scene-picker summary")).toContainText(
+    "Тайная комната",
   );
   await expect(secretCard.getByText("Просматривается мастером")).toBeVisible();
   expect(publishedSceneId).toBe("");
@@ -994,7 +994,11 @@ test("canvas tools stay selected and token placement targets the GM viewed scene
   });
   await page.goto("/");
 
-  await page.locator(".scene-switcher select").selectOption(viewedSceneId);
+  await page.locator(".scene-picker summary").click();
+  await page
+    .locator('.scene-picker [role="option"]')
+    .filter({ hasText: "Секретная сцена" })
+    .click();
   await page.locator(".token-tray summary").click();
   await page
     .locator(".token-tray")

@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useMemo,
   useReducer,
@@ -50,6 +50,7 @@ import {
   characterWorkspaceReducer,
   createCharacterWorkspaceState,
   MAX_OPEN_CHARACTER_SHEETS,
+  uniqueCharacterIds,
 } from "./character-workspace-state";
 import { buildChatTimeline } from "./chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "./dice-result";
@@ -89,12 +90,22 @@ import {
   messagesForDirectThread,
 } from "./direct-chat-state";
 import { activityTableReadTarget, feedForChatStream } from "./sidebar-feed";
+import {
+  charactersAvailableForActivityRolls,
+  filterActivityEvents,
+  formulaBonus,
+  physicalDiceStorageKey,
+  physicalRollChatRequest,
+  type ActivityFilter,
+} from "./activity-roll-controls";
 
 type SidebarFeed = "ACTIVITY" | ChatStream;
 
 const CHAT_FEED_ORDER: readonly SidebarFeed[] = [
   "ACTIVITY",
-  ...CHAT_STREAM_ORDER.filter((stream) => stream !== "TABLE"),
+  ...CHAT_STREAM_ORDER.filter(
+    (stream) => stream !== "TABLE" && stream !== "ROLLS",
+  ),
 ];
 
 function nextChatFeed(current: SidebarFeed, key: string): SidebarFeed | null {
@@ -150,6 +161,7 @@ type Props = {
     body: string,
     visibility: MessageVisibility,
     stream: ChatStream,
+    characterId?: string | null,
   ) => Promise<void>;
   onCreateDirectThread: (
     participantMembershipId: string,
@@ -478,36 +490,36 @@ export function Sidebar(props: Props) {
         >
           {"События"}
         </Button>
-        {CHAT_STREAM_ORDER.filter((stream) => stream !== "TABLE").map(
-          (stream) => {
-            const unread = unreadCountForStream(props.snapshot, stream);
-            return (
-              <Button
-                key={stream}
-                view="flat"
-                role="tab"
-                id={`chat-tab-${stream.toLowerCase()}`}
-                aria-controls={`chat-panel-${stream.toLowerCase()}`}
-                aria-selected={!directMode && activeFeed === stream}
-                tabIndex={!directMode && activeFeed === stream ? 0 : -1}
-                onClick={() => {
-                  setDirectMode(false);
-                  setActiveFeed(stream);
-                }}
-              >
-                {CHAT_STREAM_LABEL[stream]}
-                {unread > 0 && (
-                  <span
-                    className="chat-unread-badge"
-                    aria-label={`${unread} непрочитанных`}
-                  >
-                    {unread}
-                  </span>
-                )}
-              </Button>
-            );
-          },
-        )}
+        {CHAT_STREAM_ORDER.filter(
+          (stream) => stream !== "TABLE" && stream !== "ROLLS",
+        ).map((stream) => {
+          const unread = unreadCountForStream(props.snapshot, stream);
+          return (
+            <Button
+              key={stream}
+              view="flat"
+              role="tab"
+              id={`chat-tab-${stream.toLowerCase()}`}
+              aria-controls={`chat-panel-${stream.toLowerCase()}`}
+              aria-selected={!directMode && activeFeed === stream}
+              tabIndex={!directMode && activeFeed === stream ? 0 : -1}
+              onClick={() => {
+                setDirectMode(false);
+                setActiveFeed(stream);
+              }}
+            >
+              {CHAT_STREAM_LABEL[stream]}
+              {unread > 0 && (
+                <span
+                  className="chat-unread-badge"
+                  aria-label={`${unread} непрочитанных`}
+                >
+                  {unread}
+                </span>
+              )}
+            </Button>
+          );
+        })}
         <Button
           view="flat"
           role="tab"
@@ -669,17 +681,20 @@ export function CharacterWorkspace({
   onClose,
   ...props
 }: Props & { onClose: () => void }) {
-  const characters = useMemo(
-    () =>
+  const characters = useMemo(() => {
+    const visible =
       props.snapshot.me.role === "GM"
         ? props.snapshot.characters
         : props.snapshot.characters.filter(
             (character) =>
               character.ownerMembershipId === props.snapshot.me.id ||
               character.id === props.snapshot.me.characterId,
-          ),
-    [props.snapshot.characters, props.snapshot.me],
-  );
+          );
+    const byId = new Map(visible.map((character) => [character.id, character]));
+    return uniqueCharacterIds(visible.map((character) => character.id))
+      .map((id) => byId.get(id))
+      .filter((character): character is CharacterDto => Boolean(character));
+  }, [props.snapshot.characters, props.snapshot.me]);
   const [state, dispatch] = useReducer(
     characterWorkspaceReducer,
     characters.map((character) => character.id),
@@ -940,6 +955,17 @@ export function CharacterPanel({
   const [rollMode, setRollMode] = useState<RollMode>();
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
+  const [characterMutationError, setCharacterMutationError] = useState("");
+  const runCharacterMutation = async (action: () => Promise<unknown>) => {
+    setCharacterMutationError("");
+    try {
+      await action();
+    } catch {
+      setCharacterMutationError(
+        "Не удалось сохранить изменения персонажа. Повторите попытку.",
+      );
+    }
+  };
   const [entryEditor, setEntryEditor] = useState<
     CharacterDto["entries"][number] | null
   >(null);
@@ -1053,6 +1079,11 @@ export function CharacterPanel({
   };
   return (
     <section className="panel-section">
+      {characterMutationError && (
+        <p className="field-error" role="alert">
+          {characterMutationError}
+        </p>
+      )}
       {showCharacterPicker && snapshot.me.role === "GM" && (
         <label className="field">
           Персонаж
@@ -1091,10 +1122,12 @@ export function CharacterPanel({
         <FormSelect
           value={character.portraitAssetId ?? ""}
           onChange={(event) =>
-            void onPatch(character.id, {
-              portraitAssetId: event.target.value || null,
-              revision: character.revision,
-            })
+            void runCharacterMutation(() =>
+              onPatch(character.id, {
+                portraitAssetId: event.target.value || null,
+                revision: character.revision,
+              }),
+            )
           }
         >
           <option value="">Без портрета</option>
@@ -1114,15 +1147,17 @@ export function CharacterPanel({
       />
       <Button
         disabled={!portraitUpload}
-        onClick={async () => {
-          if (!portraitUpload) return;
-          const asset = await onUpload(portraitUpload, "PORTRAIT");
-          await onPatch(character.id, {
-            portraitAssetId: asset.id,
-            revision: character.revision,
-          });
-          setPortraitUpload(undefined);
-        }}
+        onClick={() =>
+          void runCharacterMutation(async () => {
+            if (!portraitUpload) return;
+            const asset = await onUpload(portraitUpload, "PORTRAIT");
+            await onPatch(character.id, {
+              portraitAssetId: asset.id,
+              revision: character.revision,
+            });
+            setPortraitUpload(undefined);
+          })
+        }
       >
         Загрузить и назначить
       </Button>
@@ -1161,10 +1196,12 @@ export function CharacterPanel({
           disabled={!editable}
           rows={8}
           onBlur={(event) =>
-            onPatch(character.id, {
-              backstory: event.target.value,
-              revision: character.revision,
-            })
+            void runCharacterMutation(() =>
+              onPatch(character.id, {
+                backstory: event.target.value,
+                revision: character.revision,
+              }),
+            )
           }
         />
       </details>
@@ -1194,10 +1231,12 @@ export function CharacterPanel({
               min={stat.min}
               max={stat.max}
               onBlur={(event) =>
-                onPatch(character.id, {
-                  stats: { [stat.key]: Number(event.target.value) },
-                  revision: character.revision,
-                })
+                void runCharacterMutation(() =>
+                  onPatch(character.id, {
+                    stats: { [stat.key]: Number(event.target.value) },
+                    revision: character.revision,
+                  }),
+                )
               }
             />
             <Button
@@ -1268,7 +1307,9 @@ export function CharacterPanel({
             defaultValue=""
             onChange={(event) => {
               if (event.target.value)
-                void onAssignEntry(character.id, event.target.value);
+                void runCharacterMutation(() =>
+                  onAssignEntry(character.id, event.target.value),
+                );
               event.target.value = "";
             }}
           >
@@ -1361,17 +1402,62 @@ export function CharacterPanel({
           disabled={!editable}
           rows={5}
           onBlur={(event) =>
-            onPatch(character.id, {
-              inventory: event.target.value
-                .split("\n")
-                .map((item) => item.trim())
-                .filter(Boolean),
-              revision: character.revision,
-            })
+            void runCharacterMutation(() =>
+              onPatch(character.id, {
+                inventory: event.target.value
+                  .split("\n")
+                  .map((item) => item.trim())
+                  .filter(Boolean),
+                revision: character.revision,
+              }),
+            )
           }
         />
       </label>
       <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
+      <div className="inline-fields character-power-controls">
+        {(["physicalPower", "magicPower"] as const).map((key) => {
+          const resource = character.resources[key] ?? {
+            current: 0,
+            maximum: 0,
+          };
+          return (
+            <span key={key}>
+              <b>
+                {key === "physicalPower" ? "Physical Power" : "Magic Power"}
+              </b>{" "}
+              {resource.current}/{resource.maximum ?? resource.current}
+            </span>
+          );
+        })}
+        <Button
+          disabled={!editable || countersPending > 0}
+          title={"Восстанавливает 25% максимума Physical Power, округляя вверх"}
+          onClick={() => {
+            const physical = character.resources.physicalPower ?? {
+              current: 0,
+              maximum: 0,
+            };
+            const maximum = physical.maximum ?? physical.current;
+            const current = Math.min(
+              maximum,
+              physical.current + Math.ceil(maximum * 0.25),
+            );
+            if (current === physical.current) return;
+            setCountersPending((count) => count + 1);
+            void onUpdateCounters(character.id, character.revision, {
+              resources: {
+                ...character.resources,
+                physicalPower: { ...physical, current, maximum },
+              },
+            }).finally(() =>
+              setCountersPending((count) => Math.max(0, count - 1)),
+            );
+          }}
+        >
+          {"Перевести дух (+25% Physical Power)"}
+        </Button>
+      </div>
       <label className="field">
         Ресурсы (JSON: имя → current/maximum)
         <FormTextArea
@@ -1583,6 +1669,26 @@ function ActivityPanel({
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
+  const availableRollCharacters = useMemo(
+    () => charactersAvailableForActivityRolls(snapshot),
+    [snapshot],
+  );
+  const [rollCharacterId, setRollCharacterId] = useState(
+    () => availableRollCharacters[0]?.id ?? "",
+  );
+  const rollCharacter =
+    availableRollCharacters.find(
+      (character) => character.id === rollCharacterId,
+    ) ?? availableRollCharacters[0];
+  const [physicalDice, setPhysicalDice] = useState(
+    () =>
+      window.localStorage.getItem(physicalDiceStorageKey(snapshot.me.id)) ===
+      "true",
+  );
+  const [activityFilters, setActivityFilters] = useState<Set<ActivityFilter>>(
+    () => new Set(["ROLLS", "STORY", "REFERENCE"]),
+  );
+  const [quickRollPending, setQuickRollPending] = useState(false);
   const characterStats =
     snapshot.characters.find(
       (character) => character.id === snapshot.me.characterId,
@@ -1590,6 +1696,25 @@ function ActivityPanel({
   const slashSuggestions = slashHelpOpen
     ? getSlashCommandSuggestions("/", characterStats)
     : getSlashCommandSuggestions(composer, characterStats);
+  const executeActivitySuggestion = (insertion: string) => {
+    const intent = parseComposerInput(insertion, characterStats);
+    setSlashHelpOpen(false);
+    if (intent.kind !== "ROLL") {
+      setComposer(insertion);
+      return;
+    }
+    setComposer("");
+    setComposerError("");
+    void onRoll(
+      intent.formula,
+      intent.label,
+      visibility,
+      snapshot.me.characterId,
+      "NORMAL",
+    ).catch(() =>
+      setComposerError("Не удалось выполнить бросок. Повторите попытку."),
+    );
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const intent = parseComposerInput(composer, characterStats);
@@ -1619,9 +1744,33 @@ function ActivityPanel({
   };
   const activityEvents = useMemo(
     () =>
-      buildActivityFeed(snapshot.messages, snapshot.chatThreads, storyPosts),
-    [snapshot.messages, snapshot.chatThreads, storyPosts],
+      filterActivityEvents(
+        buildActivityFeed(snapshot.messages, snapshot.chatThreads, storyPosts),
+        activityFilters,
+      ),
+    [activityFilters, snapshot.messages, snapshot.chatThreads, storyPosts],
   );
+  const submitQuickRoll = async (
+    formula: string,
+    label: string,
+    bonus: number,
+  ) => {
+    if (!rollCharacter) return;
+    setQuickRollPending(true);
+    setComposerError("");
+    try {
+      if (physicalDice) {
+        const request = physicalRollChatRequest(label, bonus, rollCharacter.id);
+        await onChat(request.body, visibility, "TABLE", request.characterId);
+      } else {
+        await onRoll(formula, label, visibility, rollCharacter.id, "NORMAL");
+      }
+    } catch {
+      setComposerError("Не удалось выполнить бросок. Повторите попытку.");
+    } finally {
+      setQuickRollPending(false);
+    }
+  };
   const timeline = useMemo(
     () => buildActivityTimeline(activityEvents),
     [activityEvents],
@@ -1651,6 +1800,111 @@ function ActivityPanel({
       id="chat-panel-activity"
       aria-labelledby="chat-tab-activity"
     >
+      <section className="activity-roll-controls" aria-label="Быстрые броски">
+        <div className="activity-roll-controls__heading">
+          <strong>Быстрые броски</strong>
+          {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
+            <FormSelect
+              aria-label="Персонаж для броска"
+              value={rollCharacter?.id ?? ""}
+              onChange={(event) => setRollCharacterId(event.target.value)}
+            >
+              {availableRollCharacters.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name}
+                </option>
+              ))}
+            </FormSelect>
+          )}
+          <label className="compact-check">
+            <FormInput
+              type="checkbox"
+              checked={physicalDice}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                setPhysicalDice(enabled);
+                window.localStorage.setItem(
+                  physicalDiceStorageKey(snapshot.me.id),
+                  String(enabled),
+                );
+              }}
+            />
+            Физические кубы
+          </label>
+        </div>
+        {rollCharacter ? (
+          <div className="activity-quick-rolls">
+            <Button
+              disabled={quickRollPending}
+              onClick={() =>
+                void submitQuickRoll(
+                  "1d20 + agility",
+                  "Инициатива",
+                  rollCharacter.stats.agility ?? 0,
+                )
+              }
+            >
+              Инициатива
+            </Button>
+            {arkenSystem.stats.map((stat) => (
+              <Button
+                key={stat.key}
+                disabled={quickRollPending}
+                onClick={() =>
+                  void submitQuickRoll(
+                    `1d20 + ${stat.key}`,
+                    stat.label,
+                    rollCharacter.stats[stat.key] ?? stat.defaultValue,
+                  )
+                }
+              >
+                {stat.label}
+              </Button>
+            ))}
+            {rollCharacter.skills.map((skill) => (
+              <Button
+                key={skill.key}
+                disabled={quickRollPending}
+                onClick={() =>
+                  void submitQuickRoll(
+                    skill.formula,
+                    skill.name,
+                    formulaBonus(skill.formula, rollCharacter.stats),
+                  )
+                }
+              >
+                {skill.name}
+              </Button>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">Нет доступного персонажа для броска.</p>
+        )}
+        <fieldset className="activity-filters">
+          <legend>Показывать</legend>
+          {(["ROLLS", "STORY", "REFERENCE"] as const).map((filter) => (
+            <label className="compact-check" key={filter}>
+              <FormInput
+                type="checkbox"
+                checked={activityFilters.has(filter)}
+                onChange={(event) =>
+                  setActivityFilters((current) => {
+                    const next = new Set(current);
+                    if (event.target.checked) next.add(filter);
+                    else next.delete(filter);
+                    return next;
+                  })
+                }
+              />
+              {filter === "ROLLS"
+                ? "Броски"
+                : filter === "STORY"
+                  ? "Сюжет"
+                  : "Справочные события"}
+            </label>
+          ))}
+        </fieldset>
+      </section>
       <div className="message-list" aria-live="polite" ref={listRef}>
         {timeline.length === 0 && (
           <p className="chat-empty">
@@ -1786,10 +2040,9 @@ function ActivityPanel({
                   type="button"
                   role="option"
                   aria-selected="false"
-                  onClick={() => {
-                    setComposer(suggestion.insertion);
-                    setSlashHelpOpen(false);
-                  }}
+                  onClick={() =>
+                    executeActivitySuggestion(suggestion.insertion)
+                  }
                 >
                   <strong>{suggestion.command}</strong>
                   <span>{suggestion.description}</span>
@@ -2134,6 +2387,25 @@ function ChatPanel({
         ? getSlashCommandSuggestions("/")
         : getSlashCommandSuggestions(composer)
       : [];
+  const executeChatSuggestion = (insertion: string) => {
+    const intent = parseComposerInput(insertion);
+    setSlashHelpOpen(false);
+    if (intent.kind !== "ROLL") {
+      setComposer(insertion);
+      return;
+    }
+    setComposer("");
+    setComposerError("");
+    void onRoll(
+      intent.formula,
+      intent.label,
+      visibility,
+      snapshot.me.characterId,
+      "NORMAL",
+    ).catch(() =>
+      setComposerError("Не удалось выполнить бросок. Повторите попытку."),
+    );
+  };
 
   useEffect(() => {
     followRef.current = true;
@@ -2368,10 +2640,9 @@ function ChatPanel({
                       type="button"
                       role="option"
                       aria-selected="false"
-                      onClick={() => {
-                        setComposer(suggestion.insertion);
-                        setSlashHelpOpen(false);
-                      }}
+                      onClick={() =>
+                        executeChatSuggestion(suggestion.insertion)
+                      }
                     >
                       <strong>{suggestion.command}</strong>
                       <span>{suggestion.description}</span>

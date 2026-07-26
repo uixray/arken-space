@@ -3,6 +3,7 @@ import {
   characterWorkspaceReducer,
   createCharacterWorkspaceState,
   MAX_OPEN_CHARACTER_SHEETS,
+  uniqueCharacterIds,
 } from "./character-workspace-state";
 
 describe("character workspace state", () => {
@@ -49,5 +50,11 @@ describe("character workspace state", () => {
       activeId: "one",
       collapsedIds: [],
     });
+  });
+});
+
+describe("character rail identity", () => {
+  it("deduplicates the same character delivered by HTTP and realtime", () => {
+    expect(uniqueCharacterIds(["one", "two", "one"])).toEqual(["one", "two"]);
   });
 });

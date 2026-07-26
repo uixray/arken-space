@@ -694,7 +694,11 @@ export function registerStoryRoutes(
       if (!current) return storyError(reply, "STORY_POST_NOT_FOUND", 404);
       if (current.revision !== body.revision)
         return storyError(reply, "STORY_POST_CONFLICT", 409);
-      if (target === "PUBLISHED" && current.lifecycle !== "DRAFT")
+      if (
+        target === "PUBLISHED" &&
+        current.lifecycle !== "DRAFT" &&
+        current.lifecycle !== "ARCHIVED"
+      )
         return storyError(reply, "STORY_POST_TRANSITION_INVALID", 409);
       if (target === "ARCHIVED" && current.lifecycle === "ARCHIVED")
         return storyError(reply, "STORY_POST_TRANSITION_INVALID", 409);

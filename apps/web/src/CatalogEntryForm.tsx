@@ -21,6 +21,8 @@ type EditableRollAction = {
   modifierKey: string;
   advantage: boolean;
   consumeUse: boolean;
+  costType: "none" | "physical" | "magic";
+  costAmount: number;
   order: number;
   original: RollAction;
 };
@@ -65,6 +67,8 @@ function editableAction(action: RollAction): EditableRollAction {
     modifierKey: supported?.key ?? "",
     advantage: action.advantage,
     consumeUse: action.consumeUse,
+    costType: action.cost?.type ?? "none",
+    costAmount: action.cost?.amount ?? 1,
     order: action.order,
     original: action,
   };
@@ -80,6 +84,8 @@ function emptyAction(order: number): EditableRollAction {
     modifierKey: "",
     advantage: false,
     consumeUse: false,
+    costType: "none",
+    costAmount: 1,
     order,
     original: {
       id: "",
@@ -236,6 +242,10 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
         modifiers,
         advantage: action.advantage,
         consumeUse: action.consumeUse,
+        cost:
+          action.costType === "none"
+            ? undefined
+            : { type: action.costType, amount: Math.max(1, action.costAmount) },
         order: Number.isInteger(action.order) ? action.order : index,
       };
     });
@@ -484,6 +494,37 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
               />{" "}
               Преимущество
             </label>
+            <label>
+              Ресурс
+              <FormSelect
+                value={action.costType}
+                onChange={(event) =>
+                  updateAction(action.id, {
+                    costType: event.target
+                      .value as EditableRollAction["costType"],
+                  })
+                }
+              >
+                <option value="none">Без стоимости</option>
+                <option value="physical">Physical Power</option>
+                <option value="magic">Magic Power</option>
+              </FormSelect>
+            </label>
+            {action.costType !== "none" && (
+              <label>
+                Количество
+                <FormInput
+                  type="number"
+                  min={1}
+                  value={action.costAmount}
+                  onChange={(event) =>
+                    updateAction(action.id, {
+                      costAmount: event.target.valueAsNumber,
+                    })
+                  }
+                />
+              </label>
+            )}
             <label>
               <FormInput
                 type="checkbox"
