@@ -36,6 +36,8 @@ import {
   clearDrawingDraftIfCurrent,
   persistDrawingDraft,
 } from "./drawing-draft";
+import { isDirectTokenDrag } from "./token-drag-event";
+import { getTokenImageMask } from "./token-image-mask";
 
 const DRAWING_COLOR_PRESETS = [
   { value: "#ffffff", name: "Белый" },
@@ -1547,6 +1549,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               });
               const url = assetUrl(token.assetId);
               const dragPosition = dragPositions[token.id];
+              const imageMask = getTokenImageMask(token.width, token.height);
               const common = {
                 x: 0,
                 y: 0,
@@ -1559,6 +1562,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 onDragEnd: () => undefined,
               };
               const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
+                if (!isDirectTokenDrag(event.target, event.currentTarget))
+                  return;
                 setDragPositions((current) => ({
                   ...current,
                   [token.id]: {
@@ -1578,6 +1583,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 });
               };
               const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
+                if (!isDirectTokenDrag(event.target, event.currentTarget))
+                  return;
                 const x = snap(event.target.x());
                 const y = snap(event.target.y());
                 if (
@@ -1681,16 +1688,30 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   )}
                   {url ? (
                     <>
-                      <TokenImage src={url} {...common} />
-                      {token.frameColor && (
-                        <Rect
-                          width={token.width}
-                          height={token.height}
-                          stroke={token.frameColor}
-                          strokeWidth={3 / scale}
-                          listening={false}
-                        />
-                      )}
+                      <Group
+                        clipFunc={(context) => {
+                          context.arc(
+                            imageMask.centerX,
+                            imageMask.centerY,
+                            imageMask.radius,
+                            0,
+                            Math.PI * 2,
+                            false,
+                          );
+                        }}
+                      >
+                        <TokenImage src={url} {...common} />
+                      </Group>
+                      <Circle
+                        x={imageMask.centerX}
+                        y={imageMask.centerY}
+                        radius={imageMask.radius}
+                        stroke={
+                          token.frameColor ?? visual.color.tokenFrameDefault
+                        }
+                        strokeWidth={(token.frameColor ? 3 : 2) / scale}
+                        listening={false}
+                      />
                     </>
                   ) : (
                     <Group {...common}>
@@ -1767,6 +1788,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           event.cancelBubble = true;
                         }}
                         onDragMove={(event) => {
+                          event.cancelBubble = true;
                           const aspect = token.width / token.height;
                           const width = Math.max(16, event.target.x());
                           const height = Math.max(16, width / aspect);
@@ -1780,6 +1802,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           }));
                         }}
                         onDragEnd={(event) => {
+                          event.cancelBubble = true;
                           const width = Math.round(
                             Math.max(16, event.target.x()),
                           );
@@ -1807,15 +1830,25 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                             );
                             return;
                           }
-                          void request.catch(() =>
-                            setResizeDrafts((current) =>
-                              clearSettledTokenResizeDraft(
-                                current,
-                                token.id,
-                                expected,
+                          void request
+                            .then(() =>
+                              setResizeDrafts((current) =>
+                                clearSettledTokenResizeDraft(
+                                  current,
+                                  token.id,
+                                  expected,
+                                ),
                               ),
-                            ),
-                          );
+                            )
+                            .catch(() =>
+                              setResizeDrafts((current) =>
+                                clearSettledTokenResizeDraft(
+                                  current,
+                                  token.id,
+                                  expected,
+                                ),
+                              ),
+                            );
                         }}
                       />
                     )}

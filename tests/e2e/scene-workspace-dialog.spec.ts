@@ -240,3 +240,91 @@ test("grid settings reset their draft and close outside the popover", async ({
   await page.locator(".map-viewport").click({ position: { x: 500, y: 300 } });
   await expect(settings).not.toHaveAttribute("open", "");
 });
+
+test("grid settings save canonical values across reopen and bootstrap reload", async ({
+  page,
+}) => {
+  let canonical = structuredClone(snapshot);
+  canonical.scenes[0] = {
+    ...canonical.scenes[0]!,
+    revision: 3,
+  };
+
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(canonical),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/scenes/scene-1/canvas", async (route) => {
+    const body = route.request().postDataJSON() as {
+      revision: number;
+      grid: GameSnapshot["scenes"][number]["grid"];
+    };
+    expect(body.revision).toBe(canonical.scenes[0]!.revision);
+    canonical = {
+      ...canonical,
+      snapshotVersion: canonical.snapshotVersion + 1,
+      scenes: canonical.scenes.map((scene) =>
+        scene.id === "scene-1"
+          ? { ...scene, grid: body.grid, revision: body.revision + 1 }
+          : scene,
+      ),
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(canonical.scenes[0]),
+    });
+  });
+
+  await page.goto("/");
+  const settings = page.locator("details.grid-settings");
+  const fields = settings.locator('input[type="number"]');
+  await settings.locator("summary").click();
+  await fields.nth(0).fill("96");
+  await fields.nth(1).fill("12");
+  await fields.nth(2).fill("-8");
+  await settings.locator(".inline-fields button").nth(1).click();
+  await expect(settings).not.toHaveAttribute("open", "");
+
+  await settings.locator("summary").click();
+  await expect(fields.nth(0)).toHaveValue("96");
+  await expect(fields.nth(1)).toHaveValue("12");
+  await expect(fields.nth(2)).toHaveValue("-8");
+
+  await page.reload();
+  await settings.locator("summary").click();
+  await expect(fields.nth(0)).toHaveValue("96");
+  await expect(fields.nth(1)).toHaveValue("12");
+  await expect(fields.nth(2)).toHaveValue("-8");
+});
+
+test("grid settings keep a rejected draft open for correction or retry", async ({
+  page,
+}) => {
+  await mockBootstrap(page, snapshot);
+  await page.route("**/api/scenes/scene-1/canvas", (route) =>
+    route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "SCENE_CONFLICT" }),
+    }),
+  );
+  await page.goto("/");
+
+  const settings = page.locator("details.grid-settings");
+  await settings.locator("summary").click();
+  const size = settings.locator('input[type="number"]').first();
+  await size.fill("96");
+  const save = settings.locator(".inline-fields button").nth(1);
+  await save.click();
+
+  await expect(settings).toHaveAttribute("open", "");
+  await expect(size).toHaveValue("96");
+  await expect(save).toBeEnabled();
+});

@@ -7,6 +7,40 @@ export class DiceFormulaError extends Error {}
 
 export type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
 
+function decorateSemanticOutcome(result: DiceResult): DiceResult {
+  const d20Terms = result.terms.filter((term) =>
+    ["1d20", "2d20kh1", "2d20kl1"].includes(term.notation),
+  );
+  let keptNaturalD20: number | null = null;
+  if (d20Terms.length === 1) {
+    const term = d20Terms[0]!;
+    keptNaturalD20 =
+      term.notation === "2d20kh1"
+        ? Math.max(...term.rolls)
+        : term.notation === "2d20kl1"
+          ? Math.min(...term.rolls)
+          : term.rolls.length === 1
+            ? (term.rolls[0] ?? null)
+            : null;
+  }
+  const kind =
+    keptNaturalD20 === 1
+      ? "CRITICAL_FAILURE"
+      : keptNaturalD20 === 20
+        ? "CRITICAL_SUCCESS"
+        : "NORMAL";
+  return {
+    ...result,
+    semanticOutcome: { kind, keptNaturalD20 },
+    frame:
+      kind === "CRITICAL_FAILURE"
+        ? { setKey: "ARKEN_CRITICAL_V1", frameKey: "critical-failure" }
+        : kind === "CRITICAL_SUCCESS"
+          ? { setKey: "ARKEN_CRITICAL_V1", frameKey: "critical-success" }
+          : null,
+  };
+}
+
 export function rollFormula(
   formula: string,
   stats: Record<string, number>,
@@ -95,7 +129,8 @@ export function rollFormulaWithMode(
   label?: string,
 ): DiceResult {
   const first = rollFormula(formula, stats, randomInt, label);
-  if (rollMode === "NORMAL") return { ...first, rollMode };
+  if (rollMode === "NORMAL")
+    return decorateSemanticOutcome({ ...first, rollMode });
   const second = rollFormula(formula, stats, randomInt, label);
   const selectedPool =
     rollMode === "ADVANTAGE"
@@ -106,10 +141,10 @@ export function rollFormulaWithMode(
         ? 1
         : 0;
   const selected = selectedPool === 0 ? first : second;
-  return {
+  return decorateSemanticOutcome({
     ...selected,
     rollMode,
     poolTotals: [first.total, second.total],
     selectedPool,
-  };
+  });
 }

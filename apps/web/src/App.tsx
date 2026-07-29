@@ -49,6 +49,10 @@ import {
   mergeCharacterMutationResponse,
   reconcileGameSnapshot,
 } from "./character-mutation";
+import {
+  readSidebarCollapsed,
+  writeSidebarCollapsed,
+} from "./sidebar-preference";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -210,6 +214,7 @@ function GridSettings({
   onPreview: (grid: import("@arken/contracts").SceneDto["grid"] | null) => void;
 }) {
   const [draft, setDraft] = useState(scene.grid);
+  const [saving, setSaving] = useState(false);
   const settingsRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => setDraft(scene.grid), [scene]);
   useEffect(() => {
@@ -292,10 +297,20 @@ function GridSettings({
           </button>
           <button
             type="button"
-            onClick={() => {
-              void onSave(draft);
-              onPreview(null);
-              if (settingsRef.current) settingsRef.current.open = false;
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onSave(draft);
+                onPreview(null);
+                if (settingsRef.current) settingsRef.current.open = false;
+              } catch {
+                // The shared mutation runner exposes the server error. Keep the
+                // draft open so a conflict or validation failure can be fixed
+                // and retried instead of looking like a successful reset.
+              } finally {
+                setSaving(false);
+              }
             }}
           >
             Сохранить
@@ -318,6 +333,7 @@ function GridSettings({
 
 export function App() {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [storyPosts, setStoryPosts] = useState<
     Array<StoryPostDto | StoryPostAdminDto>
   >([]);
@@ -426,6 +442,31 @@ export function App() {
     if (visible)
       setRollToasts((current) => (current.length > 0 ? [] : current));
   }, []);
+  const sidebarCampaignId = snapshot?.campaign.id;
+  const sidebarMembershipId = snapshot?.me.id;
+  useEffect(() => {
+    if (!sidebarCampaignId || !sidebarMembershipId) return;
+    setSidebarCollapsed(
+      readSidebarCollapsed(
+        window.localStorage,
+        sidebarCampaignId,
+        sidebarMembershipId,
+      ),
+    );
+  }, [sidebarCampaignId, sidebarMembershipId]);
+  const handleSidebarCollapsedChange = useCallback(
+    (collapsed: boolean) => {
+      setSidebarCollapsed(collapsed);
+      if (!snapshot) return;
+      writeSidebarCollapsed(
+        window.localStorage,
+        snapshot.campaign.id,
+        snapshot.me.id,
+        collapsed,
+      );
+    },
+    [snapshot],
+  );
   const handleRequestedChatMessage = useCallback(
     () => setRequestedChatMessageId(null),
     [],
@@ -1375,7 +1416,24 @@ export function App() {
           setCampaignRenameOpen(false);
         }}
       />
-      <div className="workbench">
+      <div
+        className={`workbench${
+          sidebarCollapsed && !previewSnapshot ? " is-sidebar-collapsed" : ""
+        }`}
+      >
+        {sidebarCollapsed && !previewSnapshot && (
+          <button
+            type="button"
+            className="sidebar-restore-button"
+            aria-controls="activity-sidebar"
+            aria-label="Развернуть боковую панель"
+            title="Развернуть боковую панель"
+            aria-expanded="false"
+            onClick={() => handleSidebarCollapsedChange(false)}
+          >
+            <span aria-hidden="true">&#x2039;</span>
+          </button>
+        )}
         <main
           className={`map-shell${
             workspace === "characters" ||
@@ -1390,7 +1448,11 @@ export function App() {
             workspace === "world-maps"
           }
         >
-          <div className="map-toolbar">
+          <div
+            className="map-toolbar"
+            role="toolbar"
+            aria-label="Инструменты карты"
+          >
             <div className="toolbar-group">
               <button
                 aria-label="Перемещение"
@@ -1462,15 +1524,17 @@ export function App() {
                     scene={activeScene}
                     onPreview={setGridPreview}
                     onSave={(grid) =>
-                      run(() =>
-                        api(`/api/scenes/${activeScene.id}/canvas`, {
-                          method: "PATCH",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            revision: activeScene.revision ?? 0,
-                            grid,
+                      run(
+                        () =>
+                          api(`/api/scenes/${activeScene.id}/canvas`, {
+                            method: "PATCH",
+                            body: JSON.stringify({
+                              actionId: crypto.randomUUID(),
+                              revision: activeScene.revision ?? 0,
+                              grid,
+                            }),
                           }),
-                        }),
+                        true,
                       )
                     }
                   />
@@ -1872,6 +1936,7 @@ export function App() {
                   <button
                     className="roll-toast-open"
                     onClick={() => {
+                      handleSidebarCollapsedChange(false);
                       setRequestedChatMessageId(message.id);
                       setRollToasts((current) =>
                         removeRollToast(current, message.id),
@@ -1981,6 +2046,8 @@ export function App() {
             requestedChatMessageId={requestedChatMessageId}
             onRequestedChatMessageHandled={handleRequestedChatMessage}
             onChatVisibilityChange={handleChatVisibilityChange}
+            collapsed={sidebarCollapsed}
+            onCollapsedChange={handleSidebarCollapsedChange}
             workspace={workspace}
             onWorkspaceChange={handleWorkspaceChange}
             onPlaceTokenDefinition={async (definitionId) =>

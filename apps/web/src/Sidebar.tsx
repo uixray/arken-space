@@ -54,6 +54,7 @@ import {
 } from "./character-workspace-state";
 import { buildChatTimeline } from "./chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "./dice-result";
+import { getDiceCritical } from "./dice-critical";
 import {
   CharacterActionCard,
   parseSkillCard,
@@ -304,6 +305,8 @@ type Props = {
   requestedChatMessageId: string | null;
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
   workspace:
     | "characters"
     | "tokens"
@@ -392,7 +395,10 @@ export function Sidebar(props: Props) {
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
     string | null
   >(null);
-  useEffect(() => onChatVisibilityChange(true), [onChatVisibilityChange]);
+  useEffect(
+    () => onChatVisibilityChange(!props.collapsed),
+    [onChatVisibilityChange, props.collapsed],
+  );
   const activeThreadId = directMode
     ? activeDirectThreadId
     : activeFeed === "ACTIVITY"
@@ -459,7 +465,24 @@ export function Sidebar(props: Props) {
   }, [sceneDialogRequest, isGm, onWorkspaceChange]);
 
   return (
-    <aside className={`sidebar ${!isGm ? "player-sidebar" : ""}`}>
+    <aside
+      id="activity-sidebar"
+      className={`sidebar ${!isGm ? "player-sidebar" : ""}`}
+      hidden={props.collapsed}
+      inert={props.collapsed}
+      aria-hidden={props.collapsed}
+    >
+      <button
+        type="button"
+        className="sidebar-collapse-button"
+        aria-controls="activity-sidebar"
+        aria-expanded="true"
+        aria-label="Свернуть боковую панель"
+        title="Свернуть боковую панель"
+        onClick={() => props.onCollapsedChange(true)}
+      >
+        <span aria-hidden="true">&#x203a;</span>
+      </button>
       <nav
         className="tabs chat-stream-tabs"
         aria-label="Потоки чата"
@@ -733,7 +756,7 @@ export function CharacterWorkspace({
   return createPortal(
     <main
       ref={workspaceRef}
-      className="character-workspace"
+      className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}`}
       aria-labelledby="character-workspace-title"
     >
       <header className="character-workspace__header">
@@ -1604,10 +1627,13 @@ function ChatMessageBody({
   const skillCard = parseSkillCard(
     message.skillCard ? { skillCard: message.skillCard } : message.dice,
   );
+  const dice = normalizeClientDiceResult(message.dice);
+  const critical = dice ? getDiceCritical(dice) : null;
   if (message.kind === "DICE" && skillCard)
     return (
       <SkillChatCard
         card={skillCard}
+        critical={critical}
         sourceRemoved={
           skillCard.entry.sourceRemoved ||
           Boolean(
@@ -1618,7 +1644,6 @@ function ChatMessageBody({
         }
       />
     );
-  const dice = normalizeClientDiceResult(message.dice);
   if (message.kind !== "DICE" || !dice)
     return (
       <>
@@ -1636,12 +1661,17 @@ function ChatMessageBody({
       </>
     );
   return (
-    <div className="roll-result">
+    <div
+      className={`roll-result${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
+    >
       <strong className="roll-total" aria-label="Итог броска">
         {dice.total}
       </strong>
       <div className="roll-details">
         <div>{message.body}</div>
+        {critical && (
+          <span className="roll-critical-label">{critical.label}</span>
+        )}
         <small>{formatDiceBreakdown(dice)}</small>
       </div>
     </div>
@@ -1970,18 +2000,6 @@ function ActivityPanel({
           );
         })}
       </div>
-      <div className="chat-tools">
-        <label className="compact-check">
-          <FormInput
-            type="checkbox"
-            checked={visibility === "GM_ONLY"}
-            onChange={(event) =>
-              setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
-            }
-          />{" "}
-          {"Только мастер"}
-        </label>
-      </div>
       <form className="chat-compose" onSubmit={submit}>
         <div className="chat-composer-input">
           <FormTextArea
@@ -2052,9 +2070,21 @@ function ActivityPanel({
             </div>
           )}
         </div>
-        <Button className="primary" type="submit">
-          {"Отправить"}
-        </Button>
+        <div className="chat-compose-submit">
+          <Button className="primary" type="submit">
+            {"Отправить"}
+          </Button>
+          <label className="compact-check chat-visibility-check">
+            <FormInput
+              type="checkbox"
+              checked={visibility === "GM_ONLY"}
+              onChange={(event) =>
+                setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
+              }
+            />
+            <span>{"Только мастер"}</span>
+          </label>
+        </div>
       </form>
       {composerError && (
         <p className="composer-error" role="alert">
@@ -2559,18 +2589,6 @@ function ChatPanel({
       )}
       {canCompose && (
         <>
-          <div className="chat-tools">
-            <label className="compact-check">
-              <FormInput
-                type="checkbox"
-                checked={visibility === "GM_ONLY"}
-                onChange={(event) =>
-                  setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
-                }
-              />{" "}
-              {"Только мастер"}
-            </label>
-          </div>
           <form className="chat-compose" onSubmit={submit}>
             <div className="chat-composer-input">
               <FormTextArea
@@ -2652,9 +2670,21 @@ function ChatPanel({
                 </div>
               )}
             </div>
-            <Button className="primary" type="submit">
-              {"Отправить"}
-            </Button>
+            <div className="chat-compose-submit">
+              <Button className="primary" type="submit">
+                {"Отправить"}
+              </Button>
+              <label className="compact-check chat-visibility-check">
+                <FormInput
+                  type="checkbox"
+                  checked={visibility === "GM_ONLY"}
+                  onChange={(event) =>
+                    setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
+                  }
+                />
+                <span>{"Только мастер"}</span>
+              </label>
+            </div>
           </form>
           {composerError && (
             <p className="composer-error" role="alert">

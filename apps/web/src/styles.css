@@ -509,24 +509,34 @@ code {
 .map-shell {
   position: relative;
   display: grid;
-  grid-template-rows: 38px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   background: #11110f;
 }
 .map-toolbar {
+  position: absolute;
+  z-index: 24;
+  top: 8px;
+  left: 8px;
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 4px var(--space-sm);
-  border-bottom: 1px solid var(--line);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-xs);
+  width: max-content;
+  max-height: calc(100% - 16px);
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
   background: var(--surface);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
   min-width: 0;
   overflow: visible;
 }
 .toolbar-group {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--space-xs);
   min-width: 0;
 }
@@ -536,7 +546,9 @@ code {
 .toolbar-history {
   display: flex;
   gap: var(--space-xs);
-  margin-left: auto;
+  flex-direction: column;
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--line);
 }
 .toolbar-overflow summary {
   display: grid;
@@ -549,8 +561,8 @@ code {
 .toolbar-overflow-menu {
   position: absolute;
   z-index: 30;
-  top: calc(100% + 6px);
-  right: 0;
+  top: 0;
+  left: calc(100% + 6px);
   display: grid;
   gap: 4px;
   min-width: 220px;
@@ -600,8 +612,8 @@ code {
 .resize-settings-popover {
   position: absolute;
   z-index: 32;
-  top: calc(100% + 6px);
-  left: 0;
+  top: 0;
+  left: calc(100% + 6px);
   display: grid;
   gap: 8px;
   min-width: 220px;
@@ -689,9 +701,9 @@ code {
 }
 .drawing-color-panel {
   position: absolute;
-  z-index: 14;
+  z-index: 25;
   top: 8px;
-  right: 8px;
+  left: 56px;
   width: max-content;
   max-width: calc(100% - 16px);
   padding: 8px;
@@ -759,17 +771,16 @@ code {
 .canvas-roll-overlay {
   position: absolute;
   z-index: 13;
+  right: 12px;
   bottom: 12px;
-  left: 50%;
   display: grid;
   gap: 6px;
-  max-width: min(620px, calc(100% - 140px));
+  width: min(620px, calc(50% - 18px));
   padding: 8px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   box-shadow: 0 8px 24px #0008;
-  transform: translateX(-50%);
 }
 .canvas-roll-dice {
   display: flex;
@@ -815,30 +826,42 @@ code {
   z-index: 12;
   left: 12px;
   bottom: 12px;
-  max-width: min(720px, calc(100% - 120px));
+  display: flex;
+  flex-direction: column-reverse;
+  width: min(320px, calc(50% - 18px));
+  max-height: calc((100% - 38px) / 2);
   border: 1px solid var(--line);
   background: var(--surface);
   box-shadow: 0 8px 24px #0008;
 }
 .token-tray summary {
+  flex: 0 0 auto;
   padding: 7px 10px;
   cursor: pointer;
   color: var(--muted);
 }
 .token-tray-list {
-  display: flex;
+  display: grid;
+  min-height: 0;
+  max-height: calc(50vh - 90px);
   gap: 6px;
-  max-width: 100%;
   padding: 8px;
-  overflow-x: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .token-tray-list button {
   display: grid;
-  grid-template-columns: 32px minmax(72px, auto);
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
   gap: 7px;
-  flex: 0 0 auto;
+  width: 100%;
   text-align: left;
+}
+.token-tray-list button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .token-tray-list img,
 .token-tray-list button > span {
@@ -1003,6 +1026,9 @@ code {
   height: 100%;
   min-height: 0;
 }
+.activity-feed {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
 .message-list {
   display: flex;
   flex-direction: column;
@@ -1066,6 +1092,33 @@ code {
   grid-template-columns: auto minmax(0, 1fr);
   border: 1px solid var(--line);
   background: var(--surface-2);
+}
+.roll-result.roll-result--critical-failure,
+.skill-chat-card.roll-result--critical-failure {
+  border-color: #d95757;
+  box-shadow: inset 0 0 0 1px rgb(217 87 87 / 35%);
+}
+.roll-result.roll-result--critical-success,
+.skill-chat-card.roll-result--critical-success {
+  border-color: #4cab6b;
+  box-shadow: inset 0 0 0 1px rgb(76 171 107 / 35%);
+}
+.roll-result--critical-failure .roll-total,
+.roll-result--critical-failure .skill-chat-card__result > strong,
+.roll-result--critical-failure .roll-critical-label {
+  color: #e46b6b;
+}
+.roll-result--critical-success .roll-total,
+.roll-result--critical-success .skill-chat-card__result > strong,
+.roll-result--critical-success .roll-critical-label {
+  color: #62c982;
+}
+.roll-critical-label {
+  display: block;
+  padding: 2px 8px 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 .roll-total {
   display: grid;
@@ -1186,6 +1239,31 @@ code {
 }
 .chat-compose textarea {
   resize: none;
+}
+.chat-compose-submit {
+  display: flex;
+  min-width: 112px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-xs);
+}
+.chat-compose-submit .primary {
+  width: 100%;
+}
+.chat-visibility-check {
+  min-height: 32px;
+  justify-content: center;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: normal;
+}
+.chat-visibility-check:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.chat-visibility-check input {
+  flex: 0 0 auto;
 }
 .composer-error {
   margin: 0;
@@ -2112,16 +2190,26 @@ code {
 }
 .map-object-list-trigger {
   position: absolute;
-  z-index: 14;
+  z-index: 24;
   top: 8px;
-  left: 8px;
+  right: 8px;
+  max-width: min(180px, calc(100% - 80px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.workbench.is-sidebar-collapsed .map-object-list-trigger,
+.workbench.is-sidebar-collapsed .map-object-list-popover,
+.workbench.is-sidebar-collapsed .roll-toast-stack {
+  right: 48px;
+}
+
 .map-object-list-popover {
   position: absolute;
-  z-index: 15;
+  z-index: 25;
   top: 44px;
-  left: 8px;
-  width: min(340px, calc(100% - 16px));
+  right: 8px;
+  width: min(340px, calc(100% - 72px));
   max-height: min(420px, calc(100% - 56px));
   overflow: auto;
   padding: var(--space-sm);
@@ -3477,4 +3565,55 @@ code {
 .canvas-roll-gm-toggle[aria-pressed="true"] {
   color: var(--accent-contrast);
   background: var(--accent);
+}
+
+/* Collapsible activity sidebar. The aside remains mounted so chat state and
+   realtime focus targets survive while it is unavailable for interaction. */
+.workbench.is-sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr) 0;
+}
+.sidebar[hidden] {
+  display: none;
+}
+.sidebar-collapse-button {
+  position: absolute;
+  z-index: 2;
+  top: 3px;
+  right: 3px;
+  width: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.sidebar .chat-stream-tabs {
+  padding-right: 38px;
+}
+.sidebar-restore-button {
+  position: fixed;
+  z-index: 950;
+  top: calc(var(--topbar-height) + var(--space-md));
+  right: 0;
+  width: 36px;
+  min-width: 36px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  border-right: 0;
+  box-shadow: 0 6px 18px #0008;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.character-workspace.is-sidebar-collapsed {
+  right: 0;
+}
+@media (max-width: 1150px) {
+  .workbench.is-sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr) 0;
+  }
+  .character-workspace.is-sidebar-collapsed {
+    right: 0;
+  }
 }

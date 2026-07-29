@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useId, useRef, useState } from "react";
 import type { CharacterCatalogEntryDto } from "@arken/contracts";
+import type { DiceCritical } from "./dice-critical";
 
 type RollAction = NonNullable<
   CharacterCatalogEntryDto["data"]["rollActions"]
@@ -288,16 +289,18 @@ export function CharacterActionCard({
 export function SkillChatCard({
   card,
   sourceRemoved = false,
+  critical = null,
 }: {
   card: SkillCard;
   sourceRemoved?: boolean;
+  critical?: DiceCritical | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
   return (
     <section
-      className="skill-chat-card"
+      className={`skill-chat-card${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
       aria-label={`${card.entry.kind === "SKILL" ? "Навык" : "Способность"}: ${card.entry.name}`}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !expanded) return;
@@ -326,6 +329,9 @@ export function SkillChatCard({
           <span>
             <b>{card.action?.label}</b>
             <code>{card.action?.formula}</code>
+            {critical && (
+              <span className="roll-critical-label">{critical.label}</span>
+            )}
           </span>
         </div>
       )}

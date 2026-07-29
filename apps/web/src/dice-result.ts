@@ -27,7 +27,21 @@ export function normalizeClientDiceResult(value: unknown): DiceResult | null {
         !dice.poolTotals.every(finiteNumber))) ||
     (dice.selectedPool !== undefined &&
       dice.selectedPool !== 0 &&
-      dice.selectedPool !== 1)
+      dice.selectedPool !== 1) ||
+    (dice.semanticOutcome !== undefined &&
+      (!dice.semanticOutcome ||
+        typeof dice.semanticOutcome !== "object" ||
+        !["NORMAL", "CRITICAL_FAILURE", "CRITICAL_SUCCESS"].includes(
+          String((dice.semanticOutcome as Record<string, unknown>).kind),
+        ))) ||
+    (dice.frame !== undefined &&
+      dice.frame !== null &&
+      (typeof dice.frame !== "object" ||
+        (dice.frame as Record<string, unknown>).setKey !==
+          "ARKEN_CRITICAL_V1" ||
+        !["critical-failure", "critical-success"].includes(
+          String((dice.frame as Record<string, unknown>).frameKey),
+        )))
   )
     return null;
 

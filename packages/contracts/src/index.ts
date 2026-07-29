@@ -1524,6 +1524,17 @@ export interface DiceTerm {
   subtotal: number;
 }
 
+export type DiceSemanticOutcome = {
+  kind: "NORMAL" | "CRITICAL_FAILURE" | "CRITICAL_SUCCESS";
+  keptNaturalD20: number | null;
+};
+
+/** Stable curated reference. URLs are resolved from an approved bundled manifest. */
+export type DiceFrameReference = {
+  setKey: "ARKEN_CRITICAL_V1";
+  frameKey: "critical-failure" | "critical-success";
+};
+
 export interface DiceResult {
   formula: string;
   resolvedFormula: string;
@@ -1535,6 +1546,10 @@ export interface DiceResult {
   rollMode?: "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
   poolTotals?: [number, number];
   selectedPool?: 0 | 1;
+  /** Authoritative server outcome; absent only on legacy history rows. */
+  semanticOutcome?: DiceSemanticOutcome;
+  /** Immutable curated frame reference stored with chat history. */
+  frame?: DiceFrameReference | null;
 }
 
 export interface SkillCardEntrySnapshot {
