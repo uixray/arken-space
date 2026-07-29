@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   filterActivityEvents,
   formulaBonus,
+  physicalRollBonus,
   physicalRollChatRequest,
   physicalRollMessage,
 } from "./activity-roll-controls";
@@ -47,6 +48,11 @@ describe("activity roll controls", () => {
     expect(physicalRollMessage("Ловкость", 3)).toContain("прибавьте +3");
     expect(physicalRollMessage("Сила", -1)).toContain("бонус -1");
   });
+  it("extracts the physical bonus for prominent rendering", () => {
+    expect(physicalRollBonus(physicalRollMessage("Сила воли", 4))).toBe("+4");
+    expect(physicalRollBonus("Обычное сообщение · бонус +4.")).toBeNull();
+  });
+
   it("keeps the GM-selected character attribution for a physical roll", () => {
     expect(
       physicalRollChatRequest("Сила", 2, "selected-character"),

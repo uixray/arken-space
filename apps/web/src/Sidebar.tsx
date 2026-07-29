@@ -96,6 +96,7 @@ import {
   filterActivityEvents,
   formulaBonus,
   physicalDiceStorageKey,
+  physicalRollBonus,
   physicalRollChatRequest,
   type ActivityFilter,
 } from "./activity-roll-controls";
@@ -1644,9 +1645,15 @@ function ChatMessageBody({
         }
       />
     );
-  if (message.kind !== "DICE" || !dice)
+  if (message.kind !== "DICE" || !dice) {
+    const physicalBonus = physicalRollBonus(message.body);
     return (
       <>
+        {physicalBonus && (
+          <strong className="physical-roll-bonus">
+            Бонус к кубу {physicalBonus}
+          </strong>
+        )}
         <p>{message.body}</p>
         {message.attachments?.map((attachment) => (
           <figure className="chat-attachment" key={attachment.contentId}>
@@ -1660,6 +1667,7 @@ function ChatMessageBody({
         ))}
       </>
     );
+  }
   return (
     <div
       className={`roll-result${critical ? ` roll-result--critical-${critical.kind}` : ""}`}

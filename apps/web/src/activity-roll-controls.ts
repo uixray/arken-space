@@ -32,6 +32,11 @@ export function physicalRollMessage(label: string, bonus: number): string {
   return `Физический бросок · ${label} · бонус ${signed}. Бросьте d20 и прибавьте ${signed} к значению куба.`;
 }
 
+export function physicalRollBonus(message: string): string | null {
+  if (!message.startsWith("Физический бросок")) return null;
+  return message.match(/·\s*бонус\s+([+-]\d+)\./u)?.[1] ?? null;
+}
+
 export function physicalDiceStorageKey(membershipId: string): string {
   return `arken:physical-dice:${membershipId}`;
 }
