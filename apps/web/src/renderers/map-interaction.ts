@@ -11,7 +11,7 @@ export function shouldBeginMapPan(
 ): boolean {
   return (
     button === 1 ||
-    button === 2 ||
+    (button === 2 && targetIsCanvas) ||
     (button === 0 && tool === "PAN" && targetIsCanvas)
   );
 }

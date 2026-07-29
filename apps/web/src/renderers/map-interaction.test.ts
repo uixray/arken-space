@@ -84,8 +84,9 @@ describe("mapInteractionReducer", () => {
     ]);
   });
 
-  it("reserves right and middle drag for panning and pans empty canvas in PAN", () => {
-    expect(shouldBeginMapPan(2, "DRAW", false)).toBe(true);
+  it("reserves middle drag and empty-canvas right drag for panning", () => {
+    expect(shouldBeginMapPan(2, "DRAW", true)).toBe(true);
+    expect(shouldBeginMapPan(2, "DRAW", false)).toBe(false);
     expect(shouldBeginMapPan(1, "RULER", false)).toBe(true);
     expect(shouldBeginMapPan(0, "PAN", true)).toBe(true);
     expect(shouldBeginMapPan(0, "PAN", false)).toBe(false);

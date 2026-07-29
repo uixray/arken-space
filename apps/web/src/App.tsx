@@ -39,6 +39,7 @@ import { notify } from "./ui/notifications";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
+import { useDismissibleDetails } from "./ui/dismissible-details";
 import { characterTokenPlacementRequest } from "./token-placement";
 import { normalizeClientDiceResult } from "./dice-result";
 import type { MapTool } from "./renderers/map-interaction";
@@ -217,19 +218,11 @@ function GridSettings({
   const [saving, setSaving] = useState(false);
   const settingsRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => setDraft(scene.grid), [scene]);
-  useEffect(() => {
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      const details = settingsRef.current;
-      if (details?.open && !details.contains(event.target as Node)) {
-        details.open = false;
-        setDraft(scene.grid);
-        onPreview(null);
-      }
-    };
-    window.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () =>
-      window.removeEventListener("pointerdown", closeOnOutsidePointer);
+  const dismissGridSettings = useCallback(() => {
+    setDraft(scene.grid);
+    onPreview(null);
   }, [onPreview, scene.grid]);
+  useDismissibleDetails(settingsRef, dismissGridSettings);
   const resetGrid = () => {
     const next = {
       enabled: true,
@@ -399,7 +392,15 @@ export function App() {
   const [playerHandoffPending, setPlayerHandoffPending] = useState(false);
   const [playerHandoffError, setPlayerHandoffError] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceDestination | null>(null);
+  const [requestedCharacterId, setRequestedCharacterId] = useState<
+    string | null
+  >(null);
   const workspaceMenuRef = useRef<HTMLDetailsElement>(null);
+  const scenePickerRef = useRef<HTMLDetailsElement>(null);
+  const resizeSettingsRef = useRef<HTMLDetailsElement>(null);
+  useDismissibleDetails(workspaceMenuRef);
+  useDismissibleDetails(scenePickerRef);
+  useDismissibleDetails(resizeSettingsRef);
 
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
@@ -1102,7 +1103,7 @@ export function App() {
         </div>
         <div className="scene-switcher">
           {snapshot.me.role === "GM" && !previewSnapshot ? (
-            <details className="scene-picker">
+            <details ref={scenePickerRef} className="scene-picker">
               <summary
                 aria-label="Выбрать просматриваемую сцену"
                 aria-haspopup="listbox"
@@ -1538,7 +1539,7 @@ export function App() {
                       )
                     }
                   />
-                  <details className="resize-settings">
+                  <details ref={resizeSettingsRef} className="resize-settings">
                     <summary
                       aria-label="Настройки размера карты"
                       title="Настройки размера карты"
@@ -1566,7 +1567,17 @@ export function App() {
                       >
                         Область
                       </button>
-                      <button onClick={() => setCanvasEditMode(null)}>
+                      <button
+                        onClick={() => {
+                          setCanvasEditMode(null);
+                          if (resizeSettingsRef.current) {
+                            resizeSettingsRef.current.open = false;
+                            resizeSettingsRef.current
+                              .querySelector<HTMLElement>("summary")
+                              ?.focus();
+                          }
+                        }}
+                      >
                         Готово
                       </button>
                     </div>
@@ -1658,6 +1669,10 @@ export function App() {
                 drawings={activeDrawings}
                 assets={viewSnapshot.assets}
                 role={viewSnapshot.me.role}
+                onOpenCharacter={(characterId) => {
+                  setRequestedCharacterId(characterId);
+                  handleWorkspaceChange("characters");
+                }}
                 membershipId={viewSnapshot.me.id}
                 socket={socket}
                 tool={tool}
@@ -2041,6 +2056,7 @@ export function App() {
         ) : (
           <Sidebar
             snapshot={snapshot}
+            requestedCharacterId={requestedCharacterId}
             socket={socket}
             presence={presence}
             requestedChatMessageId={requestedChatMessageId}

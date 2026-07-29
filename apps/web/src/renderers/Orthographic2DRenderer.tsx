@@ -671,10 +671,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       return;
     }
     if (event.evt.button !== 0) return;
-    if (event.target === stageRef.current && props.tool === "PAN") {
+    if (targetIsCanvas && props.tool === "PAN") {
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
+      dispatchInteraction({ type: "clear-selection" });
       setTokenMenu(null);
     }
     handleFogDown();
@@ -1645,10 +1646,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   onContextMenu={(event) => {
                     event.evt.preventDefault();
                     event.cancelBubble = true;
-                    // Right-button drag is reserved for panning. The legacy
-                    // token menu remains available through Shift+right-click
-                    // and the keyboard/object-list actions.
-                    if (props.role !== "GM" || !event.evt.shiftKey) return;
+                    // Right drag pans only from empty canvas; on a token it
+                    // consistently opens the contextual actions.
+                    if (props.role !== "GM") return;
                     const rect = containerRef.current?.getBoundingClientRect();
                     if (!rect) return;
                     setTokenMenu({
@@ -1902,6 +1902,17 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           onPointerDown={(event) => event.stopPropagation()}
         >
           <strong>{tokenMenu.token.name}</strong>
+          {tokenMenu.token.characterId && props.onOpenCharacter && (
+            <button
+              role="menuitem"
+              onClick={() => {
+                props.onOpenCharacter?.(tokenMenu.token.characterId!);
+                setTokenMenu(null);
+              }}
+            >
+              Открыть карточку
+            </button>
+          )}
           {(
             [
               ["MAP", "Слой карты"],

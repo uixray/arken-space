@@ -35,6 +35,12 @@ import {
 import type { GameSocket } from "./realtime";
 import { ApiError } from "./api";
 import { TokenImageGenerator } from "./TokenImageGenerator";
+import {
+  mergeAssets,
+  tokenAssetLabel,
+  tokenDefinitionAssets,
+  tokenGeneratorSources,
+} from "./token-definition-options";
 import type { TokenFramePreset } from "./token-image-editor-state";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
@@ -127,6 +133,7 @@ function nextChatFeed(current: SidebarFeed, key: string): SidebarFeed | null {
 
 type Props = {
   snapshot: GameSnapshot;
+  requestedCharacterId?: string | null;
   socket: GameSocket | null;
   presence: Array<{ membershipId: string; online: boolean }>;
   onPlaceTokenDefinition: (definitionId: string) => Promise<void>;
@@ -735,6 +742,12 @@ export function CharacterWorkspace({
       ids: characters.map((character) => character.id),
     });
   }, [characters]);
+  useEffect(() => {
+    const id = props.requestedCharacterId;
+    if (!id || !characters.some((character) => character.id === id)) return;
+    dispatch({ type: "OPEN", id });
+    dispatch({ type: "FOCUS", id });
+  }, [characters, props.requestedCharacterId]);
   useEffect(() => {
     if (!state.activeId) return;
     workspaceRef.current
@@ -2951,6 +2964,8 @@ function TokenDefinitionEditor({
     definition?.controllerMembershipIds ?? [],
   );
   const [image, setImage] = useState<File>();
+  const [uploadedSource, setUploadedSource] = useState<AssetDto>();
+  const uploadSourcePromise = useRef<Promise<AssetDto> | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -2961,7 +2976,10 @@ function TokenDefinitionEditor({
     setError("");
     try {
       let selectedAssetId = assetId || null;
-      if (image) selectedAssetId = (await onUpload(image, "TOKEN")).id;
+      if (image && uploadSourcePromise.current) {
+        const uploaded = await uploadSourcePromise.current;
+        if (!selectedAssetId) selectedAssetId = uploaded.id;
+      }
       const input = {
         name: name.trim(),
         characterId: characterId || null,
@@ -3038,29 +3056,33 @@ function TokenDefinitionEditor({
             value={assetId}
             onChange={(event) => setAssetId(event.target.value)}
             emptyMessage={
-              snapshot.assets.every((asset) => asset.kind !== "TOKEN")
+              tokenDefinitionAssets(
+                mergeAssets(snapshot.assets, uploadedSource),
+              ).length === 0
                 ? "Изображений токенов пока нет"
                 : undefined
             }
             createAction={
-              snapshot.assets.every((asset) => asset.kind !== "TOKEN")
+              tokenDefinitionAssets(
+                mergeAssets(snapshot.assets, uploadedSource),
+              ).length === 0
                 ? { label: "Добавить изображение", onSelect: onOpenMedia }
                 : undefined
             }
           >
             <option value="">Без изображения</option>
-            {snapshot.assets
-              .filter((asset) => asset.kind === "TOKEN")
-              .map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.name}
-                </option>
-              ))}
+            {tokenDefinitionAssets(
+              mergeAssets(snapshot.assets, uploadedSource),
+            ).map((asset) => (
+              <option key={asset.id} value={asset.id}>
+                {tokenAssetLabel(asset)}
+              </option>
+            ))}
           </FormSelect>
         </label>
         <TokenImageGenerator
-          imageAssets={snapshot.assets.filter(
-            (asset) => asset.kind === "IMAGE",
+          imageAssets={tokenGeneratorSources(
+            mergeAssets(snapshot.assets, uploadedSource),
           )}
           disabled={saving}
           onGenerate={onGenerateTokenImage}
@@ -3069,7 +3091,31 @@ function TokenDefinitionEditor({
         <ImageUploadField
           label="Загрузить новое изображение"
           value={image}
-          onUpdate={setImage}
+          hint="После выбора файл станет доступен в генераторе"
+          onUpdate={(file) => {
+            setImage(file);
+            setError("");
+            setUploadedSource(undefined);
+            uploadSourcePromise.current = null;
+            if (!file) return;
+            const upload = onUpload(file, "IMAGE");
+            uploadSourcePromise.current = upload;
+            void upload
+              .then((asset) => {
+                if (uploadSourcePromise.current !== upload) return;
+                setUploadedSource(asset);
+                setAssetId(asset.id);
+              })
+              .catch((reason) => {
+                if (uploadSourcePromise.current !== upload) return;
+                uploadSourcePromise.current = null;
+                setError(
+                  reason instanceof Error
+                    ? reason.message
+                    : "Не удалось загрузить исходное изображение.",
+                );
+              });
+          }}
           disabled={saving}
         />
         <section className="token-dimensions" aria-label={"Размер токена"}>

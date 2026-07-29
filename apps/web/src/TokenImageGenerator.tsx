@@ -1,4 +1,10 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
 import type { AssetDto } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import {
@@ -15,27 +21,21 @@ import {
 } from "./token-image-editor-state";
 
 const copy = {
-  generator:
-    "Генератор токена",
-  uploadSource:
-    'Сначала загрузите исходное изображение в разделе "Файлы".',
+  generator: "Генератор токена",
+  uploadSource: 'Сначала загрузите исходное изображение в разделе "Файлы".',
   fromImage: "Из IMAGE-asset",
-  sourceImage:
-    "Исходное изображение",
+  sourceImage: "Исходное изображение",
   previewLabel:
     "Интерактивный предпросмотр токена. Перетаскивайте изображение или используйте клавиши стрелок. Home или R сбрасывает кадрирование.",
   hint: "Перетаскивайте изображение или используйте клавиши стрелок. Shift делает шаг крупнее. Home / R сбрасывает кадрирование.",
   zoom: "Масштаб",
-  zoomLabel:
-    "Масштаб изображения токена",
+  zoomLabel: "Масштаб изображения токена",
   frame: "Рамка",
-  chooseFrame:
-    "Выберите рамку токена",
+  chooseFrame: "Выберите рамку токена",
   noFrame: "Без рамки",
   reset: "Сбросить",
   create: "Создать TOKEN",
-  failed:
-    "Не удалось сгенерировать изображение токена.",
+  failed: "Не удалось сгенерировать изображение токена.",
 };
 
 const frameLabels: Record<TokenFramePreset, string> = {
@@ -124,6 +124,16 @@ export function TokenImageGenerator({
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const source =
     imageAssets.find((asset) => asset.id === sourceAssetId) ?? null;
+
+  useEffect(() => {
+    if (
+      sourceAssetId &&
+      imageAssets.some((asset) => asset.id === sourceAssetId)
+    )
+      return;
+    setSourceAssetId(imageAssets[0]?.id ?? "");
+    setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
+  }, [imageAssets, sourceAssetId]);
 
   const updateTransform = (next: TokenImageTransform) =>
     setTransform(clampTokenImageTransform(next));
