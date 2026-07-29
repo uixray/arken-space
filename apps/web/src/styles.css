@@ -806,6 +806,9 @@ code {
   z-index: 40;
   display: grid;
   min-width: 180px;
+  max-width: calc(100% - 16px);
+  max-height: calc(100% - 16px);
+  overflow: auto;
   padding: 6px;
   border: 1px solid var(--line-strong);
   background: var(--surface);

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   Circle,
   Group,
@@ -150,6 +157,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     x: number;
     y: number;
   } | null>(null);
+  const tokenMenuRef = useRef<HTMLDivElement>(null);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
     null,
   );
@@ -477,6 +485,29 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const requestSelectedDelete = () => {
     if (interaction.selectedObject) requestDelete(interaction.selectedObject);
   };
+  useLayoutEffect(() => {
+    if (!tokenMenu) return;
+    const container = containerRef.current;
+    const menu = tokenMenuRef.current;
+    if (!container || !menu) return;
+    const padding = 8;
+    const maxLeft = Math.max(
+      padding,
+      container.clientWidth - menu.offsetWidth - padding,
+    );
+    const maxTop = Math.max(
+      padding,
+      container.clientHeight - menu.offsetHeight - padding,
+    );
+    const left = Math.min(Math.max(padding, tokenMenu.x), maxLeft);
+    const top = Math.min(Math.max(padding, tokenMenu.y), maxTop);
+    if (left !== tokenMenu.x || top !== tokenMenu.y) {
+      setTokenMenu((current) =>
+        current ? { ...current, x: left, y: top } : current,
+      );
+    }
+  }, [tokenMenu]);
+
   const openSelectedAction = () => {
     const selected = interaction.selectedObject;
     if (!selected || selected.kind !== "token") return;
@@ -1896,6 +1927,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       </Stage>
       {tokenMenu && (
         <div
+          ref={tokenMenuRef}
           className="token-context-menu"
           style={{ left: tokenMenu.x, top: tokenMenu.y }}
           role="menu"
@@ -1934,7 +1966,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 setTokenMenu(null);
               }}
             >
-              {tokenMenu.token.layer === layer ? "вњ“ " : ""}
+              {tokenMenu.token.layer === layer ? "✓ " : ""}
               {label}
             </button>
           ))}
