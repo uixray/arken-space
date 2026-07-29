@@ -674,7 +674,7 @@ code {
 .map-scale {
   position: absolute;
   right: 8px;
-  bottom: 8px;
+  top: 44px;
   padding: 3px 6px;
   border: 1px solid var(--line);
   background: var(--surface);
