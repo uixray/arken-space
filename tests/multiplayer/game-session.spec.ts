@@ -219,6 +219,7 @@ async function claimInvite(
   await page.goto(inviteUrl);
   await page.getByLabel("Имя").fill(displayName);
   await page.getByRole("button", { name: "Войти" }).click();
+  await page.getByLabel("Меню сеанса").click();
   await expect(
     page.getByRole("button", { name: "Сменить игрока" }),
   ).toBeVisible();
@@ -264,6 +265,7 @@ test("GM and six isolated players recover authoritative state without security l
     const gmPage = await gm.newPage();
     await gmPage.goto("/gm/" + gmToken);
     await gmPage.getByRole("button", { name: "Войти" }).click();
+    await gmPage.getByLabel("Меню сеанса").click();
     await expect(gmPage.getByRole("button", { name: "Выйти" })).toBeVisible();
     await expect(gmPage.getByText("в сети", { exact: true })).toBeVisible();
     await expect
@@ -1211,6 +1213,7 @@ test("a shared browser handoff revokes player A before player B uses their own i
     await page.goto(playerAInviteUrl);
     await page.getByLabel("Имя").fill(playerAName);
     await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByLabel("Меню сеанса").click();
     await expect(
       page.getByText("Вы играете как: " + playerAName),
     ).toBeVisible();
@@ -1263,6 +1266,7 @@ test("a shared browser handoff revokes player A before player B uses their own i
     );
     await page.getByLabel("Имя").fill(playerBName);
     await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByLabel("Меню сеанса").click();
     await expect(
       page.getByText("Вы играете как: " + playerBName),
     ).toBeVisible();
