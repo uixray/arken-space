@@ -828,14 +828,14 @@ test("GM and six isolated players recover authoritative state without security l
       .getByRole("dialog", { name: "Токены" })
       .getByRole("button", { name: "Закрыть окно" })
       .click();
-    await pages[0]!.locator("#chat-tab-rolls").click();
+    // Rolls and table events now share the unified activity feed.
+    await pages[0]!.locator("#chat-tab-activity").click();
     await expect(
       pages[0]!.locator(".message", { hasText: publicMarkers[1] }),
     ).toBeVisible();
     await pages[0]!.locator(".message-list").evaluate((element) => {
       element.scrollTop = 0;
     });
-    await pages[0]!.locator("#chat-tab-table").click();
     await expect(pages[0]!.locator(".chat-compose textarea")).toBeVisible();
     await expect(
       pages[0]!.getByRole("button", { name: "Отправить", exact: true }),
@@ -864,12 +864,15 @@ test("GM and six isolated players recover authoritative state without security l
     await expect
       .poll(async () => (await bootstrap(players[1])).me)
       .toMatchObject({ displayName: "Player 2", role: "PLAYER" });
-    await expect(
-      pages[1].getByRole("combobox", { name: "Активная сцена" }),
-    ).toHaveValue(initialScene.id);
+    await expect(pages[1].locator(".scene-picker--readonly")).toContainText(
+      initialScene.name,
+    );
+    await pages[1].getByLabel("Меню сеанса").click();
     await expect(pages[1].getByText("в сети", { exact: true })).toBeVisible();
+    await pages[1].getByLabel("Меню сеанса").click();
 
     await players[2].setOffline(true);
+    await pages[2].getByLabel("Меню сеанса").click();
     await expect(pages[2].getByText(/переподключение|нет связи/)).toBeVisible({
       timeout: 15_000,
     });
@@ -878,12 +881,14 @@ test("GM and six isolated players recover authoritative state without security l
     await expect(pages[2].getByText("в сети", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
+    await pages[2].getByLabel("Меню сеанса").click();
 
     await activateScene(gm, recoveryScene.id, connections);
     for (const page of pages)
-      await expect(
-        page.getByRole("combobox", { name: "Активная сцена" }),
-      ).toHaveValue(recoveryScene.id, { timeout: 30_000 });
+      await expect(page.locator(".scene-picker--readonly")).toContainText(
+        recoveryScene.name,
+        { timeout: 30_000 },
+      );
 
     const recoveryPromises = connections.map(({ socket }) =>
       waitForRecovery(socket),
@@ -998,12 +1003,14 @@ test("GM and six isolated players recover authoritative state without security l
     }
 
     for (const page of pages) {
+      await page.getByLabel("Меню сеанса").click();
       await expect(page.getByText("в сети", { exact: true })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(
-        page.getByRole("combobox", { name: "Активная сцена" }),
-      ).toHaveValue(recoveryScene.id);
+      await page.getByLabel("Меню сеанса").click();
+      await expect(page.locator(".scene-picker--readonly")).toContainText(
+        recoveryScene.name,
+      );
     }
 
     const sixthGrant = grants.find(
