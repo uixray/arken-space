@@ -224,6 +224,7 @@ async function claimInvite(
     page.getByRole("button", { name: "Сменить игрока" }),
   ).toBeVisible();
   await expect(page.getByText("в сети", { exact: true })).toBeVisible();
+  await page.getByLabel("Меню сеанса").click();
   await expect
     .poll(async () => (await bootstrap(context)).me)
     .toMatchObject({
@@ -268,6 +269,7 @@ test("GM and six isolated players recover authoritative state without security l
     await gmPage.getByLabel("Меню сеанса").click();
     await expect(gmPage.getByRole("button", { name: "Выйти" })).toBeVisible();
     await expect(gmPage.getByText("в сети", { exact: true })).toBeVisible();
+    await gmPage.getByLabel("Меню сеанса").click();
     await expect
       .poll(async () => (await bootstrap(gm)).me)
       .toMatchObject({
