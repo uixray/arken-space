@@ -553,11 +553,13 @@ test("GM and six isolated players recover authoritative state without security l
     // reload without changing shared playback state.
     const playerMusic = pages[0]!.getByRole("region", { name: "Музыка" });
     await expect(playerMusic).toBeVisible();
+    await playerMusic.getByLabel("Громкость").click();
     await playerMusic.getByRole("button", { name: "Включить звук" }).click();
     await expect(
       playerMusic.getByRole("slider", { name: "Личная громкость" }),
     ).toBeVisible();
     await pages[0]!.reload();
+    await pages[0]!.getByLabel("Громкость").click();
     await expect(
       pages[0]!.getByRole("slider", { name: "Личная громкость" }),
     ).toBeVisible();
