@@ -2304,6 +2304,12 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
           : viewer === "player-c"
             ? playerC
             : otherGm;
+    fixture.directChatContacts = [sender, recipient, playerC, otherGm]
+      .filter((member) => member.id !== fixture.me.id)
+      .map((member) => ({
+        membershipId: member.id,
+        displayName: member.displayName,
+      }));
     if (viewer === "sender" || viewer === "recipient") {
       fixture.chatThreads.push(direct);
       fixture.chatThreadStates.push({
@@ -2374,18 +2380,11 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
   await page.goto("/");
   const directTab = page.locator("#chat-tab-direct");
   await directTab.click();
-  await page
-    .getByRole("combobox", {
-      name: "\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c \u043b\u0438\u0447\u043d\u043e\u0433\u043e \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u044f",
-    })
-    .click();
-  await page.getByRole("option", { name: recipient.displayName }).click();
-  await page
-    .getByRole("button", {
-      name: "\u041e\u0442\u043a\u0440\u044b\u0442\u044c",
-      exact: true,
-    })
-    .click();
+  const peerSelect = page.locator(".direct-peer-select");
+  await expect(peerSelect.locator("option")).toHaveCount(4);
+  await expect(peerSelect).not.toContainText(sender.id);
+  await peerSelect.selectOption(recipient.id);
+  await expect(peerSelect).toHaveValue(recipient.id);
   await page.locator(".direct-compose textarea").fill("UIX267_PRIVATE_MARKER");
   await page.locator(".direct-compose button.primary").click();
   await expect.poll(() => requests.length).toBe(1);
@@ -2397,13 +2396,17 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
   expect(requests[0]).not.toHaveProperty("stream");
   expect(requests[0]).not.toHaveProperty("visibility");
 
+  await page.reload();
+  await page.locator("#chat-tab-direct").click();
+  await expect(page.locator(".direct-peer-select")).toHaveValue(recipient.id);
+  await expect(page.getByText("UIX267_PRIVATE_MARKER")).toBeVisible();
+
   viewer = "recipient";
   await page.reload();
-  await page.locator("#chat-tab-table").click();
+  await page.locator("#chat-tab-activity").click();
   await expect(page.getByText("UIX267_PRIVATE_MARKER")).toHaveCount(0);
-  await directTab.focus();
-  await directTab.press("Enter");
-  await expect(directTab).toHaveAttribute("aria-selected", "true");
+  await page.locator("#chat-tab-direct").click();
+  await page.locator(".direct-peer-select").selectOption(sender.id);
   await expect(page.getByText("UIX267_PRIVATE_MARKER")).toBeVisible();
 
   for (const next of ["player-c", "gm"] as const) {
@@ -2411,13 +2414,7 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
     await page.reload();
     await page.locator("#chat-tab-direct").click();
     await expect(page.getByText("UIX267_PRIVATE_MARKER")).toHaveCount(0);
-    await expect(
-      page.getByRole("combobox", {
-        name: "\u041e\u0442\u043a\u0440\u044b\u0442\u044b\u0439 \u043b\u0438\u0447\u043d\u044b\u0439 \u0434\u0438\u0430\u043b\u043e\u0433",
-      }),
-    ).toContainText(
-      "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0438\u0430\u043b\u043e\u0433",
-    );
+    await expect(page.locator(".direct-peer-select")).toHaveValue("");
   }
 });
 

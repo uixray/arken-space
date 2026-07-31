@@ -2,7 +2,7 @@
 
 ## Linear
 
-- UIX-321 remains In Progress.
+- UIX-321 implementation and browser/privacy gates are complete; ready for Done.
 
 ## Decisions
 
@@ -33,7 +33,7 @@
 - PASS: full lint.
 - PASS: production build.
 - PASS: `git diff --check`.
-- Browser QA: attempted with a new mocked UIX-321 spec; the fixture/harness was not reliable enough and was removed rather than committed. Existing UIX-267 Playwright coverage still needs adaptation to the unified selector before this pool can close.
+- PASS: adapted the established UIX-267 Playwright privacy story to directChatContacts and the unified peer selector - 1/1.
 
 ## Blockers
 
