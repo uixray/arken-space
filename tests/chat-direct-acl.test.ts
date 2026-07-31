@@ -231,6 +231,60 @@ describe("direct chat integration ACL", () => {
     }
   });
 
+  it("projects safe direct-chat contacts to players without widening general members", async () => {
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.sender),
+    });
+    expect(snapshot.statusCode).toBe(200);
+    expect(snapshot.json().members).toEqual([
+      expect.objectContaining({ id: ids.sender, displayName: "A" }),
+    ]);
+    expect(snapshot.json().directChatContacts).toEqual(
+      expect.arrayContaining([
+        { membershipId: ids.recipient, displayName: "B" },
+        { membershipId: ids.outsider, displayName: "C" },
+        { membershipId: ids.gm, displayName: "GM" },
+      ]),
+    );
+    expect(snapshot.json().directChatContacts).toHaveLength(3);
+    expect(snapshot.json().directChatContacts).not.toContainEqual(
+      expect.objectContaining({ membershipId: ids.sender }),
+    );
+  });
+
+  it("does not count the sender's own direct message as unread", async () => {
+    const opened = await openDirect("sender", ids.recipient);
+    const threadId = opened.json().id as string;
+    expect((await sendDirect("sender", threadId)).statusCode).toBe(201);
+
+    const senderSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.sender),
+    });
+    const recipientSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.recipient),
+    });
+    expect(
+      senderSnapshot
+        .json()
+        .chatThreadStates.find(
+          (state: { threadId: string }) => state.threadId === threadId,
+        ).unreadCount,
+    ).toBe(0);
+    expect(
+      recipientSnapshot
+        .json()
+        .chatThreadStates.find(
+          (state: { threadId: string }) => state.threadId === threadId,
+        ).unreadCount,
+    ).toBe(1);
+  });
+
   it("conceals staged and claimed attachment content from nonparticipants", async () => {
     const opened = await openDirect("sender", ids.recipient);
     const threadId = opened.json().id as string;

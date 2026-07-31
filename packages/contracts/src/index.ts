@@ -1481,6 +1481,12 @@ export interface ChatThreadParticipantDto {
   displayName: string;
 }
 
+/** Minimal campaign peer projection used only to start direct chats. */
+export interface DirectChatContactDto {
+  membershipId: string;
+  displayName: string;
+}
+
 export interface StreamChatThreadDto {
   id: string;
   campaignId: string;
@@ -1613,6 +1619,8 @@ export interface GameSnapshot {
   };
   me: MembershipDto;
   members: MembershipDto[];
+  /** Safe peers available to the current member for a direct chat. */
+  directChatContacts?: DirectChatContactDto[];
   characters: CharacterDto[];
   catalogEntries: CatalogEntryDto[];
   scenes: SceneDto[];

@@ -1,4 +1,15 @@
-import { and, asc, count, desc, eq, gt, inArray, max, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  max,
+  ne,
+  or,
+} from "drizzle-orm";
 import {
   assets,
   audioStates,
@@ -271,6 +282,7 @@ export async function buildSnapshot(
             eq(chatMessages.campaignId, auth.campaignId),
             eq(chatMessages.threadId, thread.id),
             gt(chatMessages.sequence, cursorByThread.get(thread.id) ?? 0),
+            ne(chatMessages.membershipId, auth.membershipId),
             chatVisibilityFilter(auth),
           ),
         ),
@@ -383,6 +395,12 @@ export async function buildSnapshot(
       characterId: characterByOwner.get(member.id) ?? null,
       revision: member.revision,
     })),
+    directChatContacts: memberRows
+      .filter((member) => member.id !== auth.membershipId)
+      .map((member) => ({
+        membershipId: member.id,
+        displayName: member.displayName,
+      })),
     characters: visibleCharacters.map((character) =>
       characterDto(character, entriesByCharacter.get(character.id) ?? []),
     ),

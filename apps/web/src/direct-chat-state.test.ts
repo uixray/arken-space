@@ -6,12 +6,17 @@ import type {
   MembershipDto,
 } from "@arken/contracts";
 import {
+  directChatContacts,
+  directThreadForPeer,
   directThreadLabel,
   directThreads,
   directUnreadCount,
   directThreadPeer,
   eligibleDirectRecipients,
   appendDirectMessageResponse,
+  messagesForDirectThread,
+  persistDirectSelection,
+  restoreDirectSelection,
   upsertDirectThread,
 } from "./direct-chat-state";
 
@@ -44,6 +49,66 @@ describe("direct chat presentation", () => {
     expect(
       eligibleDirectRecipients(members, "a").map((item) => item.id),
     ).toEqual(["b", "gm"]);
+  });
+
+  it("resolves an existing thread by peer and keeps histories isolated", () => {
+    const second = {
+      ...thread,
+      id: "thread-2",
+      participants: [
+        thread.participants[0],
+        { membershipId: "c", displayName: "Мария" },
+      ],
+    } satisfies DirectChatThreadDto;
+    const snapshot = {
+      me: { id: "a" },
+      chatThreads: [thread, second],
+      messages: [
+        { id: "one", threadId: thread.id, stream: null, sequence: 1 },
+        { id: "two", threadId: second.id, stream: null, sequence: 2 },
+      ],
+    } as unknown as GameSnapshot;
+    expect(directThreadForPeer(snapshot, "c")?.id).toBe("thread-2");
+    expect(
+      messagesForDirectThread(snapshot, thread.id).map(({ id }) => id),
+    ).toEqual(["one"]);
+    expect(
+      messagesForDirectThread(snapshot, second.id).map(({ id }) => id),
+    ).toEqual(["two"]);
+  });
+
+  it("restores only an authorized peer and repairs a stale thread id", () => {
+    const snapshot = {
+      campaign: { id: "campaign" },
+      me: { id: "a" },
+      directChatContacts: [
+        { membershipId: "b", displayName: "Даша" },
+        { membershipId: "c", displayName: "Мария" },
+      ],
+      chatThreads: [thread],
+    } as unknown as GameSnapshot;
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    };
+    expect(
+      directChatContacts(snapshot).map(({ membershipId }) => membershipId),
+    ).toEqual(["b", "c"]);
+    persistDirectSelection(storage, snapshot, {
+      peerMembershipId: "b",
+      threadId: "stale",
+    });
+    expect(restoreDirectSelection(storage, snapshot)).toEqual({
+      peerMembershipId: "b",
+      threadId: thread.id,
+    });
+    persistDirectSelection(storage, snapshot, {
+      peerMembershipId: "outsider",
+      threadId: null,
+    });
+    expect(restoreDirectSelection(storage, snapshot)).toBeNull();
   });
 
   it("treats legacy snapshots without direct chat projections as empty", () => {

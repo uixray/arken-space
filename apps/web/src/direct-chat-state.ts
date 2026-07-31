@@ -1,6 +1,7 @@
 import type {
   ChatMessageDto,
   ChatThreadStateDto,
+  DirectChatContactDto,
   DirectChatThreadDto,
   GameSnapshot,
   MembershipDto,
@@ -43,6 +44,76 @@ export function eligibleDirectRecipients(
     .sort((left, right) =>
       left.displayName.localeCompare(right.displayName, "ru"),
     );
+}
+
+export function directChatContacts(
+  snapshot: GameSnapshot,
+): DirectChatContactDto[] {
+  return [...(snapshot.directChatContacts ?? [])].sort((left, right) =>
+    left.displayName.localeCompare(right.displayName, "ru"),
+  );
+}
+
+export function directThreadForPeer(
+  snapshot: GameSnapshot,
+  peerMembershipId: string,
+) {
+  return (
+    directThreads(snapshot).find((thread) =>
+      thread.participants.some(
+        (participant) =>
+          participant.membershipId === peerMembershipId &&
+          participant.membershipId !== snapshot.me.id,
+      ),
+    ) ?? null
+  );
+}
+
+export type StoredDirectSelection = Readonly<{
+  peerMembershipId: string;
+  threadId: string | null;
+}>;
+
+export function directSelectionStorageKey(snapshot: GameSnapshot) {
+  return `arken.direct-chat.${snapshot.campaign.id}.${snapshot.me.id}`;
+}
+
+export function restoreDirectSelection(
+  storage: Pick<Storage, "getItem">,
+  snapshot: GameSnapshot,
+): StoredDirectSelection | null {
+  try {
+    const raw = storage.getItem(directSelectionStorageKey(snapshot));
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<StoredDirectSelection>;
+    if (
+      typeof value.peerMembershipId !== "string" ||
+      !directChatContacts(snapshot).some(
+        (contact) => contact.membershipId === value.peerMembershipId,
+      )
+    )
+      return null;
+    const thread = directThreadForPeer(snapshot, value.peerMembershipId);
+    return {
+      peerMembershipId: value.peerMembershipId,
+      threadId:
+        typeof value.threadId === "string" && thread?.id === value.threadId
+          ? value.threadId
+          : (thread?.id ?? null),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function persistDirectSelection(
+  storage: Pick<Storage, "setItem" | "removeItem">,
+  snapshot: GameSnapshot,
+  selection: StoredDirectSelection | null,
+) {
+  const key = directSelectionStorageKey(snapshot);
+  if (!selection) storage.removeItem(key);
+  else storage.setItem(key, JSON.stringify(selection));
 }
 
 export function messagesForDirectThread(

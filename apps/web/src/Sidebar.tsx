@@ -90,11 +90,14 @@ import {
   unreadCountForStream,
 } from "./chat-state";
 import {
+  directChatContacts,
+  directThreadForPeer,
   directThreadLabel,
   directThreads,
   directUnreadCount,
-  eligibleDirectRecipients,
   messagesForDirectThread,
+  persistDirectSelection,
+  restoreDirectSelection,
 } from "./direct-chat-state";
 import { activityTableReadTarget, feedForChatStream } from "./sidebar-feed";
 import {
@@ -2136,11 +2139,15 @@ function DirectChatPanel({
   onMarkChatRead: Props["onMarkChatRead"];
 }) {
   const threads = directThreads(snapshot);
+  const contacts = directChatContacts(snapshot);
   const activeThread =
-    threads.find((thread) => thread.id === activeThreadId) ??
-    threads[0] ??
-    null;
-  const [recipientId, setRecipientId] = useState("");
+    threads.find((thread) => thread.id === activeThreadId) ?? null;
+  const [selectedPeerId, setSelectedPeerId] = useState(
+    () =>
+      restoreDirectSelection(window.localStorage, snapshot)?.peerMembershipId ??
+      "",
+  );
+  const [selectingPeer, setSelectingPeer] = useState(false);
   const [composer, setComposer] = useState("");
   const [attachment, setAttachment] = useState<ChatAttachmentMetadata | null>(
     null,
@@ -2166,8 +2173,28 @@ function DirectChatPanel({
   );
 
   useEffect(() => {
-    if (!activeThreadId && activeThread) onActiveThreadChange(activeThread.id);
-  }, [activeThread, activeThreadId, onActiveThreadChange]);
+    const restored = restoreDirectSelection(window.localStorage, snapshot);
+    if (!restored) {
+      setSelectedPeerId("");
+      if (activeThreadId) onActiveThreadChange(null);
+      return;
+    }
+    setSelectedPeerId(restored.peerMembershipId);
+    if (activeThreadId !== restored.threadId)
+      onActiveThreadChange(restored.threadId);
+  }, [activeThreadId, onActiveThreadChange, snapshot]);
+
+  useEffect(() => {
+    if (!selectedPeerId) return;
+    const thread = directThreadForPeer(snapshot, selectedPeerId);
+    if (thread && activeThreadId !== thread.id) {
+      onActiveThreadChange(thread.id);
+      persistDirectSelection(window.localStorage, snapshot, {
+        peerMembershipId: selectedPeerId,
+        threadId: thread.id,
+      });
+    }
+  }, [activeThreadId, onActiveThreadChange, selectedPeerId, snapshot]);
 
   useEffect(() => {
     if (!activeThread || latestSequence === undefined) return;
@@ -2178,15 +2205,38 @@ function DirectChatPanel({
     return () => window.clearTimeout(timer);
   }, [activeThread, latestSequence, onMarkChatRead]);
 
-  async function createThread() {
-    if (!recipientId) return;
+  async function selectPeer(peerMembershipId: string) {
+    setSelectedPeerId(peerMembershipId);
     setError("");
+    if (!peerMembershipId) {
+      onActiveThreadChange(null);
+      persistDirectSelection(window.localStorage, snapshot, null);
+      return;
+    }
+    const existing = directThreadForPeer(snapshot, peerMembershipId);
+    if (existing) {
+      onActiveThreadChange(existing.id);
+      persistDirectSelection(window.localStorage, snapshot, {
+        peerMembershipId,
+        threadId: existing.id,
+      });
+      return;
+    }
+    setSelectingPeer(true);
     try {
-      const thread = await onCreateThread(recipientId);
+      const thread = await onCreateThread(peerMembershipId);
       onActiveThreadChange(thread.id);
-      setRecipientId("");
+      persistDirectSelection(window.localStorage, snapshot, {
+        peerMembershipId,
+        threadId: thread.id,
+      });
     } catch {
+      setSelectedPeerId("");
+      onActiveThreadChange(null);
+      persistDirectSelection(window.localStorage, snapshot, null);
       setError("Не удалось открыть личный диалог.");
+    } finally {
+      setSelectingPeer(false);
     }
   }
 
@@ -2218,50 +2268,25 @@ function DirectChatPanel({
       aria-labelledby="chat-tab-direct"
     >
       <div className="direct-thread-toolbar">
-        <FormSelect
-          aria-label="Открытый личный диалог"
-          value={activeThread?.id ?? ""}
-          onChange={(event) => onActiveThreadChange(event.target.value || null)}
+        <select
+          className="direct-peer-select"
+          aria-label="??????????"
+          value={selectedPeerId}
+          disabled={selectingPeer || contacts.length === 0}
+          onChange={(event) => void selectPeer(event.target.value)}
         >
-          <option value="">Выберите диалог</option>
-          {threads.map((thread) => (
-            <option key={thread.id} value={thread.id}>
-              {directThreadLabel(thread, snapshot.me.id)}
-              {directUnreadCount(snapshot, thread.id)
-                ? ` · ${directUnreadCount(snapshot, thread.id)}`
-                : ""}
-            </option>
-          ))}
-        </FormSelect>
-        <div className="direct-thread-create">
-          <FormSelect
-            aria-label="Получатель личного сообщения"
-            value={recipientId}
-            onChange={(event) => setRecipientId(event.target.value)}
-            emptyMessage={
-              eligibleDirectRecipients(snapshot.members, snapshot.me.id)
-                .length === 0
-                ? "Нет доступных получателей"
-                : undefined
-            }
-          >
-            <option value="">Новый диалог…</option>
-            {eligibleDirectRecipients(snapshot.members, snapshot.me.id).map(
-              (member) => (
-                <option key={member.id} value={member.id}>
-                  {member.displayName}
-                </option>
-              ),
-            )}
-          </FormSelect>
-          <Button
-            type="button"
-            disabled={!recipientId}
-            onClick={() => void createThread()}
-          >
-            Открыть
-          </Button>
-        </div>
+          <option value="">???????? ???????????</option>
+          {contacts.map((contact) => {
+            const thread = directThreadForPeer(snapshot, contact.membershipId);
+            const unread = thread ? directUnreadCount(snapshot, thread.id) : 0;
+            return (
+              <option key={contact.membershipId} value={contact.membershipId}>
+                {contact.displayName}
+                {unread ? ` ? ${unread}` : ""}
+              </option>
+            );
+          })}
+        </select>
       </div>
       <div className="message-list" aria-live="polite">
         {!activeThread && (
