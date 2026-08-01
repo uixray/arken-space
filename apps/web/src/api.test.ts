@@ -54,6 +54,34 @@ describe("api telemetry and correlation", () => {
     expect(JSON.stringify(telemetry)).not.toContain("character-secret");
   });
 
+  it("shows actionable resource details for an insufficient-cost response", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: "INSUFFICIENT_CHARACTER_RESOURCE",
+            resource: "magic",
+            required: 4,
+            available: 1,
+          }),
+          { status: 409, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const failure = (await api("/api/characters/character-1/catalog/entry-1/roll", {
+      method: "POST",
+      body: "{}",
+    }).catch((error: unknown) => error)) as ApiError;
+
+    expect(failure.code).toBe("INSUFFICIENT_CHARACTER_RESOURCE");
+    expect(failure.message).toContain("магической силы");
+    expect(failure.message).toContain("Нужно: 4");
+    expect(failure.message).toContain("доступно: 1");
+  });
+
   it("preserves a caller action id and does not report non-critical endpoints", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "FAILED" }), {

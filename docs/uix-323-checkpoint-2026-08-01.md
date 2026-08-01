@@ -28,18 +28,19 @@
 - Atomic campaign-level `LONG_REST`, including day advance, resource restoration, catalog recharge, campaign CAS and audit payload.
 - Campaign UI wording changed from Next Day to Long Rest; the redundant per-character long-rest control was removed.
 - Main, special and combat characteristic grouping now places Magic Power separately and Reaction beside Initiative.
+- Skill and ability costs remain server-authoritative and atomic; insufficient Physical/Magic Power now produces an actionable localized error with required and available values.
 
 ## Verification
 - Typecheck - PASS.
 - Lint - PASS.
 - Source encoding - PASS (4/4).
+- API error/telemetry unit tests - PASS (8/8).
 - Scoped short-rest and campaign-long-rest integration - PASS (2/2).
 - `git diff --check` - PASS.
 
 ## Remaining UIX-323 work
-- Verify skill/ability costs and actionable insufficient-resource errors.
 - Add browser coverage for resource form persistence, stale revisions and rapid input.
 - Run the release regression gate before closing the issue.
 
 ## Next action
-Verify the skill-cost boundary and add focused browser coverage for the resource editor and rest controls.
+Add focused browser coverage for the resource editor and rest controls, including stale revisions and rapid input.
