@@ -395,6 +395,29 @@ export const characters = pgTable(
   ],
 );
 
+/** Character-sheet access, independent from token control and login grants. */
+export const characterControllers = pgTable(
+  "character_controllers",
+  {
+    characterId: uuid("character_id")
+      .notNull()
+      .references(() => characters.id, { onDelete: "cascade" }),
+    membershipId: uuid("membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("character_controllers_character_member_idx").on(
+      table.characterId,
+      table.membershipId,
+    ),
+    index("character_controllers_membership_idx").on(table.membershipId),
+  ],
+);
+
 export const catalogEntries = pgTable(
   "catalog_entries",
   {
@@ -1111,6 +1134,13 @@ export const chatMessages = pgTable(
     visibility: messageVisibilityEnum("visibility").notNull().default("PUBLIC"),
     body: text("body").notNull(),
     dice: jsonb("dice").$type<unknown>(),
+    systemData: jsonb("system_data").$type<{
+      type: "WALLET_AUDIT";
+      before: { gold: number; silver: number; copper: number; sp: number };
+      after: { gold: number; silver: number; copper: number; sp: number };
+      lastAt: string;
+      operationCount: number;
+    }>(),
     stickerId: uuid("sticker_id"),
     stickerPresentation: jsonb("sticker_presentation").$type<{
       name: string;

@@ -45,6 +45,7 @@ import type { TokenFramePreset } from "./token-image-editor-state";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { isEditableEventTarget } from "./input-diagnostics";
 import { ImageUploadField } from "./ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { SceneManagerDialog, type SceneDraft } from "./ui/SceneManagerDialog";
@@ -52,6 +53,7 @@ import {
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "./chat-composer";
+import { normalizeCharacterControllerIds } from "./character-controller-access-state";
 import {
   characterWorkspaceReducer,
   createCharacterWorkspaceState,
@@ -90,11 +92,14 @@ import {
   unreadCountForStream,
 } from "./chat-state";
 import {
+  directChatContacts,
+  directThreadForPeer,
   directThreadLabel,
   directThreads,
   directUnreadCount,
-  eligibleDirectRecipients,
   messagesForDirectThread,
+  persistDirectSelection,
+  restoreDirectSelection,
 } from "./direct-chat-state";
 import { activityTableReadTarget, feedForChatStream } from "./sidebar-feed";
 import {
@@ -162,6 +167,11 @@ type Props = {
   }) => Promise<void>;
   onReplaceTokenControllers: (
     definitionId: string,
+    revision: number,
+    controllerMembershipIds: string[],
+  ) => Promise<void>;
+  onReplaceCharacterControllers: (
+    characterId: string,
     revision: number,
     controllerMembershipIds: string[],
   ) => Promise<void>;
@@ -298,6 +308,7 @@ type Props = {
     patch: {
       wallet?: CharacterDto["wallet"];
       resources?: CharacterDto["resources"];
+      rest?: "SHORT" | "LONG" | "CATCH_BREATH";
     },
     intent?: {
       walletDelta?: {
@@ -307,7 +318,7 @@ type Props = {
     },
   ) => Promise<void>;
   onCampaignClock: (
-    command: "ADVANCE_DAY" | "START_BATTLE" | "END_BATTLE",
+    command: "ADVANCE_DAY" | "LONG_REST" | "START_BATTLE" | "END_BATTLE",
     revision: number,
   ) => Promise<void>;
   requestedChatMessageId: string | null;
@@ -719,6 +730,7 @@ export function CharacterWorkspace({
         : props.snapshot.characters.filter(
             (character) =>
               character.ownerMembershipId === props.snapshot.me.id ||
+              character.controllerMembershipIds.includes(props.snapshot.me.id) ||
               character.id === props.snapshot.me.characterId,
           );
     const byId = new Map(visible.map((character) => [character.id, character]));
@@ -734,6 +746,7 @@ export function CharacterWorkspace({
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(false);
 
   useEffect(() => titleRef.current?.focus(), []);
   useEffect(() => {
@@ -745,8 +758,7 @@ export function CharacterWorkspace({
   useEffect(() => {
     const id = props.requestedCharacterId;
     if (!id || !characters.some((character) => character.id === id)) return;
-    dispatch({ type: "OPEN", id });
-    dispatch({ type: "FOCUS", id });
+    dispatch({ type: "OPEN_EXCLUSIVE", id });
   }, [characters, props.requestedCharacterId]);
   useEffect(() => {
     if (!state.activeId) return;
@@ -758,6 +770,7 @@ export function CharacterWorkspace({
   }, [state.activeId]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || isEditableEventTarget(event.target)) return;
       if (event.key !== "Escape") return;
       if ((event.target as Element | null)?.closest('[role="dialog"]')) return;
       onClose();
@@ -785,6 +798,16 @@ export function CharacterWorkspace({
         </p>
         <button
           type="button"
+          className="character-rail-toggle"
+          aria-label={railCollapsed ? "Развернуть список персонажей" : "Свернуть список персонажей"}
+          aria-pressed={railCollapsed}
+          title={railCollapsed ? "Развернуть список персонажей" : "Свернуть список персонажей"}
+          onClick={() => setRailCollapsed((current) => !current)}
+        >
+          <span aria-hidden="true">{railCollapsed ? ">" : "<"}</span>
+        </button>
+        <button
+          type="button"
           aria-label="Закрыть персонажей"
           title="Закрыть рабочее пространство персонажей"
           onClick={onClose}
@@ -792,7 +815,7 @@ export function CharacterWorkspace({
           <span aria-hidden="true">×</span>
         </button>
       </header>
-      <div className="character-workspace__body">
+      <div className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}>
         <nav className="character-rail" aria-label="Персонажи кампании">
           {props.snapshot.me.role === "GM" && (
             <button
@@ -832,8 +855,9 @@ export function CharacterWorkspace({
                       else dispatch({ type: "OPEN", id: character.id });
                     }}
                   >
+                    <span className="character-rail__initial" aria-hidden="true">{character.name.slice(0, 1).toLocaleUpperCase()}</span>
                     <strong>{character.name}</strong>
-                    <span>
+                    <span className="character-rail__status">
                       {isCollapsed ? "свернут" : isOpen ? "открыт" : ""}
                     </span>
                   </button>
@@ -920,6 +944,7 @@ export function CharacterWorkspace({
                       }
                       showCharacterPicker={false}
                       onPatch={props.onPatchCharacter}
+                      onReplaceControllers={props.onReplaceCharacterControllers}
                       onRoll={props.onRoll}
                       onAssignEntry={props.onAssignCatalogEntry}
                       onUpdateEntry={props.onUpdateCharacterEntry}
@@ -953,6 +978,92 @@ export function CharacterWorkspace({
   );
 }
 
+function CharacterControllerAccess({
+  character,
+  members,
+  onSave,
+}: {
+  character: CharacterDto;
+  members: GameSnapshot["members"];
+  onSave: Props["onReplaceCharacterControllers"];
+}) {
+  const canonical = useMemo(
+    () =>
+      normalizeCharacterControllerIds(
+        character.controllerMembershipIds,
+        character.ownerMembershipId,
+      ),
+    [character.controllerMembershipIds, character.ownerMembershipId],
+  );
+  const [draft, setDraft] = useState(canonical);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const dirty =
+    JSON.stringify([...draft].sort()) !== JSON.stringify([...canonical].sort());
+
+  useEffect(() => {
+    setDraft(canonical);
+  }, [canonical, character.id, character.revision]);
+
+  const players = members.filter((member) => member.role === "PLAYER");
+  return (
+    <fieldset className="character-controller-access" disabled={pending}>
+      <legend>Доступ к персонажу</legend>
+      <p className="muted">
+        Игроки, которые могут видеть и управлять этим персонажем.
+      </p>
+      <div className="character-controller-access__players">
+        {players.map((member) => {
+          const owner = member.id === character.ownerMembershipId;
+          const checked = owner || draft.includes(member.id);
+          return (
+            <label key={member.id}>
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={owner || pending}
+                onChange={(event) =>
+                  setDraft((current) =>
+                    event.target.checked
+                      ? normalizeCharacterControllerIds(
+                          [...current, member.id],
+                          character.ownerMembershipId,
+                        )
+                      : current.filter((id) => id !== member.id),
+                  )
+                }
+              />
+              <span>{member.displayName}</span>
+              {owner && <span className="muted">Владелец</span>}
+            </label>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+      <Button
+        disabled={!dirty || pending}
+        onClick={() => {
+          setPending(true);
+          setError("");
+          void onSave(character.id, character.revision, draft)
+            .catch(() =>
+              setError(
+                "Не удалось сохранить доступ. Данные обновлены — проверьте список и повторите попытку.",
+              ),
+            )
+            .finally(() => setPending(false));
+        }}
+      >
+        {pending ? "Сохранение…" : "Сохранить доступ"}
+      </Button>
+    </fieldset>
+  );
+}
+
 export function CharacterPanel({
   snapshot,
   character,
@@ -960,6 +1071,7 @@ export function CharacterPanel({
   setSelectedId,
   showCharacterPicker = true,
   onPatch,
+  onReplaceControllers,
   onRoll,
   onAssignEntry,
   onUpdateEntry,
@@ -976,6 +1088,7 @@ export function CharacterPanel({
   setSelectedId: (value: string) => void;
   showCharacterPicker?: boolean;
   onPatch: Props["onPatchCharacter"];
+  onReplaceControllers: Props["onReplaceCharacterControllers"];
   onRoll: Props["onRoll"];
   onAssignEntry: Props["onAssignCatalogEntry"];
   onUpdateEntry: Props["onUpdateCharacterEntry"];
@@ -1013,22 +1126,24 @@ export function CharacterPanel({
   );
   const walletDraftRef = useRef(walletDraft);
   const walletInputDirtyRef = useRef(false);
-  const [resourcesDraft, setResourcesDraft] = useState(() =>
-    JSON.stringify(character?.resources ?? {}, null, 2),
-  );
+  const [resourcesDraft, setResourcesDraft] = useState<
+    CharacterDto["resources"]
+  >(() => ({ ...(character?.resources ?? {}) }));
+  const [newResourceName, setNewResourceName] = useState("");
   useEffect(() => {
     if (character && countersPending === 0) {
       const nextWallet = normalizeWallet(character.wallet);
       walletDraftRef.current = nextWallet;
       walletInputDirtyRef.current = false;
       setWalletDraft(nextWallet);
-      setResourcesDraft(JSON.stringify(character.resources, null, 2));
+      setResourcesDraft({ ...character.resources });
     }
   }, [character, countersPending]);
   const editable =
     character &&
     (snapshot.me.role === "GM" ||
-      character.ownerMembershipId === snapshot.me.id);
+      character.ownerMembershipId === snapshot.me.id ||
+      character.controllerMembershipIds.includes(snapshot.me.id));
   if (!character)
     return (
       <Empty
@@ -1083,6 +1198,40 @@ export function CharacterPanel({
       );
     } finally {
       setCountersPending((current) => Math.max(0, current - 1));
+    }
+  };
+  const saveResources = async (next: CharacterDto["resources"]) => {
+    setResourcesDraft(next);
+    if (JSON.stringify(next) === JSON.stringify(character.resources)) return;
+    setCountersPending((count) => count + 1);
+    setCountersError("");
+    try {
+      await onUpdateCounters(character.id, character.revision, {
+        resources: next,
+      });
+    } catch (reason) {
+      setCountersError(
+        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+          ? "Ресурсы изменены. Повторите действие."
+          : "Не удалось сохранить ресурсы.",
+      );
+    } finally {
+      setCountersPending((count) => Math.max(0, count - 1));
+    }
+  };
+  const runRest = async (rest: "SHORT" | "LONG" | "CATCH_BREATH") => {
+    setCountersPending((count) => count + 1);
+    setCountersError("");
+    try {
+      await onUpdateCounters(character.id, character.revision, { rest });
+    } catch (reason) {
+      setCountersError(
+        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+          ? "Ресурсы изменены. Повторите отдых."
+          : "Не удалось применить отдых.",
+      );
+    } finally {
+      setCountersPending((count) => Math.max(0, count - 1));
     }
   };
   const changeWallet = (key: keyof CharacterDto["wallet"], delta: number) => {
@@ -1147,6 +1296,13 @@ export function CharacterPanel({
           <span className="revision">rev {character.revision}</span>
         </div>
       </div>
+      {snapshot.me.role === "GM" && (
+        <CharacterControllerAccess
+          character={character}
+          members={snapshot.members}
+          onSave={onReplaceControllers}
+        />
+      )}
       {portrait && (
         <img
           className="character-portrait"
@@ -1209,11 +1365,10 @@ export function CharacterPanel({
           </p>
           <Button
             onClick={() =>
-              onCampaignClock("ADVANCE_DAY", snapshot.campaign.revision)
+              onCampaignClock("LONG_REST", snapshot.campaign.revision)
             }
           >
-            Следующий день
-          </Button>
+            Длинный отдых</Button>
           <Button
             onClick={() =>
               onCampaignClock(
@@ -1257,7 +1412,7 @@ export function CharacterPanel({
         )}
       </div>
       <div className="stats-grid">
-        {arkenSystem.stats.map((stat) => (
+        {arkenSystem.stats.filter((stat) => stat.key !== "reaction" && stat.key !== "magicPower").map((stat) => (
           <label key={stat.key} className="stat-field">
             <span>{stat.label}</span>
             <FormInput
@@ -1287,13 +1442,48 @@ export function CharacterPanel({
           </label>
         ))}
       </div>
+      <h3 className="character-block-heading">{"Особые характеристики"}</h3>
+      <div className="stats-grid">
+        {arkenSystem.stats.filter((stat) => stat.key === "magicPower").map((stat) => (
+          <label key={stat.key} className="stat-field">
+            <span>{stat.label}</span>
+            <FormInput
+              key={`${character.id}-${stat.key}-${character.revision}`}
+              type="number"
+              defaultValue={character.stats[stat.key] ?? stat.defaultValue}
+              disabled={!editable}
+              min={stat.min}
+              max={stat.max}
+              onBlur={(event) =>
+                void runCharacterMutation(() =>
+                  onPatch(character.id, {
+                    stats: { [stat.key]: Number(event.target.value) },
+                    revision: character.revision,
+                  }),
+                )
+              }
+            />
+            <Button disabled={!editable || rollPending} onClick={() => void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)}>
+              {"Бросок"}
+            </Button>
+          </label>
+        ))}
+      </div>
       <h3 className="character-block-heading">Боевые характеристики</h3>
+      <div className="inline-fields">
       <Button
         disabled={!editable || rollPending}
         onClick={() => void submitCharacterRoll("1d20 + agility", "Инициатива")}
       >
         Инициатива (d20 + Ловкость)
       </Button>
+      <Button
+        disabled={!editable || rollPending}
+        onClick={() => void submitCharacterRoll("1d20 + reaction", "Бросок?")}
+      >
+        {"Бросок? (d20 + Бросок?)"}
+      </Button>
+      </div>
       <div className="subsection">
         <h3>Дополнительные навыки</h3>
         {character.skills.length ? (
@@ -1452,88 +1642,200 @@ export function CharacterPanel({
         />
       </label>
       <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
-      <div className="inline-fields character-power-controls">
+      <div className="character-power-controls">
         {(["physicalPower", "magicPower"] as const).map((key) => {
-          const resource = character.resources[key] ?? {
-            current: 0,
-            maximum: 0,
-          };
+          const resource = resourcesDraft[key] ?? { current: 0, maximum: 0 };
+          const maximum = resource.maximum ?? resource.current;
           return (
-            <span key={key}>
-              <b>
-                {key === "physicalPower" ? "Physical Power" : "Magic Power"}
-              </b>{" "}
-              {resource.current}/{resource.maximum ?? resource.current}
-            </span>
+            <fieldset className="resource-card" key={key} disabled={!editable}>
+              <legend>{key === "physicalPower" ? "Физическая сила" : "Магическая сила"}</legend>
+              <label>
+                Текущее
+                <FormInput
+                  type="number"
+                  min={0}
+                  value={resource.current}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: { ...resource, current: Math.max(0, Number(event.target.value)) },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+              <label>
+                Максимум
+                <FormInput
+                  type="number"
+                  min={0}
+                  value={maximum}
+                  onChange={(event) => {
+                    const nextMaximum = Math.max(0, Number(event.target.value));
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: {
+                        ...resource,
+                        maximum: nextMaximum,
+                        current: Math.min(resource.current, nextMaximum),
+                        recoverable: true,
+                      },
+                    }));
+                  }}
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+            </fieldset>
           );
         })}
-        <Button
-          disabled={!editable || countersPending > 0}
-          title={"Восстанавливает 25% максимума Physical Power, округляя вверх"}
-          onClick={() => {
-            const physical = character.resources.physicalPower ?? {
-              current: 0,
-              maximum: 0,
-            };
-            const maximum = physical.maximum ?? physical.current;
-            const current = Math.min(
-              maximum,
-              physical.current + Math.ceil(maximum * 0.25),
-            );
-            if (current === physical.current) return;
-            setCountersPending((count) => count + 1);
-            void onUpdateCounters(character.id, character.revision, {
-              resources: {
-                ...character.resources,
-                physicalPower: { ...physical, current, maximum },
-              },
-            }).finally(() =>
-              setCountersPending((count) => Math.max(0, count - 1)),
-            );
-          }}
-        >
-          {"Перевести дух (+25% Physical Power)"}
-        </Button>
+        <div className="inline-fields character-rest-controls">
+          <Button
+            disabled={!editable || countersPending > 0}
+            onClick={() => void runRest("CATCH_BREATH")}
+          >
+            Перевести дух
+          </Button>
+          <Button
+            disabled={!editable || countersPending > 0}
+            onClick={() => void runRest("SHORT")}
+          >
+            Короткий отдых (+25%)
+          </Button>
+        </div>
       </div>
-      <label className="field">
-        Ресурсы (JSON: имя → current/maximum)
-        <FormTextArea
-          value={resourcesDraft}
-          disabled={!editable}
-          rows={5}
-          onChange={(event) => setResourcesDraft(event.target.value)}
-          onBlur={(event) => {
-            try {
-              const resources = JSON.parse(
-                event.target.value,
-              ) as CharacterDto["resources"];
-              if (
-                JSON.stringify(resources) ===
-                JSON.stringify(character.resources)
-              )
-                return;
-              setCountersPending((count) => count + 1);
-              setCountersError("");
-              void onUpdateCounters(character.id, character.revision, {
-                resources,
-              })
-                .catch((reason) => {
-                  setCountersError(
-                    reason instanceof ApiError &&
-                      reason.code === "CHARACTER_CONFLICT"
-                      ? "Ресурсы изменены в другой сессии. Показаны актуальные значения — повторите правку при необходимости."
-                      : "Не удалось сохранить ресурсы. Проверьте данные и соединение.",
-                  );
-                })
-                .finally(() =>
-                  setCountersPending((count) => Math.max(0, count - 1)),
-                );
-            } catch {
-              setResourcesDraft(JSON.stringify(character.resources, null, 2));
-            }
-          }}
-        />
-      </label>
+      <div className="subsection character-resource-editor">
+        <h3>Дополнительные ресурсы</h3>
+        {Object.entries(resourcesDraft)
+          .filter(([key]) => key !== "physicalPower" && key !== "magicPower")
+          .map(([key, resource]) => (
+            <fieldset className="resource-card" key={key} disabled={!editable}>
+              <legend>{key}</legend>
+              <label>
+                Название
+                <FormInput
+                  defaultValue={key}
+                  required
+                  onBlur={(event) => {
+                    const nextKey = event.target.value.trim();
+                    if (!nextKey || nextKey === key || resourcesDraft[nextKey]) {
+                      event.target.value = key;
+                      return;
+                    }
+                    const { [key]: moved, ...rest } = resourcesDraft;
+                    void saveResources({ ...rest, [nextKey]: moved! });
+                  }}
+                />
+              </label>
+              <label>
+                Описание
+                <FormInput
+                  value={resource.description ?? ""}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: { ...resource, description: event.target.value },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+              <label>
+                Текущее
+                <FormInput
+                  type="number"
+                  min={0}
+                  value={resource.current}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: { ...resource, current: Math.max(0, Number(event.target.value)) },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+              <label>
+                Максимум
+                <FormInput
+                  type="number"
+                  min={0}
+                  value={resource.maximum ?? resource.current}
+                  onChange={(event) => {
+                    const maximum = Math.max(0, Number(event.target.value));
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: { ...resource, maximum, current: Math.min(resource.current, maximum) },
+                    }));
+                  }}
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+              <label>
+                Изображение
+                <FormSelect
+                  value={resource.imageAssetId ?? ""}
+                  onChange={(event) => {
+                    const next = {
+                      ...resourcesDraft,
+                      [key]: { ...resource, imageAssetId: event.target.value || null },
+                    };
+                    void saveResources(next);
+                  }}
+                >
+                  <option value="">Без изображения</option>
+                  {snapshot.assets
+                    .filter((asset) => asset.mimeType.startsWith("image/"))
+                    .map((asset) => (
+                      <option key={asset.id} value={asset.id}>{asset.name}</option>
+                    ))}
+                </FormSelect>
+              </label>
+              <label className="compact-check">
+                <input
+                  type="checkbox"
+                  checked={resource.recoverable !== false}
+                  onChange={(event) =>
+                    void saveResources({
+                      ...resourcesDraft,
+                      [key]: { ...resource, recoverable: event.target.checked },
+                    })
+                  }
+                />
+                Восполнять при отдыхе
+              </label>
+              <Button
+                className="danger-link"
+                onClick={() => {
+                  const { [key]: _removed, ...rest } = resourcesDraft;
+                  void saveResources(rest);
+                }}
+              >
+                Удалить
+              </Button>
+            </fieldset>
+          ))}
+        <div className="inline-fields">
+          <FormInput
+            value={newResourceName}
+            placeholder="Новый ресурс"
+            onChange={(event) => setNewResourceName(event.target.value)}
+          />
+          <Button
+            disabled={!editable || !newResourceName.trim() || Boolean(resourcesDraft[newResourceName.trim()])}
+            onClick={() => {
+              const key = newResourceName.trim();
+              if (!key) return;
+              setNewResourceName("");
+              void saveResources({
+                ...resourcesDraft,
+                [key]: { current: 0, maximum: 0, recoverable: true },
+              });
+            }}
+          >
+            Добавить
+          </Button>
+        </div>
+      </div>
       <label className="field">
         Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не
         нормализуются)
@@ -2136,11 +2438,15 @@ function DirectChatPanel({
   onMarkChatRead: Props["onMarkChatRead"];
 }) {
   const threads = directThreads(snapshot);
+  const contacts = directChatContacts(snapshot);
   const activeThread =
-    threads.find((thread) => thread.id === activeThreadId) ??
-    threads[0] ??
-    null;
-  const [recipientId, setRecipientId] = useState("");
+    threads.find((thread) => thread.id === activeThreadId) ?? null;
+  const [selectedPeerId, setSelectedPeerId] = useState(
+    () =>
+      restoreDirectSelection(window.localStorage, snapshot)?.peerMembershipId ??
+      "",
+  );
+  const [selectingPeer, setSelectingPeer] = useState(false);
   const [composer, setComposer] = useState("");
   const [attachment, setAttachment] = useState<ChatAttachmentMetadata | null>(
     null,
@@ -2166,8 +2472,28 @@ function DirectChatPanel({
   );
 
   useEffect(() => {
-    if (!activeThreadId && activeThread) onActiveThreadChange(activeThread.id);
-  }, [activeThread, activeThreadId, onActiveThreadChange]);
+    const restored = restoreDirectSelection(window.localStorage, snapshot);
+    if (!restored) {
+      setSelectedPeerId("");
+      if (activeThreadId) onActiveThreadChange(null);
+      return;
+    }
+    setSelectedPeerId(restored.peerMembershipId);
+    if (activeThreadId !== restored.threadId)
+      onActiveThreadChange(restored.threadId);
+  }, [activeThreadId, onActiveThreadChange, snapshot]);
+
+  useEffect(() => {
+    if (!selectedPeerId) return;
+    const thread = directThreadForPeer(snapshot, selectedPeerId);
+    if (thread && activeThreadId !== thread.id) {
+      onActiveThreadChange(thread.id);
+      persistDirectSelection(window.localStorage, snapshot, {
+        peerMembershipId: selectedPeerId,
+        threadId: thread.id,
+      });
+    }
+  }, [activeThreadId, onActiveThreadChange, selectedPeerId, snapshot]);
 
   useEffect(() => {
     if (!activeThread || latestSequence === undefined) return;
@@ -2178,15 +2504,38 @@ function DirectChatPanel({
     return () => window.clearTimeout(timer);
   }, [activeThread, latestSequence, onMarkChatRead]);
 
-  async function createThread() {
-    if (!recipientId) return;
+  async function selectPeer(peerMembershipId: string) {
+    setSelectedPeerId(peerMembershipId);
     setError("");
+    if (!peerMembershipId) {
+      onActiveThreadChange(null);
+      persistDirectSelection(window.localStorage, snapshot, null);
+      return;
+    }
+    const existing = directThreadForPeer(snapshot, peerMembershipId);
+    if (existing) {
+      onActiveThreadChange(existing.id);
+      persistDirectSelection(window.localStorage, snapshot, {
+        peerMembershipId,
+        threadId: existing.id,
+      });
+      return;
+    }
+    setSelectingPeer(true);
     try {
-      const thread = await onCreateThread(recipientId);
+      const thread = await onCreateThread(peerMembershipId);
       onActiveThreadChange(thread.id);
-      setRecipientId("");
+      persistDirectSelection(window.localStorage, snapshot, {
+        peerMembershipId,
+        threadId: thread.id,
+      });
     } catch {
+      setSelectedPeerId("");
+      onActiveThreadChange(null);
+      persistDirectSelection(window.localStorage, snapshot, null);
       setError("Не удалось открыть личный диалог.");
+    } finally {
+      setSelectingPeer(false);
     }
   }
 
@@ -2218,50 +2567,25 @@ function DirectChatPanel({
       aria-labelledby="chat-tab-direct"
     >
       <div className="direct-thread-toolbar">
-        <FormSelect
-          aria-label="Открытый личный диалог"
-          value={activeThread?.id ?? ""}
-          onChange={(event) => onActiveThreadChange(event.target.value || null)}
+        <select
+          className="direct-peer-select"
+          aria-label="Собеседник"
+          value={selectedPeerId}
+          disabled={selectingPeer || contacts.length === 0}
+          onChange={(event) => void selectPeer(event.target.value)}
         >
-          <option value="">Выберите диалог</option>
-          {threads.map((thread) => (
-            <option key={thread.id} value={thread.id}>
-              {directThreadLabel(thread, snapshot.me.id)}
-              {directUnreadCount(snapshot, thread.id)
-                ? ` · ${directUnreadCount(snapshot, thread.id)}`
-                : ""}
-            </option>
-          ))}
-        </FormSelect>
-        <div className="direct-thread-create">
-          <FormSelect
-            aria-label="Получатель личного сообщения"
-            value={recipientId}
-            onChange={(event) => setRecipientId(event.target.value)}
-            emptyMessage={
-              eligibleDirectRecipients(snapshot.members, snapshot.me.id)
-                .length === 0
-                ? "Нет доступных получателей"
-                : undefined
-            }
-          >
-            <option value="">Новый диалог…</option>
-            {eligibleDirectRecipients(snapshot.members, snapshot.me.id).map(
-              (member) => (
-                <option key={member.id} value={member.id}>
-                  {member.displayName}
-                </option>
-              ),
-            )}
-          </FormSelect>
-          <Button
-            type="button"
-            disabled={!recipientId}
-            onClick={() => void createThread()}
-          >
-            Открыть
-          </Button>
-        </div>
+          <option value="">Выберите собеседника</option>
+          {contacts.map((contact) => {
+            const thread = directThreadForPeer(snapshot, contact.membershipId);
+            const unread = thread ? directUnreadCount(snapshot, thread.id) : 0;
+            return (
+              <option key={contact.membershipId} value={contact.membershipId}>
+                {contact.displayName}
+                {unread ? ` ? ${unread}` : ""}
+              </option>
+            );
+          })}
+        </select>
       </div>
       <div className="message-list" aria-live="polite">
         {!activeThread && (

@@ -13,6 +13,20 @@ const ids = {
 
 const now = "2026-07-24T12:00:00.000Z";
 
+const editableMedia = {
+  contentId: "88888888-8888-4888-8888-888888888889",
+  order: 0,
+  altText: "Ravenford gate",
+  caption: "Before the party arrives",
+  fileName: "ravenford.webp",
+  mimeType: "image/webp",
+  sizeBytes: 128,
+  width: 640,
+  height: 360,
+  createdAt: now,
+};
+
+
 function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
   const membershipId = role === "GM" ? ids.gm : ids.player;
   return {
@@ -76,20 +90,49 @@ test("GM drafts, publishes, corrects and archives a story post through refreshed
   await page.route("**/api/story/posts", async (route) => {
     expect(route.request().method()).toBe("POST");
     expect(route.request().postDataJSON()).toMatchObject({ title: "Arrival at Ravenford", body: "The gates open\nfor the party.", gmNotes: "GM-only preparation note" });
-    posts = [adminPost("DRAFT", "The gates open\nfor the party.")];
+    posts = [
+      {
+        ...adminPost("DRAFT", "The gates open\nfor the party."),
+        media: [editableMedia],
+      },
+    ];
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(posts[0]) });
   });
   await page.route(`**/api/story/posts/${ids.post}/publish`, async (route) => {
     expect(route.request().method()).toBe("POST");
     const revision = (route.request().postDataJSON() as { revision: number }).revision;
     expect([1, 4]).toContain(revision);
-    posts = [adminPost("PUBLISHED", posts[0].body, revision + 1)];
+    posts = [
+      {
+        ...adminPost("PUBLISHED", posts[0].body, revision + 1),
+        media: posts[0].media,
+      },
+    ];
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(posts[0]) });
   });
   await page.route(`**/api/story/posts/${ids.post}`, async (route) => {
     expect(route.request().method()).toBe("PATCH");
-    expect(route.request().postDataJSON()).toMatchObject({ revision: 2, body: "The gates open for the whole party." });
-    posts = [adminPost("CORRECTED", "The gates open for the whole party.", 3)];
+    const input = route.request().postDataJSON() as {
+      revision: number;
+      title: string;
+      body: string;
+      gmNotes: string;
+      media: unknown[];
+    };
+    expect(input).toMatchObject({
+      revision: 2,
+      title: "Revised arrival",
+      body: "The gates open for the whole party.",
+      gmNotes: "Updated GM-only note",
+      media: [],
+    });
+    posts = [
+      {
+        ...adminPost("CORRECTED", input.body, 3),
+        title: input.title,
+        gmNotes: input.gmNotes,
+      },
+    ];
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(posts[0]) });
   });
   await page.route(`**/api/story/posts/${ids.post}/archive`, async (route) => {
@@ -115,19 +158,31 @@ test("GM drafts, publishes, corrects and archives a story post through refreshed
   await body.focus();
   await page.keyboard.press("Enter");
 
-  const post = page.locator(".story-post").filter({ hasText: "Arrival at Ravenford" });
+  const post = page.locator(".story-post").first();
+  await expect(post).toContainText("Arrival at Ravenford");
   await expect(post).toHaveAttribute("data-story-lifecycle", "DRAFT");
+  await expect(post.getByText("GM-only preparation note")).toBeVisible();
   await expect.poll(() => refreshes).toBeGreaterThan(1);
   expect(await page.locator(".story-channel").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
 
   await post.locator(".story-post__actions button").first().click();
   await expect(post).toHaveAttribute("data-story-lifecycle", "PUBLISHED");
   await post.locator(".story-post__actions button").first().click();
-  const correction = post.locator(".story-post__edit textarea");
-  await correction.fill("The gates open for the whole party.");
+  await post.locator(".story-post__edit input").first().fill("Revised arrival");
+  await post.locator(".story-post__edit textarea").first().fill(
+    "The gates open for the whole party.",
+  );
+  await post.locator(".story-post__edit textarea").last().fill(
+    "Updated GM-only note",
+  );
+  await expect(post.getByRole("button", { name: "Заменить" })).toBeVisible();
+  await post.getByRole("button", { name: "Удалить" }).click();
+  await expect(post.getByText("ravenford.webp")).toHaveCount(0);
   await post.locator(".story-post__actions button").first().click();
   await expect(post).toHaveAttribute("data-story-lifecycle", "CORRECTED");
+  await expect(post).toContainText("Revised arrival");
   await expect(post).toContainText("The gates open for the whole party.");
+  await expect(post.getByText("Updated GM-only note")).toBeVisible();
   await post.locator(".story-post__actions button").last().click();
   await expect(post).toHaveAttribute("data-story-lifecycle", "ARCHIVED");
   await post.getByRole("button", { name: "Восстановить" }).click();

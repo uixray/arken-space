@@ -28,6 +28,7 @@ import {
   appendDirectMessageResponse,
   upsertDirectThread,
 } from "./direct-chat-state";
+import { isEditableEventTarget } from "./input-diagnostics";
 import {
   addRollToast,
   removeRollToast,
@@ -166,10 +167,8 @@ function CanvasHistoryControls({
   useEffect(() => {
     if (!sceneId || disabled) return;
     const handler = (event: KeyboardEvent) => {
+      if (event.isComposing || isEditableEventTarget(event.target)) return;
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z")
-        return;
-      const target = event.target as HTMLElement | null;
-      if (target?.matches("input, textarea, select, [contenteditable=true]"))
         return;
       event.preventDefault();
       const direction = event.shiftKey ? "redo" : "undo";
@@ -777,7 +776,7 @@ export function App() {
       setPresence([]);
       setPreviewSnapshot(null);
       setWorkspace(null);
-      window.location.replace("/?switch-player=1");
+      window.location.replace("/");
     };
 
     setPlayerHandoffError("");
@@ -837,6 +836,48 @@ export function App() {
         }),
       }),
     );
+
+  const replaceCharacterControllers = async (
+    characterId: string,
+    revision: number,
+    controllerMembershipIds: string[],
+  ) => {
+    try {
+      const response = await api<{
+        ok: true;
+        controllerMembershipIds: string[];
+        revision: number;
+      }>(`/api/characters/${characterId}/controllers`, {
+        method: "PUT",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          revision,
+          controllerMembershipIds,
+        }),
+      });
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              characters: current.characters.map((character) =>
+                character.id === characterId &&
+                character.revision <= response.revision
+                  ? {
+                      ...character,
+                      controllerMembershipIds: response.controllerMembershipIds,
+                      revision: response.revision,
+                    }
+                  : character,
+              ),
+            }
+          : current,
+      );
+    } catch (reason) {
+      const canonical = await api<GameSnapshot>("/api/bootstrap");
+      setSnapshot((current) => reconcileGameSnapshot(current, canonical));
+      throw reason;
+    }
+  };
 
   const patchCharacter = (
     id: string,
@@ -925,6 +966,7 @@ export function App() {
     patch: {
       wallet?: import("@arken/contracts").CharacterDto["wallet"];
       resources?: import("@arken/contracts").CharacterDto["resources"];
+      rest?: "SHORT" | "LONG" | "CATCH_BREATH";
     },
     intent?: {
       walletDelta?: {
@@ -1364,7 +1406,7 @@ export function App() {
                 <button
                   onClick={async () => {
                     await api("/api/auth/logout", { method: "POST" });
-                    window.location.reload();
+                    window.location.replace("/");
                   }}
                 >
                   Выйти
@@ -1670,8 +1712,11 @@ export function App() {
                 assets={viewSnapshot.assets}
                 role={viewSnapshot.me.role}
                 onOpenCharacter={(characterId) => {
-                  setRequestedCharacterId(characterId);
+                  setRequestedCharacterId(null);
                   handleWorkspaceChange("characters");
+                  requestAnimationFrame(() =>
+                    setRequestedCharacterId(characterId),
+                  );
                 }}
                 membershipId={viewSnapshot.me.id}
                 socket={socket}
@@ -2133,6 +2178,7 @@ export function App() {
               ).then(() => undefined)
             }
             onPatchCharacter={patchCharacter}
+            onReplaceCharacterControllers={replaceCharacterControllers}
             storyPosts={storyPosts}
             storyNextCursor={storyNextCursor}
             onLoadMoreStoryPosts={async () => {

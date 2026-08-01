@@ -44,6 +44,7 @@ export function StoryPost({
   onPublish,
   onArchive,
   onUpdate,
+  onUploadImage,
   mediaUrl = imageUrl,
 }: {
   post: StoryPostView;
@@ -51,6 +52,7 @@ export function StoryPost({
   onPublish?: (post: StoryPostAdminDto) => Promise<void>;
   onArchive?: (post: StoryPostAdminDto) => Promise<void>;
   onUpdate?: (post: StoryPostAdminDto, input: StoryDraftInput) => Promise<void>;
+  onUploadImage?: (file: File) => Promise<ChatAttachmentMetadata>;
   mediaUrl?: (contentId: string) => string;
 }) {
   const [pending, setPending] = useState<
@@ -61,7 +63,19 @@ export function StoryPost({
   );
   const adminPost = isStoryAdminPost(post) ? post : null;
   const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(post.title);
   const [draftBody, setDraftBody] = useState(post.body);
+  const [draftGmNotes, setDraftGmNotes] = useState(adminPost?.gmNotes ?? "");
+  const [draftMedia, setDraftMedia] = useState<StoryMediaDraft[]>(() =>
+    storyPostMedia(post).map((item) => ({
+      contentId: item.contentId,
+      fileName: item.fileName,
+      altText: item.altText,
+      caption: item.caption,
+    })),
+  );
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const [replacingMediaId, setReplacingMediaId] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState("");
 
   async function transition(kind: "publish" | "archive") {
@@ -76,22 +90,81 @@ export function StoryPost({
     }
   }
 
+  async function uploadCorrectionImage(
+    file: File | undefined,
+    replaceContentId: string | null,
+  ) {
+    if (!file || !onUploadImage || pending !== null) return;
+    if (!file.type.startsWith("image/")) {
+      setUpdateError("Файл должен быть изображением.");
+      return;
+    }
+    setPending("update");
+    setUpdateError("");
+    try {
+      const attachment = await onUploadImage(file);
+      const uploaded = {
+        contentId: attachment.contentId,
+        fileName: attachment.fileName,
+        altText: attachment.fileName,
+        caption: "",
+      };
+      setDraftMedia((current) =>
+        replaceContentId
+          ? current.map((item) =>
+              item.contentId === replaceContentId
+                ? {
+                    ...uploaded,
+                    altText: item.altText || uploaded.altText,
+                    caption: item.caption,
+                  }
+                : item,
+            )
+          : [...current, uploaded].slice(0, 10),
+      );
+    } catch (reason) {
+      setUpdateError(
+        reason instanceof Error ? reason.message : "Не удалось загрузить изображение.",
+      );
+    } finally {
+      setPending(null);
+    }
+  }
+
+  function beginEditing() {
+    if (!adminPost) return;
+    setDraftTitle(adminPost.title);
+    setDraftBody(adminPost.body);
+    setDraftGmNotes(adminPost.gmNotes);
+    setDraftMedia(
+      storyPostMedia(adminPost).map((item) => ({
+        contentId: item.contentId,
+        fileName: item.fileName,
+        altText: item.altText,
+        caption: item.caption,
+      })),
+    );
+    setUpdateError("");
+    setEditing(true);
+  }
+
   async function saveCorrection() {
-    if (!adminPost || !onUpdate || !draftBody.trim()) return;
+    if (!adminPost || !onUpdate || (!draftBody.trim() && draftMedia.length === 0))
+      return;
     setPending("update");
     setUpdateError("");
     try {
       await onUpdate(adminPost, {
-        title: adminPost.title,
+        title: draftTitle.trim(),
         body: draftBody.trim(),
-        media: adminPost.media.map((item) => ({
+        media: draftMedia.map((item, order) => ({
           contentId: item.contentId,
-          order: item.order,
-          altText: item.altText,
-          caption: item.caption,
+          order,
+          altText: item.altText.trim() || item.fileName,
+          caption: item.caption.trim(),
         })),
         entityLinks: adminPost.entityLinks,
-        gmNotes: adminPost.gmNotes,
+        gmNotes: draftGmNotes,
       });
       setEditing(false);
     } catch (reason) {
@@ -123,51 +196,169 @@ export function StoryPost({
         </time>
       </header>
       {editing ? (
-        <label className="story-post__edit">
-          {
-            "Текст сюжета"
-          }
-          <textarea
-            value={draftBody}
-            disabled={pending !== null}
-            onChange={(event) => setDraftBody(event.target.value)}
-            rows={5}
-          />
-        </label>
+        <div className="story-post__edit">
+          <label>
+            Заголовок
+            <input
+              value={draftTitle}
+              maxLength={160}
+              disabled={pending !== null}
+              onChange={(event) => setDraftTitle(event.target.value)}
+            />
+          </label>
+          <label>
+            Текст записи
+            <textarea
+              value={draftBody}
+              disabled={pending !== null}
+              onChange={(event) => setDraftBody(event.target.value)}
+              rows={5}
+            />
+          </label>
+          {draftMedia.length > 0 && (
+            <ul className="story-composer__attachments">
+              {draftMedia.map((item) => (
+                <li key={item.contentId}>
+                  <span>{item.fileName}</span>
+                  <label>
+                    Альт-текст
+                    <input
+                      value={item.altText}
+                      maxLength={240}
+                      disabled={pending !== null}
+                      onChange={(event) =>
+                        setDraftMedia((current) =>
+                          current.map((candidate) =>
+                            candidate.contentId === item.contentId
+                              ? { ...candidate, altText: event.target.value }
+                              : candidate,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Подпись
+                    <input
+                      value={item.caption}
+                      maxLength={2000}
+                      disabled={pending !== null}
+                      onChange={(event) =>
+                        setDraftMedia((current) =>
+                          current.map((candidate) =>
+                            candidate.contentId === item.contentId
+                              ? { ...candidate, caption: event.target.value }
+                              : candidate,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <div className="story-post__media-actions">
+                    <button
+                      type="button"
+                      disabled={pending !== null || !onUploadImage}
+                      onClick={() => {
+                        setReplacingMediaId(item.contentId);
+                        editFileInputRef.current?.click();
+                      }}
+                    >
+                      Заменить
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending !== null}
+                      onClick={() =>
+                        setDraftMedia((current) =>
+                          current.filter(
+                            (candidate) => candidate.contentId !== item.contentId,
+                          ),
+                        )
+                      }
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {onUploadImage && (
+            <>
+              <input
+                ref={editFileInputRef}
+                className="story-composer__file-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={pending !== null}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.currentTarget.value = "";
+                  const replaceContentId = replacingMediaId;
+                  setReplacingMediaId(null);
+                  void uploadCorrectionImage(file, replaceContentId);
+                }}
+              />
+              <button
+                type="button"
+                disabled={pending !== null || draftMedia.length >= 10}
+                onClick={() => {
+                  setReplacingMediaId(null);
+                  editFileInputRef.current?.click();
+                }}
+              >
+                Добавить изображение
+              </button>
+            </>
+          )}
+          <label>
+            Заметки мастера
+            <textarea
+              value={draftGmNotes}
+              disabled={pending !== null}
+              onChange={(event) => setDraftGmNotes(event.target.value)}
+              rows={3}
+            />
+          </label>
+        </div>
       ) : (
         post.body && <p className="story-post__body">{post.body}</p>
       )}
-      {storyPostMedia(post).map((media) =>
-        failedMedia.has(media.contentId) ? (
-          <a
-            className="story-post__media-fallback"
-            href={mediaUrl(media.contentId)}
-            key={media.contentId}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {
-              "Открыть изображение: "
-            }
-            {media.fileName}
-          </a>
-        ) : (
-          <figure className="story-post__media" key={media.contentId}>
-            <img
-              src={mediaUrl(media.contentId)}
-              alt={media.altText}
-              width={media.width ?? undefined}
-              height={media.height ?? undefined}
-              loading="lazy"
-              onError={() =>
-                setFailedMedia((current) =>
-                  new Set(current).add(media.contentId),
-                )
-              }
-            />
-            {media.caption && <figcaption>{media.caption}</figcaption>}
-          </figure>
-        ),
+      {!editing &&
+        storyPostMedia(post).map((media) =>
+          failedMedia.has(media.contentId) ? (
+            <a
+              className="story-post__media-fallback"
+              href={mediaUrl(media.contentId)}
+              key={media.contentId}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Открыть изображение: {media.fileName}
+            </a>
+          ) : (
+            <figure className="story-post__media" key={media.contentId}>
+              <img
+                src={mediaUrl(media.contentId)}
+                alt={media.altText}
+                width={media.width ?? undefined}
+                height={media.height ?? undefined}
+                loading="lazy"
+                onError={() =>
+                  setFailedMedia((current) =>
+                    new Set(current).add(media.contentId),
+                  )
+                }
+              />
+              {media.caption && <figcaption>{media.caption}</figcaption>}
+            </figure>
+          ),
+        )}
+      {!editing && isGm && adminPost?.gmNotes && (
+        <aside className="story-post__gm-notes">
+          <strong>Заметки мастера</strong>
+          <p>{adminPost.gmNotes}</p>
+        </aside>
       )}
       {updateError && (
         <p className="composer-error" role="alert">
@@ -196,10 +387,7 @@ export function StoryPost({
             <button
               type="button"
               disabled={pending !== null}
-              onClick={() => {
-                setDraftBody(adminPost.body);
-                setEditing(true);
-              }}
+              onClick={beginEditing}
             >
               {" "}
               {
@@ -404,6 +592,7 @@ export function StoryChannel({
               onPublish={onPublish}
               onArchive={onArchive}
               onUpdate={onUpdate}
+              onUploadImage={onUploadImage}
               mediaUrl={mediaUrl}
             />
           ))

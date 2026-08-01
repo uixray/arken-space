@@ -17,6 +17,9 @@ type ApiResponseError = {
   error?: string;
   message?: string;
   requestId?: string;
+  resource?: "physical" | "magic";
+  required?: number;
+  available?: number;
 };
 
 const mutationMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -76,10 +79,17 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       response.headers.get("x-action-id") ??
       headers.get("x-action-id") ??
       undefined;
+    const code = data?.error ?? "REQUEST_FAILED";
+    const message =
+      code === "INSUFFICIENT_CHARACTER_RESOURCE"
+        ? "Недостаточно " +
+          (data?.resource === "magic" ? "магической силы" : "физической силы") +
+          `. Нужно: ${data?.required ?? 0}, доступно: ${data?.available ?? 0}.`
+        : data?.message ?? "Не удалось выполнить запрос";
     const error = new ApiError(
       response.status,
-      data?.error ?? "REQUEST_FAILED",
-      data?.message ?? "Не удалось выполнить запрос",
+      code,
+      message,
       requestId,
       actionId,
     );

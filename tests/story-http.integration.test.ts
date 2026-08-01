@@ -119,6 +119,18 @@ describe("UIX-246 story HTTP integration", () => {
     expect(denied.json()).toEqual({ error: "GM_REQUIRED" });
 
     const draft = await createDraft({ gmNotes: "Private editorial note" });
+    const gmDrafts = await app.inject({
+      method: "GET",
+      url: "/api/story/posts",
+      headers: headers(secrets.gm),
+    });
+    expect(gmDrafts.statusCode).toBe(200);
+    expect(gmDrafts.json().posts[0]).toMatchObject({
+      id: draft.id,
+      lifecycle: "DRAFT",
+      gmNotes: "Private editorial note",
+    });
+
     const playerDrafts = await app.inject({
       method: "GET",
       url: "/api/story/posts",

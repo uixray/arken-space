@@ -10,6 +10,7 @@ const character = {
   id: "character-1",
   name: "Hero",
   ownerMembershipId: null,
+  controllerMembershipIds: [],
   portraitAssetId: null,
   stats: {},
   skills: [],

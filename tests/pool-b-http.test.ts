@@ -1,9 +1,9 @@
-import { readdir, readFile } from "node:fs/promises";
+﻿import { readdir, readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
@@ -1122,7 +1122,7 @@ describe("Pool B HTTP boundaries", () => {
       terms: [expect.objectContaining({ notation: "1d20" })],
     });
     expect([0, 1]).toContain(advantagePayload.dice.selectedPool);
-    expect(advantagePayload.body).toContain("преимущество");
+    expect(advantagePayload.body).toContain("РїСЂРµРёРјСѓС‰РµСЃС‚РІРѕ");
     expect(advantagePayload.dice.terms[0].rolls).toHaveLength(1);
 
     const disadvantage = await app.inject({
@@ -1145,7 +1145,7 @@ describe("Pool B HTTP boundaries", () => {
       terms: [expect.objectContaining({ notation: "1d20" })],
     });
     expect([0, 1]).toContain(disadvantage.json().dice.selectedPool);
-    expect(disadvantage.json().body).toContain("помеха");
+    expect(disadvantage.json().body).toContain("РїРѕРјРµС…Р°");
 
     const gmNormal = await app.inject({
       method: "POST",
@@ -1766,6 +1766,108 @@ describe("Pool B HTTP boundaries", () => {
     ).toHaveLength(1);
   });
 
+  it("applies short and long rests to every recoverable resource", async () => {
+    await database.exec(
+      `update characters set resources = '{"physicalPower":{"current":1,"maximum":10,"recoverable":true},"magicPower":{"current":2,"maximum":8,"recoverable":true},"charges":{"current":1,"maximum":4,"recoverable":false}}'::jsonb where id = '${ids.character}'`,
+    );
+    const [beforeRest] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(beforeRest?.resources).toMatchObject({
+      physicalPower: { current: 1, maximum: 10 },
+      magicPower: { current: 2, maximum: 8 },
+    });
+    const shortRest = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        rest: "SHORT",
+      },
+    });
+    expect(shortRest.statusCode, JSON.stringify(shortRest.json())).toBe(200);
+    expect(shortRest.json()).toMatchObject({
+      revision: 1,
+      resources: {
+        physicalPower: { current: 4, maximum: 10 },
+        magicPower: { current: 4, maximum: 8 },
+        charges: { current: 1, maximum: 4, recoverable: false },
+      },
+    });
+
+    const longRest = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        rest: "LONG",
+      },
+    });
+    expect(longRest.statusCode).toBe(200);
+    expect(longRest.json()).toMatchObject({
+      revision: 2,
+      resources: {
+        physicalPower: { current: 10, maximum: 10 },
+        magicPower: { current: 8, maximum: 8 },
+        charges: { current: 1, maximum: 4, recoverable: false },
+      },
+    });
+    const [audit] = await db
+      .select({ payload: schema.gameEvents.payload })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.entityId, ids.character))
+      .orderBy(desc(schema.gameEvents.createdAt))
+      .limit(1);
+    expect(audit?.payload).toMatchObject({ rest: "LONG" });
+  });
+
+  it("applies a campaign-wide long rest atomically", async () => {
+    await database.exec(
+      `update characters set resources = '{"physicalPower":{"current":1,"maximum":10,"recoverable":true},"magicPower":{"current":2,"maximum":8,"recoverable":true},"charges":{"current":1,"maximum":4,"recoverable":false}}'::jsonb where id = '${ids.character}'`,
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "LONG_REST",
+        revision: 0,
+      },
+    });
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toMatchObject({ day: 2, revision: 1 });
+    const [rested] = await db
+      .select({
+        resources: schema.characters.resources,
+        revision: schema.characters.revision,
+      })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(rested).toMatchObject({
+      revision: 1,
+      resources: {
+        physicalPower: { current: 10, maximum: 10 },
+        magicPower: { current: 8, maximum: 8 },
+        charges: { current: 1, maximum: 4, recoverable: false },
+      },
+    });
+    const events = await db
+      .select({ payload: schema.gameEvents.payload })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.entityId, ids.campaign));
+    expect(events.at(-1)?.payload).toMatchObject({
+      command: "LONG_REST",
+      day: 2,
+      restoredCharacters: 1,
+    });
+  });
+
   it("updates clock, cooldowns, resources and wallet with public system audit", async () => {
     await database.exec(
       `update characters set wallet = '{"gold":0,"silver":0,"copper":0}'::jsonb where id = '${ids.character}'`,
@@ -1828,25 +1930,31 @@ describe("Pool B HTTP boundaries", () => {
         .json()
         .messages.find(
           (message: { kind: string; body: string }) =>
-            message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
+            message.kind === "SYSTEM" &&
+            message.body.includes("РєРѕС€РµР»С‘Рє:"),
         )?.body,
-    ).toContain("кошелёк: золото 0 → 1, серебро 0 → 2, медь 0 → 3, СП 0 → 4");
+    ).toContain(
+      "РєРѕС€РµР»С‘Рє: Р·РѕР»РѕС‚Рѕ 0 в†’ 1, СЃРµСЂРµР±СЂРѕ 0 в†’ 2, РјРµРґСЊ 0 в†’ 3, РЎРџ 0 в†’ 4",
+    );
     expect(
       countersSnapshot
         .json()
         .messages.find(
           (message: { kind: string; body: string }) =>
-            message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
+            message.kind === "SYSTEM" &&
+            message.body.includes("РєРѕС€РµР»С‘Рє:"),
         )?.body,
     ).not.toContain('{"gold"');
     const counterAudit = countersSnapshot
       .json()
       .messages.find(
         (message: { kind: string; body: string }) =>
-          message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
+          message.kind === "SYSTEM" && message.body.includes("РєРѕС€РµР»С‘Рє:"),
       )?.body as string;
-    expect(counterAudit).toContain("ресурсы: mana: добавлен 5/8");
-    expect(counterAudit).not.toContain("Мастер: Мастер:");
+    expect(counterAudit).toContain(
+      "СЂРµСЃСѓСЂСЃС‹: mana: РґРѕР±Р°РІР»РµРЅ 5/8",
+    );
+    expect(counterAudit).not.toContain("РњР°СЃС‚РµСЂ: РњР°СЃС‚РµСЂ:");
     expect(counterAudit).not.toContain('{"mana"');
     const noOpCounters = await app.inject({
       method: "PATCH",
@@ -1967,10 +2075,106 @@ describe("Pool B HTTP boundaries", () => {
       .map((message: { body: string }) => message.body);
     expect(systemBodies).toHaveLength(4);
     expect(systemBodies.slice(-3)).toEqual([
-      "День кампании: 8. Перезаряжено: 1.",
-      "Бой #1 начат.",
-      "Бой #1 завершён. Перезаряжено: 1.",
+      "Р”РµРЅСЊ РєР°РјРїР°РЅРёРё: 8. РџРµСЂРµР·Р°СЂСЏР¶РµРЅРѕ: 1.",
+      "Р‘РѕР№ #1 РЅР°С‡Р°С‚.",
+      "Р‘РѕР№ #1 Р·Р°РІРµСЂС€С‘РЅ. РџРµСЂРµР·Р°СЂСЏР¶РµРЅРѕ: 1.",
     ]);
+  });
+
+  it("coalesces a rapid wallet burst without dropping authoritative events", async () => {
+    await database.exec(
+      `update characters set wallet = '{"gold":0,"silver":0,"copper":0,"sp":0}'::jsonb where id = '${ids.character}'`,
+    );
+    const actionIds = [
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+    ];
+
+    for (const [index, actionId] of actionIds.entries()) {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/characters/${ids.character}/counters`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId,
+          revision: index,
+          wallet: { gold: index + 1, silver: 0, copper: 0, sp: 0 },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        revision: index + 1,
+        wallet: { gold: index + 1, silver: 0, copper: 0, sp: 0 },
+      });
+    }
+
+    const auditMessages = await db
+      .select({
+        body: schema.chatMessages.body,
+        systemData: schema.chatMessages.systemData,
+      })
+      .from(schema.chatMessages)
+      .where(
+        and(
+          eq(schema.chatMessages.campaignId, ids.campaign),
+          eq(schema.chatMessages.characterId, ids.character),
+          eq(schema.chatMessages.kind, "SYSTEM"),
+        ),
+      );
+    expect(auditMessages).toHaveLength(1);
+    expect(auditMessages[0]?.systemData).toMatchObject({
+      type: "WALLET_AUDIT",
+      before: { gold: 0, silver: 0, copper: 0, sp: 0 },
+      after: { gold: 3, silver: 0, copper: 0, sp: 0 },
+      operationCount: 3,
+    });
+
+    const events = await db
+      .select({
+        actionId: schema.gameEvents.actionId,
+        entityRevision: schema.gameEvents.entityRevision,
+      })
+      .from(schema.gameEvents)
+      .where(
+        and(
+          eq(schema.gameEvents.campaignId, ids.campaign),
+          eq(schema.gameEvents.entityId, ids.character),
+          eq(schema.gameEvents.type, "character.counters"),
+        ),
+      )
+      .orderBy(schema.gameEvents.sequence);
+    expect(events).toEqual(
+      actionIds.map((actionId, index) => ({
+        actionId,
+        entityRevision: index + 1,
+      })),
+    );
+
+    const replay = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: actionIds[2],
+        revision: 2,
+        wallet: { gold: 99, silver: 0, copper: 0, sp: 0 },
+      },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ wallet: { gold: 3 }, revision: 3 });
+    expect(
+      await db
+        .select({ actionId: schema.gameEvents.actionId })
+        .from(schema.gameEvents)
+        .where(
+          and(
+            eq(schema.gameEvents.campaignId, ids.campaign),
+            eq(schema.gameEvents.entityId, ids.character),
+            eq(schema.gameEvents.type, "character.counters"),
+          ),
+        ),
+    ).toHaveLength(3);
   });
 
   it("rejects foreign ownership, player clock access, malformed use models and stale revisions", async () => {
@@ -3618,5 +3822,115 @@ describe("Pool B HTTP boundaries", () => {
       revision: 4,
     });
     expect(untouchedDrawing).toMatchObject({ revision: 3 });
+  });
+  it("lets a GM assign and revoke additional character controllers", async () => {
+    const additionalPlayerId = crypto.randomUUID();
+    const additionalSecret = "a".repeat(40);
+    await db.insert(schema.memberships).values({
+      id: additionalPlayerId,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Additional player",
+    });
+    await db.insert(schema.sessions).values({
+      membershipId: additionalPlayerId,
+      tokenHash: hashToken(additionalSecret),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const invalidForeign = await app.inject({
+      method: "PUT",
+      url: `/api/characters/${ids.character}/controllers`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        controllerMembershipIds: [ids.foreignPlayer],
+      },
+    });
+    expect(invalidForeign.statusCode, invalidForeign.body).toBe(400);
+    expect(invalidForeign.json()).toEqual({ error: "INVALID_CONTROLLER" });
+
+    const assigned = await app.inject({
+      method: "PUT",
+      url: `/api/characters/${ids.character}/controllers`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        controllerMembershipIds: [additionalPlayerId],
+      },
+    });
+    expect(assigned.statusCode, assigned.body).toBe(200);
+    expect(assigned.json()).toMatchObject({ revision: 1 });
+    expect(new Set(assigned.json().controllerMembershipIds)).toEqual(
+      new Set([ids.player, additionalPlayerId]),
+    );
+
+    const assignedSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(additionalSecret),
+    });
+    expect(assignedSnapshot.statusCode).toBe(200);
+    expect(assignedSnapshot.json().characters).toEqual([
+      expect.objectContaining({
+        id: ids.character,
+        controllerMembershipIds: [additionalPlayerId],
+      }),
+    ]);
+
+    const assignedPatch = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(additionalSecret),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        notes: "Shared note",
+      },
+    });
+    expect(assignedPatch.statusCode, assignedPatch.body).toBe(200);
+    expect(assignedPatch.json()).toMatchObject({
+      notes: "Shared note",
+      revision: 2,
+    });
+
+    const revoked = await app.inject({
+      method: "PUT",
+      url: `/api/characters/${ids.character}/controllers`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 2,
+        controllerMembershipIds: [],
+      },
+    });
+    expect(revoked.statusCode, revoked.body).toBe(200);
+    expect(revoked.json()).toMatchObject({
+      controllerMembershipIds: [ids.player],
+      revision: 3,
+    });
+
+    const revokedSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(additionalSecret),
+    });
+    expect(revokedSnapshot.statusCode).toBe(200);
+    expect(revokedSnapshot.json().characters).toEqual([]);
+
+    const revokedPatch = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(additionalSecret),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 3,
+        notes: "Forbidden note",
+      },
+    });
+    expect(revokedPatch.statusCode).toBe(403);
+    expect(revokedPatch.json()).toEqual({ error: "CHARACTER_FORBIDDEN" });
   });
 });

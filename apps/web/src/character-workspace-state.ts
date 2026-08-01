@@ -8,6 +8,7 @@ export type CharacterWorkspaceState = {
 
 export type CharacterWorkspaceAction =
   | { type: "OPEN"; id: string }
+  | { type: "OPEN_EXCLUSIVE"; id: string }
   | { type: "FOCUS"; id: string }
   | { type: "COLLAPSE"; id: string }
   | { type: "RESTORE"; id: string }
@@ -42,6 +43,8 @@ export function characterWorkspaceReducer(
   action: CharacterWorkspaceAction,
 ): CharacterWorkspaceState {
   switch (action.type) {
+    case "OPEN_EXCLUSIVE":
+      return { openIds: [action.id], activeId: action.id, collapsedIds: [] };
     case "OPEN": {
       if (state.openIds.includes(action.id)) {
         return {

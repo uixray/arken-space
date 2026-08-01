@@ -59,6 +59,7 @@ import {
   rotatePlayerAccessSchema,
   rotateGmAccessSchema,
   replaceTokenControllersSchema,
+  replaceCharacterControllersSchema,
   placeTokenDefinitionSchema,
   renameCommandSchema,
   revisionCommandSchema,
@@ -73,6 +74,7 @@ import {
   actionJournal,
   catalogEntries,
   characterCatalogEntries,
+  characterControllers,
   campaigns,
   characters,
   chatMessages,
@@ -214,6 +216,30 @@ const walletLabels = {
 
 type Wallet = Record<keyof typeof walletLabels, number>;
 
+type WalletAuditSystemData = {
+  type: "WALLET_AUDIT";
+  before: Wallet;
+  after: Wallet;
+  lastAt: string;
+  operationCount: number;
+};
+
+const WALLET_AUDIT_BURST_MS = 5_000;
+
+function isWalletAuditSystemData(
+  value: unknown,
+): value is WalletAuditSystemData {
+  if (!value || typeof value !== "object") return false;
+  const data = value as Partial<WalletAuditSystemData>;
+  return (
+    data.type === "WALLET_AUDIT" &&
+    typeof data.lastAt === "string" &&
+    typeof data.operationCount === "number" &&
+    Boolean(data.before) &&
+    Boolean(data.after)
+  );
+}
+
 function formatWalletChanges(before: Wallet, after: Wallet) {
   const changes = Object.entries(walletLabels)
     .filter(
@@ -226,7 +252,16 @@ function formatWalletChanges(before: Wallet, after: Wallet) {
   return changes.length > 0 ? `кошелёк: ${changes.join(", ")}` : "";
 }
 
-type Resources = Record<string, { current: number; maximum?: number }>;
+type Resources = Record<
+  string,
+  {
+    current: number;
+    maximum?: number;
+    description?: string;
+    imageAssetId?: string | null;
+    recoverable?: boolean;
+  }
+>;
 
 function formatResourceValue(value: Resources[string] | undefined) {
   if (!value) return "удалён";
@@ -248,6 +283,58 @@ function formatResourceChanges(before: Resources, after: Resources) {
       return `${key}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
     });
   return changes.length > 0 ? `ресурсы: ${changes.join(", ")}` : "";
+}
+
+function applyCharacterRest(
+  resources: Resources,
+  rest: "SHORT" | "LONG" | "CATCH_BREATH",
+): Resources {
+  return Object.fromEntries(
+    Object.entries(resources).map(([key, resource]) => {
+      const recoverable = resource.recoverable !== false;
+      const targeted =
+        recoverable && (rest !== "CATCH_BREATH" || key === "physicalPower");
+      if (!targeted) return [key, resource];
+      const maximum = resource.maximum ?? resource.current;
+      const current =
+        rest === "LONG"
+          ? maximum
+          : Math.min(maximum, resource.current + Math.ceil(maximum * 0.25));
+      return [key, { ...resource, current, maximum }];
+    }),
+  );
+}
+
+async function characterControllerIds(
+  db: Database,
+  characterId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ membershipId: characterControllers.membershipId })
+    .from(characterControllers)
+    .where(eq(characterControllers.characterId, characterId));
+  return rows.map((row) => row.membershipId);
+}
+
+async function canAccessCharacter(
+  db: Database,
+  auth: { role: "GM" | "PLAYER"; membershipId: string },
+  character: typeof characters.$inferSelect | undefined,
+): Promise<boolean> {
+  if (!character) return false;
+  if (auth.role === "GM" || character.ownerMembershipId === auth.membershipId)
+    return true;
+  const [controller] = await db
+    .select({ membershipId: characterControllers.membershipId })
+    .from(characterControllers)
+    .where(
+      and(
+        eq(characterControllers.characterId, character.id),
+        eq(characterControllers.membershipId, auth.membershipId),
+      ),
+    )
+    .limit(1);
+  return Boolean(controller);
 }
 
 async function findAction(db: Database, campaignId: string, actionId: string) {
@@ -322,6 +409,10 @@ export async function claimInviteOwnership(
           eq(characters.campaignId, invite.campaignId),
         ),
       );
+    await tx
+      .insert(characterControllers)
+      .values({ characterId: invite.characterId, membershipId: member.id })
+      .onConflictDoNothing();
     await tx.execute(sql`insert into token_controllers (token_definition_id, membership_id)
       select d.id, ${member.id} from token_definitions d
       where d.character_id = ${invite.characterId} and d.campaign_id = ${invite.campaignId}
@@ -448,6 +539,10 @@ async function createPlayerAccess(
           eq(characters.campaignId, campaignId),
         ),
       );
+    await tx
+      .insert(characterControllers)
+      .values({ characterId, membershipId: member.id })
+      .onConflictDoNothing();
     await tx.execute(sql`insert into token_controllers (token_definition_id, membership_id)
       select d.id, ${member.id} from token_definitions d
       where d.character_id = ${characterId} and d.campaign_id = ${campaignId}
@@ -1054,6 +1149,95 @@ export function registerRoutes(
     return reply.code(201).send(character);
   });
 
+  app.put("/api/characters/:id/controllers", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = replaceCharacterControllersSchema.parse(request.body);
+    if (
+      new Set(body.controllerMembershipIds).size !==
+      body.controllerMembershipIds.length
+    )
+      return reply.code(400).send({ error: "DUPLICATE_CONTROLLERS" });
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [character] = await db
+      .select()
+      .from(characters)
+      .where(
+        and(eq(characters.id, id), eq(characters.campaignId, auth.campaignId)),
+      )
+      .limit(1);
+    if (!character)
+      return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+    const requestedIds = new Set(body.controllerMembershipIds);
+    if (character.ownerMembershipId)
+      requestedIds.add(character.ownerMembershipId);
+    const controllerMembershipIds = [...requestedIds];
+    if (controllerMembershipIds.length) {
+      const valid = await db
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.campaignId, auth.campaignId),
+            eq(memberships.role, "PLAYER"),
+          ),
+        );
+      const validIds = new Set(valid.map((member) => member.id));
+      if (
+        controllerMembershipIds.some(
+          (membershipId) => !validIds.has(membershipId),
+        )
+      )
+        return reply.code(400).send({ error: "INVALID_CONTROLLER" });
+    }
+    const replaced = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(characters)
+        .set({ revision: character.revision + 1, updatedAt: new Date() })
+        .where(
+          and(eq(characters.id, id), eq(characters.revision, body.revision)),
+        )
+        .returning();
+      if (!updated) return null;
+      await tx
+        .delete(characterControllers)
+        .where(eq(characterControllers.characterId, id));
+      if (controllerMembershipIds.length)
+        await tx.insert(characterControllers).values(
+          controllerMembershipIds.map((membershipId) => ({
+            characterId: id,
+            membershipId,
+          })),
+        );
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "character.controllers_replaced",
+        entityType: "character",
+        entityId: id,
+        entityRevision: updated.revision,
+        payload: { controllerMembershipIds },
+      });
+      return updated;
+    });
+    if (!replaced)
+      return reply.code(409).send({
+        error: "CHARACTER_CONFLICT",
+        revision: character.revision,
+      });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return {
+      ok: true,
+      controllerMembershipIds,
+      revision: replaced.revision,
+    };
+  });
+
   app.patch("/api/characters/:id", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -1069,7 +1253,7 @@ export function registerRoutes(
       )
       .limit(1);
     if (!current) return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
-    if (auth.role !== "GM" && current.ownerMembershipId !== auth.membershipId)
+    if (!(await canAccessCharacter(db, auth, current)))
       return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
     if (body.revision !== undefined && body.revision !== current.revision)
       return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
@@ -2775,11 +2959,7 @@ export function registerRoutes(
           ),
         )
         .limit(1);
-      if (
-        !character ||
-        (auth.role !== "GM" &&
-          character.ownerMembershipId !== auth.membershipId)
-      )
+      if (!character || !(await canAccessCharacter(db, auth, character)))
         return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
     }
     const { actionId, revision: _revision, ...changes } = body;
@@ -5696,11 +5876,7 @@ export function registerRoutes(
           ),
         )
         .limit(1);
-      if (
-        !character ||
-        (auth.role !== "GM" &&
-          character.ownerMembershipId !== auth.membershipId)
-      )
+      if (!character || !(await canAccessCharacter(db, auth, character)))
         return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
       characterId = character.id;
     }
@@ -5844,7 +6020,9 @@ export function registerRoutes(
       return reply.code(409).send({ error: "BATTLE_ALREADY_ACTIVE" });
     if (body.command === "END_BATTLE" && !current.battleActive)
       return reply.code(409).send({ error: "BATTLE_NOT_ACTIVE" });
-    const nextDay = current.day + (body.command === "ADVANCE_DAY" ? 1 : 0);
+    const advancesDay =
+      body.command === "ADVANCE_DAY" || body.command === "LONG_REST";
+    const nextDay = current.day + (advancesDay ? 1 : 0);
     const nextBattle =
       current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
     const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
@@ -5889,9 +6067,9 @@ export function registerRoutes(
           if (!parsed.success || !parsed.data.uses) continue;
           const uses = parsed.data.uses;
           const due =
-            (body.command === "ADVANCE_DAY" && uses.recharge === "DAY") ||
+            (advancesDay && uses.recharge === "DAY") ||
             (body.command === "END_BATTLE" && uses.recharge === "BATTLE") ||
-            (body.command === "ADVANCE_DAY" &&
+            (advancesDay &&
               uses.recharge === "WEEK" &&
               nextDay - (uses.lastRechargeDay ?? 1) >= 7);
           if (!due) continue;
@@ -5922,12 +6100,45 @@ export function registerRoutes(
           if (!rechargedEntry) throw new Error("ENTRY_CONFLICT");
           recharged++;
         }
+        let restoredCharacters = 0;
+        if (body.command === "LONG_REST") {
+          const characterRows = await tx
+            .select()
+            .from(characters)
+            .where(eq(characters.campaignId, auth.campaignId));
+          for (const character of characterRows) {
+            const beforeResources = character.resources as Resources;
+            const afterResources = applyCharacterRest(beforeResources, "LONG");
+            if (
+              JSON.stringify(beforeResources) === JSON.stringify(afterResources)
+            )
+              continue;
+            const [restoredCharacter] = await tx
+              .update(characters)
+              .set({
+                resources: afterResources,
+                revision: character.revision + 1,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(characters.id, character.id),
+                  eq(characters.revision, character.revision),
+                ),
+              )
+              .returning({ id: characters.id });
+            if (!restoredCharacter) throw new Error("CHARACTER_CONFLICT");
+            restoredCharacters++;
+          }
+        }
         const label =
-          body.command === "ADVANCE_DAY"
-            ? `День кампании: ${nextDay}`
-            : body.command === "START_BATTLE"
-              ? `Бой #${nextBattle} начат`
-              : `Бой #${current.battleCounter} завершён`;
+          body.command === "LONG_REST"
+            ? "Длинный отдых завершён"
+            : body.command === "ADVANCE_DAY"
+              ? `День кампании: ${nextDay}`
+              : body.command === "START_BATTLE"
+                ? `Бой #${nextBattle} начат`
+                : `Бой #${current.battleCounter} завершён`;
         const [message] = await tx
           .insert(chatMessages)
           .values({
@@ -5955,6 +6166,7 @@ export function registerRoutes(
             day: nextDay,
             battleCounter: nextBattle,
             recharged,
+            restoredCharacters,
           },
         });
         return { updated, message };
@@ -5963,7 +6175,8 @@ export function registerRoutes(
       if (
         error instanceof Error &&
         (error.message === "CAMPAIGN_CONFLICT" ||
-          error.message === "ENTRY_CONFLICT")
+          error.message === "ENTRY_CONFLICT" ||
+          error.message === "CHARACTER_CONFLICT")
       )
         return reply.code(409).send({ error: error.message });
       throw error;
@@ -6052,12 +6265,7 @@ export function registerRoutes(
     };
     const canEditCharacter = (
       character: typeof characters.$inferSelect | undefined,
-    ) =>
-      Boolean(
-        character &&
-        (auth.role === "GM" ||
-          character.ownerMembershipId === auth.membershipId),
-      );
+    ) => canAccessCharacter(db, auth, character);
     const sendReplay = async (
       action: NonNullable<Awaited<ReturnType<typeof findAction>>>,
     ) => {
@@ -6067,20 +6275,28 @@ export function registerRoutes(
       // Reload after observing the receipt so replay always returns the
       // canonical post-commit revision/wallet, never that stale pre-read row.
       const canonical = await loadCharacter();
-      if (!canEditCharacter(canonical))
+      if (!(await canEditCharacter(canonical)))
         return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
       const assignedEntries = await db
         .select()
         .from(characterCatalogEntries)
         .where(eq(characterCatalogEntries.characterId, id));
-      return reply.code(200).send(characterDto(canonical!, assignedEntries));
+      return reply
+        .code(200)
+        .send(
+          characterDto(
+            canonical!,
+            assignedEntries,
+            await characterControllerIds(db, id),
+          ),
+        );
     };
 
     // Check the receipt before loading the entity. This ordering guarantees a
     // normal replay reads its character after the original transaction commit.
     const priorAction = await findAction(db, auth.campaignId, body.actionId);
     const character = await loadCharacter();
-    if (!canEditCharacter(character))
+    if (!(await canEditCharacter(character)))
       return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
     if (priorAction) return sendReplay(priorAction);
     if (character!.revision !== body.revision) {
@@ -6090,6 +6306,9 @@ export function registerRoutes(
         .code(409)
         .send({ error: "CHARACTER_CONFLICT", revision: character!.revision });
     }
+    const nextResources = body.rest
+      ? applyCharacterRest((character!.resources ?? {}) as Resources, body.rest)
+      : body.resources;
     const changes = [
       body.wallet
         ? formatWalletChanges(
@@ -6097,20 +6316,25 @@ export function registerRoutes(
             body.wallet,
           )
         : "",
-      body.resources
-        ? formatResourceChanges(character!.resources, body.resources)
+      nextResources
+        ? formatResourceChanges(
+            (character!.resources ?? {}) as Resources,
+            nextResources,
+          )
         : "",
     ]
       .filter(Boolean)
       .join("; ");
     if (!changes) return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
     const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
+    const walletOnly = Boolean(body.wallet) && !nextResources && !body.rest;
+    const walletBefore = normalizeCharacterWallet(character!.wallet);
     const result = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(characters)
         .set({
           ...(body.wallet ? { wallet: body.wallet } : {}),
-          ...(body.resources ? { resources: body.resources } : {}),
+          ...(nextResources ? { resources: nextResources } : {}),
           revision: character!.revision + 1,
           updatedAt: new Date(),
         })
@@ -6122,18 +6346,74 @@ export function registerRoutes(
         )
         .returning();
       if (!updated) return null;
-      const [message] = await tx
-        .insert(chatMessages)
-        .values({
-          campaignId: auth.campaignId,
-          membershipId: auth.membershipId,
-          characterId: id,
-          kind: "SYSTEM",
-          threadId: tableThread.id,
-          visibility: "PUBLIC",
-          body: `${character!.name} \u2014 ${changes}`,
-        })
-        .returning();
+      const now = new Date();
+      const walletData: WalletAuditSystemData | null =
+        walletOnly && body.wallet
+          ? {
+              type: "WALLET_AUDIT",
+              before: walletBefore,
+              after: body.wallet,
+              lastAt: now.toISOString(),
+              operationCount: 1,
+            }
+          : null;
+      const [latestMessage] = walletData
+        ? await tx
+            .select()
+            .from(chatMessages)
+            .where(eq(chatMessages.threadId, tableThread.id))
+            .orderBy(desc(chatMessages.sequence))
+            .limit(1)
+            .for("update")
+        : [];
+      const latestWalletData = latestMessage?.systemData;
+      const lastAt = isWalletAuditSystemData(latestWalletData)
+        ? Date.parse(latestWalletData.lastAt)
+        : Number.NaN;
+      const elapsed = now.getTime() - lastAt;
+      const canAggregate =
+        latestMessage?.kind === "SYSTEM" &&
+        latestMessage.visibility === "PUBLIC" &&
+        latestMessage.membershipId === auth.membershipId &&
+        latestMessage.characterId === id &&
+        isWalletAuditSystemData(latestWalletData) &&
+        elapsed >= 0 &&
+        elapsed <= WALLET_AUDIT_BURST_MS;
+      const aggregateData: WalletAuditSystemData | null =
+        canAggregate && body.wallet
+          ? {
+              ...latestWalletData,
+              after: body.wallet,
+              lastAt: now.toISOString(),
+              operationCount: latestWalletData.operationCount + 1,
+            }
+          : null;
+      const [message] =
+        aggregateData && latestMessage
+          ? await tx
+              .update(chatMessages)
+              .set({
+                body: `${character!.name} \u2014 ${formatWalletChanges(
+                  aggregateData.before,
+                  aggregateData.after,
+                )}`,
+                systemData: aggregateData,
+              })
+              .where(eq(chatMessages.id, latestMessage.id))
+              .returning()
+          : await tx
+              .insert(chatMessages)
+              .values({
+                campaignId: auth.campaignId,
+                membershipId: auth.membershipId,
+                characterId: id,
+                kind: "SYSTEM",
+                threadId: tableThread.id,
+                visibility: "PUBLIC",
+                body: `${character!.name} \u2014 ${changes}`,
+                systemData: walletData,
+              })
+              .returning();
       await tx.insert(gameEvents).values({
         campaignId: auth.campaignId,
         actionId: body.actionId,
@@ -6142,7 +6422,11 @@ export function registerRoutes(
         entityType: "character",
         entityId: id,
         entityRevision: updated.revision,
-        payload: { wallet: body.wallet, resources: body.resources },
+        payload: {
+          wallet: body.wallet,
+          resources: nextResources,
+          rest: body.rest,
+        },
       });
       return { updated, message };
     });
@@ -6156,7 +6440,11 @@ export function registerRoutes(
       .select()
       .from(characterCatalogEntries)
       .where(eq(characterCatalogEntries.characterId, id));
-    return characterDto(result.updated, assignedEntries);
+    return characterDto(
+      result.updated,
+      assignedEntries,
+      await characterControllerIds(db, id),
+    );
   });
 
   app.post(
@@ -6185,11 +6473,7 @@ export function registerRoutes(
           ),
         )
         .limit(1);
-      if (
-        !row ||
-        (auth.role !== "GM" &&
-          row.character.ownerMembershipId !== auth.membershipId)
-      )
+      if (!row || !(await canAccessCharacter(db, auth, row.character)))
         return reply.code(403).send({ error: "CHARACTER_ENTRY_FORBIDDEN" });
       if (row.entry.revision !== body.revision)
         return reply
@@ -6302,11 +6586,7 @@ export function registerRoutes(
           ),
         )
         .limit(1);
-      if (
-        !row ||
-        (auth.role !== "GM" &&
-          row.character.ownerMembershipId !== auth.membershipId)
-      )
+      if (!row || !(await canAccessCharacter(db, auth, row.character)))
         return reply.code(403).send({ error: "CHARACTER_ENTRY_FORBIDDEN" });
       if (
         body.entryRevision !== undefined &&
@@ -6615,18 +6895,30 @@ export function registerRoutes(
           ),
         )
         .limit(1);
-      if (
-        !character ||
-        (auth.role !== "GM" &&
-          character.ownerMembershipId !== auth.membershipId)
-      )
+      if (!character || !(await canAccessCharacter(db, auth, character)))
         return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
     } else if (auth.role === "PLAYER") {
       [character] = await db
-        .select()
+        .select({ character: characters })
         .from(characters)
-        .where(eq(characters.ownerMembershipId, auth.membershipId))
-        .limit(1);
+        .leftJoin(
+          characterControllers,
+          eq(characterControllers.characterId, characters.id),
+        )
+        .where(
+          and(
+            eq(characters.campaignId, auth.campaignId),
+            or(
+              eq(characters.ownerMembershipId, auth.membershipId),
+              eq(characterControllers.membershipId, auth.membershipId),
+            ),
+          ),
+        )
+        .orderBy(
+          desc(sql`${characters.ownerMembershipId} = ${auth.membershipId}`),
+        )
+        .limit(1)
+        .then((rows) => rows.map((row) => row.character));
     }
     try {
       const normalizedFormula = normalizeLegacyFormula(body.formula);

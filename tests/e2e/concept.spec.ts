@@ -25,6 +25,7 @@ const snapshot: GameSnapshot = {
       id: "62668dba-d385-434a-a76c-b9e2f8e84de9",
       name: "Картограф",
       ownerMembershipId: null,
+      controllerMembershipIds: [],
       portraitAssetId: null,
       stats: {
         might: 2,
@@ -417,6 +418,12 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
     "true",
   );
   await expect(page.locator("canvas").first()).toBeHidden();
+
+  await workspace.getByRole("button", { name: "Свернуть список персонажей" }).click();
+  await expect(workspace.locator(".character-workspace__body")).toHaveClass(/is-rail-collapsed/);
+  await expect(workspace.getByRole("button", { name: "Развернуть список персонажей" })).toBeVisible();
+  await workspace.getByRole("button", { name: "Развернуть список персонажей" }).click();
+  await expect(workspace.locator(".character-workspace__body")).not.toHaveClass(/is-rail-collapsed/);
 
   await workspace.getByRole("button", { name: "Второй персонаж" }).click();
   await expect(
@@ -1317,6 +1324,103 @@ for (const viewport of [
   });
 }
 
+test("GM assigns and revokes additional character sheet access", async ({
+  page,
+}) => {
+  const gmSnapshot = structuredClone(snapshot);
+  const ownerId = "f53f4618-2ebc-4cf8-bce7-870097305a6b";
+  const additionalId = "a53f4618-2ebc-4cf8-bce7-870097305a6b";
+  gmSnapshot.members = [
+    gmSnapshot.me,
+    {
+      id: ownerId,
+      role: "PLAYER",
+      displayName: "Owner",
+      characterId: gmSnapshot.characters[0]!.id,
+    },
+    {
+      id: additionalId,
+      role: "PLAYER",
+      displayName: "Additional",
+      characterId: null,
+    },
+  ];
+  gmSnapshot.characters[0]!.ownerMembershipId = ownerId;
+  gmSnapshot.characters[0]!.controllerMembershipIds = [ownerId];
+
+  let revision = gmSnapshot.characters[0]!.revision;
+  const requests: Array<{
+    controllerMembershipIds: string[];
+    revision: number;
+  }> = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(gmSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/characters/*/controllers", async (route) => {
+    const body = route.request().postDataJSON() as {
+      controllerMembershipIds: string[];
+      revision: number;
+    };
+    requests.push(body);
+    revision += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        controllerMembershipIds: [
+          ownerId,
+          ...body.controllerMembershipIds.filter((id) => id !== ownerId),
+        ],
+        revision,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.locator(".workspace-menu summary").click();
+  await page
+    .getByRole("button", {
+      name: "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
+    })
+    .click();
+  const access = page.locator(".character-controller-access");
+  await expect(access).toBeVisible();
+  const owner = access.getByLabel("Owner");
+  await expect(owner).toBeChecked();
+  await expect(owner).toBeDisabled();
+  const additional = access.getByLabel("Additional");
+  await additional.check();
+  await access
+    .getByRole("button", {
+      name: "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0434\u043e\u0441\u0442\u0443\u043f",
+    })
+    .click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]).toMatchObject({
+    revision: gmSnapshot.characters[0]!.revision,
+    controllerMembershipIds: [ownerId, additionalId],
+  });
+  await additional.uncheck();
+  await access
+    .getByRole("button", {
+      name: "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0434\u043e\u0441\u0442\u0443\u043f",
+    })
+    .click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toMatchObject({
+    revision: gmSnapshot.characters[0]!.revision + 1,
+    controllerMembershipIds: [ownerId],
+  });
+});
+
 test("player opens the character workspace while chat remains visible", async ({
   page,
 }) => {
@@ -1327,12 +1431,14 @@ test("player opens the character workspace while chat remains visible", async ({
     displayName: "Player",
     characterId: playerSnapshot.characters[0]!.id,
   };
-  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.characters[0]!.ownerMembershipId = null;
+  playerSnapshot.characters[0]!.controllerMembershipIds = [playerSnapshot.me.id];
   playerSnapshot.characters.push({
     ...playerSnapshot.characters[0]!,
     id: "a49b79b7-4ddf-49fe-9e7d-4ee03806c116",
     name: "Чужой персонаж",
     ownerMembershipId: "a21b4bb6-ae66-47b9-b719-610e0440044c",
+    controllerMembershipIds: [],
   });
   playerSnapshot.members = [playerSnapshot.me];
   await page.route("**/api/bootstrap", (route) =>
@@ -1343,13 +1449,14 @@ test("player opens the character workspace while chat remains visible", async ({
     }),
   );
   await page.goto("/");
-  await page.locator("#chat-tab-table").click();
+  await page.locator("#chat-tab-activity").click();
   await expect(page.locator(".chat-compose")).toBeVisible();
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
   await expect(page.locator(".character-workspace")).toBeVisible();
+  await expect(page.locator(".character-controller-access")).toHaveCount(0);
   await expect(page.locator(".chat-compose")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Наблюдение/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "\u041d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435", exact: true })).toBeVisible();
   await expect(
     page
       .locator(".character-rail")
@@ -1358,6 +1465,37 @@ test("player opens the character workspace while chat remains visible", async ({
   await page.keyboard.press("Escape");
   await expect(page.locator(".character-workspace")).toBeHidden();
   await expect(page.locator(".workspace-menu summary")).toBeFocused();
+});
+
+test("unassigned player character workspace exposes no sheets", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "c53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Unassigned",
+    characterId: null,
+  };
+  playerSnapshot.members = [playerSnapshot.me];
+  playerSnapshot.characters = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    }),
+  );
+  await page.goto("/");
+  await page.locator(".workspace-menu summary").click();
+  await page
+    .getByRole("button", {
+      name: "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
+    })
+    .click();
+  await expect(page.locator(".character-workspace")).toBeVisible();
+  await expect(page.locator(".character-sheet-card")).toHaveCount(0);
+  await expect(page.locator(".character-controller-access")).toHaveCount(0);
 });
 
 test("character card submits normal, advantage and disadvantage rolls for GM and player", async ({
@@ -1497,6 +1635,10 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   const submittedGold: number[] = [];
   const submittedSp: number[] = [];
   const submittedRevisions: number[] = [];
+  let releaseFirstResponse!: () => void;
+  const firstResponseGate = new Promise<void>((resolve) => {
+    releaseFirstResponse = resolve;
+  });
   const renderErrors: Error[] = [];
   page.on("pageerror", (error) => renderErrors.push(error));
   await page.route("**/api/bootstrap", (route) =>
@@ -1514,8 +1656,7 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
     submittedGold.push(payload.wallet.gold);
     submittedSp.push(payload.wallet.sp);
     submittedRevisions.push(payload.revision);
-    if (submittedGold.length === 1)
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    if (submittedGold.length === 1) await firstResponseGate;
     playerSnapshot.characters[0]!.wallet = payload.wallet;
     playerSnapshot.characters[0]!.revision += 1;
     const response =
@@ -1549,6 +1690,9 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
+  await expect.poll(() => submittedGold).toEqual([1]);
+  await expect(input).toHaveValue("3");
+  releaseFirstResponse();
   await input.focus();
   await page.locator(".character-workspace__header h2").click();
   await expect.poll(() => submittedGold).toEqual([1, 2, 3]);
@@ -1573,7 +1717,62 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   );
 });
 
-test("resource conflict replaces the draft with canonical bootstrap data", async ({
+test("structured resources persist and short rest uses the authoritative counter route", async ({ page }) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]!.id,
+  };
+  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.characters[0]!.resources = {
+    physicalPower: { current: 1, maximum: 10, recoverable: true },
+    magicPower: { current: 2, maximum: 8, recoverable: true },
+  };
+  playerSnapshot.members = [playerSnapshot.me];
+  const payloads: Array<{ resources?: typeof playerSnapshot.characters[0]["resources"]; rest?: string; revision: number }> = [];
+  await page.route("**/api/bootstrap", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(playerSnapshot),
+  }));
+  await page.route("**/api/characters/*/counters", async (route) => {
+    const payload = route.request().postDataJSON() as (typeof payloads)[number];
+    payloads.push(payload);
+    if (payload.resources) playerSnapshot.characters[0]!.resources = payload.resources;
+    if (payload.rest === "SHORT") {
+      playerSnapshot.characters[0]!.resources = Object.fromEntries(
+        Object.entries(playerSnapshot.characters[0]!.resources).map(([key, resource]) => [
+          key,
+          { ...resource, current: Math.min(resource.maximum ?? resource.current, resource.current + Math.ceil((resource.maximum ?? resource.current) * 0.25)) },
+        ]),
+      );
+    }
+    playerSnapshot.characters[0]!.revision += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(playerSnapshot.characters[0]) });
+  });
+
+  await page.goto("/");
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Персонажи" }).click();
+  const physical = page.locator(".character-power-controls .resource-card").filter({ hasText: "Физическая сила" });
+  await physical.getByLabel("Текущее").fill("3");
+  await page.locator(".character-workspace__header h2").click();
+  await expect.poll(() => payloads.length).toBe(1);
+  expect(payloads[0]?.resources?.physicalPower.current).toBe(3);
+
+  await page.getByPlaceholder("Новый ресурс").fill("stamina");
+  await page.getByRole("button", { name: "Добавить", exact: true }).click();
+  await expect.poll(() => payloads.length).toBe(2);
+  await expect(page.locator(".character-resource-editor .resource-card").filter({ hasText: "stamina" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Короткий отдых (+25%)" }).click();
+  await expect.poll(() => payloads.at(-1)?.rest).toBe("SHORT");
+  await expect(physical.getByLabel("Текущее")).toHaveValue("6");
+});
+
+test("resource conflict replaces the structured draft with canonical bootstrap data", async ({
   page,
 }) => {
   const playerSnapshot = structuredClone(snapshot);
@@ -1585,7 +1784,7 @@ test("resource conflict replaces the draft with canonical bootstrap data", async
   };
   playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
   playerSnapshot.characters[0]!.resources = {
-    mana: { current: 2, maximum: 10 },
+    mana: { current: 2, maximum: 10, recoverable: true },
   };
   playerSnapshot.members = [playerSnapshot.me];
   let requests = 0;
@@ -1599,7 +1798,7 @@ test("resource conflict replaces the draft with canonical bootstrap data", async
   await page.route("**/api/characters/*/counters", (route) => {
     requests += 1;
     playerSnapshot.characters[0]!.resources = {
-      mana: { current: 8, maximum: 10 },
+      mana: { current: 8, maximum: 10, recoverable: true },
     };
     playerSnapshot.characters[0]!.revision += 1;
     return route.fulfill({
@@ -1614,19 +1813,14 @@ test("resource conflict replaces the draft with canonical bootstrap data", async
   await page.goto("/");
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
-  const resources = page
-    .locator(".character-workspace textarea:visible")
-    .nth(1);
-  await resources.fill('{"mana":{"current":5,"maximum":10}}');
+  const resourceCard = page.locator(".character-resource-editor .resource-card").filter({ hasText: "mana" });
+  const currentInput = resourceCard.getByLabel("Текущее");
+  await currentInput.fill("5");
   await page.locator(".character-workspace__header h2").click();
 
   await expect.poll(() => requests).toBe(1);
-  await expect(resources).toHaveValue(
-    JSON.stringify({ mana: { current: 8, maximum: 10 } }, null, 2),
-  );
-  await expect(page.getByRole("alert")).toContainText(
-    "Ресурсы изменены в другой сессии",
-  );
+  await expect(currentInput).toHaveValue("8");
+  await expect(page.getByRole("alert")).toContainText("Ресурсы изменены");
 });
 
 test("wallet refreshes and safely reapplies a delta after a stale revision", async ({
@@ -2304,6 +2498,12 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
           : viewer === "player-c"
             ? playerC
             : otherGm;
+    fixture.directChatContacts = [sender, recipient, playerC, otherGm]
+      .filter((member) => member.id !== fixture.me.id)
+      .map((member) => ({
+        membershipId: member.id,
+        displayName: member.displayName,
+      }));
     if (viewer === "sender" || viewer === "recipient") {
       fixture.chatThreads.push(direct);
       fixture.chatThreadStates.push({
@@ -2374,18 +2574,11 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
   await page.goto("/");
   const directTab = page.locator("#chat-tab-direct");
   await directTab.click();
-  await page
-    .getByRole("combobox", {
-      name: "\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c \u043b\u0438\u0447\u043d\u043e\u0433\u043e \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u044f",
-    })
-    .click();
-  await page.getByRole("option", { name: recipient.displayName }).click();
-  await page
-    .getByRole("button", {
-      name: "\u041e\u0442\u043a\u0440\u044b\u0442\u044c",
-      exact: true,
-    })
-    .click();
+  const peerSelect = page.locator(".direct-peer-select");
+  await expect(peerSelect.locator("option")).toHaveCount(4);
+  await expect(peerSelect).not.toContainText(sender.id);
+  await peerSelect.selectOption(recipient.id);
+  await expect(peerSelect).toHaveValue(recipient.id);
   await page.locator(".direct-compose textarea").fill("UIX267_PRIVATE_MARKER");
   await page.locator(".direct-compose button.primary").click();
   await expect.poll(() => requests.length).toBe(1);
@@ -2397,13 +2590,17 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
   expect(requests[0]).not.toHaveProperty("stream");
   expect(requests[0]).not.toHaveProperty("visibility");
 
+  await page.reload();
+  await page.locator("#chat-tab-direct").click();
+  await expect(page.locator(".direct-peer-select")).toHaveValue(recipient.id);
+  await expect(page.getByText("UIX267_PRIVATE_MARKER")).toBeVisible();
+
   viewer = "recipient";
   await page.reload();
-  await page.locator("#chat-tab-table").click();
+  await page.locator("#chat-tab-activity").click();
   await expect(page.getByText("UIX267_PRIVATE_MARKER")).toHaveCount(0);
-  await directTab.focus();
-  await directTab.press("Enter");
-  await expect(directTab).toHaveAttribute("aria-selected", "true");
+  await page.locator("#chat-tab-direct").click();
+  await page.locator(".direct-peer-select").selectOption(sender.id);
   await expect(page.getByText("UIX267_PRIVATE_MARKER")).toBeVisible();
 
   for (const next of ["player-c", "gm"] as const) {
@@ -2411,13 +2608,7 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
     await page.reload();
     await page.locator("#chat-tab-direct").click();
     await expect(page.getByText("UIX267_PRIVATE_MARKER")).toHaveCount(0);
-    await expect(
-      page.getByRole("combobox", {
-        name: "\u041e\u0442\u043a\u0440\u044b\u0442\u044b\u0439 \u043b\u0438\u0447\u043d\u044b\u0439 \u0434\u0438\u0430\u043b\u043e\u0433",
-      }),
-    ).toContainText(
-      "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0438\u0430\u043b\u043e\u0433",
-    );
+    await expect(page.locator(".direct-peer-select")).toHaveValue("");
   }
 });
 
