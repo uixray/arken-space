@@ -23,9 +23,10 @@
 - Scoped ESLint: PASS
 - Character mutation, sidebar, and source encoding tests: PASS (11/11)
 - `git diff --check`: PASS
+- Focused Chromium acceptance: PASS (3/3) for GM assign/revoke, additionally assigned player, and unassigned player.
 
 ## Blockers
-- Browser acceptance still needs a running migrated stack and two player sessions to verify GM assignment, assigned access, and revoked access end to end.
+- None for UIX-324 acceptance. Production deployment remains a separate explicit release gate.
 
 ## Next action
-- Add/run focused browser QA for GM, assigned player, and unassigned player; then complete UIX-324 acceptance review.
+- Close UIX-324 and select the next backlog pool.

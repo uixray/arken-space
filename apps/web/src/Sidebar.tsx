@@ -729,6 +729,7 @@ export function CharacterWorkspace({
         : props.snapshot.characters.filter(
             (character) =>
               character.ownerMembershipId === props.snapshot.me.id ||
+              character.controllerMembershipIds.includes(props.snapshot.me.id) ||
               character.id === props.snapshot.me.characterId,
           );
     const byId = new Map(visible.map((character) => [character.id, character]));
@@ -1139,7 +1140,8 @@ export function CharacterPanel({
   const editable =
     character &&
     (snapshot.me.role === "GM" ||
-      character.ownerMembershipId === snapshot.me.id);
+      character.ownerMembershipId === snapshot.me.id ||
+      character.controllerMembershipIds.includes(snapshot.me.id));
   if (!character)
     return (
       <Empty

@@ -25,6 +25,7 @@ const snapshot: GameSnapshot = {
       id: "62668dba-d385-434a-a76c-b9e2f8e84de9",
       name: "Картограф",
       ownerMembershipId: null,
+      controllerMembershipIds: [],
       portraitAssetId: null,
       stats: {
         might: 2,
@@ -1323,6 +1324,103 @@ for (const viewport of [
   });
 }
 
+test("GM assigns and revokes additional character sheet access", async ({
+  page,
+}) => {
+  const gmSnapshot = structuredClone(snapshot);
+  const ownerId = "f53f4618-2ebc-4cf8-bce7-870097305a6b";
+  const additionalId = "a53f4618-2ebc-4cf8-bce7-870097305a6b";
+  gmSnapshot.members = [
+    gmSnapshot.me,
+    {
+      id: ownerId,
+      role: "PLAYER",
+      displayName: "Owner",
+      characterId: gmSnapshot.characters[0]!.id,
+    },
+    {
+      id: additionalId,
+      role: "PLAYER",
+      displayName: "Additional",
+      characterId: null,
+    },
+  ];
+  gmSnapshot.characters[0]!.ownerMembershipId = ownerId;
+  gmSnapshot.characters[0]!.controllerMembershipIds = [ownerId];
+
+  let revision = gmSnapshot.characters[0]!.revision;
+  const requests: Array<{
+    controllerMembershipIds: string[];
+    revision: number;
+  }> = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(gmSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/characters/*/controllers", async (route) => {
+    const body = route.request().postDataJSON() as {
+      controllerMembershipIds: string[];
+      revision: number;
+    };
+    requests.push(body);
+    revision += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        controllerMembershipIds: [
+          ownerId,
+          ...body.controllerMembershipIds.filter((id) => id !== ownerId),
+        ],
+        revision,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.locator(".workspace-menu summary").click();
+  await page
+    .getByRole("button", {
+      name: "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
+    })
+    .click();
+  const access = page.locator(".character-controller-access");
+  await expect(access).toBeVisible();
+  const owner = access.getByLabel("Owner");
+  await expect(owner).toBeChecked();
+  await expect(owner).toBeDisabled();
+  const additional = access.getByLabel("Additional");
+  await additional.check();
+  await access
+    .getByRole("button", {
+      name: "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0434\u043e\u0441\u0442\u0443\u043f",
+    })
+    .click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]).toMatchObject({
+    revision: gmSnapshot.characters[0]!.revision,
+    controllerMembershipIds: [ownerId, additionalId],
+  });
+  await additional.uncheck();
+  await access
+    .getByRole("button", {
+      name: "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0434\u043e\u0441\u0442\u0443\u043f",
+    })
+    .click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toMatchObject({
+    revision: gmSnapshot.characters[0]!.revision + 1,
+    controllerMembershipIds: [ownerId],
+  });
+});
+
 test("player opens the character workspace while chat remains visible", async ({
   page,
 }) => {
@@ -1333,12 +1431,14 @@ test("player opens the character workspace while chat remains visible", async ({
     displayName: "Player",
     characterId: playerSnapshot.characters[0]!.id,
   };
-  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.characters[0]!.ownerMembershipId = null;
+  playerSnapshot.characters[0]!.controllerMembershipIds = [playerSnapshot.me.id];
   playerSnapshot.characters.push({
     ...playerSnapshot.characters[0]!,
     id: "a49b79b7-4ddf-49fe-9e7d-4ee03806c116",
     name: "Чужой персонаж",
     ownerMembershipId: "a21b4bb6-ae66-47b9-b719-610e0440044c",
+    controllerMembershipIds: [],
   });
   playerSnapshot.members = [playerSnapshot.me];
   await page.route("**/api/bootstrap", (route) =>
@@ -1349,13 +1449,14 @@ test("player opens the character workspace while chat remains visible", async ({
     }),
   );
   await page.goto("/");
-  await page.locator("#chat-tab-table").click();
+  await page.locator("#chat-tab-activity").click();
   await expect(page.locator(".chat-compose")).toBeVisible();
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
   await expect(page.locator(".character-workspace")).toBeVisible();
+  await expect(page.locator(".character-controller-access")).toHaveCount(0);
   await expect(page.locator(".chat-compose")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Наблюдение/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "\u041d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435", exact: true })).toBeVisible();
   await expect(
     page
       .locator(".character-rail")
@@ -1364,6 +1465,37 @@ test("player opens the character workspace while chat remains visible", async ({
   await page.keyboard.press("Escape");
   await expect(page.locator(".character-workspace")).toBeHidden();
   await expect(page.locator(".workspace-menu summary")).toBeFocused();
+});
+
+test("unassigned player character workspace exposes no sheets", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "c53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Unassigned",
+    characterId: null,
+  };
+  playerSnapshot.members = [playerSnapshot.me];
+  playerSnapshot.characters = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    }),
+  );
+  await page.goto("/");
+  await page.locator(".workspace-menu summary").click();
+  await page
+    .getByRole("button", {
+      name: "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
+    })
+    .click();
+  await expect(page.locator(".character-workspace")).toBeVisible();
+  await expect(page.locator(".character-sheet-card")).toHaveCount(0);
+  await expect(page.locator(".character-controller-access")).toHaveCount(0);
 });
 
 test("character card submits normal, advantage and disadvantage rolls for GM and player", async ({
