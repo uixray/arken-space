@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import { activityTableReadTarget, feedForChatStream } from "./sidebar-feed";
+import { normalizeCharacterControllerIds } from "./character-controller-access-state";
 
 const snapshot = (messages: GameSnapshot["messages"]): GameSnapshot =>
   ({
@@ -42,5 +43,22 @@ describe("unified activity feed routing", () => {
       ),
     ).toEqual({ threadId: "table-thread", sequence: 7 });
     expect(activityTableReadTarget(snapshot([]))).toBeNull();
+  });
+});
+
+describe("character controller access", () => {
+  it("always includes the owner and removes duplicate assignments", () => {
+    expect(
+      normalizeCharacterControllerIds(
+        ["player-2", "owner", "player-2"],
+        "owner",
+      ),
+    ).toEqual(["owner", "player-2"]);
+  });
+
+  it("preserves assignments when the character has no owner", () => {
+    expect(normalizeCharacterControllerIds(["player-2"], null)).toEqual([
+      "player-2",
+    ]);
   });
 });

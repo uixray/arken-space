@@ -1517,6 +1517,33 @@ code {
 .character-sheet-card__body .panel-section {
   min-width: 0;
 }
+.character-controller-access {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.character-controller-access legend {
+  padding: 0 var(--space-xs);
+  font-weight: 700;
+}
+.character-controller-access__players {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-xs);
+}
+.character-controller-access__players label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+.character-controller-access__players label .muted {
+  margin-left: auto;
+  font-size: 0.75rem;
+}
 .drawer-heading {
   display: flex;
   align-items: center;

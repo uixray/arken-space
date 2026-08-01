@@ -838,6 +838,48 @@ export function App() {
       }),
     );
 
+  const replaceCharacterControllers = async (
+    characterId: string,
+    revision: number,
+    controllerMembershipIds: string[],
+  ) => {
+    try {
+      const response = await api<{
+        ok: true;
+        controllerMembershipIds: string[];
+        revision: number;
+      }>(`/api/characters/${characterId}/controllers`, {
+        method: "PUT",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          revision,
+          controllerMembershipIds,
+        }),
+      });
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              characters: current.characters.map((character) =>
+                character.id === characterId &&
+                character.revision <= response.revision
+                  ? {
+                      ...character,
+                      controllerMembershipIds: response.controllerMembershipIds,
+                      revision: response.revision,
+                    }
+                  : character,
+              ),
+            }
+          : current,
+      );
+    } catch (reason) {
+      const canonical = await api<GameSnapshot>("/api/bootstrap");
+      setSnapshot((current) => reconcileGameSnapshot(current, canonical));
+      throw reason;
+    }
+  };
+
   const patchCharacter = (
     id: string,
     patch: Partial<import("@arken/contracts").CharacterDto>,
@@ -1673,7 +1715,9 @@ export function App() {
                 onOpenCharacter={(characterId) => {
                   setRequestedCharacterId(null);
                   handleWorkspaceChange("characters");
-                  requestAnimationFrame(() => setRequestedCharacterId(characterId));
+                  requestAnimationFrame(() =>
+                    setRequestedCharacterId(characterId),
+                  );
                 }}
                 membershipId={viewSnapshot.me.id}
                 socket={socket}
@@ -2135,6 +2179,7 @@ export function App() {
               ).then(() => undefined)
             }
             onPatchCharacter={patchCharacter}
+            onReplaceCharacterControllers={replaceCharacterControllers}
             storyPosts={storyPosts}
             storyNextCursor={storyNextCursor}
             onLoadMoreStoryPosts={async () => {

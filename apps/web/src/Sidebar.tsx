@@ -52,6 +52,7 @@ import {
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "./chat-composer";
+import { normalizeCharacterControllerIds } from "./character-controller-access-state";
 import {
   characterWorkspaceReducer,
   createCharacterWorkspaceState,
@@ -165,6 +166,11 @@ type Props = {
   }) => Promise<void>;
   onReplaceTokenControllers: (
     definitionId: string,
+    revision: number,
+    controllerMembershipIds: string[],
+  ) => Promise<void>;
+  onReplaceCharacterControllers: (
+    characterId: string,
     revision: number,
     controllerMembershipIds: string[],
   ) => Promise<void>;
@@ -935,6 +941,7 @@ export function CharacterWorkspace({
                       }
                       showCharacterPicker={false}
                       onPatch={props.onPatchCharacter}
+                      onReplaceControllers={props.onReplaceCharacterControllers}
                       onRoll={props.onRoll}
                       onAssignEntry={props.onAssignCatalogEntry}
                       onUpdateEntry={props.onUpdateCharacterEntry}
@@ -968,6 +975,92 @@ export function CharacterWorkspace({
   );
 }
 
+function CharacterControllerAccess({
+  character,
+  members,
+  onSave,
+}: {
+  character: CharacterDto;
+  members: GameSnapshot["members"];
+  onSave: Props["onReplaceCharacterControllers"];
+}) {
+  const canonical = useMemo(
+    () =>
+      normalizeCharacterControllerIds(
+        character.controllerMembershipIds,
+        character.ownerMembershipId,
+      ),
+    [character.controllerMembershipIds, character.ownerMembershipId],
+  );
+  const [draft, setDraft] = useState(canonical);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const dirty =
+    JSON.stringify([...draft].sort()) !== JSON.stringify([...canonical].sort());
+
+  useEffect(() => {
+    setDraft(canonical);
+  }, [canonical, character.id, character.revision]);
+
+  const players = members.filter((member) => member.role === "PLAYER");
+  return (
+    <fieldset className="character-controller-access" disabled={pending}>
+      <legend>Доступ к персонажу</legend>
+      <p className="muted">
+        Игроки, которые могут видеть и управлять этим персонажем.
+      </p>
+      <div className="character-controller-access__players">
+        {players.map((member) => {
+          const owner = member.id === character.ownerMembershipId;
+          const checked = owner || draft.includes(member.id);
+          return (
+            <label key={member.id}>
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={owner || pending}
+                onChange={(event) =>
+                  setDraft((current) =>
+                    event.target.checked
+                      ? normalizeCharacterControllerIds(
+                          [...current, member.id],
+                          character.ownerMembershipId,
+                        )
+                      : current.filter((id) => id !== member.id),
+                  )
+                }
+              />
+              <span>{member.displayName}</span>
+              {owner && <span className="muted">Владелец</span>}
+            </label>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+      <Button
+        disabled={!dirty || pending}
+        onClick={() => {
+          setPending(true);
+          setError("");
+          void onSave(character.id, character.revision, draft)
+            .catch(() =>
+              setError(
+                "Не удалось сохранить доступ. Данные обновлены — проверьте список и повторите попытку.",
+              ),
+            )
+            .finally(() => setPending(false));
+        }}
+      >
+        {pending ? "Сохранение…" : "Сохранить доступ"}
+      </Button>
+    </fieldset>
+  );
+}
+
 export function CharacterPanel({
   snapshot,
   character,
@@ -975,6 +1068,7 @@ export function CharacterPanel({
   setSelectedId,
   showCharacterPicker = true,
   onPatch,
+  onReplaceControllers,
   onRoll,
   onAssignEntry,
   onUpdateEntry,
@@ -991,6 +1085,7 @@ export function CharacterPanel({
   setSelectedId: (value: string) => void;
   showCharacterPicker?: boolean;
   onPatch: Props["onPatchCharacter"];
+  onReplaceControllers: Props["onReplaceCharacterControllers"];
   onRoll: Props["onRoll"];
   onAssignEntry: Props["onAssignCatalogEntry"];
   onUpdateEntry: Props["onUpdateCharacterEntry"];
@@ -1197,6 +1292,13 @@ export function CharacterPanel({
           <span className="revision">rev {character.revision}</span>
         </div>
       </div>
+      {snapshot.me.role === "GM" && (
+        <CharacterControllerAccess
+          character={character}
+          members={snapshot.members}
+          onSave={onReplaceControllers}
+        />
+      )}
       {portrait && (
         <img
           className="character-portrait"
