@@ -1379,7 +1379,7 @@ code {
 }
 .character-workspace__body {
   display: grid;
-  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  grid-template-columns: minmax(156px, 188px) minmax(0, 1fr);
   min-height: 0;
 }
 .character-rail {
@@ -1391,6 +1391,28 @@ code {
   overflow: auto;
   border-right: 1px solid var(--line);
   background: var(--surface);
+}
+.character-workspace__body.is-rail-collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+.character-workspace__body.is-rail-collapsed .character-rail {
+  padding-inline: 6px;
+}
+.character-workspace__body.is-rail-collapsed .character-rail__create {
+  min-width: 0;
+  padding-inline: 0;
+  font-size: 0;
+}
+.character-workspace__body.is-rail-collapsed .character-rail__create span {
+  font-size: 1rem;
+}
+.character-workspace__body.is-rail-collapsed .character-rail__item {
+  grid-template-columns: 1fr;
+}
+.character-workspace__body.is-rail-collapsed .character-rail__item strong,
+.character-workspace__body.is-rail-collapsed .character-rail__status,
+.character-workspace__body.is-rail-collapsed .character-rail__close {
+  display: none;
 }
 .character-rail__item {
   display: grid;
@@ -1405,15 +1427,31 @@ code {
   text-align: left;
 }
 .character-rail__item strong,
-.character-rail__item span {
+.character-rail__status {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.character-rail__item span {
+.character-rail__status {
   color: var(--muted);
   font-size: 0.78rem;
+}
+.character-rail__initial {
+  display: none;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-weight: 700;
+}
+.character-workspace__body.is-rail-collapsed .character-rail__initial {
+  display: grid;
+}
+.character-rail-toggle {
+  min-width: 34px;
+  padding-inline: 0;
 }
 .character-rail__item .is-active {
   border-color: var(--accent);
@@ -1426,10 +1464,10 @@ code {
 .character-sheet-deck {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(360px, 1fr);
-  gap: var(--space-md);
+  grid-auto-columns: minmax(320px, 1fr);
+  gap: var(--space-sm);
   min-width: 0;
-  padding: var(--space-md);
+  padding: var(--space-sm);
   overflow: auto;
   background: var(--bg);
 }

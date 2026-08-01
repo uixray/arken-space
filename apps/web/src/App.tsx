@@ -1671,8 +1671,9 @@ export function App() {
                 assets={viewSnapshot.assets}
                 role={viewSnapshot.me.role}
                 onOpenCharacter={(characterId) => {
-                  setRequestedCharacterId(characterId);
+                  setRequestedCharacterId(null);
                   handleWorkspaceChange("characters");
+                  requestAnimationFrame(() => setRequestedCharacterId(characterId));
                 }}
                 membershipId={viewSnapshot.me.id}
                 socket={socket}

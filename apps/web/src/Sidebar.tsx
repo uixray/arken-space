@@ -738,6 +738,7 @@ export function CharacterWorkspace({
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(false);
 
   useEffect(() => titleRef.current?.focus(), []);
   useEffect(() => {
@@ -749,8 +750,7 @@ export function CharacterWorkspace({
   useEffect(() => {
     const id = props.requestedCharacterId;
     if (!id || !characters.some((character) => character.id === id)) return;
-    dispatch({ type: "OPEN", id });
-    dispatch({ type: "FOCUS", id });
+    dispatch({ type: "OPEN_EXCLUSIVE", id });
   }, [characters, props.requestedCharacterId]);
   useEffect(() => {
     if (!state.activeId) return;
@@ -789,6 +789,16 @@ export function CharacterWorkspace({
         </p>
         <button
           type="button"
+          className="character-rail-toggle"
+          aria-label={railCollapsed ? "Развернуть список персонажей" : "Свернуть список персонажей"}
+          aria-pressed={railCollapsed}
+          title={railCollapsed ? "Развернуть список персонажей" : "Свернуть список персонажей"}
+          onClick={() => setRailCollapsed((current) => !current)}
+        >
+          <span aria-hidden="true">{railCollapsed ? ">" : "<"}</span>
+        </button>
+        <button
+          type="button"
           aria-label="Закрыть персонажей"
           title="Закрыть рабочее пространство персонажей"
           onClick={onClose}
@@ -796,7 +806,7 @@ export function CharacterWorkspace({
           <span aria-hidden="true">×</span>
         </button>
       </header>
-      <div className="character-workspace__body">
+      <div className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}>
         <nav className="character-rail" aria-label="Персонажи кампании">
           {props.snapshot.me.role === "GM" && (
             <button
@@ -836,8 +846,9 @@ export function CharacterWorkspace({
                       else dispatch({ type: "OPEN", id: character.id });
                     }}
                   >
+                    <span className="character-rail__initial" aria-hidden="true">{character.name.slice(0, 1).toLocaleUpperCase()}</span>
                     <strong>{character.name}</strong>
-                    <span>
+                    <span className="character-rail__status">
                       {isCollapsed ? "свернут" : isOpen ? "открыт" : ""}
                     </span>
                   </button>

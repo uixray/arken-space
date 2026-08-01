@@ -418,6 +418,12 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
   );
   await expect(page.locator("canvas").first()).toBeHidden();
 
+  await workspace.getByRole("button", { name: "Свернуть список персонажей" }).click();
+  await expect(workspace.locator(".character-workspace__body")).toHaveClass(/is-rail-collapsed/);
+  await expect(workspace.getByRole("button", { name: "Развернуть список персонажей" })).toBeVisible();
+  await workspace.getByRole("button", { name: "Развернуть список персонажей" }).click();
+  await expect(workspace.locator(".character-workspace__body")).not.toHaveClass(/is-rail-collapsed/);
+
   await workspace.getByRole("button", { name: "Второй персонаж" }).click();
   await expect(
     workspace.getByRole("article", {
