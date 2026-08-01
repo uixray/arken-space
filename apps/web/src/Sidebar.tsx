@@ -45,6 +45,7 @@ import type { TokenFramePreset } from "./token-image-editor-state";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { isEditableEventTarget } from "./input-diagnostics";
 import { ImageUploadField } from "./ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { SceneManagerDialog, type SceneDraft } from "./ui/SceneManagerDialog";
@@ -769,6 +770,7 @@ export function CharacterWorkspace({
   }, [state.activeId]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || isEditableEventTarget(event.target)) return;
       if (event.key !== "Escape") return;
       if ((event.target as Element | null)?.closest('[role="dialog"]')) return;
       onClose();

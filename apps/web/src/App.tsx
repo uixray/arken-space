@@ -28,6 +28,7 @@ import {
   appendDirectMessageResponse,
   upsertDirectThread,
 } from "./direct-chat-state";
+import { isEditableEventTarget } from "./input-diagnostics";
 import {
   addRollToast,
   removeRollToast,
@@ -166,10 +167,8 @@ function CanvasHistoryControls({
   useEffect(() => {
     if (!sceneId || disabled) return;
     const handler = (event: KeyboardEvent) => {
+      if (event.isComposing || isEditableEventTarget(event.target)) return;
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z")
-        return;
-      const target = event.target as HTMLElement | null;
-      if (target?.matches("input, textarea, select, [contenteditable=true]"))
         return;
       event.preventDefault();
       const direction = event.shiftKey ? "redo" : "undo";

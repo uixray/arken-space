@@ -12,10 +12,12 @@ import "./random-uuid-polyfill";
 import { App } from "./App";
 import { AppErrorBoundary } from "./AppErrorBoundary";
 import { appToaster } from "./ui/toaster";
+import { installInputDiagnostics } from "./input-diagnostics";
 import "./ui/gravity-foundation.css";
 import "./styles.css";
 
 configure({ lang: "ru" });
+installInputDiagnostics();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
