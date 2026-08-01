@@ -2270,12 +2270,12 @@ function DirectChatPanel({
       <div className="direct-thread-toolbar">
         <select
           className="direct-peer-select"
-          aria-label="??????????"
+          aria-label="Собеседник"
           value={selectedPeerId}
           disabled={selectingPeer || contacts.length === 0}
           onChange={(event) => void selectPeer(event.target.value)}
         >
-          <option value="">???????? ???????????</option>
+          <option value="">Выберите собеседника</option>
           {contacts.map((contact) => {
             const thread = directThreadForPeer(snapshot, contact.membershipId);
             const unread = thread ? directUnreadCount(snapshot, thread.id) : 0;

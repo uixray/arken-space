@@ -20,12 +20,10 @@
 - `vitest run tests/auth-logout.test.ts` ? PASS (3/3).
 - Playwright scoped handoff/GM-entry gate ? PASS (3/3).
 - `git diff --check` ? PASS.
-- Docker multiplayer gate ? BLOCKED before startup: Docker Desktop Linux engine pipe is unavailable.
+- Docker multiplayer gate ? PASS (2/2, including authoritative recovery and shared-browser handoff).
 
 ## Blockers
-- Full `pnpm test:multiplayer` must be rerun when Docker Desktop is running.
+- None for UIX-322.
 
 ## Next action
-1. Start Docker Desktop.
-2. Run isolated multiplayer gate.
-3. If green, move UIX-322 from In Review to Done and run the combined release regression.
+- Close UIX-322 and continue the combined release regression.

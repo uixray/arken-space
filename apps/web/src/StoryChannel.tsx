@@ -96,7 +96,7 @@ export function StoryPost({
   ) {
     if (!file || !onUploadImage || pending !== null) return;
     if (!file.type.startsWith("image/")) {
-      setUpdateError("????? ?????????? ?????? ???????????.");
+      setUpdateError("Файл должен быть изображением.");
       return;
     }
     setPending("update");
@@ -124,7 +124,7 @@ export function StoryPost({
       );
     } catch (reason) {
       setUpdateError(
-        reason instanceof Error ? reason.message : "?? ??????? ????????? ???????????.",
+        reason instanceof Error ? reason.message : "Не удалось загрузить изображение.",
       );
     } finally {
       setPending(null);
@@ -198,7 +198,7 @@ export function StoryPost({
       {editing ? (
         <div className="story-post__edit">
           <label>
-            ?????????
+            Заголовок
             <input
               value={draftTitle}
               maxLength={160}
@@ -207,7 +207,7 @@ export function StoryPost({
             />
           </label>
           <label>
-            ????? ??????
+            Текст записи
             <textarea
               value={draftBody}
               disabled={pending !== null}
@@ -221,7 +221,7 @@ export function StoryPost({
                 <li key={item.contentId}>
                   <span>{item.fileName}</span>
                   <label>
-                    ????????
+                    Альт-текст
                     <input
                       value={item.altText}
                       maxLength={240}
@@ -238,7 +238,7 @@ export function StoryPost({
                     />
                   </label>
                   <label>
-                    ???????
+                    Подпись
                     <input
                       value={item.caption}
                       maxLength={2000}
@@ -263,7 +263,7 @@ export function StoryPost({
                         editFileInputRef.current?.click();
                       }}
                     >
-                      ????????
+                      Заменить
                     </button>
                     <button
                       type="button"
@@ -276,7 +276,7 @@ export function StoryPost({
                         )
                       }
                     >
-                      ??????
+                      Удалить
                     </button>
                   </div>
                 </li>
@@ -307,12 +307,12 @@ export function StoryPost({
                   editFileInputRef.current?.click();
                 }}
               >
-                ???????? ???????????
+                Добавить изображение
               </button>
             </>
           )}
           <label>
-            ??????? ???????
+            Заметки мастера
             <textarea
               value={draftGmNotes}
               disabled={pending !== null}
@@ -334,7 +334,7 @@ export function StoryPost({
               target="_blank"
               rel="noreferrer"
             >
-              ??????? ???????????: {media.fileName}
+              Открыть изображение: {media.fileName}
             </a>
           ) : (
             <figure className="story-post__media" key={media.contentId}>
@@ -356,7 +356,7 @@ export function StoryPost({
         )}
       {!editing && isGm && adminPost?.gmNotes && (
         <aside className="story-post__gm-notes">
-          <strong>??????? ???????</strong>
+          <strong>Заметки мастера</strong>
           <p>{adminPost.gmNotes}</p>
         </aside>
       )}

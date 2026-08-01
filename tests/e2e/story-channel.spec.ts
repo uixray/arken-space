@@ -102,7 +102,12 @@ test("GM drafts, publishes, corrects and archives a story post through refreshed
     expect(route.request().method()).toBe("POST");
     const revision = (route.request().postDataJSON() as { revision: number }).revision;
     expect([1, 4]).toContain(revision);
-    posts = [adminPost("PUBLISHED", posts[0].body, revision + 1)];
+    posts = [
+      {
+        ...adminPost("PUBLISHED", posts[0].body, revision + 1),
+        media: posts[0].media,
+      },
+    ];
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(posts[0]) });
   });
   await page.route(`**/api/story/posts/${ids.post}`, async (route) => {
@@ -170,8 +175,8 @@ test("GM drafts, publishes, corrects and archives a story post through refreshed
   await post.locator(".story-post__edit textarea").last().fill(
     "Updated GM-only note",
   );
-  await expect(post.getByRole("button", { name: "????????" })).toBeVisible();
-  await post.getByRole("button", { name: "??????" }).click();
+  await expect(post.getByRole("button", { name: "Заменить" })).toBeVisible();
+  await post.getByRole("button", { name: "Удалить" }).click();
   await expect(post.getByText("ravenford.webp")).toHaveCount(0);
   await post.locator(".story-post__actions button").first().click();
   await expect(post).toHaveAttribute("data-story-lifecycle", "CORRECTED");
