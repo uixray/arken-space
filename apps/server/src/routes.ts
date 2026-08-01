@@ -5875,7 +5875,8 @@ export function registerRoutes(
       return reply.code(409).send({ error: "BATTLE_ALREADY_ACTIVE" });
     if (body.command === "END_BATTLE" && !current.battleActive)
       return reply.code(409).send({ error: "BATTLE_NOT_ACTIVE" });
-    const nextDay = current.day + (body.command === "ADVANCE_DAY" ? 1 : 0);
+    const advancesDay = body.command === "ADVANCE_DAY" || body.command === "LONG_REST";
+    const nextDay = current.day + (advancesDay ? 1 : 0);
     const nextBattle =
       current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
     const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
@@ -5920,9 +5921,9 @@ export function registerRoutes(
           if (!parsed.success || !parsed.data.uses) continue;
           const uses = parsed.data.uses;
           const due =
-            (body.command === "ADVANCE_DAY" && uses.recharge === "DAY") ||
+            (advancesDay && uses.recharge === "DAY") ||
             (body.command === "END_BATTLE" && uses.recharge === "BATTLE") ||
-            (body.command === "ADVANCE_DAY" &&
+            (advancesDay &&
               uses.recharge === "WEEK" &&
               nextDay - (uses.lastRechargeDay ?? 1) >= 7);
           if (!due) continue;
@@ -5953,9 +5954,27 @@ export function registerRoutes(
           if (!rechargedEntry) throw new Error("ENTRY_CONFLICT");
           recharged++;
         }
+        let restoredCharacters = 0;
+        if (body.command === "LONG_REST") {
+          const characterRows = await tx.select().from(characters).where(eq(characters.campaignId, auth.campaignId));
+          for (const character of characterRows) {
+            const beforeResources = character.resources as Resources;
+            const afterResources = applyCharacterRest(beforeResources, "LONG");
+            if (JSON.stringify(beforeResources) === JSON.stringify(afterResources)) continue;
+            const [restoredCharacter] = await tx
+              .update(characters)
+              .set({ resources: afterResources, revision: character.revision + 1, updatedAt: new Date() })
+              .where(and(eq(characters.id, character.id), eq(characters.revision, character.revision)))
+              .returning({ id: characters.id });
+            if (!restoredCharacter) throw new Error("CHARACTER_CONFLICT");
+            restoredCharacters++;
+          }
+        }
         const label =
-          body.command === "ADVANCE_DAY"
-            ? `День кампании: ${nextDay}`
+          body.command === "LONG_REST"
+            ? "Длинный отдых завершён"
+            : body.command === "ADVANCE_DAY"
+              ? `День кампании: ${nextDay}`
             : body.command === "START_BATTLE"
               ? `Бой #${nextBattle} начат`
               : `Бой #${current.battleCounter} завершён`;
@@ -5986,6 +6005,7 @@ export function registerRoutes(
             day: nextDay,
             battleCounter: nextBattle,
             recharged,
+            restoredCharacters,
           },
         });
         return { updated, message };
@@ -5994,7 +6014,8 @@ export function registerRoutes(
       if (
         error instanceof Error &&
         (error.message === "CAMPAIGN_CONFLICT" ||
-          error.message === "ENTRY_CONFLICT")
+          error.message === "ENTRY_CONFLICT" ||
+          error.message === "CHARACTER_CONFLICT")
       )
         return reply.code(409).send({ error: error.message });
       throw error;

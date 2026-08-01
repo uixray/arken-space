@@ -311,7 +311,7 @@ type Props = {
     },
   ) => Promise<void>;
   onCampaignClock: (
-    command: "ADVANCE_DAY" | "START_BATTLE" | "END_BATTLE",
+    command: "ADVANCE_DAY" | "LONG_REST" | "START_BATTLE" | "END_BATTLE",
     revision: number,
   ) => Promise<void>;
   requestedChatMessageId: string | null;
@@ -1248,11 +1248,10 @@ export function CharacterPanel({
           </p>
           <Button
             onClick={() =>
-              onCampaignClock("ADVANCE_DAY", snapshot.campaign.revision)
+              onCampaignClock("LONG_REST", snapshot.campaign.revision)
             }
           >
-            Следующий день
-          </Button>
+            Длинный отдых</Button>
           <Button
             onClick={() =>
               onCampaignClock(
@@ -1296,7 +1295,7 @@ export function CharacterPanel({
         )}
       </div>
       <div className="stats-grid">
-        {arkenSystem.stats.map((stat) => (
+        {arkenSystem.stats.filter((stat) => stat.key !== "reaction" && stat.key !== "magicPower").map((stat) => (
           <label key={stat.key} className="stat-field">
             <span>{stat.label}</span>
             <FormInput
@@ -1326,13 +1325,48 @@ export function CharacterPanel({
           </label>
         ))}
       </div>
+      <h3 className="character-block-heading">{"Особые характеристики"}</h3>
+      <div className="stats-grid">
+        {arkenSystem.stats.filter((stat) => stat.key === "magicPower").map((stat) => (
+          <label key={stat.key} className="stat-field">
+            <span>{stat.label}</span>
+            <FormInput
+              key={`${character.id}-${stat.key}-${character.revision}`}
+              type="number"
+              defaultValue={character.stats[stat.key] ?? stat.defaultValue}
+              disabled={!editable}
+              min={stat.min}
+              max={stat.max}
+              onBlur={(event) =>
+                void runCharacterMutation(() =>
+                  onPatch(character.id, {
+                    stats: { [stat.key]: Number(event.target.value) },
+                    revision: character.revision,
+                  }),
+                )
+              }
+            />
+            <Button disabled={!editable || rollPending} onClick={() => void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)}>
+              {"Бросок"}
+            </Button>
+          </label>
+        ))}
+      </div>
       <h3 className="character-block-heading">Боевые характеристики</h3>
+      <div className="inline-fields">
       <Button
         disabled={!editable || rollPending}
         onClick={() => void submitCharacterRoll("1d20 + agility", "Инициатива")}
       >
         Инициатива (d20 + Ловкость)
       </Button>
+      <Button
+        disabled={!editable || rollPending}
+        onClick={() => void submitCharacterRoll("1d20 + reaction", "Бросок?")}
+      >
+        {"Бросок? (d20 + Бросок?)"}
+      </Button>
+      </div>
       <div className="subsection">
         <h3>Дополнительные навыки</h3>
         {character.skills.length ? (
@@ -1549,12 +1583,6 @@ export function CharacterPanel({
             onClick={() => void runRest("SHORT")}
           >
             Короткий отдых (+25%)
-          </Button>
-          <Button
-            disabled={!editable || countersPending > 0}
-            onClick={() => void runRest("LONG")}
-          >
-            Длинный отдых (100%)
           </Button>
         </div>
       </div>

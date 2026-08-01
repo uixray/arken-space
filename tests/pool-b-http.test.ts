@@ -1826,6 +1826,45 @@ describe("Pool B HTTP boundaries", () => {
     expect(audit?.payload).toMatchObject({ rest: "LONG" });
   });
 
+  it("applies a campaign-wide long rest atomically", async () => {
+    await database.exec(
+      `update characters set resources = '{"physicalPower":{"current":1,"maximum":10,"recoverable":true},"magicPower":{"current":2,"maximum":8,"recoverable":true},"charges":{"current":1,"maximum":4,"recoverable":false}}'::jsonb where id = '${ids.character}'`,
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "LONG_REST",
+        revision: 0,
+      },
+    });
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toMatchObject({ day: 2, revision: 1 });
+    const [rested] = await db
+      .select({ resources: schema.characters.resources, revision: schema.characters.revision })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(rested).toMatchObject({
+      revision: 1,
+      resources: {
+        physicalPower: { current: 10, maximum: 10 },
+        magicPower: { current: 8, maximum: 8 },
+        charges: { current: 1, maximum: 4, recoverable: false },
+      },
+    });
+    const events = await db
+      .select({ payload: schema.gameEvents.payload })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.entityId, ids.campaign));
+    expect(events.at(-1)?.payload).toMatchObject({
+      command: "LONG_REST",
+      day: 2,
+      restoredCharacters: 1,
+    });
+  });
+
   it("updates clock, cooldowns, resources and wallet with public system audit", async () => {
     await database.exec(
       `update characters set wallet = '{"gold":0,"silver":0,"copper":0}'::jsonb where id = '${ids.character}'`,
