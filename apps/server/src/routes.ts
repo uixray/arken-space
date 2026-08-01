@@ -216,6 +216,30 @@ const walletLabels = {
 
 type Wallet = Record<keyof typeof walletLabels, number>;
 
+type WalletAuditSystemData = {
+  type: "WALLET_AUDIT";
+  before: Wallet;
+  after: Wallet;
+  lastAt: string;
+  operationCount: number;
+};
+
+const WALLET_AUDIT_BURST_MS = 5_000;
+
+function isWalletAuditSystemData(
+  value: unknown,
+): value is WalletAuditSystemData {
+  if (!value || typeof value !== "object") return false;
+  const data = value as Partial<WalletAuditSystemData>;
+  return (
+    data.type === "WALLET_AUDIT" &&
+    typeof data.lastAt === "string" &&
+    typeof data.operationCount === "number" &&
+    Boolean(data.before) &&
+    Boolean(data.after)
+  );
+}
+
 function formatWalletChanges(before: Wallet, after: Wallet) {
   const changes = Object.entries(walletLabels)
     .filter(
@@ -6303,6 +6327,8 @@ export function registerRoutes(
       .join("; ");
     if (!changes) return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
     const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
+    const walletOnly = Boolean(body.wallet) && !nextResources && !body.rest;
+    const walletBefore = normalizeCharacterWallet(character!.wallet);
     const result = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(characters)
@@ -6320,18 +6346,74 @@ export function registerRoutes(
         )
         .returning();
       if (!updated) return null;
-      const [message] = await tx
-        .insert(chatMessages)
-        .values({
-          campaignId: auth.campaignId,
-          membershipId: auth.membershipId,
-          characterId: id,
-          kind: "SYSTEM",
-          threadId: tableThread.id,
-          visibility: "PUBLIC",
-          body: `${character!.name} \u2014 ${changes}`,
-        })
-        .returning();
+      const now = new Date();
+      const walletData: WalletAuditSystemData | null =
+        walletOnly && body.wallet
+          ? {
+              type: "WALLET_AUDIT",
+              before: walletBefore,
+              after: body.wallet,
+              lastAt: now.toISOString(),
+              operationCount: 1,
+            }
+          : null;
+      const [latestMessage] = walletData
+        ? await tx
+            .select()
+            .from(chatMessages)
+            .where(eq(chatMessages.threadId, tableThread.id))
+            .orderBy(desc(chatMessages.sequence))
+            .limit(1)
+            .for("update")
+        : [];
+      const latestWalletData = latestMessage?.systemData;
+      const lastAt = isWalletAuditSystemData(latestWalletData)
+        ? Date.parse(latestWalletData.lastAt)
+        : Number.NaN;
+      const elapsed = now.getTime() - lastAt;
+      const canAggregate =
+        latestMessage?.kind === "SYSTEM" &&
+        latestMessage.visibility === "PUBLIC" &&
+        latestMessage.membershipId === auth.membershipId &&
+        latestMessage.characterId === id &&
+        isWalletAuditSystemData(latestWalletData) &&
+        elapsed >= 0 &&
+        elapsed <= WALLET_AUDIT_BURST_MS;
+      const aggregateData: WalletAuditSystemData | null =
+        canAggregate && body.wallet
+          ? {
+              ...latestWalletData,
+              after: body.wallet,
+              lastAt: now.toISOString(),
+              operationCount: latestWalletData.operationCount + 1,
+            }
+          : null;
+      const [message] =
+        aggregateData && latestMessage
+          ? await tx
+              .update(chatMessages)
+              .set({
+                body: `${character!.name} \u2014 ${formatWalletChanges(
+                  aggregateData.before,
+                  aggregateData.after,
+                )}`,
+                systemData: aggregateData,
+              })
+              .where(eq(chatMessages.id, latestMessage.id))
+              .returning()
+          : await tx
+              .insert(chatMessages)
+              .values({
+                campaignId: auth.campaignId,
+                membershipId: auth.membershipId,
+                characterId: id,
+                kind: "SYSTEM",
+                threadId: tableThread.id,
+                visibility: "PUBLIC",
+                body: `${character!.name} \u2014 ${changes}`,
+                systemData: walletData,
+              })
+              .returning();
       await tx.insert(gameEvents).values({
         campaignId: auth.campaignId,
         actionId: body.actionId,

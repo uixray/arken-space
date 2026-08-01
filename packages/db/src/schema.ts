@@ -1134,6 +1134,13 @@ export const chatMessages = pgTable(
     visibility: messageVisibilityEnum("visibility").notNull().default("PUBLIC"),
     body: text("body").notNull(),
     dice: jsonb("dice").$type<unknown>(),
+    systemData: jsonb("system_data").$type<{
+      type: "WALLET_AUDIT";
+      before: { gold: number; silver: number; copper: number; sp: number };
+      after: { gold: number; silver: number; copper: number; sp: number };
+      lastAt: string;
+      operationCount: number;
+    }>(),
     stickerId: uuid("sticker_id"),
     stickerPresentation: jsonb("sticker_presentation").$type<{
       name: string;

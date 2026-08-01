@@ -1635,6 +1635,10 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   const submittedGold: number[] = [];
   const submittedSp: number[] = [];
   const submittedRevisions: number[] = [];
+  let releaseFirstResponse!: () => void;
+  const firstResponseGate = new Promise<void>((resolve) => {
+    releaseFirstResponse = resolve;
+  });
   const renderErrors: Error[] = [];
   page.on("pageerror", (error) => renderErrors.push(error));
   await page.route("**/api/bootstrap", (route) =>
@@ -1652,8 +1656,7 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
     submittedGold.push(payload.wallet.gold);
     submittedSp.push(payload.wallet.sp);
     submittedRevisions.push(payload.revision);
-    if (submittedGold.length === 1)
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    if (submittedGold.length === 1) await firstResponseGate;
     playerSnapshot.characters[0]!.wallet = payload.wallet;
     playerSnapshot.characters[0]!.revision += 1;
     const response =
@@ -1687,6 +1690,9 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
+  await expect.poll(() => submittedGold).toEqual([1]);
+  await expect(input).toHaveValue("3");
+  releaseFirstResponse();
   await input.focus();
   await page.locator(".character-workspace__header h2").click();
   await expect.poll(() => submittedGold).toEqual([1, 2, 3]);

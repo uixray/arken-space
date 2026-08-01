@@ -2081,6 +2081,102 @@ describe("Pool B HTTP boundaries", () => {
     ]);
   });
 
+  it("coalesces a rapid wallet burst without dropping authoritative events", async () => {
+    await database.exec(
+      `update characters set wallet = '{"gold":0,"silver":0,"copper":0,"sp":0}'::jsonb where id = '${ids.character}'`,
+    );
+    const actionIds = [
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+    ];
+
+    for (const [index, actionId] of actionIds.entries()) {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/characters/${ids.character}/counters`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId,
+          revision: index,
+          wallet: { gold: index + 1, silver: 0, copper: 0, sp: 0 },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        revision: index + 1,
+        wallet: { gold: index + 1, silver: 0, copper: 0, sp: 0 },
+      });
+    }
+
+    const auditMessages = await db
+      .select({
+        body: schema.chatMessages.body,
+        systemData: schema.chatMessages.systemData,
+      })
+      .from(schema.chatMessages)
+      .where(
+        and(
+          eq(schema.chatMessages.campaignId, ids.campaign),
+          eq(schema.chatMessages.characterId, ids.character),
+          eq(schema.chatMessages.kind, "SYSTEM"),
+        ),
+      );
+    expect(auditMessages).toHaveLength(1);
+    expect(auditMessages[0]?.systemData).toMatchObject({
+      type: "WALLET_AUDIT",
+      before: { gold: 0, silver: 0, copper: 0, sp: 0 },
+      after: { gold: 3, silver: 0, copper: 0, sp: 0 },
+      operationCount: 3,
+    });
+
+    const events = await db
+      .select({
+        actionId: schema.gameEvents.actionId,
+        entityRevision: schema.gameEvents.entityRevision,
+      })
+      .from(schema.gameEvents)
+      .where(
+        and(
+          eq(schema.gameEvents.campaignId, ids.campaign),
+          eq(schema.gameEvents.entityId, ids.character),
+          eq(schema.gameEvents.type, "character.counters"),
+        ),
+      )
+      .orderBy(schema.gameEvents.sequence);
+    expect(events).toEqual(
+      actionIds.map((actionId, index) => ({
+        actionId,
+        entityRevision: index + 1,
+      })),
+    );
+
+    const replay = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: actionIds[2],
+        revision: 2,
+        wallet: { gold: 99, silver: 0, copper: 0, sp: 0 },
+      },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ wallet: { gold: 3 }, revision: 3 });
+    expect(
+      await db
+        .select({ actionId: schema.gameEvents.actionId })
+        .from(schema.gameEvents)
+        .where(
+          and(
+            eq(schema.gameEvents.campaignId, ids.campaign),
+            eq(schema.gameEvents.entityId, ids.character),
+            eq(schema.gameEvents.type, "character.counters"),
+          ),
+        ),
+    ).toHaveLength(3);
+  });
+
   it("rejects foreign ownership, player clock access, malformed use models and stale revisions", async () => {
     const [foreignEntry] = await db
       .insert(schema.characterCatalogEntries)
