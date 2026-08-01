@@ -395,6 +395,29 @@ export const characters = pgTable(
   ],
 );
 
+/** Character-sheet access, independent from token control and login grants. */
+export const characterControllers = pgTable(
+  "character_controllers",
+  {
+    characterId: uuid("character_id")
+      .notNull()
+      .references(() => characters.id, { onDelete: "cascade" }),
+    membershipId: uuid("membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("character_controllers_character_member_idx").on(
+      table.characterId,
+      table.membershipId,
+    ),
+    index("character_controllers_membership_idx").on(table.membershipId),
+  ],
+);
+
 export const catalogEntries = pgTable(
   "catalog_entries",
   {

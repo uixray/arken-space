@@ -28,6 +28,7 @@ export function normalizeCharacterWallet(
 export function characterDto(
   character: CharacterRow,
   entries: CharacterEntryRow[],
+  controllerMembershipIds: string[] = [],
 ): CharacterDto {
   const wallet =
     character.wallet && typeof character.wallet === "object"
@@ -37,6 +38,7 @@ export function characterDto(
     id: character.id,
     name: character.name,
     ownerMembershipId: character.ownerMembershipId,
+    controllerMembershipIds,
     portraitAssetId: character.portraitAssetId,
     stats: normalizeLegacyStats(character.stats),
     skills: (() => {

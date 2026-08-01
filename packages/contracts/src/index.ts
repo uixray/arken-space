@@ -365,6 +365,11 @@ export const replaceTokenControllersSchema = z.object({
   revision: z.number().int().nonnegative(),
   controllerMembershipIds: z.array(z.string().uuid()).max(50),
 });
+export const replaceCharacterControllersSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  controllerMembershipIds: z.array(z.string().uuid()).max(50),
+});
 export const placeTokenDefinitionSchema = z.object({
   actionId: actionIdSchema,
   definitionId: z.string().uuid(),
@@ -1175,26 +1180,28 @@ export const walletSchema = z.object({
   copper: z.number().int().nonnegative(),
   sp: z.number().int().nonnegative(),
 });
-export const characterCountersCommandSchema = z.object({
-  actionId: actionIdSchema,
-  revision: z.number().int().nonnegative(),
-  wallet: walletSchema.optional(),
-  resources: z
-    .record(
-      z.string(),
-      z.object({
-        current: z.number().finite().nonnegative(),
-        maximum: z.number().finite().nonnegative().optional(),
-        description: z.string().max(2000).optional(),
-        imageAssetId: z.string().uuid().nullable().optional(),
-        recoverable: z.boolean().optional(),
-      }),
-    )
-    .optional(),
-  rest: z.enum(["SHORT", "LONG", "CATCH_BREATH"]).optional(),
-}).refine((value) => Boolean(value.wallet || value.resources || value.rest), {
-  message: "At least one counter mutation is required",
-});
+export const characterCountersCommandSchema = z
+  .object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    wallet: walletSchema.optional(),
+    resources: z
+      .record(
+        z.string(),
+        z.object({
+          current: z.number().finite().nonnegative(),
+          maximum: z.number().finite().nonnegative().optional(),
+          description: z.string().max(2000).optional(),
+          imageAssetId: z.string().uuid().nullable().optional(),
+          recoverable: z.boolean().optional(),
+        }),
+      )
+      .optional(),
+    rest: z.enum(["SHORT", "LONG", "CATCH_BREATH"]).optional(),
+  })
+  .refine((value) => Boolean(value.wallet || value.resources || value.rest), {
+    message: "At least one counter mutation is required",
+  });
 export const rechargeEntryCommandSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -1236,6 +1243,7 @@ export interface CharacterDto {
   id: string;
   name: string;
   ownerMembershipId: string | null;
+  controllerMembershipIds: string[];
   portraitAssetId: string | null;
   stats: Record<string, number>;
   skills: Array<{ key: string; name: string; rank: number; formula: string }>;

@@ -16,6 +16,7 @@ import {
   campaigns,
   catalogEntries,
   characterCatalogEntries,
+  characterControllers,
   characters,
   chatMessages,
   chatAttachments,
@@ -66,6 +67,7 @@ export async function buildSnapshot(
   const [
     memberRows,
     characterRows,
+    characterControllerRows,
     sceneRows,
     tokenRows,
     controllerRows,
@@ -90,6 +92,14 @@ export async function buildSnapshot(
       .from(characters)
       .where(eq(characters.campaignId, auth.campaignId))
       .orderBy(asc(characters.createdAt)),
+    db
+      .select({ controller: characterControllers })
+      .from(characterControllers)
+      .innerJoin(
+        characters,
+        eq(characterControllers.characterId, characters.id),
+      )
+      .where(eq(characters.campaignId, auth.campaignId)),
     db
       .select()
       .from(scenes)
@@ -306,11 +316,21 @@ export async function buildSnapshot(
       ? sceneRows
       : sceneRows.filter((scene) => scene.id === campaign.activeSceneId);
   const visibleSceneIds = new Set(visibleScenes.map((scene) => scene.id));
+  const controllersByCharacter = new Map<string, string[]>();
+  for (const { controller } of characterControllerRows) {
+    const list = controllersByCharacter.get(controller.characterId) ?? [];
+    list.push(controller.membershipId);
+    controllersByCharacter.set(controller.characterId, list);
+  }
   const visibleCharacters =
     auth.role === "GM"
       ? characterRows
       : characterRows.filter(
-          (character) => character.ownerMembershipId === auth.membershipId,
+          (character) =>
+            character.ownerMembershipId === auth.membershipId ||
+            controllersByCharacter
+              .get(character.id)
+              ?.includes(auth.membershipId),
         );
   const visibleTokens = tokenRows.filter(
     ({ token, definition }) =>
@@ -402,7 +422,15 @@ export async function buildSnapshot(
         displayName: member.displayName,
       })),
     characters: visibleCharacters.map((character) =>
-      characterDto(character, entriesByCharacter.get(character.id) ?? []),
+      characterDto(
+        character,
+        entriesByCharacter.get(character.id) ?? [],
+        auth.role === "GM"
+          ? (controllersByCharacter.get(character.id) ?? [])
+          : (controllersByCharacter.get(character.id) ?? []).filter(
+              (id) => id === auth.membershipId,
+            ),
+      ),
     ),
     scenes: visibleScenes.map((scene) => ({
       id: scene.id,
