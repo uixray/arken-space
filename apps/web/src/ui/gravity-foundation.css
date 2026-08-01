@@ -29,6 +29,12 @@
   z-index: var(--arken-layer-dialog);
 }
 
+/* Select renders its menu in a document-level portal. Keep menus opened from
+ * modal forms above the modal layer instead of invisibly behind its backdrop. */
+.arken-form-select-popup {
+  z-index: calc(var(--arken-layer-dialog) + 1);
+}
+
 .gravity-preview {
   min-height: 100%;
   padding: 32px;
@@ -174,6 +180,42 @@
   padding: 16px;
   border: 1px dashed var(--arken-ui-border);
   text-align: center;
+}
+
+.arken-upload-field__preview {
+  display: grid;
+  width: min(100%, 280px);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--arken-ui-border);
+  border-radius: 8px;
+  background: var(--arken-ui-surface);
+}
+.arken-upload-field__preview img {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: contain;
+  background: var(--arken-ui-surface-raised);
+}
+.arken-upload-field__preview figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+}
+.arken-upload-field__preview figcaption span {
+  display: grid;
+  min-width: 0;
+}
+.arken-upload-field__preview figcaption strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arken-upload-field__preview figcaption small {
+  color: var(--arken-ui-muted);
 }
 
 .arken-visually-hidden {

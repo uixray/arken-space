@@ -242,7 +242,6 @@ export function WorldMapsWorkspace({
     }
   };
 
-
   return (
     <ArkenDialog
       open={open}
@@ -250,6 +249,7 @@ export function WorldMapsWorkspace({
       title="Карты мира"
       variant="workspace"
       className="world-maps-workspace"
+      workspaceDraggable={false}
       onClose={onClose}
     >
       <div className="world-maps-workspace__content">

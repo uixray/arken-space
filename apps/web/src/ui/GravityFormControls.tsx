@@ -10,6 +10,11 @@ import {
 } from "react";
 import { Checkbox, Select, TextArea, TextInput } from "@gravity-ui/uikit";
 
+import {
+  buildFormSelectUtilityOptions,
+  FORM_SELECT_CREATE_VALUE,
+} from "./formSelectOptions";
+
 export function FormInput({
   size: _size,
   value,
@@ -73,6 +78,11 @@ export function FormTextArea({
 
 type OptionProps = { value?: string | number; children?: ReactNode };
 
+type FormSelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
+  emptyMessage?: ReactNode;
+  createAction?: { label: ReactNode; onSelect: () => void };
+};
+
 export function FormSelect({
   children,
   value,
@@ -81,8 +91,10 @@ export function FormSelect({
   disabled,
   name,
   "aria-label": ariaLabel,
-}: SelectHTMLAttributes<HTMLSelectElement>) {
-  const options = Children.toArray(children)
+  emptyMessage,
+  createAction,
+}: FormSelectProps) {
+  const childOptions = Children.toArray(children)
     .filter(
       (child): child is ReactElement<OptionProps> =>
         isValidElement<OptionProps>(child) && child.type === "option",
@@ -94,6 +106,10 @@ export function FormSelect({
         (child.props as OptionProps & { disabled?: boolean }).disabled,
       ),
     }));
+  const options = [
+    ...childOptions,
+    ...buildFormSelectUtilityOptions(emptyMessage, createAction?.label),
+  ];
   const selected = value ?? defaultValue ?? "";
 
   return (
@@ -101,9 +117,14 @@ export function FormSelect({
       name={name}
       aria-label={ariaLabel}
       disabled={disabled}
+      popupClassName="arken-form-select-popup"
       options={options}
       value={[String(selected)]}
       onUpdate={(next) => {
+        if (next[0] === FORM_SELECT_CREATE_VALUE) {
+          createAction?.onSelect();
+          return;
+        }
         onChange?.({
           target: { value: next[0] ?? "" },
           currentTarget: { value: next[0] ?? "" },

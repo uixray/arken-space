@@ -110,7 +110,7 @@ export function SceneManagerDialog({
                 <Button
                   view="action"
                   onClick={() => void onPublish(scene.id)}
-                  disabled={scene.id === broadcast?.id}
+                  aria-pressed={scene.id === broadcast?.id}
                 >
                   Показать игрокам
                 </Button>

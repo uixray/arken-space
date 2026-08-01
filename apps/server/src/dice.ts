@@ -7,31 +7,38 @@ export class DiceFormulaError extends Error {}
 
 export type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
 
-/**
- * Converts a single ordinary d20 term into a server-resolved advantage or
- * disadvantage roll. The raw formula remains an expression only: all random
- * values are still generated in `rollFormula` on the server.
- */
-export function applyRollMode(formula: string, rollMode: RollMode): string {
-  const compact = formula.replace(/\s+/g, "");
-  if (rollMode === "NORMAL") return compact;
-  const tokens = compact.match(/[+-]?[^+-]+/g);
-  if (!tokens?.length) throw new DiceFormulaError("Формула пуста");
-  const d20Indexes = tokens
-    .map((token, index) => ({ token, index }))
-    .filter(
-      ({ token }) =>
-        token.replace(/^[+-]/, "") === "1d20" ||
-        token.replace(/^[+-]/, "") === "d20",
-    );
-  if (d20Indexes.length !== 1)
-    throw new DiceFormulaError(
-      "Преимущество и помеха доступны для одного обычного d20 в формуле",
-    );
-  const { index, token } = d20Indexes[0]!;
-  const sign = token.startsWith("-") ? "-" : token.startsWith("+") ? "+" : "";
-  tokens[index] = `${sign}2d20${rollMode === "ADVANTAGE" ? "kh1" : "kl1"}`;
-  return tokens.join("");
+function decorateSemanticOutcome(result: DiceResult): DiceResult {
+  const d20Terms = result.terms.filter((term) =>
+    ["1d20", "2d20kh1", "2d20kl1"].includes(term.notation),
+  );
+  let keptNaturalD20: number | null = null;
+  if (d20Terms.length === 1) {
+    const term = d20Terms[0]!;
+    keptNaturalD20 =
+      term.notation === "2d20kh1"
+        ? Math.max(...term.rolls)
+        : term.notation === "2d20kl1"
+          ? Math.min(...term.rolls)
+          : term.rolls.length === 1
+            ? (term.rolls[0] ?? null)
+            : null;
+  }
+  const kind =
+    keptNaturalD20 === 1
+      ? "CRITICAL_FAILURE"
+      : keptNaturalD20 === 20
+        ? "CRITICAL_SUCCESS"
+        : "NORMAL";
+  return {
+    ...result,
+    semanticOutcome: { kind, keptNaturalD20 },
+    frame:
+      kind === "CRITICAL_FAILURE"
+        ? { setKey: "ARKEN_CRITICAL_V1", frameKey: "critical-failure" }
+        : kind === "CRITICAL_SUCCESS"
+          ? { setKey: "ARKEN_CRITICAL_V1", frameKey: "critical-success" }
+          : null,
+  };
 }
 
 export function rollFormula(
@@ -106,4 +113,38 @@ export function rollFormula(
     total,
     ...(label ? { label } : {}),
   };
+}
+
+/**
+ * Applies one semantic to every supported formula: normal rolls one complete
+ * pool; advantage/disadvantage roll the complete pool twice and keep the
+ * higher/lower total. Ties deterministically keep the first pool.
+ */
+export function rollFormulaWithMode(
+  formula: string,
+  stats: Record<string, number>,
+  rollMode: RollMode,
+  randomInt: (maxExclusive: number) => number = (max) =>
+    Math.floor(Math.random() * max),
+  label?: string,
+): DiceResult {
+  const first = rollFormula(formula, stats, randomInt, label);
+  if (rollMode === "NORMAL")
+    return decorateSemanticOutcome({ ...first, rollMode });
+  const second = rollFormula(formula, stats, randomInt, label);
+  const selectedPool =
+    rollMode === "ADVANTAGE"
+      ? second.total > first.total
+        ? 1
+        : 0
+      : second.total < first.total
+        ? 1
+        : 0;
+  const selected = selectedPool === 0 ? first : second;
+  return decorateSemanticOutcome({
+    ...selected,
+    rollMode,
+    poolTotals: [first.total, second.total],
+    selectedPool,
+  });
 }

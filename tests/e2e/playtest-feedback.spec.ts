@@ -345,6 +345,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
 
     await page.goto("/");
+    await page.locator(".account-menu summary").click();
     await page.getByRole("button", { name: "Сообщить" }).click();
 
     const dialog = page.getByRole("dialog", {
@@ -368,3 +369,59 @@ for (const role of ["GM", "PLAYER"] as const) {
     expect(reportBody).toContain('name="diagnostics"');
   });
 }
+
+test("drawing color picker controls the next drawing", async ({ page }) => {
+  await mockAuthenticatedApp(page);
+  let createPayload: Record<string, unknown> | undefined;
+  let createRequests = 0;
+  await page.route("**/api/drawings", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    createRequests += 1;
+    createPayload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "drawing-new",
+        sceneId: "scene-1",
+        authorMembershipId: "membership-gm",
+        points: createPayload.points,
+        x: 0,
+        y: 0,
+        color: createPayload.color,
+        revision: 0,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.locator(".map-toolbar button", { hasText: "Рисование" }).click();
+
+  const color = page.getByLabel("Цвет рисунка");
+  await expect(color).toBeVisible();
+  const presets = page
+    .getByRole("group", { name: "Готовые цвета" })
+    .getByRole("button");
+  await expect(presets).toHaveCount(9);
+  await page.getByRole("button", { name: "Синий: #3b82f6" }).click();
+  await expect(
+    page.getByRole("button", { name: "Синий: #3b82f6" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await color.fill("#123456");
+
+  const viewport = page.locator(".map-viewport");
+  await viewport.hover({ position: { x: 250, y: 220 } });
+  const box = await viewport.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 310, box!.y + 280, { steps: 4 });
+  // Releasing over the sidebar (outside the Stage, but inside the document)
+  // must still finish this gesture exactly once.
+  const sidebarBox = await page.locator(".sidebar").boundingBox();
+  expect(sidebarBox).not.toBeNull();
+  await page.mouse.move(sidebarBox!.x + 12, sidebarBox!.y + 120);
+  await page.mouse.up();
+
+  await expect.poll(() => createPayload?.color).toBe("#123456");
+  await expect.poll(() => createRequests).toBe(1);
+});

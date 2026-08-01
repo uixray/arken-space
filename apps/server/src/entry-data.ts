@@ -9,6 +9,9 @@ export function normalizeLegacyStats(value: unknown): Record<string, number> {
     stats.willpower = spirit as number;
   delete stats.mind;
   delete stats.spirit;
+  if (!Number.isFinite(stats.reaction)) stats.reaction = 0;
+  if (!Number.isFinite(stats.attention)) stats.attention = 0;
+  if (!Number.isFinite(stats.magicPower)) stats.magicPower = 0;
   return stats;
 }
 

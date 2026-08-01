@@ -192,6 +192,26 @@ describe("UIX-246 story HTTP integration", () => {
       revision: 2,
     });
 
+    const restored = await app.inject({
+      method: "POST",
+      url: `/api/story/posts/${draft.id}/publish`,
+      headers: headers(secrets.gm),
+      payload: { actionId: action(), revision: 2 },
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toMatchObject({
+      lifecycle: "PUBLISHED",
+      revision: 3,
+    });
+
+    const archivedAgain = await app.inject({
+      method: "POST",
+      url: `/api/story/posts/${draft.id}/archive`,
+      headers: headers(secrets.gm),
+      payload: { actionId: action(), revision: 3 },
+    });
+    expect(archivedAgain.statusCode).toBe(200);
+
     const playerPosts = await app.inject({
       method: "GET",
       url: "/api/story/posts",

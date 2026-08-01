@@ -36,7 +36,12 @@ const snapshot: GameSnapshot = {
         focus: 6,
       },
       skills: [
-        { key: "observe", name: "Наблюдение", rank: 1, formula: "2d6 + mind" },
+        {
+          key: "observe",
+          name: "Наблюдение",
+          rank: 1,
+          formula: "2d6 + mind",
+        },
       ],
       spells: [],
       entries: [],
@@ -182,6 +187,43 @@ const snapshot: GameSnapshot = {
   serverTime: new Date().toISOString(),
 };
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/story/posts**", async (route) => {
+    await route.fulfill({
+      status: route.request().method() === "GET" ? 200 : 201,
+      contentType: "application/json",
+      body: JSON.stringify(
+        route.request().method() === "GET"
+          ? { posts: [], nextCursor: null }
+          : {},
+      ),
+    });
+  });
+  await page.route("**/api/canvas/history**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }),
+  );
+  await page.route("**/api/chat/read", async (route) => {
+    const input = route.request().postDataJSON() as {
+      threadId: string;
+      sequence: number;
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        campaignId: snapshot.campaign.id,
+        threadId: input.threadId,
+        lastReadSequence: input.sequence,
+        updatedAt: new Date().toISOString(),
+      }),
+    });
+  });
+});
+
 test("concept shell keeps the map primary and exposes core tools", async ({
   page,
 }) => {
@@ -202,7 +244,9 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   await page.goto("/");
 
   await expect(
-    page.getByRole("combobox", { name: "Просматриваемая сцена" }),
+    page.getByRole("combobox", {
+      name: "Просматриваемая сцена",
+    }),
   ).toHaveValue(snapshot.scenes.find((scene) => scene.active)?.id);
   await expect(page.locator("canvas").first()).toBeVisible();
   await expect(
@@ -221,6 +265,58 @@ test("concept shell keeps the map primary and exposes core tools", async ({
     path: "test-results/concept-shell.png",
     fullPage: true,
   });
+});
+
+test("GM compact chrome keeps actions discoverable at release width", async ({
+  page,
+}) => {
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.setViewportSize({ width: 1343, height: 945 });
+  await page.goto("/");
+
+  await expect(page.locator(".workspace-menu__chevron")).toBeVisible();
+  await expect(page.locator(".campaign-name-button__icon")).toBeVisible();
+  await expect(page.locator(".scene-token-count")).toBeHidden();
+  await expect(page.locator(".map-toolbar .map-tool")).toHaveCount(8);
+  await expect(
+    page.locator('.map-toolbar .map-tool[data-tool="PAN"]'),
+  ).toHaveAttribute("title", /./);
+  await expect(page.locator(".music-topbar__title")).toBeVisible();
+
+  const iconOnlyControls = page.locator(
+    [
+      ".topbar-icon-button",
+      ".account-menu summary",
+      ".music-icon-button",
+      ".music-volume-control summary",
+      ".music-overflow summary",
+      ".map-toolbar .map-tool",
+      ".grid-settings .toolbar-detail-trigger",
+      ".resize-settings .toolbar-detail-trigger",
+      ".toolbar-overflow summary",
+    ].join(", "),
+  );
+  await expect(iconOnlyControls).toHaveCount(17);
+  for (const control of await iconOnlyControls.all()) {
+    await expect(control).toHaveCSS("width", "30px");
+    await expect(control).toHaveCSS("height", "30px");
+  }
+
+  await page.locator(".music-overflow summary").click();
+  await expect(page.locator(".music-overflow__menu")).toBeVisible();
+  await page.locator(".account-menu summary").click();
+  await expect(page.locator(".account-menu__content")).toBeVisible();
+  await expect(page.locator(".account-menu__content .status")).toBeVisible();
+  await expect(page.locator(".account-menu__content .g-button")).toHaveCount(1);
 });
 
 test("GM opens token and file workflows without leaving the canvas", async ({
@@ -247,7 +343,9 @@ test("GM opens token and file workflows without leaving the canvas", async ({
   const tokensDialog = page.getByRole("dialog", { name: "Токены" });
   await expect(tokensDialog).toBeVisible();
   await tokensDialog.getByRole("button", { name: "Создать токен" }).click();
-  const tokenEditor = page.getByRole("dialog", { name: "Новый токен" });
+  const tokenEditor = page.getByRole("dialog", {
+    name: "Новый токен",
+  });
   await expect(tokenEditor).toBeVisible();
   await expect
     .poll(() =>
@@ -322,32 +420,47 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
 
   await workspace.getByRole("button", { name: "Второй персонаж" }).click();
   await expect(
-    workspace.getByRole("article", { name: "Лист персонажа Второй персонаж" }),
+    workspace.getByRole("article", {
+      name: "Лист персонажа Второй персонаж",
+    }),
   ).toBeVisible();
   const secondSheet = workspace.getByRole("article", {
     name: "Лист персонажа Второй персонаж",
   });
-  await secondSheet
-    .getByLabel("Режим броска в карточке")
-    .selectOption("ADVANTAGE");
+  const secondSheetAdvantage = secondSheet
+    .locator(".roll-mode-control")
+    .getByRole("radio", {
+      name: "\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e",
+    });
+  await secondSheetAdvantage.click();
   await workspace
-    .getByRole("button", { name: "Свернуть лист Второй персонаж" })
+    .getByRole("button", {
+      name: "Свернуть лист Второй персонаж",
+    })
     .click();
   await expect(
-    workspace.getByRole("button", { name: "Развернуть лист Второй персонаж" }),
+    workspace.getByRole("button", {
+      name: "Развернуть лист Второй персонаж",
+    }),
   ).toBeVisible();
   await workspace
-    .getByRole("button", { name: "Развернуть лист Второй персонаж" })
+    .getByRole("button", {
+      name: "Развернуть лист Второй персонаж",
+    })
     .click();
-  await expect(secondSheet.getByLabel("Режим броска в карточке")).toHaveValue(
-    "ADVANTAGE",
-  );
+  await expect(secondSheetAdvantage).toHaveAttribute("aria-checked", "true");
   await workspace
-    .getByRole("article", { name: "Лист персонажа Второй персонаж" })
-    .getByRole("button", { name: "Закрыть лист Второй персонаж" })
+    .getByRole("article", {
+      name: "Лист персонажа Второй персонаж",
+    })
+    .getByRole("button", {
+      name: "Закрыть лист Второй персонаж",
+    })
     .click();
   await expect(
-    workspace.getByRole("article", { name: "Лист персонажа Второй персонаж" }),
+    workspace.getByRole("article", {
+      name: "Лист персонажа Второй персонаж",
+    }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Закрыть персонажей" }).click();
   await expect(page.locator(".map-shell")).toHaveAttribute(
@@ -384,7 +497,9 @@ test("GM controls music from the top bar and opens the library", async ({
   const music = page.getByRole("region", { name: "Музыка" });
   await expect(music).toContainText("Трек не выбран");
   await music.getByRole("button", { name: "Библиотека" }).click();
-  const dialog = page.getByRole("dialog", { name: "Музыкальная библиотека" });
+  const dialog = page.getByRole("dialog", {
+    name: "Музыкальная библиотека",
+  });
   await expect(dialog.getByText("Библиотека пуста")).toBeVisible();
   await expect(dialog.getByLabel("Аудиофайл")).toBeVisible();
   await expect(
@@ -450,7 +565,9 @@ test("scene refresh races do not revoke local music consent", async ({
     page.getByRole("slider", { name: "Личная громкость" }),
   ).toBeVisible();
   await page
-    .getByRole("combobox", { name: "Просматриваемая сцена" })
+    .getByRole("combobox", {
+      name: "Просматриваемая сцена",
+    })
     .selectOption(secondSceneId);
   await page.getByRole("button", { name: "Показать игрокам" }).click();
 
@@ -501,48 +618,260 @@ test("chat composer and canvas quick rolls submit explicit, server-safe intents"
   const quickRolls = page.locator(".canvas-roll-overlay");
   await expect(quickRolls).toBeVisible();
   await quickRolls
-    .getByLabel("Режим быстрого броска")
-    .selectOption("ADVANTAGE");
-  await quickRolls.getByRole("button", { name: "d20" }).click();
+    .locator(".roll-mode-control")
+    .getByRole("radio", {
+      name: "\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e",
+    })
+    .click();
+  await quickRolls.getByRole("button", { name: "d6" }).click();
   await expect.poll(() => diceRequests.length).toBe(1);
   expect(diceRequests[0]).toMatchObject({
-    formula: "1d20",
+    formula: "1d6",
     rollMode: "ADVANTAGE",
   });
 
-  const composer = page.locator(".chat-compose textarea");
+  await page.locator("#chat-tab-activity").click();
+  const activityPanel = page.locator("#chat-panel-activity");
+  const composer = activityPanel.locator(".chat-compose textarea");
   await expect(page.locator(".chat-tools select")).toHaveCount(0);
+  const submitColumn = activityPanel.locator(".chat-compose-submit");
+  const sendButton = submitColumn.locator('button[type="submit"]');
+  const gmOnlyCheck = submitColumn.locator(".chat-visibility-check");
+  await expect(sendButton).toBeVisible();
+  await expect(gmOnlyCheck).toBeVisible();
+  const composerControlOrder = await Promise.all([
+    sendButton.boundingBox(),
+    gmOnlyCheck.boundingBox(),
+  ]);
+  expect(composerControlOrder[0]).not.toBeNull();
+  expect(composerControlOrder[1]).not.toBeNull();
+  expect(composerControlOrder[1]!.y).toBeGreaterThanOrEqual(
+    composerControlOrder[0]!.y + composerControlOrder[0]!.height,
+  );
   await composer.fill("/");
-  const rollSuggestion = page
-    .getByRole("listbox", { name: "Команды чата" })
-    .getByRole("option");
+  const rollSuggestion = activityPanel
+    .locator(".slash-command-suggestions [role=option]")
+    .filter({ has: page.locator("code", { hasText: "/roll 1d20 + agility" }) });
   await expect(rollSuggestion).toContainText("/roll");
   await expect(rollSuggestion).toContainText("/roll 1d20 + agility");
   await rollSuggestion.click();
-  await expect(composer).toHaveValue("/roll ");
+  await expect(composer).toHaveValue("");
+  await expect.poll(() => diceRequests.length).toBe(2);
+  expect(diceRequests[1]).toMatchObject({
+    formula: "1d20 + agility",
+    rollMode: "NORMAL",
+  });
   await composer.fill("Сообщение для группы");
   await composer.press("Enter");
   await expect.poll(() => chatRequests.length).toBe(1);
-  expect(chatRequests[0]).toMatchObject({ body: "Сообщение для группы" });
+  expect(chatRequests[0]).toMatchObject({
+    body: "Сообщение для группы",
+  });
 
   await composer.fill("/roll 1d20 + agility");
-  await page.getByRole("button", { name: "Отправить" }).click();
-  await expect.poll(() => diceRequests.length).toBe(2);
-  expect(diceRequests[1]).toMatchObject({
+  await page.locator(".chat-compose button[type=submit]").click();
+  await expect.poll(() => diceRequests.length).toBe(3);
+  expect(diceRequests[2]).toMatchObject({
     formula: "1d20 + agility",
     rollMode: "NORMAL",
   });
 
   await composer.fill("d20");
   await composer.press("Enter");
-  await expect.poll(() => diceRequests.length).toBe(3);
-  expect(diceRequests[2]).toMatchObject({
+  await expect.poll(() => diceRequests.length).toBe(4);
+  expect(diceRequests[3]).toMatchObject({
     formula: "d20",
     rollMode: "NORMAL",
   });
   expect(chatRequests).toHaveLength(1);
 });
 
+test("UIX-274 activity reloads story posts and exposes empty states and slash action", async ({
+  page,
+}) => {
+  const fixture = structuredClone(snapshot);
+  fixture.messages = [];
+  fixture.chatThreadStates = fixture.chatThreadStates.map((state) => ({
+    ...state,
+    lastReadSequence: 0,
+    latestSequence: 0,
+    unreadCount: 0,
+  }));
+  let includePublishedPost = false;
+  const timestamp = "2026-07-26T09:00:00.000Z";
+  const publishedPost = {
+    id: "77777777-7777-4777-8777-777777777777",
+    threadId: fixture.chatThreads[1]!.id,
+    authorMembershipId: fixture.me.id,
+    title: "",
+    body: "UIX274_PUBLISHED_STORY",
+    lifecycle: "PUBLISHED",
+    revision: 1,
+    entityLinks: [],
+    media: [],
+    publishedAt: timestamp,
+    correctedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(fixture),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/story/posts**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        posts: includePublishedPost ? [publishedPost] : [],
+        nextCursor: null,
+      }),
+    }),
+  );
+
+  await page.goto("/");
+  await expect(page.locator("#chat-tab-activity")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.locator(".activity-feed .chat-empty")).toBeVisible();
+
+  includePublishedPost = true;
+  await page.reload();
+  await expect(page.getByText("UIX274_PUBLISHED_STORY")).toBeVisible();
+
+  await page.locator("#chat-tab-table").click();
+  await expect(page.locator("#chat-panel-table .chat-empty")).toBeVisible();
+  const composer = page.locator(".chat-compose textarea");
+  const slashAction = page.locator(".composer-slash-action");
+  await expect(slashAction).toHaveAttribute("aria-expanded", "false");
+  await slashAction.click();
+  await expect(
+    page.getByRole("listbox", {
+      name: "\u041a\u043e\u043c\u0430\u043d\u0434\u044b \u0447\u0430\u0442\u0430",
+    }),
+  ).toBeVisible();
+  await page.getByRole("option", { name: /\/roll/ }).click();
+  await expect(composer).toHaveValue("/roll ");
+});
+
+test("activity quick rolls reserve space above the scrollable event history", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 640 });
+  const fixture = structuredClone(snapshot);
+  const baseMessage = fixture.messages[0]!;
+  fixture.messages = Array.from({ length: 24 }, (_, index) => ({
+    ...baseMessage,
+    id: `activity-layout-message-${index}`,
+    sequence: index + 1,
+    body: `Activity layout event ${index + 1}`,
+    createdAt: new Date(Date.UTC(2026, 6, 26, 9, index)).toISOString(),
+  }));
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(fixture),
+    }),
+  );
+
+  await page.goto("/");
+
+  const controls = page.locator("#chat-panel-activity .activity-roll-controls");
+  const history = page.locator("#chat-panel-activity .message-list");
+  await expect(controls).toBeVisible();
+  await expect(history).toBeVisible();
+
+  const controlsBox = await controls.boundingBox();
+  const historyBox = await history.boundingBox();
+  expect(controlsBox).not.toBeNull();
+  expect(historyBox).not.toBeNull();
+  expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(
+    historyBox!.y + 1,
+  );
+  expect(historyBox!.height).toBeGreaterThan(0);
+});
+
+test("chat marks only unambiguous kept natural d20 criticals", async ({
+  page,
+}) => {
+  const fixture = structuredClone(snapshot);
+  const baseMessage = fixture.messages[0]!;
+  const diceMessage = (
+    id: string,
+    sequence: number,
+    body: string,
+    total: number,
+    notation: string,
+    rolls: number[],
+  ): GameSnapshot["messages"][number] => ({
+    ...baseMessage,
+    id,
+    sequence,
+    kind: "DICE",
+    body,
+    dice: {
+      formula: notation,
+      resolvedFormula: notation,
+      terms: [{ notation, rolls, subtotal: rolls.reduce((a, b) => a + b, 0) }],
+      modifiers: [],
+      total,
+    },
+  });
+  fixture.messages = [
+    diceMessage(
+      "critical-failure",
+      1,
+      "Natural one with modifier",
+      8,
+      "1d20",
+      [1],
+    ),
+    diceMessage(
+      "critical-success",
+      2,
+      "Natural twenty with modifier",
+      25,
+      "1d20",
+      [20],
+    ),
+    diceMessage("total-only", 3, "Total twenty on d8", 20, "1d8", [8]),
+    diceMessage("ambiguous-pool", 4, "Ambiguous d20 pool", 21, "2d20", [1, 20]),
+  ];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(fixture),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+
+  await page.goto("/");
+
+  const failure = page.locator(".roll-result--critical-failure");
+  const success = page.locator(".roll-result--critical-success");
+  await expect(failure).toContainText("Критический провал");
+  await expect(success).toContainText("Критический успех");
+  await expect(failure).toHaveCSS("border-color", "rgb(217, 87, 87)");
+  await expect(success).toHaveCSS("border-color", "rgb(76, 171, 107)");
+  await expect(page.locator(".roll-critical-label")).toHaveCount(2);
+  await expect(
+    page.getByText("Total twenty on d8").locator(".."),
+  ).not.toHaveClass(/roll-result--critical/);
+  await expect(
+    page.getByText("Ambiguous d20 pool").locator(".."),
+  ).not.toHaveClass(/roll-result--critical/);
+});
 test("chat survives malformed client dice and renders local date boundaries", async ({
   page,
 }) => {
@@ -558,7 +887,7 @@ test("chat survives malformed client dice and renders local date boundaries", as
       id: "date-two",
       sequence: 2,
       kind: "DICE",
-      body: "?????? ??????",
+      body: "Сломанный бросок",
       createdAt: "2026-07-22T08:00:00.000Z",
       dice: { total: 20 } as unknown as NonNullable<
         GameSnapshot["messages"][number]["dice"]
@@ -579,7 +908,7 @@ test("chat survives malformed client dice and renders local date boundaries", as
   await page.goto("/");
 
   await expect(page.locator(".chat-date-divider")).toHaveCount(2);
-  await expect(page.getByText("?????? ??????")).toBeVisible();
+  await expect(page.getByText("Сломанный бросок")).toBeVisible();
   await expect(page.locator(".app-fatal-error")).toHaveCount(0);
   await expect(page.locator(".roll-result")).toHaveCount(0);
 });
@@ -608,7 +937,9 @@ test("GM shell keeps essential controls accessible across desktop widths", async
     await page.goto("/");
 
     await expect(
-      page.getByRole("combobox", { name: "Просматриваемая сцена" }),
+      page.getByRole("combobox", {
+        name: "Просматриваемая сцена",
+      }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Создать сцену" }),
@@ -636,7 +967,9 @@ test("GM shell keeps essential controls accessible across desktop widths", async
     }
     await page.locator(".workspace-menu summary").click();
 
-    const zoom = page.getByRole("slider", { name: "Масштаб карты" });
+    const zoom = page.getByRole("slider", {
+      name: "Масштаб карты",
+    });
     await expect(zoom).toBeVisible();
     const zoomBox = await zoom.boundingBox();
     expect(zoomBox).not.toBeNull();
@@ -653,7 +986,22 @@ test("GM shell keeps essential controls accessible across desktop widths", async
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Подготовка" }).click();
   await expect(page.getByRole("dialog", { name: "Подготовка" })).toBeVisible();
-  await expect(page.locator("canvas").first()).toBeVisible();
+  await expect(page.locator(".map-shell")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await expect(
+    page.locator(".setup-workspace .arken-workspace-window__drag-handle"),
+  ).toHaveAttribute("data-draggable", "false");
+  await expect(
+    page.getByRole("navigation", { name: "Разделы подготовки" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Общий каталог", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Добавить навык или способность" }),
+  ).toBeVisible();
 });
 
 test("GM prepares a scene locally before publishing it to players", async ({
@@ -704,8 +1052,8 @@ test("GM prepares a scene locally before publishing it to players", async ({
     hasText: "Тайная комната",
   });
   await secretCard.getByRole("button", { name: "Открыть для мастера" }).click();
-  await expect(page.locator(".scene-switcher select")).toHaveValue(
-    "8476b502-02f8-4cd6-9c55-3816d70d44dc",
+  await expect(page.locator(".scene-picker summary")).toContainText(
+    "Тайная комната",
   );
   await expect(secretCard.getByText("Просматривается мастером")).toBeVisible();
   expect(publishedSceneId).toBe("");
@@ -720,6 +1068,95 @@ test("GM prepares a scene locally before publishing it to players", async ({
   await expect(editor.getByText("Игровая область")).toBeVisible();
   await expect(editor.getByText("Рамка изображения")).toBeVisible();
 });
+
+for (const trayCase of [
+  { role: "GM" as const, viewport: { width: 1280, height: 720 } },
+  { role: "PLAYER" as const, viewport: { width: 720, height: 640 } },
+]) {
+  test(`token tray opens upward without covering quick rolls for ${trayCase.role}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(trayCase.viewport);
+    const traySnapshot = structuredClone(snapshot);
+    traySnapshot.me = {
+      ...traySnapshot.me,
+      role: trayCase.role,
+      characterId:
+        trayCase.role === "PLAYER" ? traySnapshot.characters[0]!.id : null,
+    };
+    traySnapshot.members = [{ ...traySnapshot.me }];
+    traySnapshot.tokenDefinitions = Array.from({ length: 24 }, (_, index) => ({
+      id: `9576b502-02f8-4cd6-9c55-${String(index).padStart(12, "0")}`,
+      characterId: null,
+      defaultAssetId: null,
+      name: `Token ${index + 1}`,
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 0,
+    }));
+
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(traySnapshot),
+      }),
+    );
+    await page.route("**/api/player-access", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "[]",
+      }),
+    );
+    await page.goto("/");
+
+    const map = page.locator(".map-shell");
+    const tray = page.locator(".token-tray");
+    const summary = tray.locator("summary");
+    const quickRolls = page.locator(".canvas-roll-overlay");
+    const collapsedSummaryBox = await summary.boundingBox();
+    expect(collapsedSummaryBox).not.toBeNull();
+
+    await summary.focus();
+    await page.keyboard.press("Enter");
+    await expect(tray).toHaveAttribute("open", "");
+
+    const [mapBox, trayBox, summaryBox, rollBox] = await Promise.all([
+      map.boundingBox(),
+      tray.boundingBox(),
+      summary.boundingBox(),
+      quickRolls.boundingBox(),
+    ]);
+    expect(mapBox).not.toBeNull();
+    expect(trayBox).not.toBeNull();
+    expect(summaryBox).not.toBeNull();
+    expect(rollBox).not.toBeNull();
+    expect(summaryBox!.y + summaryBox!.height).toBeCloseTo(
+      collapsedSummaryBox!.y + collapsedSummaryBox!.height,
+      0,
+    );
+    expect(trayBox!.height).toBeLessThanOrEqual((mapBox!.height - 38) / 2 + 1);
+    expect(trayBox!.x + trayBox!.width).toBeLessThanOrEqual(rollBox!.x);
+
+    const listOverflow = await tray
+      .locator(".token-tray-list")
+      .evaluate((node) => ({
+        clientHeight: node.clientHeight,
+        scrollHeight: node.scrollHeight,
+        overflowY: getComputedStyle(node).overflowY,
+      }));
+    expect(listOverflow.overflowY).toBe("auto");
+    expect(listOverflow.scrollHeight).toBeGreaterThan(
+      listOverflow.clientHeight,
+    );
+
+    await page.keyboard.press("Enter");
+    await expect(tray).not.toHaveAttribute("open", "");
+    await expect(summary).toBeFocused();
+  });
+}
 
 test("canvas tools stay selected and token placement targets the GM viewed scene", async ({
   page,
@@ -777,7 +1214,11 @@ test("canvas tools stay selected and token placement targets the GM viewed scene
   });
   await page.goto("/");
 
-  await page.locator(".scene-switcher select").selectOption(viewedSceneId);
+  await page.locator(".scene-picker summary").click();
+  await page
+    .locator('.scene-picker [role="option"]')
+    .filter({ hasText: "Секретная сцена" })
+    .click();
   await page.locator(".token-tray summary").click();
   await page
     .locator(".token-tray")
@@ -835,6 +1276,7 @@ for (const viewport of [
     await page.goto("/");
     await page.getByRole("button", { name: /Чат/ }).click();
 
+    await page.locator("#chat-tab-table").click();
     await expect(page.locator(".chat-tools")).toBeVisible();
     await expect(page.locator(".chat-compose")).toBeVisible();
     const dimensions = await page
@@ -901,6 +1343,7 @@ test("player opens the character workspace while chat remains visible", async ({
     }),
   );
   await page.goto("/");
+  await page.locator("#chat-tab-table").click();
   await expect(page.locator(".chat-compose")).toBeVisible();
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
@@ -973,20 +1416,29 @@ test("character card submits normal, advantage and disadvantage rolls for GM and
   await page.locator(".workspace-menu summary").click();
   await page.locator(".workspace-menu__content button").first().click();
 
-  const mode = page.locator(".character-roll-controls select");
+  const mode = page.locator(".character-roll-controls .roll-mode-control");
+  const normalMode = mode.getByRole("radio", {
+    name: "\u041e\u0431\u044b\u0447\u043d\u043e",
+  });
+  const advantageMode = mode.getByRole("radio", {
+    name: "\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e",
+  });
+  const disadvantageMode = mode.getByRole("radio", {
+    name: "\u041f\u043e\u043c\u0435\u0445\u0430",
+  });
   const roll = page.locator(".stats-grid .stat-field button").first();
-  await expect(mode).toHaveValue("NORMAL");
+  await expect(normalMode).toHaveAttribute("aria-checked", "true");
   holdNext = true;
   await roll.click();
   await expect.poll(() => requests.length).toBe(1);
   await expect(roll).toBeDisabled();
-  await expect(mode).toBeDisabled();
+  await expect(advantageMode).toBeDisabled();
   releaseHeldRoll?.();
   await expect(roll).toBeEnabled();
-  await mode.selectOption("ADVANTAGE");
+  await advantageMode.click();
   await roll.click();
   rejectNext = true;
-  await mode.selectOption("DISADVANTAGE");
+  await disadvantageMode.click();
   await roll.click();
 
   await expect.poll(() => requests.length).toBe(3);
@@ -1010,8 +1462,11 @@ test("character card submits normal, advantage and disadvantage rolls for GM and
   await page.locator(".workspace-menu summary").click();
   await page.locator(".workspace-menu__content button").first().click();
   await page
-    .locator(".character-roll-controls select")
-    .selectOption("ADVANTAGE");
+    .locator(".character-roll-controls .roll-mode-control")
+    .getByRole("radio", {
+      name: "\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e",
+    })
+    .click();
   await page.locator(".stats-grid .stat-field button").first().click();
   await expect.poll(() => requests.length).toBe(4);
   expect(requests[3]).toMatchObject({
@@ -1031,9 +1486,19 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
     characterId: playerSnapshot.characters[0]!.id,
   };
   playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  // A legacy snapshot may predate the SP wallet field. Rapid deltas must
+  // normalize it before the first queued request instead of producing NaN.
+  delete (
+    playerSnapshot.characters[0]!.wallet as Partial<
+      (typeof playerSnapshot.characters)[0]["wallet"]
+    >
+  ).sp;
   playerSnapshot.members = [playerSnapshot.me];
   const submittedGold: number[] = [];
+  const submittedSp: number[] = [];
   const submittedRevisions: number[] = [];
+  const renderErrors: Error[] = [];
+  page.on("pageerror", (error) => renderErrors.push(error));
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
@@ -1047,15 +1512,26 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
       revision: number;
     };
     submittedGold.push(payload.wallet.gold);
+    submittedSp.push(payload.wallet.sp);
     submittedRevisions.push(payload.revision);
     if (submittedGold.length === 1)
       await new Promise((resolve) => setTimeout(resolve, 100));
     playerSnapshot.characters[0]!.wallet = payload.wallet;
     playerSnapshot.characters[0]!.revision += 1;
+    const response =
+      submittedGold.length === 2
+        ? { duplicate: true }
+        : submittedGold.length === 1
+          ? Object.fromEntries(
+              Object.entries(playerSnapshot.characters[0]!).filter(
+                ([key]) => key !== "entries",
+              ),
+            )
+          : playerSnapshot.characters[0];
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(playerSnapshot.characters[0]),
+      body: JSON.stringify(response),
     });
   });
   await page.goto("/");
@@ -1083,6 +1559,18 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   await goldRow.locator("button").last().click();
   await expect.poll(() => submittedGold).toEqual([1, 2, 3, 6]);
   await expect(input).toHaveValue("6");
+
+  const spRow = page
+    .locator(".character-workspace .inline-fields")
+    .filter({ hasText: /^sp/ });
+  for (let index = 0; index < 12; index += 1)
+    await spRow.locator("button").last().click();
+  await expect.poll(() => submittedSp.at(-1)).toBe(12);
+  await expect(spRow.locator('input[type="number"]')).toHaveValue("12");
+  await expect(page.getByText("Интерфейс временно остановлен")).toHaveCount(0);
+  expect(renderErrors.filter((error) => error.name === "TypeError")).toEqual(
+    [],
+  );
 });
 
 test("resource conflict replaces the draft with canonical bootstrap data", async ({
@@ -1530,7 +2018,7 @@ test("UIX-266 GM streams, STORY posting, and keyboard tabs", async ({
     ...fixture.chatThreadStates[2]!,
     latestSequence: 3,
   };
-  const chatRequests: Array<Record<string, unknown>> = [];
+  const storyDrafts: Array<Record<string, unknown>> = [];
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
@@ -1541,6 +2029,22 @@ test("UIX-266 GM streams, STORY posting, and keyboard tabs", async ({
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await page.route("**/api/story/posts**", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ posts: [], nextCursor: null }),
+      });
+      return;
+    }
+    storyDrafts.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
   await page.route("**/api/chat/read", async (route) => {
     const request = route.request().postDataJSON() as {
       threadId: string;
@@ -1557,40 +2061,41 @@ test("UIX-266 GM streams, STORY posting, and keyboard tabs", async ({
       }),
     });
   });
-  await page.route("**/api/chat", async (route) => {
-    chatRequests.push(route.request().postDataJSON());
-    await route.fulfill({
-      status: 201,
-      contentType: "application/json",
-      body: "{}",
-    });
-  });
   await page.goto("/");
+  const activity = page.locator("#chat-tab-activity");
   const table = page.locator("#chat-tab-table");
   const story = page.locator("#chat-tab-story");
   const rolls = page.locator("#chat-tab-rolls");
-  await expect(table).toHaveAttribute("aria-selected", "true");
+  await expect(activity).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("STORY_ONLY_MARKER")).toBeVisible();
+  await expect(page.getByText("ROLLS_ONLY_MARKER")).toBeVisible();
+  await activity.press("ArrowRight");
+  await expect(table).toBeFocused();
   await expect(page.getByText("STORY_ONLY_MARKER")).toHaveCount(0);
   await table.press("ArrowRight");
   await expect(story).toBeFocused();
   await expect(page.getByText("STORY_ONLY_MARKER")).toBeVisible();
   await expect(page.getByText("ROLLS_ONLY_MARKER")).toHaveCount(0);
-  const composer = page.locator(".chat-compose textarea");
+  const composer = page.getByRole("textbox", {
+    name: "\u041d\u043e\u0432\u0430\u044f \u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0446\u0438\u044f",
+  });
   await composer.fill("NEW_STORY_POST");
   await composer.press("Enter");
-  await expect.poll(() => chatRequests.length).toBe(1);
-  expect(chatRequests[0]).toMatchObject({
+  await expect.poll(() => storyDrafts.length).toBe(1);
+  expect(storyDrafts[0]).toMatchObject({
     body: "NEW_STORY_POST",
-    stream: "STORY",
-    visibility: "PUBLIC",
+    title: "",
+    media: [],
+    entityLinks: [],
+    gmNotes: "",
   });
   await story.press("End");
   await expect(rolls).toBeFocused();
   await expect(page.getByText("ROLLS_ONLY_MARKER")).toBeVisible();
   await expect(page.locator(".chat-compose")).toHaveCount(0);
   await rolls.press("Home");
-  await expect(table).toBeFocused();
-  await table.press("ArrowLeft");
+  await expect(activity).toBeFocused();
+  await activity.press("ArrowLeft");
   await expect(rolls).toBeFocused();
 });
 
@@ -1623,6 +2128,13 @@ test("UIX-266 PLAYER sees STORY and ROLLS read-only", async ({ page }) => {
       body: JSON.stringify(fixture),
     }),
   );
+  await page.route("**/api/story/posts**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ posts: [], nextCursor: null }),
+    }),
+  );
   await page.route("**/api/chat/read", async (route) => {
     const request = route.request().postDataJSON() as {
       threadId: string;
@@ -1642,8 +2154,8 @@ test("UIX-266 PLAYER sees STORY and ROLLS read-only", async ({ page }) => {
   await page.goto("/");
   await page.locator("#chat-tab-story").click();
   await expect(page.getByText("PLAYER_STORY_MARKER")).toBeVisible();
-  await expect(page.locator(".chat-compose")).toHaveCount(0);
-  await expect(page.locator(".chat-stream-note")).toBeVisible();
+  await expect(page.locator(".story-composer")).toHaveCount(0);
+  await expect(page.locator(".story-channel__read-only")).toBeVisible();
   await page.locator("#chat-tab-rolls").click();
   await expect(page.locator(".chat-compose")).toHaveCount(0);
   await expect(page.locator(".chat-stream-note")).toBeVisible();
@@ -1651,7 +2163,7 @@ test("UIX-266 PLAYER sees STORY and ROLLS read-only", async ({ page }) => {
   await expect(page.locator(".chat-compose textarea")).toBeVisible();
 });
 
-test("UIX-266 unread badge reconciles and stays read after reload", async ({
+test("UIX-274 activity read state reconciles and stays read after reload", async ({
   page,
 }) => {
   const fixture = structuredClone(snapshot);
@@ -1710,10 +2222,15 @@ test("UIX-266 unread badge reconciles and stays read after reload", async ({
       }),
     });
   });
+  await page.route("**/api/story/posts**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ posts: [], nextCursor: null }),
+    }),
+  );
   await page.goto("/");
   const story = page.locator("#chat-tab-story");
-  await expect(story.locator(".chat-unread-badge")).toHaveText("1");
-  await story.click();
   await expect(page.getByText("UNREAD_STORY_MARKER")).toBeVisible();
   await expect
     .poll(() =>
@@ -2043,6 +2560,7 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   });
 
   await page.goto("/");
+  await page.locator("#chat-tab-table").click();
   const picker = page.locator(".chat-compose .sticker-picker");
   await picker.locator(":scope > button").click();
   const panel = picker.locator(".sticker-picker-panel");
@@ -2066,7 +2584,7 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   await page.locator("#chat-tab-rolls").click();
   await expect(page.locator(".sticker-picker")).toHaveCount(0);
   await page.locator("#chat-tab-story").click();
-  await expect(page.locator(".chat-compose .sticker-picker")).toHaveCount(1);
+  await expect(page.locator(".story-channel .sticker-picker")).toHaveCount(0);
   await page.locator("#chat-tab-direct").click();
   const directPicker = page.locator(".direct-compose .sticker-picker");
   await directPicker.locator(":scope > button").click();
@@ -2086,6 +2604,7 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   catalog = [];
   playerStory = false;
   await page.reload();
+  await page.locator("#chat-tab-table").click();
   await page.locator(".chat-compose .sticker-picker > button").click();
   await expect(page.locator(".sticker-picker-panel .chat-empty")).toBeVisible();
 });
@@ -2168,4 +2687,316 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
   await expect(
     page.getByRole("img", { name: "Cartographer waves hello" }),
   ).toHaveAttribute("src", "/api/stickers/" + stickerId + "/content");
+});
+
+test("GM can move tokens, pan the map, choose drawing color, and republish the active scene", async ({
+  page,
+}) => {
+  let publishRequests = 0;
+  let socketConnected = false;
+  let movedToken: { tokenId: string; x: number; y: number } | null = null;
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      const packet = message.toString();
+      if (packet === "40") {
+        socketConnected = true;
+        socket.send('40{"sid":"concept-test-socket"}');
+        return;
+      }
+      if (!packet.startsWith("42")) return;
+      const payloadStart = packet.indexOf("[");
+      if (payloadStart < 0) return;
+      const payload = JSON.parse(packet.slice(payloadStart)) as [
+        string,
+        Record<string, unknown>,
+      ];
+      if (payload[0] === "token:moved")
+        movedToken = {
+          tokenId: String(payload[1].tokenId),
+          x: Number(payload[1].x),
+          y: Number(payload[1].y),
+        };
+      const acknowledgementId = packet.slice(2, payloadStart);
+      if (acknowledgementId) socket.send(`43${acknowledgementId}[{"ok":true}]`);
+    });
+    socket.send(
+      '0{"sid":"concept-test-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/scenes/activate", async (route) => {
+    publishRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.goto("/");
+
+  const viewport = page.locator(".map-viewport");
+  const bounds = await viewport.boundingBox();
+  expect(bounds).not.toBeNull();
+  const canvasState = () =>
+    viewport
+      .locator("canvas")
+      .evaluateAll((canvases) =>
+        canvases.map((canvas) => canvas.toDataURL()).join("|"),
+      );
+
+  await expect.poll(() => socketConnected).toBe(true);
+  await page.mouse.move(bounds!.x + 416, bounds!.y + 352);
+  await page.mouse.down({ button: "left" });
+  await page.mouse.move(bounds!.x + 480, bounds!.y + 416, { steps: 5 });
+  await page.mouse.up({ button: "left" });
+  await expect
+    .poll(() => movedToken)
+    .toMatchObject({
+      tokenId: snapshot.tokens[0]!.id,
+      x: 448,
+      y: 384,
+    });
+
+  const beforeRightPan = await canvasState();
+  await page.mouse.move(bounds!.x + 240, bounds!.y + 180);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(bounds!.x + 300, bounds!.y + 220, { steps: 4 });
+  await page.mouse.up({ button: "right" });
+  await expect.poll(canvasState).not.toBe(beforeRightPan);
+  await expect(page.locator(".token-menu")).toHaveCount(0);
+
+  await page.mouse.move(bounds!.x + 120, bounds!.y + 120);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(bounds!.x + bounds!.width + 24, bounds!.y + 120, {
+    steps: 4,
+  });
+  await page.mouse.up({ button: "right" });
+  const afterOutsideRelease = await canvasState();
+  await page.mouse.move(bounds!.x + 160, bounds!.y + 160, { steps: 3 });
+  await expect.poll(canvasState).toBe(afterOutsideRelease);
+
+  const beforeTouchpadPan = await canvasState();
+  await page.locator(".konvajs-content").dispatchEvent("wheel", {
+    deltaX: 32,
+    deltaY: 18,
+    ctrlKey: false,
+  });
+  await expect.poll(canvasState).not.toBe(beforeTouchpadPan);
+
+  await page.locator('.map-tool[data-tool="DRAW"]').click();
+  const colorPanel = page.locator(".drawing-color-panel");
+  await expect(colorPanel).toBeVisible();
+  const panelBox = await colorPanel.boundingBox();
+  const viewportBox = await viewport.boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect(viewportBox).not.toBeNull();
+  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(
+    viewportBox!.x + viewportBox!.width,
+  );
+  expect(panelBox!.y).toBeLessThan(viewportBox!.y + viewportBox!.height / 2);
+
+  const publish = page.locator(".publish-scene");
+  await expect(publish).toBeEnabled();
+  await expect(publish).toHaveAttribute("aria-pressed", "true");
+  await publish.click();
+  await expect.poll(() => publishRequests).toBe(1);
+});
+
+test("sidebar collapse persists and hidden-chat rolls surface their authoritative total", async ({
+  page,
+}) => {
+  let gameSocket: { send(message: string): void } | null = null;
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    gameSocket = socket;
+    socket.onMessage((message) => {
+      if (message.toString() === "40")
+        socket.send('40{"sid":"sidebar-test-socket"}');
+    });
+    socket.send(
+      '0{"sid":"sidebar-test-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
+  );
+  await page.goto("/");
+
+  const map = page.locator(".map-shell");
+  const expandedWidth = (await map.boundingBox())!.width;
+  await page.locator(".sidebar-collapse-button").click();
+  await expect(page.locator(".sidebar")).toBeHidden();
+  await expect(page.locator(".sidebar-restore-button")).toBeVisible();
+  await expect
+    .poll(async () => (await map.boundingBox())!.width)
+    .toBeGreaterThan(expandedWidth);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ([campaignId, membershipId]) =>
+          localStorage.getItem(
+            `arken.sidebarCollapsed:${campaignId}:${membershipId}`,
+          ),
+        [snapshot.campaign.id, snapshot.me.id],
+      ),
+    )
+    .toBe("true");
+
+  gameSocket = null;
+  await page.reload();
+  await expect(page.locator(".sidebar")).toBeHidden();
+  await expect.poll(() => gameSocket !== null).toBe(true);
+  const rollId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  gameSocket!.send(
+    `42["chat:created",${JSON.stringify({
+      sequence: 21,
+      actionId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      emittedAt: "2026-07-29T02:00:00.000Z",
+      data: {
+        id: rollId,
+        sequence: 21,
+        membershipId: snapshot.me.id,
+        displayName: snapshot.me.displayName,
+        characterId: null,
+        body: "1d20 + 4",
+        visibility: "PUBLIC",
+        kind: "DICE",
+        threadId: snapshot.chatThreads[2]!.id,
+        stream: "ROLLS",
+        dice: {
+          formula: "1d20 + 4",
+          resolvedFormula: "1d20 + 4",
+          terms: [
+            {
+              notation: "1d20",
+              count: 1,
+              sides: 20,
+              rolls: [17],
+              subtotal: 17,
+            },
+          ],
+          modifiers: [{ source: "test", value: 4 }],
+          total: 21,
+        },
+        createdAt: "2026-07-29T02:00:00.000Z",
+      },
+    })}]`,
+  );
+
+  const toast = page.locator(".roll-toast");
+  await expect(toast).toContainText("21");
+  await toast.locator(".roll-toast-open").click();
+  await expect(page.locator(".sidebar")).toBeVisible();
+  await expect(page.locator(".roll-toast")).toHaveCount(0);
+  await expect(page.locator(`#chat-message-${rollId}`)).toBeFocused();
+});
+
+test("map controls float in opposite top corners without covering canvas UI", async ({
+  page,
+}) => {
+  for (const scenario of [
+    { role: "GM" as const, width: 1280, height: 720 },
+    { role: "PLAYER" as const, width: 720, height: 640 },
+  ]) {
+    const layoutSnapshot = structuredClone(snapshot);
+    layoutSnapshot.me.role = scenario.role;
+    layoutSnapshot.me.characterId =
+      scenario.role === "PLAYER" ? layoutSnapshot.characters[0]!.id : null;
+    layoutSnapshot.members = [
+      {
+        ...layoutSnapshot.me,
+        displayName: scenario.role === "GM" ? "GM" : "Player",
+      },
+    ];
+
+    await page.setViewportSize({
+      width: scenario.width,
+      height: scenario.height,
+    });
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(layoutSnapshot),
+      }),
+    );
+    await page.route("**/api/player-access", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "[]",
+      }),
+    );
+    await page.goto("/");
+
+    const viewport = page.locator(".map-viewport");
+    const toolbar = page.locator(".map-toolbar");
+    const objects = viewport.locator(".map-object-list-trigger");
+    await expect(viewport).toBeVisible();
+    await expect(toolbar).toBeVisible();
+    await expect(objects).toBeVisible();
+
+    const boxes = await Promise.all([
+      viewport.boundingBox(),
+      toolbar.boundingBox(),
+      objects.boundingBox(),
+    ]);
+    const [viewportBox, toolbarBox, objectsBox] = boxes;
+    expect(viewportBox).not.toBeNull();
+    expect(toolbarBox).not.toBeNull();
+    expect(objectsBox).not.toBeNull();
+    expect(toolbarBox!.x).toBeGreaterThanOrEqual(viewportBox!.x + 7);
+    expect(toolbarBox!.y).toBeGreaterThanOrEqual(viewportBox!.y + 7);
+    expect(objectsBox!.x + objectsBox!.width).toBeLessThanOrEqual(
+      viewportBox!.x + viewportBox!.width - 7,
+    );
+    expect(objectsBox!.y).toBeGreaterThanOrEqual(viewportBox!.y + 7);
+    expect(toolbarBox!.x + toolbarBox!.width).toBeLessThanOrEqual(
+      objectsBox!.x,
+    );
+
+    const fogTool = toolbar.locator('.map-tool[data-tool="FOG"]');
+    if (scenario.role === "GM") {
+      await expect(fogTool).toBeVisible();
+      await toolbar.locator('.map-tool[data-tool="DRAW"]').click();
+      const palette = viewport.locator(".drawing-color-panel");
+      await expect(palette).toBeVisible();
+      await palette.getByRole("button", { name: "Красный: #ef4444" }).click();
+      await expect(
+        palette.getByRole("button", { name: "Красный: #ef4444" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      const paletteBox = await palette.boundingBox();
+      expect(paletteBox).not.toBeNull();
+      expect(paletteBox!.x).toBeGreaterThanOrEqual(
+        toolbarBox!.x + toolbarBox!.width,
+      );
+    } else await expect(fogTool).toHaveCount(0);
+
+    await objects.click();
+    const objectPopover = viewport.locator(".map-object-list-popover");
+    await expect(objectPopover).toBeVisible();
+    const popoverBox = await objectPopover.boundingBox();
+    expect(popoverBox).not.toBeNull();
+    expect(popoverBox!.x + popoverBox!.width).toBeLessThanOrEqual(
+      viewportBox!.x + viewportBox!.width - 7,
+    );
+    expect(popoverBox!.x).toBeGreaterThanOrEqual(
+      toolbarBox!.x + toolbarBox!.width,
+    );
+
+    await page.unroute("**/api/bootstrap");
+    await page.unroute("**/api/player-access");
+  }
 });

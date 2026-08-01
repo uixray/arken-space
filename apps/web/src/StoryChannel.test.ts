@@ -54,7 +54,7 @@ describe("StoryChannel helpers", () => {
   it("keeps GM-only lifecycle metadata behind the admin type guard", () => {
     expect(isStoryAdminPost(post)).toBe(true);
     expect(storyPostStatus(post)).toBe(
-      "\u0427\u0435\u0440\u043d\u043e\u0432\u0438\u043a",
+      "Черновик",
     );
   });
 

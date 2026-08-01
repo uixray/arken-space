@@ -34,7 +34,9 @@ type CanvasVisualTokens = {
 export const CANVAS_VISUAL_TOKENS = {
   color: {
     fog: "#080807",
-    fogCover: "#000",
+    // A COVER operation must reconstruct the same fog surface as the base
+    // layer. Even a small RGB difference becomes visible at GM opacity.
+    fogCover: "#080807",
     fogDraft: "#d9c07e",
     mapBackdrop: "#282824",
     edit: "#f0c75e",

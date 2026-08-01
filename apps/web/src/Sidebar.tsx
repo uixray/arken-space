@@ -35,6 +35,12 @@ import {
 import type { GameSocket } from "./realtime";
 import { ApiError } from "./api";
 import { TokenImageGenerator } from "./TokenImageGenerator";
+import {
+  mergeAssets,
+  tokenAssetLabel,
+  tokenDefinitionAssets,
+  tokenGeneratorSources,
+} from "./token-definition-options";
 import type { TokenFramePreset } from "./token-image-editor-state";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
@@ -50,21 +56,34 @@ import {
   characterWorkspaceReducer,
   createCharacterWorkspaceState,
   MAX_OPEN_CHARACTER_SHEETS,
+  uniqueCharacterIds,
 } from "./character-workspace-state";
 import { buildChatTimeline } from "./chat-date";
-import { normalizeClientDiceResult } from "./dice-result";
+import { formatDiceBreakdown, normalizeClientDiceResult } from "./dice-result";
+import { getDiceCritical } from "./dice-critical";
 import {
   CharacterActionCard,
   parseSkillCard,
   SkillChatCard,
 } from "./SkillCards";
+import { RollModeControl, type RollMode } from "./RollModeControl";
 import { StickerPicker } from "./StickerPicker";
-import { StoryChannel, type StoryDraftInput } from "./StoryChannel";
+import { StoryChannel, StoryPost, type StoryDraftInput } from "./StoryChannel";
+import {
+  buildActivityFeed,
+  buildActivityTimeline,
+  type ActivityStoryPost,
+} from "./activity-feed";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
+import {
+  changeWalletValue,
+  EMPTY_WALLET,
+  normalizeWallet,
+  normalizeWalletValue,
+} from "./wallet";
 import {
   CHAT_STREAM_LABEL,
   CHAT_STREAM_ORDER,
-  nextChatStream,
   messagesForStream,
   streamForMessage,
   threadForStream,
@@ -77,23 +96,44 @@ import {
   eligibleDirectRecipients,
   messagesForDirectThread,
 } from "./direct-chat-state";
+import { activityTableReadTarget, feedForChatStream } from "./sidebar-feed";
+import {
+  charactersAvailableForActivityRolls,
+  filterActivityEvents,
+  formulaBonus,
+  physicalDiceStorageKey,
+  physicalRollBonus,
+  physicalRollChatRequest,
+  type ActivityFilter,
+} from "./activity-roll-controls";
 
-function formatDiceBreakdown(value: unknown) {
-  const dice = normalizeClientDiceResult(value);
-  if (!dice) return "";
-  const terms = dice.terms.map(
-    (term) => `${term.notation} (${term.rolls.join(", ")})`,
-  );
-  const modifiers = dice.modifiers
-    .filter((modifier) => modifier.value !== 0)
-    .map((modifier) =>
-      modifier.value > 0 ? `+${modifier.value}` : String(modifier.value),
+type SidebarFeed = "ACTIVITY" | ChatStream;
+
+const CHAT_FEED_ORDER: readonly SidebarFeed[] = [
+  "ACTIVITY",
+  ...CHAT_STREAM_ORDER.filter(
+    (stream) => stream !== "TABLE" && stream !== "ROLLS",
+  ),
+];
+
+function nextChatFeed(current: SidebarFeed, key: string): SidebarFeed | null {
+  const index = CHAT_FEED_ORDER.indexOf(current);
+  if (key === "Home") return CHAT_FEED_ORDER[0] ?? null;
+  if (key === "End") return CHAT_FEED_ORDER.at(-1) ?? null;
+  if (key === "ArrowRight")
+    return CHAT_FEED_ORDER[(index + 1) % CHAT_FEED_ORDER.length] ?? null;
+  if (key === "ArrowLeft")
+    return (
+      CHAT_FEED_ORDER[
+        (index - 1 + CHAT_FEED_ORDER.length) % CHAT_FEED_ORDER.length
+      ] ?? null
     );
-  return [...terms, ...modifiers].join(" ");
+  return null;
 }
 
 type Props = {
   snapshot: GameSnapshot;
+  requestedCharacterId?: string | null;
   socket: GameSocket | null;
   presence: Array<{ membershipId: string; online: boolean }>;
   onPlaceTokenDefinition: (definitionId: string) => Promise<void>;
@@ -130,6 +170,7 @@ type Props = {
     body: string,
     visibility: MessageVisibility,
     stream: ChatStream,
+    characterId?: string | null,
   ) => Promise<void>;
   onCreateDirectThread: (
     participantMembershipId: string,
@@ -243,6 +284,7 @@ type Props = {
       mode: "EXECUTE" | "SHARE";
       rollActionId?: string;
       entryRevision: number;
+      rollMode?: RollMode;
     },
   ) => Promise<void>;
   onRechargeEntry: (
@@ -271,6 +313,8 @@ type Props = {
   requestedChatMessageId: string | null;
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
   workspace:
     | "characters"
     | "tokens"
@@ -353,38 +397,41 @@ export function Sidebar(props: Props) {
     props.snapshot;
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
-  const storyReadSequenceRef = useRef(new Map<string, number>());
-  const [activeStream, setActiveStream] = useState<ChatStream>("TABLE");
+  const readSequenceRef = useRef(new Map<string, number>());
+  const [activeFeed, setActiveFeed] = useState<SidebarFeed>("ACTIVITY");
   const [directMode, setDirectMode] = useState(false);
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
     string | null
   >(null);
-  useEffect(() => onChatVisibilityChange(true), [onChatVisibilityChange]);
+  useEffect(
+    () => onChatVisibilityChange(!props.collapsed),
+    [onChatVisibilityChange, props.collapsed],
+  );
   const activeThreadId = directMode
     ? activeDirectThreadId
-    : (threadForStream(props.snapshot, activeStream)?.id ?? null);
+    : activeFeed === "ACTIVITY"
+      ? null
+      : (threadForStream(props.snapshot, activeFeed)?.id ?? null);
   useEffect(() => {
     onActiveChatThreadChange(activeThreadId);
   }, [activeThreadId, onActiveChatThreadChange]);
   useEffect(() => {
-    if (directMode || activeStream !== "STORY" || !activeThreadId) return;
+    if (directMode || activeFeed !== "STORY" || !activeThreadId) return;
     const latestSequence = messagesForStream(
       snapshotMessages,
       "STORY",
       snapshotChatThreads,
     ).at(-1)?.sequence;
     if (latestSequence === undefined) return;
-    if (
-      (storyReadSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence
-    )
+    if ((readSequenceRef.current.get(activeThreadId) ?? 0) >= latestSequence)
       return;
-    storyReadSequenceRef.current.set(activeThreadId, latestSequence);
+    readSequenceRef.current.set(activeThreadId, latestSequence);
     void onMarkChatRead(activeThreadId, latestSequence).catch(() => {
-      storyReadSequenceRef.current.delete(activeThreadId);
+      readSequenceRef.current.delete(activeThreadId);
     });
   }, [
     activeDirectThreadId,
-    activeStream,
+    activeFeed,
     activeThreadId,
     directMode,
     onMarkChatRead,
@@ -392,13 +439,27 @@ export function Sidebar(props: Props) {
     snapshotMessages,
   ]);
   useEffect(() => {
+    if (directMode || activeFeed !== "ACTIVITY") return;
+    const target = activityTableReadTarget(props.snapshot);
+    if (!target) return;
+    if ((readSequenceRef.current.get(target.threadId) ?? 0) >= target.sequence)
+      return;
+    readSequenceRef.current.set(target.threadId, target.sequence);
+    void onMarkChatRead(target.threadId, target.sequence).catch(() => {
+      readSequenceRef.current.delete(target.threadId);
+    });
+  }, [activeFeed, directMode, onMarkChatRead, props.snapshot]);
+  useEffect(() => {
     if (!requestedChatMessageId) return;
     const requestedStream = streamForMessage(
       props.snapshot.messages,
       requestedChatMessageId,
       props.snapshot.chatThreads,
     );
-    if (requestedStream) setActiveStream(requestedStream);
+    if (requestedStream) {
+      setDirectMode(false);
+      setActiveFeed(feedForChatStream(requestedStream));
+    }
     setFocusedMessageId(requestedChatMessageId);
     onRequestedChatMessageHandled();
   }, [
@@ -412,24 +473,57 @@ export function Sidebar(props: Props) {
   }, [sceneDialogRequest, isGm, onWorkspaceChange]);
 
   return (
-    <aside className={`sidebar ${!isGm ? "player-sidebar" : ""}`}>
+    <aside
+      id="activity-sidebar"
+      className={`sidebar ${!isGm ? "player-sidebar" : ""}`}
+      hidden={props.collapsed}
+      inert={props.collapsed}
+      aria-hidden={props.collapsed}
+    >
+      <button
+        type="button"
+        className="sidebar-collapse-button"
+        aria-controls="activity-sidebar"
+        aria-expanded="true"
+        aria-label="Свернуть боковую панель"
+        title="Свернуть боковую панель"
+        onClick={() => props.onCollapsedChange(true)}
+      >
+        <span aria-hidden="true">&#x203a;</span>
+      </button>
       <nav
         className="tabs chat-stream-tabs"
         aria-label="Потоки чата"
         role="tablist"
         onKeyDown={(event) => {
-          const nextStream = nextChatStream(activeStream, event.key);
-          if (!nextStream) return;
+          const nextFeed = nextChatFeed(activeFeed, event.key);
+          if (!nextFeed) return;
           event.preventDefault();
-          setActiveStream(nextStream);
+          setActiveFeed(nextFeed);
           requestAnimationFrame(() =>
             document
-              .getElementById(`chat-tab-${nextStream.toLowerCase()}`)
+              .getElementById(`chat-tab-${nextFeed.toLowerCase()}`)
               ?.focus(),
           );
         }}
       >
-        {CHAT_STREAM_ORDER.map((stream) => {
+        <Button
+          view="flat"
+          role="tab"
+          id="chat-tab-activity"
+          aria-controls="chat-panel-activity"
+          aria-selected={!directMode && activeFeed === "ACTIVITY"}
+          tabIndex={!directMode && activeFeed === "ACTIVITY" ? 0 : -1}
+          onClick={() => {
+            setDirectMode(false);
+            setActiveFeed("ACTIVITY");
+          }}
+        >
+          {"События"}
+        </Button>
+        {CHAT_STREAM_ORDER.filter(
+          (stream) => stream !== "TABLE" && stream !== "ROLLS",
+        ).map((stream) => {
           const unread = unreadCountForStream(props.snapshot, stream);
           return (
             <Button
@@ -438,11 +532,11 @@ export function Sidebar(props: Props) {
               role="tab"
               id={`chat-tab-${stream.toLowerCase()}`}
               aria-controls={`chat-panel-${stream.toLowerCase()}`}
-              aria-selected={!directMode && activeStream === stream}
-              tabIndex={!directMode && activeStream === stream ? 0 : -1}
+              aria-selected={!directMode && activeFeed === stream}
+              tabIndex={!directMode && activeFeed === stream ? 0 : -1}
               onClick={() => {
                 setDirectMode(false);
-                setActiveStream(stream);
+                setActiveFeed(stream);
               }}
             >
               {CHAT_STREAM_LABEL[stream]}
@@ -494,7 +588,17 @@ export function Sidebar(props: Props) {
             onUploadAttachment={props.onUploadChatAttachment}
             onMarkChatRead={props.onMarkChatRead}
           />
-        ) : activeStream === "STORY" ? (
+        ) : activeFeed === "ACTIVITY" ? (
+          <ActivityPanel
+            snapshot={props.snapshot}
+            storyPosts={props.storyPosts}
+            onChat={props.onChat}
+            onSticker={props.onSticker}
+            onRoll={props.onRoll}
+            focusedMessageId={focusedMessageId}
+            onMessageFocused={() => setFocusedMessageId(null)}
+          />
+        ) : activeFeed === "STORY" ? (
           <StoryChannel
             posts={props.storyPosts}
             nextCursor={props.storyNextCursor}
@@ -518,7 +622,7 @@ export function Sidebar(props: Props) {
             onSticker={props.onSticker}
             onRoll={props.onRoll}
             onMarkChatRead={props.onMarkChatRead}
-            activeStream={activeStream}
+            activeStream={activeFeed}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
           />
@@ -546,6 +650,8 @@ export function Sidebar(props: Props) {
             footer={false}
             title="Подготовка"
             variant="workspace"
+            className="setup-workspace"
+            workspaceDraggable={false}
             onClose={() => props.onWorkspaceChange(null)}
           >
             <SetupPanel {...props} />
@@ -606,17 +712,20 @@ export function CharacterWorkspace({
   onClose,
   ...props
 }: Props & { onClose: () => void }) {
-  const characters = useMemo(
-    () =>
+  const characters = useMemo(() => {
+    const visible =
       props.snapshot.me.role === "GM"
         ? props.snapshot.characters
         : props.snapshot.characters.filter(
             (character) =>
               character.ownerMembershipId === props.snapshot.me.id ||
               character.id === props.snapshot.me.characterId,
-          ),
-    [props.snapshot.characters, props.snapshot.me],
-  );
+          );
+    const byId = new Map(visible.map((character) => [character.id, character]));
+    return uniqueCharacterIds(visible.map((character) => character.id))
+      .map((id) => byId.get(id))
+      .filter((character): character is CharacterDto => Boolean(character));
+  }, [props.snapshot.characters, props.snapshot.me]);
   const [state, dispatch] = useReducer(
     characterWorkspaceReducer,
     characters.map((character) => character.id),
@@ -624,6 +733,7 @@ export function CharacterWorkspace({
   );
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
 
   useEffect(() => titleRef.current?.focus(), []);
   useEffect(() => {
@@ -632,6 +742,12 @@ export function CharacterWorkspace({
       ids: characters.map((character) => character.id),
     });
   }, [characters]);
+  useEffect(() => {
+    const id = props.requestedCharacterId;
+    if (!id || !characters.some((character) => character.id === id)) return;
+    dispatch({ type: "OPEN", id });
+    dispatch({ type: "FOCUS", id });
+  }, [characters, props.requestedCharacterId]);
   useEffect(() => {
     if (!state.activeId) return;
     workspaceRef.current
@@ -654,7 +770,7 @@ export function CharacterWorkspace({
   return createPortal(
     <main
       ref={workspaceRef}
-      className="character-workspace"
+      className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}`}
       aria-labelledby="character-workspace-title"
     >
       <header className="character-workspace__header">
@@ -667,12 +783,27 @@ export function CharacterWorkspace({
         <p className="muted">
           Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
         </p>
-        <button type="button" aria-label="Закрыть персонажей" onClick={onClose}>
-          Закрыть
+        <button
+          type="button"
+          aria-label="Закрыть персонажей"
+          title="Закрыть рабочее пространство персонажей"
+          onClick={onClose}
+        >
+          <span aria-hidden="true">×</span>
         </button>
       </header>
       <div className="character-workspace__body">
         <nav className="character-rail" aria-label="Персонажи кампании">
+          {props.snapshot.me.role === "GM" && (
+            <button
+              type="button"
+              className="character-rail__create"
+              onClick={() => setCreateCharacterOpen(true)}
+            >
+              <span aria-hidden="true">＋</span>
+              Создать персонажа
+            </button>
+          )}
           {characters.length === 0 ? (
             <p className="muted">Нет доступных персонажей.</p>
           ) : (
@@ -711,6 +842,7 @@ export function CharacterWorkspace({
                       type="button"
                       className="character-rail__close"
                       aria-label={`Закрыть лист ${character.name}`}
+                      title={`Закрыть лист ${character.name}`}
                       onClick={() =>
                         dispatch({ type: "CLOSE", id: character.id })
                       }
@@ -805,6 +937,17 @@ export function CharacterWorkspace({
           )}
         </div>
       </div>
+      <TextPromptDialog
+        open={createCharacterOpen}
+        title="Новый персонаж"
+        label="Имя персонажа"
+        applyLabel="Создать"
+        onApply={async (name) => {
+          await props.onCreateCharacter(name);
+          setCreateCharacterOpen(false);
+        }}
+        onClose={() => setCreateCharacterOpen(false)}
+      />
     </main>,
     document.body,
   );
@@ -845,18 +988,28 @@ export function CharacterPanel({
 }) {
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
-  const [rollMode, setRollMode] = useState<
-    "NORMAL" | "ADVANTAGE" | "DISADVANTAGE"
-  >("NORMAL");
+  // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
+  const [rollMode, setRollMode] = useState<RollMode>();
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
+  const [characterMutationError, setCharacterMutationError] = useState("");
+  const runCharacterMutation = async (action: () => Promise<unknown>) => {
+    setCharacterMutationError("");
+    try {
+      await action();
+    } catch {
+      setCharacterMutationError(
+        "Не удалось сохранить изменения персонажа. Повторите попытку.",
+      );
+    }
+  };
   const [entryEditor, setEntryEditor] = useState<
     CharacterDto["entries"][number] | null
   >(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [portraitUpload, setPortraitUpload] = useState<File>();
-  const [walletDraft, setWalletDraft] = useState(
-    () => character?.wallet ?? { gold: 0, silver: 0, copper: 0, sp: 0 },
+  const [walletDraft, setWalletDraft] = useState(() =>
+    normalizeWallet(character?.wallet ?? EMPTY_WALLET),
   );
   const walletDraftRef = useRef(walletDraft);
   const walletInputDirtyRef = useRef(false);
@@ -865,9 +1018,10 @@ export function CharacterPanel({
   );
   useEffect(() => {
     if (character && countersPending === 0) {
-      walletDraftRef.current = character.wallet;
+      const nextWallet = normalizeWallet(character.wallet);
+      walletDraftRef.current = nextWallet;
       walletInputDirtyRef.current = false;
-      setWalletDraft(character.wallet);
+      setWalletDraft(nextWallet);
       setResourcesDraft(JSON.stringify(character.resources, null, 2));
     }
   }, [character, countersPending]);
@@ -886,13 +1040,7 @@ export function CharacterPanel({
     setRollPending(true);
     setRollError("");
     try {
-      await onRoll(
-        formula,
-        label,
-        "PUBLIC",
-        character.id,
-        /(?:^|[+\-\s])1?d20(?:$|[+\-\s])/.test(formula) ? rollMode : "NORMAL",
-      );
+      await onRoll(formula, label, "PUBLIC", character.id, rollMode);
     } catch (reason) {
       setRollError(
         reason instanceof Error
@@ -907,10 +1055,12 @@ export function CharacterPanel({
     (asset) => asset.id === character.portraitAssetId,
   );
   const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
+    nextWallet = normalizeWallet(nextWallet);
     if (!walletInputDirtyRef.current) return;
+    const canonicalWallet = normalizeWallet(character.wallet);
     if (
       (Object.keys(nextWallet) as Array<keyof CharacterDto["wallet"]>).every(
-        (key) => nextWallet[key] === character.wallet[key],
+        (key) => nextWallet[key] === canonicalWallet[key],
       )
     ) {
       walletInputDirtyRef.current = false;
@@ -936,11 +1086,11 @@ export function CharacterPanel({
     }
   };
   const changeWallet = (key: keyof CharacterDto["wallet"], delta: number) => {
-    const current = walletDraftRef.current;
-    const nextValue = Math.max(0, current[key] + delta);
+    const current = normalizeWallet(walletDraftRef.current);
+    const next = changeWalletValue(current, key, delta);
+    const nextValue = next[key];
     const appliedDelta = nextValue - current[key];
     if (appliedDelta === 0) return;
-    const next = { ...current, [key]: nextValue };
     walletDraftRef.current = next;
     setWalletDraft(next);
     setCountersPending((count) => count + 1);
@@ -966,6 +1116,11 @@ export function CharacterPanel({
   };
   return (
     <section className="panel-section">
+      {characterMutationError && (
+        <p className="field-error" role="alert">
+          {characterMutationError}
+        </p>
+      )}
       {showCharacterPicker && snapshot.me.role === "GM" && (
         <label className="field">
           Персонаж
@@ -1004,10 +1159,12 @@ export function CharacterPanel({
         <FormSelect
           value={character.portraitAssetId ?? ""}
           onChange={(event) =>
-            void onPatch(character.id, {
-              portraitAssetId: event.target.value || null,
-              revision: character.revision,
-            })
+            void runCharacterMutation(() =>
+              onPatch(character.id, {
+                portraitAssetId: event.target.value || null,
+                revision: character.revision,
+              }),
+            )
           }
         >
           <option value="">Без портрета</option>
@@ -1027,15 +1184,17 @@ export function CharacterPanel({
       />
       <Button
         disabled={!portraitUpload}
-        onClick={async () => {
-          if (!portraitUpload) return;
-          const asset = await onUpload(portraitUpload, "PORTRAIT");
-          await onPatch(character.id, {
-            portraitAssetId: asset.id,
-            revision: character.revision,
-          });
-          setPortraitUpload(undefined);
-        }}
+        onClick={() =>
+          void runCharacterMutation(async () => {
+            if (!portraitUpload) return;
+            const asset = await onUpload(portraitUpload, "PORTRAIT");
+            await onPatch(character.id, {
+              portraitAssetId: asset.id,
+              revision: character.revision,
+            });
+            setPortraitUpload(undefined);
+          })
+        }
       >
         Загрузить и назначить
       </Button>
@@ -1074,32 +1233,23 @@ export function CharacterPanel({
           disabled={!editable}
           rows={8}
           onBlur={(event) =>
-            onPatch(character.id, {
-              backstory: event.target.value,
-              revision: character.revision,
-            })
+            void runCharacterMutation(() =>
+              onPatch(character.id, {
+                backstory: event.target.value,
+                revision: character.revision,
+              }),
+            )
           }
         />
       </details>
       <h3 className="character-block-heading">Основные характеристики</h3>
       <div className="subsection character-roll-controls">
-        <label className="field">
-          Режим броска (d20)
-          <select
-            aria-label="Режим броска в карточке"
-            value={rollMode}
-            disabled={rollPending}
-            onChange={(event) =>
-              setRollMode(
-                event.target.value as "NORMAL" | "ADVANTAGE" | "DISADVANTAGE",
-              )
-            }
-          >
-            <option value="NORMAL">Обычный</option>
-            <option value="ADVANTAGE">С преимуществом</option>
-            <option value="DISADVANTAGE">С помехой</option>
-          </select>
-        </label>
+        <RollModeControl
+          value={rollMode}
+          onChange={setRollMode}
+          disabled={rollPending}
+          label={"Режим броска"}
+        />
         {rollError && (
           <p className="field-error" role="alert">
             {rollError}
@@ -1118,10 +1268,12 @@ export function CharacterPanel({
               min={stat.min}
               max={stat.max}
               onBlur={(event) =>
-                onPatch(character.id, {
-                  stats: { [stat.key]: Number(event.target.value) },
-                  revision: character.revision,
-                })
+                void runCharacterMutation(() =>
+                  onPatch(character.id, {
+                    stats: { [stat.key]: Number(event.target.value) },
+                    revision: character.revision,
+                  }),
+                )
               }
             />
             <Button
@@ -1192,7 +1344,9 @@ export function CharacterPanel({
             defaultValue=""
             onChange={(event) => {
               if (event.target.value)
-                void onAssignEntry(character.id, event.target.value);
+                void runCharacterMutation(() =>
+                  onAssignEntry(character.id, event.target.value),
+                );
               event.target.value = "";
             }}
           >
@@ -1210,7 +1364,12 @@ export function CharacterPanel({
               <CharacterActionCard
                 entry={entry}
                 disabled={!editable}
-                onAction={(input) => onRollEntry(character.id, entry.id, input)}
+                onAction={(input) =>
+                  onRollEntry(character.id, entry.id, {
+                    ...input,
+                    ...(rollMode ? { rollMode } : {}),
+                  })
+                }
               />
               {entry.data.uses && (
                 <Button
@@ -1280,17 +1439,62 @@ export function CharacterPanel({
           disabled={!editable}
           rows={5}
           onBlur={(event) =>
-            onPatch(character.id, {
-              inventory: event.target.value
-                .split("\n")
-                .map((item) => item.trim())
-                .filter(Boolean),
-              revision: character.revision,
-            })
+            void runCharacterMutation(() =>
+              onPatch(character.id, {
+                inventory: event.target.value
+                  .split("\n")
+                  .map((item) => item.trim())
+                  .filter(Boolean),
+                revision: character.revision,
+              }),
+            )
           }
         />
       </label>
       <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
+      <div className="inline-fields character-power-controls">
+        {(["physicalPower", "magicPower"] as const).map((key) => {
+          const resource = character.resources[key] ?? {
+            current: 0,
+            maximum: 0,
+          };
+          return (
+            <span key={key}>
+              <b>
+                {key === "physicalPower" ? "Physical Power" : "Magic Power"}
+              </b>{" "}
+              {resource.current}/{resource.maximum ?? resource.current}
+            </span>
+          );
+        })}
+        <Button
+          disabled={!editable || countersPending > 0}
+          title={"Восстанавливает 25% максимума Physical Power, округляя вверх"}
+          onClick={() => {
+            const physical = character.resources.physicalPower ?? {
+              current: 0,
+              maximum: 0,
+            };
+            const maximum = physical.maximum ?? physical.current;
+            const current = Math.min(
+              maximum,
+              physical.current + Math.ceil(maximum * 0.25),
+            );
+            if (current === physical.current) return;
+            setCountersPending((count) => count + 1);
+            void onUpdateCounters(character.id, character.revision, {
+              resources: {
+                ...character.resources,
+                physicalPower: { ...physical, current, maximum },
+              },
+            }).finally(() =>
+              setCountersPending((count) => Math.max(0, count - 1)),
+            );
+          }}
+        >
+          {"Перевести дух (+25% Physical Power)"}
+        </Button>
+      </div>
       <label className="field">
         Ресурсы (JSON: имя → current/maximum)
         <FormTextArea
@@ -1351,10 +1555,7 @@ export function CharacterPanel({
               onChange={(event) => {
                 const next = {
                   ...walletDraftRef.current,
-                  [key]: Math.max(
-                    0,
-                    Number.parseInt(event.target.value || "0", 10),
-                  ),
+                  [key]: normalizeWalletValue(event.target.value),
                 };
                 walletDraftRef.current = next;
                 walletInputDirtyRef.current = true;
@@ -1422,11 +1623,7 @@ function ChatMessageBody({
     const presentation = message.stickerPresentation;
     if (!message.stickerId || !presentation)
       return (
-        <p className="chat-sticker-tombstone">
-          {
-            "\u0421\u0442\u0438\u043a\u0435\u0440 \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d"
-          }
-        </p>
+        <p className="chat-sticker-tombstone">{"Стикер больше недоступен"}</p>
       );
     return (
       <figure className="chat-sticker">
@@ -1444,10 +1641,13 @@ function ChatMessageBody({
   const skillCard = parseSkillCard(
     message.skillCard ? { skillCard: message.skillCard } : message.dice,
   );
+  const dice = normalizeClientDiceResult(message.dice);
+  const critical = dice ? getDiceCritical(dice) : null;
   if (message.kind === "DICE" && skillCard)
     return (
       <SkillChatCard
         card={skillCard}
+        critical={critical}
         sourceRemoved={
           skillCard.entry.sourceRemoved ||
           Boolean(
@@ -1458,10 +1658,15 @@ function ChatMessageBody({
         }
       />
     );
-  const dice = normalizeClientDiceResult(message.dice);
-  if (message.kind !== "DICE" || !dice)
+  if (message.kind !== "DICE" || !dice) {
+    const physicalBonus = physicalRollBonus(message.body);
     return (
       <>
+        {physicalBonus && (
+          <strong className="physical-roll-bonus">
+            Бонус к кубу {physicalBonus}
+          </strong>
+        )}
         <p>{message.body}</p>
         {message.attachments?.map((attachment) => (
           <figure className="chat-attachment" key={attachment.contentId}>
@@ -1475,16 +1680,439 @@ function ChatMessageBody({
         ))}
       </>
     );
+  }
   return (
-    <div className="roll-result">
+    <div
+      className={`roll-result${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
+    >
       <strong className="roll-total" aria-label="Итог броска">
         {dice.total}
       </strong>
       <div className="roll-details">
         <div>{message.body}</div>
+        {critical && (
+          <span className="roll-critical-label">{critical.label}</span>
+        )}
         <small>{formatDiceBreakdown(dice)}</small>
       </div>
     </div>
+  );
+}
+
+function ActivityPanel({
+  snapshot,
+  storyPosts,
+  onChat,
+  onSticker,
+  onRoll,
+  focusedMessageId,
+  onMessageFocused,
+}: {
+  snapshot: GameSnapshot;
+  storyPosts: readonly ActivityStoryPost[];
+  onChat: Props["onChat"];
+  onSticker: Props["onSticker"];
+  onRoll: Props["onRoll"];
+  focusedMessageId: string | null;
+  onMessageFocused: () => void;
+}) {
+  const [composer, setComposer] = useState("");
+  const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
+  const [composerError, setComposerError] = useState("");
+  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
+  const availableRollCharacters = useMemo(
+    () => charactersAvailableForActivityRolls(snapshot),
+    [snapshot],
+  );
+  const [rollCharacterId, setRollCharacterId] = useState(
+    () => availableRollCharacters[0]?.id ?? "",
+  );
+  const rollCharacter =
+    availableRollCharacters.find(
+      (character) => character.id === rollCharacterId,
+    ) ?? availableRollCharacters[0];
+  const [physicalDice, setPhysicalDice] = useState(
+    () =>
+      window.localStorage.getItem(physicalDiceStorageKey(snapshot.me.id)) ===
+      "true",
+  );
+  const [activityFilters, setActivityFilters] = useState<Set<ActivityFilter>>(
+    () => new Set(["ROLLS", "STORY", "REFERENCE"]),
+  );
+  const [quickRollPending, setQuickRollPending] = useState(false);
+  const characterStats =
+    snapshot.characters.find(
+      (character) => character.id === snapshot.me.characterId,
+    )?.stats ?? {};
+  const slashSuggestions = slashHelpOpen
+    ? getSlashCommandSuggestions("/", characterStats)
+    : getSlashCommandSuggestions(composer, characterStats);
+  const executeActivitySuggestion = (insertion: string) => {
+    const intent = parseComposerInput(insertion, characterStats);
+    setSlashHelpOpen(false);
+    if (intent.kind !== "ROLL") {
+      setComposer(insertion);
+      return;
+    }
+    setComposer("");
+    setComposerError("");
+    void onRoll(
+      intent.formula,
+      intent.label,
+      visibility,
+      snapshot.me.characterId,
+      "NORMAL",
+    ).catch(() =>
+      setComposerError("Не удалось выполнить бросок. Повторите попытку."),
+    );
+  };
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const intent = parseComposerInput(composer, characterStats);
+    if (intent.kind === "INVALID") {
+      setComposerError(intent.message);
+      return;
+    }
+    setComposerError("");
+    try {
+      if (intent.kind === "ROLL")
+        await onRoll(
+          intent.formula,
+          intent.label,
+          visibility,
+          snapshot.me.characterId,
+          "NORMAL",
+        );
+      else await onChat(intent.body, visibility, "TABLE");
+      setComposer("");
+    } catch {
+      setComposerError(
+        intent.kind === "ROLL"
+          ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
+          : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+      );
+    }
+  };
+  const activityEvents = useMemo(
+    () =>
+      filterActivityEvents(
+        buildActivityFeed(snapshot.messages, snapshot.chatThreads, storyPosts),
+        activityFilters,
+      ),
+    [activityFilters, snapshot.messages, snapshot.chatThreads, storyPosts],
+  );
+  const submitQuickRoll = async (
+    formula: string,
+    label: string,
+    bonus: number,
+  ) => {
+    if (!rollCharacter) return;
+    setQuickRollPending(true);
+    setComposerError("");
+    try {
+      if (physicalDice) {
+        const request = physicalRollChatRequest(label, bonus, rollCharacter.id);
+        await onChat(request.body, visibility, "TABLE", request.characterId);
+      } else {
+        await onRoll(formula, label, visibility, rollCharacter.id, "NORMAL");
+      }
+    } catch {
+      setComposerError("Не удалось выполнить бросок. Повторите попытку.");
+    } finally {
+      setQuickRollPending(false);
+    }
+  };
+  const timeline = useMemo(
+    () => buildActivityTimeline(activityEvents),
+    [activityEvents],
+  );
+  const catalogEntryIds = useMemo(
+    () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
+    [snapshot.catalogEntries],
+  );
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focusedMessageId) return;
+    const message = document.getElementById(`chat-message-${focusedMessageId}`);
+    if (!message) return;
+    const list = listRef.current;
+    if (list)
+      list.scrollTo({
+        top:
+          message.offsetTop - list.clientHeight / 2 + message.clientHeight / 2,
+      });
+    message.focus({ preventScroll: true });
+    onMessageFocused();
+  }, [focusedMessageId, onMessageFocused, timeline]);
+  return (
+    <section
+      className="chat-panel activity-feed"
+      role="tabpanel"
+      id="chat-panel-activity"
+      aria-labelledby="chat-tab-activity"
+    >
+      <section className="activity-roll-controls" aria-label="Быстрые броски">
+        <div className="activity-roll-controls__heading">
+          <strong>Быстрые броски</strong>
+          {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
+            <FormSelect
+              aria-label="Персонаж для броска"
+              value={rollCharacter?.id ?? ""}
+              onChange={(event) => setRollCharacterId(event.target.value)}
+            >
+              {availableRollCharacters.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name}
+                </option>
+              ))}
+            </FormSelect>
+          )}
+          <label className="compact-check">
+            <FormInput
+              type="checkbox"
+              checked={physicalDice}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                setPhysicalDice(enabled);
+                window.localStorage.setItem(
+                  physicalDiceStorageKey(snapshot.me.id),
+                  String(enabled),
+                );
+              }}
+            />
+            Физические кубы
+          </label>
+        </div>
+        {rollCharacter ? (
+          <div className="activity-quick-rolls">
+            <Button
+              disabled={quickRollPending}
+              onClick={() =>
+                void submitQuickRoll(
+                  "1d20 + agility",
+                  "Инициатива",
+                  rollCharacter.stats.agility ?? 0,
+                )
+              }
+            >
+              Инициатива
+            </Button>
+            {arkenSystem.stats.map((stat) => (
+              <Button
+                key={stat.key}
+                disabled={quickRollPending}
+                onClick={() =>
+                  void submitQuickRoll(
+                    `1d20 + ${stat.key}`,
+                    stat.label,
+                    rollCharacter.stats[stat.key] ?? stat.defaultValue,
+                  )
+                }
+              >
+                {stat.label}
+              </Button>
+            ))}
+            {rollCharacter.skills.map((skill) => (
+              <Button
+                key={skill.key}
+                disabled={quickRollPending}
+                onClick={() =>
+                  void submitQuickRoll(
+                    skill.formula,
+                    skill.name,
+                    formulaBonus(skill.formula, rollCharacter.stats),
+                  )
+                }
+              >
+                {skill.name}
+              </Button>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">Нет доступного персонажа для броска.</p>
+        )}
+        <fieldset className="activity-filters">
+          <legend>Показывать</legend>
+          {(["ROLLS", "STORY", "REFERENCE"] as const).map((filter) => (
+            <label className="compact-check" key={filter}>
+              <FormInput
+                type="checkbox"
+                checked={activityFilters.has(filter)}
+                onChange={(event) =>
+                  setActivityFilters((current) => {
+                    const next = new Set(current);
+                    if (event.target.checked) next.add(filter);
+                    else next.delete(filter);
+                    return next;
+                  })
+                }
+              />
+              {filter === "ROLLS"
+                ? "Броски"
+                : filter === "STORY"
+                  ? "Сюжет"
+                  : "Справочные события"}
+            </label>
+          ))}
+        </fieldset>
+      </section>
+      <div className="message-list" aria-live="polite" ref={listRef}>
+        {timeline.length === 0 && (
+          <p className="chat-empty">
+            {
+              "В ленте событий пока нет сообщений, сюжетных публикаций или бросков."
+            }
+          </p>
+        )}
+        {timeline.map((item) => {
+          if (item.type === "DATE")
+            return (
+              <div
+                className="chat-date-divider"
+                key={`activity-date-${item.key}`}
+              >
+                <span>{item.label}</span>
+              </div>
+            );
+          if (item.event.type === "STORY_POST")
+            return (
+              <StoryPost
+                key={`activity-story-${item.event.id}`}
+                post={item.event.post}
+                isGm={false}
+              />
+            );
+          const { message, stream, id, occurredAt } = item.event;
+          return (
+            <article
+              key={`activity-message-${id}`}
+              id={`chat-message-${id}`}
+              className={`message ${message.kind.toLowerCase()}`}
+              data-activity-stream={stream}
+              tabIndex={-1}
+            >
+              <header>
+                <strong>{message.displayName}</strong>
+                <span className="activity-stream-label">
+                  {CHAT_STREAM_LABEL[stream]}
+                </span>
+                {message.characterId && (
+                  <span className="message-character">
+                    {snapshot.characters.find(
+                      (character) => character.id === message.characterId,
+                    )?.name ?? "Персонаж"}
+                  </span>
+                )}
+                <time>
+                  {new Date(occurredAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </time>
+                {message.visibility === "GM_ONLY" && <span>{"мастеру"}</span>}
+              </header>
+              <ChatMessageBody
+                message={message}
+                catalogEntryIds={
+                  snapshot.me.role === "GM" ? catalogEntryIds : undefined
+                }
+              />
+            </article>
+          );
+        })}
+      </div>
+      <form className="chat-compose" onSubmit={submit}>
+        <div className="chat-composer-input">
+          <FormTextArea
+            aria-label="Сообщение или бросок"
+            aria-expanded={slashSuggestions.length > 0}
+            aria-controls={
+              slashSuggestions.length > 0
+                ? "activity-slash-suggestions"
+                : undefined
+            }
+            placeholder={"Сообщение? Введите / для быстрых команд"}
+            value={composer}
+            onChange={(event) => {
+              setSlashHelpOpen(false);
+              setComposer(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            rows={3}
+          />
+          <div className="chat-composer-actions">
+            {!composer.trim() && (
+              <StickerPicker
+                iconOnly
+                onSelect={(stickerId) =>
+                  onSticker({ stream: "TABLE" }, stickerId)
+                }
+              />
+            )}
+            <Button
+              className="composer-icon composer-slash-action"
+              type="button"
+              view="flat"
+              aria-label="Быстрые команды"
+              title="Быстрые команды"
+              aria-expanded={slashSuggestions.length > 0}
+              onClick={() => setSlashHelpOpen((open) => !open)}
+            >
+              <span aria-hidden="true">/</span>
+            </Button>
+          </div>
+          {slashSuggestions.length > 0 && (
+            <div
+              className="slash-command-suggestions"
+              id="activity-slash-suggestions"
+              role="listbox"
+              aria-label="Команды чата"
+            >
+              {slashSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion.command}
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  onClick={() =>
+                    executeActivitySuggestion(suggestion.insertion)
+                  }
+                >
+                  <strong>{suggestion.command}</strong>
+                  <span>{suggestion.description}</span>
+                  <code>{suggestion.example}</code>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="chat-compose-submit">
+          <Button className="primary" type="submit">
+            {"Отправить"}
+          </Button>
+          <label className="compact-check chat-visibility-check">
+            <FormInput
+              type="checkbox"
+              checked={visibility === "GM_ONLY"}
+              onChange={(event) =>
+                setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
+              }
+            />
+            <span>{"Только мастер"}</span>
+          </label>
+        </div>
+      </form>
+      {composerError && (
+        <p className="composer-error" role="alert">
+          {composerError}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -1610,6 +2238,12 @@ function DirectChatPanel({
             aria-label="Получатель личного сообщения"
             value={recipientId}
             onChange={(event) => setRecipientId(event.target.value)}
+            emptyMessage={
+              eligibleDirectRecipients(snapshot.members, snapshot.me.id)
+                .length === 0
+                ? "Нет доступных получателей"
+                : undefined
+            }
           >
             <option value="">Новый диалог…</option>
             {eligibleDirectRecipients(snapshot.members, snapshot.me.id).map(
@@ -1775,6 +2409,7 @@ function ChatPanel({
   const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [composerError, setComposerError] = useState("");
+  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -1798,7 +2433,30 @@ function ChatPanel({
     activeStream === "TABLE" ||
     (activeStream === "STORY" && snapshot.me.role === "GM");
   const slashSuggestions =
-    activeStream === "TABLE" ? getSlashCommandSuggestions(composer) : [];
+    activeStream === "TABLE"
+      ? slashHelpOpen
+        ? getSlashCommandSuggestions("/")
+        : getSlashCommandSuggestions(composer)
+      : [];
+  const executeChatSuggestion = (insertion: string) => {
+    const intent = parseComposerInput(insertion);
+    setSlashHelpOpen(false);
+    if (intent.kind !== "ROLL") {
+      setComposer(insertion);
+      return;
+    }
+    setComposer("");
+    setComposerError("");
+    void onRoll(
+      intent.formula,
+      intent.label,
+      visibility,
+      snapshot.me.characterId,
+      "NORMAL",
+    ).catch(() =>
+      setComposerError("Не удалось выполнить бросок. Повторите попытку."),
+    );
+  };
 
   useEffect(() => {
     followRef.current = true;
@@ -1944,34 +2602,14 @@ function ChatPanel({
       )}
       {activeStream === "ROLLS" && (
         <p className="chat-stream-note">
-          {
-            "\u0411\u0440\u043e\u0441\u043a\u0438 \u043f\u043e\u044f\u0432\u043b\u044f\u044e\u0442\u0441\u044f \u0437\u0434\u0435\u0441\u044c \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438."
-          }
+          {"Броски появляются здесь автоматически."}
         </p>
       )}
       {activeStream === "STORY" && snapshot.me.role !== "GM" && (
-        <p className="chat-stream-note">
-          {
-            "\u0421\u044e\u0436\u0435\u0442\u043d\u044b\u0439 \u043f\u043e\u0442\u043e\u043a \u0432\u0435\u0434\u0451\u0442 \u043c\u0430\u0441\u0442\u0435\u0440."
-          }
-        </p>
+        <p className="chat-stream-note">{"Сюжетный поток ведёт мастер."}</p>
       )}
       {canCompose && (
         <>
-          <div className="chat-tools">
-            <label className="compact-check">
-              <FormInput
-                type="checkbox"
-                checked={visibility === "GM_ONLY"}
-                onChange={(event) =>
-                  setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
-                }
-              />{" "}
-              {
-                "\u0422\u043e\u043b\u044c\u043a\u043e \u043c\u0430\u0441\u0442\u0435\u0440"
-              }
-            </label>
-          </div>
           <form className="chat-compose" onSubmit={submit}>
             <div className="chat-composer-input">
               <FormTextArea
@@ -1992,7 +2630,10 @@ function ChatPanel({
                     : "Сообщение … или /roll 1d20 + agility"
                 }
                 value={composer}
-                onChange={(event) => setComposer(event.target.value)}
+                onChange={(event) => {
+                  setSlashHelpOpen(false);
+                  setComposer(event.target.value);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -2001,14 +2642,36 @@ function ChatPanel({
                 }}
                 rows={3}
               />
+              <div className="chat-composer-actions">
+                {!composer.trim() && (
+                  <StickerPicker
+                    iconOnly
+                    onSelect={(stickerId) =>
+                      onSticker(
+                        { stream: activeStream as "TABLE" | "STORY" },
+                        stickerId,
+                      )
+                    }
+                  />
+                )}
+                <Button
+                  className="composer-icon composer-slash-action"
+                  type="button"
+                  view="flat"
+                  aria-label="Быстрые команды"
+                  title="Быстрые команды"
+                  aria-expanded={slashSuggestions.length > 0}
+                  onClick={() => setSlashHelpOpen((open) => !open)}
+                >
+                  <span aria-hidden="true">/</span>
+                </Button>
+              </div>
               {slashSuggestions.length > 0 && (
                 <div
                   className="slash-command-suggestions"
                   id="chat-slash-suggestions"
                   role="listbox"
-                  aria-label={
-                    "\u041a\u043e\u043c\u0430\u043d\u0434\u044b \u0447\u0430\u0442\u0430"
-                  }
+                  aria-label={"Команды чата"}
                 >
                   {slashSuggestions.map((suggestion) => (
                     <button
@@ -2016,7 +2679,9 @@ function ChatPanel({
                       type="button"
                       role="option"
                       aria-selected="false"
-                      onClick={() => setComposer(suggestion.insertion)}
+                      onClick={() =>
+                        executeChatSuggestion(suggestion.insertion)
+                      }
                     >
                       <strong>{suggestion.command}</strong>
                       <span>{suggestion.description}</span>
@@ -2026,17 +2691,21 @@ function ChatPanel({
                 </div>
               )}
             </div>
-            <StickerPicker
-              onSelect={(stickerId) =>
-                onSticker(
-                  { stream: activeStream as "TABLE" | "STORY" },
-                  stickerId,
-                )
-              }
-            />
-            <Button className="primary" type="submit">
-              {"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c"}
-            </Button>
+            <div className="chat-compose-submit">
+              <Button className="primary" type="submit">
+                {"Отправить"}
+              </Button>
+              <label className="compact-check chat-visibility-check">
+                <FormInput
+                  type="checkbox"
+                  checked={visibility === "GM_ONLY"}
+                  onChange={(event) =>
+                    setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
+                  }
+                />
+                <span>{"Только мастер"}</span>
+              </label>
+            </div>
           </form>
           {composerError && (
             <p className="composer-error" role="alert">
@@ -2169,6 +2838,14 @@ function PalettePanel(props: Props) {
           onCreate={props.onCreateTokenDefinition}
           onPatch={props.onPatchTokenDefinition}
           onReplaceControllers={props.onReplaceTokenControllers}
+          onOpenCharacters={() => {
+            setEditor(null);
+            props.onWorkspaceChange("setup");
+          }}
+          onOpenMedia={() => {
+            setEditor(null);
+            props.onWorkspaceChange("media");
+          }}
         />
       )}
       <ConfirmDialog
@@ -2256,6 +2933,8 @@ function TokenDefinitionEditor({
   onCreate,
   onPatch,
   onReplaceControllers,
+  onOpenCharacters,
+  onOpenMedia,
 }: {
   snapshot: GameSnapshot;
   definition?: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
@@ -2265,16 +2944,28 @@ function TokenDefinitionEditor({
   onCreate: Props["onCreateTokenDefinition"];
   onPatch: Props["onPatchTokenDefinition"];
   onReplaceControllers: Props["onReplaceTokenControllers"];
+  onOpenCharacters: () => void;
+  onOpenMedia: () => void;
 }) {
+  const activeScene = snapshot.scenes.find((scene) => scene.active);
+  const gridSize = activeScene?.grid.enabled ? activeScene.grid.size : 64;
+  const initialWidth = (definition?.defaultWidth ?? 64) / gridSize;
+  const initialHeight = (definition?.defaultHeight ?? 64) / gridSize;
   const [name, setName] = useState(definition?.name ?? "");
   const [characterId, setCharacterId] = useState(definition?.characterId ?? "");
   const [assetId, setAssetId] = useState(definition?.defaultAssetId ?? "");
-  const [width, setWidth] = useState(definition?.defaultWidth ?? 64);
-  const [height, setHeight] = useState(definition?.defaultHeight ?? 64);
+  const [width, setWidth] = useState(initialWidth);
+  const [height, setHeight] = useState(initialHeight);
+  const [lockAspect, setLockAspect] = useState(true);
+  const aspectRatio = useRef(
+    initialHeight > 0 ? initialWidth / initialHeight : 1,
+  );
   const [controllers, setControllers] = useState<string[]>(
     definition?.controllerMembershipIds ?? [],
   );
   const [image, setImage] = useState<File>();
+  const [uploadedSource, setUploadedSource] = useState<AssetDto>();
+  const uploadSourcePromise = useRef<Promise<AssetDto> | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -2285,13 +2976,18 @@ function TokenDefinitionEditor({
     setError("");
     try {
       let selectedAssetId = assetId || null;
-      if (image) selectedAssetId = (await onUpload(image, "TOKEN")).id;
+      if (image && uploadSourcePromise.current) {
+        const uploaded = await uploadSourcePromise.current;
+        if (!selectedAssetId) selectedAssetId = uploaded.id;
+      }
       const input = {
         name: name.trim(),
         characterId: characterId || null,
         defaultAssetId: selectedAssetId,
-        defaultWidth: width,
-        defaultHeight: height,
+        // The API keeps pixel values for backwards compatibility. The editor
+        // exposes grid units, so a token follows the active scene's grid.
+        defaultWidth: Math.round(width * gridSize),
+        defaultHeight: Math.round(height * gridSize),
         controllerMembershipIds: controllers,
       };
       if (!definition) await onCreate(input);
@@ -2335,6 +3031,16 @@ function TokenDefinitionEditor({
           <FormSelect
             value={characterId}
             onChange={(event) => setCharacterId(event.target.value)}
+            emptyMessage={
+              snapshot.characters.length === 0
+                ? "Персонажей пока нет"
+                : undefined
+            }
+            createAction={
+              snapshot.characters.length === 0
+                ? { label: "Создать персонажа", onSelect: onOpenCharacters }
+                : undefined
+            }
           >
             <option value="">Без персонажа</option>
             {snapshot.characters.map((character) => (
@@ -2349,20 +3055,34 @@ function TokenDefinitionEditor({
           <FormSelect
             value={assetId}
             onChange={(event) => setAssetId(event.target.value)}
+            emptyMessage={
+              tokenDefinitionAssets(
+                mergeAssets(snapshot.assets, uploadedSource),
+              ).length === 0
+                ? "Изображений токенов пока нет"
+                : undefined
+            }
+            createAction={
+              tokenDefinitionAssets(
+                mergeAssets(snapshot.assets, uploadedSource),
+              ).length === 0
+                ? { label: "Добавить изображение", onSelect: onOpenMedia }
+                : undefined
+            }
           >
             <option value="">Без изображения</option>
-            {snapshot.assets
-              .filter((asset) => asset.kind === "TOKEN")
-              .map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.name}
-                </option>
-              ))}
+            {tokenDefinitionAssets(
+              mergeAssets(snapshot.assets, uploadedSource),
+            ).map((asset) => (
+              <option key={asset.id} value={asset.id}>
+                {tokenAssetLabel(asset)}
+              </option>
+            ))}
           </FormSelect>
         </label>
         <TokenImageGenerator
-          imageAssets={snapshot.assets.filter(
-            (asset) => asset.kind === "IMAGE",
+          imageAssets={tokenGeneratorSources(
+            mergeAssets(snapshot.assets, uploadedSource),
           )}
           disabled={saving}
           onGenerate={onGenerateTokenImage}
@@ -2371,31 +3091,82 @@ function TokenDefinitionEditor({
         <ImageUploadField
           label="Загрузить новое изображение"
           value={image}
-          onUpdate={setImage}
+          hint="После выбора файл станет доступен в генераторе"
+          onUpdate={(file) => {
+            setImage(file);
+            setError("");
+            setUploadedSource(undefined);
+            uploadSourcePromise.current = null;
+            if (!file) return;
+            const upload = onUpload(file, "IMAGE");
+            uploadSourcePromise.current = upload;
+            void upload
+              .then((asset) => {
+                if (uploadSourcePromise.current !== upload) return;
+                setUploadedSource(asset);
+                setAssetId(asset.id);
+              })
+              .catch((reason) => {
+                if (uploadSourcePromise.current !== upload) return;
+                uploadSourcePromise.current = null;
+                setError(
+                  reason instanceof Error
+                    ? reason.message
+                    : "Не удалось загрузить исходное изображение.",
+                );
+              });
+          }}
           disabled={saving}
         />
-        <div className="inline-fields">
-          <label>
-            Ширина
-            <FormInput
-              type="number"
-              min={16}
-              max={1024}
-              value={width}
-              onChange={(event) => setWidth(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            Высота
-            <FormInput
-              type="number"
-              min={16}
-              max={1024}
-              value={height}
-              onChange={(event) => setHeight(Number(event.target.value))}
-            />
-          </label>
-        </div>
+        <section className="token-dimensions" aria-label={"Размер токена"}>
+          <p className="token-dimensions__hint">
+            {"Размер в клетках активной сетки"} ({gridSize}
+            {" px на клетку"}).
+          </p>
+          <div className="inline-fields">
+            <label>
+              {"Ширина, клетки"}
+              <FormInput
+                type="number"
+                min={0.25}
+                max={16}
+                step={0.25}
+                value={width}
+                onChange={(event) => {
+                  const next = Math.max(0.25, Number(event.target.value));
+                  setWidth(next);
+                  if (lockAspect) setHeight(next / aspectRatio.current);
+                }}
+              />
+            </label>
+            <label>
+              {"Высота, клетки"}
+              <FormInput
+                type="number"
+                min={0.25}
+                max={16}
+                step={0.25}
+                value={height}
+                onChange={(event) => {
+                  const next = Math.max(0.25, Number(event.target.value));
+                  setHeight(next);
+                  if (lockAspect) setWidth(next * aspectRatio.current);
+                }}
+              />
+            </label>
+            <label className="aspect-lock">
+              <FormInput
+                type="checkbox"
+                checked={lockAspect}
+                onChange={(event) => {
+                  setLockAspect(event.target.checked);
+                  if (height > 0) aspectRatio.current = width / height;
+                }}
+              />
+              {"Сохранять пропорции"}
+            </label>
+          </div>
+        </section>
         <fieldset>
           <legend>Управление игроками</legend>
           {snapshot.members
@@ -2432,6 +3203,9 @@ function TokenDefinitionEditor({
 }
 
 function SetupPanel(props: Props) {
+  const [activeSetupTab, setActiveSetupTab] = useState<
+    "OVERVIEW" | "CHARACTERS" | "CATALOG"
+  >("OVERVIEW");
   const [characterName, setCharacterName] = useState("");
   const [sceneName, setSceneName] = useState("");
   const [renameMember, setRenameMember] = useState<
@@ -2475,7 +3249,25 @@ function SetupPanel(props: Props) {
           <h2>Подготовка</h2>
         </div>
       </div>
-      <div className="subsection">
+      <nav className="setup-tabs" aria-label="Разделы подготовки">
+        {[
+          ["OVERVIEW", "Обзор"],
+          ["CHARACTERS", "Персонажи и доступ"],
+          ["CATALOG", "Общий каталог"],
+        ].map(([id, label]) => (
+          <Button
+            key={id}
+            view={activeSetupTab === id ? "action" : "normal"}
+            aria-pressed={activeSetupTab === id}
+            onClick={() =>
+              setActiveSetupTab(id as "OVERVIEW" | "CHARACTERS" | "CATALOG")
+            }
+          >
+            {label}
+          </Button>
+        ))}
+      </nav>
+      <div className="subsection" hidden={activeSetupTab !== "OVERVIEW"}>
         <h3>Игроки онлайн</h3>
         <div className="stack-list">
           {props.snapshot.members
@@ -2492,7 +3284,7 @@ function SetupPanel(props: Props) {
             })}
         </div>
       </div>
-      <div className="subsection">
+      <div className="subsection" hidden={activeSetupTab !== "CATALOG"}>
         <h3>Общий каталог</h3>
         <Button onClick={() => setCatalogEditor("NEW")}>
           Добавить навык или способность
@@ -2682,7 +3474,7 @@ function SetupPanel(props: Props) {
           ))}
         </div>
       </div>
-      <div className="subsection">
+      <div className="subsection" hidden={activeSetupTab !== "OVERVIEW"}>
         <h3>Проверка видимости</h3>
         <label className="field">
           Игрок
@@ -2762,7 +3554,7 @@ function SetupPanel(props: Props) {
           <Button>Создать</Button>
         </form>
       </div>
-      <div className="subsection">
+      <div className="subsection" hidden={activeSetupTab !== "CHARACTERS"}>
         <h3>Персонажи</h3>
         <form
           className="inline-fields"
@@ -2800,7 +3592,7 @@ function SetupPanel(props: Props) {
           Добавить токен в центр
         </Button>
       </div>
-      <div className="subsection">
+      <div className="subsection" hidden={activeSetupTab !== "CHARACTERS"}>
         <h3>Постоянные ссылки игроков</h3>
         <label className="field">
           Персонаж

@@ -162,6 +162,12 @@ export const rollActionSchema = z.object({
   order: z.number().int().min(0).max(1000),
   advantage: z.boolean().default(false),
   consumeUse: z.boolean().default(false),
+  cost: z
+    .object({
+      type: z.enum(["physical", "magic"]),
+      amount: z.number().int().positive().max(100000),
+    })
+    .optional(),
 });
 export const rechargePeriodSchema = z.enum(["DAY", "BATTLE", "WEEK"]);
 export const abilityUsesSchema = z
@@ -212,6 +218,9 @@ export const fixedCharacteristicsSchema = z.object({
   intelligence: z.number().finite(),
   willpower: z.number().finite(),
   charisma: z.number().finite(),
+  reaction: z.number().finite(),
+  attention: z.number().finite(),
+  magicPower: z.number().finite(),
 });
 
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });
@@ -496,6 +505,7 @@ export const sceneCanvasConfigSchema = z.object({
   revision: z.number().int().nonnegative(),
   name: z.string().trim().min(1).max(100).optional(),
   mapAssetId: z.string().uuid().nullable().optional(),
+  /** A size change preserves in-scene token cell coordinates and the defaults of referenced definitions. */
   grid: gridSchema.optional(),
   mapScale: z.number().finite().min(0.1).max(10).optional(),
   world: z
@@ -1088,7 +1098,7 @@ export type MarkChatThreadRead = z.infer<typeof markChatThreadReadSchema>;
 export const diceRequestSchema = z.object({
   actionId: actionIdSchema,
   formula: z.string().trim().min(1).max(160),
-  /** The server expands one d20 into a kept pair; the client never rolls it. */
+  /** The server rolls the complete formula once or twice and selects by total. */
   rollMode: z.enum(["NORMAL", "ADVANTAGE", "DISADVANTAGE"]).default("NORMAL"),
   visibility: messageVisibilitySchema.default("PUBLIC"),
   characterId: z.string().uuid().nullable().optional(),
@@ -1138,6 +1148,8 @@ const entryCardRequestBaseSchema = z.object({
   actionId: actionIdSchema,
   entryRevision: z.number().int().nonnegative().optional(),
   visibility: messageVisibilitySchema.default("PUBLIC"),
+  /** Executes the complete formula twice and keeps one pool by total. */
+  rollMode: z.enum(["NORMAL", "ADVANTAGE", "DISADVANTAGE"]).optional(),
 });
 export const entryCardExecuteRequestSchema = entryCardRequestBaseSchema.extend({
   mode: z.literal("EXECUTE").optional(),
@@ -1512,6 +1524,17 @@ export interface DiceTerm {
   subtotal: number;
 }
 
+export type DiceSemanticOutcome = {
+  kind: "NORMAL" | "CRITICAL_FAILURE" | "CRITICAL_SUCCESS";
+  keptNaturalD20: number | null;
+};
+
+/** Stable curated reference. URLs are resolved from an approved bundled manifest. */
+export type DiceFrameReference = {
+  setKey: "ARKEN_CRITICAL_V1";
+  frameKey: "critical-failure" | "critical-success";
+};
+
 export interface DiceResult {
   formula: string;
   resolvedFormula: string;
@@ -1519,6 +1542,14 @@ export interface DiceResult {
   modifiers: Array<{ source: string; value: number }>;
   total: number;
   label?: string;
+  /** Whole-pool selection metadata; absent on legacy stored results. */
+  rollMode?: "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
+  poolTotals?: [number, number];
+  selectedPool?: 0 | 1;
+  /** Authoritative server outcome; absent only on legacy history rows. */
+  semanticOutcome?: DiceSemanticOutcome;
+  /** Immutable curated frame reference stored with chat history. */
+  frame?: DiceFrameReference | null;
 }
 
 export interface SkillCardEntrySnapshot {

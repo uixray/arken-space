@@ -23,9 +23,12 @@ type Category = (typeof categories)[number][0];
 export function StickerPicker({
   onSelect,
   disabled = false,
+  iconOnly = false,
 }: {
   onSelect: (stickerId: string) => Promise<void>;
   disabled?: boolean;
+  /** A compact trigger for use inside a chat composer. */
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [packs, setPacks] = useState<StickerPackDto[] | null>(null);
@@ -100,16 +103,27 @@ export function StickerPicker({
   }
 
   return (
-    <div className="sticker-picker">
+    <div className={`sticker-picker${iconOnly ? " sticker-picker--icon" : ""}`}>
       <Button
+        className={iconOnly ? "composer-icon" : undefined}
         type="button"
         view="flat"
         disabled={disabled}
+        aria-label={
+          iconOnly ? "Стикеры" : undefined
+        }
+        title={
+          iconOnly ? "Стикеры" : undefined
+        }
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((value) => !value)}
       >
-        Стикеры
+        {iconOnly ? (
+          <span aria-hidden="true">{"\u263A"}</span>
+        ) : (
+          "Стикеры"
+        )}
       </Button>
       {open && (
         <div

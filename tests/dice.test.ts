@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyRollMode,
   DiceFormulaError,
   rollFormula,
+  rollFormulaWithMode,
 } from "../apps/server/src/dice";
 import { modifierSourceSchema } from "../packages/contracts/src";
 
@@ -44,21 +44,40 @@ describe("rollFormula", () => {
     });
   });
 
-  it("applies advantage and disadvantage to one d20 before server rolling", () => {
-    expect(applyRollMode("1d20 + agility", "ADVANTAGE")).toBe(
-      "2d20kh1+agility",
+  it("uses whole-pool advantage and disadvantage for non-d20 formulas", () => {
+    const advantageRolls = [0, 1, 4, 5];
+    const advantage = rollFormulaWithMode("2d6 + 1", {}, "ADVANTAGE", () =>
+      advantageRolls.shift()!,
     );
-    expect(applyRollMode("d20 + agility", "DISADVANTAGE")).toBe(
-      "2d20kl1+agility",
-    );
-    const tie = rollFormula("2d20kl1 + agility", { agility: 2 }, () => 9);
-    expect(tie.terms[0]).toMatchObject({
-      notation: "2d20kl1",
-      rolls: [10, 10],
-      subtotal: 10,
+    expect(advantage).toMatchObject({
+      total: 12,
+      rollMode: "ADVANTAGE",
+      poolTotals: [4, 12],
+      selectedPool: 1,
+      terms: [{ notation: "2d6", rolls: [5, 6], subtotal: 11 }],
     });
-    expect(tie.total).toBe(12);
-    expect(() => applyRollMode("2d20", "ADVANTAGE")).toThrow(DiceFormulaError);
+
+    const disadvantageRolls = [0, 1, 4, 5];
+    const disadvantage = rollFormulaWithMode(
+      "2d6 + 1",
+      {},
+      "DISADVANTAGE",
+      () => disadvantageRolls.shift()!,
+    );
+    expect(disadvantage).toMatchObject({
+      total: 4,
+      rollMode: "DISADVANTAGE",
+      poolTotals: [4, 12],
+      selectedPool: 0,
+      terms: [{ notation: "2d6", rolls: [1, 2], subtotal: 3 }],
+    });
+  });
+
+  it("keeps the first complete pool on deterministic mode ties", () => {
+    const rolls = [2, 2];
+    expect(
+      rollFormulaWithMode("1d6", {}, "ADVANTAGE", () => rolls.shift()!),
+    ).toMatchObject({ poolTotals: [3, 3], selectedPool: 0 });
   });
 
   it("accepts only finite arithmetic modifier formulas and rejects code or references", () => {

@@ -12,9 +12,9 @@ export const CHAT_STREAM_ORDER: readonly ChatStream[] = [
   "ROLLS",
 ];
 export const CHAT_STREAM_LABEL: Record<ChatStream, string> = {
-  TABLE: "\u0421\u0442\u043e\u043b",
-  STORY: "\u0421\u044e\u0436\u0435\u0442",
-  ROLLS: "\u0411\u0440\u043e\u0441\u043a\u0438",
+  TABLE: "Стол",
+  STORY: "Сюжет",
+  ROLLS: "Броски",
 };
 
 export function messagesForStream(

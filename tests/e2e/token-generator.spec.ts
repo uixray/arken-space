@@ -330,3 +330,44 @@ test("UIX-255 player palette does not expose GM token generator controls", async
   await expect(page.locator(".token-image-generator")).toHaveCount(0);
   await expect(page.locator(".token-palette > button")).toHaveCount(0);
 });
+
+test("UIX-272 empty character select opens above token editor with guidance and create action", async ({
+  page,
+}) => {
+  await mockBootstrap(page, "GM");
+  const emptySnapshot = structuredClone(snapshot);
+  emptySnapshot.characters = [];
+  emptySnapshot.tokens = [];
+  emptySnapshot.assets = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(emptySnapshot),
+    }),
+  );
+
+  await page.goto("/");
+  await page.locator(".workspace-menu summary").click();
+  await page.locator(".workspace-menu button").nth(1).click();
+  await page.locator(".token-palette > button").click();
+
+  const editor = page.locator(".g-modal").last();
+  await editor.locator(".g-select").first().click();
+
+  const menu = page.locator(".arken-form-select-popup");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByText("Персонажей пока нет")).toBeVisible();
+  await expect(
+    menu.getByText("Создать персонажа", { exact: true }),
+  ).toBeVisible();
+  const layers = await page.evaluate(() => {
+    const modal = document.querySelector(".g-modal");
+    const popup = document.querySelector(".arken-form-select-popup");
+    return {
+      modal: Number.parseInt(getComputedStyle(modal!).zIndex, 10),
+      popup: Number.parseInt(getComputedStyle(popup!).zIndex, 10),
+    };
+  });
+  expect(layers.popup).toBeGreaterThan(layers.modal);
+});

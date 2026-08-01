@@ -1,9 +1,13 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+  canMoveMapToken,
+  clearSettledTokenResizeDraft,
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
   resolveMapToolShortcut,
+  resolveMapWheelGesture,
+  shouldBeginMapPan,
   type MapInteractionAction,
   type MapInteractionState,
   type MapObjectRef,
@@ -80,6 +84,64 @@ describe("mapInteractionReducer", () => {
     ]);
   });
 
+  it("reserves middle drag and empty-canvas right drag for panning", () => {
+    expect(shouldBeginMapPan(2, "DRAW", true)).toBe(true);
+    expect(shouldBeginMapPan(2, "DRAW", false)).toBe(false);
+    expect(shouldBeginMapPan(1, "RULER", false)).toBe(true);
+    expect(shouldBeginMapPan(0, "PAN", true)).toBe(true);
+    expect(shouldBeginMapPan(0, "PAN", false)).toBe(false);
+    expect(shouldBeginMapPan(0, "DRAW", true)).toBe(false);
+  });
+
+  it("uses touchpad scroll for pan and modifier pinch for zoom", () => {
+    expect(
+      resolveMapWheelGesture({
+        deltaX: 24,
+        deltaY: -12,
+        ctrlKey: false,
+        metaKey: false,
+      }),
+    ).toEqual({ type: "pan", delta: { x: -24, y: 12 } });
+    expect(
+      resolveMapWheelGesture({
+        deltaX: 0,
+        deltaY: -2,
+        ctrlKey: true,
+        metaKey: false,
+      }),
+    ).toEqual({ type: "zoom", direction: "in" });
+  });
+
+  it("lets a GM move every unlocked token in PAN", () => {
+    expect(
+      canMoveMapToken({
+        tool: "PAN",
+        role: "GM",
+        locked: false,
+        membershipId: "gm",
+        controllerMembershipIds: [],
+      }),
+    ).toBe(true);
+    expect(
+      canMoveMapToken({
+        tool: "DRAW",
+        role: "GM",
+        locked: false,
+        membershipId: "gm",
+        controllerMembershipIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      canMoveMapToken({
+        tool: "PAN",
+        role: "GM",
+        locked: true,
+        membershipId: "gm",
+        controllerMembershipIds: [],
+      }),
+    ).toBe(false);
+  });
+
   it("coordinates typed selection, object list, and object menu", () => {
     const listed = reduce(
       { type: "select", ref: token },
@@ -141,5 +203,17 @@ describe("mapInteractionReducer", () => {
     state = mapInteractionReducer(state, { type: "escape" });
     expect(state.selectedObject).toBeNull();
     expect(mapInteractionReducer(state, { type: "escape" })).toBe(state);
+  });
+  it("clears only the resize request that actually settled", () => {
+    const latest = { width: 96, height: 96, revision: 4 };
+    const drafts = { token: latest };
+    expect(
+      clearSettledTokenResizeDraft(drafts, "token", {
+        width: 64,
+        height: 64,
+        revision: 3,
+      }),
+    ).toBe(drafts);
+    expect(clearSettledTokenResizeDraft(drafts, "token", latest)).toEqual({});
   });
 });

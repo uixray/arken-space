@@ -54,6 +54,7 @@ export interface SceneRendererProps {
     layer: TokenDto["layer"],
   ) => Promise<void>;
   onTokenDelete?: (tokenId: string, revision: number) => Promise<void>;
+  onOpenCharacter?: (characterId: string) => void;
   onTokenResize?: (
     tokenId: string,
     revision: number,

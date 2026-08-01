@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   Circle,
   Group,
@@ -14,13 +20,16 @@ import useImage from "use-image";
 import Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
 import { isRectFullyRevealed } from "./fog";
-import { ArkenDialog } from "../ui/ArkenDialog";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
+  canMoveMapToken,
+  clearSettledTokenResizeDraft,
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
   resolveMapToolShortcut,
+  resolveMapWheelGesture,
+  shouldBeginMapPan,
   type MapObjectRef,
 } from "./map-interaction";
 import { selectMapObjects } from "./map-objects";
@@ -30,6 +39,24 @@ import {
   type MapMoveTarget,
 } from "./map-move-queue";
 import { CANVAS_VISUAL_TOKENS as visual } from "./canvas-visual-tokens";
+import {
+  clearDrawingDraftIfCurrent,
+  persistDrawingDraft,
+} from "./drawing-draft";
+import { isDirectTokenDrag } from "./token-drag-event";
+import { getTokenImageMask } from "./token-image-mask";
+
+const DRAWING_COLOR_PRESETS = [
+  { value: "#ffffff", name: "Белый" },
+  { value: "#111111", name: "Чёрный" },
+  { value: "#ef4444", name: "Красный" },
+  { value: "#f97316", name: "Оранжевый" },
+  { value: "#facc15", name: "Жёлтый" },
+  { value: "#22c55e", name: "Зелёный" },
+  { value: "#06b6d4", name: "Бирюзовый" },
+  { value: "#3b82f6", name: "Синий" },
+  { value: "#a855f7", name: "Фиолетовый" },
+] as const;
 
 function Grid({
   width,
@@ -100,6 +127,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const { canvasEditMode, onCanvasEditCancel, onBulkMove, onToolSelect } =
     props;
   const containerRef = useRef<HTMLDivElement>(null);
+  const objectListRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [interaction, dispatchInteraction] = useReducer(
     mapInteractionReducer,
@@ -129,6 +157,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     x: number;
     y: number;
   } | null>(null);
+  const tokenMenuRef = useRef<HTMLDivElement>(null);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
     null,
   );
@@ -152,6 +181,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [dragPositions, setDragPositions] = useState<
     Record<string, { x: number; y: number; revision: number }>
   >({});
+  const [resizeDrafts, setResizeDrafts] = useState<
+    Record<string, { width: number; height: number; revision: number }>
+  >({});
   const [fogStart, setFogStart] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -163,6 +195,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   } | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
   const drawingPointsRef = useRef<number[]>([]);
+  const drawingActiveRef = useRef(false);
+  const finishDrawingRef = useRef<() => void>(() => undefined);
+  const trackDrawingRef = useRef<(event: MouseEvent) => void>(() => undefined);
+  const [drawingColor, setDrawingColor] = useState<string>(visual.color.edit);
   const [backgroundDraft, setBackgroundDraft] = useState(
     props.scene.backgroundFrame,
   );
@@ -200,6 +236,17 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     };
   }, [tokenMenu]);
   useEffect(() => {
+    if (!interaction.objectListOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const list = objectListRef.current;
+      if (list && !list.contains(event.target as Node))
+        dispatchInteraction({ type: "close-object-list" });
+    };
+    window.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () =>
+      window.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [interaction.objectListOpen]);
+  useEffect(() => {
     setBackgroundDraft(props.scene.backgroundFrame);
     setWorldDraft({ width: props.scene.width, height: props.scene.height });
   }, [
@@ -219,6 +266,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           pending &&
           (token.revision > pending.revision ||
             (token.x === pending.x && token.y === pending.y))
+        ) {
+          delete next[token.id];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [props.tokens]);
+  useEffect(() => {
+    setResizeDrafts((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const token of props.tokens) {
+        const pending = next[token.id];
+        if (
+          pending &&
+          (token.revision > pending.revision ||
+            (token.width === pending.width && token.height === pending.height))
         ) {
           delete next[token.id];
           changed = true;
@@ -292,11 +357,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     event.evt.preventDefault();
     const stage = stageRef.current;
     const pointer = stage?.getPointerPosition();
-    if (!stage || !pointer) return;
+    if (!stage) return;
+    // A two-finger touchpad gesture scrolls the canvas. Browsers expose a
+    // touchpad pinch as ctrl/meta + wheel, so keep that gesture for zooming.
+    const gesture = resolveMapWheelGesture(event.evt);
+    if (gesture.type === "pan") {
+      setPosition((current) => ({
+        x: current.x + gesture.delta.x,
+        y: current.y + gesture.delta.y,
+      }));
+      return;
+    }
+    if (!pointer) return;
     const oldScale = scale;
     const nextScale = Math.min(
       3,
-      Math.max(0.25, oldScale * (event.evt.deltaY > 0 ? 0.9 : 1.1)),
+      Math.max(0.25, oldScale * (gesture.direction === "out" ? 0.9 : 1.1)),
     );
     const mousePoint = {
       x: (pointer.x - position.x) / oldScale,
@@ -409,6 +485,29 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const requestSelectedDelete = () => {
     if (interaction.selectedObject) requestDelete(interaction.selectedObject);
   };
+  useLayoutEffect(() => {
+    if (!tokenMenu) return;
+    const container = containerRef.current;
+    const menu = tokenMenuRef.current;
+    if (!container || !menu) return;
+    const padding = 8;
+    const maxLeft = Math.max(
+      padding,
+      container.clientWidth - menu.offsetWidth - padding,
+    );
+    const maxTop = Math.max(
+      padding,
+      container.clientHeight - menu.offsetHeight - padding,
+    );
+    const left = Math.min(Math.max(padding, tokenMenu.x), maxLeft);
+    const top = Math.min(Math.max(padding, tokenMenu.y), maxTop);
+    if (left !== tokenMenu.x || top !== tokenMenu.y) {
+      setTokenMenu((current) =>
+        current ? { ...current, x: left, y: top } : current,
+      );
+    }
+  }, [tokenMenu]);
+
   const openSelectedAction = () => {
     const selected = interaction.selectedObject;
     if (!selected || selected.kind !== "token") return;
@@ -571,37 +670,43 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (point) props.onPing(point);
   };
 
-  const handlePointerDown = (event: Konva.KonvaEventObject<MouseEvent>) => {
-    if (event.evt.button === 1) {
-      event.evt.preventDefault();
-      const pointer = stageRef.current?.getPointerPosition();
-      if (pointer)
-        panStartRef.current = {
-          pointerX: pointer.x,
-          pointerY: pointer.y,
-          stageX: position.x,
-          stageY: position.y,
-        };
-      return;
-    }
-    if (event.evt.button === 2 && event.target === stageRef.current) {
-      const point = pointerInWorld();
-      if (point)
-        setMarquee({
-          startX: point.x,
-          startY: point.y,
-          x: point.x,
-          y: point.y,
-          width: 0,
-          height: 0,
-        });
+  const beginPan = (
+    event: Konva.KonvaEventObject<MouseEvent | PointerEvent>,
+  ) => {
+    event.evt.preventDefault();
+    event.cancelBubble = true;
+    const pointer = stageRef.current?.getPointerPosition();
+    if (pointer)
+      panStartRef.current = {
+        pointerX: pointer.x,
+        pointerY: pointer.y,
+        stageX: position.x,
+        stageY: position.y,
+      };
+  };
+
+  const handlePointerDown = (
+    event: Konva.KonvaEventObject<MouseEvent | PointerEvent>,
+  ) => {
+    const targetIsCanvas =
+      event.target === stageRef.current ||
+      event.target.name() === "map-interaction-hit-plane";
+    if (shouldBeginMapPan(event.evt.button, props.tool, targetIsCanvas)) {
+      beginPan(event);
+      if (event.evt.button === 0) {
+        setSelectedTokenIds([]);
+        setSelectedDrawingIds([]);
+        setSelectedDrawingId(null);
+        setTokenMenu(null);
+      }
       return;
     }
     if (event.evt.button !== 0) return;
-    if (event.target === stageRef.current && props.tool === "PAN") {
+    if (targetIsCanvas && props.tool === "PAN") {
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
+      dispatchInteraction({ type: "clear-selection" });
       setTokenMenu(null);
     }
     handleFogDown();
@@ -610,6 +715,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const bounded = clampToWorld(point);
     if (props.tool === "DRAW") {
       const points = [bounded.x, bounded.y];
+      drawingActiveRef.current = true;
       drawingPointsRef.current = points;
       setDrawingPoints(points);
     }
@@ -651,11 +757,20 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     handleFogMove();
     const point = pointerInWorld();
     if (!point) return;
-    if (props.tool === "DRAW" && drawingPointsRef.current.length) {
+    if (
+      props.tool === "DRAW" &&
+      drawingActiveRef.current &&
+      drawingPointsRef.current.length
+    ) {
       const bounded = clampToWorld(point);
-      const next = [...drawingPointsRef.current, bounded.x, bounded.y];
-      drawingPointsRef.current = next;
-      setDrawingPoints(next);
+      const previous = drawingPointsRef.current;
+      const lastX = previous[previous.length - 2];
+      const lastY = previous[previous.length - 1];
+      if (bounded.x !== lastX || bounded.y !== lastY) {
+        const next = [...previous, bounded.x, bounded.y];
+        drawingPointsRef.current = next;
+        setDrawingPoints(next);
+      }
     }
     if (props.tool === "RULER" && rulerStart)
       props.socket?.emit("ruler:update", {
@@ -717,20 +832,63 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       return;
     }
     const completedDrawing = drawingPointsRef.current;
-    // Clear synchronously before the async command so a trailing preview can
-    // never survive the pointer-up frame.
-    drawingPointsRef.current = [];
-    flushSync(() => setDrawingPoints([]));
+    const shouldFinalizeDrawing =
+      props.tool === "DRAW" && drawingActiveRef.current;
+    drawingActiveRef.current = false;
     await handleFogUp();
-    if (props.tool === "DRAW" && completedDrawing.length >= 4)
-      await props.onDrawingCreate({
-        points: completedDrawing,
-        color: visual.color.edit,
-      });
+    if (shouldFinalizeDrawing && completedDrawing.length >= 4) {
+      // Keep the local stroke visible while the server persists it. Clearing
+      // it before the command resolves creates a noticeable blank frame
+      // between the draft and the reconciled drawing from the snapshot.
+      await persistDrawingDraft(
+        { points: completedDrawing, color: drawingColor },
+        props.onDrawingCreate,
+        () =>
+          clearDrawingDraftIfCurrent(drawingPointsRef, completedDrawing, () =>
+            setDrawingPoints([]),
+          ),
+      );
+    } else if (shouldFinalizeDrawing) {
+      drawingPointsRef.current = [];
+      setDrawingPoints([]);
+    }
     if (props.tool === "RULER")
       props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
     setRulerStart(null);
   };
+
+  useEffect(() => {
+    finishDrawingRef.current = () => void handlePointerUp();
+    trackDrawingRef.current = (event) => {
+      if (!drawingActiveRef.current) return;
+      stageRef.current?.setPointersPositions(event);
+      handlePointerMove();
+    };
+  });
+
+  useEffect(() => {
+    const trackOutsideStage = (event: MouseEvent) =>
+      trackDrawingRef.current(event);
+    const finishOutsideStage = () => {
+      // Pointer capture is not guaranteed for mouse right/middle drags. Always
+      // terminate a pending pan when release/cancel happens outside the Stage,
+      // otherwise the next hover move would resume the stale gesture.
+      panStartRef.current = null;
+      if (drawingActiveRef.current) finishDrawingRef.current();
+    };
+    window.addEventListener("mousemove", trackOutsideStage, true);
+    window.addEventListener("mouseup", finishOutsideStage, true);
+    window.addEventListener("pointerup", finishOutsideStage, true);
+    window.addEventListener("pointercancel", finishOutsideStage, true);
+    window.addEventListener("blur", finishOutsideStage);
+    return () => {
+      window.removeEventListener("mousemove", trackOutsideStage, true);
+      window.removeEventListener("mouseup", finishOutsideStage, true);
+      window.removeEventListener("pointerup", finishOutsideStage, true);
+      window.removeEventListener("pointercancel", finishOutsideStage, true);
+      window.removeEventListener("blur", finishOutsideStage);
+    };
+  }, []);
 
   const assetUrl = (assetId: string | null) =>
     props.assets.find((asset) => asset.id === assetId)?.url;
@@ -820,6 +978,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       role="region"
       aria-label="Интерактивная карта сцены"
       aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 F O V D R P G Shift+G Enter Delete Escape"
+      onPointerDownCapture={(event) => {
+        if (
+          props.tool !== "DRAW" ||
+          drawingActiveRef.current ||
+          !(event.target instanceof HTMLCanvasElement)
+        )
+          return;
+        stageRef.current?.setPointersPositions(event.nativeEvent);
+        const point = pointerInWorld();
+        if (!point) return;
+        const bounded = clampToWorld(point);
+        const points = [bounded.x, bounded.y];
+        drawingActiveRef.current = true;
+        drawingPointsRef.current = points;
+        setDrawingPoints(points);
+      }}
       onFocus={() => dispatchInteraction({ type: "focus" })}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget))
@@ -828,6 +1002,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       onKeyDown={handleMapKeyDown}
       onDragOver={(event) => {
         if (
+          props.tool === "PAN" &&
           event.dataTransfer.types.includes(
             "application/x-arken-token-definition",
           )
@@ -835,6 +1010,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           event.preventDefault();
       }}
       onDrop={(event) => {
+        if (props.tool !== "PAN") return;
         const definitionId = event.dataTransfer.getData(
           "application/x-arken-token-definition",
         );
@@ -855,6 +1031,128 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       >
         Объекты карты
       </button>
+      {interaction.objectListOpen && (
+        <div
+          ref={objectListRef}
+          className="map-object-list-popover"
+          role="region"
+          aria-label={"Объекты карты"}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <ul className="map-object-list">
+            {selectableObjects.tokens.map((token) => (
+              <li key={`token:${token.id}:${token.revision}`}>
+                <button
+                  type="button"
+                  aria-pressed={
+                    interaction.selectedObject?.kind === "token" &&
+                    interaction.selectedObject.objectId === token.id
+                  }
+                  onClick={() =>
+                    selectObject({
+                      kind: "token",
+                      objectId: token.id,
+                      revision: token.revision,
+                    })
+                  }
+                >
+                  {token.name}
+                </button>
+                <button
+                  className="map-object-list__action"
+                  type="button"
+                  aria-label={`Дублировать: ${token.name}`}
+                  title={"Дублировать"}
+                  onClick={() =>
+                    void props.onPlaceTokenDefinition?.(token.definitionId, {
+                      x:
+                        token.x +
+                        (props.scene.grid.enabled ? props.scene.grid.size : 32),
+                      y:
+                        token.y +
+                        (props.scene.grid.enabled ? props.scene.grid.size : 32),
+                    })
+                  }
+                >
+                  {"\u2398"}
+                </button>
+                <button
+                  className="map-object-list__action"
+                  type="button"
+                  aria-label={`Удалить: ${token.name}`}
+                  title={"Удалить"}
+                  onClick={() =>
+                    requestDelete({
+                      kind: "token",
+                      objectId: token.id,
+                      revision: token.revision,
+                    })
+                  }
+                >
+                  {"\u00d7"}
+                </button>
+              </li>
+            ))}
+            {selectableObjects.drawings.map((drawing, index) => {
+              const canCopy =
+                props.role === "GM" ||
+                drawing.authorMembershipId === props.membershipId;
+              const label = `Рисунок ${index + 1}`;
+              return (
+                <li key={`drawing:${drawing.id}:${drawing.revision}`}>
+                  <button
+                    type="button"
+                    aria-pressed={
+                      interaction.selectedObject?.kind === "drawing" &&
+                      interaction.selectedObject.objectId === drawing.id
+                    }
+                    onClick={() =>
+                      selectObject({
+                        kind: "drawing",
+                        objectId: drawing.id,
+                        revision: drawing.revision,
+                      })
+                    }
+                  >
+                    {label}
+                  </button>
+                  <button
+                    className="map-object-list__action"
+                    type="button"
+                    disabled={!canCopy}
+                    aria-label={`Дублировать: ${label}`}
+                    title={"Дублировать"}
+                    onClick={() =>
+                      void props.onDrawingCopy?.(drawing.id, drawing.revision)
+                    }
+                  >
+                    {"\u2398"}
+                  </button>
+                  <button
+                    className="map-object-list__action"
+                    type="button"
+                    disabled={!canCopy}
+                    aria-label={`Удалить: ${label}`}
+                    title={"Удалить"}
+                    onClick={() =>
+                      requestDelete({
+                        kind: "drawing",
+                        objectId: drawing.id,
+                        revision: drawing.revision,
+                      })
+                    }
+                  >
+                    {"\u00d7"}
+                  </button>
+                </li>
+              );
+            })}
+            {selectableObjects.tokens.length +
+              selectableObjects.drawings.length ===
+              0 && <li>{"На карте пока нет объектов."}</li>}
+          </ul>
+        </div>
+      )}
       <Stage
         ref={stageRef}
         width={viewport.width}
@@ -865,13 +1163,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         scaleY={scale}
         draggable={false}
         onWheel={handleWheel}
-        onMouseDown={handlePointerDown}
-        onMouseMove={handlePointerMove}
-        onMouseUp={handlePointerUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
         onClick={handleClick}
       >
         <Layer
-          listening={false}
           clipX={0}
           clipY={0}
           clipWidth={worldDraft.width}
@@ -880,7 +1177,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <Rect
             width={worldDraft.width}
             height={worldDraft.height}
+            fill="rgba(0, 0, 0, 0.001)"
+            name="map-interaction-hit-plane"
+          />
+          <Rect
+            width={worldDraft.width}
+            height={worldDraft.height}
             fill={visual.color.mapBackdrop}
+            listening={false}
           />
           {mapImage && (
             <Image
@@ -889,6 +1193,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               y={backgroundDraft.y}
               width={backgroundDraft.width}
               height={backgroundDraft.height}
+              listening={false}
             />
           )}
           {props.scene.grid.enabled &&
@@ -901,117 +1206,119 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             )}
         </Layer>
 
-        {props.role === "GM" && props.canvasEditMode && (
-          <Layer>
-            {props.canvasEditMode === "BACKGROUND" ? (
-              <Group>
-                <Rect
-                  {...backgroundDraft}
-                  stroke={visual.color.edit}
-                  strokeWidth={2 / scale}
-                  dash={[8 / scale, 5 / scale]}
-                  draggable
-                  onDragMove={(event) =>
-                    setBackgroundDraft((current) => ({
-                      ...current,
-                      x: event.target.x(),
-                      y: event.target.y(),
-                    }))
-                  }
-                  onDragEnd={() =>
-                    void props.onCanvasPatch?.({
-                      backgroundFrame: backgroundDraft,
-                    })
-                  }
-                />
-                {(["nw", "ne", "sw", "se"] as const).map((corner) => {
-                  const left = corner.endsWith("w");
-                  const top = corner.startsWith("n");
-                  return (
-                    <Circle
-                      key={corner}
-                      x={
-                        left
-                          ? backgroundDraft.x
-                          : backgroundDraft.x + backgroundDraft.width
-                      }
-                      y={
-                        top
-                          ? backgroundDraft.y
-                          : backgroundDraft.y + backgroundDraft.height
-                      }
-                      radius={7 / scale}
-                      fill={visual.color.edit}
-                      draggable
-                      onDragMove={(event) => {
-                        const oppositeX = left
-                          ? backgroundDraft.x + backgroundDraft.width
-                          : backgroundDraft.x;
-                        const oppositeY = top
-                          ? backgroundDraft.y + backgroundDraft.height
-                          : backgroundDraft.y;
-                        let width = Math.max(
-                          16,
-                          Math.abs(event.target.x() - oppositeX),
-                        );
-                        let height = Math.max(
-                          16,
-                          Math.abs(event.target.y() - oppositeY),
-                        );
-                        if (lockAspect) {
-                          const ratio =
-                            props.scene.backgroundFrame.width /
-                            props.scene.backgroundFrame.height;
-                          if (width / height > ratio) height = width / ratio;
-                          else width = height * ratio;
+        {props.role === "GM" &&
+          props.tool === "PAN" &&
+          props.canvasEditMode && (
+            <Layer>
+              {props.canvasEditMode === "BACKGROUND" ? (
+                <Group>
+                  <Rect
+                    {...backgroundDraft}
+                    stroke={visual.color.edit}
+                    strokeWidth={2 / scale}
+                    dash={[8 / scale, 5 / scale]}
+                    draggable
+                    onDragMove={(event) =>
+                      setBackgroundDraft((current) => ({
+                        ...current,
+                        x: event.target.x(),
+                        y: event.target.y(),
+                      }))
+                    }
+                    onDragEnd={() =>
+                      void props.onCanvasPatch?.({
+                        backgroundFrame: backgroundDraft,
+                      })
+                    }
+                  />
+                  {(["nw", "ne", "sw", "se"] as const).map((corner) => {
+                    const left = corner.endsWith("w");
+                    const top = corner.startsWith("n");
+                    return (
+                      <Circle
+                        key={corner}
+                        x={
+                          left
+                            ? backgroundDraft.x
+                            : backgroundDraft.x + backgroundDraft.width
                         }
-                        setBackgroundDraft({
-                          x: left ? oppositeX - width : oppositeX,
-                          y: top ? oppositeY - height : oppositeY,
-                          width,
-                          height,
-                        });
-                      }}
-                      onDragEnd={() =>
-                        void props.onCanvasPatch?.({
-                          backgroundFrame: backgroundDraft,
-                        })
-                      }
-                    />
-                  );
-                })}
-              </Group>
-            ) : (
-              <Group>
-                <Rect
-                  x={0}
-                  y={0}
-                  width={worldDraft.width}
-                  height={worldDraft.height}
-                  stroke={visual.color.selection}
-                  strokeWidth={2 / scale}
-                  dash={[8 / scale, 5 / scale]}
-                />
-                <Circle
-                  x={worldDraft.width}
-                  y={worldDraft.height}
-                  radius={8 / scale}
-                  fill={visual.color.selection}
-                  draggable
-                  onDragMove={(event) =>
-                    setWorldDraft({
-                      width: Math.max(320, Math.round(event.target.x())),
-                      height: Math.max(320, Math.round(event.target.y())),
-                    })
-                  }
-                  onDragEnd={() =>
-                    void props.onCanvasPatch?.({ world: worldDraft })
-                  }
-                />
-              </Group>
-            )}
-          </Layer>
-        )}
+                        y={
+                          top
+                            ? backgroundDraft.y
+                            : backgroundDraft.y + backgroundDraft.height
+                        }
+                        radius={7 / scale}
+                        fill={visual.color.edit}
+                        draggable
+                        onDragMove={(event) => {
+                          const oppositeX = left
+                            ? backgroundDraft.x + backgroundDraft.width
+                            : backgroundDraft.x;
+                          const oppositeY = top
+                            ? backgroundDraft.y + backgroundDraft.height
+                            : backgroundDraft.y;
+                          let width = Math.max(
+                            16,
+                            Math.abs(event.target.x() - oppositeX),
+                          );
+                          let height = Math.max(
+                            16,
+                            Math.abs(event.target.y() - oppositeY),
+                          );
+                          if (lockAspect) {
+                            const ratio =
+                              props.scene.backgroundFrame.width /
+                              props.scene.backgroundFrame.height;
+                            if (width / height > ratio) height = width / ratio;
+                            else width = height * ratio;
+                          }
+                          setBackgroundDraft({
+                            x: left ? oppositeX - width : oppositeX,
+                            y: top ? oppositeY - height : oppositeY,
+                            width,
+                            height,
+                          });
+                        }}
+                        onDragEnd={() =>
+                          void props.onCanvasPatch?.({
+                            backgroundFrame: backgroundDraft,
+                          })
+                        }
+                      />
+                    );
+                  })}
+                </Group>
+              ) : (
+                <Group>
+                  <Rect
+                    x={0}
+                    y={0}
+                    width={worldDraft.width}
+                    height={worldDraft.height}
+                    stroke={visual.color.selection}
+                    strokeWidth={2 / scale}
+                    dash={[8 / scale, 5 / scale]}
+                  />
+                  <Circle
+                    x={worldDraft.width}
+                    y={worldDraft.height}
+                    radius={8 / scale}
+                    fill={visual.color.selection}
+                    draggable
+                    onDragMove={(event) =>
+                      setWorldDraft({
+                        width: Math.max(320, Math.round(event.target.x())),
+                        height: Math.max(320, Math.round(event.target.y())),
+                      })
+                    }
+                    onDragEnd={() =>
+                      void props.onCanvasPatch?.({ world: worldDraft })
+                    }
+                  />
+                </Group>
+              )}
+            </Layer>
+          )}
 
         <Layer {...playerClip}>
           {props.tokens
@@ -1021,7 +1328,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 key={token.id}
                 x={token.x}
                 y={token.y}
-                listening={props.role === "GM"}
+                listening={props.role === "GM" && props.tool === "PAN"}
                 onClick={() => {
                   selectObject({
                     kind: "token",
@@ -1093,6 +1400,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   />
                 )}
                 {props.role === "GM" &&
+                  props.tool === "PAN" &&
                   selectedTokenIds.length === 1 &&
                   selectedTokenIds[0] === token.id && (
                     <Circle
@@ -1109,15 +1417,32 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       onDragMove={(event) => {
                         const aspect = token.width / token.height;
                         const width = Math.max(16, event.target.x());
-                        event.target.position({
-                          x: width,
-                          y: Math.max(16, width / aspect),
-                        });
+                        const height = Math.max(16, width / aspect);
+                        event.target.position({ x: width, y: height });
+                        event.target
+                          .getParent()
+                          ?.getChildren()
+                          .filter((child) => child !== event.target)
+                          .forEach((child) =>
+                            child.scale({
+                              x: width / token.width,
+                              y: height / token.height,
+                            }),
+                          );
                       }}
                       onDragEnd={(event) => {
                         const width = Math.round(
                           Math.max(16, event.target.x()),
                         );
+                        event.target
+                          .getParent()
+                          ?.getChildren()
+                          .filter((child) => child !== event.target)
+                          .forEach((child) => child.scale({ x: 1, y: 1 }));
+                        event.target.position({
+                          x: token.width,
+                          y: token.height,
+                        });
                         void props.onTokenResize?.(token.id, token.revision, {
                           width,
                           height: Math.round(
@@ -1150,6 +1475,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   drawingRevealed(drawing.points, drawing.x, drawing.y))
               }
               draggable={
+                props.tool === "PAN" &&
                 (props.role === "GM" ||
                   (Boolean(props.membershipId) &&
                     drawing.authorMembershipId === props.membershipId)) &&
@@ -1194,7 +1520,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           {drawingPoints.length >= 4 && (
             <Line
               points={drawingPoints}
-              stroke={visual.color.edit}
+              stroke={drawingColor}
               strokeWidth={3 / scale}
               lineCap="round"
               lineJoin="round"
@@ -1242,14 +1568,20 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             .sort((a, b) =>
               a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
             )
-            .map((token) => {
-              const canMove =
-                props.tool === "PAN" &&
-                !token.locked &&
-                (props.role === "GM" ||
-                  token.controllerMembershipIds.includes(props.membershipId));
+            .map((sourceToken) => {
+              const token = resizeDrafts[sourceToken.id]
+                ? { ...sourceToken, ...resizeDrafts[sourceToken.id] }
+                : sourceToken;
+              const canMove = canMoveMapToken({
+                tool: props.tool,
+                role: props.role,
+                locked: token.locked,
+                membershipId: props.membershipId,
+                controllerMembershipIds: token.controllerMembershipIds,
+              });
               const url = assetUrl(token.assetId);
               const dragPosition = dragPositions[token.id];
+              const imageMask = getTokenImageMask(token.width, token.height);
               const common = {
                 x: 0,
                 y: 0,
@@ -1262,6 +1594,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 onDragEnd: () => undefined,
               };
               const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
+                if (!isDirectTokenDrag(event.target, event.currentTarget))
+                  return;
                 setDragPositions((current) => ({
                   ...current,
                   [token.id]: {
@@ -1281,6 +1615,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 });
               };
               const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
+                if (!isDirectTokenDrag(event.target, event.currentTarget))
+                  return;
                 const x = snap(event.target.x());
                 const y = snap(event.target.y());
                 if (
@@ -1341,6 +1677,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   onContextMenu={(event) => {
                     event.evt.preventDefault();
                     event.cancelBubble = true;
+                    // Right drag pans only from empty canvas; on a token it
+                    // consistently opens the contextual actions.
                     if (props.role !== "GM") return;
                     const rect = containerRef.current?.getBoundingClientRect();
                     if (!rect) return;
@@ -1381,16 +1719,30 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   )}
                   {url ? (
                     <>
-                      <TokenImage src={url} {...common} />
-                      {token.frameColor && (
-                        <Rect
-                          width={token.width}
-                          height={token.height}
-                          stroke={token.frameColor}
-                          strokeWidth={3 / scale}
-                          listening={false}
-                        />
-                      )}
+                      <Group
+                        clipFunc={(context) => {
+                          context.arc(
+                            imageMask.centerX,
+                            imageMask.centerY,
+                            imageMask.radius,
+                            0,
+                            Math.PI * 2,
+                            false,
+                          );
+                        }}
+                      >
+                        <TokenImage src={url} {...common} />
+                      </Group>
+                      <Circle
+                        x={imageMask.centerX}
+                        y={imageMask.centerY}
+                        radius={imageMask.radius}
+                        stroke={
+                          token.frameColor ?? visual.color.tokenFrameDefault
+                        }
+                        strokeWidth={(token.frameColor ? 3 : 2) / scale}
+                        listening={false}
+                      />
                     </>
                   ) : (
                     <Group {...common}>
@@ -1452,6 +1804,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     }
                   />
                   {props.role === "GM" &&
+                    props.tool === "PAN" &&
                     selectedTokenIds.length === 1 &&
                     selectedTokenIds[0] === token.id && (
                       <Circle
@@ -1466,24 +1819,67 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           event.cancelBubble = true;
                         }}
                         onDragMove={(event) => {
+                          event.cancelBubble = true;
                           const aspect = token.width / token.height;
                           const width = Math.max(16, event.target.x());
-                          event.target.position({
-                            x: width,
-                            y: Math.max(16, width / aspect),
-                          });
+                          const height = Math.max(16, width / aspect);
+                          setResizeDrafts((current) => ({
+                            ...current,
+                            [token.id]: {
+                              width,
+                              height,
+                              revision: token.revision,
+                            },
+                          }));
                         }}
                         onDragEnd={(event) => {
+                          event.cancelBubble = true;
                           const width = Math.round(
                             Math.max(16, event.target.x()),
                           );
                           const height = Math.round(
                             width / (token.width / token.height),
                           );
-                          void props.onTokenResize?.(token.id, token.revision, {
+
+                          const expected = {
                             width,
                             height,
-                          });
+                            revision: token.revision,
+                          };
+                          const request = props.onTokenResize?.(
+                            token.id,
+                            token.revision,
+                            { width, height },
+                          );
+                          if (!request) {
+                            setResizeDrafts((current) =>
+                              clearSettledTokenResizeDraft(
+                                current,
+                                token.id,
+                                expected,
+                              ),
+                            );
+                            return;
+                          }
+                          void request
+                            .then(() =>
+                              setResizeDrafts((current) =>
+                                clearSettledTokenResizeDraft(
+                                  current,
+                                  token.id,
+                                  expected,
+                                ),
+                              ),
+                            )
+                            .catch(() =>
+                              setResizeDrafts((current) =>
+                                clearSettledTokenResizeDraft(
+                                  current,
+                                  token.id,
+                                  expected,
+                                ),
+                              ),
+                            );
                         }}
                       />
                     )}
@@ -1531,12 +1927,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       </Stage>
       {tokenMenu && (
         <div
+          ref={tokenMenuRef}
           className="token-context-menu"
           style={{ left: tokenMenu.x, top: tokenMenu.y }}
           role="menu"
           onPointerDown={(event) => event.stopPropagation()}
         >
           <strong>{tokenMenu.token.name}</strong>
+          {tokenMenu.token.characterId && props.onOpenCharacter && (
+            <button
+              role="menuitem"
+              onClick={() => {
+                props.onOpenCharacter?.(tokenMenu.token.characterId!);
+                setTokenMenu(null);
+              }}
+            >
+              Открыть карточку
+            </button>
+          )}
           {(
             [
               ["MAP", "Слой карты"],
@@ -1629,58 +2037,6 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <button onClick={() => setTokenMenu(null)}>Отмена</button>
         </div>
       )}
-      <ArkenDialog
-        open={interaction.objectListOpen}
-        title="Объекты карты"
-        footer={false}
-        onClose={() => dispatchInteraction({ type: "close-object-list" })}
-      >
-        <ul className="map-object-list" aria-label="Доступные объекты карты">
-          {selectableObjects.tokens.map((token) => (
-            <li key={`token:${token.id}:${token.revision}`}>
-              <button
-                type="button"
-                aria-pressed={
-                  interaction.selectedObject?.kind === "token" &&
-                  interaction.selectedObject.objectId === token.id
-                }
-                onClick={() =>
-                  selectObject({
-                    kind: "token",
-                    objectId: token.id,
-                    revision: token.revision,
-                  })
-                }
-              >
-                Токен: {token.name}
-              </button>
-            </li>
-          ))}
-          {selectableObjects.drawings.map((drawing, index) => (
-            <li key={`drawing:${drawing.id}:${drawing.revision}`}>
-              <button
-                type="button"
-                aria-pressed={
-                  interaction.selectedObject?.kind === "drawing" &&
-                  interaction.selectedObject.objectId === drawing.id
-                }
-                onClick={() =>
-                  selectObject({
-                    kind: "drawing",
-                    objectId: drawing.id,
-                    revision: drawing.revision,
-                  })
-                }
-              >
-                Рисунок {index + 1}
-              </button>
-            </li>
-          ))}
-          {selectableObjects.tokens.length +
-            selectableObjects.drawings.length ===
-            0 && <li>Доступных объектов нет.</li>}
-        </ul>
-      </ArkenDialog>
       <ConfirmDialog
         open={interaction.deleteRequestedFor !== null}
         title="Удалить объект с карты?"
@@ -1698,6 +2054,93 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           Сохранять пропорции
         </label>
       )}
+      {(() => {
+        const drawing = props.drawings.find(
+          (item) => item.id === selectedDrawingId,
+        );
+        const canEditDrawing =
+          drawing &&
+          (props.role === "GM" ||
+            (!!props.membershipId &&
+              drawing.authorMembershipId === props.membershipId));
+        if (!canEditDrawing && props.tool !== "DRAW") return null;
+        return (
+          <aside
+            className="drawing-color-panel"
+            aria-label={"Панель цвета рисунка"}
+          >
+            <span className="drawing-color-controls">
+              <span
+                className="drawing-color-presets"
+                role="group"
+                aria-label="Готовые цвета"
+              >
+                {DRAWING_COLOR_PRESETS.map(({ value, name }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className="drawing-color-swatch"
+                    aria-label={`${name}: ${value}`}
+                    aria-pressed={
+                      (canEditDrawing ? drawing.color : drawingColor) === value
+                    }
+                    style={{ backgroundColor: value }}
+                    onClick={() => {
+                      setDrawingColor(value);
+                      if (canEditDrawing)
+                        void props.onDrawingUpdate?.(
+                          drawing.id,
+                          drawing.revision,
+                          { color: value },
+                        );
+                    }}
+                  />
+                ))}
+              </span>
+              <label className="drawing-color-picker">
+                <span>Цвет</span>
+                <input
+                  type="color"
+                  aria-label="Цвет рисунка"
+                  value={canEditDrawing ? drawing.color : drawingColor}
+                  onChange={(event) => {
+                    const color = event.target.value;
+                    setDrawingColor(color);
+                    if (canEditDrawing)
+                      void props.onDrawingUpdate?.(
+                        drawing.id,
+                        drawing.revision,
+                        { color },
+                      );
+                  }}
+                />
+              </label>
+              {canEditDrawing && (
+                <>
+                  <button
+                    onClick={() =>
+                      void props.onDrawingCopy?.(drawing.id, drawing.revision)
+                    }
+                  >
+                    Копировать
+                  </button>
+                  <button
+                    onClick={() => {
+                      requestDelete({
+                        kind: "drawing",
+                        objectId: drawing.id,
+                        revision: drawing.revision,
+                      });
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </>
+              )}
+            </span>
+          </aside>
+        );
+      })()}
       <div className="map-scale">
         <button
           aria-label="Увеличить масштаб"
@@ -1724,6 +2167,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         {props.role === "GM" && (
           <label>
             <input
+              aria-label="Показывать скрытый слой мастера"
+              title="Показывать скрытый слой мастера"
               type="checkbox"
               checked={showGmLayer}
               onChange={(event) => setShowGmLayer(event.target.checked)}
@@ -1731,52 +2176,6 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             GM
           </label>
         )}
-        {(() => {
-          const drawing = props.drawings.find(
-            (item) => item.id === selectedDrawingId,
-          );
-          if (
-            !drawing ||
-            (props.role !== "GM" &&
-              (!props.membershipId ||
-                drawing.authorMembershipId !== props.membershipId))
-          )
-            return null;
-          return (
-            <span>
-              <button
-                onClick={() =>
-                  void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
-                    color:
-                      drawing.color === visual.color.edit
-                        ? visual.color.drawingAlternate
-                        : visual.color.edit,
-                  })
-                }
-              >
-                Цвет
-              </button>
-              <button
-                onClick={() =>
-                  void props.onDrawingCopy?.(drawing.id, drawing.revision)
-                }
-              >
-                Копировать
-              </button>
-              <button
-                onClick={() => {
-                  requestDelete({
-                    kind: "drawing",
-                    objectId: drawing.id,
-                    revision: drawing.revision,
-                  });
-                }}
-              >
-                Удалить
-              </button>
-            </span>
-          );
-        })()}
         {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
           <button
             onClick={() => {

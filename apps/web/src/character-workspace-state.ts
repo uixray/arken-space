@@ -112,3 +112,8 @@ export function characterWorkspaceReducer(
     }
   }
 }
+
+/** Guards the rail against duplicate delivery during HTTP/realtime reconciliation. */
+export function uniqueCharacterIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)];
+}

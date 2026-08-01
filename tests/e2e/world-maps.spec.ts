@@ -180,6 +180,14 @@ test("UIX-243: GM creates, completes and publishes a world map", async ({
   await mockWorldMapApi(page, state);
   await page.goto("/");
   const workspace = await openWorldMaps(page);
+  await expect(page.locator(".map-shell")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await expect(workspace).toHaveClass(/world-maps-workspace/);
+  await expect(
+    workspace.locator(".arken-workspace-window__drag-handle"),
+  ).toHaveAttribute("data-draggable", "false");
 
   await workspace.getByRole("button", { name: "Создать карту" }).click();
   const mapEditor = page.getByRole("dialog", { name: "Новая карта" });
