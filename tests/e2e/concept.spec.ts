@@ -1573,7 +1573,62 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   );
 });
 
-test("resource conflict replaces the draft with canonical bootstrap data", async ({
+test("structured resources persist and short rest uses the authoritative counter route", async ({ page }) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]!.id,
+  };
+  playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
+  playerSnapshot.characters[0]!.resources = {
+    physicalPower: { current: 1, maximum: 10, recoverable: true },
+    magicPower: { current: 2, maximum: 8, recoverable: true },
+  };
+  playerSnapshot.members = [playerSnapshot.me];
+  const payloads: Array<{ resources?: typeof playerSnapshot.characters[0]["resources"]; rest?: string; revision: number }> = [];
+  await page.route("**/api/bootstrap", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(playerSnapshot),
+  }));
+  await page.route("**/api/characters/*/counters", async (route) => {
+    const payload = route.request().postDataJSON() as (typeof payloads)[number];
+    payloads.push(payload);
+    if (payload.resources) playerSnapshot.characters[0]!.resources = payload.resources;
+    if (payload.rest === "SHORT") {
+      playerSnapshot.characters[0]!.resources = Object.fromEntries(
+        Object.entries(playerSnapshot.characters[0]!.resources).map(([key, resource]) => [
+          key,
+          { ...resource, current: Math.min(resource.maximum ?? resource.current, resource.current + Math.ceil((resource.maximum ?? resource.current) * 0.25)) },
+        ]),
+      );
+    }
+    playerSnapshot.characters[0]!.revision += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(playerSnapshot.characters[0]) });
+  });
+
+  await page.goto("/");
+  await page.locator(".workspace-menu summary").click();
+  await page.getByRole("button", { name: "Персонажи" }).click();
+  const physical = page.locator(".character-power-controls .resource-card").filter({ hasText: "Физическая сила" });
+  await physical.getByLabel("Текущее").fill("3");
+  await page.locator(".character-workspace__header h2").click();
+  await expect.poll(() => payloads.length).toBe(1);
+  expect(payloads[0]?.resources?.physicalPower.current).toBe(3);
+
+  await page.getByPlaceholder("Новый ресурс").fill("stamina");
+  await page.getByRole("button", { name: "Добавить", exact: true }).click();
+  await expect.poll(() => payloads.length).toBe(2);
+  await expect(page.locator(".character-resource-editor .resource-card").filter({ hasText: "stamina" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Короткий отдых (+25%)" }).click();
+  await expect.poll(() => payloads.at(-1)?.rest).toBe("SHORT");
+  await expect(physical.getByLabel("Текущее")).toHaveValue("6");
+});
+
+test("resource conflict replaces the structured draft with canonical bootstrap data", async ({
   page,
 }) => {
   const playerSnapshot = structuredClone(snapshot);
@@ -1585,7 +1640,7 @@ test("resource conflict replaces the draft with canonical bootstrap data", async
   };
   playerSnapshot.characters[0]!.ownerMembershipId = playerSnapshot.me.id;
   playerSnapshot.characters[0]!.resources = {
-    mana: { current: 2, maximum: 10 },
+    mana: { current: 2, maximum: 10, recoverable: true },
   };
   playerSnapshot.members = [playerSnapshot.me];
   let requests = 0;
@@ -1599,7 +1654,7 @@ test("resource conflict replaces the draft with canonical bootstrap data", async
   await page.route("**/api/characters/*/counters", (route) => {
     requests += 1;
     playerSnapshot.characters[0]!.resources = {
-      mana: { current: 8, maximum: 10 },
+      mana: { current: 8, maximum: 10, recoverable: true },
     };
     playerSnapshot.characters[0]!.revision += 1;
     return route.fulfill({
@@ -1614,19 +1669,14 @@ test("resource conflict replaces the draft with canonical bootstrap data", async
   await page.goto("/");
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
-  const resources = page
-    .locator(".character-workspace textarea:visible")
-    .nth(1);
-  await resources.fill('{"mana":{"current":5,"maximum":10}}');
+  const resourceCard = page.locator(".character-resource-editor .resource-card").filter({ hasText: "mana" });
+  const currentInput = resourceCard.getByLabel("Текущее");
+  await currentInput.fill("5");
   await page.locator(".character-workspace__header h2").click();
 
   await expect.poll(() => requests).toBe(1);
-  await expect(resources).toHaveValue(
-    JSON.stringify({ mana: { current: 8, maximum: 10 } }, null, 2),
-  );
-  await expect(page.getByRole("alert")).toContainText(
-    "Ресурсы изменены в другой сессии",
-  );
+  await expect(currentInput).toHaveValue("8");
+  await expect(page.getByRole("alert")).toContainText("Ресурсы изменены");
 });
 
 test("wallet refreshes and safely reapplies a delta after a stale revision", async ({

@@ -35,12 +35,12 @@
 - Lint - PASS.
 - Source encoding - PASS (4/4).
 - API error/telemetry unit tests - PASS (8/8).
+- Focused Chromium resource persistence/rest/conflict tests - PASS (2/2).
 - Scoped short-rest and campaign-long-rest integration - PASS (2/2).
 - `git diff --check` - PASS.
 
 ## Remaining UIX-323 work
-- Add browser coverage for resource form persistence, stale revisions and rapid input.
 - Run the release regression gate before closing the issue.
 
 ## Next action
-Add focused browser coverage for the resource editor and rest controls, including stale revisions and rapid input.
+Run the release regression gate, then move UIX-323 to review or close it if the gate is clean.
