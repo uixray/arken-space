@@ -11,7 +11,7 @@
 ## Revision
 
 - Base: `08fdd0a` (`fix(input): harden editable keyboard handling`)
-- Delivery commit: pending at checkpoint creation.
+- Delivery commit: `10eccdc` (`fix(chat): aggregate rapid wallet audit messages`).
 
 ## Changed files
 
