@@ -164,7 +164,7 @@ test("nickname link exchanges a public beta player session", async ({
   await expect(page).toHaveURL("/");
 });
 
-test("a player can safely hand off a shared computer to the next invite", async ({
+test("a player can safely hand off a shared computer to the player chooser", async ({
   page,
 }) => {
   const playerSnapshot: GameSnapshot = {
@@ -199,6 +199,7 @@ test("a player can safely hand off a shared computer to the next invite", async 
   );
 
   await page.goto("/");
+  await page.getByLabel("Меню сеанса").click();
   await expect(page.getByText("Вы играете как: Игрок один")).toBeVisible();
   await page.getByRole("button", { name: "Сменить игрока" }).click();
 
@@ -207,24 +208,18 @@ test("a player can safely hand off a shared computer to the next invite", async 
   await dialog.getByRole("button", { name: "Сменить игрока" }).click();
 
   await expect.poll(() => logoutRequests).toBe(1);
-  await expect(page).toHaveURL(/\?switch-player=1$/);
+  await expect(page).toHaveURL("/");
   await expect(
-    page.getByRole("heading", {
-      name: "Передайте компьютер следующему игроку",
-    }),
+    page.getByRole("heading", { name: "Выберите игрока" }),
   ).toBeVisible();
+  await expect(page.getByText("Вы играете как: Игрок один")).toHaveCount(0);
 
-  await page
-    .getByLabel("Личная ссылка игрока")
-    .fill("https://example.test/join/not-for-this-site");
-  await page.getByRole("button", { name: "Открыть ссылку" }).click();
-  await expect(page.getByRole("alert")).toContainText(
-    "личную ссылку Arken Space",
-  );
-
-  await page.getByLabel("Личная ссылка игрока").fill("/join/player-token");
-  await page.getByRole("button", { name: "Открыть ссылку" }).click();
-  await expect(page).toHaveURL("/join/player-token");
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Выберите игрока" }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(page.getByText("Вы играете как: Игрок один")).toHaveCount(0);
 });
 
 test("handoff hides the previous player when the logout response is lost", async ({
@@ -256,6 +251,7 @@ test("handoff hides the previous player when the logout response is lost", async
   );
 
   await page.goto("/");
+  await page.getByLabel("Меню сеанса").click();
   await expect(page.getByText("Вы играете как: Игрок один")).toBeVisible();
   await page.getByRole("button", { name: "Сменить игрока" }).click();
   await page
@@ -263,11 +259,9 @@ test("handoff hides the previous player when the logout response is lost", async
     .getByRole("button", { name: "Сменить игрока" })
     .click();
 
-  await expect(page).toHaveURL(/\?switch-player=1$/);
+  await expect(page).toHaveURL("/");
   await expect(
-    page.getByRole("heading", {
-      name: "Передайте компьютер следующему игроку",
-    }),
+    page.getByRole("heading", { name: "Выберите игрока" }),
   ).toBeVisible();
   await expect(page.getByText("Вы играете как: Игрок один")).toHaveCount(0);
 });

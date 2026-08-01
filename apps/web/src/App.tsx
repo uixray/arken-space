@@ -777,7 +777,7 @@ export function App() {
       setPresence([]);
       setPreviewSnapshot(null);
       setWorkspace(null);
-      window.location.replace("/?switch-player=1");
+      window.location.replace("/");
     };
 
     setPlayerHandoffError("");
@@ -1364,7 +1364,7 @@ export function App() {
                 <button
                   onClick={async () => {
                     await api("/api/auth/logout", { method: "POST" });
-                    window.location.reload();
+                    window.location.replace("/");
                   }}
                 >
                   Выйти

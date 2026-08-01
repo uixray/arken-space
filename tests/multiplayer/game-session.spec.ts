@@ -1247,11 +1247,9 @@ test("a shared browser handoff revokes player A before player B uses their own i
     await handoffDialog.getByRole("button", { name: "Сменить игрока" }).click();
 
     await expect(playerASocketDisconnected).resolves.toBeUndefined();
-    await expect(page).toHaveURL(/\?switch-player=1$/);
+    await expect(page).toHaveURL("/");
     await expect(
-      page.getByRole("heading", {
-        name: "Передайте компьютер следующему игроку",
-      }),
+      page.getByRole("heading", { name: "Выберите игрока" }),
     ).toBeVisible();
     await expect
       .poll(async () =>
@@ -1270,8 +1268,7 @@ test("a shared browser handoff revokes player A before player B uses their own i
     );
     expect(playerAActionAfterHandoff.status()).toBe(401);
 
-    await page.getByLabel("Личная ссылка игрока").fill(playerBInviteUrl);
-    await page.getByRole("button", { name: "Открыть ссылку" }).click();
+    await page.goto(playerBInviteUrl);
     await expect(page).toHaveURL(
       new RegExp(new URL(playerBInviteUrl).pathname + "$"),
     );
