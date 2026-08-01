@@ -226,7 +226,16 @@ function formatWalletChanges(before: Wallet, after: Wallet) {
   return changes.length > 0 ? `кошелёк: ${changes.join(", ")}` : "";
 }
 
-type Resources = Record<string, { current: number; maximum?: number }>;
+type Resources = Record<
+  string,
+  {
+    current: number;
+    maximum?: number;
+    description?: string;
+    imageAssetId?: string | null;
+    recoverable?: boolean;
+  }
+>;
 
 function formatResourceValue(value: Resources[string] | undefined) {
   if (!value) return "удалён";
@@ -248,6 +257,28 @@ function formatResourceChanges(before: Resources, after: Resources) {
       return `${key}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
     });
   return changes.length > 0 ? `ресурсы: ${changes.join(", ")}` : "";
+}
+
+
+function applyCharacterRest(
+  resources: Resources,
+  rest: "SHORT" | "LONG" | "CATCH_BREATH",
+): Resources {
+  return Object.fromEntries(
+    Object.entries(resources).map(([key, resource]) => {
+      const recoverable = resource.recoverable !== false;
+      const targeted =
+        recoverable &&
+        (rest !== "CATCH_BREATH" || key === "physicalPower");
+      if (!targeted) return [key, resource];
+      const maximum = resource.maximum ?? resource.current;
+      const current =
+        rest === "LONG"
+          ? maximum
+          : Math.min(maximum, resource.current + Math.ceil(maximum * 0.25));
+      return [key, { ...resource, current, maximum }];
+    }),
+  );
 }
 
 async function findAction(db: Database, campaignId: string, actionId: string) {
@@ -6090,6 +6121,9 @@ export function registerRoutes(
         .code(409)
         .send({ error: "CHARACTER_CONFLICT", revision: character!.revision });
     }
+    const nextResources = body.rest
+      ? applyCharacterRest((character!.resources ?? {}) as Resources, body.rest)
+      : body.resources;
     const changes = [
       body.wallet
         ? formatWalletChanges(
@@ -6097,8 +6131,11 @@ export function registerRoutes(
             body.wallet,
           )
         : "",
-      body.resources
-        ? formatResourceChanges(character!.resources, body.resources)
+      nextResources
+        ? formatResourceChanges(
+            (character!.resources ?? {}) as Resources,
+            nextResources,
+          )
         : "",
     ]
       .filter(Boolean)
@@ -6110,7 +6147,7 @@ export function registerRoutes(
         .update(characters)
         .set({
           ...(body.wallet ? { wallet: body.wallet } : {}),
-          ...(body.resources ? { resources: body.resources } : {}),
+          ...(nextResources ? { resources: nextResources } : {}),
           revision: character!.revision + 1,
           updatedAt: new Date(),
         })
@@ -6142,7 +6179,11 @@ export function registerRoutes(
         entityType: "character",
         entityId: id,
         entityRevision: updated.revision,
-        payload: { wallet: body.wallet, resources: body.resources },
+        payload: {
+          wallet: body.wallet,
+          resources: nextResources,
+          rest: body.rest,
+        },
       });
       return { updated, message };
     });

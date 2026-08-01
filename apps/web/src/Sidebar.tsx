@@ -301,6 +301,7 @@ type Props = {
     patch: {
       wallet?: CharacterDto["wallet"];
       resources?: CharacterDto["resources"];
+      rest?: "SHORT" | "LONG" | "CATCH_BREATH";
     },
     intent?: {
       walletDelta?: {
@@ -1016,16 +1017,17 @@ export function CharacterPanel({
   );
   const walletDraftRef = useRef(walletDraft);
   const walletInputDirtyRef = useRef(false);
-  const [resourcesDraft, setResourcesDraft] = useState(() =>
-    JSON.stringify(character?.resources ?? {}, null, 2),
-  );
+  const [resourcesDraft, setResourcesDraft] = useState<
+    CharacterDto["resources"]
+  >(() => ({ ...(character?.resources ?? {}) }));
+  const [newResourceName, setNewResourceName] = useState("");
   useEffect(() => {
     if (character && countersPending === 0) {
       const nextWallet = normalizeWallet(character.wallet);
       walletDraftRef.current = nextWallet;
       walletInputDirtyRef.current = false;
       setWalletDraft(nextWallet);
-      setResourcesDraft(JSON.stringify(character.resources, null, 2));
+      setResourcesDraft({ ...character.resources });
     }
   }, [character, countersPending]);
   const editable =
@@ -1086,6 +1088,40 @@ export function CharacterPanel({
       );
     } finally {
       setCountersPending((current) => Math.max(0, current - 1));
+    }
+  };
+  const saveResources = async (next: CharacterDto["resources"]) => {
+    setResourcesDraft(next);
+    if (JSON.stringify(next) === JSON.stringify(character.resources)) return;
+    setCountersPending((count) => count + 1);
+    setCountersError("");
+    try {
+      await onUpdateCounters(character.id, character.revision, {
+        resources: next,
+      });
+    } catch (reason) {
+      setCountersError(
+        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+          ? "Ресурсы изменены. Повторите действие."
+          : "Не удалось сохранить ресурсы.",
+      );
+    } finally {
+      setCountersPending((count) => Math.max(0, count - 1));
+    }
+  };
+  const runRest = async (rest: "SHORT" | "LONG" | "CATCH_BREATH") => {
+    setCountersPending((count) => count + 1);
+    setCountersError("");
+    try {
+      await onUpdateCounters(character.id, character.revision, { rest });
+    } catch (reason) {
+      setCountersError(
+        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+          ? "Ресурсы изменены. Повторите отдых."
+          : "Не удалось применить отдых.",
+      );
+    } finally {
+      setCountersPending((count) => Math.max(0, count - 1));
     }
   };
   const changeWallet = (key: keyof CharacterDto["wallet"], delta: number) => {
@@ -1455,88 +1491,206 @@ export function CharacterPanel({
         />
       </label>
       <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
-      <div className="inline-fields character-power-controls">
+      <div className="character-power-controls">
         {(["physicalPower", "magicPower"] as const).map((key) => {
-          const resource = character.resources[key] ?? {
-            current: 0,
-            maximum: 0,
-          };
+          const resource = resourcesDraft[key] ?? { current: 0, maximum: 0 };
+          const maximum = resource.maximum ?? resource.current;
           return (
-            <span key={key}>
-              <b>
-                {key === "physicalPower" ? "Physical Power" : "Magic Power"}
-              </b>{" "}
-              {resource.current}/{resource.maximum ?? resource.current}
-            </span>
+            <fieldset className="resource-card" key={key} disabled={!editable}>
+              <legend>{key === "physicalPower" ? "Физическая сила" : "Магическая сила"}</legend>
+              <label>
+                Текущее
+                <FormInput
+                  type="number"
+                  min={0}
+                  value={resource.current}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: { ...resource, current: Math.max(0, Number(event.target.value)) },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+              <label>
+                Максимум
+                <FormInput
+                  type="number"
+                  min={0}
+                  value={maximum}
+                  onChange={(event) => {
+                    const nextMaximum = Math.max(0, Number(event.target.value));
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: {
+                        ...resource,
+                        maximum: nextMaximum,
+                        current: Math.min(resource.current, nextMaximum),
+                        recoverable: true,
+                      },
+                    }));
+                  }}
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+            </fieldset>
           );
         })}
-        <Button
-          disabled={!editable || countersPending > 0}
-          title={"Восстанавливает 25% максимума Physical Power, округляя вверх"}
-          onClick={() => {
-            const physical = character.resources.physicalPower ?? {
-              current: 0,
-              maximum: 0,
-            };
-            const maximum = physical.maximum ?? physical.current;
-            const current = Math.min(
-              maximum,
-              physical.current + Math.ceil(maximum * 0.25),
-            );
-            if (current === physical.current) return;
-            setCountersPending((count) => count + 1);
-            void onUpdateCounters(character.id, character.revision, {
-              resources: {
-                ...character.resources,
-                physicalPower: { ...physical, current, maximum },
-              },
-            }).finally(() =>
-              setCountersPending((count) => Math.max(0, count - 1)),
-            );
-          }}
-        >
-          {"Перевести дух (+25% Physical Power)"}
-        </Button>
+        <div className="inline-fields character-rest-controls">
+          <Button
+            disabled={!editable || countersPending > 0}
+            onClick={() => void runRest("CATCH_BREATH")}
+          >
+            Перевести дух
+          </Button>
+          <Button
+            disabled={!editable || countersPending > 0}
+            onClick={() => void runRest("SHORT")}
+          >
+            Короткий отдых (+25%)
+          </Button>
+          <Button
+            disabled={!editable || countersPending > 0}
+            onClick={() => void runRest("LONG")}
+          >
+            Длинный отдых (100%)
+          </Button>
+        </div>
       </div>
-      <label className="field">
-        Ресурсы (JSON: имя → current/maximum)
-        <FormTextArea
-          value={resourcesDraft}
-          disabled={!editable}
-          rows={5}
-          onChange={(event) => setResourcesDraft(event.target.value)}
-          onBlur={(event) => {
-            try {
-              const resources = JSON.parse(
-                event.target.value,
-              ) as CharacterDto["resources"];
-              if (
-                JSON.stringify(resources) ===
-                JSON.stringify(character.resources)
-              )
-                return;
-              setCountersPending((count) => count + 1);
-              setCountersError("");
-              void onUpdateCounters(character.id, character.revision, {
-                resources,
-              })
-                .catch((reason) => {
-                  setCountersError(
-                    reason instanceof ApiError &&
-                      reason.code === "CHARACTER_CONFLICT"
-                      ? "Ресурсы изменены в другой сессии. Показаны актуальные значения — повторите правку при необходимости."
-                      : "Не удалось сохранить ресурсы. Проверьте данные и соединение.",
-                  );
-                })
-                .finally(() =>
-                  setCountersPending((count) => Math.max(0, count - 1)),
-                );
-            } catch {
-              setResourcesDraft(JSON.stringify(character.resources, null, 2));
-            }
-          }}
-        />
-      </label>
+      <div className="subsection character-resource-editor">
+        <h3>Дополнительные ресурсы</h3>
+        {Object.entries(resourcesDraft)
+          .filter(([key]) => key !== "physicalPower" && key !== "magicPower")
+          .map(([key, resource]) => (
+            <fieldset className="resource-card" key={key} disabled={!editable}>
+              <legend>{key}</legend>
+              <label>
+                Название
+                <FormInput
+                  defaultValue={key}
+                  required
+                  onBlur={(event) => {
+                    const nextKey = event.target.value.trim();
+                    if (!nextKey || nextKey === key || resourcesDraft[nextKey]) {
+                      event.target.value = key;
+                      return;
+                    }
+                    const { [key]: moved, ...rest } = resourcesDraft;
+                    void saveResources({ ...rest, [nextKey]: moved! });
+                  }}
+                />
+              </label>
+              <label>
+                Описание
+                <FormInput
+                  value={resource.description ?? ""}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: { ...resource, description: event.target.value },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+              <label>
+                Текущее
+                <FormInput
+                  type="number"
+                  min={0}
+                  value={resource.current}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: { ...resource, current: Math.max(0, Number(event.target.value)) },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+              <label>
+                Максимум
+                <FormInput
+                  type="number"
+                  min={0}
+                  value={resource.maximum ?? resource.current}
+                  onChange={(event) => {
+                    const maximum = Math.max(0, Number(event.target.value));
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: { ...resource, maximum, current: Math.min(resource.current, maximum) },
+                    }));
+                  }}
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </label>
+              <label>
+                Изображение
+                <FormSelect
+                  value={resource.imageAssetId ?? ""}
+                  onChange={(event) => {
+                    const next = {
+                      ...resourcesDraft,
+                      [key]: { ...resource, imageAssetId: event.target.value || null },
+                    };
+                    void saveResources(next);
+                  }}
+                >
+                  <option value="">Без изображения</option>
+                  {snapshot.assets
+                    .filter((asset) => asset.mimeType.startsWith("image/"))
+                    .map((asset) => (
+                      <option key={asset.id} value={asset.id}>{asset.name}</option>
+                    ))}
+                </FormSelect>
+              </label>
+              <label className="compact-check">
+                <input
+                  type="checkbox"
+                  checked={resource.recoverable !== false}
+                  onChange={(event) =>
+                    void saveResources({
+                      ...resourcesDraft,
+                      [key]: { ...resource, recoverable: event.target.checked },
+                    })
+                  }
+                />
+                Восполнять при отдыхе
+              </label>
+              <Button
+                className="danger-link"
+                onClick={() => {
+                  const { [key]: _removed, ...rest } = resourcesDraft;
+                  void saveResources(rest);
+                }}
+              >
+                Удалить
+              </Button>
+            </fieldset>
+          ))}
+        <div className="inline-fields">
+          <FormInput
+            value={newResourceName}
+            placeholder="Новый ресурс"
+            onChange={(event) => setNewResourceName(event.target.value)}
+          />
+          <Button
+            disabled={!editable || !newResourceName.trim() || Boolean(resourcesDraft[newResourceName.trim()])}
+            onClick={() => {
+              const key = newResourceName.trim();
+              if (!key) return;
+              setNewResourceName("");
+              void saveResources({
+                ...resourcesDraft,
+                [key]: { current: 0, maximum: 0, recoverable: true },
+              });
+            }}
+          >
+            Добавить
+          </Button>
+        </div>
+      </div>
       <label className="field">
         Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не
         нормализуются)

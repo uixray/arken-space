@@ -1185,9 +1185,15 @@ export const characterCountersCommandSchema = z.object({
       z.object({
         current: z.number().finite().nonnegative(),
         maximum: z.number().finite().nonnegative().optional(),
+        description: z.string().max(2000).optional(),
+        imageAssetId: z.string().uuid().nullable().optional(),
+        recoverable: z.boolean().optional(),
       }),
     )
     .optional(),
+  rest: z.enum(["SHORT", "LONG", "CATCH_BREATH"]).optional(),
+}).refine((value) => Boolean(value.wallet || value.resources || value.rest), {
+  message: "At least one counter mutation is required",
 });
 export const rechargeEntryCommandSchema = z.object({
   actionId: actionIdSchema,
@@ -1242,7 +1248,16 @@ export interface CharacterDto {
   notes: string;
   backstory: string;
   inventory: string[];
-  resources: Record<string, { current: number; maximum?: number }>;
+  resources: Record<
+    string,
+    {
+      current: number;
+      maximum?: number;
+      description?: string;
+      imageAssetId?: string | null;
+      recoverable?: boolean;
+    }
+  >;
   wallet: z.infer<typeof walletSchema>;
   entries: CharacterCatalogEntryDto[];
   revision: number;

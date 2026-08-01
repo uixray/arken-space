@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
@@ -1764,6 +1764,66 @@ describe("Pool B HTTP boundaries", () => {
             message.kind === "SYSTEM" && message.characterId === ids.character,
         ),
     ).toHaveLength(1);
+  });
+
+  it("applies short and long rests to every recoverable resource", async () => {
+    await database.exec(
+      `update characters set resources = '{"physicalPower":{"current":1,"maximum":10,"recoverable":true},"magicPower":{"current":2,"maximum":8,"recoverable":true},"charges":{"current":1,"maximum":4,"recoverable":false}}'::jsonb where id = '${ids.character}'`,
+    );
+    const [beforeRest] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(beforeRest?.resources).toMatchObject({
+      physicalPower: { current: 1, maximum: 10 },
+      magicPower: { current: 2, maximum: 8 },
+    });
+    const shortRest = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        rest: "SHORT",
+      },
+    });
+    expect(shortRest.statusCode, JSON.stringify(shortRest.json())).toBe(200);
+    expect(shortRest.json()).toMatchObject({
+      revision: 1,
+      resources: {
+        physicalPower: { current: 4, maximum: 10 },
+        magicPower: { current: 4, maximum: 8 },
+        charges: { current: 1, maximum: 4, recoverable: false },
+      },
+    });
+
+    const longRest = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        rest: "LONG",
+      },
+    });
+    expect(longRest.statusCode).toBe(200);
+    expect(longRest.json()).toMatchObject({
+      revision: 2,
+      resources: {
+        physicalPower: { current: 10, maximum: 10 },
+        magicPower: { current: 8, maximum: 8 },
+        charges: { current: 1, maximum: 4, recoverable: false },
+      },
+    });
+    const [audit] = await db
+      .select({ payload: schema.gameEvents.payload })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.entityId, ids.character))
+      .orderBy(desc(schema.gameEvents.createdAt))
+      .limit(1);
+    expect(audit?.payload).toMatchObject({ rest: "LONG" });
   });
 
   it("updates clock, cooldowns, resources and wallet with public system audit", async () => {

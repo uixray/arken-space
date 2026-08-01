@@ -925,6 +925,7 @@ export function App() {
     patch: {
       wallet?: import("@arken/contracts").CharacterDto["wallet"];
       resources?: import("@arken/contracts").CharacterDto["resources"];
+      rest?: "SHORT" | "LONG" | "CATCH_BREATH";
     },
     intent?: {
       walletDelta?: {
