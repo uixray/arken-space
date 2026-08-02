@@ -12,6 +12,17 @@ import { listVisiblePlayerRequests, registerPlayerRequestRoutes } from "./player
 let database: PGlite;
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
+const realtimeEmissions: Array<{ rooms: string[]; event: string; request: { id: string; revision: number } }> = [];
+const realtime = {
+  to(room: string) {
+    const rooms = [room];
+    const target = {
+      to(nextRoom: string) { rooms.push(nextRoom); return target; },
+      emit(event: string, request: { id: string; revision: number }) { realtimeEmissions.push({ rooms: [...rooms], event, request }); },
+    };
+    return target;
+  },
+};
 const id = () => crypto.randomUUID();
 const ids = {
   campaign: id(), foreignCampaign: id(), gm: id(), gm2: id(), author: id(), other: id(), foreign: id(),
@@ -51,7 +62,7 @@ beforeAll(async () => {
     { id: ids.foreignCharacter, campaignId: ids.foreignCampaign, ownerMembershipId: ids.foreign, name: "Foreign character" },
   ]);
   await db.insert(schema.characterControllers).values({ characterId: ids.controlledCharacter, membershipId: ids.author });
-  app = Fastify(); await app.register(cookie); registerPlayerRequestRoutes(app, db as never); await app.ready();
+  app = Fastify(); await app.register(cookie); registerPlayerRequestRoutes(app, db as never, realtime as never); await app.ready();
 }, 30_000);
 afterAll(async () => { await app.close(); await database.close(); });
 
@@ -130,3 +141,23 @@ describe("player request filters and durable projection", () => {
   });
 });
 
+
+
+describe("player request realtime delivery", () => {
+  it("targets public campaign and private GM/author union, and skips replay or conflict", async () => {
+    realtimeEmissions.length = 0;
+    const publicBody = createBody({ audience: "PUBLIC" });
+    const publicResponse = await app.inject({ method: "POST", url: "/api/player-requests", headers: headers(secrets.author), payload: publicBody });
+    expect(realtimeEmissions.at(-1)).toMatchObject({ rooms: [`campaign:${ids.campaign}`], event: "player-request:changed", request: { id: publicResponse.json().id, revision: 0 } });
+
+    const privateBody = createBody({ audience: "GM_ONLY" });
+    const privateResponse = await app.inject({ method: "POST", url: "/api/player-requests", headers: headers(secrets.author), payload: privateBody });
+    expect(realtimeEmissions.at(-1)).toMatchObject({ rooms: [`campaign:${ids.campaign}:gm`, `member:${ids.author}`], event: "player-request:changed", request: { id: privateResponse.json().id, revision: 0 } });
+    expect(realtimeEmissions.at(-1)?.rooms).not.toContain(`campaign:${ids.campaign}`);
+
+    const count = realtimeEmissions.length;
+    expect((await app.inject({ method: "POST", url: "/api/player-requests", headers: headers(secrets.author), payload: privateBody })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/player-requests", headers: headers(secrets.author), payload: { ...privateBody, title: "conflict" } })).statusCode).toBe(409);
+    expect(realtimeEmissions).toHaveLength(count);
+  });
+});

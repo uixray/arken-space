@@ -1758,6 +1758,7 @@ export interface ServerToClientEvents {
   ) => void;
   "chat:created": (event: EventEnvelope<ChatMessageDto>) => void;
   "story:changed": (event: StoryChangedEvent) => void;
+  "player-request:changed": (request: PlayerRequestDto) => void;
   "chat:thread_created": (event: {
     thread: DirectChatThreadDto;
     state: ChatThreadStateDto;

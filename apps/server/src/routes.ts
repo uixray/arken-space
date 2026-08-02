@@ -616,7 +616,7 @@ export function registerRoutes(
   );
   registerStoryRoutes(app, db, io);
   registerOperatorFeedbackRoutes(app, db);
-  registerPlayerRequestRoutes(app, db);
+  registerPlayerRequestRoutes(app, db, io);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {

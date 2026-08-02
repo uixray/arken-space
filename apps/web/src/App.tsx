@@ -52,6 +52,7 @@ import {
   mergeCharacterMutationResponse,
   reconcileGameSnapshot,
 } from "./character-mutation";
+import { applyPlayerRequestChanged } from "./player-request-realtime";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -725,6 +726,9 @@ export function App() {
     );
     next.on("story:changed", () => {
       void loadStoryPosts().catch(() => undefined);
+    });
+    next.on("player-request:changed", (request) => {
+      setSnapshot((current) => applyPlayerRequestChanged(current, request));
     });
     next.on("chat:thread_created", ({ thread, state }) => {
       setSnapshot((current) =>

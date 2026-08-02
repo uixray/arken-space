@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import type { Server } from "socket.io";
 import { and, asc, eq, inArray, or, type SQL } from "drizzle-orm";
 import {
   createPlayerRequestSchema,
@@ -8,6 +9,8 @@ import {
   updatePlayerRequestSchema,
   type PlayerRequestDto,
   type PlayerRequestStatus,
+  type ClientToServerEvents,
+  type ServerToClientEvents,
 } from "@arken/contracts";
 import {
   characterControllers, characters, gameEvents, memberships, playerRequests,
@@ -19,6 +22,17 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type RequestDb = Database | Transaction;
 type RequestRow = typeof playerRequests.$inferSelect;
+type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
+const campaignRoom = (id: string) => `campaign:${id}`;
+const gmRoom = (id: string) => `campaign:${id}:gm`;
+const memberRoom = (id: string) => `member:${id}`;
+
+export function emitPlayerRequestChanged(io: RealtimeServer, request: PlayerRequestDto) {
+  const target = request.audience === "PUBLIC"
+    ? io.to(campaignRoom(request.campaignId))
+    : io.to(gmRoom(request.campaignId)).to(memberRoom(request.authorMembershipId));
+  target.emit("player-request:changed", request);
+}
 
 const canonicalJson = (value: unknown): string => {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -97,7 +111,7 @@ export async function listVisiblePlayerRequests(db: RequestDb, auth: AuthContext
   return (await Promise.all(rows.map(({ id }) => dtoById(db, auth, id)))).filter((row): row is PlayerRequestDto => Boolean(row));
 }
 
-export function registerPlayerRequestRoutes(app: FastifyInstance, db: Database) {
+export function registerPlayerRequestRoutes(app: FastifyInstance, db: Database, io?: RealtimeServer) {
   app.get("/api/player-requests", async (request, reply) => {
     const auth = await requireAuth(request, reply, db); if (!auth) return;
     const parsed = listPlayerRequestsSchema.safeParse(request.query); if (!parsed.success) return fail(reply, 400, "INVALID_REQUEST");
@@ -133,7 +147,10 @@ export function registerPlayerRequestRoutes(app: FastifyInstance, db: Database) 
       await record(tx, auth, body.actionId, "PLAYER_REQUEST_CREATED", row!.id, 0, hash);
       return row!.id;
     });
-    return reply.code(201).send(await dtoById(db, auth, id));
+    const dto = await dtoById(db, auth, id);
+    if (!dto) return fail(reply, 500, "REQUEST_PROJECTION_FAILED");
+    if (io) emitPlayerRequestChanged(io, dto);
+    return reply.code(201).send(dto);
   });
   app.patch("/api/player-requests/:id", async (request, reply) => {
     const auth = await requireAuth(request, reply, db); if (!auth) return;
@@ -149,7 +166,11 @@ export function registerPlayerRequestRoutes(app: FastifyInstance, db: Database) 
         .where(and(eq(playerRequests.campaignId, auth.campaignId), eq(playerRequests.id, id), eq(playerRequests.authorMembershipId, auth.membershipId), eq(playerRequests.status, "SUBMITTED"), eq(playerRequests.revision, body.revision))).returning();
       if (!row) return false; await record(tx, auth, body.actionId, "PLAYER_REQUEST_UPDATED", id, row.revision, hash); return true;
     });
-    if (!updated) return fail(reply, 409, "REVISION_CONFLICT"); return dtoById(db, auth, id);
+    if (!updated) return fail(reply, 409, "REVISION_CONFLICT");
+    const dto = await dtoById(db, auth, id);
+    if (!dto) return fail(reply, 500, "REQUEST_PROJECTION_FAILED");
+    if (io) emitPlayerRequestChanged(io, dto);
+    return dto;
   });
   app.post("/api/player-requests/:id/actions", async (request, reply) => {
     const auth = await requireAuth(request, reply, db); if (!auth) return;
@@ -170,6 +191,10 @@ export function registerPlayerRequestRoutes(app: FastifyInstance, db: Database) 
         .where(and(eq(playerRequests.campaignId, auth.campaignId), eq(playerRequests.id, id), eq(playerRequests.status, visible.status), eq(playerRequests.revision, body.revision))).returning();
       if (!row) return false; await record(tx, auth, body.actionId, type, id, row.revision, hash); return true;
     });
-    if (!updated) return fail(reply, 409, "REVISION_CONFLICT"); return dtoById(db, auth, id);
+    if (!updated) return fail(reply, 409, "REVISION_CONFLICT");
+    const dto = await dtoById(db, auth, id);
+    if (!dto) return fail(reply, 500, "REQUEST_PROJECTION_FAILED");
+    if (io) emitPlayerRequestChanged(io, dto);
+    return dto;
   });
 }
