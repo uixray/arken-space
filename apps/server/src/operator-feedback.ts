@@ -81,6 +81,12 @@ const transitions: Record<FeedbackStatus, readonly FeedbackStatus[]> = {
   DISMISSED: [],
 };
 
+const safeAttachmentMimeTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
+
 function operatorIds() {
   return new Set(
     env.OPERATOR_MEMBERSHIP_IDS.split(",")
@@ -212,6 +218,16 @@ export function registerOperatorFeedbackRoutes(
   app: FastifyInstance,
   db: Database,
 ) {
+  app.get(
+    "/api/operator/feedback/capability",
+    operatorFeedbackRateLimit(),
+    async (request, reply) => {
+      const auth = await requireOperator(request, reply, db);
+      if (!auth) return;
+      return { allowed: true };
+    },
+  );
+
   app.get(
     "/api/operator/feedback",
     operatorFeedbackRateLimit(),
@@ -363,6 +379,8 @@ export function registerOperatorFeedbackRoutes(
         .limit(1);
       if (!attachment)
         return reply.code(404).send({ error: "ATTACHMENT_NOT_FOUND" });
+      if (!safeAttachmentMimeTypes.has(attachment.mimeType))
+        return reply.code(415).send({ error: "ATTACHMENT_TYPE_NOT_ALLOWED" });
       if (basename(attachment.storageKey) !== attachment.storageKey)
         return reply.code(500).send({ error: "ATTACHMENT_UNAVAILABLE" });
       let bytes: Buffer;
@@ -381,6 +399,8 @@ export function registerOperatorFeedbackRoutes(
       return reply
         .type(attachment.mimeType)
         .header("Cache-Control", "private, no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Content-Disposition", "inline; filename=feedback-image")
         .send(bytes);
     },
   );

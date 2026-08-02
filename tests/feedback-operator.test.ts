@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+﻿import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import {
@@ -245,6 +246,21 @@ describe("operator feedback boundary", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.rawPayload).toEqual(bytes);
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["content-disposition"]).toContain("inline");
+    await db
+      .update(schema.feedbackAttachments)
+      .set({ mimeType: "image/svg+xml" })
+      .where(eq(schema.feedbackAttachments.id, attachment!.id));
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/operator/feedback/${row.id}/attachments/${attachment!.id}`,
+          headers: auth(tokens.operator),
+        })
+      ).statusCode,
+    ).toBe(415);
   });
 
   it("enforces transitions and strict Linear links, and exports a redacted copy", async () => {

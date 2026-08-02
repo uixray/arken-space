@@ -23,6 +23,7 @@ import { Sidebar } from "./Sidebar";
 import type { StoryDraftInput } from "./StoryChannel";
 import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
+import { fetchOperatorCapability } from "./operator-feedback";
 import { appendChatMessage, reconcileChatRead } from "./chat-state";
 import {
   appendDirectMessageResponse,
@@ -63,7 +64,13 @@ const Orthographic2DRenderer = lazy(() =>
 );
 
 type WorkspaceDestination =
-  "characters" | "tokens" | "scenes" | "setup" | "media" | "world-maps";
+  | "characters"
+  | "tokens"
+  | "scenes"
+  | "setup"
+  | "media"
+  | "world-maps"
+  | "operator-feedback";
 
 function CanvasRollOverlay({
   characterId,
@@ -421,6 +428,7 @@ export function App() {
   const [playerHandoffPending, setPlayerHandoffPending] = useState(false);
   const [playerHandoffError, setPlayerHandoffError] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceDestination | null>(null);
+  const [operatorFeedbackAllowed, setOperatorFeedbackAllowed] = useState(false);
   const [requestedCharacterId, setRequestedCharacterId] = useState<
     string | null
   >(null);
@@ -430,6 +438,28 @@ export function App() {
   useDismissibleDetails(workspaceMenuRef);
   useDismissibleDetails(scenePickerRef);
   useDismissibleDetails(resizeSettingsRef);
+
+  useEffect(() => {
+    if (!snapshot) {
+      setOperatorFeedbackAllowed(false);
+      return;
+    }
+    let active = true;
+    void fetchOperatorCapability()
+      .then(() => {
+        if (active) setOperatorFeedbackAllowed(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        setOperatorFeedbackAllowed(false);
+        setWorkspace((current) =>
+          current === "operator-feedback" ? null : current,
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [snapshot?.me.id]);
 
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
@@ -1344,6 +1374,14 @@ export function App() {
             >
               World maps
             </button>
+            {operatorFeedbackAllowed && (
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange("operator-feedback")}
+              >
+                Operator feedback
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleWorkspaceChange("media")}
@@ -2141,6 +2179,7 @@ export function App() {
             collapsed={sidebarCollapsed}
             onCollapsedChange={handleSidebarCollapsedChange}
             workspace={workspace}
+            operatorFeedbackAllowed={operatorFeedbackAllowed}
             onWorkspaceChange={handleWorkspaceChange}
             onPlaceTokenDefinition={async (definitionId) =>
               run(() =>

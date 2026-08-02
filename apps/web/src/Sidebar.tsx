@@ -77,6 +77,7 @@ import {
   type ActivityStoryPost,
 } from "./activity-feed";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
+import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import {
   changeWalletValue,
   EMPTY_WALLET,
@@ -333,7 +334,9 @@ type Props = {
     | "setup"
     | "media"
     | "world-maps"
+    | "operator-feedback"
     | null;
+  operatorFeedbackAllowed: boolean;
   onWorkspaceChange: (
     workspace:
       | "characters"
@@ -342,6 +345,7 @@ type Props = {
       | "setup"
       | "media"
       | "world-maps"
+      | "operator-feedback"
       | null,
   ) => void;
   onCreateWorldMap: (input: {
@@ -681,6 +685,13 @@ export function Sidebar(props: Props) {
             onUpload={props.onUpload}
           />
         )}
+        {props.workspace === "operator-feedback" &&
+          props.operatorFeedbackAllowed && (
+            <OperatorFeedbackWorkspace
+              open
+              onClose={() => props.onWorkspaceChange(null)}
+            />
+          )}
         {props.workspace === "world-maps" && (
           <WorldMapsWorkspace
             open

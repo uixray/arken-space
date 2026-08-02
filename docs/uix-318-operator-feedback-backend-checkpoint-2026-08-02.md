@@ -43,3 +43,51 @@ Broad regression, lint, production build, Docker multiplayer and browser QA are 
 ## Next action
 
 Commit the backend foundation as a bounded pool, keep UIX-318 In Progress, then implement the minimal operator-only inbox UI in a separate commit.
+---
+
+## Minimal operator inbox UI pool
+
+### Decisions
+
+- Operator capability is probed through a dedicated authenticated endpoint; GM role alone never exposes the inbox.
+- Capability failure is fail-closed and closes an already open operator workspace.
+- Sensitive contact and diagnostics are absent until an explicit reveal action and are cleared on selection, close, reload and status change.
+- Status actions follow the backend transition graph. Linking requires a matching `UIX-N` key and strict Linear issue URL.
+- Clipboard copy always fetches the server-redacted export and never uses revealed state.
+- Attachments require an explicit action and are rendered only as allowlisted PNG/JPEG/WebP blobs; server responses use `nosniff`, private no-store caching and a safe inline filename.
+- UI styling is isolated; shared `styles.css` and `WorldMapsWorkspace.tsx` remain untouched.
+
+### Revision
+
+Base: `3937647`.
+
+### Changed files
+
+- `apps/server/src/operator-feedback.ts`
+- `tests/feedback-operator.test.ts`
+- `apps/web/src/operator-feedback.ts`
+- `apps/web/src/operator-feedback.test.ts`
+- `apps/web/src/OperatorFeedbackWorkspace.tsx`
+- `apps/web/src/OperatorFeedbackWorkspace.css`
+- `apps/web/src/App.tsx`
+- `apps/web/src/Sidebar.tsx`
+- `docs/uix-318-operator-feedback-backend-checkpoint-2026-08-02.md`
+
+### Verification
+
+- focused frontend, backend and source-encoding tests: 13/13 PASS
+- web typecheck: PASS
+- server typecheck: PASS
+- `git diff --check`: PASS
+
+Broad regression, lint, production build, Docker multiplayer and browser QA remain deferred by user request.
+
+### Blockers
+
+- Browser QA with a real allowlisted operator session remains open.
+- Independent production SSH identity verification and production discovery remain open.
+- No deployment or production mutation was performed.
+
+### Next action
+
+Commit this UI pool and keep UIX-318 In Progress until browser QA and external production trust gates are completed.
