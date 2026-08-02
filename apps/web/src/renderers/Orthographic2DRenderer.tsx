@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -46,6 +47,11 @@ import { CANVAS_VISUAL_TOKENS as visual } from "./canvas-visual-tokens";
 import { persistDrawingDraft, releaseDrawingDraft } from "./drawing-draft";
 import { isDirectTokenDrag } from "./token-drag-event";
 import { getTokenImageMask } from "./token-image-mask";
+import {
+  createTokenImageState,
+  resolveTokenImageState,
+  type TokenImageAvailability,
+} from "./token-image-state";
 
 const DRAWING_COLOR_PRESETS = [
   { value: "#ffffff", name: "Белый" },
@@ -104,9 +110,18 @@ function Grid({
 
 function TokenImage({
   src,
+  tokenId,
+  onAvailabilityChange,
+  onUnmount,
   ...props
 }: {
   src: string;
+  tokenId: string;
+  onAvailabilityChange?: (
+    tokenId: string,
+    availability: TokenImageAvailability,
+  ) => void;
+  onUnmount?: (tokenId: string) => void;
   x: number;
   y: number;
   width: number;
@@ -116,12 +131,30 @@ function TokenImage({
   onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => void;
 }) {
-  const [image] = useImage(src, "anonymous");
-  const [lastImage, setLastImage] = useState<HTMLImageElement | null>(null);
+  const [image, loadStatus] = useImage(src, "anonymous");
+  const [imageState, setImageState] = useState(() =>
+    createTokenImageState<HTMLImageElement>(src),
+  );
   useEffect(() => {
-    if (image) setLastImage(image);
-  }, [image]);
-  return <Image image={image ?? lastImage ?? undefined} {...props} />;
+    setImageState((previous) => {
+      const next = resolveTokenImageState(previous, {
+        src,
+        image: image ?? null,
+        loadStatus,
+      });
+      return next.requestedSrc === previous.requestedSrc &&
+        next.displayedImage === previous.displayedImage &&
+        next.availability === previous.availability
+        ? previous
+        : next;
+    });
+  }, [image, loadStatus, src]);
+  useEffect(
+    () => onAvailabilityChange?.(tokenId, imageState.availability),
+    [imageState.availability, onAvailabilityChange, tokenId],
+  );
+  useEffect(() => () => onUnmount?.(tokenId), [onUnmount, tokenId]);
+  return <Image image={imageState.displayedImage ?? undefined} {...props} />;
 }
 
 export function Orthographic2DRenderer(props: SceneRendererProps) {
@@ -179,6 +212,49 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     stageY: number;
   } | null>(null);
   const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
+  const [tokenImageStates, setTokenImageStates] = useState<
+    Record<string, TokenImageAvailability>
+  >({});
+  const setTokenImageAvailability = useCallback(
+    (tokenId: string, availability: TokenImageAvailability) => {
+      setTokenImageStates((current) =>
+        current[tokenId] === availability
+          ? current
+          : { ...current, [tokenId]: availability },
+      );
+    },
+    [],
+  );
+  const removeTokenImageAvailability = useCallback((tokenId: string) => {
+    setTokenImageStates((current) => {
+      if (!(tokenId in current)) return current;
+      const next = { ...current };
+      delete next[tokenId];
+      return next;
+    });
+  }, []);
+  const tokenImageStateAttribute = Object.entries(tokenImageStates)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([tokenId, availability]) => `${tokenId}:${availability}`)
+    .join(",");
+  useEffect(() => {
+    const assetIds = new Set(props.assets.map((asset) => asset.id));
+    const mountedCandidates = new Set(
+      props.tokens
+        .filter((token) => token.assetId && assetIds.has(token.assetId))
+        .map((token) => token.id),
+    );
+    setTokenImageStates((current) => {
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([tokenId]) =>
+          mountedCandidates.has(tokenId),
+        ),
+      );
+      return Object.keys(next).length === Object.keys(current).length
+        ? current
+        : next;
+    });
+  }, [props.assets, props.tokens]);
   const [dragPositions, setDragPositions] = useState<
     Record<string, { x: number; y: number; revision: number }>
   >({});
@@ -972,6 +1048,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   return (
     <div
       className="map-viewport"
+      data-token-image-states={tokenImageStateAttribute}
       ref={containerRef}
       tabIndex={0}
       role="region"
@@ -1369,6 +1446,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   <>
                     <TokenImage
                       src={assetUrl(token.assetId)!}
+                      tokenId={token.id}
+                      onAvailabilityChange={setTokenImageAvailability}
+                      onUnmount={removeTokenImageAvailability}
                       x={0}
                       y={0}
                       width={token.width}
@@ -1745,7 +1825,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                           );
                         }}
                       >
-                        <TokenImage src={url} {...common} />
+                        <TokenImage
+                          src={url}
+                          tokenId={token.id}
+                          onAvailabilityChange={setTokenImageAvailability}
+                          onUnmount={removeTokenImageAvailability}
+                          {...common}
+                        />
                       </Group>
                       <Circle
                         x={imageMask.centerX}

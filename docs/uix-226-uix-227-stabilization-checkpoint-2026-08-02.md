@@ -91,3 +91,13 @@ Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then i
 - Verification: API unit tests 10/10, web typecheck, workspace lint and diff check passed.
 - Browser cold-resize gesture remains open: Konva resize-handle coordinate automation was flaky and the incorrect world-resize test was removed rather than accepted.
 - Next action: commit this correlation scope separately; then add deterministic portrait/asset observability before the remaining real-browser gate.
+## UIX-227 portrait continuity subpool
+
+- Added a pure token-image state machine for `loading`, `loaded`, `retained` and explicit `missing-asset` states.
+- A loaded portrait remains mounted while a replacement source is loading; stale image results cannot replace the new source.
+- The map region exposes only mounted visible token IDs plus bounded availability enums. URLs and hidden/unmounted token IDs are not exposed; state is pruned on unmount or asset removal.
+- Added an isolated authoritative keyboard-move browser regression with a deterministic local image route and mutation observer.
+- Changed files: `apps/web/src/renderers/Orthographic2DRenderer.tsx`, `apps/web/src/renderers/token-image-state.ts`, `apps/web/src/renderers/token-image-state.test.ts`, `tests/e2e/canvas-token-regressions.spec.ts`, and this checkpoint.
+- Verification: focused unit 8/8; isolated Chromium 3/3; portrait repeat 5/5; workspace typecheck, lint, production build and diff check passed.
+- Mocked Playwright emitted expected absent story/websocket proxy noise and the existing Konva six-layer performance warning; tests were not affected.
+- Remaining UIX-227 gates: stable cold first token-resize browser interaction, stack move/delete browser observability, Docker multiplayer and real GM/player smoke.
