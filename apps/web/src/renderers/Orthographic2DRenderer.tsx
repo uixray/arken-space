@@ -32,17 +32,18 @@ import {
   shouldBeginMapPan,
   type MapObjectRef,
 } from "./map-interaction";
-import { selectMapObjects } from "./map-objects";
+import {
+  canSelectToken,
+  resolveTokenStacks,
+  selectMapObjects,
+} from "./map-objects";
 import {
   MapMoveQueue,
   mapMoveSelectionKey,
   type MapMoveTarget,
 } from "./map-move-queue";
 import { CANVAS_VISUAL_TOKENS as visual } from "./canvas-visual-tokens";
-import {
-  clearDrawingDraftIfCurrent,
-  persistDrawingDraft,
-} from "./drawing-draft";
+import { persistDrawingDraft, releaseDrawingDraft } from "./drawing-draft";
 import { isDirectTokenDrag } from "./token-drag-event";
 import { getTokenImageMask } from "./token-image-mask";
 
@@ -538,6 +539,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setSelectedDrawingId(null);
       dispatchInteraction({ type: "clear-selection" });
       setTokenMenu(null);
+      onToolSelect("PAN");
     } else if (event.key.startsWith("Arrow")) {
       if (movableTargets.length) {
         const moveStep =
@@ -837,17 +839,17 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     drawingActiveRef.current = false;
     await handleFogUp();
     if (shouldFinalizeDrawing && completedDrawing.length >= 4) {
-      // Keep the local stroke visible while the server persists it. Clearing
-      // it before the command resolves creates a noticeable blank frame
-      // between the draft and the reconciled drawing from the snapshot.
-      await persistDrawingDraft(
-        { points: completedDrawing, color: drawingColor },
-        props.onDrawingCreate,
-        () =>
-          clearDrawingDraftIfCurrent(drawingPointsRef, completedDrawing, () =>
-            setDrawingPoints([]),
-          ),
+      const releasedDrawing = releaseDrawingDraft(drawingPointsRef, [], () =>
+        setDrawingPoints([]),
       );
+      void persistDrawingDraft(
+        { points: releasedDrawing, color: drawingColor },
+        props.onDrawingCreate,
+        () => undefined,
+      ).catch(() => {
+        // onDrawingCreate owns user-facing error reporting; consume the
+        // detached background task rejection to avoid an unhandled promise.
+      });
     } else if (shouldFinalizeDrawing) {
       drawingPointsRef.current = [];
       setDrawingPoints([]);
@@ -900,16 +902,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const size = props.scene.grid.enabled ? props.scene.grid.size : 64;
     return `${Math.floor((x - props.scene.grid.offsetX) / size)}:${Math.floor((y - props.scene.grid.offsetY) / size)}`;
   };
-  const occupiedCells = props.tokens.reduce<Record<string, number>>(
-    (cells, token) => {
-      if (token.layer !== "MAP") {
-        const position = dragPositions[token.id] ?? token;
-        const key = gridCellKey(position.x, position.y);
-        cells[key] = (cells[key] ?? 0) + 1;
-      }
-      return cells;
-    },
-    {},
+  const tokenStacks = resolveTokenStacks(
+    props.tokens.map((token) => ({
+      ...token,
+      x: dragPositions[token.id]?.x ?? token.x,
+      y: dragPositions[token.id]?.y ?? token.y,
+    })),
+    gridCellKey,
   );
   const drawingRevealed = (points: number[], x: number, y: number) => {
     const xs = points.filter((_, index) => index % 2 === 0);
@@ -1581,6 +1580,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               });
               const url = assetUrl(token.assetId);
               const dragPosition = dragPositions[token.id];
+              const tokenStack =
+                tokenStacks[
+                  gridCellKey(
+                    dragPosition?.x ?? token.x,
+                    dragPosition?.y ?? token.y,
+                  )
+                ];
+              const isStackRepresentative =
+                tokenStack?.representativeId === token.id &&
+                tokenStack.count > 1;
               const imageMask = getTokenImageMask(token.width, token.height);
               const common = {
                 x: 0,
@@ -1667,7 +1676,17 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   onMouseEnter={() => setHoveredTokenId(token.id)}
                   onMouseLeave={() => setHoveredTokenId(null)}
                   onClick={(event) => {
-                    if (event.evt.button !== 0) return;
+                    if (
+                      event.evt.button !== 0 ||
+                      !canSelectToken(token, {
+                        role: props.role,
+                        membershipId: props.membershipId,
+                        fogReveals: props.fogReveals,
+                        world: worldDraft,
+                        showGmLayer,
+                      })
+                    )
+                      return;
                     selectObject({
                       kind: "token",
                       objectId: token.id,
@@ -1701,12 +1720,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       listening={false}
                     />
                   )}
-                  {(occupiedCells[
-                    gridCellKey(
-                      dragPosition?.x ?? token.x,
-                      dragPosition?.y ?? token.y,
-                    )
-                  ] ?? 0) > 1 && (
+                  {isStackRepresentative && (
                     <Circle
                       x={token.width / 2}
                       y={token.height / 2}
@@ -1773,21 +1787,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     width={token.width + 32}
                     align="center"
                     text={`${token.name}${
-                      (occupiedCells[
-                        gridCellKey(
-                          dragPosition?.x ?? token.x,
-                          dragPosition?.y ?? token.y,
-                        )
-                      ] ?? 0) > 1
-                        ? ` +${
-                            (occupiedCells[
-                              gridCellKey(
-                                dragPosition?.x ?? token.x,
-                                dragPosition?.y ?? token.y,
-                              )
-                            ] ?? 0) - 1
-                          }`
-                        : ""
+                      isStackRepresentative ? ` +${tokenStack!.count - 1}` : ""
                     }`}
                     fill={visual.color.tokenName}
                     fontSize={13}
@@ -1795,12 +1795,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     visible={
                       hoveredTokenId === token.id ||
                       canMove ||
-                      (occupiedCells[
-                        gridCellKey(
-                          dragPosition?.x ?? token.x,
-                          dragPosition?.y ?? token.y,
-                        )
-                      ] ?? 0) > 1
+                      isStackRepresentative
                     }
                   />
                   {props.role === "GM" &&

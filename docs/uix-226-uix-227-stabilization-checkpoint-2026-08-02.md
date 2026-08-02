@@ -38,3 +38,48 @@
 ## Next action
 
 Review and commit only the four files above for UIX-226, then start a separate UIX-227 renderer/browser pool.
+
+## UIX-227 pool
+
+### Decisions
+
+- Hide and detach the active drawing draft synchronously on pointer-up, then persist the immutable completed stroke in the background.
+- Resolve token stacks from current drag positions and choose the lexicographically smallest token ID as the single stable representative.
+- Escape clears selection/menu and returns the active canvas tool to PAN.
+- Revalidate token selectability at click time so a player-visible foreign token cannot enter a transient selected state.
+- Keep browser coverage isolated in `tests/e2e/canvas-token-regressions.spec.ts` rather than widening the stale broad concept suite.
+
+### Revision
+
+- UIX-226 committed as `8238f32`.
+- UIX-227 is implemented on top and remains uncommitted.
+
+### Changed files
+
+- `apps/web/src/renderers/Orthographic2DRenderer.tsx`
+- `apps/web/src/renderers/drawing-draft.ts`
+- `apps/web/src/renderers/drawing-draft.test.ts`
+- `apps/web/src/renderers/map-objects.ts`
+- `apps/web/src/renderers/map-objects.test.ts`
+- `tests/e2e/canvas-token-regressions.spec.ts`
+- this checkpoint
+
+### Verification
+
+- Focused renderer unit pool: 5 files, 32 tests passed.
+- Isolated Chromium browser regression: 2 tests passed.
+- Workspace typecheck: passed.
+- Workspace lint: passed.
+- Production build: passed; existing large-chunk warning remains.
+- `git diff --check`: passed.
+
+### Remaining gates
+
+- Cold-load first resize and actionable conflict correlation IDs still need a stable browser gesture/observability test.
+- Portrait continuity during drag remains a real-browser visual gate.
+- Stack update after realtime move/delete is unit-covered at the resolver level but not yet browser-observable.
+- Docker multiplayer and production smoke were not run.
+
+### Next action
+
+Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then implement the remaining cold-load/portrait browser gate before review.

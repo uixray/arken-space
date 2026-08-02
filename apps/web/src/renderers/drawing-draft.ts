@@ -1,6 +1,6 @@
 /**
- * Keeps an optimistic canvas draft mounted until persistence has settled.
- * The caller reconciles the saved object into its snapshot before resolving.
+ * Persists a detached drawing snapshot and always runs caller-owned cleanup.
+ * Visibility timing is controlled separately by releaseDrawingDraft.
  */
 export async function persistDrawingDraft<T>(
   drawing: T,
@@ -12,6 +12,18 @@ export async function persistDrawingDraft<T>(
   } finally {
     clearDraft();
   }
+}
+
+/** Detaches the completed stroke from the visible draft before persistence. */
+export function releaseDrawingDraft<T>(
+  draftRef: { current: T },
+  emptyDraft: T,
+  clearDraft: () => void,
+) {
+  const completedDraft = draftRef.current;
+  draftRef.current = emptyDraft;
+  clearDraft();
+  return completedDraft;
 }
 
 /** Clears only the stroke that initiated the completed persistence command. */
