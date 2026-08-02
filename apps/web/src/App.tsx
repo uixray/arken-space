@@ -80,51 +80,81 @@ function CanvasRollOverlay({
 }) {
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
+  const [customRollOpen, setCustomRollOpen] = useState(false);
   return (
-    <section className="canvas-roll-overlay" aria-label="Быстрые броски">
-      <div className="canvas-roll-row">
-        <RollModeControl
-          value={rollMode}
-          onChange={setRollMode}
-          label="Режим броска"
-          iconOnly
-        />
-        <div className="canvas-roll-dice" aria-label="Кости">
-          {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
-            <button
-              key={sides}
-              type="button"
-              title={`Бросить d${sides}`}
-              onClick={() =>
-                void onRoll(
-                  `1d${sides}`,
-                  `d${sides}`,
-                  visibility,
-                  characterId,
-                  rollMode,
-                )
-              }
-            >
-              d{sides}
-            </button>
-          ))}
+    <>
+      <section className="canvas-roll-overlay" aria-label="Быстрые броски">
+        <div className="canvas-roll-row">
+          <RollModeControl
+            value={rollMode}
+            onChange={setRollMode}
+            label="Режим броска"
+            iconOnly
+          />
+          <div className="canvas-roll-dice" aria-label="Кости">
+            {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
+              <button
+                key={sides}
+                type="button"
+                title={`Бросить d${sides}`}
+                onClick={() =>
+                  void onRoll(
+                    `1d${sides}`,
+                    `d${sides}`,
+                    visibility,
+                    characterId,
+                    rollMode,
+                  )
+                }
+              >
+                d{sides}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="canvas-roll-custom"
+            aria-label="Своя формула"
+            title="Своя формула"
+            onClick={() => setCustomRollOpen(true)}
+          >
+            <span aria-hidden="true">fx</span>
+          </button>
+          <button
+            type="button"
+            className="canvas-roll-gm-toggle"
+            aria-label="Бросок только мастеру"
+            title="Бросок только мастеру"
+            aria-pressed={visibility === "GM_ONLY"}
+            onClick={() =>
+              setVisibility((current) =>
+                current === "GM_ONLY" ? "PUBLIC" : "GM_ONLY",
+              )
+            }
+          >
+            <span aria-hidden="true">◆</span>
+          </button>
         </div>
-        <button
-          type="button"
-          className="canvas-roll-gm-toggle"
-          aria-label="Бросок только мастеру"
-          title="Бросок только мастеру"
-          aria-pressed={visibility === "GM_ONLY"}
-          onClick={() =>
-            setVisibility((current) =>
-              current === "GM_ONLY" ? "PUBLIC" : "GM_ONLY",
-            )
-          }
-        >
-          <span aria-hidden="true">◆</span>
-        </button>
-      </div>
-    </section>
+      </section>
+      <TextPromptDialog
+        open={customRollOpen}
+        title="Быстрый бросок"
+        label="Формула броска"
+        initialValue="1d20"
+        applyLabel="Бросить"
+        onClose={() => setCustomRollOpen(false)}
+        onApply={async (formula) => {
+          await onRoll(
+            formula,
+            "Быстрый бросок",
+            visibility,
+            characterId,
+            rollMode,
+          );
+          setCustomRollOpen(false);
+        }}
+      />
+    </>
   );
 }
 

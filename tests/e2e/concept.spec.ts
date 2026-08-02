@@ -588,7 +588,7 @@ test("scene refresh races do not revoke local music consent", async ({
     .toBe("true");
 });
 
-test("chat composer and canvas quick rolls submit explicit, server-safe intents", async ({
+test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe intents", async ({
   page,
 }) => {
   const diceRequests: Array<Record<string, unknown>> = [];
@@ -691,6 +691,44 @@ test("chat composer and canvas quick rolls submit explicit, server-safe intents"
     rollMode: "NORMAL",
   });
   expect(chatRequests).toHaveLength(1);
+
+  await quickRolls.locator(".canvas-roll-gm-toggle").click();
+  await quickRolls.getByRole("button", { name: "Своя формула" }).click();
+  const customFormulaDialog = page.getByRole("dialog", { name: "Быстрый бросок" });
+  await expect(customFormulaDialog).toBeVisible();
+  await customFormulaDialog.getByRole("textbox", { name: "Формула броска" }).fill("2d8 + 3");
+  await customFormulaDialog.getByRole("button", { name: "Бросить" }).click();
+  await expect.poll(() => diceRequests.length).toBe(5);
+  expect(diceRequests[4]).toMatchObject({
+    formula: "2d8 + 3",
+    label: "Быстрый бросок",
+    visibility: "GM_ONLY",
+    rollMode: "ADVANTAGE",
+  });
+  await expect(customFormulaDialog).toBeHidden();
+});
+
+test("UIX-226 canvas custom roll stays reachable within a 390x844 viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.goto("/");
+
+  const customRoll = page.locator(".canvas-roll-overlay").getByRole("button", { name: "Своя формула" });
+  await expect(customRoll).toBeVisible();
+  const box = await customRoll.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(844);
+
+  await customRoll.click();
+  await expect(page.getByRole("dialog", { name: "Быстрый бросок" })).toBeVisible();
 });
 
 test("UIX-274 activity reloads story posts and exposes empty states and slash action", async ({
