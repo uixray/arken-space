@@ -1,6 +1,15 @@
 import { z } from "zod";
 
 const bytes = z.coerce.number().int().positive();
+const uuidList = z.string().refine(
+  (value) =>
+    value.trim() === "" ||
+    value
+      .split(",")
+      .map((item) => item.trim())
+      .every((item) => z.string().uuid().safeParse(item).success),
+  "Must be a comma-separated list of membership UUIDs",
+);
 
 export const env = z
   .object({
@@ -29,5 +38,12 @@ export const env = z
     MIN_FREE_DISK_BYTES: bytes.default(5 * 1024 ** 3),
     MAX_IMAGE_BYTES: bytes.default(20 * 1024 ** 2),
     MAX_AUDIO_BYTES: bytes.default(100 * 1024 ** 2),
+    OPERATOR_MEMBERSHIP_IDS: uuidList.default(""),
+    OPERATOR_FEEDBACK_RATE_LIMIT_MAX: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .default(120),
   })
   .parse(process.env);

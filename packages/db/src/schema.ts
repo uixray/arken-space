@@ -141,6 +141,13 @@ export const feedbackAttachmentKindEnum = pgEnum("feedback_attachment_kind", [
   "SCREENSHOT",
   "USER_IMAGE",
 ]);
+export const feedbackStatusEnum = pgEnum("feedback_status", [
+  "NEW",
+  "ACKNOWLEDGED",
+  "LINKED",
+  "RESOLVED",
+  "DISMISSED",
+]);
 
 export const campaigns = pgTable("campaigns", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -219,6 +226,12 @@ export const feedbackReports = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
+    status: feedbackStatusEnum("status").notNull().default("NEW"),
+    linearKey: text("linear_key"),
+    linearUrl: text("linear_url"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -227,6 +240,24 @@ export const feedbackReports = pgTable(
     index("feedback_reports_created_idx").on(table.createdAt),
     index("feedback_reports_campaign_idx").on(table.campaignId),
   ],
+);
+
+export const feedbackOperatorAudits = pgTable(
+  "feedback_operator_audits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => feedbackReports.id, { onDelete: "cascade" }),
+    operatorMembershipId: uuid("operator_membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("feedback_operator_audits_report_idx").on(table.reportId)],
 );
 
 export const feedbackAttachments = pgTable(

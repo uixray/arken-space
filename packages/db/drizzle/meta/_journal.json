@@ -169,6 +169,13 @@
       "when": 1785603600000,
       "tag": "0023_wallet_audit_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785688200000,
+      "tag": "0024_feedback_operator",
+      "breakpoints": true
     }
   ]
 }
