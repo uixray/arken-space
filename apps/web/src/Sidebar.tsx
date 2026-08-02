@@ -78,6 +78,7 @@ import {
 } from "./activity-feed";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
+import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 import {
   changeWalletValue,
   EMPTY_WALLET,
@@ -325,6 +326,10 @@ type Props = {
   requestedChatMessageId: string | null;
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
+  onOpenPlayerRequestCreate: () => void;
+  onCreatePlayerRequest: (input: { title: string; body: string; horizon: "NOW" | "BEFORE_BREAK" | "NEXT_SESSION"; audience: "PUBLIC" | "GM_ONLY"; characterId: string | null }) => Promise<void>;
+  onUpdatePlayerRequest: (request: import("@arken/contracts").PlayerRequestDto, input: { title: string; body: string }) => Promise<void>;
+  onPlayerRequestAction: (request: import("@arken/contracts").PlayerRequestDto, action: import("@arken/contracts").PlayerRequestTransition, resolutionNote?: string) => Promise<void>;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   workspace:
@@ -335,6 +340,7 @@ type Props = {
     | "media"
     | "world-maps"
     | "operator-feedback"
+    | "player-requests"
     | null;
   operatorFeedbackAllowed: boolean;
   onWorkspaceChange: (
@@ -346,6 +352,7 @@ type Props = {
       | "media"
       | "world-maps"
       | "operator-feedback"
+      | "player-requests"
       | null,
   ) => void;
   onCreateWorldMap: (input: {
@@ -612,6 +619,7 @@ export function Sidebar(props: Props) {
             onRoll={props.onRoll}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
+            onOpenPlayerRequestCreate={props.onOpenPlayerRequestCreate}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel
@@ -692,6 +700,9 @@ export function Sidebar(props: Props) {
               onClose={() => props.onWorkspaceChange(null)}
             />
           )}
+        {props.workspace === "player-requests" && (
+          <PlayerRequestsWorkspace open snapshot={props.snapshot} onClose={() => props.onWorkspaceChange(null)} onCreate={props.onCreatePlayerRequest} onUpdate={props.onUpdatePlayerRequest} onAction={props.onPlayerRequestAction} />
+        )}
         {props.workspace === "world-maps" && (
           <WorldMapsWorkspace
             open
@@ -2020,6 +2031,7 @@ function ActivityPanel({
   onRoll,
   focusedMessageId,
   onMessageFocused,
+  onOpenPlayerRequestCreate,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -2028,6 +2040,7 @@ function ActivityPanel({
   onRoll: Props["onRoll"];
   focusedMessageId: string | null;
   onMessageFocused: () => void;
+  onOpenPlayerRequestCreate: () => void;
 }) {
   const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
@@ -2408,6 +2421,11 @@ function ActivityPanel({
           <Button className="primary" type="submit">
             {"Отправить"}
           </Button>
+          {snapshot.me.role === "PLAYER" && (
+            <Button type="button" view="flat" onClick={onOpenPlayerRequestCreate}>
+              Заявка
+            </Button>
+          )}
           <label className="compact-check chat-visibility-check">
             <FormInput
               type="checkbox"

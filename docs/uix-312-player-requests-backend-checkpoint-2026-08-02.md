@@ -91,3 +91,46 @@ Base: `3498930`.
 ### Next action
 
 Commit the realtime pool, then build the minimal request UI without attachments or linked chat cards.
+---
+
+## Minimal request workspace UI pool
+
+### Decisions
+
+- All authenticated users receive a request workspace; the GM sees `Открытые заявки`, a player sees `Мои заявки`.
+- The PLAYER chat composer includes a `Заявка` action that opens the workspace form; no chat card is created.
+- Client mutations always use fresh action IDs and canonical server DTO responses; no optimistic request object is synthesized.
+- Player views remain author-only even though authorized PUBLIC requests may exist in the snapshot.
+- Audience labels are explicit: `Всем участникам` and `Автору и всем мастерам`.
+- Drafts and selection remain component-local and reset on close or identity/campaign change; nothing is persisted locally.
+- Character choice is limited to the active or owned characters currently exposed by the snapshot. Delegated-controller enumeration is deferred because the client contract does not expose it.
+- Styles are isolated; shared `styles.css` and `WorldMapsWorkspace.tsx` remain untouched.
+
+### Revision
+
+Base: `07507a5`.
+
+### Changed files
+
+- `apps/web/src/PlayerRequestsWorkspace.tsx`
+- `apps/web/src/PlayerRequestsWorkspace.css`
+- `apps/web/src/player-request-ui.ts`
+- `apps/web/src/player-request-ui.test.ts`
+- `apps/web/src/App.tsx`
+- `apps/web/src/Sidebar.tsx`
+- `docs/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
+
+### Verification
+
+- player request UI/realtime/source-encoding tests: 9/9 PASS
+- web typecheck: PASS
+- `git diff --check`: PASS
+
+### Blockers
+
+- Browser and real multiplayer QA remain deferred.
+- Linked chat cards, attachments and delegated-controller character enumeration remain open scope.
+
+### Next action
+
+Commit the UI pool. UIX-312 remains In Progress until deferred acceptance and verification gates are resolved.
