@@ -101,3 +101,12 @@ Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then i
 - Verification: focused unit 8/8; isolated Chromium 3/3; portrait repeat 5/5; workspace typecheck, lint, production build and diff check passed.
 - Mocked Playwright emitted expected absent story/websocket proxy noise and the existing Konva six-layer performance warning; tests were not affected.
 - Remaining UIX-227 gates: stable cold first token-resize browser interaction, stack move/delete browser observability, Docker multiplayer and real GM/player smoke.
+## UIX-227 stack semantics subpool
+
+- The GM object list now shows `<name> · стопка <count>` only for the deterministic representative among selectable tokens in the same grid cell.
+- Non-representatives and PLAYER labels remain unchanged; no IDs, positions or hidden aggregate data were added.
+- Added an isolated browser regression for initial stack semantics, authoritative keyboard movement, revision-aware delete and post-reload stack cleanup.
+- Keyboard movement is intentionally reconciled from the authoritative snapshot rather than inventing a new optimistic pending-token state.
+- Changed files: `apps/web/src/renderers/Orthographic2DRenderer.tsx`, `tests/e2e/canvas-token-regressions.spec.ts`, and this checkpoint.
+- Verification: focused unit 24/24; isolated Chromium 4/4; workspace typecheck, lint, production build and diff check passed.
+- Remaining UIX-227 gates: stable cold first token resize, Docker multiplayer and final real GM/player smoke.

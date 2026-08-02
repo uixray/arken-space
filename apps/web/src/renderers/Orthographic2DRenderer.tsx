@@ -986,6 +986,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     })),
     gridCellKey,
   );
+  const objectListTokenStacks = resolveTokenStacks(
+    selectableObjects.tokens.map((token) => ({
+      ...token,
+      x: dragPositions[token.id]?.x ?? token.x,
+      y: dragPositions[token.id]?.y ?? token.y,
+    })),
+    gridCellKey,
+  );
   const drawingRevealed = (points: number[], x: number, y: number) => {
     const xs = points.filter((_, index) => index % 2 === 0);
     const ys = points.filter((_, index) => index % 2 === 1);
@@ -1116,59 +1124,79 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           onPointerDown={(event) => event.stopPropagation()}
         >
           <ul className="map-object-list">
-            {selectableObjects.tokens.map((token) => (
-              <li key={`token:${token.id}:${token.revision}`}>
-                <button
-                  type="button"
-                  aria-pressed={
-                    interaction.selectedObject?.kind === "token" &&
-                    interaction.selectedObject.objectId === token.id
-                  }
-                  onClick={() =>
-                    selectObject({
-                      kind: "token",
-                      objectId: token.id,
-                      revision: token.revision,
-                    })
-                  }
-                >
-                  {token.name}
-                </button>
-                <button
-                  className="map-object-list__action"
-                  type="button"
-                  aria-label={`Дублировать: ${token.name}`}
-                  title={"Дублировать"}
-                  onClick={() =>
-                    void props.onPlaceTokenDefinition?.(token.definitionId, {
-                      x:
-                        token.x +
-                        (props.scene.grid.enabled ? props.scene.grid.size : 32),
-                      y:
-                        token.y +
-                        (props.scene.grid.enabled ? props.scene.grid.size : 32),
-                    })
-                  }
-                >
-                  {"\u2398"}
-                </button>
-                <button
-                  className="map-object-list__action"
-                  type="button"
-                  aria-label={`Удалить: ${token.name}`}
-                  title={"Удалить"}
-                  onClick={() =>
-                    requestDelete({
-                      kind: "token",
-                      objectId: token.id,
-                      revision: token.revision,
-                    })
-                  }
-                >
-                  {"\u00d7"}
-                </button>
-              </li>
-            ))}
+            {selectableObjects.tokens.map((token) => {
+              const dragPosition = dragPositions[token.id];
+              const stack =
+                objectListTokenStacks[
+                  gridCellKey(
+                    dragPosition?.x ?? token.x,
+                    dragPosition?.y ?? token.y,
+                  )
+                ];
+              const label =
+                props.role === "GM" &&
+                stack?.representativeId === token.id &&
+                stack.count > 1
+                  ? `${token.name} \u00b7 \u0441\u0442\u043e\u043f\u043a\u0430 ${stack.count}`
+                  : token.name;
+              return (
+                <li key={`token:${token.id}:${token.revision}`}>
+                  <button
+                    type="button"
+                    aria-pressed={
+                      interaction.selectedObject?.kind === "token" &&
+                      interaction.selectedObject.objectId === token.id
+                    }
+                    onClick={() =>
+                      selectObject({
+                        kind: "token",
+                        objectId: token.id,
+                        revision: token.revision,
+                      })
+                    }
+                  >
+                    {label}
+                  </button>
+                  <button
+                    className="map-object-list__action"
+                    type="button"
+                    aria-label={`Дублировать: ${token.name}`}
+                    title={"Дублировать"}
+                    onClick={() =>
+                      void props.onPlaceTokenDefinition?.(token.definitionId, {
+                        x:
+                          token.x +
+                          (props.scene.grid.enabled
+                            ? props.scene.grid.size
+                            : 32),
+                        y:
+                          token.y +
+                          (props.scene.grid.enabled
+                            ? props.scene.grid.size
+                            : 32),
+                      })
+                    }
+                  >
+                    {"\u2398"}
+                  </button>
+                  <button
+                    className="map-object-list__action"
+                    type="button"
+                    aria-label={`Удалить: ${token.name}`}
+                    title={"Удалить"}
+                    onClick={() =>
+                      requestDelete({
+                        kind: "token",
+                        objectId: token.id,
+                        revision: token.revision,
+                      })
+                    }
+                  >
+                    {"\u00d7"}
+                  </button>
+                </li>
+              );
+            })}
             {selectableObjects.drawings.map((drawing, index) => {
               const canCopy =
                 props.role === "GM" ||
