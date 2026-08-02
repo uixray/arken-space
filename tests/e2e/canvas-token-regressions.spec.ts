@@ -131,6 +131,176 @@ async function installCanvasRoutes(page: Page) {
   return { portraitRequestCount: () => portraitRequests };
 }
 
+async function selectTokenAndResizeFromObservableHandle(
+  page: Page,
+  delta = 48,
+) {
+  const map = page.locator(".map-viewport");
+  const trigger = map.locator(".map-object-list-trigger");
+  await trigger.click();
+  await map
+    .locator(".map-object-list")
+    .getByRole("button", { name: "Selected token", exact: true })
+    .click();
+  // Escape also changes selection/tool state, so close through the trigger.
+  await trigger.click();
+  await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+  await expect(map).toHaveAttribute("data-resize-handle-y", /\d/);
+  const [box, localX, localY] = await Promise.all([
+    map.boundingBox(),
+    map.getAttribute("data-resize-handle-x"),
+    map.getAttribute("data-resize-handle-y"),
+  ]);
+  expect(box).not.toBeNull();
+  expect(localX).not.toBeNull();
+  expect(localY).not.toBeNull();
+  const startX = box!.x + Number(localX);
+  const startY = box!.y + Number(localY);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + delta, startY + delta, { steps: 4 });
+  await page.mouse.up();
+}
+
+test("cold token resize sends one canonical proportional PATCH without rebootstrap", async ({
+  page,
+}) => {
+  let bootstrapRequests = 0;
+  const resizeRequests: Array<{
+    method: string;
+    url: string;
+    headerActionId: string | null;
+    body: Record<string, unknown>;
+  }> = [];
+  await page.route("**/api/bootstrap", (route) => {
+    bootstrapRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    });
+  });
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/canvas/history**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route(`**/api/tokens/${tokenId}/size`, async (route) => {
+    const request = route.request();
+    const body = request.postDataJSON() as Record<string, unknown>;
+    resizeRequests.push({
+      method: request.method(),
+      url: new URL(request.url()).pathname,
+      headerActionId: await request.headerValue("x-action-id"),
+      body,
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...snapshot.tokens[0],
+        width: body.width,
+        height: body.height,
+        revision: 1,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const coldBootstrapRequests = bootstrapRequests;
+  await selectTokenAndResizeFromObservableHandle(page);
+  await expect.poll(() => resizeRequests.length).toBe(1);
+  await page.waitForTimeout(100);
+  expect(resizeRequests).toHaveLength(1);
+  expect(bootstrapRequests).toBe(coldBootstrapRequests);
+  expect(resizeRequests[0]).toMatchObject({
+    method: "PATCH",
+    url: `/api/tokens/${tokenId}/size`,
+    body: { revision: 0 },
+  });
+  expect(resizeRequests[0].body.width).toEqual(expect.any(Number));
+  expect(resizeRequests[0].body.height).toEqual(expect.any(Number));
+  expect(resizeRequests[0].body.width).toBeGreaterThan(64);
+  expect(resizeRequests[0].body.height).toBeGreaterThan(64);
+  expect(resizeRequests[0].body.width).toBe(resizeRequests[0].body.height);
+  expect(resizeRequests[0].headerActionId).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(resizeRequests[0].body.actionId).toBe(
+    resizeRequests[0].headerActionId,
+  );
+});
+
+test("cold token resize conflict reloads and exposes only safe correlation data", async ({
+  page,
+}) => {
+  const safeRequestId = "resize-conflict-request-01";
+  const safeMessage = "Token size changed concurrently";
+  const unsafeData = "secret-resize-payload";
+  let bootstrapRequests = 0;
+  const resizeRequests: Array<{
+    headerActionId: string | null;
+    body: Record<string, unknown>;
+  }> = [];
+  await page.route("**/api/bootstrap", (route) => {
+    bootstrapRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    });
+  });
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/canvas/history**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/client-logs", (route) =>
+    route.fulfill({ status: 204, body: "" }),
+  );
+  await page.route(`**/api/tokens/${tokenId}/size`, async (route) => {
+    const request = route.request();
+    const body = request.postDataJSON() as Record<string, unknown>;
+    const headerActionId = await request.headerValue("x-action-id");
+    resizeRequests.push({ headerActionId, body });
+    await route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      headers: {
+        "x-request-id": safeRequestId,
+        "x-action-id": headerActionId!,
+      },
+      body: JSON.stringify({
+        error: "CONFLICT",
+        message: safeMessage,
+        ignoredUnsafeData: unsafeData,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const coldBootstrapRequests = bootstrapRequests;
+  await selectTokenAndResizeFromObservableHandle(page);
+  await expect.poll(() => resizeRequests.length).toBe(1);
+  const canonicalActionId = resizeRequests[0].headerActionId;
+  expect(canonicalActionId).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(resizeRequests[0].body).toMatchObject({ revision: 0 });
+  expect(resizeRequests[0].body.actionId).toBe(canonicalActionId);
+
+  const notification = page
+    .locator("[data-toast]")
+    .filter({ hasText: safeMessage });
+  await expect(notification).toBeVisible();
+  await expect(notification).toContainText(`requestId: ${safeRequestId}`);
+  await expect(notification).toContainText(`actionId: ${canonicalActionId}`);
+  const visibleText = await notification.innerText();
+  expect(visibleText).not.toContain(tokenId);
+  expect(visibleText).not.toContain(`/api/tokens/${tokenId}/size`);
+  expect(visibleText).not.toContain(JSON.stringify(resizeRequests[0].body));
+  expect(visibleText).not.toContain(unsafeData);
+  await expect.poll(() => bootstrapRequests).toBe(coldBootstrapRequests + 1);
+});
+
 test("GM stack semantics follow authoritative movement and deletion", async ({
   page,
 }) => {

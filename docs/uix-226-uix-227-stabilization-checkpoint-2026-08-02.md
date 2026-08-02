@@ -110,3 +110,15 @@ Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then i
 - Changed files: `apps/web/src/renderers/Orthographic2DRenderer.tsx`, `tests/e2e/canvas-token-regressions.spec.ts`, and this checkpoint.
 - Verification: focused unit 24/24; isolated Chromium 4/4; workspace typecheck, lint, production build and diff check passed.
 - Remaining UIX-227 gates: stable cold first token resize, Docker multiplayer and final real GM/player smoke.
+## UIX-227 cold token-resize subpool
+
+- Added GM-only ephemeral resize-handle local-screen coordinates to the map region while one selectable token is selected in PAN; no token ID, revision, world geometry or private metadata is exposed.
+- Added a pure finite/rounded handle geometry helper and focused tests.
+- Added deterministic cold first-resize success and 409 conflict browser regressions.
+- Success proves one proportional PATCH, revision 0, canonical body/header action UUID and no rebootstrap.
+- Conflict proves reconciliation reload plus a safe request/action correlation notification without token ID, URL, body or unsafe data.
+- Fixed a source bug where the reconciliation reload cleared the formatted resize error before the notification effect rendered.
+- Changed files: `apps/web/src/App.tsx`, `apps/web/src/renderers/Orthographic2DRenderer.tsx`, `apps/web/src/renderers/resize-handle.ts`, `apps/web/src/renderers/resize-handle.test.ts`, `tests/e2e/canvas-token-regressions.spec.ts`, and this checkpoint.
+- Verification: focused unit 30/30; isolated Chromium 6/6; resize success repeat 5/5 and conflict repeat 5/5 with retries disabled; workspace typecheck, lint, production build and diff check passed.
+- Environment blocker: Docker Desktop daemon unavailable, so `test:multiplayer` and real GM/player smoke remain open gates.
+- Next action: commit this scope separately and move UIX-227 to In Review, not Done, pending Docker multiplayer and final real-browser smoke.

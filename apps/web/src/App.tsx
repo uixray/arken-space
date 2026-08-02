@@ -1894,6 +1894,7 @@ export function App() {
                     );
                   } catch (reason) {
                     await load();
+                    setError(formatApiError(reason));
                     throw reason;
                   }
                 }}

@@ -52,6 +52,7 @@ import {
   resolveTokenImageState,
   type TokenImageAvailability,
 } from "./token-image-state";
+import { resolveResizeHandleDataAttributes } from "./resize-handle";
 
 const DRAWING_COLOR_PRESETS = [
   { value: "#ffffff", name: "Белый" },
@@ -1053,10 +1054,29 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       )}
     </Layer>
   );
+  const selectedResizeToken =
+    props.role === "GM" && props.tool === "PAN" && selectedTokenIds.length === 1
+      ? (selectableObjects.tokens.find(
+          (token) => token.id === selectedTokenIds[0],
+        ) ?? null)
+      : null;
+  const resizeHandleData = resolveResizeHandleDataAttributes({
+    enabled: selectedResizeToken !== null,
+    token: selectedResizeToken,
+    resizeDraft: selectedResizeToken
+      ? resizeDrafts[selectedResizeToken.id]
+      : undefined,
+    dragPosition: selectedResizeToken
+      ? dragPositions[selectedResizeToken.id]
+      : undefined,
+    stagePosition: position,
+    scale,
+  });
   return (
     <div
       className="map-viewport"
       data-token-image-states={tokenImageStateAttribute}
+      {...(resizeHandleData ?? {})}
       ref={containerRef}
       tabIndex={0}
       role="region"
