@@ -79,6 +79,7 @@ import {
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
+import { PlayerRequestChatCard } from "./player-request-chat";
 import {
   changeWalletValue,
   EMPTY_WALLET,
@@ -648,6 +649,7 @@ export function Sidebar(props: Props) {
             activeStream={activeFeed}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
+            onOpenPlayerRequests={() => props.onWorkspaceChange("player-requests")}
           />
         )}
         {props.workspace === "characters" && (
@@ -1936,13 +1938,13 @@ export function CharacterPanel({
   );
 }
 
-function ChatMessageBody({
-  message,
-  catalogEntryIds,
-}: {
+function ChatMessageBody({ message, catalogEntryIds, playerRequests, onOpenPlayerRequests }: {
   message: GameSnapshot["messages"][number];
   catalogEntryIds?: ReadonlySet<string>;
-}) {
+  playerRequests?: GameSnapshot["playerRequests"];
+  onOpenPlayerRequests?: () => void;
+} ) {
+  if (message.playerRequestId) return <PlayerRequestChatCard message={message} requests={playerRequests ?? []} onOpen={onOpenPlayerRequests ?? (() => {})} />;
   if (message.stickerId || message.stickerPresentation) {
     const presentation = message.stickerPresentation;
     if (!message.stickerId || !presentation)
@@ -2342,6 +2344,8 @@ function ActivityPanel({
                 catalogEntryIds={
                   snapshot.me.role === "GM" ? catalogEntryIds : undefined
                 }
+                playerRequests={snapshot.playerRequests}
+                onOpenPlayerRequests={onOpenPlayerRequestCreate}
               />
             </article>
           );
@@ -2749,6 +2753,7 @@ function ChatPanel({
   activeStream,
   focusedMessageId,
   onMessageFocused,
+  onOpenPlayerRequests,
 }: {
   snapshot: GameSnapshot;
   onChat: Props["onChat"];
@@ -2758,6 +2763,7 @@ function ChatPanel({
   activeStream: ChatStream;
   focusedMessageId: string | null;
   onMessageFocused: () => void;
+  onOpenPlayerRequests: () => void;
 }) {
   const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
@@ -2930,9 +2936,9 @@ function ChatPanel({
               </header>
               <ChatMessageBody
                 message={item.message}
-                catalogEntryIds={
-                  snapshot.me.role === "GM" ? catalogEntryIds : undefined
-                }
+                catalogEntryIds={snapshot.me.role === "GM" ? catalogEntryIds : undefined}
+                playerRequests={snapshot.playerRequests}
+                onOpenPlayerRequests={onOpenPlayerRequests}
               />
             </article>
           ),

@@ -13,7 +13,7 @@ import {
   type ServerToClientEvents,
 } from "@arken/contracts";
 import {
-  characterControllers, characters, gameEvents, memberships, playerRequests,
+  characterControllers, characters, chatMessages, chatThreads, gameEvents, memberships, playerRequests,
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
 import { requireAuth } from "./auth.js";
@@ -82,10 +82,12 @@ async function replay(db: RequestDb, auth: AuthContext, actionId: string, type: 
   return { kind: "MATCH" as const, entityId: event.entityId! };
 }
 async function record(db: RequestDb, auth: AuthContext, actionId: string, type: string, id: string, revision: number, hash: string) {
-  await db.insert(gameEvents).values({ campaignId: auth.campaignId, membershipId: auth.membershipId, actionId,
+  const [event] = await db.insert(gameEvents).values({ campaignId: auth.campaignId, membershipId: auth.membershipId, actionId,
     type, entityType: "PLAYER_REQUEST", entityId: id, entityRevision: revision,
     // Deliberately excludes request title/body, including cancellation events.
-    payload: { commandHash: hash }, });
+    payload: { commandHash: hash }, }).returning();
+  if (!event) throw new Error("EVENT_RECORD_FAILED");
+  return event;
 }
 async function controlledCharacter(db: RequestDb, auth: AuthContext, id: string) {
   const [row] = await db.select({ id: characters.id, ownerId: characters.ownerMembershipId, controllerId: characterControllers.membershipId })
@@ -140,16 +142,40 @@ export function registerPlayerRequestRoutes(app: FastifyInstance, db: Database, 
     const prior = await replay(db, auth, body.actionId, "PLAYER_REQUEST_CREATED", null, hash);
     if (prior.kind === "CONFLICT") return fail(reply, 409, "ACTION_ID_CONFLICT");
     if (prior.kind === "MATCH") return reply.code(200).send(await dtoById(db, auth, prior.entityId));
-    const id = await db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
+      await tx.insert(chatThreads).values({ campaignId: auth.campaignId, type: "STREAM", stream: "TABLE" })
+        .onConflictDoNothing({ target: [chatThreads.campaignId, chatThreads.stream] });
+      const [thread] = await tx.select().from(chatThreads).where(and(
+        eq(chatThreads.campaignId, auth.campaignId), eq(chatThreads.stream, "TABLE"),
+      )).limit(1);
+      if (!thread) throw new Error("CHAT_THREAD_NOT_FOUND");
       const [row] = await tx.insert(playerRequests).values({ campaignId: auth.campaignId, authorMembershipId: auth.membershipId,
         characterId: body.characterId ?? null, audience: body.audience, horizon: body.horizon,
         title: body.title, body: body.body }).returning();
-      await record(tx, auth, body.actionId, "PLAYER_REQUEST_CREATED", row!.id, 0, hash);
-      return row!.id;
+      if (!row) throw new Error("REQUEST_CREATE_FAILED");
+      const [message] = await tx.insert(chatMessages).values({ campaignId: auth.campaignId, membershipId: auth.membershipId,
+        characterId: body.characterId ?? null, kind: "SYSTEM", threadId: thread.id,
+        visibility: body.audience, body: "", playerRequestId: row.id }).returning();
+      if (!message) throw new Error("MESSAGE_CREATE_FAILED");
+      const event = await record(tx, auth, body.actionId, "PLAYER_REQUEST_CREATED", row.id, 0, hash);
+      return { id: row.id, message, event, stream: thread.stream };
     });
-    const dto = await dtoById(db, auth, id);
+    const dto = await dtoById(db, auth, created.id);
     if (!dto) return fail(reply, 500, "REQUEST_PROJECTION_FAILED");
-    if (io) emitPlayerRequestChanged(io, dto);
+    if (io) {
+      const target = dto.audience === "PUBLIC"
+        ? io.to(campaignRoom(dto.campaignId))
+        : io.to(gmRoom(dto.campaignId)).to(memberRoom(dto.authorMembershipId));
+      target.emit("player-request:changed", dto);
+      target.emit("chat:created", {
+        sequence: Number(created.event.sequence), actionId: body.actionId,
+        emittedAt: created.event.createdAt.toISOString(),
+        data: { id: created.message.id, sequence: Number(created.message.sequence), membershipId: auth.membershipId,
+          displayName: auth.displayName, characterId: created.message.characterId, body: "",
+          playerRequestId: dto.id, visibility: created.message.visibility, kind: "SYSTEM",
+          threadId: created.message.threadId, stream: created.stream, dice: null, createdAt: created.message.createdAt.toISOString() },
+      });
+    }
     return reply.code(201).send(dto);
   });
   app.patch("/api/player-requests/:id", async (request, reply) => {

@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as schema from "@arken/db";
 import { env } from "./env.js";
@@ -12,13 +13,13 @@ import { listVisiblePlayerRequests, registerPlayerRequestRoutes } from "./player
 let database: PGlite;
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
-const realtimeEmissions: Array<{ rooms: string[]; event: string; request: { id: string; revision: number } }> = [];
+const realtimeEmissions: Array<{ rooms: string[]; event: string; request: any }> = [];
 const realtime = {
   to(room: string) {
     const rooms = [room];
     const target = {
       to(nextRoom: string) { rooms.push(nextRoom); return target; },
-      emit(event: string, request: { id: string; revision: number }) { realtimeEmissions.push({ rooms: [...rooms], event, request }); },
+      emit(event: string, request: any) { realtimeEmissions.push({ rooms: [...rooms], event, request }); },
     };
     return target;
   },
@@ -148,16 +149,27 @@ describe("player request realtime delivery", () => {
     realtimeEmissions.length = 0;
     const publicBody = createBody({ audience: "PUBLIC" });
     const publicResponse = await app.inject({ method: "POST", url: "/api/player-requests", headers: headers(secrets.author), payload: publicBody });
-    expect(realtimeEmissions.at(-1)).toMatchObject({ rooms: [`campaign:${ids.campaign}`], event: "player-request:changed", request: { id: publicResponse.json().id, revision: 0 } });
+    expect(realtimeEmissions.slice(-2)).toMatchObject([
+      { rooms: [`campaign:${ids.campaign}`], event: "player-request:changed", request: { id: publicResponse.json().id, revision: 0 } },
+      { rooms: [`campaign:${ids.campaign}`], event: "chat:created", request: { data: { playerRequestId: publicResponse.json().id, body: "", kind: "SYSTEM", stream: "TABLE" } } },
+    ]);
 
     const privateBody = createBody({ audience: "GM_ONLY" });
     const privateResponse = await app.inject({ method: "POST", url: "/api/player-requests", headers: headers(secrets.author), payload: privateBody });
-    expect(realtimeEmissions.at(-1)).toMatchObject({ rooms: [`campaign:${ids.campaign}:gm`, `member:${ids.author}`], event: "player-request:changed", request: { id: privateResponse.json().id, revision: 0 } });
+    expect(realtimeEmissions.slice(-2)).toMatchObject([
+      { rooms: [`campaign:${ids.campaign}:gm`, `member:${ids.author}`], event: "player-request:changed", request: { id: privateResponse.json().id, revision: 0 } },
+      { rooms: [`campaign:${ids.campaign}:gm`, `member:${ids.author}`], event: "chat:created", request: { data: { playerRequestId: privateResponse.json().id, visibility: "GM_ONLY" } } },
+    ]);
     expect(realtimeEmissions.at(-1)?.rooms).not.toContain(`campaign:${ids.campaign}`);
 
     const count = realtimeEmissions.length;
     expect((await app.inject({ method: "POST", url: "/api/player-requests", headers: headers(secrets.author), payload: privateBody })).statusCode).toBe(200);
     expect((await app.inject({ method: "POST", url: "/api/player-requests", headers: headers(secrets.author), payload: { ...privateBody, title: "conflict" } })).statusCode).toBe(409);
     expect(realtimeEmissions).toHaveLength(count);
+    const updated = await app.inject({ method: "PATCH", url: `/api/player-requests/${privateResponse.json().id}`, headers: headers(secrets.author), payload: { actionId: id(), revision: 0, title: "Updated card", body: "Canonical only" } });
+    expect(updated.statusCode).toBe(200);
+    const transitioned = await action(secrets.gm, privateResponse.json().id, 1, "ACKNOWLEDGE");
+    expect(transitioned.statusCode).toBe(200);
+    expect(await db.select().from(schema.chatMessages).where(eq(schema.chatMessages.playerRequestId, privateResponse.json().id))).toHaveLength(1);
   });
 });

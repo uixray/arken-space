@@ -1180,6 +1180,8 @@ export const chatMessages = pgTable(
     threadId: uuid("thread_id").notNull(),
     visibility: messageVisibilityEnum("visibility").notNull().default("PUBLIC"),
     body: text("body").notNull(),
+    /** Reference-only projection; canonical request content stays in player_requests. */
+    playerRequestId: uuid("player_request_id"),
     dice: jsonb("dice").$type<unknown>(),
     systemData: jsonb("system_data").$type<{
       type: "WALLET_AUDIT";
@@ -1205,6 +1207,7 @@ export const chatMessages = pgTable(
   },
   (table) => [
     uniqueIndex("chat_sequence_idx").on(table.sequence),
+    uniqueIndex("chat_messages_player_request_idx").on(table.playerRequestId),
     index("chat_campaign_sequence_idx").on(table.campaignId, table.sequence),
     index("chat_messages_thread_sequence_idx").on(
       table.threadId,
@@ -1218,6 +1221,10 @@ export const chatMessages = pgTable(
     check(
       "chat_messages_sticker_shape_check",
       sql`(${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL) OR (${table.stickerId} IS NOT NULL AND ${table.stickerPresentation} IS NOT NULL AND ${table.kind} = 'TEXT' AND ${table.dice} IS NULL)`,
+    ),
+    check(
+      "chat_messages_player_request_shape_check",
+      sql`${table.playerRequestId} IS NULL OR (${table.kind} = 'SYSTEM' AND ${table.body} = '' AND ${table.dice} IS NULL AND ${table.systemData} IS NULL AND ${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL)`,
     ),
     check(
       "chat_messages_sticker_presentation_check",
@@ -1640,6 +1647,7 @@ export const playerRequests = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    uniqueIndex("player_requests_campaign_id_idx").on(table.campaignId, table.id),
     index("player_requests_campaign_created_idx").on(table.campaignId, table.createdAt),
     index("player_requests_campaign_author_idx").on(table.campaignId, table.authorMembershipId),
     index("player_requests_campaign_status_idx").on(table.campaignId, table.status),

@@ -220,14 +220,16 @@ export async function buildSnapshot(
         .limit(200),
     ),
   );
+  const visiblePlayerRequestIds = new Set(playerRequestRows.map((request) => request.id));
   const messageRows = visibleThreadRows
     .flatMap((thread, index) =>
       (messageGroups[index] ?? []).map((message) => ({ message, thread })),
     )
     .filter(
       ({ message }) =>
-        !message.stickerViewerMembershipIds ||
-        message.stickerViewerMembershipIds.includes(auth.membershipId),
+        (!message.stickerViewerMembershipIds ||
+          message.stickerViewerMembershipIds.includes(auth.membershipId)) &&
+        (!message.playerRequestId || visiblePlayerRequestIds.has(message.playerRequestId)),
     );
   const visibleMessageIds = messageRows.map(({ message }) => message.id);
   const stickerIds = messageRows.flatMap(({ message }) =>
@@ -535,6 +537,7 @@ export async function buildSnapshot(
           memberNameById.get(message.membershipId) ?? unknownPlayerDisplayName,
         characterId: message.characterId,
         body: message.body,
+        playerRequestId: message.playerRequestId,
         visibility: message.visibility,
         kind: message.kind,
         threadId: message.threadId,

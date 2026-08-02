@@ -1534,6 +1534,8 @@ export interface ChatMessageDto {
   displayName: string;
   characterId: string | null;
   body: string;
+  /** Reference only. Resolve current data from GameSnapshot.playerRequests. */
+  playerRequestId?: string | null;
   visibility: MessageVisibility;
   kind: "TEXT" | "DICE" | "SYSTEM";
   threadId: string;

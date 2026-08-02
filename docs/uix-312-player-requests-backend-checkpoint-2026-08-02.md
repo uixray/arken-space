@@ -168,3 +168,56 @@ Base: `c95cd3c`.
 ### Next action
 
 Run the pool verification and integrate it with the linked chat-card work.
+
+---
+
+## Linked TABLE chat-card pool
+
+### Decisions
+
+- Each durable player request creates exactly one reference-only `SYSTEM` message in the `TABLE` stream in the same transaction. The chat row stores no request title, body, status, or copied request metadata.
+- `chat_messages.player_request_id` is nullable, campaign-scoped by a composite foreign key, unique per request, constrained to the empty SYSTEM shape, and guarded by a migration trigger to the TABLE stream.
+- Realtime creation emits `player-request:changed` before `chat:created` to the same safe audience: campaign for PUBLIC, GM room plus author room for GM_ONLY. Replay, edit, and transitions create no cards.
+- Snapshot history drops linked messages unless the viewer can resolve the canonical request projection. The client resolves current card fields from `snapshot.playerRequests`; missing canonical data renders only a generic unavailable state.
+- Request attachments remain out of scope.
+
+### Revision
+
+Base: `fc8d057`. Working tree, not committed by this pool.
+
+### Changed files
+
+- `packages/db/src/schema.ts`
+- `packages/db/drizzle/0026_player_request_chat_cards.sql`
+- `packages/db/drizzle/meta/_journal.json`
+- `packages/contracts/src/index.ts`
+- `apps/server/src/player-requests.ts`
+- `apps/server/src/snapshot.ts`
+- `apps/server/src/player-requests.integration.test.ts`
+- `apps/web/src/player-request-chat.tsx`
+- `apps/web/src/player-request-chat.css`
+- `apps/web/src/player-request-chat.test.ts`
+- `apps/web/src/Sidebar.tsx`
+
+### Verification
+
+- contracts/db/server/web typecheck: PASS
+- focused player-request integration + chat-card resolver: 11/11 PASS
+- DB and contracts package build: PASS
+- migration executed by PGlite integration suite: PASS
+- `git diff --check`: PASS
+
+### Blockers
+
+- Browser and real multiplayer QA remain deferred at the existing project gate.
+
+### Next action
+
+Integrate/review the pool, then run the broader deferred browser/Docker/regression gates before closing UIX-312.
+
+### Release-blocking integration correction
+
+- Restored the chat-card Russian labels as BOM-free UTF-8 and added a source regression test for the six required labels plus placeholder rejection.
+- Wired canonical `snapshot.playerRequests` and the request-workspace opener into the unified ACTIVITY feed; direct chat remains unchanged because the database trigger restricts request cards to TABLE.
+- Added repository-standard migration statement breakpoints to `0026_player_request_chat_cards.sql`.
+- Verification: focused migration/request/card/UI tests 17/17 PASS; contracts/db/server/web typecheck PASS; 10-file owned-scope UTF-8/BOM/placeholder scan PASS; `git diff --check` PASS.
