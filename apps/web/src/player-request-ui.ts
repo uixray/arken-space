@@ -36,7 +36,9 @@ export function visiblePlayerRequests(
 export function requestCharacters(characters: readonly CharacterDto[], membershipId: string, activeCharacterId: string | null) {
   return characters.filter(
     (character) =>
-      character.ownerMembershipId === membershipId || character.id === activeCharacterId,
+      character.ownerMembershipId === membershipId ||
+      character.controllerMembershipIds.includes(membershipId) ||
+      character.id === activeCharacterId,
   );
 }
 

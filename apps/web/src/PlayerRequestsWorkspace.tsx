@@ -20,7 +20,7 @@ export function PlayerRequestsWorkspace({ open, createMode, snapshot, onClose, o
   const [filters, setFilters] = useState<PlayerRequestFilters>({ state: "OPEN", horizon: "ALL", audience: "ALL" });
   const isGm = snapshot.me.role === "GM";
   const requests = visiblePlayerRequests(snapshot.playerRequests ?? [], snapshot.me.id, snapshot.me.role, filters);
-  const characters = useMemo(() => requestCharacters(snapshot.characters, snapshot.me.id, snapshot.me.characterId), [snapshot.characters, snapshot.me.id]);
+  const characters = useMemo(() => requestCharacters(snapshot.characters, snapshot.me.id, snapshot.me.characterId), [snapshot.characters, snapshot.me.id, snapshot.me.characterId]);
 
   useEffect(() => {
     setDraft(emptyDraft()); setEditing(null); setBusy(null); setError("");
@@ -86,7 +86,7 @@ export function PlayerRequestsWorkspace({ open, createMode, snapshot, onClose, o
           {!isGm && canCancelRequest(request, snapshot.me.id) && <button disabled={!!busy} onClick={() => void act(request, "CANCEL")}>Отменить заявку</button>}
         </div>
       </article>)}</div>
-      {!isGm && <p className="player-requests__note">Можно выбрать только активного или принадлежащего вам персонажа. Управление заявками от имени делегированного контроллера пока не поддерживается.</p>}
+      {!isGm && <p className="player-requests__note">Можно выбрать активного, принадлежащего вам или переданного вам в управление персонажа.</p>}
     </div>
   </ArkenDialog>;
 }

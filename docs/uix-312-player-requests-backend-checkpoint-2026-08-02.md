@@ -134,3 +134,37 @@ Base: `07507a5`.
 ### Next action
 
 Commit the UI pool. UIX-312 remains In Progress until deferred acceptance and verification gates are resolved.
+---
+
+## Delegated-controller character picker follow-up
+
+### Decisions
+
+- The request character picker includes characters owned by the current membership, delegated to it through `controllerMembershipIds`, or selected as the active-character fallback.
+- Each snapshot character is emitted at most once even when several eligibility rules match; unrelated characters remain excluded.
+- Request attachments remain out of scope.
+
+### Revision
+
+Base: `c95cd3c`.
+
+### Changed files
+
+- `apps/web/src/player-request-ui.ts`
+- `apps/web/src/player-request-ui.test.ts`
+- `apps/web/src/PlayerRequestsWorkspace.tsx`
+- `docs/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
+
+### Verification
+
+- player request UI and source-encoding tests: 8/8 PASS
+- web typecheck: PASS
+- `git diff --check`: PASS
+
+### Blockers
+
+- None for this follow-up.
+
+### Next action
+
+Run the pool verification and integrate it with the linked chat-card work.
