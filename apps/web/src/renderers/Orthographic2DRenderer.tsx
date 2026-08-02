@@ -20,6 +20,7 @@ import {
 import useImage from "use-image";
 import Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
+import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { isRectFullyRevealed } from "./fog";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
@@ -53,6 +54,12 @@ import {
   type TokenImageAvailability,
 } from "./token-image-state";
 import { resolveResizeHandleDataAttributes } from "./resize-handle";
+
+function shouldCancelCanvasEdit(
+  event: Pick<KeyboardEvent, "key" | "isComposing" | "target">,
+) {
+  return event.key === "Escape" && !shouldIgnoreGlobalShortcut(event);
+}
 
 const DRAWING_COLOR_PRESETS = [
   { value: "#ffffff", name: "Белый" },
@@ -373,7 +380,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   useEffect(() => {
     if (!canvasEditMode) return;
     const cancel = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (!shouldCancelCanvasEdit(event)) return;
       setBackgroundDraft(props.scene.backgroundFrame);
       setWorldDraft({ width: props.scene.width, height: props.scene.height });
       onCanvasEditCancel?.();
@@ -1157,7 +1164,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 props.role === "GM" &&
                 stack?.representativeId === token.id &&
                 stack.count > 1
-                  ? `${token.name} \u00b7 \u0441\u0442\u043e\u043f\u043a\u0430 ${stack.count}`
+                  ? `${token.name} · стопка ${stack.count}`
                   : token.name;
               return (
                 <li key={`token:${token.id}:${token.revision}`}>
