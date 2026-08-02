@@ -49,6 +49,7 @@ import {
 import { revokedStickerTombstone } from "./sticker-access.js";
 import { buildWorldMapsSnapshot } from "./world-maps.js";
 import { characterDto } from "./character-dto.js";
+import { listVisiblePlayerRequests } from "./player-requests.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -81,6 +82,7 @@ export async function buildSnapshot(
     cursorRows,
     audioRows,
     sequenceRows,
+    playerRequestRows,
   ] = await Promise.all([
     db
       .select()
@@ -189,6 +191,7 @@ export async function buildSnapshot(
       .select({ value: max(gameEvents.sequence) })
       .from(gameEvents)
       .where(eq(gameEvents.campaignId, auth.campaignId)),
+    listVisiblePlayerRequests(db, auth),
   ]);
 
   const worldMapProjection = await buildWorldMapsSnapshot(db, auth);
@@ -521,6 +524,7 @@ export async function buildSnapshot(
         revision: drawing.revision,
       })),
     worldMaps: worldMapProjection.snapshot,
+    playerRequests: playerRequestRows,
     messages: messageRows
       .sort((left, right) => left.message.sequence - right.message.sequence)
       .map(({ message, thread }) => ({

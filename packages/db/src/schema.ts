@@ -39,6 +39,22 @@ export const messageKindEnum = pgEnum("message_kind", [
   "DICE",
   "SYSTEM",
 ]);
+export const playerRequestAudienceEnum = pgEnum("player_request_audience", [
+  "PUBLIC",
+  "GM_ONLY",
+]);
+export const playerRequestHorizonEnum = pgEnum("player_request_horizon", [
+  "NOW",
+  "BEFORE_BREAK",
+  "NEXT_SESSION",
+]);
+export const playerRequestStatusEnum = pgEnum("player_request_status", [
+  "SUBMITTED",
+  "ACKNOWLEDGED",
+  "RESOLVED",
+  "DECLINED",
+  "CANCELLED",
+]);
 export const stickerPackSubjectEnum = pgEnum("sticker_pack_subject", [
   "CHARACTER",
   "PLAYER",
@@ -1602,6 +1618,53 @@ export const audioStates = pgTable("audio_states", {
     .defaultNow()
     .notNull(),
 });
+
+/** Durable player-to-GM requests. Visibility is always filtered server-side. */
+export const playerRequests = pgTable(
+  "player_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    authorMembershipId: uuid("author_membership_id").notNull(),
+    characterId: uuid("character_id"),
+    audience: playerRequestAudienceEnum("audience").notNull(),
+    horizon: playerRequestHorizonEnum("horizon").notNull(),
+    status: playerRequestStatusEnum("status").notNull().default("SUBMITTED"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    resolutionNote: text("resolution_note"),
+    resolvedByMembershipId: uuid("resolved_by_membership_id"),
+    revision: integer("revision").notNull().default(0),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("player_requests_campaign_created_idx").on(table.campaignId, table.createdAt),
+    index("player_requests_campaign_author_idx").on(table.campaignId, table.authorMembershipId),
+    index("player_requests_campaign_status_idx").on(table.campaignId, table.status),
+    index("player_requests_campaign_horizon_status_idx").on(table.campaignId, table.horizon, table.status),
+    foreignKey({
+      name: "player_requests_campaign_author_fk",
+      columns: [table.campaignId, table.authorMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "player_requests_campaign_character_fk",
+      columns: [table.campaignId, table.characterId],
+      foreignColumns: [characters.campaignId, characters.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "player_requests_campaign_resolver_fk",
+      columns: [table.campaignId, table.resolvedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check("player_requests_content_revision_check", sql`length(trim(${table.title})) BETWEEN 1 AND 120 AND length(trim(${table.body})) BETWEEN 1 AND 4000 AND ${table.revision} >= 0`),
+    check("player_requests_resolution_shape_check", sql`((${table.status} IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NOT NULL) OR ((${table.status} NOT IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NULL AND ${table.resolutionNote} IS NULL)`),
+    check("player_requests_resolution_note_length_check", sql`${table.resolutionNote} IS NULL OR length(trim(${table.resolutionNote})) BETWEEN 1 AND 2000`),
+    check("player_requests_cancellation_shape_check", sql`(${table.status} = 'CANCELLED' AND ${table.cancelledAt} IS NOT NULL) OR (${table.status} <> 'CANCELLED' AND ${table.cancelledAt} IS NULL)`),
+  ],
+);
 
 export const gameEvents = pgTable(
   "game_events",

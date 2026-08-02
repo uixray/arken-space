@@ -38,6 +38,7 @@ describe("initial PostgreSQL migration", () => {
         "invites",
         "memberships",
         "player_access_grants",
+        "player_requests",
         "scenes",
         "sessions",
         "tokens",

@@ -119,6 +119,54 @@ export type WorldMapLocationVisibility = z.infer<
   typeof worldMapLocationVisibilitySchema
 >;
 
+export const playerRequestAudienceSchema = z.enum(["PUBLIC", "GM_ONLY"]);
+export const playerRequestHorizonSchema = z.enum(["NOW", "BEFORE_BREAK", "NEXT_SESSION"]);
+export const playerRequestListStateSchema = z.enum(["OPEN", "CLOSED"]);
+export const playerRequestStatusSchema = z.enum([
+  "SUBMITTED", "ACKNOWLEDGED", "RESOLVED", "DECLINED", "CANCELLED",
+]);
+export const playerRequestTransitionSchema = z.enum([
+  "ACKNOWLEDGE", "RESOLVE", "DECLINE", "CANCEL",
+]);
+export const playerRequestDtoSchema = z.object({
+  id: z.string().uuid(), campaignId: z.string().uuid(), authorMembershipId: z.string().uuid(),
+  authorDisplayName: z.string(), characterId: z.string().uuid().nullable(), characterName: z.string().nullable(),
+  audience: playerRequestAudienceSchema, horizon: playerRequestHorizonSchema, status: playerRequestStatusSchema,
+  title: z.string(), body: z.string(), resolutionNote: z.string().nullable(),
+  resolvedByMembershipId: z.string().uuid().nullable(), resolvedByDisplayName: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
+});
+export const createPlayerRequestSchema = z.object({
+  actionId: z.string().uuid(), audience: playerRequestAudienceSchema,
+  horizon: playerRequestHorizonSchema,
+  characterId: z.string().uuid().nullable().optional(),
+  title: z.string().trim().min(1).max(120), body: z.string().trim().min(1).max(4000),
+}).strict();
+export const updatePlayerRequestSchema = z.object({
+  actionId: z.string().uuid(), revision: z.number().int().nonnegative(),
+  title: z.string().trim().min(1).max(120), body: z.string().trim().min(1).max(4000),
+}).strict();
+export const transitionPlayerRequestSchema = z.object({
+  actionId: z.string().uuid(), revision: z.number().int().nonnegative(),
+  action: playerRequestTransitionSchema,
+  resolutionNote: z.string().trim().min(1).max(2000).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.resolutionNote && value.action !== "RESOLVE" && value.action !== "DECLINE")
+    context.addIssue({ code: "custom", path: ["resolutionNote"], message: "Resolution note is only valid for resolve or decline" });
+});
+export const listPlayerRequestsSchema = z.object({
+  status: playerRequestStatusSchema.optional(), state: playerRequestListStateSchema.optional(),
+  audience: playerRequestAudienceSchema.optional(), horizon: playerRequestHorizonSchema.optional(),
+  authorMembershipId: z.string().uuid().optional(), characterId: z.string().uuid().optional(),
+}).strict();
+export type PlayerRequestHorizon = z.infer<typeof playerRequestHorizonSchema>;
+export type PlayerRequestListState = z.infer<typeof playerRequestListStateSchema>;
+export type PlayerRequestAudience = z.infer<typeof playerRequestAudienceSchema>;
+export type PlayerRequestStatus = z.infer<typeof playerRequestStatusSchema>;
+export type PlayerRequestTransition = z.infer<typeof playerRequestTransitionSchema>;
+export type PlayerRequestDto = z.infer<typeof playerRequestDtoSchema>;
+
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
@@ -1651,6 +1699,8 @@ export interface GameSnapshot {
   tokenDefinitions?: TokenDefinitionDto[];
   fogReveals: FogRevealDto[];
   drawings?: DrawingDto[];
+  /** Durable request projection, independently loaded from the chat window. */
+  playerRequests?: PlayerRequestDto[];
   /** Filtered world/region map projection; absent until the feature is loaded. */
   worldMaps?: WorldMapsSnapshotDto;
   messages: ChatMessageDto[];

@@ -112,6 +112,7 @@ import { characterDto, normalizeCharacterWallet } from "./character-dto.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
+import { registerPlayerRequestRoutes } from "./player-requests.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -615,6 +616,7 @@ export function registerRoutes(
   );
   registerStoryRoutes(app, db, io);
   registerOperatorFeedbackRoutes(app, db);
+  registerPlayerRequestRoutes(app, db);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
