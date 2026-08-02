@@ -83,3 +83,11 @@ Review and commit only the four files above for UIX-226, then start a separate U
 ### Next action
 
 Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then implement the remaining cold-load/portrait browser gate before review.
+## UIX-227 resize correlation subpool
+
+- Token resize now uses one canonical UUID in both the request body and `x-action-id`, aligning route idempotency, request logs, telemetry and user correlation.
+- API failures surface only bounded safe `requestId` / `actionId` values; response bodies, URLs and stacks are not included.
+- Changed files: `apps/web/src/App.tsx`, `apps/web/src/api.ts`, `apps/web/src/api.test.ts`, and this checkpoint.
+- Verification: API unit tests 10/10, web typecheck, workspace lint and diff check passed.
+- Browser cold-resize gesture remains open: Konva resize-handle coordinate automation was flaky and the incorrect world-resize test was removed rather than accepted.
+- Next action: commit this correlation scope separately; then add deterministic portrait/asset observability before the remaining real-browser gate.

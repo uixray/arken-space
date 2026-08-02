@@ -13,6 +13,28 @@ export class ApiError extends Error {
   }
 }
 
+const safeCorrelationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+/** Formats an API failure for UI without exposing request bodies, URLs or stacks. */
+export function formatApiError(
+  reason: unknown,
+  fallback = "Операция не выполнена",
+): string {
+  if (!(reason instanceof ApiError))
+    return reason instanceof Error ? reason.message : fallback;
+  const correlation = [
+    safeCorrelationIdPattern.test(reason.requestId ?? "")
+      ? `requestId: ${reason.requestId}`
+      : null,
+    safeCorrelationIdPattern.test(reason.actionId ?? "")
+      ? `actionId: ${reason.actionId}`
+      : null,
+  ].filter(Boolean);
+  return correlation.length > 0
+    ? `${reason.message} (${correlation.join(", ")})`
+    : reason.message;
+}
+
 type ApiResponseError = {
   error?: string;
   message?: string;

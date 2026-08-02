@@ -16,7 +16,7 @@ import type {
   StoryPostDto,
   TokenDto,
 } from "@arken/contracts";
-import { api, ApiError, reportClientEvent } from "./api";
+import { api, ApiError, formatApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
@@ -792,9 +792,7 @@ export function App() {
       setError("");
       return await action();
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Операция не выполнена",
-      );
+      setError(formatApiError(reason));
       throw reason;
     }
   };
@@ -1871,12 +1869,14 @@ export function App() {
                   )
                 }
                 onTokenResize={async (tokenId, revision, size) => {
+                  const actionId = crypto.randomUUID();
                   try {
                     const updated = await runResult(() =>
                       api<TokenDto>(`/api/tokens/${tokenId}/size`, {
                         method: "PATCH",
+                        headers: { "x-action-id": actionId },
                         body: JSON.stringify({
-                          actionId: crypto.randomUUID(),
+                          actionId,
                           revision,
                           ...size,
                         }),
