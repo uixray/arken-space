@@ -1,4 +1,6 @@
 import { z } from "zod";
+export * from "./fog-geometry.js";
+import { fogGeometrySchema } from "./fog-geometry.js";
 export {
   betaPlayerByHandle,
   betaPlayers,
@@ -505,11 +507,14 @@ export const renameCommandSchema = revisionCommandSchema.extend({
 export const createFogRevealSchema = z.object({
   actionId: actionIdSchema,
   sceneId: z.string().uuid(),
-  x: z.number().finite(),
-  y: z.number().finite(),
-  width: z.number().positive().max(16384),
-  height: z.number().positive().max(16384),
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+  width: z.number().positive().max(16384).optional(),
+  height: z.number().positive().max(16384).optional(),
   operation: z.enum(["REVEAL", "COVER"]).default("REVEAL"),
+  geometry: fogGeometrySchema.optional(),
+}).superRefine((value, ctx) => {
+  if (!value.geometry && [value.x,value.y,value.width,value.height].some(v => v === undefined)) ctx.addIssue({ code: "custom", message: "legacy RECT requires x, y, width and height" });
 });
 
 export const undoFogRevealSchema = z.object({
@@ -1384,6 +1389,8 @@ export interface FogRevealDto {
   operation?: "REVEAL" | "COVER";
   sequence?: number;
   revision?: number;
+  geometry?: import("./fog-geometry.js").FogGeometry;
+  bbox?: import("./fog-geometry.js").FogBounds;
 }
 
 export interface DrawingDto {

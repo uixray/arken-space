@@ -510,6 +510,8 @@ export async function buildSnapshot(
         width: fog.width,
         height: fog.height,
         operation: fog.operation,
+        geometry: fog.geometry,
+        bbox: fog.bbox,
         sequence: fog.sequence,
         revision: fog.revision,
       })),

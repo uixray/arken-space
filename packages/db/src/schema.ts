@@ -143,6 +143,7 @@ export const catalogEntryKindEnum = pgEnum("catalog_entry_kind", [
   "ABILITY",
 ]);
 export const fogOperationEnum = pgEnum("fog_operation", ["REVEAL", "COVER"]);
+export const fogShapeEnum = pgEnum("fog_shape", ["RECT", "CIRCLE", "POLYGON", "BRUSH"]);
 export const journalStatusEnum = pgEnum("journal_status", [
   "APPLIED",
   "UNDONE",
@@ -792,6 +793,9 @@ export const fogReveals = pgTable(
     width: doublePrecision("width").notNull(),
     height: doublePrecision("height").notNull(),
     operation: fogOperationEnum("operation").notNull().default("REVEAL"),
+    shape: fogShapeEnum("shape").notNull().default("RECT"),
+    geometry: jsonb("geometry").$type<{ type: "RECT"; x: number; y: number; width: number; height: number } | { type: "CIRCLE"; center: { x: number; y: number }; radius: number } | { type: "POLYGON"; points: { x: number; y: number }[] } | { type: "BRUSH"; points: { x: number; y: number }[]; radius: number }>().notNull(),
+    bbox: jsonb("bbox").$type<{ x: number; y: number; width: number; height: number }>().notNull(),
     sequence: bigserial("sequence", { mode: "number" }).notNull(),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
