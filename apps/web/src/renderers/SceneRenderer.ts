@@ -42,6 +42,7 @@ export interface SceneRendererProps {
   onDrawingCreate: (drawing: {
     points: number[];
     color: string;
+    strokeWidth?: number;
   }) => Promise<DrawingDto | void>;
   onPing: (point: { x: number; y: number }) => void;
   onPlaceTokenDefinition?: (
@@ -68,7 +69,7 @@ export interface SceneRendererProps {
   onDrawingUpdate?: (
     drawingId: string,
     revision: number,
-    patch: { x?: number; y?: number; color?: string },
+    patch: { x?: number; y?: number; color?: string; strokeWidth?: number },
   ) => Promise<void>;
   onDrawingDelete?: (drawingId: string, revision: number) => Promise<void>;
   onDrawingCopy?: (drawingId: string, revision: number) => Promise<void>;

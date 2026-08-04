@@ -770,6 +770,76 @@ code {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+.drawing-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.drawing-control-group:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.drawing-control-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.drawing-width-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.drawing-width-preset-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 28px;
+  height: 32px;
+  min-width: 28px;
+  min-height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.drawing-width-preset-btn[aria-pressed="true"] {
+  border-color: var(--accent, #e5c07b);
+  background: #ded4bd;
+  color: #191815;
+}
+.drawing-width-preview {
+  width: 16px;
+  background: currentColor;
+  border-radius: 1px;
+}
+.drawing-width-label {
+  font-size: 0.68rem;
+  line-height: 1;
+}
+.drawing-stroke-width-picker {
+  display: flex;
+  align-items: center;
+}
+.drawing-stroke-width-picker input[type="range"] {
+  width: 100%;
+}
+.drawing-panel-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 4px;
+}
+.drawing-panel-actions button {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+}
 .canvas-roll-overlay {
   position: absolute;
   z-index: 13;

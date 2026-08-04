@@ -3415,6 +3415,7 @@ export function registerRoutes(
           authorMembershipId: auth.membershipId,
           points: row.drawing.points,
           color: row.drawing.color,
+          strokeWidth: row.drawing.strokeWidth,
           x: row.drawing.x + 16,
           y: row.drawing.y + 16,
         })

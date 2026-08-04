@@ -523,6 +523,7 @@ export async function buildSnapshot(
         authorMembershipId: drawing.authorMembershipId,
         points: drawing.points,
         color: drawing.color,
+        strokeWidth: drawing.strokeWidth,
         x: drawing.x,
         y: drawing.y,
         revision: drawing.revision,

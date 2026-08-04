@@ -73,6 +73,8 @@ const DRAWING_COLOR_PRESETS = [
   { value: "#a855f7", name: "Фиолетовый" },
 ] as const;
 
+const DRAWING_STROKE_WIDTH_PRESETS = [1, 3, 5, 8, 12, 16, 24] as const;
+
 function Grid({
   width,
   height,
@@ -284,6 +286,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const finishDrawingRef = useRef<() => void>(() => undefined);
   const trackDrawingRef = useRef<(event: MouseEvent) => void>(() => undefined);
   const [drawingColor, setDrawingColor] = useState<string>(visual.color.edit);
+  const [drawingStrokeWidth, setDrawingStrokeWidth] = useState<number>(3);
   const [backgroundDraft, setBackgroundDraft] = useState(
     props.scene.backgroundFrame,
   );
@@ -927,7 +930,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         setDrawingPoints([]),
       );
       void persistDrawingDraft(
-        { points: releasedDrawing, color: drawingColor },
+        {
+          points: releasedDrawing,
+          color: drawingColor,
+          strokeWidth: drawingStrokeWidth,
+        },
         props.onDrawingCreate,
         () => undefined,
       ).catch(() => {
@@ -1591,71 +1598,74 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         </Layer>
 
         <Layer {...playerClip}>
-          {props.drawings.map((drawing) => (
-            <Line
-              key={drawing.id}
-              points={drawing.points}
-              x={drawing.x}
-              y={drawing.y}
-              stroke={drawing.color}
-              strokeWidth={3 / scale}
-              lineCap="round"
-              lineJoin="round"
-              listening={
-                (props.role === "GM" ||
-                  (Boolean(props.membershipId) &&
-                    drawing.authorMembershipId === props.membershipId)) &&
-                (props.role === "GM" ||
-                  drawingRevealed(drawing.points, drawing.x, drawing.y))
-              }
-              draggable={
-                props.tool === "PAN" &&
-                (props.role === "GM" ||
-                  (Boolean(props.membershipId) &&
-                    drawing.authorMembershipId === props.membershipId)) &&
-                (props.role === "GM" ||
-                  drawingRevealed(drawing.points, drawing.x, drawing.y))
-              }
-              hitStrokeWidth={14 / scale}
-              shadowColor={
-                selectedDrawingIds.includes(drawing.id)
-                  ? visual.color.selection
-                  : undefined
-              }
-              shadowBlur={
-                selectedDrawingIds.includes(drawing.id) ? 10 / scale : 0
-              }
-              onClick={() => {
-                selectObject({
-                  kind: "drawing",
-                  objectId: drawing.id,
-                  revision: drawing.revision,
-                });
-              }}
-              onDragEnd={(event) => {
-                if (
-                  selectedDrawingIds.includes(drawing.id) &&
-                  selectedTokenIds.length + selectedDrawingIds.length > 1 &&
-                  props.onBulkMove
-                ) {
-                  enqueueMove({
-                    x: event.target.x() - drawing.x,
-                    y: event.target.y() - drawing.y,
-                  });
-                  return;
+          {props.drawings.map((drawing) => {
+            const currentStrokeWidth = drawing.strokeWidth ?? 3;
+            return (
+              <Line
+                key={drawing.id}
+                points={drawing.points}
+                x={drawing.x}
+                y={drawing.y}
+                stroke={drawing.color}
+                strokeWidth={currentStrokeWidth / scale}
+                lineCap="round"
+                lineJoin="round"
+                listening={
+                  (props.role === "GM" ||
+                    (Boolean(props.membershipId) &&
+                      drawing.authorMembershipId === props.membershipId)) &&
+                  (props.role === "GM" ||
+                    drawingRevealed(drawing.points, drawing.x, drawing.y))
                 }
-                void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
-                  x: event.target.x(),
-                  y: event.target.y(),
-                });
-              }}
-            />
-          ))}
+                draggable={
+                  props.tool === "PAN" &&
+                  (props.role === "GM" ||
+                    (Boolean(props.membershipId) &&
+                      drawing.authorMembershipId === props.membershipId)) &&
+                  (props.role === "GM" ||
+                    drawingRevealed(drawing.points, drawing.x, drawing.y))
+                }
+                hitStrokeWidth={Math.max(14, currentStrokeWidth) / scale}
+                shadowColor={
+                  selectedDrawingIds.includes(drawing.id)
+                    ? visual.color.selection
+                    : undefined
+                }
+                shadowBlur={
+                  selectedDrawingIds.includes(drawing.id) ? 10 / scale : 0
+                }
+                onClick={() => {
+                  selectObject({
+                    kind: "drawing",
+                    objectId: drawing.id,
+                    revision: drawing.revision,
+                  });
+                }}
+                onDragEnd={(event) => {
+                  if (
+                    selectedDrawingIds.includes(drawing.id) &&
+                    selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+                    props.onBulkMove
+                  ) {
+                    enqueueMove({
+                      x: event.target.x() - drawing.x,
+                      y: event.target.y() - drawing.y,
+                    });
+                    return;
+                  }
+                  void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
+                    x: event.target.x(),
+                    y: event.target.y(),
+                  });
+                }}
+              />
+            );
+          })}
           {drawingPoints.length >= 4 && (
             <Line
               points={drawingPoints}
               stroke={drawingColor}
-              strokeWidth={3 / scale}
+              strokeWidth={drawingStrokeWidth / scale}
               lineCap="round"
               lineJoin="round"
             />
@@ -2200,60 +2210,114 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             (!!props.membershipId &&
               drawing.authorMembershipId === props.membershipId));
         if (!canEditDrawing && props.tool !== "DRAW") return null;
+
+        const activeColor = canEditDrawing ? drawing.color : drawingColor;
+        const activeWidth = canEditDrawing
+          ? (drawing.strokeWidth ?? 3)
+          : drawingStrokeWidth;
+
+        const updateColor = (color: string) => {
+          setDrawingColor(color);
+          if (canEditDrawing) {
+            void props.onDrawingUpdate?.(
+              drawing.id,
+              drawing.revision,
+              { color },
+            );
+          }
+        };
+
+        const updateWidth = (strokeWidth: number) => {
+          const clamped = Math.max(1, Math.min(100, strokeWidth));
+          setDrawingStrokeWidth(clamped);
+          if (canEditDrawing) {
+            void props.onDrawingUpdate?.(
+              drawing.id,
+              drawing.revision,
+              { strokeWidth: clamped },
+            );
+          }
+        };
+
         return (
           <aside
             className="drawing-color-panel"
-            aria-label={"Панель цвета рисунка"}
+            aria-label="Панель параметров рисунка"
           >
             <span className="drawing-color-controls">
-              <span
-                className="drawing-color-presets"
-                role="group"
-                aria-label="Готовые цвета"
-              >
-                {DRAWING_COLOR_PRESETS.map(({ value, name }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className="drawing-color-swatch"
-                    aria-label={`${name}: ${value}`}
-                    aria-pressed={
-                      (canEditDrawing ? drawing.color : drawingColor) === value
-                    }
-                    style={{ backgroundColor: value }}
-                    onClick={() => {
-                      setDrawingColor(value);
-                      if (canEditDrawing)
-                        void props.onDrawingUpdate?.(
-                          drawing.id,
-                          drawing.revision,
-                          { color: value },
-                        );
-                    }}
+              <span className="drawing-control-group">
+                <label className="drawing-control-label">Цвет</label>
+                <span
+                  className="drawing-color-presets"
+                  role="group"
+                  aria-label="Готовые цвета"
+                >
+                  {DRAWING_COLOR_PRESETS.map(({ value, name }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className="drawing-color-swatch"
+                      aria-label={`${name}: ${value}`}
+                      aria-pressed={activeColor === value}
+                      style={{ backgroundColor: value }}
+                      onClick={() => updateColor(value)}
+                    />
+                  ))}
+                </span>
+                <label className="drawing-color-picker">
+                  <span>Цвет</span>
+                  <input
+                    type="color"
+                    aria-label="Цвет рисунка"
+                    value={activeColor}
+                    onChange={(event) => updateColor(event.target.value)}
                   />
-                ))}
+                </label>
               </span>
-              <label className="drawing-color-picker">
-                <span>Цвет</span>
-                <input
-                  type="color"
-                  aria-label="Цвет рисунка"
-                  value={canEditDrawing ? drawing.color : drawingColor}
-                  onChange={(event) => {
-                    const color = event.target.value;
-                    setDrawingColor(color);
-                    if (canEditDrawing)
-                      void props.onDrawingUpdate?.(
-                        drawing.id,
-                        drawing.revision,
-                        { color },
-                      );
-                  }}
-                />
-              </label>
+
+              <span className="drawing-control-group">
+                <label className="drawing-control-label">
+                  Толщина: <strong>{activeWidth}px</strong>
+                </label>
+                <span
+                  className="drawing-width-presets"
+                  role="group"
+                  aria-label="Быстрый выбор толщины"
+                >
+                  {DRAWING_STROKE_WIDTH_PRESETS.map((width) => (
+                    <button
+                      key={width}
+                      type="button"
+                      className="drawing-width-preset-btn"
+                      aria-label={`Толщина ${width}px`}
+                      aria-pressed={activeWidth === width}
+                      onClick={() => updateWidth(width)}
+                    >
+                      <span
+                        className="drawing-width-preview"
+                        style={{ height: Math.min(width, 14) }}
+                      />
+                      <span className="drawing-width-label">{width}</span>
+                    </button>
+                  ))}
+                </span>
+                <label className="drawing-stroke-width-picker">
+                  <input
+                    type="range"
+                    min="1"
+                    max="50"
+                    step="1"
+                    aria-label="Толщина линии"
+                    value={activeWidth}
+                    onChange={(event) => updateWidth(Number(event.target.value))}
+                  />
+                </label>
+              </span>
+
               {canEditDrawing && (
-                <>
+                <span className="drawing-panel-actions">
                   <button
+                    type="button"
                     onClick={() =>
                       void props.onDrawingCopy?.(drawing.id, drawing.revision)
                     }
@@ -2261,6 +2325,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     Копировать
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       requestDelete({
                         kind: "drawing",
@@ -2271,7 +2336,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   >
                     Удалить
                   </button>
-                </>
+                </span>
               )}
             </span>
           </aside>

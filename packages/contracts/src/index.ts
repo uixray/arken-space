@@ -541,6 +541,7 @@ export const createDrawingSchema = z.object({
   sceneId: z.string().uuid(),
   points: drawingPointsSchema,
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  strokeWidth: z.number().finite().min(1).max(100).default(3).optional(),
   x: z.number().finite().default(0),
   y: z.number().finite().default(0),
 });
@@ -551,6 +552,7 @@ export const updateDrawingSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .optional(),
+  strokeWidth: z.number().finite().min(1).max(100).optional(),
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
 });
@@ -1399,6 +1401,7 @@ export interface DrawingDto {
   authorMembershipId: string;
   points: number[];
   color: string;
+  strokeWidth?: number;
   x: number;
   y: number;
   revision: number;

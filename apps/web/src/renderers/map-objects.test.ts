@@ -40,6 +40,7 @@ const drawing = (patch: Partial<DrawingDto> = {}): DrawingDto => ({
   authorMembershipId: "player",
   points: [0, 0, 20, 20],
   color: "#000",
+  strokeWidth: 3,
   x: 10,
   y: 10,
   revision: 1,

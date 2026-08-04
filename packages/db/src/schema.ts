@@ -817,6 +817,7 @@ export const drawings = pgTable(
       .references(() => memberships.id, { onDelete: "cascade" }),
     points: jsonb("points").$type<number[]>().notNull(),
     color: text("color").notNull().default("#ffffff"),
+    strokeWidth: doublePrecision("stroke_width").notNull().default(3),
     x: doublePrecision("x").notNull().default(0),
     y: doublePrecision("y").notNull().default(0),
     revision: integer("revision").notNull().default(0),
