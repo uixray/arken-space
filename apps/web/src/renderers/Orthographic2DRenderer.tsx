@@ -298,6 +298,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [rulerStart, setRulerStart] = useState<{ x: number; y: number } | null>(
     null,
   );
+  const [rulerEnd, setRulerEnd] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (props.tool === "RULER" || !rulerStart) return;
+    props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
+    setRulerStart(null);
+    setRulerEnd(null);
+  }, [props.tool, rulerStart, props.socket, props.scene.id]);
   const [mapImage] = useImage(
     props.assets.find((asset) => asset.id === props.scene.mapAssetId)?.url ??
       "",
@@ -405,6 +414,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+
   useEffect(() => {
     const mask = fogMaskRef.current;
     if (!mask) return;
@@ -502,6 +512,42 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       y: (viewport.height - props.scene.height * next) / 2,
     });
   };
+
+  const displayRulers = useMemo(() => {
+    const result = [...props.rulers];
+    if (rulerStart && rulerEnd) {
+      const dx = rulerEnd.x - rulerStart.x;
+      const dy = rulerEnd.y - rulerStart.y;
+      const gridSize = props.scene.grid.enabled ? props.scene.grid.size : 1;
+      const distance = Math.hypot(dx, dy) / gridSize;
+      const localRuler = {
+        sceneId: props.scene.id,
+        membershipId: props.membershipId,
+        displayName: "Вы",
+        startX: rulerStart.x,
+        startY: rulerStart.y,
+        endX: rulerEnd.x,
+        endY: rulerEnd.y,
+        distance,
+      };
+      const index = result.findIndex(
+        (r) => r.membershipId === props.membershipId,
+      );
+      if (index >= 0) {
+        result[index] = localRuler;
+      } else {
+        result.push(localRuler);
+      }
+    }
+    return result;
+  }, [
+    props.rulers,
+    rulerStart,
+    rulerEnd,
+    props.scene.grid,
+    props.scene.id,
+    props.membershipId,
+  ]);
 
   const selectableObjects = selectMapObjects(props.tokens, props.drawings, {
     role: props.role,
@@ -808,7 +854,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       drawingPointsRef.current = points;
       setDrawingPoints(points);
     }
-    if (props.tool === "RULER") setRulerStart(point);
+    if (props.tool === "RULER") {
+      setRulerStart(point);
+      setRulerEnd(point);
+    }
   };
 
   const handlePointerMove = () => {
@@ -861,7 +910,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         setDrawingPoints(next);
       }
     }
-    if (props.tool === "RULER" && rulerStart)
+    if (props.tool === "RULER" && rulerStart) {
+      setRulerEnd(point);
       props.socket?.emit("ruler:update", {
         sceneId: props.scene.id,
         startX: rulerStart.x,
@@ -869,6 +919,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         endX: point.x,
         endY: point.y,
       });
+    }
   };
 
   const handlePointerUp = async () => {
@@ -945,9 +996,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       drawingPointsRef.current = [];
       setDrawingPoints([]);
     }
-    if (props.tool === "RULER")
+    if (props.tool === "RULER") {
       props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
-    setRulerStart(null);
+      setRulerStart(null);
+      setRulerEnd(null);
+    }
   };
 
   useEffect(() => {
@@ -2035,22 +2088,49 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         </Layer>
 
         <Layer listening={false}>
-          {props.rulers.map((ruler) => (
-            <Group key={ruler.membershipId}>
-              <Line
-                points={[ruler.startX, ruler.startY, ruler.endX, ruler.endY]}
-                stroke={visual.color.selection}
-                strokeWidth={2 / scale}
-              />
-              <Text
-                x={ruler.endX}
-                y={ruler.endY}
-                text={`${ruler.displayName}: ${ruler.distance.toFixed(1)}`}
-                fill={visual.color.selection}
-                fontSize={13 / scale}
-              />
-            </Group>
-          ))}
+          {displayRulers.map((ruler) => {
+            const labelText = `${ruler.displayName}: ${ruler.distance.toFixed(1)}`;
+            const estimatedWidth = Math.max(50, labelText.length * 8 + 12);
+            return (
+              <Group key={ruler.membershipId}>
+                <Line
+                  points={[ruler.startX, ruler.startY, ruler.endX, ruler.endY]}
+                  stroke={visual.color.selection}
+                  strokeWidth={2.5 / scale}
+                  dash={[6 / scale, 4 / scale]}
+                />
+                <Circle
+                  x={ruler.startX}
+                  y={ruler.startY}
+                  radius={4 / scale}
+                  fill={visual.color.selection}
+                />
+                <Circle
+                  x={ruler.endX}
+                  y={ruler.endY}
+                  radius={5 / scale}
+                  fill={visual.color.selection}
+                />
+                <Group x={ruler.endX + 8 / scale} y={ruler.endY - 14 / scale}>
+                  <Rect
+                    x={-4 / scale}
+                    y={-2 / scale}
+                    width={estimatedWidth / scale}
+                    height={20 / scale}
+                    fill="#0f172a"
+                    opacity={0.85}
+                    cornerRadius={4 / scale}
+                  />
+                  <Text
+                    text={labelText}
+                    fill="#f8fafc"
+                    fontSize={13 / scale}
+                    fontStyle="bold"
+                  />
+                </Group>
+              </Group>
+            );
+          })}
           {props.pings.map((ping) => (
             <Group key={`${ping.membershipId}-${ping.createdAt}`}>
               <Circle

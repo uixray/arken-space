@@ -1023,4 +1023,41 @@ describe("durable realtime token commands", () => {
     `);
     expect(events.rows[0]?.count).toBe(3);
   });
+
+  it("broadcasts ruler updates and clear events across clients", async () => {
+    const updated = new Promise<
+      Parameters<ServerToClientEvents["ruler:updated"]>[0]
+    >((resolve) => {
+      otherClient.once("ruler:updated", resolve);
+    });
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      startX: 10,
+      startY: 20,
+      endX: 110,
+      endY: 120,
+    });
+    const updatePayload = await updated;
+    expect(updatePayload).toMatchObject({
+      sceneId: ids.scene,
+      membershipId: ids.player,
+      startX: 10,
+      startY: 20,
+      endX: 110,
+      endY: 120,
+    });
+    expect(typeof updatePayload.distance).toBe("number");
+
+    const cleared = new Promise<
+      Parameters<ServerToClientEvents["ruler:cleared"]>[0]
+    >((resolve) => {
+      otherClient.once("ruler:cleared", resolve);
+    });
+    client.emit("ruler:clear", { sceneId: ids.scene });
+    const clearPayload = await cleared;
+    expect(clearPayload).toEqual({
+      sceneId: ids.scene,
+      membershipId: ids.player,
+    });
+  });
 });
