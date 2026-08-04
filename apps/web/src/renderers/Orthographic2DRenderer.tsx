@@ -1521,6 +1521,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         <Layer {...playerClip}>
           {props.tokens
             .filter((token) => token.layer === "MAP")
+            .filter((token) => props.role === "GM" || token.visible)
             .map((token) => (
               <Group
                 key={token.id}
@@ -1753,7 +1754,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         <Layer {...playerClip}>
           {props.tokens
             .filter((token) => token.layer !== "MAP")
-            .filter((token) => token.layer !== "GM" || showGmLayer)
+            .filter((token) => token.layer !== "GM" || (props.role === "GM" && showGmLayer))
             .filter((token) => token.visible || props.role === "GM")
             .filter(
               (token) =>
