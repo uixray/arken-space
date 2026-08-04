@@ -2,7 +2,7 @@
 set -eu
 
 APP=/home/uixray/apps/arken-space
-DOMAIN=https://arken.uixray.tech
+DOMAIN=https://arken-khar.space
 HEADERS=/tmp/arken-login-headers
 COOKIE=/tmp/arken-cookie
 BODY=/tmp/arken-login-body
