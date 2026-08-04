@@ -39,6 +39,22 @@ export const messageKindEnum = pgEnum("message_kind", [
   "DICE",
   "SYSTEM",
 ]);
+export const playerRequestAudienceEnum = pgEnum("player_request_audience", [
+  "PUBLIC",
+  "GM_ONLY",
+]);
+export const playerRequestHorizonEnum = pgEnum("player_request_horizon", [
+  "NOW",
+  "BEFORE_BREAK",
+  "NEXT_SESSION",
+]);
+export const playerRequestStatusEnum = pgEnum("player_request_status", [
+  "SUBMITTED",
+  "ACKNOWLEDGED",
+  "RESOLVED",
+  "DECLINED",
+  "CANCELLED",
+]);
 export const stickerPackSubjectEnum = pgEnum("sticker_pack_subject", [
   "CHARACTER",
   "PLAYER",
@@ -127,6 +143,7 @@ export const catalogEntryKindEnum = pgEnum("catalog_entry_kind", [
   "ABILITY",
 ]);
 export const fogOperationEnum = pgEnum("fog_operation", ["REVEAL", "COVER"]);
+export const fogShapeEnum = pgEnum("fog_shape", ["RECT", "CIRCLE", "POLYGON", "BRUSH"]);
 export const journalStatusEnum = pgEnum("journal_status", [
   "APPLIED",
   "UNDONE",
@@ -140,6 +157,13 @@ export const feedbackKindEnum = pgEnum("feedback_kind", [
 export const feedbackAttachmentKindEnum = pgEnum("feedback_attachment_kind", [
   "SCREENSHOT",
   "USER_IMAGE",
+]);
+export const feedbackStatusEnum = pgEnum("feedback_status", [
+  "NEW",
+  "ACKNOWLEDGED",
+  "LINKED",
+  "RESOLVED",
+  "DISMISSED",
 ]);
 
 export const campaigns = pgTable("campaigns", {
@@ -219,6 +243,12 @@ export const feedbackReports = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
+    status: feedbackStatusEnum("status").notNull().default("NEW"),
+    linearKey: text("linear_key"),
+    linearUrl: text("linear_url"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -227,6 +257,24 @@ export const feedbackReports = pgTable(
     index("feedback_reports_created_idx").on(table.createdAt),
     index("feedback_reports_campaign_idx").on(table.campaignId),
   ],
+);
+
+export const feedbackOperatorAudits = pgTable(
+  "feedback_operator_audits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => feedbackReports.id, { onDelete: "cascade" }),
+    operatorMembershipId: uuid("operator_membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("feedback_operator_audits_report_idx").on(table.reportId)],
 );
 
 export const feedbackAttachments = pgTable(
@@ -745,6 +793,9 @@ export const fogReveals = pgTable(
     width: doublePrecision("width").notNull(),
     height: doublePrecision("height").notNull(),
     operation: fogOperationEnum("operation").notNull().default("REVEAL"),
+    shape: fogShapeEnum("shape").notNull().default("RECT"),
+    geometry: jsonb("geometry").$type<{ type: "RECT"; x: number; y: number; width: number; height: number } | { type: "CIRCLE"; center: { x: number; y: number }; radius: number } | { type: "POLYGON"; points: { x: number; y: number }[] } | { type: "BRUSH"; points: { x: number; y: number }[]; radius: number }>().notNull(),
+    bbox: jsonb("bbox").$type<{ x: number; y: number; width: number; height: number }>().notNull(),
     sequence: bigserial("sequence", { mode: "number" }).notNull(),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -1133,6 +1184,8 @@ export const chatMessages = pgTable(
     threadId: uuid("thread_id").notNull(),
     visibility: messageVisibilityEnum("visibility").notNull().default("PUBLIC"),
     body: text("body").notNull(),
+    /** Reference-only projection; canonical request content stays in player_requests. */
+    playerRequestId: uuid("player_request_id"),
     dice: jsonb("dice").$type<unknown>(),
     systemData: jsonb("system_data").$type<{
       type: "WALLET_AUDIT";
@@ -1158,6 +1211,7 @@ export const chatMessages = pgTable(
   },
   (table) => [
     uniqueIndex("chat_sequence_idx").on(table.sequence),
+    uniqueIndex("chat_messages_player_request_idx").on(table.playerRequestId),
     index("chat_campaign_sequence_idx").on(table.campaignId, table.sequence),
     index("chat_messages_thread_sequence_idx").on(
       table.threadId,
@@ -1171,6 +1225,10 @@ export const chatMessages = pgTable(
     check(
       "chat_messages_sticker_shape_check",
       sql`(${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL) OR (${table.stickerId} IS NOT NULL AND ${table.stickerPresentation} IS NOT NULL AND ${table.kind} = 'TEXT' AND ${table.dice} IS NULL)`,
+    ),
+    check(
+      "chat_messages_player_request_shape_check",
+      sql`${table.playerRequestId} IS NULL OR (${table.kind} = 'SYSTEM' AND ${table.body} = '' AND ${table.dice} IS NULL AND ${table.systemData} IS NULL AND ${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL)`,
     ),
     check(
       "chat_messages_sticker_presentation_check",
@@ -1571,6 +1629,54 @@ export const audioStates = pgTable("audio_states", {
     .defaultNow()
     .notNull(),
 });
+
+/** Durable player-to-GM requests. Visibility is always filtered server-side. */
+export const playerRequests = pgTable(
+  "player_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    authorMembershipId: uuid("author_membership_id").notNull(),
+    characterId: uuid("character_id"),
+    audience: playerRequestAudienceEnum("audience").notNull(),
+    horizon: playerRequestHorizonEnum("horizon").notNull(),
+    status: playerRequestStatusEnum("status").notNull().default("SUBMITTED"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    resolutionNote: text("resolution_note"),
+    resolvedByMembershipId: uuid("resolved_by_membership_id"),
+    revision: integer("revision").notNull().default(0),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("player_requests_campaign_id_idx").on(table.campaignId, table.id),
+    index("player_requests_campaign_created_idx").on(table.campaignId, table.createdAt),
+    index("player_requests_campaign_author_idx").on(table.campaignId, table.authorMembershipId),
+    index("player_requests_campaign_status_idx").on(table.campaignId, table.status),
+    index("player_requests_campaign_horizon_status_idx").on(table.campaignId, table.horizon, table.status),
+    foreignKey({
+      name: "player_requests_campaign_author_fk",
+      columns: [table.campaignId, table.authorMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "player_requests_campaign_character_fk",
+      columns: [table.campaignId, table.characterId],
+      foreignColumns: [characters.campaignId, characters.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "player_requests_campaign_resolver_fk",
+      columns: [table.campaignId, table.resolvedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check("player_requests_content_revision_check", sql`length(trim(${table.title})) BETWEEN 1 AND 120 AND length(trim(${table.body})) BETWEEN 1 AND 4000 AND ${table.revision} >= 0`),
+    check("player_requests_resolution_shape_check", sql`((${table.status} IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NOT NULL) OR ((${table.status} NOT IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NULL AND ${table.resolutionNote} IS NULL)`),
+    check("player_requests_resolution_note_length_check", sql`${table.resolutionNote} IS NULL OR length(trim(${table.resolutionNote})) BETWEEN 1 AND 2000`),
+    check("player_requests_cancellation_shape_check", sql`(${table.status} = 'CANCELLED' AND ${table.cancelledAt} IS NOT NULL) OR (${table.status} <> 'CANCELLED' AND ${table.cancelledAt} IS NULL)`),
+  ],
+);
 
 export const gameEvents = pgTable(
   "game_events",

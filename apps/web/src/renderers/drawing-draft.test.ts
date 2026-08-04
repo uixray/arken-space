@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   clearDrawingDraftIfCurrent,
   persistDrawingDraft,
+  releaseDrawingDraft,
 } from "./drawing-draft";
 
 describe("persistDrawingDraft", () => {
@@ -68,5 +69,16 @@ describe("persistDrawingDraft", () => {
     expect(clearDraft).not.toHaveBeenCalled();
     expect(clearDrawingDraftIfCurrent(draftRef, newer, clearDraft)).toBe(true);
     expect(clearDraft).toHaveBeenCalledOnce();
+  });
+});
+
+describe("releaseDrawingDraft", () => {
+  it("hides the completed stroke synchronously and returns it for persistence", () => {
+    const completed = [1, 2, 3, 4];
+    const ref = { current: completed };
+    const clear = vi.fn();
+    expect(releaseDrawingDraft(ref, [], clear)).toBe(completed);
+    expect(ref.current).toEqual([]);
+    expect(clear).toHaveBeenCalledOnce();
   });
 });

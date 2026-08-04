@@ -14,6 +14,7 @@ import {
   sum,
 } from "drizzle-orm";
 import { z } from "zod";
+import { canonicalizeFogGeometry, FogGeometryError } from "./fog-geometry.js";
 import {
   activateSceneSchema,
   actionIdSchema,
@@ -111,6 +112,8 @@ import { buildSnapshot } from "./snapshot.js";
 import { characterDto, normalizeCharacterWallet } from "./character-dto.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
+import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
+import { registerPlayerRequestRoutes } from "./player-requests.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -613,6 +616,8 @@ export function registerRoutes(
     broadcastSnapshots(io, db, campaignId),
   );
   registerStoryRoutes(app, db, io);
+  registerOperatorFeedbackRoutes(app, db);
+  registerPlayerRequestRoutes(app, db, io);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
@@ -3120,20 +3125,16 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    const left = Math.max(0, body.x);
-    const top = Math.max(0, body.y);
-    const right = Math.min(scene.width, body.x + body.width);
-    const bottom = Math.min(scene.height, body.y + body.height);
-    if (right <= left || bottom <= top)
-      return reply.code(422).send({ error: "FOG_OUTSIDE_SCENE" });
-    const { actionId, sceneId: _sceneId, ...rest } = body;
+    const legacy = !body.geometry;
+    const requestedGeometry = body.geometry ?? { type: "RECT" as const, x: body.x!, y: body.y!, width: body.width!, height: body.height! };
+    let canonical;
+    try { canonical = canonicalizeFogGeometry(requestedGeometry, scene, legacy); }
+    catch (error) { if (error instanceof FogGeometryError) return reply.code(422).send({ error: error.code }); throw error; }
+    const { actionId } = body;
     const revealInput = {
-      ...rest,
-      sceneId: scene.id,
-      x: left,
-      y: top,
-      width: right - left,
-      height: bottom - top,
+      sceneId: scene.id, operation: body.operation, shape: canonical.geometry.type,
+      geometry: canonical.geometry, bbox: canonical.bbox,
+      x: canonical.bbox.x, y: canonical.bbox.y, width: canonical.bbox.width, height: canonical.bbox.height,
     };
     const result = await db.transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, scene.id);
@@ -4279,6 +4280,10 @@ export function registerRoutes(
                   width: fog.width,
                   height: fog.height,
                   operation: fog.operation,
+                  shape: fog.shape,
+                  geometry: fog.geometry,
+                  bbox: fog.bbox,
+                  sequence: fog.sequence,
                   revision: (targetRevision ?? fog.revision) + 1,
                 })
                 .returning();

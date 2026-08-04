@@ -1,12 +1,35 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { api, ApiError } from "./api";
+import { api, ApiError, formatApiError } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("api telemetry and correlation", () => {
+  it("adds only bounded safe correlation ids to API error messages", () => {
+    expect(
+      formatApiError(
+        new ApiError(409, "CONFLICT", "Conflict", "request-1", "action_2"),
+      ),
+    ).toBe("Conflict (requestId: request-1, actionId: action_2)");
+  });
+
+  it("omits unsafe or oversized correlation ids", () => {
+    const formatted = formatApiError(
+      new ApiError(
+        409,
+        "CONFLICT",
+        "Conflict",
+        "request/private?token=secret",
+        `action-${"x".repeat(128)}`,
+      ),
+    );
+    expect(formatted).toBe("Conflict");
+    expect(formatted).not.toContain("private");
+    expect(formatted).not.toContain("secret");
+  });
+
   it("adds an action id to mutations and exposes correlation on ApiError", async () => {
     const fetchMock = vi
       .fn()

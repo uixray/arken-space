@@ -169,6 +169,34 @@
       "when": 1785603600000,
       "tag": "0023_wallet_audit_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785688200000,
+      "tag": "0024_feedback_operator",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785774600000,
+      "tag": "0025_player_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785783600000,
+      "tag": "0026_player_request_chat_cards",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785790800000,
+      "tag": "0027_fog_geometry",
+      "breakpoints": true
     }
   ]
 }

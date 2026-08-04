@@ -21,8 +21,19 @@ function supportsClosest(target: EventTarget | null): target is ClosestTarget {
 }
 
 export function diagnosticKey(key: string) {
-  return key.length > 1 ? key : "printable";
+  // String length is not a printable test: emoji and other graphemes commonly
+  // use multiple UTF-16 code units. Retain only known named control keys.
+  return SAFE_NON_PRINTABLE_KEYS.has(key) || /^F(?:[1-9]|1\d|2[0-4])$/.test(key)
+    ? key
+    : "printable";
 }
+
+const SAFE_NON_PRINTABLE_KEYS = new Set([
+  "Alt", "AltGraph", "Backspace", "CapsLock", "ContextMenu", "Control",
+  "Delete", "End", "Enter", "Escape", "Home", "Insert", "Meta",
+  "NumLock", "PageDown", "PageUp", "Pause", "ScrollLock", "Shift", "Tab",
+  "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp",
+]);
 
 export function isEditableEventTarget(target: EventTarget | null) {
   if (!supportsClosest(target)) return false;
@@ -33,8 +44,14 @@ export function isEditableEventTarget(target: EventTarget | null) {
   );
 }
 
+export function shouldIgnoreGlobalShortcut(
+  event: Pick<KeyboardEvent, "isComposing" | "target">,
+) {
+  return event.isComposing || isEditableEventTarget(event.target);
+}
+
 function describeTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) return undefined;
+  if (typeof Element === "undefined" || !(target instanceof Element)) return undefined;
   const role = target.getAttribute("role");
   return [target.tagName.toLowerCase(), role ? `[role=${role}]` : ""]
     .filter(Boolean)

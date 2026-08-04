@@ -1,5 +1,6 @@
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { normalizeWallet } from "./wallet";
+import { reconcilePlayerRequests } from "./player-request-realtime";
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object"
@@ -91,6 +92,7 @@ export function reconcileGameSnapshot(
   );
   return {
     ...incoming,
+    playerRequests: reconcilePlayerRequests(current.playerRequests, incoming.playerRequests),
     characters: incoming.characters.map((character) => {
       const existing = currentCharacters.get(character.id);
       return existing && existing.revision > character.revision

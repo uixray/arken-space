@@ -4,6 +4,7 @@ import {
   canSelectDrawing,
   canSelectToken,
   drawingBounds,
+  resolveTokenStacks,
   selectMapObjects,
 } from "./map-objects";
 
@@ -121,5 +122,23 @@ describe("canonical map object selection", () => {
     );
     expect(result.tokens.map(({ id }) => id)).toEqual(["token"]);
     expect(result.drawings.map(({ id }) => id)).toEqual(["drawing"]);
+  });
+});
+
+describe("token stacks", () => {
+  it("chooses one deterministic representative from current positions", () => {
+    const stacks = resolveTokenStacks(
+      [
+        token({ id: "z", x: 70 }),
+        token({ id: "b" }),
+        token({ id: "a" }),
+        token({ id: "map", layer: "MAP" }),
+      ],
+      (x, y) => `${Math.floor(x / 50)}:${Math.floor(y / 50)}`,
+    );
+    expect(stacks).toEqual({
+      "0:0": { count: 2, representativeId: "a" },
+      "1:0": { count: 1, representativeId: "z" },
+    });
   });
 });

@@ -49,6 +49,7 @@ import {
 import { revokedStickerTombstone } from "./sticker-access.js";
 import { buildWorldMapsSnapshot } from "./world-maps.js";
 import { characterDto } from "./character-dto.js";
+import { listVisiblePlayerRequests } from "./player-requests.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -81,6 +82,7 @@ export async function buildSnapshot(
     cursorRows,
     audioRows,
     sequenceRows,
+    playerRequestRows,
   ] = await Promise.all([
     db
       .select()
@@ -189,6 +191,7 @@ export async function buildSnapshot(
       .select({ value: max(gameEvents.sequence) })
       .from(gameEvents)
       .where(eq(gameEvents.campaignId, auth.campaignId)),
+    listVisiblePlayerRequests(db, auth),
   ]);
 
   const worldMapProjection = await buildWorldMapsSnapshot(db, auth);
@@ -217,14 +220,16 @@ export async function buildSnapshot(
         .limit(200),
     ),
   );
+  const visiblePlayerRequestIds = new Set(playerRequestRows.map((request) => request.id));
   const messageRows = visibleThreadRows
     .flatMap((thread, index) =>
       (messageGroups[index] ?? []).map((message) => ({ message, thread })),
     )
     .filter(
       ({ message }) =>
-        !message.stickerViewerMembershipIds ||
-        message.stickerViewerMembershipIds.includes(auth.membershipId),
+        (!message.stickerViewerMembershipIds ||
+          message.stickerViewerMembershipIds.includes(auth.membershipId)) &&
+        (!message.playerRequestId || visiblePlayerRequestIds.has(message.playerRequestId)),
     );
   const visibleMessageIds = messageRows.map(({ message }) => message.id);
   const stickerIds = messageRows.flatMap(({ message }) =>
@@ -505,6 +510,8 @@ export async function buildSnapshot(
         width: fog.width,
         height: fog.height,
         operation: fog.operation,
+        geometry: fog.geometry,
+        bbox: fog.bbox,
         sequence: fog.sequence,
         revision: fog.revision,
       })),
@@ -521,6 +528,7 @@ export async function buildSnapshot(
         revision: drawing.revision,
       })),
     worldMaps: worldMapProjection.snapshot,
+    playerRequests: playerRequestRows,
     messages: messageRows
       .sort((left, right) => left.message.sequence - right.message.sequence)
       .map(({ message, thread }) => ({
@@ -531,6 +539,7 @@ export async function buildSnapshot(
           memberNameById.get(message.membershipId) ?? unknownPlayerDisplayName,
         characterId: message.characterId,
         body: message.body,
+        playerRequestId: message.playerRequestId,
         visibility: message.visibility,
         kind: message.kind,
         threadId: message.threadId,

@@ -42,3 +42,45 @@ Punto Switcher-specific reproduction requires manual validation on the operator 
 ## Next action
 
 Run the manual matrix and attach the redacted ring-buffer output to UIX-325 if Find in Page reappears.
+
+---
+
+## Automated hardening pool — 2026-08-02
+
+### Decisions
+
+- Keep native Ctrl+F untouched; the application must not globally intercept browser Find.
+- Redact every non-whitelisted key as `printable`, including Cyrillic, emoji, composed graphemes, unknown names and lone surrogates.
+- Reuse one editable/IME guard for global shortcuts, including canvas-edit Escape.
+- Treat automated Chrome/Firefox coverage as semantic regression evidence only; it does not replace the manual Punto Switcher and RU/EN layout matrix.
+
+### Revision
+
+Base: `c4b7ca8`.
+
+### Changed files
+
+- `apps/web/src/input-diagnostics.ts`
+- `apps/web/src/input-diagnostics.test.ts`
+- `apps/web/src/renderers/Orthographic2DRenderer.tsx`
+- `playwright.config.ts`
+- `tests/e2e/inventory-input.spec.ts`
+- `docs/uix-325-inventory-focus-diagnostics-checkpoint-2026-08-01.md`
+
+### Verification
+
+- diagnostics and source-encoding tests: 11/11 PASS
+- inventory browser regression, Chromium: 3/3 PASS
+- inventory browser regression, Firefox: 3/3 PASS
+- workspace typecheck: PASS
+- lint: PASS
+- production build: PASS (existing chunk-size warning only)
+- `git diff --check`: PASS
+
+### Blocker
+
+The real Windows matrix remains open: Chrome/Firefox × Punto on/off × RU/EN, including ordinary typing and layout switching. Docker multiplayer verification is deferred by explicit user request and is not part of this input-only pool.
+
+### Next action
+
+Commit this bounded hardening pool, keep UIX-325 In Progress, and perform the manual environment matrix later.

@@ -3655,6 +3655,7 @@ code {
   gap: 2px;
 }
 .roll-mode-control--icons button,
+.canvas-roll-custom,
 .canvas-roll-gm-toggle {
   display: inline-grid;
   width: 28px;
@@ -3667,6 +3668,14 @@ code {
 .canvas-roll-gm-toggle[aria-pressed="true"] {
   color: var(--accent-contrast);
   background: var(--accent);
+}
+@media (max-width: 520px) {
+  .canvas-roll-overlay {
+    position: fixed;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
 }
 
 /* Collapsible activity sidebar. The aside remains mounted so chat state and

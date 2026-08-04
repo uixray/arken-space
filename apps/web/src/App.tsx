@@ -16,13 +16,14 @@ import type {
   StoryPostDto,
   TokenDto,
 } from "@arken/contracts";
-import { api, ApiError, reportClientEvent } from "./api";
+import { api, ApiError, formatApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
 import type { StoryDraftInput } from "./StoryChannel";
 import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
+import { fetchOperatorCapability } from "./operator-feedback";
 import { appendChatMessage, reconcileChatRead } from "./chat-state";
 import {
   appendDirectMessageResponse,
@@ -51,6 +52,7 @@ import {
   mergeCharacterMutationResponse,
   reconcileGameSnapshot,
 } from "./character-mutation";
+import { applyPlayerRequestChanged } from "./player-request-realtime";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -63,7 +65,14 @@ const Orthographic2DRenderer = lazy(() =>
 );
 
 type WorkspaceDestination =
-  "characters" | "tokens" | "scenes" | "setup" | "media" | "world-maps";
+  | "characters"
+  | "tokens"
+  | "scenes"
+  | "setup"
+  | "media"
+  | "world-maps"
+  | "operator-feedback"
+  | "player-requests";
 
 function CanvasRollOverlay({
   characterId,
@@ -80,51 +89,81 @@ function CanvasRollOverlay({
 }) {
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
+  const [customRollOpen, setCustomRollOpen] = useState(false);
   return (
-    <section className="canvas-roll-overlay" aria-label="Быстрые броски">
-      <div className="canvas-roll-row">
-        <RollModeControl
-          value={rollMode}
-          onChange={setRollMode}
-          label="Режим броска"
-          iconOnly
-        />
-        <div className="canvas-roll-dice" aria-label="Кости">
-          {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
-            <button
-              key={sides}
-              type="button"
-              title={`Бросить d${sides}`}
-              onClick={() =>
-                void onRoll(
-                  `1d${sides}`,
-                  `d${sides}`,
-                  visibility,
-                  characterId,
-                  rollMode,
-                )
-              }
-            >
-              d{sides}
-            </button>
-          ))}
+    <>
+      <section className="canvas-roll-overlay" aria-label="Быстрые броски">
+        <div className="canvas-roll-row">
+          <RollModeControl
+            value={rollMode}
+            onChange={setRollMode}
+            label="Режим броска"
+            iconOnly
+          />
+          <div className="canvas-roll-dice" aria-label="Кости">
+            {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
+              <button
+                key={sides}
+                type="button"
+                title={`Бросить d${sides}`}
+                onClick={() =>
+                  void onRoll(
+                    `1d${sides}`,
+                    `d${sides}`,
+                    visibility,
+                    characterId,
+                    rollMode,
+                  )
+                }
+              >
+                d{sides}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="canvas-roll-custom"
+            aria-label="Своя формула"
+            title="Своя формула"
+            onClick={() => setCustomRollOpen(true)}
+          >
+            <span aria-hidden="true">fx</span>
+          </button>
+          <button
+            type="button"
+            className="canvas-roll-gm-toggle"
+            aria-label="Бросок только мастеру"
+            title="Бросок только мастеру"
+            aria-pressed={visibility === "GM_ONLY"}
+            onClick={() =>
+              setVisibility((current) =>
+                current === "GM_ONLY" ? "PUBLIC" : "GM_ONLY",
+              )
+            }
+          >
+            <span aria-hidden="true">◆</span>
+          </button>
         </div>
-        <button
-          type="button"
-          className="canvas-roll-gm-toggle"
-          aria-label="Бросок только мастеру"
-          title="Бросок только мастеру"
-          aria-pressed={visibility === "GM_ONLY"}
-          onClick={() =>
-            setVisibility((current) =>
-              current === "GM_ONLY" ? "PUBLIC" : "GM_ONLY",
-            )
-          }
-        >
-          <span aria-hidden="true">◆</span>
-        </button>
-      </div>
-    </section>
+      </section>
+      <TextPromptDialog
+        open={customRollOpen}
+        title="Быстрый бросок"
+        label="Формула броска"
+        initialValue="1d20"
+        applyLabel="Бросить"
+        onClose={() => setCustomRollOpen(false)}
+        onApply={async (formula) => {
+          await onRoll(
+            formula,
+            "Быстрый бросок",
+            visibility,
+            characterId,
+            rollMode,
+          );
+          setCustomRollOpen(false);
+        }}
+      />
+    </>
   );
 }
 
@@ -391,6 +430,7 @@ export function App() {
   const [playerHandoffPending, setPlayerHandoffPending] = useState(false);
   const [playerHandoffError, setPlayerHandoffError] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceDestination | null>(null);
+  const [operatorFeedbackAllowed, setOperatorFeedbackAllowed] = useState(false);
   const [requestedCharacterId, setRequestedCharacterId] = useState<
     string | null
   >(null);
@@ -400,6 +440,28 @@ export function App() {
   useDismissibleDetails(workspaceMenuRef);
   useDismissibleDetails(scenePickerRef);
   useDismissibleDetails(resizeSettingsRef);
+
+  useEffect(() => {
+    if (!snapshot) {
+      setOperatorFeedbackAllowed(false);
+      return;
+    }
+    let active = true;
+    void fetchOperatorCapability()
+      .then(() => {
+        if (active) setOperatorFeedbackAllowed(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        setOperatorFeedbackAllowed(false);
+        setWorkspace((current) =>
+          current === "operator-feedback" ? null : current,
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [snapshot?.me.id]);
 
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
@@ -666,6 +728,9 @@ export function App() {
     next.on("story:changed", () => {
       void loadStoryPosts().catch(() => undefined);
     });
+    next.on("player-request:changed", (request) => {
+      setSnapshot((current) => applyPlayerRequestChanged(current, request));
+    });
     next.on("chat:thread_created", ({ thread, state }) => {
       setSnapshot((current) =>
         current ? upsertDirectThread(current, thread, state) : current,
@@ -762,9 +827,7 @@ export function App() {
       setError("");
       return await action();
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Операция не выполнена",
-      );
+      setError(formatApiError(reason));
       throw reason;
     }
   };
@@ -1316,6 +1379,17 @@ export function App() {
             >
               World maps
             </button>
+            <button type="button" onClick={() => handleWorkspaceChange("player-requests")}>
+              {snapshot.me.role === "GM" ? "Открытые заявки" : "Мои заявки"}
+            </button>
+            {operatorFeedbackAllowed && (
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange("operator-feedback")}
+              >
+                Operator feedback
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleWorkspaceChange("media")}
@@ -1841,12 +1915,14 @@ export function App() {
                   )
                 }
                 onTokenResize={async (tokenId, revision, size) => {
+                  const actionId = crypto.randomUUID();
                   try {
                     const updated = await runResult(() =>
                       api<TokenDto>(`/api/tokens/${tokenId}/size`, {
                         method: "PATCH",
+                        headers: { "x-action-id": actionId },
                         body: JSON.stringify({
-                          actionId: crypto.randomUUID(),
+                          actionId,
                           revision,
                           ...size,
                         }),
@@ -1864,6 +1940,7 @@ export function App() {
                     );
                   } catch (reason) {
                     await load();
+                    setError(formatApiError(reason));
                     throw reason;
                   }
                 }}
@@ -2110,7 +2187,36 @@ export function App() {
             collapsed={sidebarCollapsed}
             onCollapsedChange={handleSidebarCollapsedChange}
             workspace={workspace}
+            operatorFeedbackAllowed={operatorFeedbackAllowed}
             onWorkspaceChange={handleWorkspaceChange}
+            onOpenPlayerRequestCreate={() => handleWorkspaceChange("player-requests")}
+            onCreatePlayerRequest={async (input) => {
+              try {
+                const request = await api<import("@arken/contracts").PlayerRequestDto>("/api/player-requests", { method: "POST", body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }) });
+                setSnapshot((current) => applyPlayerRequestChanged(current, request));
+              } catch (reason) {
+                if (reason instanceof ApiError && reason.status === 409) await load();
+                throw reason;
+              }
+            }}
+            onUpdatePlayerRequest={async (currentRequest, input) => {
+              try {
+                const request = await api<import("@arken/contracts").PlayerRequestDto>(`/api/player-requests/${currentRequest.id}`, { method: "PATCH", body: JSON.stringify({ ...input, revision: currentRequest.revision, actionId: crypto.randomUUID() }) });
+                setSnapshot((current) => applyPlayerRequestChanged(current, request));
+              } catch (reason) {
+                if (reason instanceof ApiError && reason.status === 409) await load();
+                throw reason;
+              }
+            }}
+            onPlayerRequestAction={async (currentRequest, action, resolutionNote) => {
+              try {
+                const request = await api<import("@arken/contracts").PlayerRequestDto>(`/api/player-requests/${currentRequest.id}/actions`, { method: "POST", body: JSON.stringify({ actionId: crypto.randomUUID(), revision: currentRequest.revision, action, ...(resolutionNote ? { resolutionNote } : {}) }) });
+                setSnapshot((current) => applyPlayerRequestChanged(current, request));
+              } catch (reason) {
+                if (reason instanceof ApiError && reason.status === 409) await load();
+                throw reason;
+              }
+            }}
             onPlaceTokenDefinition={async (definitionId) =>
               run(() =>
                 api(`/api/token-definitions/${definitionId}/placements`, {

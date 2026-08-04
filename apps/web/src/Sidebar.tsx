@@ -77,6 +77,9 @@ import {
   type ActivityStoryPost,
 } from "./activity-feed";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
+import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
+import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
+import { PlayerRequestChatCard } from "./player-request-chat";
 import {
   changeWalletValue,
   EMPTY_WALLET,
@@ -324,6 +327,10 @@ type Props = {
   requestedChatMessageId: string | null;
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
+  onOpenPlayerRequestCreate: () => void;
+  onCreatePlayerRequest: (input: { title: string; body: string; horizon: "NOW" | "BEFORE_BREAK" | "NEXT_SESSION"; audience: "PUBLIC" | "GM_ONLY"; characterId: string | null }) => Promise<void>;
+  onUpdatePlayerRequest: (request: import("@arken/contracts").PlayerRequestDto, input: { title: string; body: string }) => Promise<void>;
+  onPlayerRequestAction: (request: import("@arken/contracts").PlayerRequestDto, action: import("@arken/contracts").PlayerRequestTransition, resolutionNote?: string) => Promise<void>;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   workspace:
@@ -333,7 +340,10 @@ type Props = {
     | "setup"
     | "media"
     | "world-maps"
+    | "operator-feedback"
+    | "player-requests"
     | null;
+  operatorFeedbackAllowed: boolean;
   onWorkspaceChange: (
     workspace:
       | "characters"
@@ -342,6 +352,8 @@ type Props = {
       | "setup"
       | "media"
       | "world-maps"
+      | "operator-feedback"
+      | "player-requests"
       | null,
   ) => void;
   onCreateWorldMap: (input: {
@@ -608,6 +620,7 @@ export function Sidebar(props: Props) {
             onRoll={props.onRoll}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
+            onOpenPlayerRequestCreate={props.onOpenPlayerRequestCreate}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel
@@ -636,6 +649,7 @@ export function Sidebar(props: Props) {
             activeStream={activeFeed}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
+            onOpenPlayerRequests={() => props.onWorkspaceChange("player-requests")}
           />
         )}
         {props.workspace === "characters" && (
@@ -680,6 +694,16 @@ export function Sidebar(props: Props) {
             onSave={props.onSaveScene}
             onUpload={props.onUpload}
           />
+        )}
+        {props.workspace === "operator-feedback" &&
+          props.operatorFeedbackAllowed && (
+            <OperatorFeedbackWorkspace
+              open
+              onClose={() => props.onWorkspaceChange(null)}
+            />
+          )}
+        {props.workspace === "player-requests" && (
+          <PlayerRequestsWorkspace open snapshot={props.snapshot} onClose={() => props.onWorkspaceChange(null)} onCreate={props.onCreatePlayerRequest} onUpdate={props.onUpdatePlayerRequest} onAction={props.onPlayerRequestAction} />
         )}
         {props.workspace === "world-maps" && (
           <WorldMapsWorkspace
@@ -1914,13 +1938,13 @@ export function CharacterPanel({
   );
 }
 
-function ChatMessageBody({
-  message,
-  catalogEntryIds,
-}: {
+function ChatMessageBody({ message, catalogEntryIds, playerRequests, onOpenPlayerRequests }: {
   message: GameSnapshot["messages"][number];
   catalogEntryIds?: ReadonlySet<string>;
-}) {
+  playerRequests?: GameSnapshot["playerRequests"];
+  onOpenPlayerRequests?: () => void;
+} ) {
+  if (message.playerRequestId) return <PlayerRequestChatCard message={message} requests={playerRequests ?? []} onOpen={onOpenPlayerRequests ?? (() => {})} />;
   if (message.stickerId || message.stickerPresentation) {
     const presentation = message.stickerPresentation;
     if (!message.stickerId || !presentation)
@@ -2009,6 +2033,7 @@ function ActivityPanel({
   onRoll,
   focusedMessageId,
   onMessageFocused,
+  onOpenPlayerRequestCreate,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -2017,6 +2042,7 @@ function ActivityPanel({
   onRoll: Props["onRoll"];
   focusedMessageId: string | null;
   onMessageFocused: () => void;
+  onOpenPlayerRequestCreate: () => void;
 }) {
   const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
@@ -2318,6 +2344,8 @@ function ActivityPanel({
                 catalogEntryIds={
                   snapshot.me.role === "GM" ? catalogEntryIds : undefined
                 }
+                playerRequests={snapshot.playerRequests}
+                onOpenPlayerRequests={onOpenPlayerRequestCreate}
               />
             </article>
           );
@@ -2397,6 +2425,11 @@ function ActivityPanel({
           <Button className="primary" type="submit">
             {"Отправить"}
           </Button>
+          {snapshot.me.role === "PLAYER" && (
+            <Button type="button" view="flat" onClick={onOpenPlayerRequestCreate}>
+              Заявка
+            </Button>
+          )}
           <label className="compact-check chat-visibility-check">
             <FormInput
               type="checkbox"
@@ -2720,6 +2753,7 @@ function ChatPanel({
   activeStream,
   focusedMessageId,
   onMessageFocused,
+  onOpenPlayerRequests,
 }: {
   snapshot: GameSnapshot;
   onChat: Props["onChat"];
@@ -2729,6 +2763,7 @@ function ChatPanel({
   activeStream: ChatStream;
   focusedMessageId: string | null;
   onMessageFocused: () => void;
+  onOpenPlayerRequests: () => void;
 }) {
   const [composer, setComposer] = useState("");
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
@@ -2901,9 +2936,9 @@ function ChatPanel({
               </header>
               <ChatMessageBody
                 message={item.message}
-                catalogEntryIds={
-                  snapshot.me.role === "GM" ? catalogEntryIds : undefined
-                }
+                catalogEntryIds={snapshot.me.role === "GM" ? catalogEntryIds : undefined}
+                playerRequests={snapshot.playerRequests}
+                onOpenPlayerRequests={onOpenPlayerRequests}
               />
             </article>
           ),

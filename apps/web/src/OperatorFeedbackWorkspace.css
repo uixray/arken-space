@@ -1,0 +1,31 @@
+﻿.operator-feedback {
+  width: min(960px, calc(100vw - 48px));
+  height: min(700px, calc(100vh - 48px));
+}
+.operator-feedback__grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  height: 100%;
+  overflow: hidden;
+}
+.operator-feedback nav,
+.operator-feedback section {
+  overflow: auto;
+}
+.operator-feedback nav button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 10px;
+  text-align: left;
+}
+.operator-feedback img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+}
+.operator-feedback pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

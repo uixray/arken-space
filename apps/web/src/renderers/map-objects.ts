@@ -22,6 +22,29 @@ export interface MapObjectSelectionContext {
   showGmLayer?: boolean;
 }
 
+export type TokenStackEntry = Pick<TokenDto, "id" | "layer" | "x" | "y">;
+
+export function resolveTokenStacks(
+  tokens: readonly TokenStackEntry[],
+  cellKey: (x: number, y: number) => string,
+) {
+  const cells = new Map<string, string[]>();
+  for (const token of tokens) {
+    if (token.layer === "MAP") continue;
+    const key = cellKey(token.x, token.y);
+    const ids = cells.get(key) ?? [];
+    ids.push(token.id);
+    cells.set(key, ids);
+  }
+  const result: Record<string, { count: number; representativeId: string }> =
+    {};
+  for (const [key, ids] of cells) {
+    ids.sort((a, b) => a.localeCompare(b));
+    result[key] = { count: ids.length, representativeId: ids[0]! };
+  }
+  return result;
+}
+
 const isFiniteNumber = (value: number) => Number.isFinite(value);
 
 export function tokenBounds(token: TokenDto): MapObjectBounds | null {
