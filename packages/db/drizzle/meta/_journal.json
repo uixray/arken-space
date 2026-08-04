@@ -197,6 +197,13 @@
       "when": 1785790800000,
       "tag": "0027_fog_geometry",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785873600000,
+      "tag": "0028_drawing_stroke_width",
+      "breakpoints": true
     }
   ]
 }
