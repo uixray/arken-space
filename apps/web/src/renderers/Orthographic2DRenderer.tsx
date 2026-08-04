@@ -414,6 +414,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+  const orderedFogReveals = useMemo(
+    () =>
+      [...props.fogReveals].sort(
+        (a, b) => (a.sequence ?? 0) - (b.sequence ?? 0),
+      ),
+    [props.fogReveals],
+  );
 
   useEffect(() => {
     const mask = fogMaskRef.current;
@@ -427,7 +434,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       pixelRatio: 1,
     });
     mask.getLayer()?.batchDraw();
-  }, [props.fogReveals, worldDraft.width, worldDraft.height]);
+  }, [orderedFogReveals, worldDraft.width, worldDraft.height]);
 
   const pointerInWorld = () => {
     const pointer = stageRef.current?.getPointerPosition();
@@ -552,7 +559,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const selectableObjects = selectMapObjects(props.tokens, props.drawings, {
     role: props.role,
     membershipId: props.membershipId,
-    fogReveals: props.fogReveals,
+    fogReveals: orderedFogReveals,
     world: worldDraft,
     showGmLayer,
   });
@@ -743,7 +750,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     interaction.selectedObject,
     props.tokens,
     props.drawings,
-    props.fogReveals,
+    orderedFogReveals,
     props.role,
     props.membershipId,
     showGmLayer,
@@ -1074,7 +1081,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         width: Math.max(...xs) - Math.min(...xs),
         height: Math.max(...ys) - Math.min(...ys),
       },
-      props.fogReveals,
+      orderedFogReveals,
     );
   };
 
@@ -1096,7 +1103,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           height={worldDraft.height}
           fill={visual.color.fog}
         />
-        {props.fogReveals.map((fog) => (
+        {orderedFogReveals.map((fog) => (
           <Rect
             key={fog.id}
             x={fog.x}
@@ -1760,7 +1767,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               (token) =>
                 props.role === "GM" ||
                 token.controllerMembershipIds.includes(props.membershipId) ||
-                isRectFullyRevealed(token, props.fogReveals),
+                isRectFullyRevealed(token, orderedFogReveals),
             )
             .sort((a, b) =>
               a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
@@ -1879,7 +1886,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       !canSelectToken(token, {
                         role: props.role,
                         membershipId: props.membershipId,
-                        fogReveals: props.fogReveals,
+                        fogReveals: orderedFogReveals,
                         world: worldDraft,
                         showGmLayer,
                       })
