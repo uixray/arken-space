@@ -39,9 +39,9 @@ The checked foundation rows record repository delivery. This planning pass did n
 
 ### Canvas authority and tools
 
-- [ ] [UIX-212 — Authoritative canvas undo and redo](https://linear.app/uixraydesign/issue/UIX-212/arken-space-authoritative-canvas-undo-and-redo) — blocked by UIX-208.
-- [ ] [UIX-213 — Canvas visibility layers and ordered fog operations](https://linear.app/uixraydesign/issue/UIX-213/arken-space-canvas-visibility-layers-and-ordered-fog-operations) — blocked by UIX-212.
-- [ ] [UIX-214 — Persistent drawings, shared ruler and map navigation controls](https://linear.app/uixraydesign/issue/UIX-214/arken-space-persistent-drawings-shared-ruler-and-map-navigation) — blocked by UIX-212 and UIX-213.
+- [x] [UIX-212 — Authoritative canvas undo and redo](https://linear.app/uixraydesign/issue/UIX-212/arken-space-authoritative-canvas-undo-and-redo) — done.
+- [x] [UIX-213 — Canvas visibility layers and ordered fog operations](https://linear.app/uixraydesign/issue/UIX-213/arken-space-canvas-visibility-layers-and-ordered-fog-operations) — done.
+- [ ] [UIX-214 — Persistent drawings, shared ruler and map navigation controls](https://linear.app/uixraydesign/issue/UIX-214/arken-space-persistent-drawings-shared-ruler-and-map-navigation) — in progress: shared-ruler tool-switch cleanup regression found in review, plus line-settings/stroke-width increment still self-flagged partial.
 
 ### Product workflows
 
