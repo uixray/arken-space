@@ -287,6 +287,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const trackDrawingRef = useRef<(event: MouseEvent) => void>(() => undefined);
   const [drawingColor, setDrawingColor] = useState<string>(visual.color.edit);
   const [drawingStrokeWidth, setDrawingStrokeWidth] = useState<number>(3);
+  const drawingColorUpdateTimeoutRef = useRef<number | null>(null);
+  const drawingWidthUpdateTimeoutRef = useRef<number | null>(null);
   const [backgroundDraft, setBackgroundDraft] = useState(
     props.scene.backgroundFrame,
   );
@@ -2307,11 +2309,18 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         const updateColor = (color: string) => {
           setDrawingColor(color);
           if (canEditDrawing) {
-            void props.onDrawingUpdate?.(
-              drawing.id,
-              drawing.revision,
-              { color },
-            );
+            if (drawingColorUpdateTimeoutRef.current !== null) {
+              window.clearTimeout(drawingColorUpdateTimeoutRef.current);
+            }
+            // Debounced: a native color/range input fires onChange on every
+            // pointer tick, and each call would otherwise PATCH with the same
+            // stale `drawing.revision` faster than the prior request's ack
+            // can update it, producing a storm of 409 DRAWING_CONFLICT.
+            drawingColorUpdateTimeoutRef.current = window.setTimeout(() => {
+              void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
+                color,
+              });
+            }, 200);
           }
         };
 
@@ -2319,11 +2328,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           const clamped = Math.max(1, Math.min(100, strokeWidth));
           setDrawingStrokeWidth(clamped);
           if (canEditDrawing) {
-            void props.onDrawingUpdate?.(
-              drawing.id,
-              drawing.revision,
-              { strokeWidth: clamped },
-            );
+            if (drawingWidthUpdateTimeoutRef.current !== null) {
+              window.clearTimeout(drawingWidthUpdateTimeoutRef.current);
+            }
+            drawingWidthUpdateTimeoutRef.current = window.setTimeout(() => {
+              void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
+                strokeWidth: clamped,
+              });
+            }, 200);
           }
         };
 
