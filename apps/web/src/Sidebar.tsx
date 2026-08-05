@@ -574,30 +574,7 @@ export function Sidebar(props: Props) {
             </Button>
           );
         })}
-        <Button
-          view="flat"
-          role="tab"
-          id="chat-tab-direct"
-          aria-controls="chat-panel-direct"
-          aria-selected={directMode}
-          tabIndex={directMode ? 0 : -1}
-          onClick={() => setDirectMode(true)}
-        >
-          Личные
-          {directThreads(props.snapshot).reduce(
-            (total, thread) =>
-              total + directUnreadCount(props.snapshot, thread.id),
-            0,
-          ) > 0 && (
-            <span className="chat-unread-badge" aria-label="Есть непрочитанные">
-              {directThreads(props.snapshot).reduce(
-                (total, thread) =>
-                  total + directUnreadCount(props.snapshot, thread.id),
-                0,
-              )}
-            </span>
-          )}
-        </Button>
+        {/* UIX-365: direct-message tab hidden pending a dedicated redesign of the mechanic. */}
       </nav>
       <div className="panel-scroll chat-scroll">
         {directMode ? (
