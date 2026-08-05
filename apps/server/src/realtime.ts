@@ -670,48 +670,65 @@ export function registerRealtime(
       });
     });
 
-    socket.on("ruler:update", async (input) => {
-      const parsed = rulerUpdateSchema.safeParse(input);
-      if (!parsed.success) return;
-      const [scene] = await db
-        .select({ id: scenes.id, grid: scenes.grid })
-        .from(scenes)
-        .where(
-          and(
-            eq(scenes.id, parsed.data.sceneId),
-            eq(scenes.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      if (!scene) return;
-      const dx = parsed.data.endX - parsed.data.startX;
-      const dy = parsed.data.endY - parsed.data.startY;
-      io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
-        ...parsed.data,
-        membershipId: auth.membershipId,
-        displayName: auth.displayName,
-        distance:
-          Math.hypot(dx, dy) / (scene.grid.enabled ? scene.grid.size : 1),
+    // ruler:update and ruler:clear both hit the DB before broadcasting. If a
+    // drag's last ruler:update and the ruler:clear that follows it (e.g. from
+    // pressing Escape) are handled as two independent async callbacks, their
+    // DB lookups can resolve out of order, so the "clear" broadcast can beat
+    // the still-pending "update" broadcast across the wire. That leaves every
+    // client (including the one who cleared it) with a ruler:updated arriving
+    // after ruler:cleared, redrawing a stale line that nothing clears
+    // afterwards. Chaining both handlers on a single per-socket promise
+    // preserves the client's emit order in the broadcasts.
+    let rulerQueue: Promise<void> = Promise.resolve();
+
+    socket.on("ruler:update", (input) => {
+      rulerQueue = rulerQueue.then(async () => {
+        const parsed = rulerUpdateSchema.safeParse(input);
+        if (!parsed.success) return;
+        const [scene] = await db
+          .select({ id: scenes.id, grid: scenes.grid })
+          .from(scenes)
+          .where(
+            and(
+              eq(scenes.id, parsed.data.sceneId),
+              eq(scenes.campaignId, auth.campaignId),
+            ),
+          )
+          .limit(1);
+        if (!scene) return;
+        const dx = parsed.data.endX - parsed.data.startX;
+        const dy = parsed.data.endY - parsed.data.startY;
+        io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
+          ...parsed.data,
+          membershipId: auth.membershipId,
+          displayName: auth.displayName,
+          distance:
+            Math.hypot(dx, dy) / (scene.grid.enabled ? scene.grid.size : 1),
+        });
       });
     });
 
-    socket.on("ruler:clear", async (input) => {
-      const parsed = z.object({ sceneId: z.string().uuid() }).safeParse(input);
-      if (!parsed.success) return;
-      const [scene] = await db
-        .select({ id: scenes.id })
-        .from(scenes)
-        .where(
-          and(
-            eq(scenes.id, parsed.data.sceneId),
-            eq(scenes.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      if (!scene) return;
-      io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
-        sceneId: scene.id,
-        membershipId: auth.membershipId,
+    socket.on("ruler:clear", (input) => {
+      rulerQueue = rulerQueue.then(async () => {
+        const parsed = z
+          .object({ sceneId: z.string().uuid() })
+          .safeParse(input);
+        if (!parsed.success) return;
+        const [scene] = await db
+          .select({ id: scenes.id })
+          .from(scenes)
+          .where(
+            and(
+              eq(scenes.id, parsed.data.sceneId),
+              eq(scenes.campaignId, auth.campaignId),
+            ),
+          )
+          .limit(1);
+        if (!scene) return;
+        io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
+          sceneId: scene.id,
+          membershipId: auth.membershipId,
+        });
       });
     });
 

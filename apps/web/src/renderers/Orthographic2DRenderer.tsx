@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import {
+  Arrow,
   Circle,
   Group,
   Image,
@@ -2102,26 +2103,25 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
 
         <Layer listening={false}>
           {displayRulers.map((ruler) => {
-            const labelText = `${ruler.displayName}: ${ruler.distance.toFixed(1)}`;
+            const gridEnabled = props.scene.grid.enabled;
+            const unitSuffix = gridEnabled ? " кл." : " px (без сетки)";
+            const labelText = `${ruler.displayName}: ${ruler.distance.toFixed(1)}${unitSuffix}`;
             const estimatedWidth = Math.max(50, labelText.length * 8 + 12);
             return (
               <Group key={ruler.membershipId}>
-                <Line
+                <Arrow
                   points={[ruler.startX, ruler.startY, ruler.endX, ruler.endY]}
                   stroke={visual.color.selection}
+                  fill={visual.color.selection}
                   strokeWidth={2.5 / scale}
                   dash={[6 / scale, 4 / scale]}
+                  pointerLength={10 / scale}
+                  pointerWidth={10 / scale}
                 />
                 <Circle
                   x={ruler.startX}
                   y={ruler.startY}
                   radius={4 / scale}
-                  fill={visual.color.selection}
-                />
-                <Circle
-                  x={ruler.endX}
-                  y={ruler.endY}
-                  radius={5 / scale}
                   fill={visual.color.selection}
                 />
                 <Group x={ruler.endX + 8 / scale} y={ruler.endY - 14 / scale}>
