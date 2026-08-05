@@ -682,6 +682,20 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setSelectedDrawingId(null);
       dispatchInteraction({ type: "clear-selection" });
       setTokenMenu(null);
+      if (
+        drawingActiveRef.current ||
+        drawingPointsRef.current.length > 0 ||
+        drawingPoints.length > 0
+      ) {
+        // Cancel the in-progress stroke instead of leaving it dangling: the
+        // matching pointerup will still fire later with props.tool already
+        // switched away from DRAW, so shouldFinalizeDrawing there would be
+        // false and neither persist nor reset the draft. Mirror the
+        // reset-only branch from handlePointerUp here.
+        drawingActiveRef.current = false;
+        drawingPointsRef.current = [];
+        setDrawingPoints([]);
+      }
       onToolSelect("PAN");
     } else if (event.key.startsWith("Arrow")) {
       if (movableTargets.length) {

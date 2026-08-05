@@ -1959,18 +1959,43 @@ export function App() {
                     }),
                   )
                 }
-                onDrawingUpdate={(drawingId, revision, patch) =>
-                  run(() =>
-                    api(`/api/drawings/${drawingId}`, {
-                      method: "PATCH",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision,
-                        ...patch,
-                      }),
-                    }),
-                  )
-                }
+                onDrawingUpdate={async (drawingId, revision, patch) => {
+                  try {
+                    const updated = await runResult(() =>
+                      api<import("@arken/contracts").DrawingDto>(
+                        `/api/drawings/${drawingId}`,
+                        {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            actionId: crypto.randomUUID(),
+                            revision,
+                            ...patch,
+                          }),
+                        },
+                      ),
+                    );
+                    // Apply the PATCH response (with its new revision)
+                    // directly rather than waiting for the broadcast
+                    // snapshot round-trip: on a slow network the broadcast
+                    // can lag behind the next debounced edit, which would
+                    // otherwise keep reading a stale revision and 409 on
+                    // every subsequent request.
+                    setSnapshot((current) =>
+                      current
+                        ? {
+                            ...current,
+                            drawings: (current.drawings ?? []).map((item) =>
+                              item.id === updated.id ? updated : item,
+                            ),
+                          }
+                        : current,
+                    );
+                  } catch (reason) {
+                    if (reason instanceof ApiError && reason.status === 409)
+                      await load();
+                    throw reason;
+                  }
+                }}
                 onDrawingDelete={(drawingId, revision) =>
                   run(() =>
                     api(`/api/drawings/${drawingId}`, {
