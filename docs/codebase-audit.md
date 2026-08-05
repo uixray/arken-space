@@ -22,13 +22,13 @@
 
 В этой рабочей копии (не чистый clone — см. предупреждение ниже) выполнены:
 
-| Проверка          | Результат                                                                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm typecheck`  | PASS для всех 5 buildable workspace projects (`@arken/contracts`, `@arken/db`, `@arken/system`, `@arken/server`, `@arken/web`).                   |
-| `pnpm lint`       | FAIL — 1508 ESLint errors, почти все `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`.             |
-| `pnpm format:check` | FAIL — Prettier сообщает о проблемах стиля в 4421 файлах.                                                                                        |
-| Полный Vitest      | Не перезапускался в рамках этого аудита (см. ниже); последний записанный прогон — `release-regression-checkpoint-2026-08-01.md`: 383/396 PASS. |
-| Docker multiplayer, Playwright, restore rehearsal | Не запускались в рамках документирования; прошлые результаты зафиксированы в соответствующих release/runbook документах. |
+| Проверка                                          | Результат                                                                                                                                      |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm typecheck`                                  | PASS для всех 5 buildable workspace projects (`@arken/contracts`, `@arken/db`, `@arken/system`, `@arken/server`, `@arken/web`).                |
+| `pnpm lint`                                       | FAIL — 1508 ESLint errors, почти все `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`.         |
+| `pnpm format:check`                               | FAIL — Prettier сообщает о проблемах стиля в 4421 файлах.                                                                                      |
+| Полный Vitest                                     | Не перезапускался в рамках этого аудита (см. ниже); последний записанный прогон — `release-regression-checkpoint-2026-08-01.md`: 383/396 PASS. |
+| Docker multiplayer, Playwright, restore rehearsal | Не запускались в рамках документирования; прошлые результаты зафиксированы в соответствующих release/runbook документах.                       |
 
 **Важно про lint/format:check FAIL.** Причина — не дефект кода, а состояние
 именно этой рабочей копии: в `.worktrees/` и в соседних sibling-директориях
@@ -88,14 +88,14 @@ tests/       — Vitest (unit/integration) + Playwright (e2e/multiplayer)
 scripts/, infra/ — деплой, backup/restore, reset, incident bundle, nginx/systemd
 ```
 
-| Пакет                 | Ответственность                                                                                   | Точки входа                                        |
-| ---------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `apps/web`            | SPA: canvas, чат, персонажи, world maps, стикеры, story channel, wallet UI, REST/Socket.IO клиенты | `src/main.tsx`, `src/App.tsx`, `src/Sidebar.tsx`     |
-| `apps/server`         | HTTP/WS transport, auth/authz, use cases, snapshots, media, operator feedback                     | `src/index.ts`, `src/routes.ts`, `src/realtime.ts`   |
-| `packages/contracts`  | Общие Zod input-схемы, DTO и typed Socket.IO events (1809 строк `index.ts`)                        | `src/index.ts`, `src/fog-geometry.ts`                |
-| `packages/db`         | Drizzle schema (43 таблицы), SQL миграции `0000`–`0028`, connection factory                        | `src/schema.ts`, `src/index.ts`, `src/migrate.ts`    |
-| `packages/system`     | Определение игровой системы и starter character                                                    | `src/index.ts`                                       |
-| `tests`               | Vitest unit/integration (91 файл), Playwright e2e (10 спеков) + multiplayer                        | `vitest.config.ts`, `playwright*.config.ts`          |
+| Пакет                | Ответственность                                                                                    | Точки входа                                        |
+| -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `apps/web`           | SPA: canvas, чат, персонажи, world maps, стикеры, story channel, wallet UI, REST/Socket.IO клиенты | `src/main.tsx`, `src/App.tsx`, `src/Sidebar.tsx`   |
+| `apps/server`        | HTTP/WS transport, auth/authz, use cases, snapshots, media, operator feedback                      | `src/index.ts`, `src/routes.ts`, `src/realtime.ts` |
+| `packages/contracts` | Общие Zod input-схемы, DTO и typed Socket.IO events (1809 строк `index.ts`)                        | `src/index.ts`, `src/fog-geometry.ts`              |
+| `packages/db`        | Drizzle schema (43 таблицы), SQL миграции `0000`–`0028`, connection factory                        | `src/schema.ts`, `src/index.ts`, `src/migrate.ts`  |
+| `packages/system`    | Определение игровой системы и starter character                                                    | `src/index.ts`                                     |
+| `tests`              | Vitest unit/integration (91 файл), Playwright e2e (10 спеков) + multiplayer                        | `vitest.config.ts`, `playwright*.config.ts`        |
 
 Направление зависимостей по-прежнему правильное: `apps/web` не импортирует
 `server`/`db`, общие wire-контракты вынесены отдельно. Backend по-прежнему не
@@ -132,21 +132,21 @@ scripts/, infra/ — деплой, backup/restore, reset, incident bundle, nginx
 
 ## Команды разработки (из `package.json`)
 
-| Команда                  | Назначение                                                                 |
-| ------------------------- | ---------------------------------------------------------------------------- |
-| `pnpm dev`                | Параллельно поднимает `@arken/server` (tsx watch) и `@arken/web` (vite)     |
-| `pnpm dev:db`             | `docker compose up -d postgres`                                             |
-| `pnpm build`              | `pnpm -r --workspace-concurrency=1 build` во всех workspace-пакетах         |
-| `pnpm typecheck`          | `pnpm -r --workspace-concurrency=1 typecheck` (`tsc --noEmit` в каждом)     |
-| `pnpm test` / `test:watch`| `vitest run` / `vitest`                                                     |
-| `pnpm test:e2e`           | `playwright test`                                                           |
-| `pnpm test:multiplayer`   | `node scripts/run-multiplayer-e2e.mjs` (Docker-профиль)                     |
-| `pnpm restore:rehearse`   | `node scripts/run-restore-rehearsal.mjs`                                    |
-| `pnpm gameplay:reset:safe`| `node scripts/run-gameplay-reset-safe.mjs`                                  |
-| `pnpm incident:bundle`    | `node scripts/collect-incident-bundle.mjs`                                  |
-| `pnpm db:generate/migrate/studio` | Drizzle-kit generate/migrate/studio для `@arken/db`                 |
-| `pnpm lint`               | `eslint .`                                                                   |
-| `pnpm format:check`       | `prettier --check . --ignore-unknown`                                       |
+| Команда                           | Назначение                                                              |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| `pnpm dev`                        | Параллельно поднимает `@arken/server` (tsx watch) и `@arken/web` (vite) |
+| `pnpm dev:db`                     | `docker compose up -d postgres`                                         |
+| `pnpm build`                      | `pnpm -r --workspace-concurrency=1 build` во всех workspace-пакетах     |
+| `pnpm typecheck`                  | `pnpm -r --workspace-concurrency=1 typecheck` (`tsc --noEmit` в каждом) |
+| `pnpm test` / `test:watch`        | `vitest run` / `vitest`                                                 |
+| `pnpm test:e2e`                   | `playwright test`                                                       |
+| `pnpm test:multiplayer`           | `node scripts/run-multiplayer-e2e.mjs` (Docker-профиль)                 |
+| `pnpm restore:rehearse`           | `node scripts/run-restore-rehearsal.mjs`                                |
+| `pnpm gameplay:reset:safe`        | `node scripts/run-gameplay-reset-safe.mjs`                              |
+| `pnpm incident:bundle`            | `node scripts/collect-incident-bundle.mjs`                              |
+| `pnpm db:generate/migrate/studio` | Drizzle-kit generate/migrate/studio для `@arken/db`                     |
+| `pnpm lint`                       | `eslint .`                                                              |
+| `pnpm format:check`               | `prettier --check . --ignore-unknown`                                   |
 
 ## Рост схемы и контрактов с прошлого аудита
 
@@ -223,13 +223,13 @@ findings ещё указывают на те же строки.
 
 ## Крупнейшие hotspots (поддерживаемость)
 
-| Файл                                              | Строк | Было (2026-07-19) |
-| --------------------------------------------------- | ------: | -------------------: |
-| `apps/server/src/routes.ts`                        |  7262  | 4919                |
-| `apps/web/src/Sidebar.tsx`                         |  4160  | 2009                |
-| `apps/web/src/App.tsx`                             |  2944  | 2113                |
-| `apps/web/src/styles.css`                          |  3800  | 1739                |
-| `apps/web/src/renderers/Orthographic2DRenderer.tsx`|  2486  | 1481                |
+| Файл                                                | Строк | Было (2026-07-19) |
+| --------------------------------------------------- | ----: | ----------------: |
+| `apps/server/src/routes.ts`                         |  7262 |              4919 |
+| `apps/web/src/Sidebar.tsx`                          |  4160 |              2009 |
+| `apps/web/src/App.tsx`                              |  2944 |              2113 |
+| `apps/web/src/styles.css`                           |  3800 |              1739 |
+| `apps/web/src/renderers/Orthographic2DRenderer.tsx` |  2486 |              1481 |
 
 Все пять hotspot-файлов из прошлого аудита выросли, часть — более чем в 1.5
 раза. Рекомендация декомпозиции из прошлой версии документа (server

@@ -39,4 +39,3 @@ gate.
 
 Run the release gate, provision exactly one starter token for Dasha, reload, and
 repeat the read-only inventory.
-

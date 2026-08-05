@@ -18,16 +18,16 @@
 
 ### Preliminary map inventory
 
-| Source | Candidate scope | Readable reference labels | Review notes |
-| --- | --- | --- | --- |
-| photo 10 | WORLD overview | Центральный Аркейн, Северный Аркейн-Хар, Восточный Аркейн-Хар, Южный Аркейн-Хар, Велтория, Крестландия, Аландрия | Best hierarchy root; borders and scale are illustrative. |
-| photo 1 | Central Arkein / Krestlandia border | Центральный Аркейн, Крестландия, Берхор, Каранаир | Candidate regional overview; several labels need original-resolution GM confirmation. |
-| photo 2 | Central Arkein | Центральный Аркейн, Северный/Южный/Восточный/Западный Аркейн, Тристонния, Амбрион, Леонарис, Янтарная башня, Броистан | Candidate child map; distinguish settlements from landmarks. |
-| photo 3 | South Arkein coast | Южный Аркейн, Аландрия, Сталград, Храм, island and coastal labels | Candidate regional/coastal child; small labels remain uncertain. |
-| photo 4 | Alandria | Аландрия, Пустыня Сияния, Кампилак, Мешнарак, Махлар | Candidate country/island overview. |
-| photo 5 | Veltoria | Велтория, Арквин, Крестландия, Аландрия, Норвиан, Тримун, Хантар, Дианри | Candidate country overview; spelling requires GM confirmation. |
-| photo 8 | Western/northern subregion | Море Хьёрд, Драконьи Клыки, Хорст, Бреган, Майкал, Арфонг, Переправа, Локсвилл | Candidate regional map; parent is not explicit. |
-| photos 6, 7, 9 | Unclassified regional references | Metadata confirmed; labels not safely transcribed in this pass | Review at original resolution before hierarchy assignment. |
+| Source         | Candidate scope                     | Readable reference labels                                                                                             | Review notes                                                                          |
+| -------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| photo 10       | WORLD overview                      | Центральный Аркейн, Северный Аркейн-Хар, Восточный Аркейн-Хар, Южный Аркейн-Хар, Велтория, Крестландия, Аландрия      | Best hierarchy root; borders and scale are illustrative.                              |
+| photo 1        | Central Arkein / Krestlandia border | Центральный Аркейн, Крестландия, Берхор, Каранаир                                                                     | Candidate regional overview; several labels need original-resolution GM confirmation. |
+| photo 2        | Central Arkein                      | Центральный Аркейн, Северный/Южный/Восточный/Западный Аркейн, Тристонния, Амбрион, Леонарис, Янтарная башня, Броистан | Candidate child map; distinguish settlements from landmarks.                          |
+| photo 3        | South Arkein coast                  | Южный Аркейн, Аландрия, Сталград, Храм, island and coastal labels                                                     | Candidate regional/coastal child; small labels remain uncertain.                      |
+| photo 4        | Alandria                            | Аландрия, Пустыня Сияния, Кампилак, Мешнарак, Махлар                                                                  | Candidate country/island overview.                                                    |
+| photo 5        | Veltoria                            | Велтория, Арквин, Крестландия, Аландрия, Норвиан, Тримун, Хантар, Дианри                                              | Candidate country overview; spelling requires GM confirmation.                        |
+| photo 8        | Western/northern subregion          | Море Хьёрд, Драконьи Клыки, Хорст, Бреган, Майкал, Арфонг, Переправа, Локсвилл                                        | Candidate regional map; parent is not explicit.                                       |
+| photos 6, 7, 9 | Unclassified regional references    | Metadata confirmed; labels not safely transcribed in this pass                                                        | Review at original resolution before hierarchy assignment.                            |
 
 ### Candidate hierarchy
 
@@ -61,7 +61,6 @@ This is a review inventory, not canonical geography. No route edge, distance, bo
 1. Implement the safe asset-independent MVP foundation.
 2. Review the inventory and classify photos 6/7/8/9 before importing geography.
 3. Select or produce one approved background through the redraw gate before player publication.
-
 
 ## Implementation checkpoint
 

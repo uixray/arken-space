@@ -1,6 +1,7 @@
 # UIX-323 checkpoint - 2026-08-01
 
 ## Decisions
+
 - Short rest restores 25% of the maximum value of every recoverable resource, rounded up and capped at maximum.
 - Long rest is a campaign-level atomic command: it advances the day, restores all recoverable character resources, and recharges due day/week catalog uses in one transaction.
 - A resource can opt out through `recoverable: false`.
@@ -9,11 +10,13 @@
 - Magic Power is presented as a separate special characteristic; Reaction is grouped with Initiative.
 
 ## Revision
+
 - Branch: `codex/manual-production-fixes`
 - First pool commit: `0fd0591`
 - Base before the second pool: `0fd0591`
 
 ## Changed files
+
 - `packages/contracts/src/index.ts`
 - `apps/server/src/routes.ts`
 - `apps/web/src/App.tsx`
@@ -21,6 +24,7 @@
 - `tests/pool-b-http.test.ts`
 
 ## Delivered
+
 - Editable current/maximum Physical Power and Magic Power.
 - Structured custom-resource form with required name, optional description, current/maximum, image and recovery toggle.
 - Add, rename, edit and remove resource rows.
@@ -31,6 +35,7 @@
 - Skill and ability costs remain server-authoritative and atomic; insufficient Physical/Magic Power now produces an actionable localized error with required and available values.
 
 ## Verification
+
 - Typecheck - PASS.
 - Lint - PASS.
 - Source encoding - PASS (4/4).
@@ -41,7 +46,9 @@
 - `git diff --check` - PASS.
 
 ## Blockers outside UIX-323
+
 - The broad concept suite contains baseline selector debt and cannot currently serve as a green release gate. This is separate from the resource/rest acceptance boundary.
 
 ## Next action
+
 Close UIX-323 based on its green scoped acceptance gates and continue the prioritized backlog; keep the broad Playwright baseline debt explicit.

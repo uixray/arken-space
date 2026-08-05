@@ -83,6 +83,7 @@ Review and commit only the four files above for UIX-226, then start a separate U
 ### Next action
 
 Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then implement the remaining cold-load/portrait browser gate before review.
+
 ## UIX-227 resize correlation subpool
 
 - Token resize now uses one canonical UUID in both the request body and `x-action-id`, aligning route idempotency, request logs, telemetry and user correlation.
@@ -91,6 +92,7 @@ Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then i
 - Verification: API unit tests 10/10, web typecheck, workspace lint and diff check passed.
 - Browser cold-resize gesture remains open: Konva resize-handle coordinate automation was flaky and the incorrect world-resize test was removed rather than accepted.
 - Next action: commit this correlation scope separately; then add deterministic portrait/asset observability before the remaining real-browser gate.
+
 ## UIX-227 portrait continuity subpool
 
 - Added a pure token-image state machine for `loading`, `loaded`, `retained` and explicit `missing-asset` states.
@@ -101,6 +103,7 @@ Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then i
 - Verification: focused unit 8/8; isolated Chromium 3/3; portrait repeat 5/5; workspace typecheck, lint, production build and diff check passed.
 - Mocked Playwright emitted expected absent story/websocket proxy noise and the existing Konva six-layer performance warning; tests were not affected.
 - Remaining UIX-227 gates: stable cold first token-resize browser interaction, stack move/delete browser observability, Docker multiplayer and real GM/player smoke.
+
 ## UIX-227 stack semantics subpool
 
 - The GM object list now shows `<name> · стопка <count>` only for the deterministic representative among selectable tokens in the same grid cell.
@@ -110,6 +113,7 @@ Commit the seven-file UIX-227 scope separately, keep UIX-227 In Progress, then i
 - Changed files: `apps/web/src/renderers/Orthographic2DRenderer.tsx`, `tests/e2e/canvas-token-regressions.spec.ts`, and this checkpoint.
 - Verification: focused unit 24/24; isolated Chromium 4/4; workspace typecheck, lint, production build and diff check passed.
 - Remaining UIX-227 gates: stable cold first token resize, Docker multiplayer and final real GM/player smoke.
+
 ## UIX-227 cold token-resize subpool
 
 - Added GM-only ephemeral resize-handle local-screen coordinates to the map region while one selectable token is selected in PAN; no token ID, revision, world geometry or private metadata is exposed.
