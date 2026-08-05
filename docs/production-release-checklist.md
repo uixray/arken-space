@@ -16,8 +16,8 @@ test "$(printf %s "$EXPECTED_BUILD_REVISION" | wc -c)" -eq 40
 The production `.env` must be mode `600`, must not be committed, and must set:
 
 - `APP_VERSION`, `POSTGRES_PASSWORD`, `GM_ACCESS_TOKEN`;
-- `WEB_ORIGIN=https://arken.uixray.tech` and
-  `PUBLIC_URL=https://arken.uixray.tech`;
+- `WEB_ORIGIN=https://arken-khar.space` and
+  `PUBLIC_URL=https://arken-khar.space`;
 - absolute persistent `MEDIA_HOST_PATH` outside the checkout;
 - media quota, free-disk reserve, image and audio limits.
 
@@ -27,7 +27,7 @@ never in the application `.env` or GitHub.
 ## Mandatory pre-deploy gates
 
 1. Confirm DNS resolves to the intended host and the existing certificate covers
-   `arken.uixray.tech`. Validate nginx with `sudo nginx -t`.
+   `arken-khar.space`. Validate nginx with `sudo nginx -t`.
 2. Install `restic`; load `/etc/arken-space/restic.env`; run `restic check`.
 3. Create a fresh backup with `infra/backup/backup.sh`. Record the exact snapshot
    ID emitted by that invocation. Do not use `latest` as release evidence.
@@ -63,7 +63,7 @@ The server applies migrations `0000` through `0008` before accepting traffic.
 After startup, require all services healthy and verify:
 
 ```sh
-curl -fsS https://arken.uixray.tech/healthz
+curl -fsS https://arken-khar.space/healthz
 sh infra/deploy/smoke-auth.sh
 ```
 

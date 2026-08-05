@@ -8,7 +8,7 @@ Private web-first virtual tabletop for a custom tabletop RPG system. The first r
 - realtime orthographic 2D scenes, square grid, tokens and manual fog;
 - custom-system character sheets, chat and server-authoritative dice;
 - safe image/audio uploads and synchronized group music;
-- self-hosted deployment at `arken.uixray.tech`.
+- self-hosted deployment at `arken-khar.space`.
 
 Multi-level, isometric and full 3D rendering are deliberately deferred until the core 2D game loop is stable. The shared game state is renderer-independent so those modes can be added without rewriting access, chat, characters or realtime transport.
 

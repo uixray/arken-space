@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- DNS `arken.uixray.tech` points to the existing server.
+- DNS `arken-khar.space` points to the existing server.
 - Docker Compose, nginx and a TLS certificate are available.
 - At least 5 GB remains free after reserving application media.
 - A private S3-compatible restic repository exists outside this host.
@@ -19,8 +19,8 @@ for every release. The commands below are an overview, not substitute evidence.
    exact committed revision.
 5. Export the exact revision, snapshot and schema evidence variables documented
    in the release checklist, then run `infra/deploy/build-and-start.sh`.
-6. Install `infra/nginx/arken.uixray.tech.conf`, validate with `sudo nginx -t`, then reload nginx.
-7. Open `https://arken.uixray.tech/gm/<GM_ACCESS_TOKEN>`. Store the master URL in a password manager.
+6. Install `infra/nginx/arken-khar.space.conf`, validate with `sudo nginx -t`, then reload nginx.
+7. Open `https://arken-khar.space/gm/<GM_ACCESS_TOKEN>`. Store the master URL in a password manager.
 8. Verify `/healthz`, authenticated diagnostics, WebSocket connection, upload and database persistence.
 
 ## Backup

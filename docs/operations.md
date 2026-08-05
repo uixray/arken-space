@@ -13,7 +13,7 @@ Current production host paths:
 1. Set production values from `.env.example`; never use the development GM or PostgreSQL secrets.
 2. Build and start with `docker compose up -d --build`.
 3. The server container runs all pending PostgreSQL migrations before starting Fastify.
-4. Check `https://arken.uixray.tech/healthz`. A healthy response includes database, build and schema versions.
+4. Check `https://arken-khar.space/healthz`. A healthy response includes database, build and schema versions.
 5. Log in and compare `/api/diagnostics` with the expected release.
 
 Do not change the database schema unless a current restic snapshot exists.
