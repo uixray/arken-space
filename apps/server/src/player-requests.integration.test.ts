@@ -150,13 +150,11 @@ beforeAll(async () => {
     [ids.other, secrets.other],
     [ids.foreign, secrets.foreign],
   ] as const)
-    await db
-      .insert(schema.sessions)
-      .values({
-        membershipId,
-        tokenHash: hashToken(secret),
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+    await db.insert(schema.sessions).values({
+      membershipId,
+      tokenHash: hashToken(secret),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
   await db.insert(schema.characters).values([
     {
       id: ids.ownedCharacter,

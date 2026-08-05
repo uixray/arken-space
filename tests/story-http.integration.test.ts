@@ -346,19 +346,17 @@ describe("UIX-246 story HTTP integration", () => {
   it("atomically claims staged story media", async () => {
     const db = drizzle(database, { schema });
     const contentId = crypto.randomUUID();
-    await db
-      .insert(schema.chatAttachmentUploads)
-      .values({
-        contentId,
-        campaignId: ids.campaign,
-        uploadedByMembershipId: ids.gm,
-        fileName: "once.png",
-        storageKey: crypto.randomUUID(),
-        mimeType: "image/png",
-        sizeBytes: 1,
-        status: "STAGED",
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+    await db.insert(schema.chatAttachmentUploads).values({
+      contentId,
+      campaignId: ids.campaign,
+      uploadedByMembershipId: ids.gm,
+      fileName: "once.png",
+      storageKey: crypto.randomUUID(),
+      mimeType: "image/png",
+      sizeBytes: 1,
+      status: "STAGED",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
     await createDraft({ media: [{ contentId, order: 0, altText: "Once" }] });
     const duplicate = await app.inject({
       method: "POST",
