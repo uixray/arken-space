@@ -43,8 +43,7 @@ function dateKey(value: string) {
 
 function dateLabel(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime()))
-    return "Без даты";
+  if (Number.isNaN(date.getTime())) return "Без даты";
   return new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "long",

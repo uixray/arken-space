@@ -107,7 +107,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
         ? "Недостаточно " +
           (data?.resource === "magic" ? "магической силы" : "физической силы") +
           `. Нужно: ${data?.required ?? 0}, доступно: ${data?.available ?? 0}.`
-        : data?.message ?? "Не удалось выполнить запрос";
+        : (data?.message ?? "Не удалось выполнить запрос");
     const error = new ApiError(
       response.status,
       code,

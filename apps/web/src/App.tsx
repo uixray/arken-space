@@ -1379,7 +1379,10 @@ export function App() {
             >
               World maps
             </button>
-            <button type="button" onClick={() => handleWorkspaceChange("player-requests")}>
+            <button
+              type="button"
+              onClick={() => handleWorkspaceChange("player-requests")}
+            >
               {snapshot.me.role === "GM" ? "Открытые заявки" : "Мои заявки"}
             </button>
             {operatorFeedbackAllowed && (
@@ -2189,31 +2192,73 @@ export function App() {
             workspace={workspace}
             operatorFeedbackAllowed={operatorFeedbackAllowed}
             onWorkspaceChange={handleWorkspaceChange}
-            onOpenPlayerRequestCreate={() => handleWorkspaceChange("player-requests")}
+            onOpenPlayerRequestCreate={() =>
+              handleWorkspaceChange("player-requests")
+            }
             onCreatePlayerRequest={async (input) => {
               try {
-                const request = await api<import("@arken/contracts").PlayerRequestDto>("/api/player-requests", { method: "POST", body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }) });
-                setSnapshot((current) => applyPlayerRequestChanged(current, request));
+                const request = await api<
+                  import("@arken/contracts").PlayerRequestDto
+                >("/api/player-requests", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    ...input,
+                    actionId: crypto.randomUUID(),
+                  }),
+                });
+                setSnapshot((current) =>
+                  applyPlayerRequestChanged(current, request),
+                );
               } catch (reason) {
-                if (reason instanceof ApiError && reason.status === 409) await load();
+                if (reason instanceof ApiError && reason.status === 409)
+                  await load();
                 throw reason;
               }
             }}
             onUpdatePlayerRequest={async (currentRequest, input) => {
               try {
-                const request = await api<import("@arken/contracts").PlayerRequestDto>(`/api/player-requests/${currentRequest.id}`, { method: "PATCH", body: JSON.stringify({ ...input, revision: currentRequest.revision, actionId: crypto.randomUUID() }) });
-                setSnapshot((current) => applyPlayerRequestChanged(current, request));
+                const request = await api<
+                  import("@arken/contracts").PlayerRequestDto
+                >(`/api/player-requests/${currentRequest.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    ...input,
+                    revision: currentRequest.revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                });
+                setSnapshot((current) =>
+                  applyPlayerRequestChanged(current, request),
+                );
               } catch (reason) {
-                if (reason instanceof ApiError && reason.status === 409) await load();
+                if (reason instanceof ApiError && reason.status === 409)
+                  await load();
                 throw reason;
               }
             }}
-            onPlayerRequestAction={async (currentRequest, action, resolutionNote) => {
+            onPlayerRequestAction={async (
+              currentRequest,
+              action,
+              resolutionNote,
+            ) => {
               try {
-                const request = await api<import("@arken/contracts").PlayerRequestDto>(`/api/player-requests/${currentRequest.id}/actions`, { method: "POST", body: JSON.stringify({ actionId: crypto.randomUUID(), revision: currentRequest.revision, action, ...(resolutionNote ? { resolutionNote } : {}) }) });
-                setSnapshot((current) => applyPlayerRequestChanged(current, request));
+                const request = await api<
+                  import("@arken/contracts").PlayerRequestDto
+                >(`/api/player-requests/${currentRequest.id}/actions`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    revision: currentRequest.revision,
+                    action,
+                    ...(resolutionNote ? { resolutionNote } : {}),
+                  }),
+                });
+                setSnapshot((current) =>
+                  applyPlayerRequestChanged(current, request),
+                );
               } catch (reason) {
-                if (reason instanceof ApiError && reason.status === 409) await load();
+                if (reason instanceof ApiError && reason.status === 409)
+                  await load();
                 throw reason;
               }
             }}

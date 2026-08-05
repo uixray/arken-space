@@ -1,6 +1,12 @@
 export type SafeInputDiagnostic = {
   at: string;
-  event: "keydown" | "beforeinput" | "compositionstart" | "compositionend" | "focusin" | "focusout";
+  event:
+    | "keydown"
+    | "beforeinput"
+    | "compositionstart"
+    | "compositionend"
+    | "focusin"
+    | "focusout";
   key?: string;
   code?: string;
   inputType?: string;
@@ -14,10 +20,14 @@ export type SafeInputDiagnostic = {
 
 const MAX_EVENTS = 100;
 
-type ClosestTarget = EventTarget & { closest: (selector: string) => Element | null };
+type ClosestTarget = EventTarget & {
+  closest: (selector: string) => Element | null;
+};
 
 function supportsClosest(target: EventTarget | null): target is ClosestTarget {
-  return Boolean(target && typeof (target as Partial<ClosestTarget>).closest === "function");
+  return Boolean(
+    target && typeof (target as Partial<ClosestTarget>).closest === "function",
+  );
 }
 
 export function diagnosticKey(key: string) {
@@ -29,10 +39,30 @@ export function diagnosticKey(key: string) {
 }
 
 const SAFE_NON_PRINTABLE_KEYS = new Set([
-  "Alt", "AltGraph", "Backspace", "CapsLock", "ContextMenu", "Control",
-  "Delete", "End", "Enter", "Escape", "Home", "Insert", "Meta",
-  "NumLock", "PageDown", "PageUp", "Pause", "ScrollLock", "Shift", "Tab",
-  "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp",
+  "Alt",
+  "AltGraph",
+  "Backspace",
+  "CapsLock",
+  "ContextMenu",
+  "Control",
+  "Delete",
+  "End",
+  "Enter",
+  "Escape",
+  "Home",
+  "Insert",
+  "Meta",
+  "NumLock",
+  "PageDown",
+  "PageUp",
+  "Pause",
+  "ScrollLock",
+  "Shift",
+  "Tab",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
 ]);
 
 export function isEditableEventTarget(target: EventTarget | null) {
@@ -51,20 +81,25 @@ export function shouldIgnoreGlobalShortcut(
 }
 
 function describeTarget(target: EventTarget | null) {
-  if (typeof Element === "undefined" || !(target instanceof Element)) return undefined;
+  if (typeof Element === "undefined" || !(target instanceof Element))
+    return undefined;
   const role = target.getAttribute("role");
   return [target.tagName.toLowerCase(), role ? `[role=${role}]` : ""]
     .filter(Boolean)
     .join("");
 }
 
-export function installInputDiagnostics(locationSearch = window.location.search) {
-  if (!new URLSearchParams(locationSearch).has("input-diagnostics")) return () => undefined;
+export function installInputDiagnostics(
+  locationSearch = window.location.search,
+) {
+  if (!new URLSearchParams(locationSearch).has("input-diagnostics"))
+    return () => undefined;
 
   const events: SafeInputDiagnostic[] = [];
   const remember = (event: SafeInputDiagnostic) => {
     events.push(event);
-    if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
+    if (events.length > MAX_EVENTS)
+      events.splice(0, events.length - MAX_EVENTS);
   };
   const base = (event: Event) => ({
     at: new Date().toISOString(),
@@ -114,7 +149,11 @@ export function installInputDiagnostics(locationSearch = window.location.search)
 
   return () => {
     window.removeEventListener("keydown", onKeyDown, true);
-    window.removeEventListener("beforeinput", onBeforeInput as EventListener, true);
+    window.removeEventListener(
+      "beforeinput",
+      onBeforeInput as EventListener,
+      true,
+    );
     window.removeEventListener("compositionstart", onComposition, true);
     window.removeEventListener("compositionend", onComposition, true);
     window.removeEventListener("focusin", onFocus, true);

@@ -35,8 +35,7 @@ const characteristicLabels: Record<string, string> = {
   willpower: "Воля",
   charisma: "Харизма",
   reaction: "Реакция",
-  attention:
-    "Внимательность",
+  attention: "Внимательность",
   magicPower: "Сила магии",
 };
 

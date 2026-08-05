@@ -122,51 +122,101 @@ export type WorldMapLocationVisibility = z.infer<
 >;
 
 export const playerRequestAudienceSchema = z.enum(["PUBLIC", "GM_ONLY"]);
-export const playerRequestHorizonSchema = z.enum(["NOW", "BEFORE_BREAK", "NEXT_SESSION"]);
+export const playerRequestHorizonSchema = z.enum([
+  "NOW",
+  "BEFORE_BREAK",
+  "NEXT_SESSION",
+]);
 export const playerRequestListStateSchema = z.enum(["OPEN", "CLOSED"]);
 export const playerRequestStatusSchema = z.enum([
-  "SUBMITTED", "ACKNOWLEDGED", "RESOLVED", "DECLINED", "CANCELLED",
+  "SUBMITTED",
+  "ACKNOWLEDGED",
+  "RESOLVED",
+  "DECLINED",
+  "CANCELLED",
 ]);
 export const playerRequestTransitionSchema = z.enum([
-  "ACKNOWLEDGE", "RESOLVE", "DECLINE", "CANCEL",
+  "ACKNOWLEDGE",
+  "RESOLVE",
+  "DECLINE",
+  "CANCEL",
 ]);
 export const playerRequestDtoSchema = z.object({
-  id: z.string().uuid(), campaignId: z.string().uuid(), authorMembershipId: z.string().uuid(),
-  authorDisplayName: z.string(), characterId: z.string().uuid().nullable(), characterName: z.string().nullable(),
-  audience: playerRequestAudienceSchema, horizon: playerRequestHorizonSchema, status: playerRequestStatusSchema,
-  title: z.string(), body: z.string(), resolutionNote: z.string().nullable(),
-  resolvedByMembershipId: z.string().uuid().nullable(), resolvedByDisplayName: z.string().nullable(),
-  revision: z.number().int().nonnegative(),
-  createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
-});
-export const createPlayerRequestSchema = z.object({
-  actionId: z.string().uuid(), audience: playerRequestAudienceSchema,
+  id: z.string().uuid(),
+  campaignId: z.string().uuid(),
+  authorMembershipId: z.string().uuid(),
+  authorDisplayName: z.string(),
+  characterId: z.string().uuid().nullable(),
+  characterName: z.string().nullable(),
+  audience: playerRequestAudienceSchema,
   horizon: playerRequestHorizonSchema,
-  characterId: z.string().uuid().nullable().optional(),
-  title: z.string().trim().min(1).max(120), body: z.string().trim().min(1).max(4000),
-}).strict();
-export const updatePlayerRequestSchema = z.object({
-  actionId: z.string().uuid(), revision: z.number().int().nonnegative(),
-  title: z.string().trim().min(1).max(120), body: z.string().trim().min(1).max(4000),
-}).strict();
-export const transitionPlayerRequestSchema = z.object({
-  actionId: z.string().uuid(), revision: z.number().int().nonnegative(),
-  action: playerRequestTransitionSchema,
-  resolutionNote: z.string().trim().min(1).max(2000).optional(),
-}).strict().superRefine((value, context) => {
-  if (value.resolutionNote && value.action !== "RESOLVE" && value.action !== "DECLINE")
-    context.addIssue({ code: "custom", path: ["resolutionNote"], message: "Resolution note is only valid for resolve or decline" });
+  status: playerRequestStatusSchema,
+  title: z.string(),
+  body: z.string(),
+  resolutionNote: z.string().nullable(),
+  resolvedByMembershipId: z.string().uuid().nullable(),
+  resolvedByDisplayName: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 });
-export const listPlayerRequestsSchema = z.object({
-  status: playerRequestStatusSchema.optional(), state: playerRequestListStateSchema.optional(),
-  audience: playerRequestAudienceSchema.optional(), horizon: playerRequestHorizonSchema.optional(),
-  authorMembershipId: z.string().uuid().optional(), characterId: z.string().uuid().optional(),
-}).strict();
+export const createPlayerRequestSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    audience: playerRequestAudienceSchema,
+    horizon: playerRequestHorizonSchema,
+    characterId: z.string().uuid().nullable().optional(),
+    title: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(4000),
+  })
+  .strict();
+export const updatePlayerRequestSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    title: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(4000),
+  })
+  .strict();
+export const transitionPlayerRequestSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    action: playerRequestTransitionSchema,
+    resolutionNote: z.string().trim().min(1).max(2000).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.resolutionNote &&
+      value.action !== "RESOLVE" &&
+      value.action !== "DECLINE"
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["resolutionNote"],
+        message: "Resolution note is only valid for resolve or decline",
+      });
+  });
+export const listPlayerRequestsSchema = z
+  .object({
+    status: playerRequestStatusSchema.optional(),
+    state: playerRequestListStateSchema.optional(),
+    audience: playerRequestAudienceSchema.optional(),
+    horizon: playerRequestHorizonSchema.optional(),
+    authorMembershipId: z.string().uuid().optional(),
+    characterId: z.string().uuid().optional(),
+  })
+  .strict();
 export type PlayerRequestHorizon = z.infer<typeof playerRequestHorizonSchema>;
-export type PlayerRequestListState = z.infer<typeof playerRequestListStateSchema>;
+export type PlayerRequestListState = z.infer<
+  typeof playerRequestListStateSchema
+>;
 export type PlayerRequestAudience = z.infer<typeof playerRequestAudienceSchema>;
 export type PlayerRequestStatus = z.infer<typeof playerRequestStatusSchema>;
-export type PlayerRequestTransition = z.infer<typeof playerRequestTransitionSchema>;
+export type PlayerRequestTransition = z.infer<
+  typeof playerRequestTransitionSchema
+>;
 export type PlayerRequestDto = z.infer<typeof playerRequestDtoSchema>;
 
 export const actionIdSchema = z.string().uuid();
@@ -504,18 +554,27 @@ export const renameCommandSchema = revisionCommandSchema.extend({
   name: z.string().trim().min(1).max(80),
 });
 
-export const createFogRevealSchema = z.object({
-  actionId: actionIdSchema,
-  sceneId: z.string().uuid(),
-  x: z.number().finite().optional(),
-  y: z.number().finite().optional(),
-  width: z.number().positive().max(16384).optional(),
-  height: z.number().positive().max(16384).optional(),
-  operation: z.enum(["REVEAL", "COVER"]).default("REVEAL"),
-  geometry: fogGeometrySchema.optional(),
-}).superRefine((value, ctx) => {
-  if (!value.geometry && [value.x,value.y,value.width,value.height].some(v => v === undefined)) ctx.addIssue({ code: "custom", message: "legacy RECT requires x, y, width and height" });
-});
+export const createFogRevealSchema = z
+  .object({
+    actionId: actionIdSchema,
+    sceneId: z.string().uuid(),
+    x: z.number().finite().optional(),
+    y: z.number().finite().optional(),
+    width: z.number().positive().max(16384).optional(),
+    height: z.number().positive().max(16384).optional(),
+    operation: z.enum(["REVEAL", "COVER"]).default("REVEAL"),
+    geometry: fogGeometrySchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      !value.geometry &&
+      [value.x, value.y, value.width, value.height].some((v) => v === undefined)
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "legacy RECT requires x, y, width and height",
+      });
+  });
 
 export const undoFogRevealSchema = z.object({
   actionId: actionIdSchema,

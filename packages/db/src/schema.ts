@@ -143,7 +143,12 @@ export const catalogEntryKindEnum = pgEnum("catalog_entry_kind", [
   "ABILITY",
 ]);
 export const fogOperationEnum = pgEnum("fog_operation", ["REVEAL", "COVER"]);
-export const fogShapeEnum = pgEnum("fog_shape", ["RECT", "CIRCLE", "POLYGON", "BRUSH"]);
+export const fogShapeEnum = pgEnum("fog_shape", [
+  "RECT",
+  "CIRCLE",
+  "POLYGON",
+  "BRUSH",
+]);
 export const journalStatusEnum = pgEnum("journal_status", [
   "APPLIED",
   "UNDONE",
@@ -794,8 +799,17 @@ export const fogReveals = pgTable(
     height: doublePrecision("height").notNull(),
     operation: fogOperationEnum("operation").notNull().default("REVEAL"),
     shape: fogShapeEnum("shape").notNull().default("RECT"),
-    geometry: jsonb("geometry").$type<{ type: "RECT"; x: number; y: number; width: number; height: number } | { type: "CIRCLE"; center: { x: number; y: number }; radius: number } | { type: "POLYGON"; points: { x: number; y: number }[] } | { type: "BRUSH"; points: { x: number; y: number }[]; radius: number }>().notNull(),
-    bbox: jsonb("bbox").$type<{ x: number; y: number; width: number; height: number }>().notNull(),
+    geometry: jsonb("geometry")
+      .$type<
+        | { type: "RECT"; x: number; y: number; width: number; height: number }
+        | { type: "CIRCLE"; center: { x: number; y: number }; radius: number }
+        | { type: "POLYGON"; points: { x: number; y: number }[] }
+        | { type: "BRUSH"; points: { x: number; y: number }[]; radius: number }
+      >()
+      .notNull(),
+    bbox: jsonb("bbox")
+      .$type<{ x: number; y: number; width: number; height: number }>()
+      .notNull(),
     sequence: bigserial("sequence", { mode: "number" }).notNull(),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -1636,7 +1650,9 @@ export const playerRequests = pgTable(
   "player_requests",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
     authorMembershipId: uuid("author_membership_id").notNull(),
     characterId: uuid("character_id"),
     audience: playerRequestAudienceEnum("audience").notNull(),
@@ -1648,15 +1664,35 @@ export const playerRequests = pgTable(
     resolvedByMembershipId: uuid("resolved_by_membership_id"),
     revision: integer("revision").notNull().default(0),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => [
-    uniqueIndex("player_requests_campaign_id_idx").on(table.campaignId, table.id),
-    index("player_requests_campaign_created_idx").on(table.campaignId, table.createdAt),
-    index("player_requests_campaign_author_idx").on(table.campaignId, table.authorMembershipId),
-    index("player_requests_campaign_status_idx").on(table.campaignId, table.status),
-    index("player_requests_campaign_horizon_status_idx").on(table.campaignId, table.horizon, table.status),
+    uniqueIndex("player_requests_campaign_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    index("player_requests_campaign_created_idx").on(
+      table.campaignId,
+      table.createdAt,
+    ),
+    index("player_requests_campaign_author_idx").on(
+      table.campaignId,
+      table.authorMembershipId,
+    ),
+    index("player_requests_campaign_status_idx").on(
+      table.campaignId,
+      table.status,
+    ),
+    index("player_requests_campaign_horizon_status_idx").on(
+      table.campaignId,
+      table.horizon,
+      table.status,
+    ),
     foreignKey({
       name: "player_requests_campaign_author_fk",
       columns: [table.campaignId, table.authorMembershipId],
@@ -1672,10 +1708,22 @@ export const playerRequests = pgTable(
       columns: [table.campaignId, table.resolvedByMembershipId],
       foreignColumns: [memberships.campaignId, memberships.id],
     }).onDelete("restrict"),
-    check("player_requests_content_revision_check", sql`length(trim(${table.title})) BETWEEN 1 AND 120 AND length(trim(${table.body})) BETWEEN 1 AND 4000 AND ${table.revision} >= 0`),
-    check("player_requests_resolution_shape_check", sql`((${table.status} IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NOT NULL) OR ((${table.status} NOT IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NULL AND ${table.resolutionNote} IS NULL)`),
-    check("player_requests_resolution_note_length_check", sql`${table.resolutionNote} IS NULL OR length(trim(${table.resolutionNote})) BETWEEN 1 AND 2000`),
-    check("player_requests_cancellation_shape_check", sql`(${table.status} = 'CANCELLED' AND ${table.cancelledAt} IS NOT NULL) OR (${table.status} <> 'CANCELLED' AND ${table.cancelledAt} IS NULL)`),
+    check(
+      "player_requests_content_revision_check",
+      sql`length(trim(${table.title})) BETWEEN 1 AND 120 AND length(trim(${table.body})) BETWEEN 1 AND 4000 AND ${table.revision} >= 0`,
+    ),
+    check(
+      "player_requests_resolution_shape_check",
+      sql`((${table.status} IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NOT NULL) OR ((${table.status} NOT IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NULL AND ${table.resolutionNote} IS NULL)`,
+    ),
+    check(
+      "player_requests_resolution_note_length_check",
+      sql`${table.resolutionNote} IS NULL OR length(trim(${table.resolutionNote})) BETWEEN 1 AND 2000`,
+    ),
+    check(
+      "player_requests_cancellation_shape_check",
+      sql`(${table.status} = 'CANCELLED' AND ${table.cancelledAt} IS NOT NULL) OR (${table.status} <> 'CANCELLED' AND ${table.cancelledAt} IS NULL)`,
+    ),
   ],
 );
 

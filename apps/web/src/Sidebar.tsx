@@ -328,9 +328,22 @@ type Props = {
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
   onOpenPlayerRequestCreate: () => void;
-  onCreatePlayerRequest: (input: { title: string; body: string; horizon: "NOW" | "BEFORE_BREAK" | "NEXT_SESSION"; audience: "PUBLIC" | "GM_ONLY"; characterId: string | null }) => Promise<void>;
-  onUpdatePlayerRequest: (request: import("@arken/contracts").PlayerRequestDto, input: { title: string; body: string }) => Promise<void>;
-  onPlayerRequestAction: (request: import("@arken/contracts").PlayerRequestDto, action: import("@arken/contracts").PlayerRequestTransition, resolutionNote?: string) => Promise<void>;
+  onCreatePlayerRequest: (input: {
+    title: string;
+    body: string;
+    horizon: "NOW" | "BEFORE_BREAK" | "NEXT_SESSION";
+    audience: "PUBLIC" | "GM_ONLY";
+    characterId: string | null;
+  }) => Promise<void>;
+  onUpdatePlayerRequest: (
+    request: import("@arken/contracts").PlayerRequestDto,
+    input: { title: string; body: string },
+  ) => Promise<void>;
+  onPlayerRequestAction: (
+    request: import("@arken/contracts").PlayerRequestDto,
+    action: import("@arken/contracts").PlayerRequestTransition,
+    resolutionNote?: string,
+  ) => Promise<void>;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   workspace:
@@ -626,7 +639,9 @@ export function Sidebar(props: Props) {
             activeStream={activeFeed}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
-            onOpenPlayerRequests={() => props.onWorkspaceChange("player-requests")}
+            onOpenPlayerRequests={() =>
+              props.onWorkspaceChange("player-requests")
+            }
           />
         )}
         {props.workspace === "characters" && (
@@ -680,7 +695,14 @@ export function Sidebar(props: Props) {
             />
           )}
         {props.workspace === "player-requests" && (
-          <PlayerRequestsWorkspace open snapshot={props.snapshot} onClose={() => props.onWorkspaceChange(null)} onCreate={props.onCreatePlayerRequest} onUpdate={props.onUpdatePlayerRequest} onAction={props.onPlayerRequestAction} />
+          <PlayerRequestsWorkspace
+            open
+            snapshot={props.snapshot}
+            onClose={() => props.onWorkspaceChange(null)}
+            onCreate={props.onCreatePlayerRequest}
+            onUpdate={props.onUpdatePlayerRequest}
+            onAction={props.onPlayerRequestAction}
+          />
         )}
         {props.workspace === "world-maps" && (
           <WorldMapsWorkspace
@@ -731,7 +753,9 @@ export function CharacterWorkspace({
         : props.snapshot.characters.filter(
             (character) =>
               character.ownerMembershipId === props.snapshot.me.id ||
-              character.controllerMembershipIds.includes(props.snapshot.me.id) ||
+              character.controllerMembershipIds.includes(
+                props.snapshot.me.id,
+              ) ||
               character.id === props.snapshot.me.characterId,
           );
     const byId = new Map(visible.map((character) => [character.id, character]));
@@ -800,9 +824,17 @@ export function CharacterWorkspace({
         <button
           type="button"
           className="character-rail-toggle"
-          aria-label={railCollapsed ? "Развернуть список персонажей" : "Свернуть список персонажей"}
+          aria-label={
+            railCollapsed
+              ? "Развернуть список персонажей"
+              : "Свернуть список персонажей"
+          }
           aria-pressed={railCollapsed}
-          title={railCollapsed ? "Развернуть список персонажей" : "Свернуть список персонажей"}
+          title={
+            railCollapsed
+              ? "Развернуть список персонажей"
+              : "Свернуть список персонажей"
+          }
           onClick={() => setRailCollapsed((current) => !current)}
         >
           <span aria-hidden="true">{railCollapsed ? ">" : "<"}</span>
@@ -816,7 +848,9 @@ export function CharacterWorkspace({
           <span aria-hidden="true">×</span>
         </button>
       </header>
-      <div className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}>
+      <div
+        className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}
+      >
         <nav className="character-rail" aria-label="Персонажи кампании">
           {props.snapshot.me.role === "GM" && (
             <button
@@ -856,7 +890,12 @@ export function CharacterWorkspace({
                       else dispatch({ type: "OPEN", id: character.id });
                     }}
                   >
-                    <span className="character-rail__initial" aria-hidden="true">{character.name.slice(0, 1).toLocaleUpperCase()}</span>
+                    <span
+                      className="character-rail__initial"
+                      aria-hidden="true"
+                    >
+                      {character.name.slice(0, 1).toLocaleUpperCase()}
+                    </span>
                     <strong>{character.name}</strong>
                     <span className="character-rail__status">
                       {isCollapsed ? "свернут" : isOpen ? "открыт" : ""}
@@ -1369,7 +1408,8 @@ export function CharacterPanel({
               onCampaignClock("LONG_REST", snapshot.campaign.revision)
             }
           >
-            Длинный отдых</Button>
+            Длинный отдых
+          </Button>
           <Button
             onClick={() =>
               onCampaignClock(
@@ -1413,77 +1453,90 @@ export function CharacterPanel({
         )}
       </div>
       <div className="stats-grid">
-        {arkenSystem.stats.filter((stat) => stat.key !== "reaction" && stat.key !== "magicPower").map((stat) => (
-          <label key={stat.key} className="stat-field">
-            <span>{stat.label}</span>
-            <FormInput
-              key={`${character.id}-${stat.key}-${character.revision}`}
-              type="number"
-              defaultValue={character.stats[stat.key] ?? stat.defaultValue}
-              disabled={!editable}
-              min={stat.min}
-              max={stat.max}
-              onBlur={(event) =>
-                void runCharacterMutation(() =>
-                  onPatch(character.id, {
-                    stats: { [stat.key]: Number(event.target.value) },
-                    revision: character.revision,
-                  }),
-                )
-              }
-            />
-            <Button
-              disabled={!editable || rollPending}
-              onClick={() =>
-                void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)
-              }
-            >
-              Бросок
-            </Button>
-          </label>
-        ))}
+        {arkenSystem.stats
+          .filter(
+            (stat) => stat.key !== "reaction" && stat.key !== "magicPower",
+          )
+          .map((stat) => (
+            <label key={stat.key} className="stat-field">
+              <span>{stat.label}</span>
+              <FormInput
+                key={`${character.id}-${stat.key}-${character.revision}`}
+                type="number"
+                defaultValue={character.stats[stat.key] ?? stat.defaultValue}
+                disabled={!editable}
+                min={stat.min}
+                max={stat.max}
+                onBlur={(event) =>
+                  void runCharacterMutation(() =>
+                    onPatch(character.id, {
+                      stats: { [stat.key]: Number(event.target.value) },
+                      revision: character.revision,
+                    }),
+                  )
+                }
+              />
+              <Button
+                disabled={!editable || rollPending}
+                onClick={() =>
+                  void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)
+                }
+              >
+                Бросок
+              </Button>
+            </label>
+          ))}
       </div>
       <h3 className="character-block-heading">{"Особые характеристики"}</h3>
       <div className="stats-grid">
-        {arkenSystem.stats.filter((stat) => stat.key === "magicPower").map((stat) => (
-          <label key={stat.key} className="stat-field">
-            <span>{stat.label}</span>
-            <FormInput
-              key={`${character.id}-${stat.key}-${character.revision}`}
-              type="number"
-              defaultValue={character.stats[stat.key] ?? stat.defaultValue}
-              disabled={!editable}
-              min={stat.min}
-              max={stat.max}
-              onBlur={(event) =>
-                void runCharacterMutation(() =>
-                  onPatch(character.id, {
-                    stats: { [stat.key]: Number(event.target.value) },
-                    revision: character.revision,
-                  }),
-                )
-              }
-            />
-            <Button disabled={!editable || rollPending} onClick={() => void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)}>
-              {"Бросок"}
-            </Button>
-          </label>
-        ))}
+        {arkenSystem.stats
+          .filter((stat) => stat.key === "magicPower")
+          .map((stat) => (
+            <label key={stat.key} className="stat-field">
+              <span>{stat.label}</span>
+              <FormInput
+                key={`${character.id}-${stat.key}-${character.revision}`}
+                type="number"
+                defaultValue={character.stats[stat.key] ?? stat.defaultValue}
+                disabled={!editable}
+                min={stat.min}
+                max={stat.max}
+                onBlur={(event) =>
+                  void runCharacterMutation(() =>
+                    onPatch(character.id, {
+                      stats: { [stat.key]: Number(event.target.value) },
+                      revision: character.revision,
+                    }),
+                  )
+                }
+              />
+              <Button
+                disabled={!editable || rollPending}
+                onClick={() =>
+                  void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)
+                }
+              >
+                {"Бросок"}
+              </Button>
+            </label>
+          ))}
       </div>
       <h3 className="character-block-heading">Боевые характеристики</h3>
       <div className="inline-fields">
-      <Button
-        disabled={!editable || rollPending}
-        onClick={() => void submitCharacterRoll("1d20 + agility", "Инициатива")}
-      >
-        Инициатива (d20 + Ловкость)
-      </Button>
-      <Button
-        disabled={!editable || rollPending}
-        onClick={() => void submitCharacterRoll("1d20 + reaction", "Бросок?")}
-      >
-        {"Бросок? (d20 + Бросок?)"}
-      </Button>
+        <Button
+          disabled={!editable || rollPending}
+          onClick={() =>
+            void submitCharacterRoll("1d20 + agility", "Инициатива")
+          }
+        >
+          Инициатива (d20 + Ловкость)
+        </Button>
+        <Button
+          disabled={!editable || rollPending}
+          onClick={() => void submitCharacterRoll("1d20 + reaction", "Бросок?")}
+        >
+          {"Бросок? (d20 + Бросок?)"}
+        </Button>
       </div>
       <div className="subsection">
         <h3>Дополнительные навыки</h3>
@@ -1649,7 +1702,11 @@ export function CharacterPanel({
           const maximum = resource.maximum ?? resource.current;
           return (
             <fieldset className="resource-card" key={key} disabled={!editable}>
-              <legend>{key === "physicalPower" ? "Физическая сила" : "Магическая сила"}</legend>
+              <legend>
+                {key === "physicalPower"
+                  ? "Физическая сила"
+                  : "Магическая сила"}
+              </legend>
               <label>
                 Текущее
                 <FormInput
@@ -1659,7 +1716,10 @@ export function CharacterPanel({
                   onChange={(event) =>
                     setResourcesDraft((current) => ({
                       ...current,
-                      [key]: { ...resource, current: Math.max(0, Number(event.target.value)) },
+                      [key]: {
+                        ...resource,
+                        current: Math.max(0, Number(event.target.value)),
+                      },
                     }))
                   }
                   onBlur={() => void saveResources(resourcesDraft)}
@@ -1718,7 +1778,11 @@ export function CharacterPanel({
                   required
                   onBlur={(event) => {
                     const nextKey = event.target.value.trim();
-                    if (!nextKey || nextKey === key || resourcesDraft[nextKey]) {
+                    if (
+                      !nextKey ||
+                      nextKey === key ||
+                      resourcesDraft[nextKey]
+                    ) {
                       event.target.value = key;
                       return;
                     }
@@ -1749,7 +1813,10 @@ export function CharacterPanel({
                   onChange={(event) =>
                     setResourcesDraft((current) => ({
                       ...current,
-                      [key]: { ...resource, current: Math.max(0, Number(event.target.value)) },
+                      [key]: {
+                        ...resource,
+                        current: Math.max(0, Number(event.target.value)),
+                      },
                     }))
                   }
                   onBlur={() => void saveResources(resourcesDraft)}
@@ -1765,7 +1832,11 @@ export function CharacterPanel({
                     const maximum = Math.max(0, Number(event.target.value));
                     setResourcesDraft((current) => ({
                       ...current,
-                      [key]: { ...resource, maximum, current: Math.min(resource.current, maximum) },
+                      [key]: {
+                        ...resource,
+                        maximum,
+                        current: Math.min(resource.current, maximum),
+                      },
                     }));
                   }}
                   onBlur={() => void saveResources(resourcesDraft)}
@@ -1778,7 +1849,10 @@ export function CharacterPanel({
                   onChange={(event) => {
                     const next = {
                       ...resourcesDraft,
-                      [key]: { ...resource, imageAssetId: event.target.value || null },
+                      [key]: {
+                        ...resource,
+                        imageAssetId: event.target.value || null,
+                      },
                     };
                     void saveResources(next);
                   }}
@@ -1787,7 +1861,9 @@ export function CharacterPanel({
                   {snapshot.assets
                     .filter((asset) => asset.mimeType.startsWith("image/"))
                     .map((asset) => (
-                      <option key={asset.id} value={asset.id}>{asset.name}</option>
+                      <option key={asset.id} value={asset.id}>
+                        {asset.name}
+                      </option>
                     ))}
                 </FormSelect>
               </label>
@@ -1822,7 +1898,11 @@ export function CharacterPanel({
             onChange={(event) => setNewResourceName(event.target.value)}
           />
           <Button
-            disabled={!editable || !newResourceName.trim() || Boolean(resourcesDraft[newResourceName.trim()])}
+            disabled={
+              !editable ||
+              !newResourceName.trim() ||
+              Boolean(resourcesDraft[newResourceName.trim()])
+            }
             onClick={() => {
               const key = newResourceName.trim();
               if (!key) return;
@@ -1915,13 +1995,25 @@ export function CharacterPanel({
   );
 }
 
-function ChatMessageBody({ message, catalogEntryIds, playerRequests, onOpenPlayerRequests }: {
+function ChatMessageBody({
+  message,
+  catalogEntryIds,
+  playerRequests,
+  onOpenPlayerRequests,
+}: {
   message: GameSnapshot["messages"][number];
   catalogEntryIds?: ReadonlySet<string>;
   playerRequests?: GameSnapshot["playerRequests"];
   onOpenPlayerRequests?: () => void;
-} ) {
-  if (message.playerRequestId) return <PlayerRequestChatCard message={message} requests={playerRequests ?? []} onOpen={onOpenPlayerRequests ?? (() => {})} />;
+}) {
+  if (message.playerRequestId)
+    return (
+      <PlayerRequestChatCard
+        message={message}
+        requests={playerRequests ?? []}
+        onOpen={onOpenPlayerRequests ?? (() => {})}
+      />
+    );
   if (message.stickerId || message.stickerPresentation) {
     const presentation = message.stickerPresentation;
     if (!message.stickerId || !presentation)
@@ -2403,7 +2495,11 @@ function ActivityPanel({
             {"Отправить"}
           </Button>
           {snapshot.me.role === "PLAYER" && (
-            <Button type="button" view="flat" onClick={onOpenPlayerRequestCreate}>
+            <Button
+              type="button"
+              view="flat"
+              onClick={onOpenPlayerRequestCreate}
+            >
               Заявка
             </Button>
           )}
@@ -2913,7 +3009,9 @@ function ChatPanel({
               </header>
               <ChatMessageBody
                 message={item.message}
-                catalogEntryIds={snapshot.me.role === "GM" ? catalogEntryIds : undefined}
+                catalogEntryIds={
+                  snapshot.me.role === "GM" ? catalogEntryIds : undefined
+                }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequests}
               />

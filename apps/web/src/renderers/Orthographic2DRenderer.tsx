@@ -1756,7 +1756,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         <Layer {...playerClip}>
           {props.tokens
             .filter((token) => token.layer !== "MAP")
-            .filter((token) => token.layer !== "GM" || (props.role === "GM" && showGmLayer))
+            .filter(
+              (token) =>
+                token.layer !== "GM" || (props.role === "GM" && showGmLayer),
+            )
             .filter((token) => token.visible || props.role === "GM")
             .filter(
               (token) =>
@@ -2409,7 +2412,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     step="1"
                     aria-label="Толщина линии"
                     value={activeWidth}
-                    onChange={(event) => updateWidth(Number(event.target.value))}
+                    onChange={(event) =>
+                      updateWidth(Number(event.target.value))
+                    }
                   />
                 </label>
               </span>

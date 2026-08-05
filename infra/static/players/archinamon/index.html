@@ -1,105 +1,117 @@
 <!doctype html>
 <html lang="ru">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Эд — Arken-Khar</title>
-<style>
-  :root {
-    color-scheme: dark;
-    --bg: #100b08;
-    --bg-glow: #2a1a10;
-    --card: #1a130e;
-    --border: #3a2a1c;
-    --ember: #d97b3f;
-    --ember-bright: #f0a05c;
-    --text: #e8dcc8;
-    --text-dim: #a8977e;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    min-height: 100%;
-  }
-  body {
-    font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-    background:
-      radial-gradient(circle at 50% 0%, var(--bg-glow) 0%, var(--bg) 55%);
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-  }
-  .card {
-    width: 100%;
-    max-width: 420px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 40px 32px;
-    text-align: center;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  }
-  .sigil {
-    width: 56px;
-    height: 56px;
-    margin: 0 auto 20px;
-    border-radius: 50%;
-    background: radial-gradient(circle, var(--ember-bright), var(--ember) 70%);
-    box-shadow: 0 0 24px rgba(217, 123, 63, 0.55);
-  }
-  .brand {
-    font-size: 13px;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    margin: 0 0 6px;
-  }
-  h1 {
-    font-size: 32px;
-    margin: 0 0 8px;
-    font-weight: 500;
-    color: var(--ember-bright);
-  }
-  p.tagline {
-    color: var(--text-dim);
-    font-size: 15px;
-    margin: 0 0 32px;
-  }
-  a.enter {
-    display: inline-block;
-    width: 100%;
-    padding: 14px 20px;
-    border-radius: 8px;
-    background: linear-gradient(180deg, var(--ember-bright), var(--ember));
-    color: #1a0f06;
-    font-weight: 600;
-    text-decoration: none;
-    font-family: inherit;
-    letter-spacing: 0.02em;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-  }
-  a.enter:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 24px rgba(217, 123, 63, 0.35);
-  }
-  .foot {
-    margin-top: 24px;
-    font-size: 12px;
-    color: var(--text-dim);
-    opacity: 0.7;
-  }
-</style>
-</head>
-<body>
-  <main class="card">
-    <div class="sigil" aria-hidden="true"></div>
-    <p class="brand">Arken-Khar</p>
-    <h1>Эд</h1>
-    <p class="tagline">Личная страница игрока</p>
-    <a class="enter" href="https://arken-khar.space">Войти в игру</a>
-    <p class="foot">arken-khar.space</p>
-  </main>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Эд — Arken-Khar</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #100b08;
+        --bg-glow: #2a1a10;
+        --card: #1a130e;
+        --border: #3a2a1c;
+        --ember: #d97b3f;
+        --ember-bright: #f0a05c;
+        --text: #e8dcc8;
+        --text-dim: #a8977e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+      body {
+        font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+        background: radial-gradient(
+          circle at 50% 0%,
+          var(--bg-glow) 0%,
+          var(--bg) 55%
+        );
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 40px 32px;
+        text-align: center;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      }
+      .sigil {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 20px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          var(--ember-bright),
+          var(--ember) 70%
+        );
+        box-shadow: 0 0 24px rgba(217, 123, 63, 0.55);
+      }
+      .brand {
+        font-size: 13px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin: 0 0 6px;
+      }
+      h1 {
+        font-size: 32px;
+        margin: 0 0 8px;
+        font-weight: 500;
+        color: var(--ember-bright);
+      }
+      p.tagline {
+        color: var(--text-dim);
+        font-size: 15px;
+        margin: 0 0 32px;
+      }
+      a.enter {
+        display: inline-block;
+        width: 100%;
+        padding: 14px 20px;
+        border-radius: 8px;
+        background: linear-gradient(180deg, var(--ember-bright), var(--ember));
+        color: #1a0f06;
+        font-weight: 600;
+        text-decoration: none;
+        font-family: inherit;
+        letter-spacing: 0.02em;
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+      a.enter:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 24px rgba(217, 123, 63, 0.35);
+      }
+      .foot {
+        margin-top: 24px;
+        font-size: 12px;
+        color: var(--text-dim);
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="sigil" aria-hidden="true"></div>
+      <p class="brand">Arken-Khar</p>
+      <h1>Эд</h1>
+      <p class="tagline">Личная страница игрока</p>
+      <a class="enter" href="https://arken-khar.space">Войти в игру</a>
+      <p class="foot">arken-khar.space</p>
+    </main>
+  </body>
 </html>

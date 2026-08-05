@@ -7,10 +7,17 @@ export function resolvePlayerRequestCard(
   requests: readonly PlayerRequestDto[],
 ) {
   if (!message.playerRequestId) return null;
-  return requests.find((request) => request.id === message.playerRequestId) ?? undefined;
+  return (
+    requests.find((request) => request.id === message.playerRequestId) ??
+    undefined
+  );
 }
 
-export function PlayerRequestChatCard({ message, requests, onOpen }: {
+export function PlayerRequestChatCard({
+  message,
+  requests,
+  onOpen,
+}: {
   message: ChatMessageDto;
   requests: readonly PlayerRequestDto[];
   onOpen: () => void;
@@ -18,7 +25,9 @@ export function PlayerRequestChatCard({ message, requests, onOpen }: {
   const request = resolvePlayerRequestCard(message, requests);
   if (request === null) return null;
   if (request === undefined)
-    return <div className="request-chat-card unavailable">Заявка недоступна</div>;
+    return (
+      <div className="request-chat-card unavailable">Заявка недоступна</div>
+    );
   return (
     <section className="request-chat-card" aria-label="Карточка заявки">
       <div className="request-chat-card-heading">
@@ -26,11 +35,24 @@ export function PlayerRequestChatCard({ message, requests, onOpen }: {
         <span>{requestLabels.status[request.status]}</span>
       </div>
       <dl>
-        <div><dt>Срок</dt><dd>{requestLabels.horizon[request.horizon]}</dd></div>
-        <div><dt>Аудитория</dt><dd>{requestLabels.audience[request.audience]}</dd></div>
-        {request.characterName && <div><dt>Персонаж</dt><dd>{request.characterName}</dd></div>}
+        <div>
+          <dt>Срок</dt>
+          <dd>{requestLabels.horizon[request.horizon]}</dd>
+        </div>
+        <div>
+          <dt>Аудитория</dt>
+          <dd>{requestLabels.audience[request.audience]}</dd>
+        </div>
+        {request.characterName && (
+          <div>
+            <dt>Персонаж</dt>
+            <dd>{request.characterName}</dd>
+          </div>
+        )}
       </dl>
-      <button type="button" onClick={onOpen}>Открыть заявки</button>
+      <button type="button" onClick={onOpen}>
+        Открыть заявки
+      </button>
     </section>
   );
 }

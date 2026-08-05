@@ -21,11 +21,8 @@ export function canCreateStoryDraft(input: {
 }
 
 export function storyPostStatus(post: StoryPostView) {
-  if (post.lifecycle === "DRAFT")
-    return "Черновик";
-  if (post.lifecycle === "ARCHIVED")
-    return "В архиве";
-  if (post.lifecycle === "CORRECTED")
-    return "Исправлено";
+  if (post.lifecycle === "DRAFT") return "Черновик";
+  if (post.lifecycle === "ARCHIVED") return "В архиве";
+  if (post.lifecycle === "CORRECTED") return "Исправлено";
   return "Опубликовано";
 }

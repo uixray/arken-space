@@ -124,7 +124,9 @@ export function StoryPost({
       );
     } catch (reason) {
       setUpdateError(
-        reason instanceof Error ? reason.message : "Не удалось загрузить изображение.",
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось загрузить изображение.",
       );
     } finally {
       setPending(null);
@@ -149,7 +151,11 @@ export function StoryPost({
   }
 
   async function saveCorrection() {
-    if (!adminPost || !onUpdate || (!draftBody.trim() && draftMedia.length === 0))
+    if (
+      !adminPost ||
+      !onUpdate ||
+      (!draftBody.trim() && draftMedia.length === 0)
+    )
       return;
     setPending("update");
     setUpdateError("");
@@ -271,7 +277,8 @@ export function StoryPost({
                       onClick={() =>
                         setDraftMedia((current) =>
                           current.filter(
-                            (candidate) => candidate.contentId !== item.contentId,
+                            (candidate) =>
+                              candidate.contentId !== item.contentId,
                           ),
                         )
                       }
@@ -367,22 +374,23 @@ export function StoryPost({
       )}
       {isGm && adminPost && (
         <div className="story-post__actions">
-          {(adminPost.lifecycle === "DRAFT" || adminPost.lifecycle === "ARCHIVED") &&
+          {(adminPost.lifecycle === "DRAFT" ||
+            adminPost.lifecycle === "ARCHIVED") &&
             onPublish && (
-            <button
-              type="button"
-              disabled={pending !== null}
-              onClick={() => void transition("publish")}
-            >
-              {pending === "publish"
-                ? adminPost.lifecycle === "ARCHIVED"
-                  ? "Восстанавливаем…"
-                  : "Публикуем…"
-                : adminPost.lifecycle === "ARCHIVED"
-                  ? "Восстановить"
-                  : "Опубликовать"}
-            </button>
-          )}
+              <button
+                type="button"
+                disabled={pending !== null}
+                onClick={() => void transition("publish")}
+              >
+                {pending === "publish"
+                  ? adminPost.lifecycle === "ARCHIVED"
+                    ? "Восстанавливаем…"
+                    : "Публикуем…"
+                  : adminPost.lifecycle === "ARCHIVED"
+                    ? "Восстановить"
+                    : "Опубликовать"}
+              </button>
+            )}
           {adminPost.lifecycle !== "ARCHIVED" && onUpdate && !editing && (
             <button
               type="button"
@@ -390,9 +398,7 @@ export function StoryPost({
               onClick={beginEditing}
             >
               {" "}
-              {
-                "Исправить"
-              }{" "}
+              {"Исправить"}{" "}
             </button>
           )}
           {editing && (
@@ -402,9 +408,7 @@ export function StoryPost({
                 disabled={pending !== null}
                 onClick={() => void saveCorrection()}
               >
-                {
-                  "Сохранить"
-                }
+                {"Сохранить"}
               </button>
               <button
                 type="button"
@@ -421,9 +425,7 @@ export function StoryPost({
               disabled={pending !== null}
               onClick={() => void transition("archive")}
             >
-              {pending === "archive"
-                ? "Архивируем\u2026"
-                : "В архив"}
+              {pending === "archive" ? "Архивируем\u2026" : "В архив"}
             </button>
           )}
         </div>
@@ -471,9 +473,7 @@ export function StoryChannel({
   async function upload(file: File | undefined) {
     if (!file || !onUploadImage || busy) return;
     if (!file.type.startsWith("image/")) {
-      setError(
-        "Можно прикрепить только изображение.",
-      );
+      setError("Можно прикрепить только изображение.");
       return;
     }
     setLocalPending(true);
@@ -544,16 +544,12 @@ export function StoryChannel({
     >
       <header className="story-channel__header">
         <div>
-          <span className="eyebrow">
-            {"Летопись кампании"}
-          </span>
+          <span className="eyebrow">{"Летопись кампании"}</span>
           <h2>{"Сюжет"}</h2>
         </div>
         {!isGm && (
           <span className="story-channel__read-only">
-            {
-              "Сюжет ведёт мастер"
-            }
+            {"Сюжет ведёт мастер"}
           </span>
         )}
       </header>
@@ -562,9 +558,7 @@ export function StoryChannel({
           <article className="story-post story-post--legacy" key={message.id}>
             <header className="story-post__header">
               <div>
-                <span className="eyebrow">
-                  {"Ранее в сюжете"}
-                </span>
+                <span className="eyebrow">{"Ранее в сюжете"}</span>
                 <strong>{message.displayName}</strong>
               </div>
               <time dateTime={message.createdAt}>
@@ -579,9 +573,7 @@ export function StoryChannel({
         ))}
         {posts.length === 0 && legacyMessages.length === 0 ? (
           <p className="chat-empty">
-            {
-              "В сюжетной ленте пока нет публикаций."
-            }
+            {"В сюжетной ленте пока нет публикаций."}
           </p>
         ) : (
           posts.map((post) => (
@@ -620,9 +612,7 @@ export function StoryChannel({
             />
           </label>
           <label>
-            {
-              "Новая публикация"
-            }
+            {"Новая публикация"}
             <textarea
               value={body}
               disabled={busy}
@@ -697,9 +687,7 @@ export function StoryChannel({
             </ul>
           )}
           <label className="story-composer__gm-notes">
-            {
-              "Заметки мастера"
-            }{" "}
+            {"Заметки мастера"}{" "}
             <textarea
               value={gmNotes}
               disabled={busy}
@@ -727,9 +715,7 @@ export function StoryChannel({
                   disabled={busy}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  {
-                    "Добавить изображение"
-                  }
+                  {"Добавить изображение"}
                 </button>
               </>
             )}
@@ -737,9 +723,7 @@ export function StoryChannel({
               type="submit"
               disabled={busy || !canCreateStoryDraft({ body, media })}
             >
-              {busy
-                ? "Сохраняем\u2026"
-                : "Сохранить черновик"}
+              {busy ? "Сохраняем\u2026" : "Сохранить черновик"}
             </button>
           </div>
           {error && (

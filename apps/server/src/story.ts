@@ -60,9 +60,7 @@ function storyError(
 }
 
 type StoryReplay =
-  | { kind: "MISS" }
-  | { kind: "MATCH"; payload: unknown }
-  | { kind: "CONFLICT" };
+  { kind: "MISS" } | { kind: "MATCH"; payload: unknown } | { kind: "CONFLICT" };
 
 type StoredStoryEventPayload = {
   commandHash: string;
@@ -85,7 +83,9 @@ function storyCommandHash(type: string, command: unknown) {
     .digest("hex");
 }
 
-function storedStoryEventPayload(value: unknown): StoredStoryEventPayload | null {
+function storedStoryEventPayload(
+  value: unknown,
+): StoredStoryEventPayload | null {
   if (!value || typeof value !== "object") return null;
   const payload = value as Partial<StoredStoryEventPayload>;
   return typeof payload.commandHash === "string" && "response" in payload
@@ -977,8 +977,10 @@ export function registerStoryRoutes(
           const rightsStatus = rightById.get(record.sourceMessageId)!;
           if (previous) {
             if (
-              storyCommandHash("story.import.record", previous.sourcePayload) !==
-              storyCommandHash("story.import.record", record)
+              storyCommandHash(
+                "story.import.record",
+                previous.sourcePayload,
+              ) !== storyCommandHash("story.import.record", record)
             )
               throw new Error("STORY_IMPORT_SOURCE_MISMATCH");
             if (previous.rightsStatus !== rightsStatus)

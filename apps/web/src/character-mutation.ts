@@ -92,7 +92,10 @@ export function reconcileGameSnapshot(
   );
   return {
     ...incoming,
-    playerRequests: reconcilePlayerRequests(current.playerRequests, incoming.playerRequests),
+    playerRequests: reconcilePlayerRequests(
+      current.playerRequests,
+      incoming.playerRequests,
+    ),
     characters: incoming.characters.map((character) => {
       const existing = currentCharacters.get(character.id);
       return existing && existing.revision > character.revision

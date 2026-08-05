@@ -27,7 +27,8 @@ export function reconcilePlayerRequests(
   const merged = new Map(incoming.map((request) => [request.id, request]));
   for (const request of current) {
     const candidate = merged.get(request.id);
-    if (!candidate || request.revision > candidate.revision) merged.set(request.id, request);
+    if (!candidate || request.revision > candidate.revision)
+      merged.set(request.id, request);
   }
   return [...merged.values()];
 }

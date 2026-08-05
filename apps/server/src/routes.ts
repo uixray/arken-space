@@ -3126,15 +3126,32 @@ export function registerRoutes(
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
     const legacy = !body.geometry;
-    const requestedGeometry = body.geometry ?? { type: "RECT" as const, x: body.x!, y: body.y!, width: body.width!, height: body.height! };
+    const requestedGeometry = body.geometry ?? {
+      type: "RECT" as const,
+      x: body.x!,
+      y: body.y!,
+      width: body.width!,
+      height: body.height!,
+    };
     let canonical;
-    try { canonical = canonicalizeFogGeometry(requestedGeometry, scene, legacy); }
-    catch (error) { if (error instanceof FogGeometryError) return reply.code(422).send({ error: error.code }); throw error; }
+    try {
+      canonical = canonicalizeFogGeometry(requestedGeometry, scene, legacy);
+    } catch (error) {
+      if (error instanceof FogGeometryError)
+        return reply.code(422).send({ error: error.code });
+      throw error;
+    }
     const { actionId } = body;
     const revealInput = {
-      sceneId: scene.id, operation: body.operation, shape: canonical.geometry.type,
-      geometry: canonical.geometry, bbox: canonical.bbox,
-      x: canonical.bbox.x, y: canonical.bbox.y, width: canonical.bbox.width, height: canonical.bbox.height,
+      sceneId: scene.id,
+      operation: body.operation,
+      shape: canonical.geometry.type,
+      geometry: canonical.geometry,
+      bbox: canonical.bbox,
+      x: canonical.bbox.x,
+      y: canonical.bbox.y,
+      width: canonical.bbox.width,
+      height: canonical.bbox.height,
     };
     const result = await db.transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, scene.id);

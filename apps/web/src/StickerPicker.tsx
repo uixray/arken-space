@@ -109,21 +109,13 @@ export function StickerPicker({
         type="button"
         view="flat"
         disabled={disabled}
-        aria-label={
-          iconOnly ? "Стикеры" : undefined
-        }
-        title={
-          iconOnly ? "Стикеры" : undefined
-        }
+        aria-label={iconOnly ? "Стикеры" : undefined}
+        title={iconOnly ? "Стикеры" : undefined}
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((value) => !value)}
       >
-        {iconOnly ? (
-          <span aria-hidden="true">{"\u263A"}</span>
-        ) : (
-          "Стикеры"
-        )}
+        {iconOnly ? <span aria-hidden="true">{"\u263A"}</span> : "Стикеры"}
       </Button>
       {open && (
         <div
