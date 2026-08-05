@@ -94,10 +94,13 @@ describe("api telemetry and correlation", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const failure = (await api("/api/characters/character-1/catalog/entry-1/roll", {
-      method: "POST",
-      body: "{}",
-    }).catch((error: unknown) => error)) as ApiError;
+    const failure = (await api(
+      "/api/characters/character-1/catalog/entry-1/roll",
+      {
+        method: "POST",
+        body: "{}",
+      },
+    ).catch((error: unknown) => error)) as ApiError;
 
     expect(failure.code).toBe("INSUFFICIENT_CHARACTER_RESOURCE");
     expect(failure.message).toContain("магической силы");

@@ -92,8 +92,7 @@ describe("getSlashCommandSuggestions", () => {
     expect(parseComposerInput("/magicPower", { magicPower: 5 })).toEqual({
       kind: "ROLL",
       formula: "1d20 + magicPower",
-      label:
-        "Проверка: Сила магии",
+      label: "Проверка: Сила магии",
     });
   });
 

@@ -15,12 +15,18 @@ function fakeWindow(search = "?input-diagnostics") {
   const listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
   const value = {
     location: { search },
-    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    addEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+    ) {
       const group = listeners.get(type) ?? new Set();
       group.add(listener);
       listeners.set(type, group);
     },
-    removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    removeEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+    ) {
       listeners.get(type)?.delete(listener);
     },
     dispatchEvent(event: Event) {
@@ -35,7 +41,11 @@ function fakeWindow(search = "?input-diagnostics") {
   return value;
 }
 
-function dispatch(target: EventTarget, type: string, fields: Record<string, unknown> = {}) {
+function dispatch(
+  target: EventTarget,
+  type: string,
+  fields: Record<string, unknown> = {},
+) {
   const event = new Event(type);
   for (const [key, value] of Object.entries(fields)) {
     Object.defineProperty(event, key, { configurable: true, value });
@@ -48,7 +58,8 @@ afterEach(() => vi.unstubAllGlobals());
 describe("input diagnostics", () => {
   it("recognizes editable targets through their closest form control", () => {
     const editable = {
-      closest: (selector: string) => selector.includes("textarea") ? ({} as Element) : null,
+      closest: (selector: string) =>
+        selector.includes("textarea") ? ({} as Element) : null,
     } as unknown as EventTarget;
 
     expect(isEditableEventTarget(editable)).toBe(true);
@@ -57,7 +68,15 @@ describe("input diagnostics", () => {
   });
 
   it("redacts every non-whitelisted key, including multi-code-unit graphemes", () => {
-    for (const key of ["ф", "f", "\u{1F600}", "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}", "e\u0301", "SecretKey", "\ud83d"]) {
+    for (const key of [
+      "ф",
+      "f",
+      "\u{1F600}",
+      "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}",
+      "e\u0301",
+      "SecretKey",
+      "\ud83d",
+    ]) {
       expect(diagnosticKey(key)).toBe("printable");
     }
     expect(diagnosticKey("Escape")).toBe("Escape");
@@ -68,11 +87,23 @@ describe("input diagnostics", () => {
 
   it("identifies editable and composing global shortcut events", () => {
     const editable = {
-      closest: () => ({} as Element),
+      closest: () => ({}) as Element,
     } as unknown as EventTarget;
-    expect(shouldIgnoreGlobalShortcut({ isComposing: true, target: {} as EventTarget })).toBe(true);
-    expect(shouldIgnoreGlobalShortcut({ isComposing: false, target: editable })).toBe(true);
-    expect(shouldIgnoreGlobalShortcut({ isComposing: false, target: {} as EventTarget })).toBe(false);
+    expect(
+      shouldIgnoreGlobalShortcut({
+        isComposing: true,
+        target: {} as EventTarget,
+      }),
+    ).toBe(true);
+    expect(
+      shouldIgnoreGlobalShortcut({ isComposing: false, target: editable }),
+    ).toBe(true);
+    expect(
+      shouldIgnoreGlobalShortcut({
+        isComposing: false,
+        target: {} as EventTarget,
+      }),
+    ).toBe(false);
   });
 
   it("does nothing unless the diagnostics query flag is present", () => {
@@ -88,11 +119,20 @@ describe("input diagnostics", () => {
     const cleanup = installInputDiagnostics(window.location.search);
 
     dispatch(window, "keydown", {
-      key: "\u{1F600}", code: "KeyA", ctrlKey: false, altKey: false,
-      shiftKey: true, metaKey: false, isComposing: false, value: "password",
+      key: "\u{1F600}",
+      code: "KeyA",
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: true,
+      metaKey: false,
+      isComposing: false,
+      value: "password",
     });
     dispatch(window, "beforeinput", {
-      inputType: "insertText", isComposing: true, data: "private text", value: "password",
+      inputType: "insertText",
+      isComposing: true,
+      data: "private text",
+      value: "password",
     });
     dispatch(window, "compositionstart", { data: "ф" });
     dispatch(window, "compositionend", { data: "ф" });
@@ -101,10 +141,22 @@ describe("input diagnostics", () => {
 
     const events = window.__arkenInputDiagnostics?.() ?? [];
     expect(events.map((event) => event.event)).toEqual([
-      "keydown", "beforeinput", "compositionstart", "compositionend", "focusin", "focusout",
+      "keydown",
+      "beforeinput",
+      "compositionstart",
+      "compositionend",
+      "focusin",
+      "focusout",
     ]);
-    expect(events[0]).toMatchObject({ key: "printable", code: "KeyA", shiftKey: true });
-    expect(events[1]).toMatchObject({ inputType: "insertText", composing: true });
+    expect(events[0]).toMatchObject({
+      key: "printable",
+      code: "KeyA",
+      shiftKey: true,
+    });
+    expect(events[1]).toMatchObject({
+      inputType: "insertText",
+      composing: true,
+    });
     expect(JSON.stringify(events)).not.toContain("private text");
     expect(JSON.stringify(events)).not.toContain("password");
     expect(JSON.stringify(events)).not.toContain("ф");

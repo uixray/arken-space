@@ -20,7 +20,12 @@ describe("authoritative dice semantic outcome", () => {
   });
 
   it("uses the d20 in the selected whole pool for advantage", () => {
-    const result = rollFormulaWithMode("1d20", {}, "ADVANTAGE", sequence(0, 19));
+    const result = rollFormulaWithMode(
+      "1d20",
+      {},
+      "ADVANTAGE",
+      sequence(0, 19),
+    );
     expect(result.selectedPool).toBe(1);
     expect(result.semanticOutcome).toEqual({
       kind: "CRITICAL_SUCCESS",

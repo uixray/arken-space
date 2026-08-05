@@ -53,9 +53,7 @@ const post: StoryPostAdminDto = {
 describe("StoryChannel helpers", () => {
   it("keeps GM-only lifecycle metadata behind the admin type guard", () => {
     expect(isStoryAdminPost(post)).toBe(true);
-    expect(storyPostStatus(post)).toBe(
-      "Черновик",
-    );
+    expect(storyPostStatus(post)).toBe("Черновик");
   });
 
   it("renders image media in explicit order only", () => {

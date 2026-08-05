@@ -419,11 +419,21 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
   );
   await expect(page.locator("canvas").first()).toBeHidden();
 
-  await workspace.getByRole("button", { name: "Свернуть список персонажей" }).click();
-  await expect(workspace.locator(".character-workspace__body")).toHaveClass(/is-rail-collapsed/);
-  await expect(workspace.getByRole("button", { name: "Развернуть список персонажей" })).toBeVisible();
-  await workspace.getByRole("button", { name: "Развернуть список персонажей" }).click();
-  await expect(workspace.locator(".character-workspace__body")).not.toHaveClass(/is-rail-collapsed/);
+  await workspace
+    .getByRole("button", { name: "Свернуть список персонажей" })
+    .click();
+  await expect(workspace.locator(".character-workspace__body")).toHaveClass(
+    /is-rail-collapsed/,
+  );
+  await expect(
+    workspace.getByRole("button", { name: "Развернуть список персонажей" }),
+  ).toBeVisible();
+  await workspace
+    .getByRole("button", { name: "Развернуть список персонажей" })
+    .click();
+  await expect(workspace.locator(".character-workspace__body")).not.toHaveClass(
+    /is-rail-collapsed/,
+  );
 
   await workspace.getByRole("button", { name: "Второй персонаж" }).click();
   await expect(
@@ -694,9 +704,13 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
 
   await quickRolls.locator(".canvas-roll-gm-toggle").click();
   await quickRolls.getByRole("button", { name: "Своя формула" }).click();
-  const customFormulaDialog = page.getByRole("dialog", { name: "Быстрый бросок" });
+  const customFormulaDialog = page.getByRole("dialog", {
+    name: "Быстрый бросок",
+  });
   await expect(customFormulaDialog).toBeVisible();
-  await customFormulaDialog.getByRole("textbox", { name: "Формула броска" }).fill("2d8 + 3");
+  await customFormulaDialog
+    .getByRole("textbox", { name: "Формула броска" })
+    .fill("2d8 + 3");
   await customFormulaDialog.getByRole("button", { name: "Бросить" }).click();
   await expect.poll(() => diceRequests.length).toBe(5);
   expect(diceRequests[4]).toMatchObject({
@@ -708,17 +722,25 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
   await expect(customFormulaDialog).toBeHidden();
 });
 
-test("UIX-226 canvas custom roll stays reachable within a 390x844 viewport", async ({ page }) => {
+test("UIX-226 canvas custom roll stays reachable within a 390x844 viewport", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route("**/api/bootstrap", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) }),
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot),
+    }),
   );
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
   await page.goto("/");
 
-  const customRoll = page.locator(".canvas-roll-overlay").getByRole("button", { name: "Своя формула" });
+  const customRoll = page
+    .locator(".canvas-roll-overlay")
+    .getByRole("button", { name: "Своя формула" });
   await expect(customRoll).toBeVisible();
   const box = await customRoll.boundingBox();
   expect(box).not.toBeNull();
@@ -728,7 +750,9 @@ test("UIX-226 canvas custom roll stays reachable within a 390x844 viewport", asy
   expect(box!.y + box!.height).toBeLessThanOrEqual(844);
 
   await customRoll.click();
-  await expect(page.getByRole("dialog", { name: "Быстрый бросок" })).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Быстрый бросок" }),
+  ).toBeVisible();
 });
 
 test("UIX-274 activity reloads story posts and exposes empty states and slash action", async ({
@@ -1470,7 +1494,9 @@ test("player opens the character workspace while chat remains visible", async ({
     characterId: playerSnapshot.characters[0]!.id,
   };
   playerSnapshot.characters[0]!.ownerMembershipId = null;
-  playerSnapshot.characters[0]!.controllerMembershipIds = [playerSnapshot.me.id];
+  playerSnapshot.characters[0]!.controllerMembershipIds = [
+    playerSnapshot.me.id,
+  ];
   playerSnapshot.characters.push({
     ...playerSnapshot.characters[0]!,
     id: "a49b79b7-4ddf-49fe-9e7d-4ee03806c116",
@@ -1494,7 +1520,12 @@ test("player opens the character workspace while chat remains visible", async ({
   await expect(page.locator(".character-workspace")).toBeVisible();
   await expect(page.locator(".character-controller-access")).toHaveCount(0);
   await expect(page.locator(".chat-compose")).toBeVisible();
-  await expect(page.getByRole("button", { name: "\u041d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "\u041d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435",
+      exact: true,
+    }),
+  ).toBeVisible();
   await expect(
     page
       .locator(".character-rail")
@@ -1755,7 +1786,9 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   );
 });
 
-test("structured resources persist and short rest uses the authoritative counter route", async ({ page }) => {
+test("structured resources persist and short rest uses the authoritative counter route", async ({
+  page,
+}) => {
   const playerSnapshot = structuredClone(snapshot);
   playerSnapshot.me = {
     id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
@@ -1769,32 +1802,54 @@ test("structured resources persist and short rest uses the authoritative counter
     magicPower: { current: 2, maximum: 8, recoverable: true },
   };
   playerSnapshot.members = [playerSnapshot.me];
-  const payloads: Array<{ resources?: typeof playerSnapshot.characters[0]["resources"]; rest?: string; revision: number }> = [];
-  await page.route("**/api/bootstrap", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify(playerSnapshot),
-  }));
+  const payloads: Array<{
+    resources?: (typeof playerSnapshot.characters)[0]["resources"];
+    rest?: string;
+    revision: number;
+  }> = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    }),
+  );
   await page.route("**/api/characters/*/counters", async (route) => {
     const payload = route.request().postDataJSON() as (typeof payloads)[number];
     payloads.push(payload);
-    if (payload.resources) playerSnapshot.characters[0]!.resources = payload.resources;
+    if (payload.resources)
+      playerSnapshot.characters[0]!.resources = payload.resources;
     if (payload.rest === "SHORT") {
       playerSnapshot.characters[0]!.resources = Object.fromEntries(
-        Object.entries(playerSnapshot.characters[0]!.resources).map(([key, resource]) => [
-          key,
-          { ...resource, current: Math.min(resource.maximum ?? resource.current, resource.current + Math.ceil((resource.maximum ?? resource.current) * 0.25)) },
-        ]),
+        Object.entries(playerSnapshot.characters[0]!.resources).map(
+          ([key, resource]) => [
+            key,
+            {
+              ...resource,
+              current: Math.min(
+                resource.maximum ?? resource.current,
+                resource.current +
+                  Math.ceil((resource.maximum ?? resource.current) * 0.25),
+              ),
+            },
+          ],
+        ),
       );
     }
     playerSnapshot.characters[0]!.revision += 1;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(playerSnapshot.characters[0]) });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot.characters[0]),
+    });
   });
 
   await page.goto("/");
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
-  const physical = page.locator(".character-power-controls .resource-card").filter({ hasText: "Физическая сила" });
+  const physical = page
+    .locator(".character-power-controls .resource-card")
+    .filter({ hasText: "Физическая сила" });
   await physical.getByLabel("Текущее").fill("3");
   await page.locator(".character-workspace__header h2").click();
   await expect.poll(() => payloads.length).toBe(1);
@@ -1803,7 +1858,11 @@ test("structured resources persist and short rest uses the authoritative counter
   await page.getByPlaceholder("Новый ресурс").fill("stamina");
   await page.getByRole("button", { name: "Добавить", exact: true }).click();
   await expect.poll(() => payloads.length).toBe(2);
-  await expect(page.locator(".character-resource-editor .resource-card").filter({ hasText: "stamina" })).toBeVisible();
+  await expect(
+    page
+      .locator(".character-resource-editor .resource-card")
+      .filter({ hasText: "stamina" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Короткий отдых (+25%)" }).click();
   await expect.poll(() => payloads.at(-1)?.rest).toBe("SHORT");
@@ -1851,7 +1910,9 @@ test("resource conflict replaces the structured draft with canonical bootstrap d
   await page.goto("/");
   await page.locator(".workspace-menu summary").click();
   await page.getByRole("button", { name: "Персонажи" }).click();
-  const resourceCard = page.locator(".character-resource-editor .resource-card").filter({ hasText: "mana" });
+  const resourceCard = page
+    .locator(".character-resource-editor .resource-card")
+    .filter({ hasText: "mana" });
   const currentInput = resourceCard.getByLabel("Текущее");
   await currentInput.fill("5");
   await page.locator(".character-workspace__header h2").click();

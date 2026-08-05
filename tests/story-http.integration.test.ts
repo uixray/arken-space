@@ -326,9 +326,19 @@ describe("UIX-246 story HTTP integration", () => {
 
   it("rejects action-id reuse for a different command", async () => {
     const actionId = action();
-    const created = await app.inject({ method: "POST", url: "/api/story/posts", headers: headers(secrets.gm), payload: { actionId, body: "Original" } });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/story/posts",
+      headers: headers(secrets.gm),
+      payload: { actionId, body: "Original" },
+    });
     expect(created.statusCode).toBe(201);
-    const conflict = await app.inject({ method: "PATCH", url: `/api/story/posts/${created.json().id}`, headers: headers(secrets.gm), payload: { actionId, revision: 0, body: "Different command" } });
+    const conflict = await app.inject({
+      method: "PATCH",
+      url: `/api/story/posts/${created.json().id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId, revision: 0, body: "Different command" },
+    });
     expect(conflict.statusCode).toBe(409);
     expect(conflict.json()).toEqual({ error: "ACTION_ID_CONFLICT" });
   });
@@ -336,9 +346,30 @@ describe("UIX-246 story HTTP integration", () => {
   it("atomically claims staged story media", async () => {
     const db = drizzle(database, { schema });
     const contentId = crypto.randomUUID();
-    await db.insert(schema.chatAttachmentUploads).values({ contentId, campaignId: ids.campaign, uploadedByMembershipId: ids.gm, fileName: "once.png", storageKey: crypto.randomUUID(), mimeType: "image/png", sizeBytes: 1, status: "STAGED", expiresAt: new Date(Date.now() + 60_000) });
+    await db
+      .insert(schema.chatAttachmentUploads)
+      .values({
+        contentId,
+        campaignId: ids.campaign,
+        uploadedByMembershipId: ids.gm,
+        fileName: "once.png",
+        storageKey: crypto.randomUUID(),
+        mimeType: "image/png",
+        sizeBytes: 1,
+        status: "STAGED",
+        expiresAt: new Date(Date.now() + 60_000),
+      });
     await createDraft({ media: [{ contentId, order: 0, altText: "Once" }] });
-    const duplicate = await app.inject({ method: "POST", url: "/api/story/posts", headers: headers(secrets.gm), payload: { actionId: action(), body: "Cannot reuse claimed upload", media: [{ contentId, order: 0, altText: "Again" }] } });
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/story/posts",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: action(),
+        body: "Cannot reuse claimed upload",
+        media: [{ contentId, order: 0, altText: "Again" }],
+      },
+    });
     expect(duplicate.statusCode).toBe(404);
     expect(duplicate.json()).toEqual({ error: "STORY_MEDIA_NOT_FOUND" });
   });
@@ -349,29 +380,103 @@ describe("UIX-246 story HTTP integration", () => {
     const third = await createDraft({ body: "Third" });
     const db = drizzle(database, { schema });
     const sameTime = new Date("2026-07-24T12:00:00.000Z");
-    await db.update(schema.storyPosts).set({ updatedAt: sameTime }).where(inArray(schema.storyPosts.id, [first.id, second.id, third.id]));
-    const pageOne = await app.inject({ method: "GET", url: "/api/story/posts?limit=1", headers: headers(secrets.gm) });
+    await db
+      .update(schema.storyPosts)
+      .set({ updatedAt: sameTime })
+      .where(inArray(schema.storyPosts.id, [first.id, second.id, third.id]));
+    const pageOne = await app.inject({
+      method: "GET",
+      url: "/api/story/posts?limit=1",
+      headers: headers(secrets.gm),
+    });
     expect(pageOne.statusCode).toBe(200);
     const one = pageOne.json();
     expect(one.nextCursor).toEqual(expect.any(String));
-    const pageTwo = await app.inject({ method: "GET", url: `/api/story/posts?limit=10&cursor=${encodeURIComponent(one.nextCursor)}`, headers: headers(secrets.gm) });
+    const pageTwo = await app.inject({
+      method: "GET",
+      url: `/api/story/posts?limit=10&cursor=${encodeURIComponent(one.nextCursor)}`,
+      headers: headers(secrets.gm),
+    });
     expect(pageTwo.statusCode).toBe(200);
-    expect([one.posts[0].id, ...pageTwo.json().posts.map((post: { id: string }) => post.id)].sort()).toEqual([first.id, second.id, third.id].sort());
+    expect(
+      [
+        one.posts[0].id,
+        ...pageTwo.json().posts.map((post: { id: string }) => post.id),
+      ].sort(),
+    ).toEqual([first.id, second.id, third.id].sort());
   });
 
   it("binds commit to the reviewed export and permits a later reviewed rights decision", async () => {
-    const record = { sourceMessageId: "telegram-rights", sourceAuthor: "Ed", sourceTimestamp: "2026-07-24T05:00:00.000Z", body: "Rights review", media: [] };
-    const reviewed = await app.inject({ method: "POST", url: "/api/story/imports/telegram/dry-run", headers: headers(secrets.gm), payload: { actionId: action(), records: [record] } });
+    const record = {
+      sourceMessageId: "telegram-rights",
+      sourceAuthor: "Ed",
+      sourceTimestamp: "2026-07-24T05:00:00.000Z",
+      body: "Rights review",
+      media: [],
+    };
+    const reviewed = await app.inject({
+      method: "POST",
+      url: "/api/story/imports/telegram/dry-run",
+      headers: headers(secrets.gm),
+      payload: { actionId: action(), records: [record] },
+    });
     const batchId = reviewed.json().importBatchId as string;
-    const mismatch = await app.inject({ method: "POST", url: "/api/story/imports/telegram/commit", headers: headers(secrets.gm), payload: { actionId: action(), importBatchId: batchId, records: [{ ...record, body: "Tampered" }], rights: [{ sourceMessageId: record.sourceMessageId, status: "APPROVED" }] } });
+    const mismatch = await app.inject({
+      method: "POST",
+      url: "/api/story/imports/telegram/commit",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: action(),
+        importBatchId: batchId,
+        records: [{ ...record, body: "Tampered" }],
+        rights: [
+          { sourceMessageId: record.sourceMessageId, status: "APPROVED" },
+        ],
+      },
+    });
     expect(mismatch.statusCode).toBe(409);
     expect(mismatch.json()).toEqual({ error: "STORY_IMPORT_BATCH_MISMATCH" });
-    const imported = await app.inject({ method: "POST", url: "/api/story/imports/telegram/commit", headers: headers(secrets.gm), payload: { actionId: action(), importBatchId: batchId, records: [record], rights: [{ sourceMessageId: record.sourceMessageId, status: "PENDING" }] } });
+    const imported = await app.inject({
+      method: "POST",
+      url: "/api/story/imports/telegram/commit",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: action(),
+        importBatchId: batchId,
+        records: [record],
+        rights: [
+          { sourceMessageId: record.sourceMessageId, status: "PENDING" },
+        ],
+      },
+    });
     expect(imported.statusCode).toBe(201);
     const postId = imported.json().postIds[0] as string;
-    const secondReview = await app.inject({ method: "POST", url: "/api/story/imports/telegram/dry-run", headers: headers(secrets.gm), payload: { actionId: action(), records: [record] } });
-    const approved = await app.inject({ method: "POST", url: "/api/story/imports/telegram/commit", headers: headers(secrets.gm), payload: { actionId: action(), importBatchId: secondReview.json().importBatchId, records: [record], rights: [{ sourceMessageId: record.sourceMessageId, status: "APPROVED" }] } });
+    const secondReview = await app.inject({
+      method: "POST",
+      url: "/api/story/imports/telegram/dry-run",
+      headers: headers(secrets.gm),
+      payload: { actionId: action(), records: [record] },
+    });
+    const approved = await app.inject({
+      method: "POST",
+      url: "/api/story/imports/telegram/commit",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: action(),
+        importBatchId: secondReview.json().importBatchId,
+        records: [record],
+        rights: [
+          { sourceMessageId: record.sourceMessageId, status: "APPROVED" },
+        ],
+      },
+    });
     expect(approved.statusCode).toBe(201);
-    const publish = await app.inject({ method: "POST", url: `/api/story/posts/${postId}/publish`, headers: headers(secrets.gm), payload: { actionId: action(), revision: 0 } });
+    const publish = await app.inject({
+      method: "POST",
+      url: `/api/story/posts/${postId}/publish`,
+      headers: headers(secrets.gm),
+      payload: { actionId: action(), revision: 0 },
+    });
     expect(publish.statusCode).toBe(200);
-  });});
+  });
+});

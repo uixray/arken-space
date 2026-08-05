@@ -87,5 +87,4 @@ describe("getDiceCritical", () => {
       }),
     ).toBeNull();
   });
-
 });

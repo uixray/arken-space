@@ -20,8 +20,15 @@ describe("character workspace state", () => {
   it("opens a token-linked character exclusively without changing deliberate multi-card behavior", () => {
     let state = createCharacterWorkspaceState(["one", "two", "three"]);
     state = characterWorkspaceReducer(state, { type: "OPEN", id: "two" });
-    state = characterWorkspaceReducer(state, { type: "OPEN_EXCLUSIVE", id: "three" });
-    expect(state).toEqual({ openIds: ["three"], activeId: "three", collapsedIds: [] });
+    state = characterWorkspaceReducer(state, {
+      type: "OPEN_EXCLUSIVE",
+      id: "three",
+    });
+    expect(state).toEqual({
+      openIds: ["three"],
+      activeId: "three",
+      collapsedIds: [],
+    });
   });
 
   it("keeps the deck bounded and does not silently replace an open sheet", () => {

@@ -25,7 +25,8 @@ describe("story post contracts", () => {
 
   it("requires narrative content or media, with accessible, ordered media", () => {
     expect(
-      createStoryPostSchema.safeParse({ actionId, body: "", media: [] }).success,
+      createStoryPostSchema.safeParse({ actionId, body: "", media: [] })
+        .success,
     ).toBe(false);
 
     const result = createStoryPostSchema.parse({
@@ -111,7 +112,9 @@ describe("story post contracts", () => {
 
   it("uses an opaque cursor for independent story pagination", () => {
     expect(listStoryPostsSchema.parse({})).toEqual({ limit: 20 });
-    expect(listStoryPostsSchema.parse({ cursor: "opaque-cursor", limit: "50" })).toEqual({
+    expect(
+      listStoryPostsSchema.parse({ cursor: "opaque-cursor", limit: "50" }),
+    ).toEqual({
       cursor: "opaque-cursor",
       limit: 50,
     });
