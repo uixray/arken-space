@@ -9,6 +9,8 @@ export default tseslint.config(
       "**/dist/**",
       "**/coverage/**",
       "**/drizzle/meta/**",
+      "**/test-results/**",
+      ".worktrees/**",
       ".agent/**",
       ".agents/**",
       ".claude/**",

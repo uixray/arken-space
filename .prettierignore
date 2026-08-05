@@ -2,6 +2,8 @@ node_modules
 dist
 coverage
 playwright-report
+test-results
+.worktrees
 packages/db/drizzle/meta
 pnpm-lock.yaml
 .agent
