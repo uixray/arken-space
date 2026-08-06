@@ -284,6 +284,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
   const drawingPointsRef = useRef<number[]>([]);
   const drawingActiveRef = useRef(false);
+  const [pendingDrawings, setPendingDrawings] = useState<
+    { tempId: string; points: number[]; color: string; strokeWidth: number }[]
+  >([]);
   const finishDrawingRef = useRef<() => void>(() => undefined);
   const trackDrawingRef = useRef<(event: MouseEvent) => void>(() => undefined);
   const [drawingColor, setDrawingColor] = useState<string>(visual.color.edit);
@@ -1004,6 +1007,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       const releasedDrawing = releaseDrawingDraft(drawingPointsRef, [], () =>
         setDrawingPoints([]),
       );
+      const tempId = crypto.randomUUID();
+      setPendingDrawings((current) => [
+        ...current,
+        {
+          tempId,
+          points: releasedDrawing,
+          color: drawingColor,
+          strokeWidth: drawingStrokeWidth,
+        },
+      ]);
       void persistDrawingDraft(
         {
           points: releasedDrawing,
@@ -1011,7 +1024,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           strokeWidth: drawingStrokeWidth,
         },
         props.onDrawingCreate,
-        () => undefined,
+        () =>
+          setPendingDrawings((current) =>
+            current.filter((pending) => pending.tempId !== tempId),
+          ),
       ).catch(() => {
         // onDrawingCreate owns user-facing error reporting; consume the
         // detached background task rejection to avoid an unhandled promise.
@@ -1739,6 +1755,28 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               />
             );
           })}
+          {pendingDrawings
+            .filter(
+              (pending) =>
+                !props.drawings.some(
+                  (drawing) =>
+                    drawing.points.length === pending.points.length &&
+                    drawing.points.every(
+                      (value, index) => value === pending.points[index],
+                    ),
+                ),
+            )
+            .map((pending) => (
+              <Line
+                key={pending.tempId}
+                points={pending.points}
+                stroke={pending.color}
+                strokeWidth={pending.strokeWidth / scale}
+                lineCap="round"
+                lineJoin="round"
+                listening={false}
+              />
+            ))}
           {drawingPoints.length >= 4 && (
             <Line
               points={drawingPoints}
