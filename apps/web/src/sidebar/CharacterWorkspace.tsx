@@ -569,6 +569,13 @@ export function CharacterPanel({
     (snapshot.me.role === "GM" ||
       character.ownerMembershipId === snapshot.me.id ||
       character.controllerMembershipIds.includes(snapshot.me.id));
+  // Media gallery ACL (character-media.ts) only allows owner/GM to mutate,
+  // not controllers — a narrower check than the general sheet `editable`,
+  // so controllers don't see edit/reorder/detach buttons that 403 on click.
+  const canEditMedia =
+    character &&
+    (snapshot.me.role === "GM" ||
+      character.ownerMembershipId === snapshot.me.id);
   if (!character)
     return (
       <Empty
@@ -783,7 +790,7 @@ export function CharacterPanel({
       <CharacterMediaGallery
         characterId={character.id}
         characterName={character.name}
-        editable={Boolean(editable)}
+        editable={Boolean(canEditMedia)}
         isGm={snapshot.me.role === "GM"}
         onUpload={onUpload}
       />

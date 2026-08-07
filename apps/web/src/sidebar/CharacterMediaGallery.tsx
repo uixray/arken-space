@@ -127,6 +127,30 @@ export function CharacterMediaGallery({
     }
   };
 
+  /**
+   * GM-only hard delete (AC2/AC14): permanently removes the gallery entry
+   * row rather than just hiding it. Never offered to the owner.
+   */
+  const hardDelete = async (item: CharacterMediaDto) => {
+    setPendingId(item.id);
+    setError("");
+    try {
+      await api(`/api/character-media/${item.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          revision: item.revision,
+        }),
+      });
+      setItems((current) => current.filter((entry) => entry.id !== item.id));
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 409) await load();
+      setError(formatApiError(reason, "Не удалось удалить запись галереи."));
+    } finally {
+      setPendingId(null);
+    }
+  };
+
   return (
     <div className="character-media-gallery">
       {error && (
@@ -193,6 +217,17 @@ export function CharacterMediaGallery({
                   >
                     Убрать из галереи
                   </Button>
+                  {isGm && (
+                    <Button
+                      size="s"
+                      view="flat-danger"
+                      disabled={pendingId === item.id}
+                      title="Безвозвратно удаляет запись галереи (сам файл не удаляется). Недоступно владельцу."
+                      onClick={() => void hardDelete(item)}
+                    >
+                      Удалить навсегда
+                    </Button>
+                  )}
                 </div>
               )}
             </li>

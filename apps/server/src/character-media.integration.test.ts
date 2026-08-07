@@ -358,3 +358,90 @@ describe("character media HTTP: delete", () => {
     expect(assetStillThere).toHaveLength(1);
   });
 });
+
+describe("character media HTTP: GM manages media on a character they don't own (AC2/AC14)", () => {
+  it("lets the GM create GM_ONLY media, edit, reorder, detach and hard-delete on a character owned by someone else", async () => {
+    // ids.character is owned by ids.owner, not by the GM — this proves the
+    // GM's cross-character management (AC2) extends to GM_ONLY entries the
+    // owner can never see or manage (AC8).
+    const first = (
+      await createMedia(secrets.gm, {
+        visibility: "GM_ONLY",
+        caption: "Secret plot hook",
+      })
+    ).json();
+    expect(first.visibility).toBe("GM_ONLY");
+    expect(first.characterId).toBe(ids.character);
+
+    const ownerList = (
+      await app.inject({
+        method: "GET",
+        url: `/api/characters/${ids.character}/media`,
+        headers: headers(secrets.owner),
+      })
+    ).json();
+    expect(
+      ownerList.some((row: { id: string }) => row.id === first.id),
+    ).toBe(false);
+
+    const editRes = await app.inject({
+      method: "PATCH",
+      url: `/api/character-media/${first.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: first.revision,
+        caption: "Updated secret",
+      },
+    });
+    expect(editRes.statusCode).toBe(200);
+    const edited = editRes.json();
+    expect(edited.caption).toBe("Updated secret");
+    expect(edited.visibility).toBe("GM_ONLY");
+
+    const second = (
+      await createMedia(secrets.gm, { visibility: "GM_ONLY" })
+    ).json();
+    const reorderRes = await app.inject({
+      method: "POST",
+      url: `/api/character-media/${edited.id}/reorder`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: edited.revision,
+        ordering: second.ordering,
+      },
+    });
+    expect(reorderRes.statusCode).toBe(200);
+    const reordered = reorderRes.json();
+    expect(reordered.ordering).toBe(second.ordering);
+
+    const detachRes = await app.inject({
+      method: "POST",
+      url: `/api/character-media/${second.id}/detach`,
+      headers: headers(secrets.gm),
+      payload: { actionId: id(), revision: second.revision },
+    });
+    expect(detachRes.statusCode).toBe(200);
+    expect(detachRes.json().detachedAt).not.toBeNull();
+
+    const deleteRes = await app.inject({
+      method: "DELETE",
+      url: `/api/character-media/${reordered.id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: id(), revision: reordered.revision },
+    });
+    expect(deleteRes.statusCode).toBe(204);
+
+    const finalList = (
+      await app.inject({
+        method: "GET",
+        url: `/api/characters/${ids.character}/media`,
+        headers: headers(secrets.gm),
+      })
+    ).json();
+    expect(
+      finalList.some((row: { id: string }) => row.id === reordered.id),
+    ).toBe(false);
+  });
+});
