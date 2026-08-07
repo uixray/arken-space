@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractPastedImageFile,
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "./chat-composer";
+
+function fakeClipboardData(
+  items: Array<{ kind: string; type: string; file?: File }>,
+): Pick<DataTransfer, "items"> {
+  return {
+    items: items.map((item) => ({
+      kind: item.kind,
+      type: item.type,
+      getAsFile: () => item.file ?? null,
+    })) as unknown as DataTransferItemList,
+  };
+}
 
 describe("parseComposerInput", () => {
   it("keeps ordinary text separate from explicit roll syntax", () => {
@@ -100,5 +113,37 @@ describe("getSlashCommandSuggestions", () => {
     expect(getSlashCommandSuggestions("hello")).toEqual([]);
     expect(getSlashCommandSuggestions("/roll 1d20")).toEqual([]);
     expect(getSlashCommandSuggestions("/unknown")).toEqual([]);
+  });
+});
+
+describe("extractPastedImageFile", () => {
+  it("picks the image file out of a clipboard paste, triggering the upload path", () => {
+    const file = new File(["fake-bytes"], "screenshot.png", {
+      type: "image/png",
+    });
+    const clipboardData = fakeClipboardData([
+      { kind: "file", type: "image/png", file },
+    ]);
+    expect(extractPastedImageFile(clipboardData)).toBe(file);
+  });
+
+  it("ignores plain text paste so normal textarea paste is unaffected", () => {
+    const clipboardData = fakeClipboardData([
+      { kind: "string", type: "text/plain" },
+    ]);
+    expect(extractPastedImageFile(clipboardData)).toBeNull();
+  });
+
+  it("ignores non-image file pastes and missing clipboard data", () => {
+    const file = new File(["fake-bytes"], "notes.txt", {
+      type: "text/plain",
+    });
+    expect(
+      extractPastedImageFile(
+        fakeClipboardData([{ kind: "file", type: "text/plain", file }]),
+      ),
+    ).toBeNull();
+    expect(extractPastedImageFile(null)).toBeNull();
+    expect(extractPastedImageFile(undefined)).toBeNull();
   });
 });

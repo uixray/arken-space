@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type FormEvent,
+} from "react";
 import type {
   ChatAttachmentMetadata,
   ChatStream,
@@ -9,6 +16,7 @@ import { arkenSystem } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
 import {
+  extractPastedImageFile,
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "../chat-composer";
@@ -665,6 +673,33 @@ export function DirectChatPanel({
     return () => window.clearTimeout(timer);
   }, [activeThread, latestSequence, onMarkChatRead]);
 
+  async function attachFile(file: File) {
+    setUploading(true);
+    setError("");
+    try {
+      const previewUrl = URL.createObjectURL(file);
+      try {
+        setAttachment(await onUploadAttachment(file));
+        if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
+        setAttachmentPreviewUrl(previewUrl);
+      } catch (error) {
+        URL.revokeObjectURL(previewUrl);
+        throw error;
+      }
+    } catch {
+      setError("Не удалось загрузить изображение.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function pasteImageFromClipboard(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const file = extractPastedImageFile(event.clipboardData);
+    if (!file) return;
+    event.preventDefault();
+    void attachFile(file);
+  }
+
   async function selectPeer(peerMembershipId: string) {
     setSelectedPeerId(peerMembershipId);
     setError("");
@@ -793,6 +828,7 @@ export function DirectChatPanel({
               placeholder={`Сообщение для ${directThreadLabel(activeThread, snapshot.me.id)}…`}
               value={composer}
               onChange={(event) => setComposer(event.target.value)}
+              onPaste={pasteImageFromClipboard}
               rows={3}
             />
             {attachment && (
@@ -833,24 +869,7 @@ export function DirectChatPanel({
                 const file = event.target.files?.[0];
                 event.currentTarget.value = "";
                 if (!file) return;
-                setUploading(true);
-                setError("");
-                try {
-                  const previewUrl = URL.createObjectURL(file);
-                  try {
-                    setAttachment(await onUploadAttachment(file));
-                    if (attachmentPreviewUrl)
-                      URL.revokeObjectURL(attachmentPreviewUrl);
-                    setAttachmentPreviewUrl(previewUrl);
-                  } catch (error) {
-                    URL.revokeObjectURL(previewUrl);
-                    throw error;
-                  }
-                } catch {
-                  setError("Не удалось загрузить изображение.");
-                } finally {
-                  setUploading(false);
-                }
+                await attachFile(file);
               }}
             />
           </label>

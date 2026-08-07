@@ -77,6 +77,23 @@ export function getSlashCommandSuggestions(
 }
 
 /**
+ * Picks the pasted image out of a clipboard payload, if there is one.
+ * Plain-text paste (no image items) must fall through untouched so the
+ * browser's default paste-into-textarea behavior keeps working.
+ */
+export function extractPastedImageFile(
+  clipboardData: Pick<DataTransfer, "items"> | null | undefined,
+): File | null {
+  if (!clipboardData) return null;
+  for (const item of Array.from(clipboardData.items)) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      return item.getAsFile();
+    }
+  }
+  return null;
+}
+
+/**
  * Keeps chat text and explicit dice syntax on one safe input path. Formula
  * evaluation is intentionally delegated to the server's dice parser.
  */
