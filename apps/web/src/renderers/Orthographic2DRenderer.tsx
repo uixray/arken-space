@@ -48,6 +48,7 @@ import {
 import { CANVAS_VISUAL_TOKENS as visual } from "./canvas-visual-tokens";
 import { persistDrawingDraft, releaseDrawingDraft } from "./drawing-draft";
 import { isDirectTokenDrag } from "./token-drag-event";
+import { mapWorldPointFromDrop } from "../token-placement";
 import { getTokenImageMask } from "./token-image-mask";
 import {
   createTokenImageState,
@@ -1228,10 +1229,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         if (!definitionId || !props.onPlaceTokenDefinition) return;
         event.preventDefault();
         const rect = event.currentTarget.getBoundingClientRect();
-        void props.onPlaceTokenDefinition(definitionId, {
-          x: (event.clientX - rect.left - position.x) / scale,
-          y: (event.clientY - rect.top - position.y) / scale,
-        });
+        void props.onPlaceTokenDefinition(
+          definitionId,
+          mapWorldPointFromDrop({
+            clientX: event.clientX,
+            clientY: event.clientY,
+            containerRect: rect,
+            pan: position,
+            scale,
+          }),
+        );
       }}
       onContextMenu={(event) => event.preventDefault()}
     >

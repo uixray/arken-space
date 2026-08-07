@@ -14,6 +14,7 @@ import { ImageUploadField } from "../ui/ImageUploadField";
 import { FormInput, FormSelect } from "../ui/GravityFormControls";
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
+import { canPlaceTokenDefinition } from "../token-placement";
 
 export function PalettePanel(props: Props) {
   const definitions = props.snapshot.tokenDefinitions ?? [];
@@ -53,18 +54,27 @@ export function PalettePanel(props: Props) {
           const asset = props.snapshot.assets.find(
             (item) => item.id === definition.defaultAssetId,
           );
+          const canPlace = canPlaceTokenDefinition({
+            role: props.snapshot.me.role,
+            membershipId: props.snapshot.me.id,
+            controllerMembershipIds: definition.controllerMembershipIds,
+          });
           return (
             <article
               className="palette-card"
               key={definition.id}
-              draggable
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = "copy";
-                event.dataTransfer.setData(
-                  "application/x-arken-token-definition",
-                  definition.id,
-                );
-              }}
+              draggable={canPlace}
+              onDragStart={
+                canPlace
+                  ? (event) => {
+                      event.dataTransfer.effectAllowed = "copy";
+                      event.dataTransfer.setData(
+                        "application/x-arken-token-definition",
+                        definition.id,
+                      );
+                    }
+                  : (event) => event.preventDefault()
+              }
             >
               <Button
                 className="palette-place"

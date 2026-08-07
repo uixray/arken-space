@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
-import { characterTokenPlacementRequest } from "./token-placement";
+import {
+  canPlaceTokenDefinition,
+  characterTokenPlacementRequest,
+  mapWorldPointFromDrop,
+} from "./token-placement";
 
 const character = {
   id: "character-ed",
@@ -76,5 +80,63 @@ describe("character token placement", () => {
         height: 64,
       },
     });
+  });
+});
+
+describe("token definition drag placement permission", () => {
+  it("allows the GM to drag-place regardless of controllers", () => {
+    expect(
+      canPlaceTokenDefinition({
+        role: "GM",
+        membershipId: "member-gm",
+        controllerMembershipIds: [],
+      }),
+    ).toBe(true);
+  });
+
+  it("allows a player who controls the definition to drag-place", () => {
+    expect(
+      canPlaceTokenDefinition({
+        role: "PLAYER",
+        membershipId: "member-ed",
+        controllerMembershipIds: ["member-ed", "member-other"],
+      }),
+    ).toBe(true);
+  });
+
+  it("denies a player without control rights over the definition", () => {
+    expect(
+      canPlaceTokenDefinition({
+        role: "PLAYER",
+        membershipId: "member-ed",
+        controllerMembershipIds: ["member-other"],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("mapWorldPointFromDrop", () => {
+  it("converts a drop event's client coordinates to map world coordinates", () => {
+    const point = mapWorldPointFromDrop({
+      clientX: 340,
+      clientY: 220,
+      containerRect: { left: 40, top: 20 },
+      pan: { x: 100, y: 50 },
+      scale: 2,
+    });
+
+    expect(point).toEqual({ x: 100, y: 75 });
+  });
+
+  it("accounts for zero pan/unit scale as the identity transform", () => {
+    const point = mapWorldPointFromDrop({
+      clientX: 150,
+      clientY: 90,
+      containerRect: { left: 0, top: 0 },
+      pan: { x: 0, y: 0 },
+      scale: 1,
+    });
+
+    expect(point).toEqual({ x: 150, y: 90 });
   });
 });
