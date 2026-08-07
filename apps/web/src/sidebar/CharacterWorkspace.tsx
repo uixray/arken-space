@@ -19,6 +19,7 @@ import {
   uniqueCharacterIds,
   type CharacterTemplateFields,
 } from "../character-workspace-state";
+import { CharacterMediaGallery } from "./CharacterMediaGallery";
 import { CharacterActionCard } from "../SkillCards";
 import { RollModeControl, type RollMode } from "../RollModeControl";
 import {
@@ -778,6 +779,14 @@ export function CharacterPanel({
       >
         Загрузить и назначить
       </Button>
+      <h3 className="character-block-heading">Галерея</h3>
+      <CharacterMediaGallery
+        characterId={character.id}
+        characterName={character.name}
+        editable={Boolean(editable)}
+        isGm={snapshot.me.role === "GM"}
+        onUpload={onUpload}
+      />
       {snapshot.me.role === "GM" && (
         <div className="subsection">
           <h3>Время кампании</h3>
