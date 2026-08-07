@@ -22,6 +22,7 @@ const ids = {
   foreignCampaign: id(),
   gm: id(),
   player: id(),
+  playerNoToken: id(), // party member with no controlled token anywhere
   foreign: id(),
   sceneA: id(), // source/active scene, 1000x800
   sceneB: id(), // linked destination scene, 500x2000
@@ -33,6 +34,8 @@ const ids = {
   tokenDefinition: id(),
   token: id(), // PLAYER-layer token on sceneA at 300,480 (30%, 60%)
   gmToken: id(), // GM-layer token, must NOT transfer
+  tokenDefinitionB: id(),
+  tokenOnSceneB: id(), // PLAYER-layer token already placed on sceneB, controlled by `player`
 };
 const secrets = { gm: "g".repeat(40), player: "p".repeat(40), foreign: "f".repeat(40) };
 const headers = (secret: string) => ({
@@ -129,6 +132,12 @@ beforeAll(async () => {
       displayName: "Player",
     },
     {
+      id: ids.playerNoToken,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Player without a token",
+    },
+    {
       id: ids.foreign,
       campaignId: ids.foreignCampaign,
       role: "GM",
@@ -200,11 +209,10 @@ beforeAll(async () => {
     locationId: ids.location,
     sceneId: ids.sceneB,
   });
-  await db.insert(schema.tokenDefinitions).values({
-    id: ids.tokenDefinition,
-    campaignId: ids.campaign,
-    name: "Hero",
-  });
+  await db.insert(schema.tokenDefinitions).values([
+    { id: ids.tokenDefinition, campaignId: ids.campaign, name: "Hero" },
+    { id: ids.tokenDefinitionB, campaignId: ids.campaign, name: "Hero (scene B)" },
+  ]);
   await db.insert(schema.tokens).values([
     {
       id: ids.token,
@@ -224,6 +232,23 @@ beforeAll(async () => {
       x: 500,
       y: 400,
     },
+    {
+      id: ids.tokenOnSceneB,
+      definitionId: ids.tokenDefinitionB,
+      sceneId: ids.sceneB,
+      layer: "PLAYER",
+      name: "Hero (scene B)",
+      x: 100,
+      y: 100,
+    },
+  ]);
+  // `player` controls a definition whose only instance sits on sceneA (the
+  // "controlled token, but on a different scene" case) *and* a definition
+  // whose instance sits on sceneB (the "controlled token present" case) —
+  // `playerNoToken` controls nothing, anywhere.
+  await db.insert(schema.tokenControllers).values([
+    { tokenDefinitionId: ids.tokenDefinition, membershipId: ids.player },
+    { tokenDefinitionId: ids.tokenDefinitionB, membershipId: ids.player },
   ]);
 
   app = Fastify();
@@ -473,6 +498,88 @@ describe("one-active-encounter-at-a-time and idempotency", () => {
     const againstEnded = await endEncounter(secrets.gm, started.id, first.json().revision);
     expect(againstEnded.statusCode).toBe(409);
     expect(againstEnded.json().error).toBe("ENCOUNTER_NOT_ACTIVE");
+  });
+});
+
+describe("LINKED_SCENE preflight (missing-token warning)", () => {
+  it("requires auth and GM role", async () => {
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/encounters/preflight?targetSceneId=${ids.sceneB}`,
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/encounters/preflight?targetSceneId=${ids.sceneB}`,
+          headers: headers(secrets.player),
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+
+  it("404s on a forged/cross-campaign target scene, and on an invalid location-to-scene link", async () => {
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/encounters/preflight?targetSceneId=${id()}`,
+          headers: headers(secrets.gm),
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/encounters/preflight?targetSceneId=${ids.foreignScene}`,
+          headers: headers(secrets.gm),
+        })
+      ).statusCode,
+    ).toBe(404);
+    const badLink = await app.inject({
+      method: "GET",
+      url: `/api/encounters/preflight?targetSceneId=${ids.sceneB}&locationId=${id()}`,
+      headers: headers(secrets.gm),
+    });
+    expect(badLink.statusCode).toBe(404);
+    expect(badLink.json().error).toBe("INVALID_LOCATION_SCENE_LINK");
+  });
+
+  it("reports party members with no controlled PLAYER-layer token on the target scene", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/encounters/preflight?targetSceneId=${ids.sceneB}&locationId=${ids.location}`,
+      headers: headers(secrets.gm),
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.targetSceneId).toBe(ids.sceneB);
+    // `player` controls a token already placed on sceneB -> not missing.
+    // `playerNoToken` controls nothing -> missing.
+    // `player`'s *other* controlled token sits on sceneA, not sceneB, so it
+    // doesn't save them from being reported for sceneA-as-target below.
+    // GM memberships never appear (only PLAYER-role party members count).
+    expect(body.missingTokenMembershipIds.sort()).toEqual(
+      [ids.playerNoToken].sort(),
+    );
+
+    const sceneAResponse = await app.inject({
+      method: "GET",
+      url: `/api/encounters/preflight?targetSceneId=${ids.sceneA}`,
+      headers: headers(secrets.gm),
+    });
+    expect(sceneAResponse.statusCode).toBe(200);
+    // On sceneA, `player`'s controlled token there covers them, but they're
+    // still not missing for a *different* reason than on sceneB above —
+    // this asserts the same-scene-only join, not a cross-scene fallback.
+    expect(sceneAResponse.json().missingTokenMembershipIds.sort()).toEqual(
+      [ids.playerNoToken].sort(),
+    );
   });
 });
 

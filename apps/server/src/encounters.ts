@@ -4,13 +4,18 @@ import { and, asc, eq } from "drizzle-orm";
 import {
   startEncounterSchema,
   endEncounterSchema,
+  encounterPreflightQuerySchema,
   type EncounterDto,
+  type EncounterPreflightResponse,
 } from "@arken/contracts";
 import {
   campaigns,
   encounters,
   gameEvents,
+  memberships,
   scenes,
+  tokenControllers,
+  tokenDefinitions,
   tokens,
   worldMapLocationScenes,
 } from "@arken/db";
@@ -166,6 +171,51 @@ async function findEncounterById(
     .where(and(eq(encounters.campaignId, campaignId), eq(encounters.id, id)))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * UIX-311 Stage 3 preflight: which campaign party (PLAYER-role) members
+ * currently lack a controlled PLAYER-layer token on `targetSceneId`.
+ *
+ * Reuses the same "who controls a token" join used to build TokenDto.
+ * controllerMembershipIds elsewhere (see snapshot.ts's tokens/tokenControllers
+ * join and realtime.ts's tokenDto) rather than inventing a new notion of
+ * control — a membership "has a token" on the destination scene only if it
+ * is listed in token_controllers for a token_definition backing a token
+ * that's actually placed there. Only the PLAYER layer is considered because
+ * that's the layer LINKED_SCENE auto-transfers (see the ENCOUNTER_STARTED
+ * transaction above); MAP/GM-layer tokens are scenery/GM markers, not party
+ * members, and never factor into "is the party accounted for".
+ */
+export async function computeMissingTokenMembers(
+  db: EncounterDb,
+  campaignId: string,
+  targetSceneId: string,
+): Promise<string[]> {
+  const partyMembers = await db
+    .select({ id: memberships.id })
+    .from(memberships)
+    .where(
+      and(eq(memberships.campaignId, campaignId), eq(memberships.role, "PLAYER")),
+    );
+  if (!partyMembers.length) return [];
+
+  const controllerRows = await db
+    .select({ membershipId: tokenControllers.membershipId })
+    .from(tokenControllers)
+    .innerJoin(
+      tokenDefinitions,
+      eq(tokenControllers.tokenDefinitionId, tokenDefinitions.id),
+    )
+    .innerJoin(tokens, eq(tokens.definitionId, tokenDefinitions.id))
+    .where(and(eq(tokens.sceneId, targetSceneId), eq(tokens.layer, "PLAYER")));
+
+  const controlledMembershipIds = new Set(
+    controllerRows.map((row) => row.membershipId),
+  );
+  return partyMembers
+    .map((member) => member.id)
+    .filter((id) => !controlledMembershipIds.has(id));
 }
 
 export function registerEncounterRoutes(
@@ -424,5 +474,52 @@ export function registerEncounterRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     return reply.send(await listEncounters(db, auth.campaignId));
+  });
+
+  // UIX-311 Stage 3: LINKED_SCENE preflight — GM-only warning surface, no
+  // state mutation. Re-validates campaign ownership of the candidate target
+  // scene (and, if provided, the location-to-scene link) the same way
+  // POST /api/encounters/start does, so a GM previewing a scene picker never
+  // learns anything about a scene/location it can't actually target.
+  app.get("/api/encounters/preflight", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
+    const parsed = encounterPreflightQuerySchema.safeParse(request.query);
+    if (!parsed.success) return fail(reply, 400, "INVALID_REQUEST");
+    const { targetSceneId, locationId } = parsed.data;
+
+    const [targetScene] = await db
+      .select({ id: scenes.id })
+      .from(scenes)
+      .where(and(eq(scenes.campaignId, auth.campaignId), eq(scenes.id, targetSceneId)))
+      .limit(1);
+    if (!targetScene) return fail(reply, 404, "TARGET_SCENE_NOT_FOUND");
+
+    if (locationId) {
+      const [link] = await db
+        .select()
+        .from(worldMapLocationScenes)
+        .where(
+          and(
+            eq(worldMapLocationScenes.campaignId, auth.campaignId),
+            eq(worldMapLocationScenes.locationId, locationId),
+            eq(worldMapLocationScenes.sceneId, targetSceneId),
+          ),
+        )
+        .limit(1);
+      if (!link) return fail(reply, 404, "INVALID_LOCATION_SCENE_LINK");
+    }
+
+    const missingTokenMembershipIds = await computeMissingTokenMembers(
+      db,
+      auth.campaignId,
+      targetSceneId,
+    );
+    const response: EncounterPreflightResponse = {
+      targetSceneId,
+      missingTokenMembershipIds,
+    };
+    return reply.send(response);
   });
 }

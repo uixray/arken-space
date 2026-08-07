@@ -409,6 +409,33 @@ export const endEncounterSchema = z
   .strict();
 export type EndEncounterCommand = z.infer<typeof endEncounterSchema>;
 
+/**
+ * UIX-311 Stage 3: LINKED_SCENE preflight. Given a candidate destination
+ * scene (and optionally the world-map location it was picked through), the
+ * GM can check which campaign party members lack a controlled PLAYER-layer
+ * token there before committing to start the encounter. LINKED_SCENE token
+ * continuity is automatic (transferRelativePosition, Stage 1); this is a
+ * warning surface, not a manual-placement flow.
+ */
+export const encounterPreflightQuerySchema = z
+  .object({
+    targetSceneId: z.string().uuid(),
+    locationId: z.string().uuid().optional(),
+  })
+  .strict();
+export type EncounterPreflightQuery = z.infer<
+  typeof encounterPreflightQuerySchema
+>;
+
+export const encounterPreflightResponseSchema = z.object({
+  targetSceneId: z.string().uuid(),
+  /** PLAYER-role membership ids with no controlled PLAYER-layer token on targetSceneId. */
+  missingTokenMembershipIds: z.array(z.string().uuid()),
+});
+export type EncounterPreflightResponse = z.infer<
+  typeof encounterPreflightResponseSchema
+>;
+
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
