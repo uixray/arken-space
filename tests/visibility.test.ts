@@ -34,15 +34,19 @@ beforeAll(async () => {
   const migrations = (await readdir(migrationsUrl))
     .filter((name) => name.endsWith(".sql"))
     .sort();
-  for (const file of migrations.filter(
-    (file) =>
-      !file.startsWith("0009_") &&
-      !file.startsWith("0017_") &&
-      !file.startsWith("0018_") &&
-      !file.startsWith("0019_") &&
-      !file.startsWith("0020_") &&
-      !file.startsWith("0021_"),
-  )) {
+  // Only 0009's backfill is skipped (expensive, and migration.test.ts already
+  // covers it) — every other migration runs in its real numeric order so
+  // later migrations can depend on schema objects (indexes, columns) that
+  // earlier ones created, exactly like a real deployment. A previous version
+  // of this fixture additionally deferred 0017-0021 to run last "for no
+  // documented reason beyond 0009", which broke once 0029/0030 added
+  // composite foreign keys to a unique index that 0017 creates — those FKs
+  // ran (alphabetically) before 0017 did. Keep 0009 as the only special case.
+  const preBackfill = migrations.filter((file) => file < "0009_");
+  const postBackfill = migrations.filter(
+    (file) => !file.startsWith("0009_") && file > "0009_",
+  );
+  for (const file of preBackfill) {
     const sql = (
       await readFile(new URL(file, migrationsUrl), "utf8")
     ).replaceAll("--> statement-breakpoint", "");
@@ -56,17 +60,11 @@ beforeAll(async () => {
     create unique index chat_sequence_idx on chat_messages (sequence);
     create index chat_campaign_sequence_idx on chat_messages (campaign_id, sequence);
   `);
-  for (const file of [
-    "0017_chat_threads.sql",
-    "0018_direct_chat.sql",
-    "0019_sticker_packs.sql",
-    "0020_world_maps.sql",
-    "0021_story_posts.sql",
-  ]) {
-    const chatThreadsMigration = (
+  for (const file of postBackfill) {
+    const sql = (
       await readFile(new URL(file, migrationsUrl), "utf8")
     ).replaceAll("--> statement-breakpoint", "");
-    await database.exec(chatThreadsMigration);
+    await database.exec(sql);
   }
 });
 

@@ -1122,7 +1122,7 @@ describe("Pool B HTTP boundaries", () => {
       terms: [expect.objectContaining({ notation: "1d20" })],
     });
     expect([0, 1]).toContain(advantagePayload.dice.selectedPool);
-    expect(advantagePayload.body).toContain("РїСЂРµРёРјСѓС‰РµСЃС‚РІРѕ");
+    expect(advantagePayload.body).toContain("преимущество");
     expect(advantagePayload.dice.terms[0].rolls).toHaveLength(1);
 
     const disadvantage = await app.inject({
@@ -1145,7 +1145,7 @@ describe("Pool B HTTP boundaries", () => {
       terms: [expect.objectContaining({ notation: "1d20" })],
     });
     expect([0, 1]).toContain(disadvantage.json().dice.selectedPool);
-    expect(disadvantage.json().body).toContain("РїРѕРјРµС…Р°");
+    expect(disadvantage.json().body).toContain("помеха");
 
     const gmNormal = await app.inject({
       method: "POST",
@@ -1930,31 +1930,25 @@ describe("Pool B HTTP boundaries", () => {
         .json()
         .messages.find(
           (message: { kind: string; body: string }) =>
-            message.kind === "SYSTEM" &&
-            message.body.includes("РєРѕС€РµР»С‘Рє:"),
+            message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
         )?.body,
-    ).toContain(
-      "РєРѕС€РµР»С‘Рє: Р·РѕР»РѕС‚Рѕ 0 в†’ 1, СЃРµСЂРµР±СЂРѕ 0 в†’ 2, РјРµРґСЊ 0 в†’ 3, РЎРџ 0 в†’ 4",
-    );
+    ).toContain("кошелёк: золото 0 → 1, серебро 0 → 2, медь 0 → 3, СП 0 → 4");
     expect(
       countersSnapshot
         .json()
         .messages.find(
           (message: { kind: string; body: string }) =>
-            message.kind === "SYSTEM" &&
-            message.body.includes("РєРѕС€РµР»С‘Рє:"),
+            message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
         )?.body,
     ).not.toContain('{"gold"');
     const counterAudit = countersSnapshot
       .json()
       .messages.find(
         (message: { kind: string; body: string }) =>
-          message.kind === "SYSTEM" && message.body.includes("РєРѕС€РµР»С‘Рє:"),
+          message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
       )?.body as string;
-    expect(counterAudit).toContain(
-      "СЂРµСЃСѓСЂСЃС‹: mana: РґРѕР±Р°РІР»РµРЅ 5/8",
-    );
-    expect(counterAudit).not.toContain("РњР°СЃС‚РµСЂ: РњР°СЃС‚РµСЂ:");
+    expect(counterAudit).toContain("ресурсы: mana: добавлен 5/8");
+    expect(counterAudit).not.toContain("Мастер: Мастер:");
     expect(counterAudit).not.toContain('{"mana"');
     const noOpCounters = await app.inject({
       method: "PATCH",
@@ -2075,9 +2069,9 @@ describe("Pool B HTTP boundaries", () => {
       .map((message: { body: string }) => message.body);
     expect(systemBodies).toHaveLength(4);
     expect(systemBodies.slice(-3)).toEqual([
-      "Р”РµРЅСЊ РєР°РјРїР°РЅРёРё: 8. РџРµСЂРµР·Р°СЂСЏР¶РµРЅРѕ: 1.",
-      "Р‘РѕР№ #1 РЅР°С‡Р°С‚.",
-      "Р‘РѕР№ #1 Р·Р°РІРµСЂС€С‘РЅ. РџРµСЂРµР·Р°СЂСЏР¶РµРЅРѕ: 1.",
+      "День кампании: 8. Перезаряжено: 1.",
+      "Бой #1 начат.",
+      "Бой #1 завершён. Перезаряжено: 1.",
     ]);
   });
 
