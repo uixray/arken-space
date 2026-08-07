@@ -714,6 +714,20 @@ export const characterCommandSchema = characterUpdateSchema.extend({
   revision: z.number().int().nonnegative().optional(),
 });
 
+/**
+ * Structural fields a "create from template" preset carries over from an existing
+ * character. Deliberately excludes identity (name, portrait, owner/controllers),
+ * narrative text (notes/backstory) and wallet — those stay specific to each character.
+ */
+export const characterTemplateFieldsSchema = characterUpdateSchema
+  .pick({ stats: true, skills: true, spells: true, inventory: true, resources: true })
+  .partial();
+export const createCharacterSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  actionId: actionIdSchema,
+  template: characterTemplateFieldsSchema.optional(),
+});
+
 /** Entity references are IDs only; labels are resolved server-side and never trusted from a client. */
 export const storyEntityLinkSchema = z
   .object({

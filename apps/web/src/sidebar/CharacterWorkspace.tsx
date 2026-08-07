@@ -14,8 +14,10 @@ import { normalizeCharacterControllerIds } from "../character-controller-access-
 import {
   characterWorkspaceReducer,
   createCharacterWorkspaceState,
+  extractCharacterTemplateFields,
   MAX_OPEN_CHARACTER_SHEETS,
   uniqueCharacterIds,
+  type CharacterTemplateFields,
 } from "../character-workspace-state";
 import { CharacterActionCard } from "../SkillCards";
 import { RollModeControl, type RollMode } from "../RollModeControl";
@@ -288,19 +290,115 @@ export function CharacterWorkspace({
           )}
         </div>
       </div>
-      <TextPromptDialog
+      <CreateCharacterDialog
         open={createCharacterOpen}
-        title="Новый персонаж"
-        label="Имя персонажа"
-        applyLabel="Создать"
-        onApply={async (name) => {
-          await props.onCreateCharacter(name);
+        characters={props.snapshot.characters}
+        onCreate={async (name, template) => {
+          await props.onCreateCharacter(name, template);
           setCreateCharacterOpen(false);
         }}
         onClose={() => setCreateCharacterOpen(false)}
       />
     </main>,
     document.body,
+  );
+}
+
+/**
+ * GM-only: creates a new, independent character — optionally pre-filled from an
+ * existing campaign character's structure (stats/skills/spells/inventory/resources).
+ * The template is a one-time, editable starting point: the GM can adjust the name
+ * here and every structural field afterward on the new character's own sheet;
+ * nothing stays linked back to the source.
+ */
+function CreateCharacterDialog({
+  open,
+  characters,
+  onCreate,
+  onClose,
+}: {
+  open: boolean;
+  characters: CharacterDto[];
+  onCreate: (
+    name: string,
+    template: CharacterTemplateFields | undefined,
+  ) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setTemplateId("");
+      setError("");
+    }
+  }, [open]);
+
+  const submit = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setPending(true);
+    setError("");
+    try {
+      const source = templateId
+        ? characters.find((character) => character.id === templateId)
+        : undefined;
+      await onCreate(
+        trimmed,
+        source ? extractCharacterTemplateFields(source) : undefined,
+      );
+    } catch {
+      setError("Не удалось создать персонажа. Повторите попытку.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <ArkenDialog
+      open={open}
+      title="Новый персонаж"
+      applyLabel="Создать"
+      loading={pending}
+      error={error}
+      onApply={() => void submit()}
+      onClose={onClose}
+    >
+      <label className="field">
+        Имя персонажа
+        <FormInput
+          autoFocus
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && name.trim()) void submit();
+          }}
+        />
+      </label>
+      <label className="field">
+        Шаблон (необязательно)
+        <FormSelect
+          value={templateId}
+          onChange={(event) => setTemplateId(event.target.value)}
+        >
+          <option value="">Без шаблона (пустой лист)</option>
+          {characters.map((character) => (
+            <option key={character.id} value={character.id}>
+              На основе «{character.name}»
+            </option>
+          ))}
+        </FormSelect>
+        <span className="muted">
+          Копируются характеристики, навыки, заклинания, инвентарь и ресурсы.
+          Имя, портрет, владелец и кошелёк не переносятся — новый персонаж
+          полностью независим и остаётся редактируемым.
+        </span>
+      </label>
+    </ArkenDialog>
   );
 }
 

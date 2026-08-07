@@ -2502,7 +2502,7 @@ export function App() {
               );
             }}
             onRoll={submitRoll}
-            onCreateCharacter={async (name) =>
+            onCreateCharacter={async (name, template) =>
               run(
                 () =>
                   api("/api/characters", {
@@ -2510,6 +2510,7 @@ export function App() {
                     body: JSON.stringify({
                       name,
                       actionId: crypto.randomUUID(),
+                      ...(template ? { template } : {}),
                     }),
                   }),
                 true,

@@ -20,6 +20,7 @@ import type {
 } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import type { GameSocket } from "./realtime";
+import type { CharacterTemplateFields } from "./character-workspace-state";
 import type { RollMode } from "./RollModeControl";
 import type { TokenFramePreset } from "./token-image-editor-state";
 import { ArkenDialog } from "./ui/ArkenDialog";
@@ -149,7 +150,10 @@ export type Props = {
     characterId?: string | null,
     rollMode?: "NORMAL" | "ADVANTAGE" | "DISADVANTAGE",
   ) => Promise<void>;
-  onCreateCharacter: (name: string) => Promise<void>;
+  onCreateCharacter: (
+    name: string,
+    template?: CharacterTemplateFields,
+  ) => Promise<void>;
   onCreateInvite: (
     characterId: string,
     label: string,

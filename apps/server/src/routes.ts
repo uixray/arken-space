@@ -20,6 +20,7 @@ import {
   actionIdSchema,
   assetKindSchema,
   characterCommandSchema,
+  createCharacterSchema,
   assignCatalogEntrySchema,
   catalogEntryCommandSchema,
   characterCatalogEntryCommandSchema,
@@ -1120,21 +1121,26 @@ export function registerRoutes(
     if (!auth) return;
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
-    const body = z
-      .object({
-        name: z.string().trim().min(1).max(80),
-        actionId: actionIdSchema,
-      })
-      .parse(request.body);
+    const body = createCharacterSchema.parse(request.body);
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) return reply.code(200).send({ duplicate: true });
+    // A template preset carries over structural fields only (stats/skills/spells/
+    // inventory/resources); the client derives it from an existing character and
+    // sends a deep-cloned snapshot, so the new character is independent from
+    // the moment it is created — never a live-linked clone of its source.
+    const starter = createStarterCharacter();
+    const template = body.template ?? {};
     const character = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(characters)
         .values({
           campaignId: auth.campaignId,
           name: body.name,
-          ...createStarterCharacter(),
+          stats: { ...starter.stats, ...template.stats },
+          skills: template.skills ?? starter.skills,
+          spells: template.spells ?? starter.spells,
+          inventory: template.inventory ?? [],
+          resources: template.resources ?? starter.resources,
         })
         .returning();
       if (!created) throw new Error("CHARACTER_CREATE_FAILED");

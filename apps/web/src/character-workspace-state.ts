@@ -1,3 +1,5 @@
+import type { CharacterDto } from "@arken/contracts";
+
 export const MAX_OPEN_CHARACTER_SHEETS = 3;
 
 export type CharacterWorkspaceState = {
@@ -119,4 +121,39 @@ export function characterWorkspaceReducer(
 /** Guards the rail against duplicate delivery during HTTP/realtime reconciliation. */
 export function uniqueCharacterIds(ids: readonly string[]): string[] {
   return [...new Set(ids)];
+}
+
+/**
+ * Structural fields a "create from template" preset carries over from an existing
+ * character — stat blocks, skills, spells, inventory and resources. Deliberately
+ * excludes identity (name, portrait, owner/controllers), narrative text
+ * (notes/backstory) and wallet: those belong to the specific character, not its
+ * structure, and a template should not silently clone a teammate's gold or bio.
+ */
+export type CharacterTemplateFields = Pick<
+  CharacterDto,
+  "stats" | "skills" | "spells" | "inventory" | "resources"
+>;
+
+/**
+ * Derives an editable, independent preset from an existing character's structure
+ * for GM-driven "create character based on X" flows. Every field is deep-cloned so
+ * neither the source nor the new character can mutate the other after creation —
+ * this is a one-time copy, never a live link.
+ */
+export function extractCharacterTemplateFields(
+  source: CharacterDto,
+): CharacterTemplateFields {
+  return {
+    stats: { ...source.stats },
+    skills: source.skills.map((skill) => ({ ...skill })),
+    spells: source.spells.map((spell) => ({ ...spell })),
+    inventory: [...source.inventory],
+    resources: Object.fromEntries(
+      Object.entries(source.resources).map(([key, value]) => [
+        key,
+        { ...value },
+      ]),
+    ),
+  };
 }
