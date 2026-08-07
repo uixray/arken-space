@@ -11,6 +11,7 @@ type CanvasVisualTokens = {
     fog: CanvasColor;
     fogCover: CanvasColor;
     fogDraft: CanvasColor;
+    encounterRegionDraft: CanvasColor;
     mapBackdrop: CanvasColor;
     edit: CanvasColor;
     editHighlight: CanvasColor;
@@ -38,6 +39,9 @@ export const CANVAS_VISUAL_TOKENS = {
     // layer. Even a small RGB difference becomes visible at GM opacity.
     fogCover: "#080807",
     fogDraft: "#d9c07e",
+    // UIX-311: SCENE_REGION camera-focus draft rectangle. Distinct hue from
+    // fogDraft so the GM can tell the two rectangle-drag tools apart.
+    encounterRegionDraft: "#7ee0ff",
     mapBackdrop: "#282824",
     edit: "#f0c75e",
     editHighlight: "#f2dfaa",

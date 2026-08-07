@@ -23,6 +23,7 @@ import Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { isRectFullyRevealed } from "./fog";
+import { fitRect } from "./camera-fit";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   canMoveMapToken,
@@ -282,6 +283,18 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     width: number;
     height: number;
   } | null>(null);
+  // UIX-311: SCENE_REGION camera-focus rectangle drag, same draft-rect
+  // pattern as fogStart/fogDraft above.
+  const [regionStart, setRegionStart] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [regionDraft, setRegionDraft] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
   const drawingPointsRef = useRef<number[]>([]);
   const drawingActiveRef = useRef(false);
@@ -510,22 +523,55 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     });
   };
   const fitMap = () => {
-    const next = Math.min(
-      3,
-      Math.max(
-        0.25,
-        Math.min(
-          viewport.width / props.scene.width,
-          viewport.height / props.scene.height,
-        ) * 0.92,
-      ),
+    const fitted = fitRect(
+      { x: 0, y: 0, width: props.scene.width, height: props.scene.height },
+      viewport,
     );
-    setScale(next);
-    setPosition({
-      x: (viewport.width - props.scene.width * next) / 2,
-      y: (viewport.height - props.scene.height * next) / 2,
-    });
+    setScale(fitted.scale);
+    setPosition(fitted.position);
   };
+
+  // UIX-311: while a SCENE_REGION encounter is ACTIVE on this scene, every
+  // client (GM and players) fits its own camera to the persisted
+  // world-coordinate focusRegion -- fitRect runs locally per viewport, no
+  // pixel position is ever stored or broadcast. When the encounter ends
+  // (status flips to ENDED, or its snapshot entry disappears), "prior
+  // focus/scale" is simplest read as "re-fit to the whole scene," so we
+  // just call fitMap() again.
+  const activeSceneRegionEncounter = props.encounters?.find(
+    (encounter) =>
+      encounter.status === "ACTIVE" &&
+      encounter.mode === "SCENE_REGION" &&
+      encounter.sourceSceneId === props.scene.id,
+  );
+  const activeRegionEncounterId = activeSceneRegionEncounter?.id ?? null;
+  const activeFocusRegion = activeSceneRegionEncounter?.focusRegion ?? null;
+  const wasFittedToRegionRef = useRef(false);
+  useEffect(() => {
+    if (activeFocusRegion) {
+      const fitted = fitRect(activeFocusRegion, viewport);
+      setScale(fitted.scale);
+      setPosition(fitted.position);
+      wasFittedToRegionRef.current = true;
+      return;
+    }
+    if (wasFittedToRegionRef.current) {
+      wasFittedToRegionRef.current = false;
+      fitMap();
+    }
+    // fitMap/setScale/setPosition are stable per render and only invoked
+    // from inside the effect; only the encounter identity/region and the
+    // viewport size should re-trigger the fit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeRegionEncounterId,
+    activeFocusRegion?.x,
+    activeFocusRegion?.y,
+    activeFocusRegion?.width,
+    activeFocusRegion?.height,
+    viewport.width,
+    viewport.height,
+  ]);
 
   const displayRulers = useMemo(() => {
     const result = [...props.rulers];
@@ -827,6 +873,32 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     setFogDraft(null);
   };
 
+  const handleRegionDown = () => {
+    if (props.tool !== "SCENE_REGION" || props.role !== "GM") return;
+    const point = pointerInWorld();
+    if (point) setRegionStart(clampToWorld(point));
+  };
+
+  const handleRegionMove = () => {
+    if (!regionStart || props.tool !== "SCENE_REGION") return;
+    const point = pointerInWorld();
+    if (!point) return;
+    const bounded = clampToWorld(point);
+    setRegionDraft({
+      x: Math.min(regionStart.x, bounded.x),
+      y: Math.min(regionStart.y, bounded.y),
+      width: Math.abs(bounded.x - regionStart.x),
+      height: Math.abs(bounded.y - regionStart.y),
+    });
+  };
+
+  const handleRegionUp = () => {
+    if (regionDraft && regionDraft.width >= 8 && regionDraft.height >= 8)
+      props.onEncounterRegionSelect?.(regionDraft);
+    setRegionStart(null);
+    setRegionDraft(null);
+  };
+
   const handleClick = () => {
     if (props.tool !== "PING") return;
     const point = pointerInWorld();
@@ -873,6 +945,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setTokenMenu(null);
     }
     handleFogDown();
+    handleRegionDown();
     const point = pointerInWorld();
     if (!point) return;
     const bounded = clampToWorld(point);
@@ -921,6 +994,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       return;
     }
     handleFogMove();
+    handleRegionMove();
     const point = pointerInWorld();
     if (!point) return;
     if (
@@ -1004,6 +1078,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       props.tool === "DRAW" && drawingActiveRef.current;
     drawingActiveRef.current = false;
     await handleFogUp();
+    handleRegionUp();
     if (shouldFinalizeDrawing && completedDrawing.length >= 4) {
       const releasedDrawing = releaseDrawingDraft(drawingPointsRef, [], () =>
         setDrawingPoints([]),
@@ -1806,6 +1881,22 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               opacity={visual.opacity.marqueeFill}
               stroke={visual.color.selection}
               strokeWidth={1 / scale}
+              dash={[6 / scale, 4 / scale]}
+            />
+          </Layer>
+        )}
+
+        {regionDraft && (
+          <Layer listening={false}>
+            <Rect
+              x={regionDraft.x}
+              y={regionDraft.y}
+              width={regionDraft.width}
+              height={regionDraft.height}
+              fill={visual.color.encounterRegionDraft}
+              opacity={visual.opacity.fogDraft}
+              stroke={visual.color.encounterRegionDraft}
+              strokeWidth={2 / scale}
               dash={[6 / scale, 4 / scale]}
             />
           </Layer>

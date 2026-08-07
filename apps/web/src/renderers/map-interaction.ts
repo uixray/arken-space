@@ -1,6 +1,18 @@
 import type { Role } from "@arken/contracts";
 
-export type MapTool = "PAN" | "FOG" | "COVER" | "DRAW" | "RULER" | "PING";
+export type MapTool =
+  | "PAN"
+  | "FOG"
+  | "COVER"
+  | "DRAW"
+  | "RULER"
+  | "PING"
+  /**
+   * UIX-311: GM drags a rectangle to pick the camera-focus hint for a
+   * SCENE_REGION encounter. Same pointerdown/move/up draft-rect pattern as
+   * FOG/COVER, GM-only.
+   */
+  | "SCENE_REGION";
 
 export type Point = Readonly<{ x: number; y: number }>;
 

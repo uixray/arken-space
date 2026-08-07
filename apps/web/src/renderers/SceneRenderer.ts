@@ -1,6 +1,7 @@
 import type {
   AssetDto,
   DrawingDto,
+  EncounterDto,
   FogRevealDto,
   MapPing,
   Role,
@@ -39,6 +40,25 @@ export interface SceneRendererProps {
     width: number;
     height: number;
   }) => Promise<void>;
+  /**
+   * UIX-311: encounter lifecycle for the active scene. SCENE_REGION cameras
+   * fit to `focusRegion` while such an encounter is ACTIVE, and reset to
+   * the whole-scene fit once it ENDs. Optional/absent until Stage 4 wires a
+   * GM-facing start-encounter entry point.
+   */
+  encounters?: EncounterDto[];
+  /**
+   * Fires when the GM commits a SCENE_REGION draft rectangle (SCENE_REGION
+   * tool, pointerdown -> move -> up). Stage 4 owns turning this into a real
+   * "start encounter" confirmation UI; this renderer only reports the
+   * selected world-coordinate rect.
+   */
+  onEncounterRegionSelect?: (rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => void;
   onDrawingCreate: (drawing: {
     points: number[];
     color: string;

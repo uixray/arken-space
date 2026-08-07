@@ -1606,6 +1606,23 @@ export function App() {
                   >
                     Закрыть туман
                   </button>
+                  {/*
+                   * UIX-311 stage 2 temp trigger: no real "start encounter"
+                   * UI exists yet (that's stage 4's job). This button only
+                   * exercises the SCENE_REGION selection + fitRect camera
+                   * behavior end-to-end for manual testing; it should be
+                   * replaced by stage 4's GM-facing start-encounter flow.
+                   */}
+                  <button
+                    aria-label="Область боя (временно)"
+                    title="Временная кнопка для проверки выбора области боя (UIX-311, заменится в Stage 4)"
+                    className="map-tool"
+                    data-tool="SCENE_REGION"
+                    aria-pressed={tool === "SCENE_REGION"}
+                    onClick={() => setTool("SCENE_REGION")}
+                  >
+                    Область боя (temp)
+                  </button>
                 </>
               )}
               <button
@@ -1806,6 +1823,24 @@ export function App() {
                 gmFogOpacity={gmFogOpacity}
                 gmFogVisible={gmFogVisible}
                 gmGridVisible={gmGridVisible}
+                encounters={viewSnapshot.encounters}
+                onEncounterRegionSelect={(rect) => {
+                  // UIX-311 stage 2 temp trigger: stage 4 replaces this
+                  // with a real GM confirmation flow before starting combat.
+                  void run(() =>
+                    api("/api/encounters/start", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        mode: "SCENE_REGION",
+                        sourceSceneId: activeScene.id,
+                        sourceSceneRevision: activeScene.revision ?? 0,
+                        focusRegion: rect,
+                      }),
+                    }),
+                  );
+                  setTool("PAN");
+                }}
                 canvasEditMode={canvasEditMode}
                 onCanvasEditCancel={() => setCanvasEditMode(null)}
                 onCanvasPatch={(patch) =>
