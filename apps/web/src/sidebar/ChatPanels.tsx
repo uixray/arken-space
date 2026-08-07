@@ -12,7 +12,6 @@ import type {
   GameSnapshot,
   MessageVisibility,
 } from "@arken/contracts";
-import { arkenSystem } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
 import {
@@ -50,13 +49,13 @@ import {
 import {
   charactersAvailableForActivityRolls,
   filterActivityEvents,
-  formulaBonus,
   physicalDiceStorageKey,
   physicalRollBonus,
   physicalRollChatRequest,
   type ActivityFilter,
 } from "../activity-roll-controls";
 import type { Props } from "../Sidebar";
+import { QuickRollPanel } from "./QuickRollPanel";
 
 export function ChatMessageBody({
   message,
@@ -344,50 +343,13 @@ export function ActivityPanel({
           </label>
         </div>
         {rollCharacter ? (
-          <div className="activity-quick-rolls">
-            <Button
-              disabled={quickRollPending}
-              onClick={() =>
-                void submitQuickRoll(
-                  "1d20 + agility",
-                  "Инициатива",
-                  rollCharacter.stats.agility ?? 0,
-                )
-              }
-            >
-              Инициатива
-            </Button>
-            {arkenSystem.stats.map((stat) => (
-              <Button
-                key={stat.key}
-                disabled={quickRollPending}
-                onClick={() =>
-                  void submitQuickRoll(
-                    `1d20 + ${stat.key}`,
-                    stat.label,
-                    rollCharacter.stats[stat.key] ?? stat.defaultValue,
-                  )
-                }
-              >
-                {stat.label}
-              </Button>
-            ))}
-            {rollCharacter.skills.map((skill) => (
-              <Button
-                key={skill.key}
-                disabled={quickRollPending}
-                onClick={() =>
-                  void submitQuickRoll(
-                    skill.formula,
-                    skill.name,
-                    formulaBonus(skill.formula, rollCharacter.stats),
-                  )
-                }
-              >
-                {skill.name}
-              </Button>
-            ))}
-          </div>
+          <QuickRollPanel
+            rollCharacter={rollCharacter}
+            quickRollPending={quickRollPending}
+            onQuickRoll={(formula, label, bonus) =>
+              void submitQuickRoll(formula, label, bonus)
+            }
+          />
         ) : (
           <p className="muted">Нет доступного персонажа для броска.</p>
         )}

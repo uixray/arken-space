@@ -3630,6 +3630,53 @@ code {
   max-height: 110px;
   overflow: auto;
 }
+.quick-roll-panel {
+  position: fixed;
+  z-index: 1200;
+  top: 96px;
+  right: 16px;
+  display: grid;
+  gap: var(--space-xs);
+  width: min(320px, calc(100vw - 32px));
+  padding: var(--space-xs);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: 0 16px 48px #000a;
+}
+.quick-roll-panel__handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.quick-roll-panel__handle:active {
+  cursor: grabbing;
+}
+.quick-roll-panel__grip {
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+.quick-roll-panel__reset {
+  min-width: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: transparent;
+}
+@media (max-width: 767px) {
+  .quick-roll-panel {
+    position: static;
+    top: auto;
+    right: auto;
+    width: auto;
+    box-shadow: none;
+  }
+  .quick-roll-panel__handle {
+    cursor: default;
+    touch-action: auto;
+  }
+}
 .activity-filters {
   margin: 0;
   padding: var(--space-xs) var(--space-sm);
