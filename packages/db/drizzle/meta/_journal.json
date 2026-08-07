@@ -211,6 +211,13 @@
       "when": 1785960000000,
       "tag": "0029_character_media",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786046400000,
+      "tag": "0030_encounters",
+      "breakpoints": true
     }
   ]
 }

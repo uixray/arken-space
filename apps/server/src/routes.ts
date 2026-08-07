@@ -116,6 +116,7 @@ import { registerStoryRoutes } from "./story.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
+import { registerEncounterRoutes } from "./encounters.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -621,6 +622,9 @@ export function registerRoutes(
   registerOperatorFeedbackRoutes(app, db);
   registerPlayerRequestRoutes(app, db, io);
   registerCharacterMediaRoutes(app, db);
+  registerEncounterRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {

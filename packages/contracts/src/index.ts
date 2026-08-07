@@ -295,6 +295,120 @@ export const detachCharacterMediaSchema = z
   })
   .strict();
 
+/**
+ * Encounter contract for UIX-311 ("start combat from a map region or a
+ * linked tactical scene"). Stage 1: data model + atomic server commands.
+ *
+ * SCENE_REGION focuses cameras on a rectangle of the already-active source
+ * scene as an initial-camera hint only — it is never a server-side movement
+ * boundary, so source === target and no token repositioning happens.
+ * LINKED_SCENE atomically activates a different, prepared destination scene
+ * and auto-transfers each participant token's position, expressed as a
+ * relative fraction of the source scene's bounds, onto the same fraction of
+ * the destination scene's bounds (see transferRelativePosition on the
+ * server).
+ */
+export const encounterStatusSchema = z.enum(["ACTIVE", "ENDED"]);
+export const encounterModeSchema = z.enum(["SCENE_REGION", "LINKED_SCENE"]);
+export type EncounterStatus = z.infer<typeof encounterStatusSchema>;
+export type EncounterMode = z.infer<typeof encounterModeSchema>;
+
+export const encounterFocusRegionSchema = z
+  .object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  })
+  .strict();
+export type EncounterFocusRegion = z.infer<typeof encounterFocusRegionSchema>;
+
+export const encounterDtoSchema = z.object({
+  id: z.string().uuid(),
+  campaignId: z.string().uuid(),
+  sequence: z.number().int().nonnegative(),
+  status: encounterStatusSchema,
+  mode: encounterModeSchema,
+  sourceSceneId: z.string().uuid(),
+  targetSceneId: z.string().uuid(),
+  /** SCENE_REGION only: camera-focus hint rectangle, scene world coordinates. */
+  focusRegion: encounterFocusRegionSchema.nullable(),
+  /** LINKED_SCENE only, nullable: set when triggered from a world-map location. */
+  locationId: z.string().uuid().nullable(),
+  sourceSceneRevision: z.number().int().nonnegative(),
+  initiatorMembershipId: z.string().uuid(),
+  revision: z.number().int().nonnegative(),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime().nullable(),
+  endedByMembershipId: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type EncounterDto = z.infer<typeof encounterDtoSchema>;
+
+/**
+ * Mode-specific required/forbidden fields: SCENE_REGION requires
+ * `focusRegion` and forbids `targetSceneId`/`locationId` (source and target
+ * are always the same active scene). LINKED_SCENE requires `targetSceneId`
+ * and forbids `focusRegion`; `locationId` is optional.
+ */
+export const startEncounterSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    mode: encounterModeSchema,
+    sourceSceneId: z.string().uuid(),
+    /** CAS on the source scene's revision at the moment combat starts. */
+    sourceSceneRevision: z.number().int().nonnegative(),
+    focusRegion: encounterFocusRegionSchema.optional(),
+    targetSceneId: z.string().uuid().optional(),
+    locationId: z.string().uuid().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.mode === "SCENE_REGION") {
+      if (!value.focusRegion)
+        context.addIssue({
+          code: "custom",
+          path: ["focusRegion"],
+          message: "focusRegion is required for SCENE_REGION",
+        });
+      if (value.targetSceneId)
+        context.addIssue({
+          code: "custom",
+          path: ["targetSceneId"],
+          message: "targetSceneId is not valid for SCENE_REGION",
+        });
+      if (value.locationId)
+        context.addIssue({
+          code: "custom",
+          path: ["locationId"],
+          message: "locationId is not valid for SCENE_REGION",
+        });
+    } else {
+      if (!value.targetSceneId)
+        context.addIssue({
+          code: "custom",
+          path: ["targetSceneId"],
+          message: "targetSceneId is required for LINKED_SCENE",
+        });
+      if (value.focusRegion)
+        context.addIssue({
+          code: "custom",
+          path: ["focusRegion"],
+          message: "focusRegion is not valid for LINKED_SCENE",
+        });
+    }
+  });
+export type StartEncounterCommand = z.infer<typeof startEncounterSchema>;
+
+export const endEncounterSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type EndEncounterCommand = z.infer<typeof endEncounterSchema>;
+
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
@@ -1862,6 +1976,8 @@ export interface GameSnapshot {
   drawings?: DrawingDto[];
   /** Durable request projection, independently loaded from the chat window. */
   playerRequests?: PlayerRequestDto[];
+  /** UIX-311 encounter lifecycle; absent until the feature is loaded. */
+  encounters?: EncounterDto[];
   /** Filtered world/region map projection; absent until the feature is loaded. */
   worldMaps?: WorldMapsSnapshotDto;
   messages: ChatMessageDto[];

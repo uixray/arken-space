@@ -50,6 +50,7 @@ import { revokedStickerTombstone } from "./sticker-access.js";
 import { buildWorldMapsSnapshot } from "./world-maps.js";
 import { characterDto } from "./character-dto.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
+import { listEncounters } from "./encounters.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -195,6 +196,7 @@ export async function buildSnapshot(
   ]);
 
   const worldMapProjection = await buildWorldMapsSnapshot(db, auth);
+  const encounterRows = await listEncounters(db, auth.campaignId);
 
   const visibleThreadRows = threadRows.filter(
     (thread) =>
@@ -533,6 +535,7 @@ export async function buildSnapshot(
       })),
     worldMaps: worldMapProjection.snapshot,
     playerRequests: playerRequestRows,
+    encounters: encounterRows,
     messages: messageRows
       .sort((left, right) => left.message.sequence - right.message.sequence)
       .map(({ message, thread }) => ({

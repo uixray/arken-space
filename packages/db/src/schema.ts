@@ -172,6 +172,19 @@ export const characterMediaVisibilityEnum = pgEnum("character_media_visibility",
   "PARTY",
   "GM_ONLY",
 ]);
+export const encounterStatusEnum = pgEnum("encounter_status", [
+  "ACTIVE",
+  "ENDED",
+]);
+/**
+ * SCENE_REGION focuses cameras on a rectangle of the already-active scene
+ * (source === target); LINKED_SCENE atomically activates a different,
+ * prepared tactical scene as the target (UIX-311).
+ */
+export const encounterModeEnum = pgEnum("encounter_mode", [
+  "SCENE_REGION",
+  "LINKED_SCENE",
+]);
 export const feedbackKindEnum = pgEnum("feedback_kind", [
   "SUGGESTION",
   "BUG",
@@ -1905,6 +1918,108 @@ export const actionJournal = pgTable(
     index("action_journal_campaign_sequence_idx").on(
       table.campaignId,
       table.sequence,
+    ),
+  ],
+);
+
+/**
+ * Encounter lifecycle for UIX-311 ("start combat from a map region or a
+ * linked tactical scene"). Stage 1: data model + atomic server commands only,
+ * no client UI.
+ *
+ * `sourceSceneId` is the tactical scene the GM was on when combat started.
+ * `targetSceneId` is the scene that becomes/stays the campaign's active
+ * scene for the encounter: for SCENE_REGION it always equals sourceSceneId
+ * (camera-focus hint only, never a movement boundary); for LINKED_SCENE it
+ * is the prepared destination scene, activated atomically with the encounter.
+ * `focusRegion` and `locationId` are mutually exclusive per mode (see the
+ * shape check below). `sourceSceneRevision` pins the source scene's revision
+ * at start time for optimistic-concurrency validation of the atomic
+ * transaction; it is not re-checked on end.
+ */
+export const encounters = pgTable(
+  "encounters",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    /** Campaign-scoped ordering counter, mirrors fog_reveals.sequence. */
+    sequence: bigserial("sequence", { mode: "number" }).notNull(),
+    status: encounterStatusEnum("status").notNull().default("ACTIVE"),
+    mode: encounterModeEnum("mode").notNull(),
+    sourceSceneId: uuid("source_scene_id").notNull(),
+    targetSceneId: uuid("target_scene_id").notNull(),
+    /** SCENE_REGION only: camera-focus hint rectangle, scene world coordinates. */
+    focusRegion: jsonb("focus_region").$type<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>(),
+    /** LINKED_SCENE only, nullable: set when triggered from a world-map location. */
+    locationId: uuid("location_id"),
+    sourceSceneRevision: integer("source_scene_revision").notNull(),
+    initiatorMembershipId: uuid("initiator_membership_id").notNull(),
+    revision: integer("revision").notNull().default(0),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    endedByMembershipId: uuid("ended_by_membership_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("encounters_campaign_idx").on(table.campaignId),
+    uniqueIndex("encounters_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    /** At most one ACTIVE encounter per campaign. */
+    uniqueIndex("encounters_campaign_active_idx")
+      .on(table.campaignId)
+      .where(sql`${table.status} = 'ACTIVE'`),
+    foreignKey({
+      name: "encounters_campaign_source_scene_fk",
+      columns: [table.campaignId, table.sourceSceneId],
+      foreignColumns: [scenes.campaignId, scenes.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "encounters_campaign_target_scene_fk",
+      columns: [table.campaignId, table.targetSceneId],
+      foreignColumns: [scenes.campaignId, scenes.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "encounters_campaign_location_fk",
+      columns: [table.campaignId, table.locationId],
+      foreignColumns: [worldMapLocations.campaignId, worldMapLocations.id],
+    }).onDelete("set null"),
+    foreignKey({
+      name: "encounters_campaign_initiator_fk",
+      columns: [table.campaignId, table.initiatorMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "encounters_campaign_ended_by_fk",
+      columns: [table.campaignId, table.endedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "encounters_revision_check",
+      sql`${table.revision} >= 0 AND ${table.sourceSceneRevision} >= 0`,
+    ),
+    check(
+      "encounters_mode_shape_check",
+      sql`(${table.mode} = 'SCENE_REGION' AND ${table.targetSceneId} = ${table.sourceSceneId} AND ${table.focusRegion} IS NOT NULL AND ${table.locationId} IS NULL) OR (${table.mode} = 'LINKED_SCENE' AND ${table.focusRegion} IS NULL)`,
+    ),
+    check(
+      "encounters_status_shape_check",
+      sql`(${table.status} = 'ACTIVE' AND ${table.endedAt} IS NULL AND ${table.endedByMembershipId} IS NULL) OR (${table.status} = 'ENDED' AND ${table.endedAt} IS NOT NULL AND ${table.endedByMembershipId} IS NOT NULL)`,
     ),
   ],
 );
