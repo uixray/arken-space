@@ -185,6 +185,31 @@ export const encounterModeEnum = pgEnum("encounter_mode", [
   "SCENE_REGION",
   "LINKED_SCENE",
 ]);
+/**
+ * World Content (UIX-245 Stage 1): the canonical, campaign-independent
+ * encyclopedia entity types. Deliberately not campaign-scoped — see
+ * `worldContent` below.
+ */
+export const worldContentTypeEnum = pgEnum("world_content_type", [
+  "LOCATION",
+  "PERSON",
+  "MONSTER",
+  "DEITY",
+  "FACTION",
+  "ITEM",
+  "ARTICLE",
+]);
+/** Imports create DRAFT-only records (later, blocked stage); GM authoring can publish/archive. */
+export const worldContentLifecycleEnum = pgEnum("world_content_lifecycle", [
+  "DRAFT",
+  "PUBLISHED",
+  "ARCHIVED",
+]);
+/** Shared by provenance.rightsReviewStatus and provenance.editorialApprovalStatus; null means not applicable (e.g. GM-authored-from-scratch entities). */
+export const worldContentReviewStatusEnum = pgEnum(
+  "world_content_review_status",
+  ["PENDING", "APPROVED", "REJECTED"],
+);
 export const feedbackKindEnum = pgEnum("feedback_kind", [
   "SUGGESTION",
   "BUG",
@@ -2020,6 +2045,197 @@ export const encounters = pgTable(
     check(
       "encounters_status_shape_check",
       sql`(${table.status} = 'ACTIVE' AND ${table.endedAt} IS NULL AND ${table.endedByMembershipId} IS NULL) OR (${table.status} = 'ENDED' AND ${table.endedAt} IS NOT NULL AND ${table.endedByMembershipId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/**
+ * World Content (UIX-245 Stage 1): canonical encyclopedia entities.
+ *
+ * Architecturally distinct from every other table in this file: it has NO
+ * `campaignId` and no cascading FK to `campaigns`. Canon must survive
+ * campaign deletion and be reusable across campaigns (AC1). A later, blocked
+ * stage adds campaign-scoped discovery/override/instance tables that
+ * *reference* rows here without ever rewriting them (AC10) — those tables do
+ * not exist yet and are intentionally out of scope for this stage.
+ *
+ * `gmOnlyText` is the AC4 field: it must never be selected by a non-GM
+ * query. `worldContentAcl` in the server package is the single place that
+ * decides GM vs player projections; callers must not hand-roll their own
+ * exclusion logic.
+ *
+ * `coverAssetId` (here) and `world_content_media.assetId` (gallery, below)
+ * intentionally have NO foreign key to `assets`: `assets` is campaign-scoped
+ * with an `onDelete: cascade` back to `campaigns`, so a hard FK would either
+ * force World Content back into a single campaign's lifetime or leave
+ * dangling rows when a campaign is deleted. Later stages are expected to
+ * introduce a campaign-independent media/asset store for canon; until then
+ * these are plain UUID references, resolved best-effort by the caller.
+ */
+export const worldContent = pgTable(
+  "world_content",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** Stable, human-readable, unique — expected to anchor later URLs. */
+    slug: text("slug").notNull(),
+    type: worldContentTypeEnum("type").notNull(),
+    /** Free-form, per-type categorization (e.g. "capital city", "dragon"); not an enum because the issue does not pin down a fixed subtype list per type. */
+    subtype: text("subtype"),
+    name: text("name").notNull(),
+    aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
+    summary: text("summary").notNull().default(""),
+    /** Player-visible rich body (markdown). */
+    publicText: text("public_text").notNull().default(""),
+    /** AC4: never project this field to a non-GM caller. */
+    gmOnlyText: text("gm_only_text").notNull().default(""),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    lifecycle: worldContentLifecycleEnum("lifecycle")
+      .notNull()
+      .default("DRAFT"),
+    /** Single cover reference; see table doc comment re: no FK to `assets`. */
+    coverAssetId: uuid("cover_asset_id"),
+    /** Import provenance (later, blocked stage); all nullable since GM-authored-from-scratch canon has none. */
+    sourceUrl: text("source_url"),
+    sourceExternalId: text("source_external_id"),
+    retrievedAt: timestamp("retrieved_at", { withTimezone: true }),
+    rawContentHash: text("raw_content_hash"),
+    attribution: text("attribution"),
+    rightsReviewStatus: worldContentReviewStatusEnum("rights_review_status"),
+    editorialApprovalStatus: worldContentReviewStatusEnum(
+      "editorial_approval_status",
+    ),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("world_content_slug_idx").on(table.slug),
+    index("world_content_type_lifecycle_idx").on(
+      table.type,
+      table.lifecycle,
+    ),
+    index("world_content_lifecycle_updated_idx").on(
+      table.lifecycle,
+      table.updatedAt,
+    ),
+    check(
+      "world_content_slug_format_check",
+      sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(${table.slug}) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "world_content_shape_check",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 200 AND length(${table.summary}) <= 2000 AND length(${table.publicText}) <= 50000 AND length(${table.gmOnlyText}) <= 50000 AND ${table.revision} >= 0`,
+    ),
+  ],
+);
+
+/**
+ * Idempotency + audit ledger for World Content mutations, analogous to
+ * `game_events` but campaign-independent (no `campaignId`, since canon can
+ * be edited outside any single campaign's lifetime). `actorMembershipId` is
+ * best-effort attribution only and intentionally has no FK: `memberships`
+ * rows are campaign-scoped and cascade-delete with their campaign, while
+ * this audit trail must outlive any campaign (AC1/AC12).
+ */
+export const worldContentActions = pgTable(
+  "world_content_actions",
+  {
+    sequence: bigserial("sequence", { mode: "number" }).primaryKey(),
+    actionId: uuid("action_id").notNull(),
+    type: text("type").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id"),
+    entityRevision: integer("entity_revision"),
+    actorMembershipId: uuid("actor_membership_id"),
+    payload: jsonb("payload").$type<unknown>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("world_content_actions_action_idx").on(table.actionId),
+    index("world_content_actions_entity_idx").on(
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+);
+
+/**
+ * Ordered gallery for a canonical entity, in the spirit of `character_media`
+ * but not campaign-scoped (see `worldContent` doc comment re: `assets`).
+ */
+export const worldContentMedia = pgTable(
+  "world_content_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    worldContentId: uuid("world_content_id")
+      .notNull()
+      .references(() => worldContent.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id").notNull(),
+    caption: text("caption"),
+    ordering: integer("ordering").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("world_content_media_entity_ordering_idx").on(
+      table.worldContentId,
+      table.ordering,
+    ),
+    uniqueIndex("world_content_media_entity_asset_idx").on(
+      table.worldContentId,
+      table.assetId,
+    ),
+    check(
+      "world_content_media_shape_check",
+      sql`${table.ordering} >= 0 AND (${table.caption} IS NULL OR length(trim(${table.caption})) BETWEEN 1 AND 500)`,
+    ),
+  ],
+);
+
+/**
+ * References between canonical entities (e.g. a PERSON related to a
+ * FACTION), modeled as its own join table — not a JSON blob — so later
+ * stages can efficiently query "what's related to X" in either direction.
+ * Style reference: `world_map_location_scenes`.
+ */
+export const worldContentRelations = pgTable(
+  "world_content_relations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    fromWorldContentId: uuid("from_world_content_id")
+      .notNull()
+      .references(() => worldContent.id, { onDelete: "cascade" }),
+    toWorldContentId: uuid("to_world_content_id")
+      .notNull()
+      .references(() => worldContent.id, { onDelete: "cascade" }),
+    /** Free-form (e.g. "MEMBER_OF", "LOCATED_IN", "ALLIED_WITH") — the issue does not pin a fixed relation-kind enum. */
+    relationType: text("relation_type").notNull(),
+    note: text("note"),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("world_content_relations_edge_idx").on(
+      table.fromWorldContentId,
+      table.toWorldContentId,
+      table.relationType,
+    ),
+    index("world_content_relations_reverse_idx").on(table.toWorldContentId),
+    check(
+      "world_content_relations_shape_check",
+      sql`${table.fromWorldContentId} <> ${table.toWorldContentId} AND length(trim(${table.relationType})) BETWEEN 1 AND 60 AND ${table.revision} >= 0`,
     ),
   ],
 );

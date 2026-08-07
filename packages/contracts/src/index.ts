@@ -2099,3 +2099,206 @@ export interface ClientToServerEvents {
   "ruler:clear": (ruler: { sceneId: string }) => void;
   "game:resync": (knownSequence?: number) => void;
 }
+
+/**
+ * World Content (UIX-245 Stage 1): canonical, campaign-independent
+ * encyclopedia entities. See `packages/db/src/schema.ts`'s `worldContent`
+ * doc comment for why these are not campaign-scoped.
+ *
+ * Two DTOs exist deliberately: `WorldContentDto` (GM) carries `gmOnlyText`
+ * and provenance; `WorldContentPlayerDto` (non-GM) has no such field at
+ * all — the ACL helper in `apps/server/src/world-content.ts` must build the
+ * latter from a query that never selects `gm_only_text`, not merely omit it
+ * client-side (AC4).
+ */
+export const worldContentTypeSchema = z.enum([
+  "LOCATION",
+  "PERSON",
+  "MONSTER",
+  "DEITY",
+  "FACTION",
+  "ITEM",
+  "ARTICLE",
+]);
+export const worldContentLifecycleSchema = z.enum([
+  "DRAFT",
+  "PUBLISHED",
+  "ARCHIVED",
+]);
+export const worldContentReviewStatusSchema = z.enum([
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+export type WorldContentType = z.infer<typeof worldContentTypeSchema>;
+export type WorldContentLifecycle = z.infer<typeof worldContentLifecycleSchema>;
+export type WorldContentReviewStatus = z.infer<
+  typeof worldContentReviewStatusSchema
+>;
+
+const worldContentAliasesSchema = z
+  .array(z.string().trim().min(1).max(120))
+  .max(50);
+const worldContentTagsSchema = z.array(z.string().trim().min(1).max(60)).max(
+  50,
+);
+const worldContentSlugSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(160)
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Slug must be kebab-case lowercase");
+
+/** Provenance is fully optional/nullable: GM-authored-from-scratch entities have none. */
+export const worldContentProvenanceSchema = z
+  .object({
+    sourceUrl: z.string().url().nullable(),
+    sourceExternalId: z.string().trim().min(1).max(200).nullable(),
+    retrievedAt: z.string().datetime().nullable(),
+    rawContentHash: z.string().trim().min(1).max(200).nullable(),
+    attribution: z.string().trim().min(1).max(500).nullable(),
+    rightsReviewStatus: worldContentReviewStatusSchema.nullable(),
+    editorialApprovalStatus: worldContentReviewStatusSchema.nullable(),
+  })
+  .strict();
+export type WorldContentProvenance = z.infer<
+  typeof worldContentProvenanceSchema
+>;
+
+/** GM-facing DTO: includes `gmOnlyText` and full provenance. Never send this to a non-GM caller. */
+export const worldContentDtoSchema = z.object({
+  id: z.string().uuid(),
+  slug: worldContentSlugSchema,
+  type: worldContentTypeSchema,
+  subtype: z.string().nullable(),
+  name: z.string(),
+  aliases: worldContentAliasesSchema,
+  summary: z.string(),
+  publicText: z.string(),
+  gmOnlyText: z.string(),
+  tags: worldContentTagsSchema,
+  lifecycle: worldContentLifecycleSchema,
+  coverAssetId: z.string().uuid().nullable(),
+  provenance: worldContentProvenanceSchema,
+  revision: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type WorldContentDto = z.infer<typeof worldContentDtoSchema>;
+
+/**
+ * Non-GM (player) projection: PUBLISHED entities only, no `gmOnlyText`, no
+ * provenance (internal editorial metadata). See the module doc comment.
+ */
+export const worldContentPlayerDtoSchema = z.object({
+  id: z.string().uuid(),
+  slug: worldContentSlugSchema,
+  type: worldContentTypeSchema,
+  subtype: z.string().nullable(),
+  name: z.string(),
+  aliases: worldContentAliasesSchema,
+  summary: z.string(),
+  publicText: z.string(),
+  tags: worldContentTagsSchema,
+  coverAssetId: z.string().uuid().nullable(),
+  revision: z.number().int().nonnegative(),
+  updatedAt: z.string().datetime(),
+});
+export type WorldContentPlayerDto = z.infer<
+  typeof worldContentPlayerDtoSchema
+>;
+
+export const createWorldContentSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    slug: worldContentSlugSchema,
+    type: worldContentTypeSchema,
+    subtype: z.string().trim().min(1).max(120).nullable().optional(),
+    name: z.string().trim().min(1).max(200),
+    aliases: worldContentAliasesSchema.optional(),
+    summary: z.string().trim().max(2000).optional(),
+    publicText: z.string().max(50000).optional(),
+    gmOnlyText: z.string().max(50000).optional(),
+    tags: worldContentTagsSchema.optional(),
+    coverAssetId: z.string().uuid().nullable().optional(),
+  })
+  .strict();
+export type CreateWorldContent = z.infer<typeof createWorldContentSchema>;
+
+export const updateWorldContentSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    subtype: z.string().trim().min(1).max(120).nullable().optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    aliases: worldContentAliasesSchema.optional(),
+    summary: z.string().trim().max(2000).optional(),
+    publicText: z.string().max(50000).optional(),
+    gmOnlyText: z.string().max(50000).optional(),
+    tags: worldContentTagsSchema.optional(),
+    coverAssetId: z.string().uuid().nullable().optional(),
+  })
+  .strict();
+export type UpdateWorldContent = z.infer<typeof updateWorldContentSchema>;
+
+/** DRAFT -> PUBLISHED -> ARCHIVED (or DRAFT -> ARCHIVED); the server enforces legal transitions. */
+export const transitionWorldContentLifecycleSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    lifecycle: worldContentLifecycleSchema,
+  })
+  .strict();
+export type TransitionWorldContentLifecycle = z.infer<
+  typeof transitionWorldContentLifecycleSchema
+>;
+
+export const worldContentMediaDtoSchema = z.object({
+  id: z.string().uuid(),
+  worldContentId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  caption: z.string().nullable(),
+  ordering: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+});
+export type WorldContentMediaDto = z.infer<typeof worldContentMediaDtoSchema>;
+
+export const addWorldContentMediaSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    assetId: z.string().uuid(),
+    caption: z.string().trim().min(1).max(500).nullable().optional(),
+  })
+  .strict();
+export type AddWorldContentMedia = z.infer<typeof addWorldContentMediaSchema>;
+
+/**
+ * A relation between two canonical entities (e.g. a PERSON related to a
+ * FACTION). `relationType` is intentionally free-form text, not an enum —
+ * see `worldContentRelations` in `packages/db/src/schema.ts`.
+ */
+export const worldContentRelationDtoSchema = z.object({
+  id: z.string().uuid(),
+  fromWorldContentId: z.string().uuid(),
+  toWorldContentId: z.string().uuid(),
+  relationType: z.string(),
+  note: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type WorldContentRelationDto = z.infer<
+  typeof worldContentRelationDtoSchema
+>;
+
+export const createWorldContentRelationSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    toWorldContentId: z.string().uuid(),
+    relationType: z.string().trim().min(1).max(60),
+    note: z.string().trim().min(1).max(1000).nullable().optional(),
+  })
+  .strict();
+export type CreateWorldContentRelation = z.infer<
+  typeof createWorldContentRelationSchema
+>;

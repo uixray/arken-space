@@ -92,7 +92,7 @@ describe("backup and restore safety", () => {
     expect(describeDatabaseCountCoverage(oldManifest)).toMatchObject({
       mode: "sampled",
       countedTables: 12,
-      knownPersistedTables: 45,
+      knownPersistedTables: 49,
     });
   });
 
@@ -118,13 +118,13 @@ describe("backup and restore safety", () => {
     expect(countedTables).toEqual(persistedTables);
     expect(describeDatabaseCountCoverage(syntheticCounts)).toEqual({
       mode: "full",
-      countedTables: 45,
-      knownPersistedTables: 45,
+      countedTables: 49,
+      knownPersistedTables: 49,
       missingTables: [],
     });
   });
 
-  it("verifies all migration identities from 0000 through 0030", () => {
+  it("verifies all migration identities from 0000 through 0031", () => {
     const migrationsDirectory = path.join(root, "packages", "db", "drizzle");
     const expected = readExpectedMigrationLedger({
       journalPath: path.join(migrationsDirectory, "meta", "_journal.json"),
@@ -135,9 +135,9 @@ describe("backup and restore safety", () => {
       .join("\n");
     const actual = parseMigrationLedger(databaseOutput);
 
-    expect(expected).toHaveLength(31);
+    expect(expected).toHaveLength(32);
     expect(expected[0].tag).toBe("0000_nasty_emma_frost");
-    expect(expected.at(-1)?.tag).toBe("0030_encounters");
+    expect(expected.at(-1)?.tag).toBe("0031_world_content");
     expect(() => compareMigrationLedger(expected, actual)).not.toThrow();
     expect(() =>
       compareMigrationLedgerPrefix(expected, actual.slice(0, 16)),
@@ -159,7 +159,7 @@ describe("backup and restore safety", () => {
         ...actual.slice(0, -1),
         { ...actual.at(-1)!, hash: "0".repeat(64) },
       ]),
-    ).toThrow(/identity differs at 0030_encounters/);
+    ).toThrow(/identity differs at 0031_world_content/);
   });
 
   it("writes migration and coverage evidence without invoking restore in tests", () => {

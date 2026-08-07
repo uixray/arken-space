@@ -43,6 +43,10 @@ describe("initial PostgreSQL migration", () => {
         "scenes",
         "sessions",
         "tokens",
+        "world_content",
+        "world_content_actions",
+        "world_content_media",
+        "world_content_relations",
       ]),
     );
     await database.close();
