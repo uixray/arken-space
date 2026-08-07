@@ -38,12 +38,12 @@ describe("resolvePlayerRequestCard", () => {
   });
 
   it("wires canonical requests into the unified activity feed", () => {
-    const sidebar = readFileSync(
-      new URL("./Sidebar.tsx", import.meta.url),
+    const chatPanels = readFileSync(
+      new URL("./sidebar/ChatPanels.tsx", import.meta.url),
       "utf8",
     );
-    expect(sidebar).toContain("playerRequests={snapshot.playerRequests}");
-    expect(sidebar).toContain(
+    expect(chatPanels).toContain("playerRequests={snapshot.playerRequests}");
+    expect(chatPanels).toContain(
       "onOpenPlayerRequests={onOpenPlayerRequestCreate}",
     );
   });
