@@ -154,6 +154,24 @@ export const journalStatusEnum = pgEnum("journal_status", [
   "UNDONE",
   "INVALIDATED",
 ]);
+export const characterMediaCategoryEnum = pgEnum("character_media_category", [
+  "CHARACTER_ART",
+  "ARTIFACT",
+  "ITEM",
+  "DOCUMENT_HANDOUT",
+  "MEMORY_SCENE",
+  "OTHER",
+]);
+/**
+ * OWNER_GM is the default (owner + GM). PARTY widens to the whole campaign.
+ * GM_ONLY is a stricter tier than the default: hidden from the character's
+ * own owner too, for GM-authored notes/media (AC8).
+ */
+export const characterMediaVisibilityEnum = pgEnum("character_media_visibility", [
+  "OWNER_GM",
+  "PARTY",
+  "GM_ONLY",
+]);
 export const feedbackKindEnum = pgEnum("feedback_kind", [
   "SUGGESTION",
   "BUG",
@@ -468,6 +486,92 @@ export const characterControllers = pgTable(
       table.membershipId,
     ),
     index("character_controllers_membership_idx").on(table.membershipId),
+  ],
+);
+
+/**
+ * A character's media gallery (art, artifacts, handouts, scene memories),
+ * additive to and independent from `characters.portraitAssetId`.
+ *
+ * Deletion is deliberately two-tiered: `detachedAt` soft-removes an entry
+ * from the gallery (available to players per AC-detach semantics) while the
+ * underlying `assets` row is untouched; physically deleting the asset stays
+ * a separate GM-only flow (see the asset-lifecycle work in UIX-293) and is
+ * out of scope here.
+ */
+export const characterMedia = pgTable(
+  "character_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    characterId: uuid("character_id").notNull(),
+    assetId: uuid("asset_id").notNull(),
+    category: characterMediaCategoryEnum("category").notNull(),
+    caption: text("caption"),
+    ordering: integer("ordering").notNull().default(0),
+    visibility: characterMediaVisibilityEnum("visibility")
+      .notNull()
+      .default("OWNER_GM"),
+    /** Nullable placeholder for Stage 5 item/world-entity linking (UIX-264/UIX-244); unpopulated and unvalidated for now. */
+    relatedEntityId: uuid("related_entity_id"),
+    uploadedByMembershipId: uuid("uploaded_by_membership_id").notNull(),
+    detachedAt: timestamp("detached_at", { withTimezone: true }),
+    detachedByMembershipId: uuid("detached_by_membership_id"),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("character_media_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    index("character_media_character_ordering_idx").on(
+      table.characterId,
+      table.ordering,
+    ),
+    index("character_media_character_detached_idx").on(
+      table.characterId,
+      table.detachedAt,
+    ),
+    foreignKey({
+      name: "character_media_campaign_character_fk",
+      columns: [table.campaignId, table.characterId],
+      foreignColumns: [characters.campaignId, characters.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "character_media_campaign_asset_fk",
+      columns: [table.campaignId, table.assetId],
+      foreignColumns: [assets.campaignId, assets.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "character_media_campaign_uploader_fk",
+      columns: [table.campaignId, table.uploadedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "character_media_campaign_detacher_fk",
+      columns: [table.campaignId, table.detachedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "character_media_caption_check",
+      sql`${table.caption} IS NULL OR length(trim(${table.caption})) BETWEEN 1 AND 500`,
+    ),
+    check(
+      "character_media_ordering_revision_check",
+      sql`${table.ordering} >= 0 AND ${table.revision} >= 0`,
+    ),
+    check(
+      "character_media_detach_shape_check",
+      sql`(${table.detachedAt} IS NULL AND ${table.detachedByMembershipId} IS NULL) OR (${table.detachedAt} IS NOT NULL AND ${table.detachedByMembershipId} IS NOT NULL)`,
+    ),
   ],
 );
 

@@ -219,6 +219,82 @@ export type PlayerRequestTransition = z.infer<
 >;
 export type PlayerRequestDto = z.infer<typeof playerRequestDtoSchema>;
 
+export const characterMediaCategorySchema = z.enum([
+  "CHARACTER_ART",
+  "ARTIFACT",
+  "ITEM",
+  "DOCUMENT_HANDOUT",
+  "MEMORY_SCENE",
+  "OTHER",
+]);
+/**
+ * OWNER_GM is the default (owner + GM). PARTY widens to the whole campaign.
+ * GM_ONLY is stricter than the default: hidden from the character's own
+ * owner too, for GM-authored media/notes (AC8).
+ */
+export const characterMediaVisibilitySchema = z.enum([
+  "OWNER_GM",
+  "PARTY",
+  "GM_ONLY",
+]);
+export type CharacterMediaCategory = z.infer<
+  typeof characterMediaCategorySchema
+>;
+export type CharacterMediaVisibility = z.infer<
+  typeof characterMediaVisibilitySchema
+>;
+export const characterMediaDtoSchema = z.object({
+  id: z.string().uuid(),
+  campaignId: z.string().uuid(),
+  characterId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  category: characterMediaCategorySchema,
+  caption: z.string().nullable(),
+  ordering: z.number().int().nonnegative(),
+  visibility: characterMediaVisibilitySchema,
+  relatedEntityId: z.string().uuid().nullable(),
+  uploadedByMembershipId: z.string().uuid(),
+  detachedAt: z.string().datetime().nullable(),
+  revision: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type CharacterMediaDto = z.infer<typeof characterMediaDtoSchema>;
+/** Attaching an already-uploaded asset to a character's gallery; upload itself is Stage 2. */
+export const createCharacterMediaSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    characterId: z.string().uuid(),
+    assetId: z.string().uuid(),
+    category: characterMediaCategorySchema,
+    caption: z.string().trim().min(1).max(500).nullable().optional(),
+    visibility: characterMediaVisibilitySchema.default("OWNER_GM").optional(),
+  })
+  .strict();
+export const updateCharacterMediaSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    category: characterMediaCategorySchema.optional(),
+    caption: z.string().trim().min(1).max(500).nullable().optional(),
+    visibility: characterMediaVisibilitySchema.optional(),
+  })
+  .strict();
+export const reorderCharacterMediaSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    ordering: z.number().int().nonnegative(),
+  })
+  .strict();
+/** Soft-removes from the gallery only; the underlying asset is never deleted by this action. */
+export const detachCharacterMediaSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);

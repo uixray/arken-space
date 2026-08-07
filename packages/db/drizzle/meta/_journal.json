@@ -204,6 +204,13 @@
       "when": 1785873600000,
       "tag": "0028_drawing_stroke_width",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785960000000,
+      "tag": "0029_character_media",
+      "breakpoints": true
     }
   ]
 }

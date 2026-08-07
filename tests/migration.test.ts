@@ -26,6 +26,7 @@ describe("initial PostgreSQL migration", () => {
         "action_journal",
         "audio_states",
         "campaigns",
+        "character_media",
         "characters",
         "chat_messages",
         "chat_read_cursors",
