@@ -57,6 +57,12 @@ import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
 } from "./sidebar-preference";
+import {
+  EncounterConfirmDialog,
+  type EncounterDraft,
+} from "./EncounterConfirmDialog";
+import { endEncounter } from "./encounter-actions";
+import { locationSceneNames } from "./world-map-workspace-state";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -378,6 +384,18 @@ export function App() {
     "CONNECTING" | "ONLINE" | "RECONNECTING" | "RESYNCING" | "OFFLINE"
   >("CONNECTING");
   const [tool, setTool] = useState<MapTool>("PAN");
+  // UIX-311 Stage 4: real GM "Начать бой" flow state — replaces the Stage
+  // 2/3 temp triggers. `encounterMenuOpen` is the SCENE_REGION/LINKED_SCENE
+  // chooser, `encounterScenePickerOpen` is the canvas-context location/scene
+  // picker for LINKED_SCENE, and `encounterDraft` is the pending confirm
+  // step (set either once the GM commits a SCENE_REGION drag or picks a
+  // LINKED_SCENE target) consumed by EncounterConfirmDialog.
+  const [encounterMenuOpen, setEncounterMenuOpen] = useState(false);
+  const [encounterScenePickerOpen, setEncounterScenePickerOpen] =
+    useState(false);
+  const [encounterDraft, setEncounterDraft] = useState<EncounterDraft | null>(
+    null,
+  );
   const [gmFogOpacity, setGmFogOpacity] = useState(() => {
     const stored = Number(localStorage.getItem("arken.gmFogOpacity") ?? 0.35);
     return Number.isFinite(stored) ? Math.min(1, Math.max(0, stored)) : 0.35;
@@ -1179,6 +1197,12 @@ export function App() {
   const activeFog = activeScene
     ? viewSnapshot.fogReveals.filter((fog) => fog.sceneId === activeScene.id)
     : [];
+  // UIX-311 Stage 4: the campaign has at most one ACTIVE encounter at a
+  // time (server-enforced). Its presence drives the "Начать бой" ↔
+  // "Завершить бой" toolbar swap.
+  const activeEncounter =
+    viewSnapshot.encounters?.find((encounter) => encounter.status === "ACTIVE") ??
+    null;
   const activeDrawings = activeScene
     ? (viewSnapshot.drawings ?? []).filter(
         (drawing) => drawing.sceneId === activeScene.id,
@@ -1536,6 +1560,92 @@ export function App() {
           setCampaignRenameOpen(false);
         }}
       />
+      {/*
+       * UIX-311 Stage 4: "Начать бой" chooser — SCENE_REGION is only offered
+       * here (tactical-canvas context); LINKED_SCENE opens the same
+       * location/scene picker used from the world-map workspace.
+       */}
+      <ArkenDialog
+        open={encounterMenuOpen}
+        title="Начать бой"
+        footer={false}
+        onClose={() => setEncounterMenuOpen(false)}
+      >
+        <div className="encounter-menu">
+          <button
+            type="button"
+            className="primary"
+            disabled={!activeScene}
+            onClick={() => {
+              setEncounterMenuOpen(false);
+              setTool("SCENE_REGION");
+            }}
+          >
+            Выделить область текущей сцены
+          </button>
+          <button
+            type="button"
+            disabled={!broadcastScene}
+            onClick={() => {
+              setEncounterMenuOpen(false);
+              setEncounterScenePickerOpen(true);
+            }}
+          >
+            Перейти в другую локацию
+          </button>
+        </div>
+      </ArkenDialog>
+      <ArkenDialog
+        open={encounterScenePickerOpen}
+        title="Выбор локации"
+        footer={false}
+        onClose={() => setEncounterScenePickerOpen(false)}
+      >
+        <div className="encounter-scene-picker">
+          {broadcastScene &&
+            (viewSnapshot.worldMaps?.locations ?? [])
+              .map((location) => ({
+                location,
+                scenes: locationSceneNames(location, viewSnapshot.scenes),
+              }))
+              .filter((entry) => entry.scenes.length > 0)
+              .map(({ location, scenes }) => (
+                <div
+                  key={location.id}
+                  className="encounter-scene-picker__group"
+                >
+                  <strong>{location.name}</strong>
+                  {scenes.map((scene) => (
+                    <button
+                      key={scene.id}
+                      type="button"
+                      onClick={() => {
+                        setEncounterScenePickerOpen(false);
+                        setEncounterDraft({
+                          mode: "LINKED_SCENE",
+                          sourceScene: broadcastScene,
+                          targetSceneId: scene.id,
+                          targetSceneName: scene.name,
+                          locationId: location.id,
+                        });
+                      }}
+                    >
+                      {scene.name}
+                    </button>
+                  ))}
+                </div>
+              ))}
+          {!(viewSnapshot.worldMaps?.locations ?? []).some(
+            (location) => location.sceneIds.length > 0,
+          ) ? <p>Нет локаций со связанными сценами.</p> : null}
+        </div>
+      </ArkenDialog>
+      <EncounterConfirmDialog
+        draft={encounterDraft}
+        snapshot={viewSnapshot}
+        onClose={() => setEncounterDraft(null)}
+        onStarted={() => setEncounterDraft(null)}
+      />
       <div
         className={`workbench${
           sidebarCollapsed && !previewSnapshot ? " is-sidebar-collapsed" : ""
@@ -1607,22 +1717,38 @@ export function App() {
                     Закрыть туман
                   </button>
                   {/*
-                   * UIX-311 stage 2 temp trigger: no real "start encounter"
-                   * UI exists yet (that's stage 4's job). This button only
-                   * exercises the SCENE_REGION selection + fitRect camera
-                   * behavior end-to-end for manual testing; it should be
-                   * replaced by stage 4's GM-facing start-encounter flow.
+                   * UIX-311 Stage 4: real GM "Начать бой" / "Завершить бой"
+                   * entry point, replacing the Stage 2/3 temp triggers. Only
+                   * one encounter can be ACTIVE at a time (server-enforced),
+                   * so the button swaps based on activeEncounter.
                    */}
-                  <button
-                    aria-label="Область боя (временно)"
-                    title="Временная кнопка для проверки выбора области боя (UIX-311, заменится в Stage 4)"
-                    className="map-tool"
-                    data-tool="SCENE_REGION"
-                    aria-pressed={tool === "SCENE_REGION"}
-                    onClick={() => setTool("SCENE_REGION")}
-                  >
-                    Область боя (temp)
-                  </button>
+                  {activeEncounter ? (
+                    <button
+                      aria-label="Завершить бой"
+                      title="Завершить текущий бой"
+                      className="map-tool-text"
+                      onClick={() =>
+                        void run(() =>
+                          endEncounter(
+                            activeEncounter.id,
+                            activeEncounter.revision,
+                          ),
+                        )
+                      }
+                    >
+                      Завершить бой
+                    </button>
+                  ) : (
+                    <button
+                      aria-label="Начать бой"
+                      title="Начать бой из области сцены или связанной локации"
+                      className="map-tool-text"
+                      disabled={!activeScene}
+                      onClick={() => setEncounterMenuOpen(true)}
+                    >
+                      Начать бой
+                    </button>
+                  )}
                 </>
               )}
               <button
@@ -1825,21 +1951,17 @@ export function App() {
                 gmGridVisible={gmGridVisible}
                 encounters={viewSnapshot.encounters}
                 onEncounterRegionSelect={(rect) => {
-                  // UIX-311 stage 2 temp trigger: stage 4 replaces this
-                  // with a real GM confirmation flow before starting combat.
-                  void run(() =>
-                    api("/api/encounters/start", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        mode: "SCENE_REGION",
-                        sourceSceneId: activeScene.id,
-                        sourceSceneRevision: activeScene.revision ?? 0,
-                        focusRegion: rect,
-                      }),
-                    }),
-                  );
+                  // UIX-311 Stage 4: the committed drag rect opens the real
+                  // GM confirm step (EncounterConfirmDialog) instead of
+                  // starting combat silently.
                   setTool("PAN");
+                  setEncounterDraft({
+                    mode: "SCENE_REGION",
+                    sourceScene: activeScene,
+                    targetSceneId: activeScene.id,
+                    targetSceneName: activeScene.name,
+                    focusRegion: rect,
+                  });
                 }}
                 canvasEditMode={canvasEditMode}
                 onCanvasEditCancel={() => setCanvasEditMode(null)}

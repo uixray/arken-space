@@ -3496,6 +3496,34 @@ code {
   padding: 0;
   font-size: 0;
 }
+/* UIX-311 Stage 4: "Начать бой" / "Завершить бой" — a labeled text button
+   next to the icon-only .map-tool buttons, not a selectable MapTool. */
+.map-toolbar .map-tool-text {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm, 6px);
+  white-space: nowrap;
+}
+.encounter-menu,
+.encounter-scene-picker {
+  display: grid;
+  gap: var(--space-sm, 8px);
+}
+.encounter-scene-picker__group {
+  display: grid;
+  gap: 4px;
+}
+.encounter-scene-picker__group button {
+  text-align: left;
+}
+.encounter-confirm {
+  display: grid;
+  gap: var(--space-sm, 8px);
+}
+.encounter-confirm__participants {
+  margin: 0;
+  padding-left: 1.2em;
+}
 .fog-view-controls label {
   display: flex;
   align-items: center;
