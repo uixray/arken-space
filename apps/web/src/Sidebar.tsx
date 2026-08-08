@@ -33,6 +33,7 @@ import { SceneManagerDialog, type SceneDraft } from "./ui/SceneManagerDialog";
 import { StoryChannel, type StoryDraftInput } from "./StoryChannel";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
+import { WorldContentWorkspace } from "./WorldContentWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 import {
   CHAT_STREAM_LABEL,
@@ -302,6 +303,7 @@ export type Props = {
     | "world-maps"
     | "operator-feedback"
     | "player-requests"
+    | "world-encyclopedia"
     | null;
   operatorFeedbackAllowed: boolean;
   onWorkspaceChange: (
@@ -314,6 +316,7 @@ export type Props = {
       | "world-maps"
       | "operator-feedback"
       | "player-requests"
+      | "world-encyclopedia"
       | null,
   ) => void;
   onCreateWorldMap: (input: {
@@ -681,6 +684,13 @@ export function Sidebar(props: Props) {
             onUnlinkLocationScene={props.onUnlinkWorldMapLocationScene}
             onSetPartyPosition={props.onSetWorldMapPartyPosition}
             onClearPartyPosition={props.onClearWorldMapPartyPosition}
+          />
+        )}
+        {props.workspace === "world-encyclopedia" && isGm && (
+          <WorldContentWorkspace
+            open
+            assets={props.snapshot.assets}
+            onClose={() => props.onWorkspaceChange(null)}
           />
         )}
         {props.workspace === "media" && (

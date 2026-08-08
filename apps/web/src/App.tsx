@@ -85,7 +85,8 @@ type WorkspaceDestination =
   | "media"
   | "world-maps"
   | "operator-feedback"
-  | "player-requests";
+  | "player-requests"
+  | "world-encyclopedia";
 
 function CanvasRollOverlay({
   characterId,
@@ -1468,6 +1469,12 @@ export function App() {
                   onClick={() => handleWorkspaceChange("setup")}
                 >
                   Подготовка
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleWorkspaceChange("world-encyclopedia")}
+                >
+                  Энциклопедия мира
                 </button>
               </>
             ) : null}
