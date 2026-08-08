@@ -58,6 +58,7 @@ import {
   type ActivityFilter,
 } from "../activity-roll-controls";
 import type { Props } from "../Sidebar";
+import { useFollowScroll } from "../ui/useFollowScroll";
 import { QuickRollPanel } from "./QuickRollPanel";
 
 export function ChatMessageBody({
@@ -301,7 +302,13 @@ export function ActivityPanel({
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
   );
-  const listRef = useRef<HTMLDivElement>(null);
+  // The visible slice always keeps the timeline's tail (see
+  // `visibleTimeline` above), so the last full-timeline event id is a
+  // reliable "did new content arrive" signal whether the log is collapsed
+  // or expanded.
+  const latestActivityEventId = activityEvents.at(-1)?.id;
+  const { listRef, newItemCount, scrollToBottom, onScroll } =
+    useFollowScroll(latestActivityEventId);
   // Jumping to a specific message (e.g. from a notification) must be able to
   // reveal it even if the log is currently collapsed to its compact view.
   useEffect(() => {
@@ -319,7 +326,7 @@ export function ActivityPanel({
       });
     message.focus({ preventScroll: true });
     onMessageFocused();
-  }, [focusedMessageId, onMessageFocused, timeline]);
+  }, [focusedMessageId, onMessageFocused, timeline, listRef]);
   return (
     <section
       className="chat-panel activity-feed"
@@ -423,6 +430,7 @@ export function ActivityPanel({
         id="activity-message-list"
         aria-live="polite"
         ref={listRef}
+        onScroll={onScroll}
       >
         {timeline.length === 0 && (
           <p className="chat-empty">
@@ -495,6 +503,14 @@ export function ActivityPanel({
           );
         })}
       </div>
+      {newItemCount > 0 && (
+        <Button
+          className="new-messages"
+          onClick={() => scrollToBottom("smooth")}
+        >
+          Новые события · {newItemCount}
+        </Button>
+      )}
       <form className="chat-compose" onSubmit={submit}>
         <div className="chat-composer-input">
           <FormTextArea
@@ -639,7 +655,12 @@ export function DirectChatPanel({
   const messages = activeThread
     ? messagesForDirectThread(snapshot, activeThread.id)
     : [];
-  const latestSequence = messages.at(-1)?.sequence;
+  const latestMessage = messages.at(-1);
+  const latestSequence = latestMessage?.sequence;
+  const { listRef, newItemCount, scrollToBottom, onScroll } = useFollowScroll(
+    latestMessage?.id,
+    activeThread?.id,
+  );
 
   useEffect(() => {
     attachmentPreviewUrlRef.current = attachmentPreviewUrl;
@@ -795,7 +816,12 @@ export function DirectChatPanel({
           })}
         </select>
       </div>
-      <div className="message-list" aria-live="polite">
+      <div
+        className="message-list"
+        aria-live="polite"
+        ref={listRef}
+        onScroll={onScroll}
+      >
         {!activeThread && (
           <p className="chat-empty">
             Выберите получателя, чтобы начать личный диалог.
@@ -832,6 +858,14 @@ export function DirectChatPanel({
           ),
         )}
       </div>
+      {newItemCount > 0 && (
+        <Button
+          className="new-messages"
+          onClick={() => scrollToBottom("smooth")}
+        >
+          Новые сообщения · {newItemCount}
+        </Button>
+      )}
       {activeThread && (
         <form className="chat-compose direct-compose" onSubmit={submit}>
           <div className="chat-composer-input">
@@ -928,10 +962,6 @@ export function ChatPanel({
   const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
-  const followRef = useRef(true);
-  const [atBottom, setAtBottom] = useState(true);
-  const [newMessageCount, setNewMessageCount] = useState(0);
   const messages = useMemo(
     () =>
       messagesForStream(snapshot.messages, activeStream, snapshot.chatThreads),
@@ -947,6 +977,8 @@ export function ChatPanel({
   const threadId = thread?.id;
   const latestMessageId = latestMessage?.id;
   const latestSequence = latestMessage?.sequence;
+  const { listRef, isAtBottom, newItemCount, scrollToBottom, onScroll } =
+    useFollowScroll(latestMessageId, activeStream);
   const canCompose =
     activeStream === "TABLE" ||
     (activeStream === "STORY" && snapshot.me.role === "GM");
@@ -977,33 +1009,12 @@ export function ChatPanel({
   };
 
   useEffect(() => {
-    followRef.current = true;
-    setAtBottom(true);
-    setNewMessageCount(0);
-    requestAnimationFrame(() => {
-      const list = listRef.current;
-      if (list) list.scrollTo({ top: list.scrollHeight });
-    });
-  }, [activeStream]);
-
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list || !latestMessage) return;
-    if (followRef.current) {
-      list.scrollTo({ top: list.scrollHeight });
-      setNewMessageCount(0);
-    } else {
-      setNewMessageCount((current) => current + 1);
-    }
-  }, [latestMessageId, latestMessage]);
-
-  useEffect(() => {
-    if (!threadId || latestSequence === undefined || !atBottom) return;
+    if (!threadId || latestSequence === undefined || !isAtBottom) return;
     const timer = window.setTimeout(() => {
       void onMarkChatRead(threadId, latestSequence);
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [threadId, latestSequence, atBottom, onMarkChatRead]);
+  }, [threadId, latestSequence, isAtBottom, onMarkChatRead]);
 
   useEffect(() => {
     if (!focusedMessageId) return;
@@ -1017,7 +1028,7 @@ export function ChatPanel({
       });
     message.focus({ preventScroll: true });
     onMessageFocused();
-  }, [focusedMessageId, onMessageFocused, activeStream]);
+  }, [focusedMessageId, onMessageFocused, activeStream, listRef]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1052,14 +1063,7 @@ export function ChatPanel({
         className="message-list"
         aria-live="polite"
         ref={listRef}
-        onScroll={(event) => {
-          const list = event.currentTarget;
-          const nextAtBottom =
-            list.scrollHeight - list.scrollTop - list.clientHeight < 48;
-          followRef.current = nextAtBottom;
-          setAtBottom(nextAtBottom);
-          if (nextAtBottom) setNewMessageCount(0);
-        }}
+        onScroll={onScroll}
       >
         {timeline.length === 0 && (
           <p className="chat-empty">В этом потоке пока нет сообщений.</p>
@@ -1105,19 +1109,12 @@ export function ChatPanel({
           ),
         )}
       </div>
-      {newMessageCount > 0 && (
+      {newItemCount > 0 && (
         <Button
           className="new-messages"
-          onClick={() => {
-            const list = listRef.current;
-            if (list)
-              list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
-            followRef.current = true;
-            setAtBottom(true);
-            setNewMessageCount(0);
-          }}
+          onClick={() => scrollToBottom("smooth")}
         >
-          Новые сообщения · {newMessageCount}
+          Новые сообщения · {newItemCount}
         </Button>
       )}
       {activeStream === "ROLLS" && (
