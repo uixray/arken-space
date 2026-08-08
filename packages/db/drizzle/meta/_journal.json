@@ -225,6 +225,13 @@
       "when": 1786141292171,
       "tag": "0031_world_content",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786217954226,
+      "tag": "0032_square_toad",
+      "breakpoints": true
     }
   ]
 }

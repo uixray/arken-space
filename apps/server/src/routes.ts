@@ -118,6 +118,7 @@ import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
 import { registerEncounterRoutes } from "./encounters.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
+import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -627,6 +628,7 @@ export function registerRoutes(
     broadcastSnapshots(io, db, campaignId),
   );
   registerWorldContentRoutes(app, db);
+  registerWorldContentInstanceRoutes(app, db);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {

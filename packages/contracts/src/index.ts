@@ -2366,3 +2366,92 @@ export const deleteWorldContentSchema = z
   })
   .strict();
 export type DeleteWorldContent = z.infer<typeof deleteWorldContentSchema>;
+
+/**
+ * Campaign-scoped instance of a canonical `worldContent` entity (UIX-264,
+ * child of UIX-245). See `world_content_instances` in
+ * `packages/db/src/schema.ts` for the full architectural rationale
+ * (campaign-cascade, no-FK-cascade to canon, composite location FK, etc).
+ *
+ * GM-only, entirely: unlike `worldContentDtoSchema`/`worldContentPlayerDtoSchema`,
+ * there is deliberately no player-facing projection here yet. UIX-264's AC
+ * ("player APIs never expose... GM fields") implies instances will
+ * eventually feed a player-visible campaign state (e.g. "this NPC is now
+ * visibly wounded"), but that projection is a future integration point, not
+ * built speculatively in this pass — every route that reads or writes an
+ * instance requires the GM role.
+ */
+export const worldContentInstanceDtoSchema = z.object({
+  id: z.string().uuid(),
+  campaignId: z.string().uuid(),
+  worldContentId: z.string().uuid(),
+  displayNameOverride: z.string().nullable(),
+  currentState: z.string().nullable(),
+  gmNotes: z.string().nullable(),
+  portraitAssetId: z.string().uuid().nullable(),
+  ownerMembershipId: z.string().uuid().nullable(),
+  currentLocationId: z.string().uuid().nullable(),
+  quantity: z.number().int().nonnegative().nullable(),
+  condition: z.string().nullable(),
+  discovered: z.boolean(),
+  revision: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type WorldContentInstanceDto = z.infer<
+  typeof worldContentInstanceDtoSchema
+>;
+
+export const createWorldContentInstanceSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    worldContentId: z.string().uuid(),
+    displayNameOverride: z.string().trim().min(1).max(200).nullable().optional(),
+    currentState: z.string().trim().max(4000).nullable().optional(),
+    gmNotes: z.string().trim().max(20000).nullable().optional(),
+    portraitAssetId: z.string().uuid().nullable().optional(),
+    ownerMembershipId: z.string().uuid().nullable().optional(),
+    currentLocationId: z.string().uuid().nullable().optional(),
+    quantity: z.number().int().nonnegative().nullable().optional(),
+    condition: z.string().trim().min(1).max(200).nullable().optional(),
+    discovered: z.boolean().optional(),
+  })
+  .strict();
+export type CreateWorldContentInstance = z.infer<
+  typeof createWorldContentInstanceSchema
+>;
+
+export const updateWorldContentInstanceSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    displayNameOverride: z.string().trim().min(1).max(200).nullable().optional(),
+    currentState: z.string().trim().max(4000).nullable().optional(),
+    gmNotes: z.string().trim().max(20000).nullable().optional(),
+    portraitAssetId: z.string().uuid().nullable().optional(),
+    ownerMembershipId: z.string().uuid().nullable().optional(),
+    currentLocationId: z.string().uuid().nullable().optional(),
+    quantity: z.number().int().nonnegative().nullable().optional(),
+    condition: z.string().trim().min(1).max(200).nullable().optional(),
+    discovered: z.boolean().optional(),
+  })
+  .strict();
+export type UpdateWorldContentInstance = z.infer<
+  typeof updateWorldContentInstanceSchema
+>;
+
+/**
+ * Hard delete, CAS-protected: unlike `deleteWorldContentSchema` (which
+ * transitions canon to ARCHIVED), instances are mutable campaign state, not
+ * durable canon — see the route handler's doc comment in
+ * `apps/server/src/world-content-instances.ts` for the full reasoning.
+ */
+export const deleteWorldContentInstanceSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type DeleteWorldContentInstance = z.infer<
+  typeof deleteWorldContentInstanceSchema
+>;

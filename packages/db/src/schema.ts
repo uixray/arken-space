@@ -2239,3 +2239,139 @@ export const worldContentRelations = pgTable(
     ),
   ],
 );
+
+/**
+ * Campaign-scoped, mutable "instance" of a canonical `worldContent` entity
+ * (UIX-264, child of UIX-245). One canonical entity (e.g. a MONSTER "dragon"
+ * or a PERSON "innkeeper") can be referenced from many campaigns, and each
+ * campaign can carry its own independent, mutable override of it — display
+ * name, current state, GM notes, portrait, owner, location — WITHOUT ever
+ * rewriting the canonical row. This table is the opposite of `worldContent`
+ * in every architectural respect that table's doc comment calls out: it IS
+ * campaign-scoped, it DOES cascade-delete with its campaign (mutable
+ * campaign state must not survive campaign deletion), and it never touches
+ * `worldContent`/`worldContentActions`/etc.
+ *
+ * `worldContentId` intentionally has NO `onDelete: cascade` (default
+ * restrict/no-action): canonical deletes already soft-delete to ARCHIVED via
+ * `DELETE /api/world-content/:id` (see that route's doc comment), so an
+ * archived-but-still-present canonical row is exactly what an instance
+ * should keep pointing at. A hard FK here is what makes "deleting an entity
+ * used by a campaign is rejected or converted to an explicit archive flow"
+ * (UIX-264 AC) true by construction — a raw SQL DELETE of a referenced
+ * `worldContent` row fails loudly instead of silently orphaning instances.
+ *
+ * `portraitAssetId` has NO FK, for the same reason as `worldContent.coverAssetId`
+ * (see that table's doc comment): campaign assets (`assets`, cascade-deleted
+ * with their campaign) and world-content instances have different enough
+ * lifetimes/ownership that a hard FK would be the wrong constraint here too;
+ * resolved best-effort by the caller.
+ *
+ * `ownerMembershipId` follows `memberships`' own convention: campaign-scoped,
+ * `onDelete: set null` (an instance should not vanish just because whoever
+ * "had" it left the campaign or was removed).
+ *
+ * `currentLocationId` follows the `encounters.locationId` /
+ * `world_map_locations` composite-FK convention used elsewhere in this file
+ * for other cross-cutting, campaign-scoped location references: a composite
+ * `(campaignId, currentLocationId)` FK against
+ * `(worldMapLocations.campaignId, worldMapLocations.id)` with
+ * `onDelete: set null`, rather than a bare FK to `world_map_locations.id`
+ * alone (which would allow a location from a *different* campaign to be
+ * attached to this instance).
+ */
+export const worldContentInstances = pgTable(
+  "world_content_instances",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    worldContentId: uuid("world_content_id")
+      .notNull()
+      .references(() => worldContent.id),
+    /** Falls back to the canonical `worldContent.name` when null. */
+    displayNameOverride: text("display_name_override"),
+    /** Free-form GM state description, e.g. "wounded, fled to the docks". */
+    currentState: text("current_state"),
+    /** GM-only, same sensitivity tier as `worldContent.gmOnlyText` — never expose to players. */
+    gmNotes: text("gm_notes"),
+    /** No FK — see table doc comment. */
+    portraitAssetId: uuid("portrait_asset_id"),
+    ownerMembershipId: uuid("owner_membership_id").references(
+      () => memberships.id,
+      { onDelete: "set null" },
+    ),
+    /** See table doc comment re: composite FK below. */
+    currentLocationId: uuid("current_location_id"),
+    /** ITEM-type instances only; null/irrelevant for other types. */
+    quantity: integer("quantity"),
+    /** ITEM-type instances only, e.g. "damaged", "pristine". */
+    condition: text("condition"),
+    /** Campaign discovery state: has the party encountered/learned of this instance yet (UIX-245). */
+    discovered: boolean("discovered").notNull().default(false),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("world_content_instances_campaign_idx").on(table.campaignId),
+    index("world_content_instances_world_content_idx").on(
+      table.worldContentId,
+    ),
+    index("world_content_instances_campaign_world_content_idx").on(
+      table.campaignId,
+      table.worldContentId,
+    ),
+    foreignKey({
+      name: "world_content_instances_campaign_location_fk",
+      columns: [table.campaignId, table.currentLocationId],
+      foreignColumns: [worldMapLocations.campaignId, worldMapLocations.id],
+    }).onDelete("set null"),
+    check(
+      "world_content_instances_shape_check",
+      sql`(${table.displayNameOverride} IS NULL OR length(trim(${table.displayNameOverride})) BETWEEN 1 AND 200) AND (${table.currentState} IS NULL OR length(${table.currentState}) <= 4000) AND (${table.gmNotes} IS NULL OR length(${table.gmNotes}) <= 20000) AND (${table.condition} IS NULL OR length(trim(${table.condition})) BETWEEN 1 AND 200) AND (${table.quantity} IS NULL OR ${table.quantity} >= 0) AND ${table.revision} >= 0`,
+    ),
+  ],
+);
+
+/**
+ * Idempotency + audit ledger for `world_content_instances` mutations,
+ * campaign-scoped (unlike the canonical `worldContentActions`, since
+ * instances are campaign-scoped state) — mirrors `worldContentActions`'
+ * shape with the `campaignId` + per-campaign `actionId` uniqueness
+ * convention used by `gameEvents`/`actionJournal`.
+ */
+export const worldContentInstanceActions = pgTable(
+  "world_content_instance_actions",
+  {
+    sequence: bigserial("sequence", { mode: "number" }).primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    actionId: uuid("action_id").notNull(),
+    type: text("type").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id"),
+    entityRevision: integer("entity_revision"),
+    actorMembershipId: uuid("actor_membership_id"),
+    payload: jsonb("payload").$type<unknown>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("world_content_instance_actions_campaign_action_idx").on(
+      table.campaignId,
+      table.actionId,
+    ),
+    index("world_content_instance_actions_entity_idx").on(
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+);

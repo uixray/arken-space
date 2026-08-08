@@ -48,6 +48,8 @@ const applicationCountTableNames = [
   "tokens",
   "world_content",
   "world_content_actions",
+  "world_content_instance_actions",
+  "world_content_instances",
   "world_content_media",
   "world_content_relations",
   "world_map_location_scenes",
