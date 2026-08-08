@@ -1,4 +1,4 @@
-import { and, eq, ilike, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
@@ -21,6 +21,7 @@ import {
   type WorldContentLifecycle,
   type WorldContentMediaDto,
   type WorldContentRelationDto,
+  type WorldContentRelationEdgeDto,
 } from "@arken/contracts";
 import { requireAuth } from "./auth.js";
 import {
@@ -62,6 +63,19 @@ function fail(
 ) {
   return reply.code(status).send({ error });
 }
+
+/**
+ * The minimal shape exposed for the *other* side of a relation edge, or (in
+ * spirit) any place a caller just needs enough to render a link — never the
+ * full GM or player DTO. Deliberately excludes `lifecycle` too: a player
+ * must not learn a hidden entity's lifecycle, only that it doesn't exist.
+ */
+const worldContentEntityRefColumns = {
+  id: worldContent.id,
+  slug: worldContent.slug,
+  type: worldContent.type,
+  name: worldContent.name,
+} as const;
 
 /** Global actionId lookup: `worldContentActions` has no campaignId (see module doc comment). */
 async function findAction(db: RequestDb, actionId: string) {
@@ -233,6 +247,100 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
       .limit(1);
     if (!row) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
     return reply.send(toPlayerDto(row));
+  });
+
+  /**
+   * `GET /api/world-content/:id/relations` (UIX-245 Stage 4): edges in both
+   * directions, each joined with the *other* entity's minimal ref
+   * (id/slug/type/name) so the client never has to do N+1 lookups. Visibility
+   * is layered twice: the subject entity itself must be visible to the
+   * caller (same 404 as the single-entity GET — a player must never learn
+   * this entity exists via a relations probe either), and for a player the
+   * *other* entity on each edge must also be PUBLISHED or the edge is
+   * dropped entirely, never merely redacted — a player must not learn a
+   * hidden entity exists just because something published links to it. The
+   * GM sees every edge, regardless of the other entity's lifecycle.
+   */
+  app.get("/api/world-content/:id/relations", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const { id } = idParams.parse(request.params);
+    const authCtx: WorldContentAuthContext = { role: auth.role };
+    const [subject] = await db
+      .select({ id: worldContent.id })
+      .from(worldContent)
+      .where(worldContentByIdVisibleTo(authCtx, id))
+      .limit(1);
+    if (!subject) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
+
+    const edges = await db
+      .select()
+      .from(worldContentRelations)
+      .where(
+        or(
+          eq(worldContentRelations.fromWorldContentId, id),
+          eq(worldContentRelations.toWorldContentId, id),
+        ),
+      );
+    if (edges.length === 0) return reply.send([]);
+
+    const otherIds = Array.from(
+      new Set(
+        edges.map((edge) =>
+          edge.fromWorldContentId === id
+            ? edge.toWorldContentId
+            : edge.fromWorldContentId,
+        ),
+      ),
+    );
+    const otherRows = await db
+      .select(worldContentEntityRefColumns)
+      .from(worldContent)
+      .where(and(inArray(worldContent.id, otherIds), worldContentVisibility(authCtx)));
+    const otherById = new Map(otherRows.map((row) => [row.id, row]));
+
+    const result: WorldContentRelationEdgeDto[] = [];
+    for (const edge of edges) {
+      const isOutgoing = edge.fromWorldContentId === id;
+      const otherId = isOutgoing ? edge.toWorldContentId : edge.fromWorldContentId;
+      const other = otherById.get(otherId);
+      // Not visible to this caller (e.g. a player and the other entity is
+      // DRAFT/ARCHIVED) -> drop the edge entirely, not just the entity data.
+      if (!other) continue;
+      result.push({
+        id: edge.id,
+        relationType: edge.relationType,
+        note: edge.note,
+        direction: isOutgoing ? "OUTGOING" : "INCOMING",
+        entity: other,
+      });
+    }
+    return reply.send(result);
+  });
+
+  /**
+   * `GET /api/world-content/:id/media` (UIX-245 Stage 4): the ordered
+   * gallery for one entity. Visibility is gated on the *parent* entity only
+   * (same 404 as the single-entity GET) — `world_content_media` rows carry
+   * no lifecycle of their own.
+   */
+  app.get("/api/world-content/:id/media", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const { id } = idParams.parse(request.params);
+    const authCtx: WorldContentAuthContext = { role: auth.role };
+    const [subject] = await db
+      .select({ id: worldContent.id })
+      .from(worldContent)
+      .where(worldContentByIdVisibleTo(authCtx, id))
+      .limit(1);
+    if (!subject) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
+    const rows = await db
+      .select()
+      .from(worldContentMedia)
+      .where(eq(worldContentMedia.worldContentId, id))
+      .orderBy(worldContentMedia.ordering);
+    return reply.send(rows.map(mediaDto));
   });
 
   app.post("/api/world-content", async (request, reply) => {

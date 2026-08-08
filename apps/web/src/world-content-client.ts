@@ -2,7 +2,9 @@ import type {
   WorldContentDto,
   WorldContentLifecycle,
   WorldContentMediaDto,
+  WorldContentPlayerDto,
   WorldContentRelationDto,
+  WorldContentRelationEdgeDto,
   WorldContentType,
 } from "@arken/contracts";
 import { api } from "./api";
@@ -163,6 +165,33 @@ export const fetchWorldContentList = (query: WorldContentListQuery = {}) =>
 
 export const fetchWorldContentDetail = (id: string) =>
   api<WorldContentDto>(`/api/world-content/${encodeURIComponent(id)}`);
+
+/**
+ * Player-safe encyclopedia client slice (UIX-245 Stage 4). Same endpoints as
+ * the GM manager above — the server decides the DTO shape from the caller's
+ * role, not the client (see `worldContentVisibility`/`toPlayerDto` in
+ * `apps/server/src/world-content.ts`) — but typed to
+ * `WorldContentPlayerDto`, the safe subset, so a GM browsing this panel as a
+ * "what do players see" preview can only read player-safe fields even
+ * though the raw JSON they receive is the fuller GM DTO.
+ */
+export const fetchWorldContentPlayerList = (query: WorldContentListQuery = {}) =>
+  api<WorldContentPlayerDto[]>(`/api/world-content${listQueryString(query)}`);
+
+export const fetchWorldContentPlayerDetail = (id: string) =>
+  api<WorldContentPlayerDto>(`/api/world-content/${encodeURIComponent(id)}`);
+
+/** Both directions, joined with the other entity's minimal ref — see `GET /api/world-content/:id/relations`. */
+export const fetchWorldContentRelations = (id: string) =>
+  api<WorldContentRelationEdgeDto[]>(
+    `/api/world-content/${encodeURIComponent(id)}/relations`,
+  );
+
+/** Ordered gallery for one entity — see `GET /api/world-content/:id/media`. */
+export const fetchWorldContentMedia = (id: string) =>
+  api<WorldContentMediaDto[]>(
+    `/api/world-content/${encodeURIComponent(id)}/media`,
+  );
 
 export type CreateWorldContentInput = {
   slug: string;

@@ -2334,6 +2334,30 @@ export type RemoveWorldContentMedia = z.infer<
   typeof removeWorldContentMediaSchema
 >;
 
+/**
+ * `GET /api/world-content/:id/relations` response entry (UIX-245 Stage 4).
+ * `entity` is the *other* side of the edge, projected down to the minimal
+ * player-safe shape (id/slug/type/name) — enough to render a link, never the
+ * full DTO. `direction` tells the caller whether `entity` is the target
+ * (`OUTGOING`: this entity -> entity) or the source (`INCOMING`: entity ->
+ * this entity); the edge is symmetric for display purposes either way.
+ */
+export const worldContentRelationEdgeDtoSchema = z.object({
+  id: z.string().uuid(),
+  relationType: z.string(),
+  note: z.string().nullable(),
+  direction: z.enum(["OUTGOING", "INCOMING"]),
+  entity: z.object({
+    id: z.string().uuid(),
+    slug: worldContentSlugSchema,
+    type: worldContentTypeSchema,
+    name: z.string(),
+  }),
+});
+export type WorldContentRelationEdgeDto = z.infer<
+  typeof worldContentRelationEdgeDtoSchema
+>;
+
 /** GM-only soft-delete: transitions lifecycle to ARCHIVED under the same CAS discipline as `updateWorldContentSchema`. */
 export const deleteWorldContentSchema = z
   .object({

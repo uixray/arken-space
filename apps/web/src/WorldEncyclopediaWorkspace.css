@@ -1,0 +1,117 @@
+.world-encyclopedia-workspace {
+  width: min(1100px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 48px));
+}
+.world-encyclopedia-workspace__grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 16px;
+  height: 100%;
+  overflow: hidden;
+}
+.world-encyclopedia-workspace__list-pane,
+.world-encyclopedia-workspace__detail-pane {
+  overflow: auto;
+  min-height: 0;
+}
+.world-encyclopedia-workspace__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+.world-encyclopedia-workspace__filters .field {
+  min-width: 140px;
+  flex: 1 1 140px;
+}
+.world-encyclopedia-workspace__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.world-encyclopedia-workspace__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  border-radius: 6px;
+}
+.world-encyclopedia-workspace__row.is-selected {
+  outline: 2px solid var(--g-color-line-focus, #4285f4);
+}
+.world-encyclopedia-workspace__row-name {
+  font-weight: 600;
+  grid-column: 1;
+}
+.world-encyclopedia-workspace__row-type {
+  grid-column: 2;
+  color: var(--g-color-text-secondary);
+}
+.world-encyclopedia-workspace__row-tags {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.world-encyclopedia-workspace__article {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.world-encyclopedia-workspace__aliases {
+  margin: 0;
+  color: var(--g-color-text-secondary);
+  font-style: italic;
+}
+.world-encyclopedia-workspace__cover {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.world-encyclopedia-workspace__summary {
+  font-weight: 600;
+}
+.world-encyclopedia-workspace__body {
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin: 0;
+}
+.world-encyclopedia-workspace__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+}
+.world-encyclopedia-workspace__media-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+.world-encyclopedia-workspace__media-grid img {
+  display: block;
+  width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.world-encyclopedia-workspace__relations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.world-encyclopedia-workspace__relations li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

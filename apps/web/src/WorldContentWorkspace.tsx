@@ -4,7 +4,7 @@ import type {
   WorldContentDto,
   WorldContentLifecycle,
   WorldContentMediaDto,
-  WorldContentRelationDto,
+  WorldContentRelationEdgeDto,
   WorldContentType,
 } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
@@ -24,6 +24,8 @@ import {
   deleteWorldContentRelation,
   fetchWorldContentDetail,
   fetchWorldContentList,
+  fetchWorldContentMedia,
+  fetchWorldContentRelations,
   isValidWorldContentSlug,
   legalWorldContentTransitions,
   parseTagList,
@@ -677,14 +679,31 @@ function RelationsSection({
   const [relationType, setRelationType] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  // The API only exposes creation/deletion of relation edges, not a
-  // reverse-lookup ("who points at me") endpoint, so this section only
-  // tracks relations created here, from this entity outward, for the
-  // lifetime of this dialog session — see the module doc comment.
-  const [created, setCreated] = useState<WorldContentRelationDto[]>([]);
+  // Real fetch against GET /api/world-content/:id/relations (UIX-245 Stage
+  // 4) — both directions, joined with the other entity's name/type/slug —
+  // replacing the earlier session-only, outgoing-only placeholder.
+  const [edges, setEdges] = useState<WorldContentRelationEdgeDto[]>([]);
 
   const candidates = allEntities.filter((item) => item.id !== entity.id);
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setEdges(await fetchWorldContentRelations(entity.id));
+    } catch (reason) {
+      setError(formatApiError(reason, safeError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entity.id]);
 
   const add = async () => {
     if (!targetId || !relationType.trim()) {
@@ -694,14 +713,14 @@ function RelationsSection({
     setBusy(true);
     setError("");
     try {
-      const relation = await createWorldContentRelation(entity.id, {
+      await createWorldContentRelation(entity.id, {
         toWorldContentId: targetId,
         relationType: relationType.trim(),
         note: note.trim() || null,
       });
-      setCreated((current) => [...current, relation]);
       setRelationType("");
       setNote("");
+      await load();
     } catch (reason) {
       setError(formatApiError(reason, safeError));
     } finally {
@@ -714,7 +733,7 @@ function RelationsSection({
     setError("");
     try {
       await deleteWorldContentRelation(relationId);
-      setCreated((current) => current.filter((item) => item.id !== relationId));
+      setEdges((current) => current.filter((item) => item.id !== relationId));
     } catch (reason) {
       setError(formatApiError(reason, safeError));
     } finally {
@@ -725,39 +744,36 @@ function RelationsSection({
   return (
     <section className="world-content-workspace__subsection">
       <h3>Связи</h3>
-      <p className="muted">
-        Показаны только исходящие связи, созданные в этой сессии — API не
-        отдаёт входящие связи для сущности (нет reverse-list эндпоинта).
-      </p>
       {error && (
         <p className="field-error" role="alert">
           {error}
         </p>
       )}
-      {created.length > 0 && (
+      {loading ? (
+        <p className="muted">Загрузка…</p>
+      ) : edges.length > 0 ? (
         <ul className="world-content-workspace__relations">
-          {created.map((relation) => {
-            const target = allEntities.find(
-              (item) => item.id === relation.toWorldContentId,
-            );
-            return (
-              <li key={relation.id}>
-                <span>
-                  {relation.relationType} → {target?.name ?? relation.toWorldContentId}
-                </span>
-                {relation.note && <span className="muted"> ({relation.note})</span>}
-                <Button
-                  size="s"
-                  view="flat-danger"
-                  disabled={busy}
-                  onClick={() => void remove(relation.id)}
-                >
-                  Удалить
-                </Button>
-              </li>
-            );
-          })}
+          {edges.map((edge) => (
+            <li key={edge.id}>
+              <span>
+                {edge.direction === "OUTGOING"
+                  ? `${edge.relationType} → ${edge.entity.name}`
+                  : `${edge.entity.name} → ${edge.relationType}`}
+              </span>
+              {edge.note && <span className="muted"> ({edge.note})</span>}
+              <Button
+                size="s"
+                view="flat-danger"
+                disabled={busy}
+                onClick={() => void remove(edge.id)}
+              >
+                Удалить
+              </Button>
+            </li>
+          ))}
         </ul>
+      ) : (
+        <p className="muted">Связей пока нет.</p>
       )}
       <div className="world-content-workspace__relation-form">
         <FormSelect
@@ -804,8 +820,28 @@ function MediaSection({
   const [assetId, setAssetId] = useState("");
   const [caption, setCaption] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const sorted = sortWorldContentMedia(items);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    fetchWorldContentMedia(entity.id)
+      .then((fetched) => {
+        if (active) setItems(fetched);
+      })
+      .catch((reason) => {
+        if (active) setError(formatApiError(reason, safeError));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [entity.id]);
 
   const attach = async () => {
     if (!assetId) {
@@ -866,16 +902,12 @@ function MediaSection({
   return (
     <section className="world-content-workspace__subsection">
       <h3>Галерея</h3>
-      <p className="muted">
-        Показаны только элементы, добавленные в этой сессии редактирования —
-        список не подгружается заново с сервера при открытии, добавляйте
-        файлы здесь.
-      </p>
       {error && (
         <p className="field-error" role="alert">
           {error}
         </p>
       )}
+      {loading && <p className="muted">Загрузка…</p>}
       {sorted.length > 0 && (
         <ul className="world-content-workspace__media-grid">
           {sorted.map((item, index) => (

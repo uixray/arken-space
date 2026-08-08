@@ -390,6 +390,168 @@ describe("world content HTTP: relations", () => {
   });
 });
 
+describe("world content HTTP: GET relations (UIX-245 stage 4)", () => {
+  it("404s the whole request when the subject entity itself isn't visible to the caller", async () => {
+    const draft = (await createEntity(secrets.gm, { name: "Hidden Subject" })).json();
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${draft.id}/relations`,
+      headers: headers(secrets.player),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("shows a GM every edge in both directions regardless of the other entity's lifecycle", async () => {
+    const hub = (await createEntity(secrets.gm, { name: "Hub" })).json();
+    await publish(hub.id, 0);
+    const draftTarget = (await createEntity(secrets.gm, { name: "Draft Target" })).json();
+    const publishedTarget = (
+      await createEntity(secrets.gm, { name: "Published Target" })
+    ).json();
+    const publishedTargetRow = (await publish(publishedTarget.id, 0)).json();
+    const incomingSource = (
+      await createEntity(secrets.gm, { name: "Incoming Source" })
+    ).json();
+    const incomingSourceRow = (await publish(incomingSource.id, 0)).json();
+
+    await app.inject({
+      method: "POST",
+      url: `/api/world-content/${hub.id}/relations`,
+      headers: headers(secrets.gm),
+      payload: { actionId: id(), toWorldContentId: draftTarget.id, relationType: "GUARDS" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/world-content/${hub.id}/relations`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        toWorldContentId: publishedTargetRow.id,
+        relationType: "NEAR",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/world-content/${incomingSourceRow.id}/relations`,
+      headers: headers(secrets.gm),
+      payload: { actionId: id(), toWorldContentId: hub.id, relationType: "MEMBER_OF" },
+    });
+
+    const gmRes = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${hub.id}/relations`,
+      headers: headers(secrets.gm),
+    });
+    expect(gmRes.statusCode).toBe(200);
+    const gmEdges = gmRes.json();
+    expect(gmEdges).toHaveLength(3);
+    const gmEntityIds = gmEdges.map((edge: { entity: { id: string } }) => edge.entity.id);
+    expect(gmEntityIds).toEqual(
+      expect.arrayContaining([draftTarget.id, publishedTargetRow.id, incomingSourceRow.id]),
+    );
+    const outgoingToDraft = gmEdges.find(
+      (edge: { entity: { id: string } }) => edge.entity.id === draftTarget.id,
+    );
+    expect(outgoingToDraft).toMatchObject({ direction: "OUTGOING", relationType: "GUARDS" });
+    const incoming = gmEdges.find(
+      (edge: { entity: { id: string } }) => edge.entity.id === incomingSourceRow.id,
+    );
+    expect(incoming).toMatchObject({ direction: "INCOMING", relationType: "MEMBER_OF" });
+
+    // A player on the same hub never learns the DRAFT target exists, but
+    // sees both PUBLISHED edges in the correct direction.
+    const playerRes = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${hub.id}/relations`,
+      headers: headers(secrets.player),
+    });
+    expect(playerRes.statusCode).toBe(200);
+    const playerEdges = playerRes.json();
+    const playerEntityIds = playerEdges.map(
+      (edge: { entity: { id: string } }) => edge.entity.id,
+    );
+    expect(playerEntityIds).not.toContain(draftTarget.id);
+    expect(playerEntityIds).toEqual(
+      expect.arrayContaining([publishedTargetRow.id, incomingSourceRow.id]),
+    );
+    expect(playerEdges).toHaveLength(2);
+    // Player-safe entity ref never carries lifecycle or extra fields.
+    for (const edge of playerEdges) {
+      expect(edge.entity).not.toHaveProperty("lifecycle");
+      expect(Object.keys(edge.entity).sort()).toEqual(["id", "name", "slug", "type"]);
+    }
+  });
+
+  it("returns an empty list when there are no relations", async () => {
+    const solo = (await createEntity(secrets.gm, { name: "Solo" })).json();
+    await publish(solo.id, 0);
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${solo.id}/relations`,
+      headers: headers(secrets.gm),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+});
+
+describe("world content HTTP: GET media (UIX-245 stage 4)", () => {
+  it("404s when the parent entity isn't visible to the caller", async () => {
+    const draft = (await createEntity(secrets.gm, { name: "Hidden Parent" })).json();
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${draft.id}/media`,
+      headers: headers(secrets.player),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns the ordered gallery for GM and (once published) player callers alike", async () => {
+    const entity = (await createEntity(secrets.gm, { name: "Gallery Owner" })).json();
+    const assetOne = id();
+    const assetTwo = id();
+    await app.inject({
+      method: "POST",
+      url: `/api/world-content/${entity.id}/media`,
+      headers: headers(secrets.gm),
+      payload: { actionId: id(), assetId: assetOne, caption: "First" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/world-content/${entity.id}/media`,
+      headers: headers(secrets.gm),
+      payload: { actionId: id(), assetId: assetTwo, caption: "Second" },
+    });
+
+    const gmRes = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${entity.id}/media`,
+      headers: headers(secrets.gm),
+    });
+    expect(gmRes.statusCode).toBe(200);
+    expect(gmRes.json()).toMatchObject([
+      { assetId: assetOne, ordering: 0 },
+      { assetId: assetTwo, ordering: 1 },
+    ]);
+
+    const playerBefore = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${entity.id}/media`,
+      headers: headers(secrets.player),
+    });
+    expect(playerBefore.statusCode).toBe(404);
+
+    await publish(entity.id, 0);
+    const playerAfter = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${entity.id}/media`,
+      headers: headers(secrets.player),
+    });
+    expect(playerAfter.statusCode).toBe(200);
+    expect(playerAfter.json()).toHaveLength(2);
+  });
+});
+
 describe("world content HTTP: media", () => {
   it("attaches, reorders/recaptions, and removes gallery entries", async () => {
     const entity = (await createEntity(secrets.gm)).json();

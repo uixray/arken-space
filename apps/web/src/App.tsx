@@ -86,7 +86,8 @@ type WorkspaceDestination =
   | "world-maps"
   | "operator-feedback"
   | "player-requests"
-  | "world-encyclopedia";
+  | "world-encyclopedia"
+  | "world-codex";
 
 function CanvasRollOverlay({
   characterId,
@@ -1483,6 +1484,12 @@ export function App() {
               onClick={() => handleWorkspaceChange("world-maps")}
             >
               World maps
+            </button>
+            <button
+              type="button"
+              onClick={() => handleWorkspaceChange("world-codex")}
+            >
+              Энциклопедия
             </button>
             <button
               type="button"

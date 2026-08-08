@@ -34,6 +34,7 @@ import { StoryChannel, type StoryDraftInput } from "./StoryChannel";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { WorldContentWorkspace } from "./WorldContentWorkspace";
+import { WorldEncyclopediaWorkspace } from "./WorldEncyclopediaWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 import {
   CHAT_STREAM_LABEL,
@@ -304,6 +305,7 @@ export type Props = {
     | "operator-feedback"
     | "player-requests"
     | "world-encyclopedia"
+    | "world-codex"
     | null;
   operatorFeedbackAllowed: boolean;
   onWorkspaceChange: (
@@ -317,6 +319,7 @@ export type Props = {
       | "operator-feedback"
       | "player-requests"
       | "world-encyclopedia"
+      | "world-codex"
       | null,
   ) => void;
   onCreateWorldMap: (input: {
@@ -690,6 +693,12 @@ export function Sidebar(props: Props) {
           <WorldContentWorkspace
             open
             assets={props.snapshot.assets}
+            onClose={() => props.onWorkspaceChange(null)}
+          />
+        )}
+        {props.workspace === "world-codex" && (
+          <WorldEncyclopediaWorkspace
+            open
             onClose={() => props.onWorkspaceChange(null)}
           />
         )}
