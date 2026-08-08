@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   filterActivityEvents,
   formulaBonus,
   physicalRollBonus,
   physicalRollChatRequest,
   physicalRollMessage,
+  readRollLogCollapsed,
+  rollLogCollapsedStorageKey,
+  writeRollLogCollapsed,
 } from "./activity-roll-controls";
 import type { ActivityEvent } from "./activity-feed";
 
@@ -60,5 +63,57 @@ describe("activity roll controls", () => {
       characterId: "selected-character",
       body: expect.stringContaining("+2"),
     });
+  });
+
+  it("scopes the roll-log collapse preference to the membership", () => {
+    expect(rollLogCollapsedStorageKey("member:b")).toBe(
+      "arken:roll-log-collapsed:member:b",
+    );
+  });
+
+  it("defaults the roll-log to expanded and only accepts the explicit true value", () => {
+    expect(readRollLogCollapsed({ getItem: () => null }, "member")).toBe(
+      false,
+    );
+    expect(readRollLogCollapsed({ getItem: () => "false" }, "member")).toBe(
+      false,
+    );
+    expect(readRollLogCollapsed({ getItem: () => "true" }, "member")).toBe(
+      true,
+    );
+  });
+
+  it("survives unavailable storage for the roll-log preference", () => {
+    expect(
+      readRollLogCollapsed(
+        {
+          getItem: () => {
+            throw new Error("blocked");
+          },
+        },
+        "member",
+      ),
+    ).toBe(false);
+
+    expect(() =>
+      writeRollLogCollapsed(
+        {
+          setItem: () => {
+            throw new Error("full");
+          },
+        },
+        "member",
+        true,
+      ),
+    ).not.toThrow();
+  });
+
+  it("persists a boolean string under the scoped roll-log key", () => {
+    const setItem = vi.fn();
+    writeRollLogCollapsed({ setItem }, "member", true);
+    expect(setItem).toHaveBeenCalledWith(
+      "arken:roll-log-collapsed:member",
+      "true",
+    );
   });
 });

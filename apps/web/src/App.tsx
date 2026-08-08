@@ -5,6 +5,8 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
   AssetKind,
@@ -57,6 +59,11 @@ import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
 } from "./sidebar-preference";
+import {
+  clampSidebarWidth,
+  readSidebarWidth,
+  writeSidebarWidth,
+} from "./sidebar-width-preference";
 import {
   EncounterConfirmDialog,
   type EncounterDraft,
@@ -371,6 +378,17 @@ function GridSettings({
 export function App() {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // UIX-372: drag-resized sidebar width in px; null keeps the CSS default
+  // (--sidebar-width fallback) until the GM/player has customized it.
+  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
+  const sidebarWidthRef = useRef<number | null>(null);
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
+  const sidebarResizeDragRef = useRef<{
+    pointerId: number;
+    anchorRight: number;
+  } | null>(null);
   const [storyPosts, setStoryPosts] = useState<
     Array<StoryPostDto | StoryPostAdminDto>
   >([]);
@@ -544,6 +562,59 @@ export function App() {
         snapshot.me.id,
         collapsed,
       );
+    },
+    [snapshot],
+  );
+  useEffect(() => {
+    if (!sidebarCampaignId || !sidebarMembershipId) return;
+    setSidebarWidth(
+      readSidebarWidth(
+        window.localStorage,
+        sidebarCampaignId,
+        sidebarMembershipId,
+      ),
+    );
+  }, [sidebarCampaignId, sidebarMembershipId]);
+  const handleSidebarResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return;
+      const aside = event.currentTarget.closest<HTMLElement>(".sidebar");
+      const rect = aside?.getBoundingClientRect();
+      if (!rect) return;
+      sidebarResizeDragRef.current = {
+        pointerId: event.pointerId,
+        anchorRight: rect.right,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    },
+    [],
+  );
+  const handleSidebarResizeMove = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const drag = sidebarResizeDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      setSidebarWidth(clampSidebarWidth(drag.anchorRight - event.clientX));
+      event.preventDefault();
+    },
+    [],
+  );
+  const handleSidebarResizeEnd = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const drag = sidebarResizeDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      sidebarResizeDragRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      if (snapshot && sidebarWidthRef.current != null) {
+        writeSidebarWidth(
+          window.localStorage,
+          snapshot.campaign.id,
+          snapshot.me.id,
+          sidebarWidthRef.current,
+        );
+      }
     },
     [snapshot],
   );
@@ -1650,6 +1721,11 @@ export function App() {
         className={`workbench${
           sidebarCollapsed && !previewSnapshot ? " is-sidebar-collapsed" : ""
         }`}
+        style={
+          sidebarWidth != null
+            ? ({ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties)
+            : undefined
+        }
       >
         {sidebarCollapsed && !previewSnapshot && (
           <button
@@ -2371,6 +2447,9 @@ export function App() {
             onChatVisibilityChange={handleChatVisibilityChange}
             collapsed={sidebarCollapsed}
             onCollapsedChange={handleSidebarCollapsedChange}
+            onResizeHandleDown={handleSidebarResizeStart}
+            onResizeHandleMove={handleSidebarResizeMove}
+            onResizeHandleUp={handleSidebarResizeEnd}
             workspace={workspace}
             operatorFeedbackAllowed={operatorFeedbackAllowed}
             onWorkspaceChange={handleWorkspaceChange}

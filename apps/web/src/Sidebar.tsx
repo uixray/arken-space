@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type {
   AssetKind,
   AssetDto,
@@ -282,6 +287,12 @@ export type Props = {
   ) => Promise<void>;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  /** UIX-372: pointer handlers driving the sidebar's drag-to-resize width
+   * handle. Left to the caller (App.tsx) since it owns the persisted width
+   * and the `--sidebar-width` custom property on `.workbench`. */
+  onResizeHandleDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onResizeHandleMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onResizeHandleUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   workspace:
     | "characters"
     | "tokens"
@@ -452,6 +463,16 @@ export function Sidebar(props: Props) {
       inert={props.collapsed}
       aria-hidden={props.collapsed}
     >
+      <button
+        type="button"
+        className="sidebar-resize-handle"
+        aria-label="Изменить ширину боковой панели"
+        title="Перетащите, чтобы изменить ширину боковой панели"
+        onPointerDown={props.onResizeHandleDown}
+        onPointerMove={props.onResizeHandleMove}
+        onPointerUp={props.onResizeHandleUp}
+        onPointerCancel={props.onResizeHandleUp}
+      />
       <button
         type="button"
         className="sidebar-collapse-button"

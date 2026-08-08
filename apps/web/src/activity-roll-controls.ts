@@ -41,6 +41,42 @@ export function physicalDiceStorageKey(membershipId: string): string {
   return `arken:physical-dice:${membershipId}`;
 }
 
+/** UIX-372: how many timeline entries stay visible once the roll log is
+ * collapsed to a compact height. */
+export const ROLL_LOG_COLLAPSED_ENTRY_COUNT = 8;
+
+export function rollLogCollapsedStorageKey(membershipId: string): string {
+  return `arken:roll-log-collapsed:${membershipId}`;
+}
+
+export function readRollLogCollapsed(
+  storage: Pick<Storage, "getItem">,
+  membershipId: string,
+): boolean {
+  try {
+    return (
+      storage.getItem(rollLogCollapsedStorageKey(membershipId)) === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function writeRollLogCollapsed(
+  storage: Pick<Storage, "setItem">,
+  membershipId: string,
+  collapsed: boolean,
+) {
+  try {
+    storage.setItem(
+      rollLogCollapsedStorageKey(membershipId),
+      String(collapsed),
+    );
+  } catch {
+    // A blocked or full localStorage must not make the game unusable.
+  }
+}
+
 export function formulaBonus(
   formula: string,
   stats: Readonly<Record<string, number>>,

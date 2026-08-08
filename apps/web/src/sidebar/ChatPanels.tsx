@@ -52,6 +52,9 @@ import {
   physicalDiceStorageKey,
   physicalRollBonus,
   physicalRollChatRequest,
+  readRollLogCollapsed,
+  ROLL_LOG_COLLAPSED_ENTRY_COUNT,
+  writeRollLogCollapsed,
   type ActivityFilter,
 } from "../activity-roll-controls";
 import type { Props } from "../Sidebar";
@@ -199,6 +202,12 @@ export function ActivityPanel({
     () => new Set(["ROLLS", "STORY", "REFERENCE"]),
   );
   const [quickRollPending, setQuickRollPending] = useState(false);
+  // UIX-372: the roll/event log can get long and spammy with quick rolls, so
+  // it can be collapsed to a compact "last N entries" view independently of
+  // whole-sidebar collapse or width resize.
+  const [rollLogCollapsed, setRollLogCollapsed] = useState(() =>
+    readRollLogCollapsed(window.localStorage, snapshot.me.id),
+  );
   const characterStats =
     snapshot.characters.find(
       (character) => character.id === snapshot.me.characterId,
@@ -285,11 +294,19 @@ export function ActivityPanel({
     () => buildActivityTimeline(activityEvents),
     [activityEvents],
   );
+  const visibleTimeline = rollLogCollapsed
+    ? timeline.slice(-ROLL_LOG_COLLAPSED_ENTRY_COUNT)
+    : timeline;
   const catalogEntryIds = useMemo(
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
   );
   const listRef = useRef<HTMLDivElement>(null);
+  // Jumping to a specific message (e.g. from a notification) must be able to
+  // reveal it even if the log is currently collapsed to its compact view.
+  useEffect(() => {
+    if (focusedMessageId) setRollLogCollapsed(false);
+  }, [focusedMessageId]);
   useEffect(() => {
     if (!focusedMessageId) return;
     const message = document.getElementById(`chat-message-${focusedMessageId}`);
@@ -378,7 +395,35 @@ export function ActivityPanel({
           ))}
         </fieldset>
       </section>
-      <div className="message-list" aria-live="polite" ref={listRef}>
+      <div className="activity-log-toolbar">
+        <span className="eyebrow">Журнал</span>
+        {timeline.length > ROLL_LOG_COLLAPSED_ENTRY_COUNT && (
+          <button
+            type="button"
+            className="activity-log-toggle"
+            aria-expanded={!rollLogCollapsed}
+            aria-controls="activity-message-list"
+            title={
+              rollLogCollapsed
+                ? "Показать всю ленту событий"
+                : "Показать только последние записи"
+            }
+            onClick={() => {
+              const next = !rollLogCollapsed;
+              setRollLogCollapsed(next);
+              writeRollLogCollapsed(window.localStorage, snapshot.me.id, next);
+            }}
+          >
+            {rollLogCollapsed ? "Развернуть" : "Свернуть"}
+          </button>
+        )}
+      </div>
+      <div
+        className="message-list"
+        id="activity-message-list"
+        aria-live="polite"
+        ref={listRef}
+      >
         {timeline.length === 0 && (
           <p className="chat-empty">
             {
@@ -386,7 +431,12 @@ export function ActivityPanel({
             }
           </p>
         )}
-        {timeline.map((item) => {
+        {rollLogCollapsed && visibleTimeline.length < timeline.length && (
+          <p className="activity-log-truncated-note">
+            {`Показаны последние ${visibleTimeline.length} из ${timeline.length}. `}
+          </p>
+        )}
+        {visibleTimeline.map((item) => {
           if (item.type === "DATE")
             return (
               <div
