@@ -416,6 +416,76 @@ describe("atomic LINKED_SCENE start", () => {
   });
 });
 
+describe("encounter end authorization", () => {
+  it("requires auth and GM role — a PLAYER cannot end an active encounter", async () => {
+    const started = (await startRegion(secrets.gm)).json();
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/encounters/${started.id}/end`,
+          payload: { actionId: id(), revision: started.revision },
+        })
+      ).statusCode,
+    ).toBe(401);
+    const playerAttempt = await endEncounter(
+      secrets.player,
+      started.id,
+      started.revision,
+    );
+    expect(playerAttempt.statusCode).toBe(403);
+    expect(playerAttempt.json().error).toBe("GM_REQUIRED");
+
+    // Confirm the PLAYER's rejected attempt left the encounter untouched,
+    // then let the GM end it for real.
+    const stillActive = (
+      await app.inject({
+        method: "GET",
+        url: "/api/encounters",
+        headers: headers(secrets.gm),
+      })
+    ).json();
+    expect(
+      stillActive.find((row: { id: string }) => row.id === started.id)
+        ?.status,
+    ).toBe("ACTIVE");
+    await endEncounter(secrets.gm, started.id, started.revision);
+  });
+});
+
+describe("late-join / reconnect encounter-focus restoration", () => {
+  it("lets a non-initiating PLAYER fetch the ACTIVE encounter (region + focusRegion) as a fresh client would on reconnect", async () => {
+    const started = (
+      await startRegion(secrets.gm, {
+        focusRegion: { x: 50, y: 60, width: 120, height: 90 },
+      })
+    ).json();
+
+    // Simulate a late-joining/reconnecting PLAYER client: it has no prior
+    // state, only a fresh authenticated GET — the same request path used to
+    // build the initial/reconnect game snapshot (listEncounters is included
+    // unconditionally in every snapshot, see snapshot.ts).
+    const reconnectView = await app.inject({
+      method: "GET",
+      url: "/api/encounters",
+      headers: headers(secrets.player),
+    });
+    expect(reconnectView.statusCode).toBe(200);
+    const active = reconnectView
+      .json()
+      .find((row: { id: string }) => row.id === started.id);
+    expect(active).toMatchObject({
+      status: "ACTIVE",
+      mode: "SCENE_REGION",
+      sourceSceneId: ids.sceneA,
+      targetSceneId: ids.sceneA,
+      focusRegion: { x: 50, y: 60, width: 120, height: 90 },
+    });
+
+    await endEncounter(secrets.gm, started.id, started.revision);
+  });
+});
+
 describe("one-active-encounter-at-a-time and idempotency", () => {
   it("rejects a second start while one is active, and allows a new one once ended", async () => {
     const first = (await startRegion(secrets.gm)).json();
@@ -428,6 +498,21 @@ describe("one-active-encounter-at-a-time and idempotency", () => {
     expect(ended.statusCode).toBe(200);
     expect(ended.json().status).toBe("ENDED");
     expect(ended.json().endedByMembershipId).toBe(ids.gm);
+
+    // Ending writes an auditable ENCOUNTER_ENDED game event tied to the
+    // encounter's post-end revision, not just a status flip on the row.
+    const encounterEvents = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.entityType, "ENCOUNTER"));
+    expect(
+      encounterEvents.some(
+        (row) =>
+          row.entityId === first.id &&
+          row.type === "ENCOUNTER_ENDED" &&
+          row.membershipId === ids.gm,
+      ),
+    ).toBe(true);
 
     const third = await startRegion(secrets.gm);
     expect(third.statusCode).toBe(201);
