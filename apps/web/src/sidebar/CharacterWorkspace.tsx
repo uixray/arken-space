@@ -601,6 +601,22 @@ export function CharacterPanel({
   const portrait = snapshot.assets.find(
     (asset) => asset.id === character.portraitAssetId,
   );
+  // The catalog system (UIX-209) is the only mechanism that lets a GM add, edit
+  // or remove a named skill/ability on a specific character — character.skills
+  // and character.spells are legacy fixed arrays with no create/remove UI, kept
+  // here read-only for backward compatibility with existing data.
+  const skillEntries = character.entries.filter(
+    (entry) => entry.kind === "SKILL",
+  );
+  const abilityEntries = character.entries.filter(
+    (entry) => entry.kind === "ABILITY",
+  );
+  const skillCatalogOptions = snapshot.catalogEntries.filter(
+    (entry) => entry.kind === "SKILL",
+  );
+  const abilityCatalogOptions = snapshot.catalogEntries.filter(
+    (entry) => entry.kind === "ABILITY",
+  );
   const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
     nextWallet = normalizeWallet(nextWallet);
     if (!walletInputDirtyRef.current) return;
@@ -735,13 +751,6 @@ export function CharacterPanel({
           onSave={onReplaceControllers}
         />
       )}
-      {portrait && (
-        <img
-          className="character-portrait"
-          src={portrait.url}
-          alt={`Портрет ${character.name}`}
-        />
-      )}
       <label className="field">
         Портрет
         <FormSelect
@@ -838,7 +847,7 @@ export function CharacterPanel({
           }
         />
       </details>
-      <h3 className="character-block-heading">Основные характеристики</h3>
+      <h3 className="character-block-heading">Характеристики</h3>
       <div className="subsection character-roll-controls">
         <RollModeControl
           value={rollMode}
@@ -852,206 +861,258 @@ export function CharacterPanel({
           </p>
         )}
       </div>
-      <div className="stats-grid">
-        {arkenSystem.stats
-          .filter(
-            (stat) => stat.key !== "reaction" && stat.key !== "magicPower",
-          )
-          .map((stat) => (
-            <label key={stat.key} className="stat-field">
-              <span>{stat.label}</span>
-              <FormInput
-                key={`${character.id}-${stat.key}-${character.revision}`}
-                type="number"
-                defaultValue={character.stats[stat.key] ?? stat.defaultValue}
-                disabled={!editable}
-                min={stat.min}
-                max={stat.max}
-                onBlur={(event) =>
-                  void runCharacterMutation(() =>
-                    onPatch(character.id, {
-                      stats: { [stat.key]: Number(event.target.value) },
-                      revision: character.revision,
-                    }),
-                  )
-                }
-              />
-              <Button
-                disabled={!editable || rollPending}
-                onClick={() =>
-                  void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)
-                }
-              >
-                Бросок
-              </Button>
-            </label>
-          ))}
-      </div>
-      <h3 className="character-block-heading">{"Особые характеристики"}</h3>
-      <div className="stats-grid">
-        {arkenSystem.stats
-          .filter((stat) => stat.key === "magicPower")
-          .map((stat) => (
-            <label key={stat.key} className="stat-field">
-              <span>{stat.label}</span>
-              <FormInput
-                key={`${character.id}-${stat.key}-${character.revision}`}
-                type="number"
-                defaultValue={character.stats[stat.key] ?? stat.defaultValue}
-                disabled={!editable}
-                min={stat.min}
-                max={stat.max}
-                onBlur={(event) =>
-                  void runCharacterMutation(() =>
-                    onPatch(character.id, {
-                      stats: { [stat.key]: Number(event.target.value) },
-                      revision: character.revision,
-                    }),
-                  )
-                }
-              />
-              <Button
-                disabled={!editable || rollPending}
-                onClick={() =>
-                  void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)
-                }
-              >
-                {"Бросок"}
-              </Button>
-            </label>
-          ))}
-      </div>
-      <h3 className="character-block-heading">Боевые характеристики</h3>
-      <div className="inline-fields">
-        <Button
-          disabled={!editable || rollPending}
-          onClick={() =>
-            void submitCharacterRoll("1d20 + agility", "Инициатива")
-          }
-        >
-          Инициатива (d20 + Ловкость)
-        </Button>
-        <Button
-          disabled={!editable || rollPending}
-          onClick={() => void submitCharacterRoll("1d20 + reaction", "Бросок?")}
-        >
-          {"Бросок? (d20 + Бросок?)"}
-        </Button>
-      </div>
-      <div className="subsection">
-        <h3>Дополнительные навыки</h3>
-        {character.skills.length ? (
-          character.skills.map((skill) => (
+      <div className="character-card-row">
+        <div className="character-card character-card--portrait">
+          <h3 className="character-card__header">Портрет</h3>
+          {portrait ? (
+            <img
+              className="character-portrait"
+              src={portrait.url}
+              alt={`Портрет ${character.name}`}
+            />
+          ) : (
+            <p className="muted">Портрет не назначен.</p>
+          )}
+        </div>
+        <div className="character-card character-card--stats">
+          <h3 className="character-card__header">Характеристики</h3>
+          <div className="character-card__body">
+            {[
+              ...arkenSystem.stats.filter(
+                (stat) => stat.key !== "reaction" && stat.key !== "magicPower",
+              ),
+              ...arkenSystem.stats.filter((stat) => stat.key === "magicPower"),
+            ].map((stat) => (
+              <label key={stat.key} className="stat-field">
+                <span>{stat.label}</span>
+                <FormInput
+                  key={`${character.id}-${stat.key}-${character.revision}`}
+                  type="number"
+                  defaultValue={character.stats[stat.key] ?? stat.defaultValue}
+                  disabled={!editable}
+                  min={stat.min}
+                  max={stat.max}
+                  onBlur={(event) =>
+                    void runCharacterMutation(() =>
+                      onPatch(character.id, {
+                        stats: { [stat.key]: Number(event.target.value) },
+                        revision: character.revision,
+                      }),
+                    )
+                  }
+                />
+                <Button
+                  disabled={!editable || rollPending}
+                  onClick={() =>
+                    void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)
+                  }
+                >
+                  Бросок
+                </Button>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="character-card character-card--combat">
+          <h3 className="character-card__header">Боевые характеристики</h3>
+          <div className="character-card__body">
             <Button
-              className="action-row"
-              key={skill.key}
-              disabled={rollPending}
+              disabled={!editable || rollPending}
               onClick={() =>
-                void submitCharacterRoll(skill.formula, skill.name)
+                void submitCharacterRoll("1d20 + agility", "Инициатива")
               }
             >
-              <span>{skill.name}</span>
-              <code>{skill.formula}</code>
+              Инициатива (d20 + Ловкость)
             </Button>
-          ))
-        ) : (
-          <p className="muted">Навыки ещё не добавлены.</p>
-        )}
-      </div>
-      <div className="subsection">
-        <h3>Способности и заклинания</h3>
-        {character.spells.length ? (
-          character.spells.map((spell) => (
-            <div className="plain-row" key={spell.key}>
-              <strong>{spell.name}</strong>
-              <p>{spell.description}</p>
-              {spell.formula && (
+            <Button
+              disabled={!editable || rollPending}
+              onClick={() =>
+                void submitCharacterRoll("1d20 + reaction", "Бросок?")
+              }
+            >
+              {"Бросок? (d20 + Бросок?)"}
+            </Button>
+          </div>
+        </div>
+        <div className="character-card character-card--skills">
+          <h3 className="character-card__header">Навыки</h3>
+          <div className="character-card__body">
+            {character.skills.length > 0 &&
+              character.skills.map((skill) => (
                 <Button
+                  className="action-row"
+                  key={skill.key}
                   disabled={rollPending}
                   onClick={() =>
-                    void submitCharacterRoll(spell.formula!, spell.name)
+                    void submitCharacterRoll(skill.formula, skill.name)
                   }
                 >
-                  Бросить {spell.formula}
+                  <span>{skill.name}</span>
+                  <code>{skill.formula}</code>
                 </Button>
-              )}
-            </div>
-          ))
-        ) : (
-          <p className="muted">Заклинания ещё не добавлены.</p>
-        )}
-      </div>
-      <div className="subsection">
-        <h3>Каталог персонажа</h3>
-        {snapshot.me.role === "GM" && snapshot.catalogEntries.length > 0 && (
-          <FormSelect
-            defaultValue=""
-            onChange={(event) => {
-              if (event.target.value)
-                void runCharacterMutation(() =>
-                  onAssignEntry(character.id, event.target.value),
-                );
-              event.target.value = "";
-            }}
-          >
-            <option value="">Назначить из общего каталога…</option>
-            {snapshot.catalogEntries.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name}
-              </option>
-            ))}
-          </FormSelect>
-        )}
-        {character.entries.length ? (
-          character.entries.map((entry) => (
-            <div className="plain-row" key={entry.id}>
-              <CharacterActionCard
-                entry={entry}
-                disabled={!editable}
-                onAction={(input) =>
-                  onRollEntry(character.id, entry.id, {
-                    ...input,
-                    ...(rollMode ? { rollMode } : {}),
-                  })
-                }
-              />
-              {entry.data.uses && (
-                <Button
-                  disabled={!editable}
-                  onClick={() =>
-                    onRechargeEntry(character.id, entry.id, entry.revision)
-                  }
-                >
-                  Перезарядить
-                </Button>
-              )}
-              {snapshot.me.role === "GM" && (
-                <div className="inline-fields">
-                  <Button onClick={() => setEntryEditor(entry)}>
-                    Редактировать запись
-                  </Button>
-                  <Button
-                    className="danger-link"
-                    onClick={() =>
-                      void onDeleteEntry(character.id, entry.id, entry.revision)
+              ))}
+            {skillEntries.length ? (
+              skillEntries.map((entry) => (
+                <div className="character-card__row" key={entry.id}>
+                  <CharacterActionCard
+                    entry={entry}
+                    disabled={!editable}
+                    onAction={(input) =>
+                      onRollEntry(character.id, entry.id, {
+                        ...input,
+                        ...(rollMode ? { rollMode } : {}),
+                      })
                     }
-                  >
-                    Удалить у персонажа
-                  </Button>
+                  />
+                  {entry.data.uses && (
+                    <Button
+                      disabled={!editable}
+                      onClick={() =>
+                        onRechargeEntry(character.id, entry.id, entry.revision)
+                      }
+                    >
+                      Перезарядить
+                    </Button>
+                  )}
+                  {snapshot.me.role === "GM" && (
+                    <div className="inline-fields">
+                      <Button onClick={() => setEntryEditor(entry)}>
+                        Редактировать
+                      </Button>
+                      <Button
+                        className="danger-link"
+                        onClick={() =>
+                          void onDeleteEntry(
+                            character.id,
+                            entry.id,
+                            entry.revision,
+                          )
+                        }
+                      >
+                        Удалить
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              )}
-              {snapshot.me.role === "GM" && (
-                <Button hidden onClick={() => setEntryEditor(entry)}>
-                  Редактировать запись
-                </Button>
-              )}
+              ))
+            ) : character.skills.length === 0 ? (
+              <p className="muted">Навыки ещё не добавлены.</p>
+            ) : null}
+          </div>
+          {snapshot.me.role === "GM" && skillCatalogOptions.length > 0 && (
+            <div className="character-card__add">
+              <FormSelect
+                defaultValue=""
+                aria-label="Добавить навык из каталога"
+                onChange={(event) => {
+                  if (event.target.value)
+                    void runCharacterMutation(() =>
+                      onAssignEntry(character.id, event.target.value),
+                    );
+                  event.target.value = "";
+                }}
+              >
+                <option value="">+ Добавить навык…</option>
+                {skillCatalogOptions.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </FormSelect>
             </div>
-          ))
-        ) : (
-          <p className="muted">
-            Мастер ещё не назначил навыки или способности.
-          </p>
-        )}
+          )}
+        </div>
+        <div className="character-card character-card--abilities">
+          <h3 className="character-card__header">Способности и заклинания</h3>
+          <div className="character-card__body">
+            {character.spells.length > 0 &&
+              character.spells.map((spell) => (
+                <div className="plain-row" key={spell.key}>
+                  <strong>{spell.name}</strong>
+                  <p>{spell.description}</p>
+                  {spell.formula && (
+                    <Button
+                      disabled={rollPending}
+                      onClick={() =>
+                        void submitCharacterRoll(spell.formula!, spell.name)
+                      }
+                    >
+                      Бросить {spell.formula}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            {abilityEntries.length ? (
+              abilityEntries.map((entry) => (
+                <div className="character-card__row" key={entry.id}>
+                  <CharacterActionCard
+                    entry={entry}
+                    disabled={!editable}
+                    onAction={(input) =>
+                      onRollEntry(character.id, entry.id, {
+                        ...input,
+                        ...(rollMode ? { rollMode } : {}),
+                      })
+                    }
+                  />
+                  {entry.data.uses && (
+                    <Button
+                      disabled={!editable}
+                      onClick={() =>
+                        onRechargeEntry(character.id, entry.id, entry.revision)
+                      }
+                    >
+                      Перезарядить
+                    </Button>
+                  )}
+                  {snapshot.me.role === "GM" && (
+                    <div className="inline-fields">
+                      <Button onClick={() => setEntryEditor(entry)}>
+                        Редактировать
+                      </Button>
+                      <Button
+                        className="danger-link"
+                        onClick={() =>
+                          void onDeleteEntry(
+                            character.id,
+                            entry.id,
+                            entry.revision,
+                          )
+                        }
+                      >
+                        Удалить
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : character.spells.length === 0 ? (
+              <p className="muted">Способности ещё не добавлены.</p>
+            ) : null}
+          </div>
+          {snapshot.me.role === "GM" && abilityCatalogOptions.length > 0 && (
+            <div className="character-card__add">
+              <FormSelect
+                defaultValue=""
+                aria-label="Добавить способность из каталога"
+                onChange={(event) => {
+                  if (event.target.value)
+                    void runCharacterMutation(() =>
+                      onAssignEntry(character.id, event.target.value),
+                    );
+                  event.target.value = "";
+                }}
+              >
+                <option value="">+ Добавить способность…</option>
+                {abilityCatalogOptions.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </FormSelect>
+            </div>
+          )}
+        </div>
       </div>
       {entryEditor && (
         <ArkenDialog

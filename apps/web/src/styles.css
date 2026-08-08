@@ -33,6 +33,12 @@
   --color-focus: var(--color-accent);
   --color-focus-strong: var(--color-accent-hover);
 
+  /* Character sheet category cards (UIX-374): one accent border per block. */
+  --color-card-stats: #4d8fd6;
+  --color-card-combat: #d68a4d;
+  --color-card-skills: #6fae6a;
+  --color-card-abilities: #a67ad4;
+
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
@@ -1071,6 +1077,72 @@ code {
   border-radius: 0;
   color: var(--muted);
   font-size: 0.72rem;
+}
+.character-card-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--space-md);
+}
+.character-card {
+  display: flex;
+  flex: 1 1 220px;
+  min-width: 200px;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.character-card--portrait {
+  flex: 0 0 160px;
+  align-items: center;
+  text-align: center;
+}
+.character-card--stats {
+  border-color: var(--color-card-stats);
+}
+.character-card--combat {
+  border-color: var(--color-card-combat);
+}
+.character-card--skills {
+  border-color: var(--color-card-skills);
+}
+.character-card--abilities {
+  border-color: var(--color-card-abilities);
+}
+.character-card__header {
+  margin: 0;
+  font-size: var(--font-size-heading-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.character-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: 1;
+}
+.character-card__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--line);
+}
+.character-card__row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.character-card__add {
+  margin-top: auto;
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--line);
+}
+.character-card--portrait .character-portrait {
+  width: 100%;
+  max-width: 140px;
 }
 .action-row {
   display: flex;
