@@ -295,6 +295,32 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     width: number;
     height: number;
   } | null>(null);
+  // UIX-313: FOG_BRUSH/COVER_BRUSH continuous round-brush stroke -- local
+  // draft points sampled on pointer move, committed as one BRUSH geometry
+  // POST on pointer-up (same local-draft-then-commit pattern as fogDraft).
+  const brushPointsRef = useRef<{ x: number; y: number }[]>([]);
+  const brushActiveRef = useRef(false);
+  const [brushPoints, setBrushPoints] = useState<{ x: number; y: number }[]>(
+    [],
+  );
+  // UIX-313: FOG_POLYGON/COVER_POLYGON click-to-add-vertex draft. Cleared
+  // (without committing) on Escape, right-click, or a tool switch away from
+  // a polygon tool; completed on Enter/double-click once it has >=3 points.
+  const [polygonPoints, setPolygonPoints] = useState<
+    { x: number; y: number }[]
+  >([]);
+  const [polygonPreview, setPolygonPreview] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const cancelPolygonDraft = () => {
+    setPolygonPoints([]);
+    setPolygonPreview(null);
+  };
+  useEffect(() => {
+    if (props.tool !== "FOG_POLYGON" && props.tool !== "COVER_POLYGON")
+      cancelPolygonDraft();
+  }, [props.tool]);
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
   const drawingPointsRef = useRef<number[]>([]);
   const drawingActiveRef = useRef(false);
@@ -303,6 +329,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   >([]);
   const finishDrawingRef = useRef<() => void>(() => undefined);
   const trackDrawingRef = useRef<(event: MouseEvent) => void>(() => undefined);
+  const brushUpRef = useRef<() => void>(() => undefined);
   const [drawingColor, setDrawingColor] = useState<string>(visual.color.edit);
   const [drawingStrokeWidth, setDrawingStrokeWidth] = useState<number>(3);
   const drawingColorUpdateTimeoutRef = useRef<number | null>(null);
@@ -732,6 +759,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setSelectedDrawingId(null);
       dispatchInteraction({ type: "clear-selection" });
       setTokenMenu(null);
+      cancelPolygonDraft();
       if (
         drawingActiveRef.current ||
         drawingPointsRef.current.length > 0 ||
@@ -784,7 +812,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       });
     else if (event.key.toLowerCase() === "o")
       dispatchInteraction({ type: "toggle-object-list" });
-    else if (event.key === "Enter") openSelectedAction();
+    else if (event.key === "Enter") {
+      if (isPolygonTool && polygonPoints.length >= 3) void handlePolygonComplete();
+      else openSelectedAction();
+    }
     else if (event.key === "Delete") requestSelectedDelete();
     else return;
     event.preventDefault();
@@ -873,6 +904,79 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     setFogDraft(null);
   };
 
+  const isBrushTool =
+    props.tool === "FOG_BRUSH" || props.tool === "COVER_BRUSH";
+
+  const handleBrushDown = () => {
+    if (!isBrushTool || props.role !== "GM") return;
+    const point = pointerInWorld();
+    if (!point) return;
+    const bounded = clampToWorld(point);
+    brushActiveRef.current = true;
+    brushPointsRef.current = [bounded];
+    setBrushPoints([bounded]);
+  };
+
+  const handleBrushMove = () => {
+    if (!brushActiveRef.current || !isBrushTool) return;
+    const point = pointerInWorld();
+    if (!point) return;
+    const bounded = clampToWorld(point);
+    const previous = brushPointsRef.current;
+    const last = previous[previous.length - 1];
+    if (last && last.x === bounded.x && last.y === bounded.y) return;
+    const next = [...previous, bounded];
+    brushPointsRef.current = next;
+    setBrushPoints(next);
+  };
+
+  const handleBrushUp = async () => {
+    if (!brushActiveRef.current) return;
+    brushActiveRef.current = false;
+    const points = brushPointsRef.current;
+    brushPointsRef.current = [];
+    setBrushPoints([]);
+    if (!points.length) return;
+    await props.onFogCreate({
+      geometry: {
+        type: "BRUSH",
+        points,
+        radius: props.fogBrushRadius ?? 40,
+      },
+    });
+  };
+
+  const isPolygonTool =
+    props.tool === "FOG_POLYGON" || props.tool === "COVER_POLYGON";
+
+  const handlePolygonClick = () => {
+    if (!isPolygonTool || props.role !== "GM") return;
+    const point = pointerInWorld();
+    if (!point) return;
+    const bounded = clampToWorld(point);
+    setPolygonPoints((current) => {
+      const last = current[current.length - 1];
+      // A double-click's second mousedown lands on the same point as the
+      // first -- skip it instead of adding a degenerate zero-length edge
+      // right before handlePolygonComplete runs.
+      if (last && last.x === bounded.x && last.y === bounded.y) return current;
+      return [...current, bounded];
+    });
+  };
+
+  const handlePolygonMove = () => {
+    if (!isPolygonTool || polygonPoints.length === 0) return;
+    const point = pointerInWorld();
+    if (point) setPolygonPreview(clampToWorld(point));
+  };
+
+  const handlePolygonComplete = async () => {
+    if (!isPolygonTool || polygonPoints.length < 3) return;
+    const points = polygonPoints;
+    cancelPolygonDraft();
+    await props.onFogCreate({ geometry: { type: "POLYGON", points } });
+  };
+
   const handleRegionDown = () => {
     if (props.tool !== "SCENE_REGION" || props.role !== "GM") return;
     const point = pointerInWorld();
@@ -926,6 +1030,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const targetIsCanvas =
       event.target === stageRef.current ||
       event.target.name() === "map-interaction-hit-plane";
+    if (isPolygonTool && event.evt.button === 2) {
+      // Right-click cancels the in-progress polygon draft instead of
+      // starting a camera pan.
+      event.evt.preventDefault();
+      cancelPolygonDraft();
+      return;
+    }
     if (shouldBeginMapPan(event.evt.button, props.tool, targetIsCanvas)) {
       beginPan(event);
       if (event.evt.button === 0) {
@@ -946,6 +1057,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     }
     handleFogDown();
     handleRegionDown();
+    handleBrushDown();
+    handlePolygonClick();
     const point = pointerInWorld();
     if (!point) return;
     const bounded = clampToWorld(point);
@@ -995,6 +1108,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     }
     handleFogMove();
     handleRegionMove();
+    handleBrushMove();
+    handlePolygonMove();
     const point = pointerInWorld();
     if (!point) return;
     if (
@@ -1079,6 +1194,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     drawingActiveRef.current = false;
     await handleFogUp();
     handleRegionUp();
+    await handleBrushUp();
     if (shouldFinalizeDrawing && completedDrawing.length >= 4) {
       const releasedDrawing = releaseDrawingDraft(drawingPointsRef, [], () =>
         setDrawingPoints([]),
@@ -1126,6 +1242,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       stageRef.current?.setPointersPositions(event);
       handlePointerMove();
     };
+    brushUpRef.current = () => void handleBrushUp();
   });
 
   useEffect(() => {
@@ -1137,6 +1254,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       // otherwise the next hover move would resume the stale gesture.
       panStartRef.current = null;
       if (drawingActiveRef.current) finishDrawingRef.current();
+      if (brushActiveRef.current) brushUpRef.current();
     };
     window.addEventListener("mousemove", trackOutsideStage, true);
     window.addEventListener("mouseup", finishOutsideStage, true);
@@ -1212,19 +1330,77 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           height={worldDraft.height}
           fill={visual.color.fog}
         />
-        {orderedFogReveals.map((fog) => (
-          <Rect
-            key={fog.id}
-            x={fog.x}
-            y={fog.y}
-            width={fog.width}
-            height={fog.height}
-            fill={visual.color.fogCover}
-            globalCompositeOperation={
-              fog.operation === "COVER" ? "source-over" : "destination-out"
-            }
-          />
-        ))}
+        {orderedFogReveals.map((fog) => {
+          const compositeOperation =
+            fog.operation === "COVER" ? "source-over" : "destination-out";
+          const geometry = fog.geometry;
+          // Rows created before UIX-313 (or any legacy RECT-only insert)
+          // have no `geometry`; fall back to the bbox fields, same as the
+          // pre-UIX-313 rendering.
+          if (!geometry || geometry.type === "RECT") {
+            const rect =
+              geometry?.type === "RECT"
+                ? geometry
+                : { x: fog.x, y: fog.y, width: fog.width, height: fog.height };
+            return (
+              <Rect
+                key={fog.id}
+                x={rect.x}
+                y={rect.y}
+                width={rect.width}
+                height={rect.height}
+                fill={visual.color.fogCover}
+                globalCompositeOperation={compositeOperation}
+              />
+            );
+          }
+          if (geometry.type === "CIRCLE")
+            return (
+              <Circle
+                key={fog.id}
+                x={geometry.center.x}
+                y={geometry.center.y}
+                radius={geometry.radius}
+                fill={visual.color.fogCover}
+                globalCompositeOperation={compositeOperation}
+              />
+            );
+          if (geometry.type === "POLYGON")
+            return (
+              <Line
+                key={fog.id}
+                points={geometry.points.flatMap((point) => [point.x, point.y])}
+                closed
+                fill={visual.color.fogCover}
+                globalCompositeOperation={compositeOperation}
+              />
+            );
+          // BRUSH: a single-point stroke has no length for Konva's Line to
+          // render, so draw the equivalent circle; otherwise draw a
+          // round-capped/joined stroke following the sampled points.
+          if (geometry.points.length === 1)
+            return (
+              <Circle
+                key={fog.id}
+                x={geometry.points[0]!.x}
+                y={geometry.points[0]!.y}
+                radius={geometry.radius}
+                fill={visual.color.fogCover}
+                globalCompositeOperation={compositeOperation}
+              />
+            );
+          return (
+            <Line
+              key={fog.id}
+              points={geometry.points.flatMap((point) => [point.x, point.y])}
+              stroke={visual.color.fogCover}
+              strokeWidth={geometry.radius * 2}
+              lineCap="round"
+              lineJoin="round"
+              globalCompositeOperation={compositeOperation}
+            />
+          );
+        })}
       </Group>
       {fogDraft && (
         <Rect
@@ -1234,6 +1410,57 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           stroke={visual.color.editHighlight}
           strokeWidth={2 / scale}
         />
+      )}
+      {brushPoints.length === 1 && (
+        <Circle
+          x={brushPoints[0]!.x}
+          y={brushPoints[0]!.y}
+          radius={props.fogBrushRadius ?? 40}
+          fill={visual.color.fogDraft}
+          opacity={visual.opacity.fogDraft}
+          stroke={visual.color.editHighlight}
+          strokeWidth={2 / scale}
+        />
+      )}
+      {brushPoints.length > 1 && (
+        <Line
+          points={brushPoints.flatMap((point) => [point.x, point.y])}
+          stroke={visual.color.fogDraft}
+          opacity={visual.opacity.fogDraft}
+          strokeWidth={(props.fogBrushRadius ?? 40) * 2}
+          lineCap="round"
+          lineJoin="round"
+        />
+      )}
+      {isPolygonTool && polygonPoints.length > 0 && (
+        <>
+          <Line
+            points={[
+              ...polygonPoints.flatMap((point) => [point.x, point.y]),
+              ...(polygonPreview
+                ? [polygonPreview.x, polygonPreview.y]
+                : []),
+            ]}
+            closed={polygonPoints.length >= 2 && Boolean(polygonPreview)}
+            stroke={visual.color.editHighlight}
+            strokeWidth={2 / scale}
+            fill={
+              polygonPoints.length >= 2
+                ? visual.color.fogDraft
+                : undefined
+            }
+            opacity={visual.opacity.fogDraft}
+          />
+          {polygonPoints.map((point, index) => (
+            <Circle
+              key={index}
+              x={point.x}
+              y={point.y}
+              radius={4 / scale}
+              fill={visual.color.editHighlight}
+            />
+          ))}
+        </>
       )}
     </Layer>
   );
@@ -1264,7 +1491,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       tabIndex={0}
       role="region"
       aria-label="Интерактивная карта сцены"
-      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 F O V D R P G Shift+G Enter Delete Escape"
+      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 F O V D R P G Shift+G B Shift+B L Shift+L Enter Delete Escape"
       onPointerDownCapture={(event) => {
         if (
           props.tool !== "DRAW" ||
@@ -1480,6 +1707,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onClick={handleClick}
+        onDblClick={() => void handlePolygonComplete()}
       >
         <Layer
           clipX={0}

@@ -2,6 +2,7 @@ import type {
   AssetDto,
   DrawingDto,
   EncounterDto,
+  FogGeometry,
   FogRevealDto,
   MapPing,
   Role,
@@ -34,12 +35,11 @@ export interface SceneRendererProps {
     endY: number;
     distance: number;
   }>;
-  onFogCreate: (rect: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }) => Promise<void>;
+  onFogCreate: (
+    payload:
+      | { x: number; y: number; width: number; height: number }
+      | { geometry: FogGeometry },
+  ) => Promise<void>;
   /**
    * UIX-311: encounter lifecycle for the active scene. SCENE_REGION cameras
    * fit to `focusRegion` while such an encounter is ACTIVE, and reset to
@@ -104,6 +104,11 @@ export interface SceneRendererProps {
   gmFogOpacity?: number;
   gmFogVisible?: boolean;
   gmGridVisible?: boolean;
+  /**
+   * UIX-313: world-unit radius for the circular fog brush tool
+   * (FOG_BRUSH/COVER_BRUSH). Defaults to a sane value if omitted.
+   */
+  fogBrushRadius?: number;
   canvasEditMode?: "BACKGROUND" | "WORLD" | null;
   onCanvasEditCancel?: () => void;
   onCanvasPatch?: (patch: {

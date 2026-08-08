@@ -402,6 +402,9 @@ export function App() {
     "CONNECTING" | "ONLINE" | "RECONNECTING" | "RESYNCING" | "OFFLINE"
   >("CONNECTING");
   const [tool, setTool] = useState<MapTool>("PAN");
+  // UIX-313: shared brush radius (world units) for the circular fog brush,
+  // reused for both FOG_BRUSH and COVER_BRUSH.
+  const [fogBrushRadius, setFogBrushRadius] = useState(40);
   // UIX-311 Stage 4: real GM "Начать бой" flow state — replaces the Stage
   // 2/3 temp triggers. `encounterMenuOpen` is the SCENE_REGION/LINKED_SCENE
   // chooser, `encounterScenePickerOpen` is the canvas-context location/scene
@@ -1792,6 +1795,64 @@ export function App() {
                   >
                     Закрыть туман
                   </button>
+                  <button
+                    aria-label="Открыть туман кистью"
+                    title="Открыть туман круглой кистью (клик или протяжка)"
+                    className="map-tool"
+                    data-tool="FOG_BRUSH"
+                    aria-pressed={tool === "FOG_BRUSH"}
+                    onClick={() => setTool("FOG_BRUSH")}
+                  >
+                    Кисть тумана
+                  </button>
+                  <button
+                    aria-label="Закрыть туман кистью"
+                    title="Закрыть область круглой кистью тумана"
+                    className="map-tool"
+                    data-tool="COVER_BRUSH"
+                    aria-pressed={tool === "COVER_BRUSH"}
+                    onClick={() => setTool("COVER_BRUSH")}
+                  >
+                    Кисть покрытия
+                  </button>
+                  {(tool === "FOG_BRUSH" || tool === "COVER_BRUSH") && (
+                    <label className="map-tool-text" title="Радиус кисти тумана">
+                      Радиус
+                      <input
+                        type="range"
+                        min={8}
+                        max={200}
+                        step={4}
+                        value={fogBrushRadius}
+                        onChange={(event) =>
+                          setFogBrushRadius(Number(event.target.value))
+                        }
+                        aria-label="Радиус кисти тумана"
+                        style={{ verticalAlign: "middle", margin: "0 6px" }}
+                      />
+                      {fogBrushRadius}
+                    </label>
+                  )}
+                  <button
+                    aria-label="Открыть туман полигоном"
+                    title="Открыть туман многоугольником (клик — вершина, Enter/двойной клик — завершить, Esc — отмена)"
+                    className="map-tool"
+                    data-tool="FOG_POLYGON"
+                    aria-pressed={tool === "FOG_POLYGON"}
+                    onClick={() => setTool("FOG_POLYGON")}
+                  >
+                    Полигон тумана
+                  </button>
+                  <button
+                    aria-label="Закрыть туман полигоном"
+                    title="Закрыть область многоугольником тумана (клик — вершина, Enter/двойной клик — завершить, Esc — отмена)"
+                    className="map-tool"
+                    data-tool="COVER_POLYGON"
+                    aria-pressed={tool === "COVER_POLYGON"}
+                    onClick={() => setTool("COVER_POLYGON")}
+                  >
+                    Полигон покрытия
+                  </button>
                   {/*
                    * UIX-311 Stage 4: real GM "Начать бой" / "Завершить бой"
                    * entry point, replacing the Stage 2/3 temp triggers. Only
@@ -2025,6 +2086,7 @@ export function App() {
                 gmFogOpacity={gmFogOpacity}
                 gmFogVisible={gmFogVisible}
                 gmGridVisible={gmGridVisible}
+                fogBrushRadius={fogBrushRadius}
                 encounters={viewSnapshot.encounters}
                 onEncounterRegionSelect={(rect) => {
                   // UIX-311 Stage 4: the committed drag rect opens the real
@@ -2053,15 +2115,19 @@ export function App() {
                     }),
                   )
                 }
-                onFogCreate={async (rect) => {
+                onFogCreate={async (payload) => {
+                  const isCover =
+                    tool === "COVER" ||
+                    tool === "COVER_BRUSH" ||
+                    tool === "COVER_POLYGON";
                   await run(() =>
                     api("/api/fog-reveals", {
                       method: "POST",
                       body: JSON.stringify({
                         actionId: crypto.randomUUID(),
                         sceneId: activeScene.id,
-                        operation: tool === "COVER" ? "COVER" : "REVEAL",
-                        ...rect,
+                        operation: isCover ? "COVER" : "REVEAL",
+                        ...payload,
                       }),
                     }),
                   );

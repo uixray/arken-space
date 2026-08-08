@@ -3319,6 +3319,124 @@ describe("Pool B HTTP boundaries", () => {
     expect(outside.json()).toMatchObject({ error: "FOG_OUTSIDE_SCENE" });
   });
 
+  it("creates BRUSH and POLYGON fog reveals with GM gating and idempotent replay (UIX-313)", async () => {
+    const brushActionId = crypto.randomUUID();
+    const brushPayload = {
+      actionId: brushActionId,
+      sceneId: ids.scene,
+      operation: "REVEAL" as const,
+      geometry: {
+        type: "BRUSH" as const,
+        points: [
+          { x: 100, y: 100 },
+          { x: 140, y: 100 },
+          { x: 140, y: 140 },
+        ],
+        radius: 12,
+      },
+    };
+    const playerBrush = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.player),
+      payload: brushPayload,
+    });
+    expect(playerBrush.statusCode).toBe(403);
+    const brush = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.gm),
+      payload: brushPayload,
+    });
+    expect(brush.statusCode).toBe(201);
+    expect(brush.json()).toMatchObject({
+      shape: "BRUSH",
+      geometry: { type: "BRUSH", radius: 12 },
+    });
+    const brushReplay = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.gm),
+      payload: brushPayload,
+    });
+    expect(brushReplay.statusCode).toBe(200);
+    expect(brushReplay.json()).toMatchObject({ duplicate: true });
+
+    const polygonActionId = crypto.randomUUID();
+    const polygonPayload = {
+      actionId: polygonActionId,
+      sceneId: ids.scene,
+      operation: "COVER" as const,
+      geometry: {
+        type: "POLYGON" as const,
+        points: [
+          { x: 200, y: 200 },
+          { x: 260, y: 200 },
+          { x: 230, y: 260 },
+        ],
+      },
+    };
+    const playerPolygon = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.player),
+      payload: polygonPayload,
+    });
+    expect(playerPolygon.statusCode).toBe(403);
+    const polygon = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.gm),
+      payload: polygonPayload,
+    });
+    expect(polygon.statusCode).toBe(201);
+    expect(polygon.json()).toMatchObject({
+      shape: "POLYGON",
+      operation: "COVER",
+      geometry: { type: "POLYGON" },
+    });
+    const polygonReplay = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.gm),
+      payload: polygonPayload,
+    });
+    expect(polygonReplay.statusCode).toBe(200);
+    expect(polygonReplay.json()).toMatchObject({ duplicate: true });
+
+    const degeneratePolygon = await app.inject({
+      method: "POST",
+      url: "/api/fog-reveals",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        operation: "REVEAL",
+        geometry: {
+          type: "POLYGON",
+          points: [
+            { x: 0, y: 0 },
+            { x: 10, y: 0 },
+            { x: 20, y: 0 },
+          ],
+        },
+      },
+    });
+    expect(degeneratePolygon.statusCode).toBe(422);
+
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    const shapes = snapshot
+      .json()
+      .fogReveals.map(
+        (reveal: { geometry?: { type?: string } }) => reveal.geometry?.type,
+      );
+    expect(shapes).toEqual(expect.arrayContaining(["BRUSH", "POLYGON"]));
+  });
+
   it("does not let a player delete their controlled token from an inactive scene", async () => {
     const inactiveSceneId = crypto.randomUUID();
     const inactiveTokenId = crypto.randomUUID();

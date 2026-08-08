@@ -78,6 +78,14 @@ describe("mapInteractionReducer", () => {
     expect(resolveMapToolShortcut("d", true, "GM")).toBeNull();
     expect(resolveMapToolShortcut("Delete", false, "GM")).toBeNull();
 
+    // UIX-313: circular brush and polygon fog tools are GM-only, like FOG/COVER.
+    expect(resolveMapToolShortcut("b", false, "PLAYER")).toBeNull();
+    expect(resolveMapToolShortcut("b", false, "GM")).toBe("FOG_BRUSH");
+    expect(resolveMapToolShortcut("B", true, "GM")).toBe("COVER_BRUSH");
+    expect(resolveMapToolShortcut("l", false, "PLAYER")).toBeNull();
+    expect(resolveMapToolShortcut("l", false, "GM")).toBe("FOG_POLYGON");
+    expect(resolveMapToolShortcut("L", true, "GM")).toBe("COVER_POLYGON");
+
     const state = reduce({ type: "select-tool", tool: "PING" });
     expect(state.commands).toEqual([
       { id: 1, type: "select-tool", tool: "PING" },

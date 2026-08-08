@@ -12,7 +12,22 @@ export type MapTool =
    * SCENE_REGION encounter. Same pointerdown/move/up draft-rect pattern as
    * FOG/COVER, GM-only.
    */
-  | "SCENE_REGION";
+  | "SCENE_REGION"
+  /**
+   * UIX-313: continuous round-brush fog stroke, sampled locally into a
+   * draft on pointer move and committed as a single BRUSH geometry POST on
+   * pointer-up (same local-draft-then-commit pattern as FOG/COVER).
+   * GM-only.
+   */
+  | "FOG_BRUSH"
+  | "COVER_BRUSH"
+  /**
+   * UIX-313: click-to-add-vertex polygon fog tool, completed with
+   * Enter/double-click (>=3 points) or cancelled with Escape/right-click.
+   * GM-only.
+   */
+  | "FOG_POLYGON"
+  | "COVER_POLYGON";
 
 export type Point = Readonly<{ x: number; y: number }>;
 
@@ -284,6 +299,14 @@ export function resolveMapToolShortcut(
   if (normalized === "g") {
     if (role !== "GM") return null;
     return shiftKey ? "COVER" : "FOG";
+  }
+  if (normalized === "b") {
+    if (role !== "GM") return null;
+    return shiftKey ? "COVER_BRUSH" : "FOG_BRUSH";
+  }
+  if (normalized === "l") {
+    if (role !== "GM") return null;
+    return shiftKey ? "COVER_POLYGON" : "FOG_POLYGON";
   }
   if (shiftKey) return null;
   return TOOL_SHORTCUTS[normalized] ?? null;
