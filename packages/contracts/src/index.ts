@@ -2302,3 +2302,43 @@ export const createWorldContentRelationSchema = z
 export type CreateWorldContentRelation = z.infer<
   typeof createWorldContentRelationSchema
 >;
+
+/** Relation deletion carries no CAS revision — deleting an edge is not a partial-field update. */
+export const deleteWorldContentRelationSchema = z
+  .object({
+    actionId: z.string().uuid(),
+  })
+  .strict();
+export type DeleteWorldContentRelation = z.infer<
+  typeof deleteWorldContentRelationSchema
+>;
+
+/** Recaption/reorder for an already-attached gallery entry. `world_content_media` carries no `revision` column, so there is no CAS check here — mirrors the table shape, not an oversight. */
+export const updateWorldContentMediaSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    caption: z.string().trim().min(1).max(500).nullable().optional(),
+    ordering: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type UpdateWorldContentMedia = z.infer<
+  typeof updateWorldContentMediaSchema
+>;
+
+export const removeWorldContentMediaSchema = z
+  .object({
+    actionId: z.string().uuid(),
+  })
+  .strict();
+export type RemoveWorldContentMedia = z.infer<
+  typeof removeWorldContentMediaSchema
+>;
+
+/** GM-only soft-delete: transitions lifecycle to ARCHIVED under the same CAS discipline as `updateWorldContentSchema`. */
+export const deleteWorldContentSchema = z
+  .object({
+    actionId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type DeleteWorldContent = z.infer<typeof deleteWorldContentSchema>;
