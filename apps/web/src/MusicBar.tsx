@@ -6,6 +6,7 @@ import { ArkenDialog } from "./ui/ArkenDialog";
 import { EmptyState, ErrorState } from "./ui/EntityState";
 import { notify } from "./ui/notifications";
 import { isAudioConsentError } from "./audio-playback";
+import { resolvePlaybackAction } from "./music-playback";
 
 const ENABLED_KEY = "arken.audio.enabled";
 const VOLUME_KEY = "arken.audio.volume";
@@ -77,11 +78,12 @@ export function MusicBar({
     }
     if (Math.abs(player.currentTime - expected) > 0.75)
       player.currentTime = expected;
-    if (audio.playing && player.paused)
+    const action = resolvePlaybackAction(audio.playing, player.paused);
+    if (action === "play")
       void player.play().catch((reason: unknown) => {
-        // Snapshot refreshes (including scene activation) can race with media
-        // loading and reject play() with AbortError. That is transient and
-        // must not revoke the user's local audio consent.
+        // Snapshot refreshes (including scene activation) can race with
+        // media loading and reject play() with AbortError. That is
+        // transient and must not revoke the user's local audio consent.
         if (!isAudioConsentError(reason)) return;
         setEnabled(false);
         notify({
@@ -90,7 +92,7 @@ export function MusicBar({
           tone: "warning",
         });
       });
-    else player.pause();
+    else if (action === "pause") player.pause();
   }, [audio, current, enabled, volume]);
   useEffect(
     () => localStorage.setItem(ENABLED_KEY, String(enabled)),
