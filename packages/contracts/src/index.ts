@@ -867,6 +867,19 @@ export const rulerUpdateSchema = z.object({
   endY: z.number().finite(),
 });
 
+/**
+ * UIX-392: ephemeral cursor presence. Bounds mirror `backgroundFrame`'s
+ * world-coordinate range above — generous enough for legitimate pointer
+ * positions (including a little overscroll past the map edge) while still
+ * rejecting garbage/NaN/huge values from a misbehaving client. Nothing here
+ * is persisted; see `apps/server/src/realtime.ts`'s `cursor:move` handler.
+ */
+export const cursorMoveSchema = z.object({
+  sceneId: z.string().uuid(),
+  x: z.number().finite().min(-16384).max(16384),
+  y: z.number().finite().min(-16384).max(16384),
+});
+
 export const characterUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   portraitAssetId: z.string().uuid().nullable().optional(),
@@ -2167,6 +2180,20 @@ export interface ServerToClientEvents {
     },
   ) => void;
   "ruler:cleared": (ruler: { sceneId: string; membershipId: string }) => void;
+  /**
+   * UIX-392: ephemeral cursor presence, broadcast per the fog-safety split
+   * (GM cursors -> GM room only; player cursors -> full campaign room). Not
+   * persisted — see `cursorMoveSchema` above.
+   */
+  "cursor:moved": (cursor: {
+    membershipId: string;
+    displayName: string;
+    role: Role;
+    sceneId: string;
+    x: number;
+    y: number;
+  }) => void;
+  "cursor:gone": (event: { membershipId: string }) => void;
   "server:error": (error: { code: string; message: string }) => void;
 }
 
@@ -2191,6 +2218,10 @@ export interface ClientToServerEvents {
   ) => void;
   "ruler:update": (ruler: z.infer<typeof rulerUpdateSchema>) => void;
   "ruler:clear": (ruler: { sceneId: string }) => void;
+  /** UIX-392: rAF-batched pointer position; ignored if it fails validation or arrives faster than the server-side rate floor. */
+  "cursor:move": (cursor: z.infer<typeof cursorMoveSchema>) => void;
+  /** UIX-392: explicit "no longer pointing at anything" signal (scene switch, blur, inactivity). */
+  "cursor:gone": () => void;
   "game:resync": (knownSequence?: number) => void;
 }
 

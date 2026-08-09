@@ -71,6 +71,12 @@ import {
 } from "./EncounterConfirmDialog";
 import { endEncounter } from "./encounter-actions";
 import { locationSceneNames } from "./world-map-workspace-state";
+import type { CursorPresence } from "./renderers/cursor-presence";
+import {
+  CURSOR_PREFERENCE_DEFAULT,
+  readCursorPreference,
+  writeCursorPreference,
+} from "./cursor-preference";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -368,6 +374,13 @@ export function App() {
       distance: number;
     }>
   >([]);
+  // UIX-392: ephemeral cursor presence, keyed by membershipId so a later
+  // cursor:moved always replaces a member's previous position instead of
+  // accumulating a trail.
+  const [cursors, setCursors] = useState<CursorPresence[]>([]);
+  const [cursorPreference, setCursorPreference] = useState(
+    CURSOR_PREFERENCE_DEFAULT,
+  );
   const [previewSnapshot, setPreviewSnapshot] = useState<GameSnapshot | null>(
     null,
   );
@@ -541,6 +554,28 @@ export function App() {
     for (const message of snapshot.messages)
       knownChatMessageIdsRef.current.add(message.id);
   }, [snapshot]);
+  useEffect(() => {
+    if (!campaignId || !snapshot) return;
+    setCursorPreference(
+      readCursorPreference(window.localStorage, campaignId, snapshot.me.id),
+    );
+  }, [campaignId, snapshot?.me.id]);
+  const toggleCursorPreference = useCallback(() => {
+    setCursorPreference((current) => {
+      const next = {
+        sendEnabled: !current.sendEnabled,
+        receiveEnabled: !current.receiveEnabled,
+      };
+      if (campaignId && snapshot)
+        writeCursorPreference(
+          window.localStorage,
+          campaignId,
+          snapshot.me.id,
+          next,
+        );
+      return next;
+    });
+  }, [campaignId, snapshot]);
 
   const loadStoryPosts = useCallback(async (cursor?: string) => {
     const query = new URLSearchParams({ limit: "50" });
@@ -727,6 +762,17 @@ export function App() {
         ),
       ),
     );
+    next.on("cursor:moved", (cursor) =>
+      setCursors((current) => [
+        ...current.filter((item) => item.membershipId !== cursor.membershipId),
+        cursor,
+      ]),
+    );
+    next.on("cursor:gone", (event) =>
+      setCursors((current) =>
+        current.filter((item) => item.membershipId !== event.membershipId),
+      ),
+    );
     next.on("story:changed", () => {
       void loadStoryPosts().catch(() => undefined);
     });
@@ -797,6 +843,7 @@ export function App() {
     return () => {
       next.disconnect();
       setSocket(null);
+      setCursors([]);
     };
   }, [authRequired, campaignId, loadStoryPosts]);
 
@@ -1842,6 +1889,20 @@ export function App() {
               >
                 Пинг
               </button>
+              <button
+                aria-label="Курсоры участников"
+                title={
+                  cursorPreference.sendEnabled
+                    ? "Скрыть курсоры участников (перестать показывать и отправлять свой)"
+                    : "Показывать курсоры участников"
+                }
+                className="map-tool"
+                data-tool="CURSOR_PRESENCE"
+                aria-pressed={cursorPreference.sendEnabled}
+                onClick={toggleCursorPreference}
+              >
+                Курсоры
+              </button>
               {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
                 <>
                   <GridSettings
@@ -2007,6 +2068,14 @@ export function App() {
                 rulers={rulers.filter(
                   (ruler) => ruler.sceneId === activeScene.id,
                 )}
+                cursors={
+                  cursorPreference.receiveEnabled
+                    ? cursors.filter(
+                        (cursor) => cursor.sceneId === activeScene.id,
+                      )
+                    : []
+                }
+                cursorSendEnabled={cursorPreference.sendEnabled}
                 gmFogOpacity={gmFogOpacity}
                 gmFogVisible={gmFogVisible}
                 gmGridVisible={gmGridVisible}

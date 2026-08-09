@@ -1351,3 +1351,104 @@ describe("durable realtime token commands", () => {
     });
   });
 });
+
+describe("cursor presence (UIX-392)", () => {
+  it("broadcasts a GM cursor to the GM room only, never to a player socket", async () => {
+    let leakedToPlayer = false;
+    const onLeak = () => {
+      leakedToPlayer = true;
+    };
+    client.on("cursor:moved", onLeak);
+    otherClient.on("cursor:moved", onLeak);
+    const gmSeen = new Promise<Parameters<ServerToClientEvents["cursor:moved"]>[0]>(
+      (resolve) => gmClient.once("cursor:moved", resolve),
+    );
+    gmClient.emit("cursor:move", { sceneId: ids.scene, x: 40, y: 60 });
+    await expect(gmSeen).resolves.toMatchObject({
+      membershipId: ids.gm,
+      role: "GM",
+      sceneId: ids.scene,
+      x: 40,
+      y: 60,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(leakedToPlayer).toBe(false);
+    client.off("cursor:moved", onLeak);
+    otherClient.off("cursor:moved", onLeak);
+  });
+
+  it("broadcasts a player cursor to both the GM and every player in the campaign", async () => {
+    const gmSeen = new Promise<Parameters<ServerToClientEvents["cursor:moved"]>[0]>(
+      (resolve) => gmClient.once("cursor:moved", resolve),
+    );
+    const otherPlayerSeen = new Promise<
+      Parameters<ServerToClientEvents["cursor:moved"]>[0]
+    >((resolve) => otherClient.once("cursor:moved", resolve));
+    client.emit("cursor:move", { sceneId: ids.scene, x: 12, y: 24 });
+    const expected = {
+      membershipId: ids.player,
+      role: "PLAYER",
+      sceneId: ids.scene,
+      x: 12,
+      y: 24,
+    };
+    await expect(gmSeen).resolves.toMatchObject(expected);
+    await expect(otherPlayerSeen).resolves.toMatchObject(expected);
+  });
+
+  it("rejects malformed or out-of-bounds coordinates without broadcasting", async () => {
+    let received = false;
+    gmClient.on("cursor:moved", () => {
+      received = true;
+    });
+    client.emit("cursor:move", { sceneId: ids.scene, x: Number.NaN, y: 0 });
+    client.emit("cursor:move", { sceneId: ids.scene, x: 999_999, y: 0 });
+    client.emit("cursor:move", {
+      sceneId: "not-a-uuid",
+      x: 0,
+      y: 0,
+    } as never);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(received).toBe(false);
+  });
+
+  it("drops updates that arrive faster than the server-side rate floor", async () => {
+    const received: number[] = [];
+    gmClient.on("cursor:moved", (cursor) => received.push(cursor.x));
+    client.emit("cursor:move", { sceneId: ids.scene, x: 1, y: 0 });
+    client.emit("cursor:move", { sceneId: ids.scene, x: 2, y: 0 });
+    client.emit("cursor:move", { sceneId: ids.scene, x: 3, y: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(received).toEqual([1]);
+  });
+
+  it("broadcasts cursor:gone when a socket that sent a cursor disconnects", async () => {
+    const gone = new Promise<Parameters<ServerToClientEvents["cursor:gone"]>[0]>(
+      (resolve) => gmClient.once("cursor:gone", resolve),
+    );
+    client.emit("cursor:move", { sceneId: ids.scene, x: 5, y: 5 });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    client.disconnect();
+    await expect(gone).resolves.toEqual({ membershipId: ids.player });
+  });
+
+  it("does not broadcast cursor:gone for a socket that never sent a cursor", async () => {
+    let received = false;
+    gmClient.on("cursor:gone", () => {
+      received = true;
+    });
+    otherClient.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(received).toBe(false);
+  });
+
+  it("honors an explicit client-driven cursor:gone signal", async () => {
+    const gone = new Promise<Parameters<ServerToClientEvents["cursor:gone"]>[0]>(
+      (resolve) => gmClient.once("cursor:gone", resolve),
+    );
+    client.emit("cursor:move", { sceneId: ids.scene, x: 5, y: 5 });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    client.emit("cursor:gone");
+    await expect(gone).resolves.toEqual({ membershipId: ids.player });
+  });
+});

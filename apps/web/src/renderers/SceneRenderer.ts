@@ -9,6 +9,7 @@ import type {
   SceneDto,
   TokenDto,
 } from "@arken/contracts";
+import type { CursorPresence } from "./cursor-presence";
 import type { GameSocket } from "../realtime";
 import type { MapMoveAck, MapMoveTarget } from "./map-move-queue";
 import type { MapTool } from "./map-interaction";
@@ -25,6 +26,10 @@ export interface SceneRendererProps {
   tool: MapTool;
   onToolSelect: (tool: MapTool) => void;
   pings: MapPing[];
+  /** UIX-392: already filtered to the active scene and the receive opt-out. */
+  cursors: CursorPresence[];
+  /** UIX-392: local opt-out — when false, this client's own pointer never emits `cursor:move`. */
+  cursorSendEnabled: boolean;
   rulers: Array<{
     sceneId: string;
     membershipId: string;

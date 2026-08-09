@@ -25,6 +25,7 @@ import type {
 import {
   audioStateUpdateSchema,
   audioTrackCommandSchema,
+  cursorMoveSchema,
   moveTokenSchema,
   rulerUpdateSchema,
 } from "@arken/contracts";
@@ -1151,6 +1152,70 @@ export function registerRealtime(
       ack?.({ ok: true });
     });
 
+    // UIX-392: ephemeral cursor presence. Deliberately NOT following the
+    // actionId/idempotency/gameEvents/actionJournal pattern used by every
+    // other handler in this file — that machinery exists because those
+    // handlers persist durable game state, and cursor position is
+    // explicitly ephemeral (never persisted, per the ticket's AC). This is
+    // a pure in-memory relay off data already on `auth`, with no DB write.
+    // No scene-scoped socket room is created either; broadcasts reuse the
+    // existing campaign/GM rooms and the client filters by `sceneId`,
+    // matching every other realtime event in this file.
+    let lastCursorMoveAt = 0;
+    // Defensive floor under the client's rAF batching (~16ms/60fps). This
+    // does not need to be tight: it exists to cap a misbehaving or hostile
+    // client, not to shape normal traffic.
+    const CURSOR_MOVE_MIN_INTERVAL_MS = 40;
+    // Only a socket that has actually broadcast a cursor position needs a
+    // cursor:gone on disconnect; sockets that never used the feature would
+    // otherwise generate pure noise for every other client.
+    let hasBroadcastCursor = false;
+
+    const cursorRoom = () =>
+      auth.role === "GM" ? gmRoom(auth.campaignId) : campaignRoom(auth.campaignId);
+
+    socket.on("cursor:move", async (input) => {
+      const parsed = cursorMoveSchema.safeParse(input);
+      if (!parsed.success) return;
+      const now = Date.now();
+      if (now - lastCursorMoveAt < CURSOR_MOVE_MIN_INTERVAL_MS) return;
+      lastCursorMoveAt = now;
+      const [scene] = await db
+        .select({ id: scenes.id })
+        .from(scenes)
+        .where(
+          and(
+            eq(scenes.id, parsed.data.sceneId),
+            eq(scenes.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!scene) return;
+      hasBroadcastCursor = true;
+      // Fog-safety split (UIX-392): a GM can see everything, so any
+      // coordinate their cursor visits could disclose something hidden if
+      // shown to a player — broadcast to the GM room only. A player's own
+      // cursor never exceeds what that player can already see on their own
+      // fog-limited view (this app's fog is role-uniform, not per-player
+      // secret), so it is safe to broadcast to the full campaign room.
+      io.to(cursorRoom()).emit("cursor:moved", {
+        membershipId: auth.membershipId,
+        displayName: auth.displayName,
+        role: auth.role,
+        sceneId: scene.id,
+        x: parsed.data.x,
+        y: parsed.data.y,
+      });
+    });
+
+    socket.on("cursor:gone", () => {
+      if (!hasBroadcastCursor) return;
+      hasBroadcastCursor = false;
+      io.to(cursorRoom()).emit("cursor:gone", {
+        membershipId: auth.membershipId,
+      });
+    });
+
     socket.on("disconnect", (reason) => {
       log.info(
         {
@@ -1160,6 +1225,14 @@ export function registerRealtime(
         },
         "realtime.disconnected",
       );
+      // UIX-392: disconnect is the one server-enforced expiry backstop for
+      // cursor presence — a client-side scene switch/blur/inactivity signal
+      // (cursor:gone above) covers the graceful cases, but a dropped
+      // connection never gets to emit that, so it must be handled here too.
+      if (hasBroadcastCursor)
+        io.to(cursorRoom()).emit("cursor:gone", {
+          membershipId: auth.membershipId,
+        });
       const key = presenceKey(auth.campaignId, auth.membershipId);
       const previous = pendingPresence.get(key);
       if (previous) clearTimeout(previous);

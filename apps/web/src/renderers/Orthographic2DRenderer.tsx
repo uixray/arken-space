@@ -57,6 +57,12 @@ import {
   type TokenImageAvailability,
 } from "./token-image-state";
 import { resolveResizeHandleDataAttributes } from "./resize-handle";
+import {
+  CursorMoveBatcher,
+  isTrackableCursorPointerType,
+  CURSOR_INACTIVITY_MS,
+} from "./cursor-broadcast";
+import { cursorColorForMembership } from "./cursor-color";
 
 function shouldCancelCanvasEdit(
   event: Pick<KeyboardEvent, "key" | "isComposing" | "target">,
@@ -224,6 +230,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     stageX: number;
     stageY: number;
   } | null>(null);
+  // UIX-392: ephemeral cursor presence. The batcher collapses rapid
+  // pointermove-driven queue() calls to at most one `cursor:move` emit per
+  // animation frame; the inactivity timer emits an explicit `cursor:gone`
+  // after a few seconds of no movement as a graceful (client-driven)
+  // expiry, separate from the server's disconnect-based backstop.
+  const cursorBatcherRef = useRef<CursorMoveBatcher<{
+    x: number;
+    y: number;
+  }> | null>(null);
+  const cursorInactivityTimerRef = useRef<number | null>(null);
   const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
   const [tokenImageStates, setTokenImageStates] = useState<
     Record<string, TokenImageAvailability>
@@ -390,6 +406,41 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     return () =>
       window.removeEventListener("pointerdown", closeOnOutsidePointer);
   }, [interaction.objectListOpen]);
+  // UIX-392: (re)create the rAF batcher whenever the socket or active scene
+  // changes, so a stale closure never emits into the wrong scene/socket.
+  useEffect(() => {
+    const socket = props.socket;
+    const sceneId = props.scene.id;
+    cursorBatcherRef.current = new CursorMoveBatcher<{ x: number; y: number }>(
+      {
+        schedule: (callback) => requestAnimationFrame(callback),
+        cancel: (handle) => cancelAnimationFrame(handle),
+      },
+      (point) => {
+        socket?.emit("cursor:move", { sceneId, x: point.x, y: point.y });
+      },
+    );
+    return () => {
+      cursorBatcherRef.current?.cancel();
+      cursorBatcherRef.current = null;
+    };
+  }, [props.socket, props.scene.id]);
+  // Explicit "gone" signals: scene switch/unmount (this effect's own
+  // cleanup) and window blur. An idle timeout (scheduled per pointer move,
+  // see handlePointerMove) covers plain inactivity. The server's disconnect
+  // handler is the last-resort backstop for a connection that drops instead
+  // of tearing down cleanly.
+  useEffect(() => {
+    const socket = props.socket;
+    const handleBlur = () => socket?.emit("cursor:gone");
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("blur", handleBlur);
+      if (cursorInactivityTimerRef.current !== null)
+        window.clearTimeout(cursorInactivityTimerRef.current);
+      socket?.emit("cursor:gone");
+    };
+  }, [props.socket, props.scene.id]);
   useEffect(() => {
     setBackgroundDraft(props.scene.backgroundFrame);
     setWorldDraft({ width: props.scene.width, height: props.scene.height });
@@ -1074,7 +1125,35 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     }
   };
 
-  const handlePointerMove = () => {
+  const handlePointerMove = (
+    event?: Konva.KonvaEventObject<MouseEvent | PointerEvent>,
+  ) => {
+    // UIX-392: touch input is explicitly deferred for cursor presence (see
+    // `isTrackableCursorPointerType` doc comment) — only genuine mouse
+    // pointer events feed the batcher, so touch-drag/pan gestures on mobile
+    // never spam `cursor:move`. `event` is undefined when this function is
+    // invoked internally (e.g. drag-tracking outside the Stage), which is
+    // intentionally treated as untrackable rather than guessed at.
+    const pointerType =
+      event && "pointerType" in event.evt
+        ? (event.evt as PointerEvent).pointerType
+        : undefined;
+    if (
+      props.cursorSendEnabled &&
+      props.socket &&
+      pointerType !== undefined &&
+      isTrackableCursorPointerType(pointerType)
+    ) {
+      const worldPoint = pointerInWorld();
+      if (worldPoint) {
+        cursorBatcherRef.current?.queue(worldPoint);
+        if (cursorInactivityTimerRef.current !== null)
+          window.clearTimeout(cursorInactivityTimerRef.current);
+        cursorInactivityTimerRef.current = window.setTimeout(() => {
+          props.socket?.emit("cursor:gone");
+        }, CURSOR_INACTIVITY_MS);
+      }
+    }
     if (panStartRef.current) {
       const pointer = stageRef.current?.getPointerPosition();
       if (pointer)
@@ -2540,6 +2619,39 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               />
             </Group>
           ))}
+          {props.cursors.map((cursor) => {
+            const color = cursorColorForMembership(cursor.membershipId);
+            const labelWidth = Math.max(40, cursor.displayName.length * 7 + 12);
+            return (
+              <Group key={cursor.membershipId}>
+                <Circle
+                  x={cursor.x}
+                  y={cursor.y}
+                  radius={6 / scale}
+                  fill={color}
+                  stroke="#0f172a"
+                  strokeWidth={1.5 / scale}
+                />
+                <Group x={cursor.x + 10 / scale} y={cursor.y - 10 / scale}>
+                  <Rect
+                    x={-4 / scale}
+                    y={-2 / scale}
+                    width={labelWidth / scale}
+                    height={18 / scale}
+                    fill="#0f172a"
+                    opacity={0.85}
+                    cornerRadius={4 / scale}
+                  />
+                  <Text
+                    text={cursor.displayName}
+                    fill={color}
+                    fontSize={12 / scale}
+                    fontStyle="bold"
+                  />
+                </Group>
+              </Group>
+            );
+          })}
         </Layer>
       </Stage>
       {tokenMenu && (
