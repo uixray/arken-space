@@ -49,6 +49,9 @@ const character = (
   wallet: { gold: 0, silver: 0, copper: 0, sp: 0 },
   entries: [],
   revision: 0,
+  lifecycle: "ACTIVE",
+  archivedAt: null,
+  archivedByMembershipId: null,
   ...overrides,
 });
 

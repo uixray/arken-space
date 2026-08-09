@@ -180,7 +180,7 @@ describe("backup and restore safety", () => {
     expect(verifyRetiredTableMigration(freshManifest, {})).toEqual([]);
   });
 
-  it("verifies all migration identities from 0000 through 0034", () => {
+  it("verifies all migration identities from 0000 through 0035", () => {
     const migrationsDirectory = path.join(root, "packages", "db", "drizzle");
     const expected = readExpectedMigrationLedger({
       journalPath: path.join(migrationsDirectory, "meta", "_journal.json"),
@@ -191,9 +191,9 @@ describe("backup and restore safety", () => {
       .join("\n");
     const actual = parseMigrationLedger(databaseOutput);
 
-    expect(expected).toHaveLength(35);
+    expect(expected).toHaveLength(36);
     expect(expected[0].tag).toBe("0000_nasty_emma_frost");
-    expect(expected.at(-1)?.tag).toBe("0034_drop_audio_states");
+    expect(expected.at(-1)?.tag).toBe("0035_equal_shard");
     expect(() => compareMigrationLedger(expected, actual)).not.toThrow();
     expect(() =>
       compareMigrationLedgerPrefix(expected, actual.slice(0, 16)),
@@ -215,7 +215,7 @@ describe("backup and restore safety", () => {
         ...actual.slice(0, -1),
         { ...actual.at(-1)!, hash: "0".repeat(64) },
       ]),
-    ).toThrow(/identity differs at 0034_drop_audio_states/);
+    ).toThrow(/identity differs at 0035_equal_shard/);
   });
 
   it("writes migration and coverage evidence without invoking restore in tests", () => {

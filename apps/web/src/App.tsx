@@ -3207,6 +3207,39 @@ export function App() {
                 }),
               )
             }
+            // UIX-393: characters are never hard-deleted; archive/restore is a
+            // GM-only revision/CAS transition, same conflict-reload shape as
+            // world-map lifecycle transitions above — reused directly rather
+            // than duplicating the 409-reload logic under a new name.
+            onArchiveCharacter={(character) =>
+              runWorldMapMutation(() =>
+                api(`/api/characters/${character.id}/archive`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    revision: character.revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onRestoreCharacter={(character) =>
+              runWorldMapMutation(() =>
+                api(`/api/characters/${character.id}/restore`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    revision: character.revision,
+                    actionId: crypto.randomUUID(),
+                  }),
+                }),
+              )
+            }
+            onLoadArchivedCharacters={() =>
+              runResult(() =>
+                api<import("@arken/contracts").CharacterDto[]>(
+                  "/api/characters/archived",
+                ),
+              )
+            }
             onCreateWorldMapLocation={(input) =>
               runWorldMapMutation(() =>
                 api("/api/world-maps/locations", {

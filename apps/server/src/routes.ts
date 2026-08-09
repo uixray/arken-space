@@ -21,6 +21,8 @@ import {
   assetKindSchema,
   characterCommandSchema,
   createCharacterSchema,
+  archiveCharacterSchema,
+  restoreCharacterSchema,
   assignCatalogEntrySchema,
   catalogEntryCommandSchema,
   characterCatalogEntryCommandSchema,
@@ -1354,6 +1356,275 @@ export function registerRoutes(
       await broadcastSnapshots(io, db, auth.campaignId);
     }
     return updated;
+  });
+
+  /**
+   * GM-only roster of archived characters (UIX-393). A dedicated read
+   * endpoint rather than folding archived rows into the main snapshot: the
+   * snapshot's `characters` array is gameplay-active state broadcast to
+   * every connected client (including players), so archived characters are
+   * filtered out of it entirely in `buildSnapshot` (see `snapshot.ts`).
+   * This list backs the GM-only restore UI in `CharacterWorkspace.tsx`.
+   */
+  app.get("/api/characters/archived", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const rows = await db
+      .select()
+      .from(characters)
+      .where(
+        and(
+          eq(characters.campaignId, auth.campaignId),
+          eq(characters.lifecycle, "ARCHIVED"),
+        ),
+      )
+      .orderBy(desc(characters.archivedAt));
+    if (rows.length === 0) return reply.send([]);
+    const entryRows = await db
+      .select()
+      .from(characterCatalogEntries)
+      .where(
+        inArray(
+          characterCatalogEntries.characterId,
+          rows.map((row) => row.id),
+        ),
+      );
+    const controllerRows = await db
+      .select()
+      .from(characterControllers)
+      .where(
+        inArray(
+          characterControllers.characterId,
+          rows.map((row) => row.id),
+        ),
+      );
+    const entriesByCharacter = new Map<string, typeof entryRows>();
+    for (const entry of entryRows) {
+      const list = entriesByCharacter.get(entry.characterId) ?? [];
+      list.push(entry);
+      entriesByCharacter.set(entry.characterId, list);
+    }
+    const controllersByCharacter = new Map<string, string[]>();
+    for (const controller of controllerRows) {
+      const list = controllersByCharacter.get(controller.characterId) ?? [];
+      list.push(controller.membershipId);
+      controllersByCharacter.set(controller.characterId, list);
+    }
+    return reply.send(
+      rows.map((row) =>
+        characterDto(
+          row,
+          entriesByCharacter.get(row.id) ?? [],
+          controllersByCharacter.get(row.id) ?? [],
+        ),
+      ),
+    );
+  });
+
+  /**
+   * UIX-393: archive a character (soft-delete — never a hard DELETE, so
+   * campaign history/audit stays intact and a GM can always restore). GM-only,
+   * campaign-scoped, revision/CAS, idempotent `actionId`. Not eligible
+   * (missing, wrong campaign, or already ARCHIVED) all collapse to the same
+   * 404 so a cross-campaign or already-archived probe cannot distinguish
+   * "doesn't exist" from "exists but not archivable" — mirrors
+   * `DELETE /api/sticker-packs/:id`.
+   *
+   * Dependent-reference policy (see also the `characters` table's doc intent
+   * and `snapshot.ts`'s filter of ARCHIVED rows out of gameplay projection):
+   *  - `character_controllers` (sheet-access grants): deleted. Purely an
+   *    access-control join table, not history; access to an archived sheet
+   *    is meaningless, and restore does not reinstate it — the GM re-grants
+   *    explicitly.
+   *  - `token_definitions.character_id` / `tokens.character_id`: detached
+   *    (set NULL), the same outcome a hard delete would already produce via
+   *    each column's `onDelete: "set null"`. An archived character must not
+   *    remain controllable or placed as a live scene token.
+   *  - `invites` for this character: any *unclaimed* invite is expired
+   *    immediately (`expiresAt` moved to now) so nobody can claim ownership
+   *    of an archived character while it is archived; already-claimed
+   *    invites are historical and untouched.
+   *  - `character_media`, `character_catalog_entries`: left untouched. Both
+   *    are per-character sheet content, not scene-live state; they simply
+   *    become unreachable while the character is archived (its sheet drops
+   *    out of the snapshot) and reappear intact on restore.
+   *  - `chat_messages.character_id`, `game_events`/audit rows: never
+   *    touched. Chat attribution and audit history must survive archiving
+   *    unchanged (AC: "retaining historical references").
+   */
+  app.post("/api/characters/:id/archive", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = archiveCharacterSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(characters)
+      .where(
+        and(
+          eq(characters.id, id),
+          eq(characters.campaignId, auth.campaignId),
+          eq(characters.lifecycle, "ACTIVE"),
+        ),
+      )
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
+    const now = new Date();
+    const archived = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(characters)
+        .set({
+          lifecycle: "ARCHIVED",
+          archivedAt: now,
+          archivedByMembershipId: auth.membershipId,
+          revision: current.revision + 1,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(characters.id, id),
+            eq(characters.campaignId, auth.campaignId),
+            eq(characters.lifecycle, "ACTIVE"),
+            eq(characters.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!updated) return null;
+      await tx
+        .delete(characterControllers)
+        .where(eq(characterControllers.characterId, id));
+      await tx
+        .update(tokenDefinitions)
+        .set({ characterId: null })
+        .where(
+          and(
+            eq(tokenDefinitions.characterId, id),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+          ),
+        );
+      await tx
+        .update(tokens)
+        .set({ characterId: null })
+        .where(eq(tokens.characterId, id));
+      await tx
+        .update(invites)
+        .set({ expiresAt: now })
+        .where(
+          and(
+            eq(invites.characterId, id),
+            eq(invites.campaignId, auth.campaignId),
+            isNull(invites.claimedAt),
+          ),
+        );
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "character.archived",
+        entityType: "character",
+        entityId: id,
+        entityRevision: updated.revision,
+        payload: { characterId: id, from: "ACTIVE", to: "ARCHIVED" },
+      });
+      return updated;
+    });
+    if (!archived) return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.send(characterDto(archived, [], []));
+  });
+
+  /**
+   * UIX-393: restore an archived character back to ACTIVE. GM-only,
+   * campaign-scoped, revision/CAS, idempotent `actionId`. Deliberately does
+   * NOT reinstate anything the archive transaction detached (character
+   * controllers, token/token-definition links, expired invites) — those
+   * were live scene/access state at archive time and may no longer be
+   * correct; the GM re-establishes them explicitly, the same way a
+   * newly-created character starts with none of them either.
+   */
+  app.post("/api/characters/:id/restore", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = restoreCharacterSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(characters)
+      .where(
+        and(
+          eq(characters.id, id),
+          eq(characters.campaignId, auth.campaignId),
+          eq(characters.lifecycle, "ARCHIVED"),
+        ),
+      )
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
+    const now = new Date();
+    const restored = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(characters)
+        .set({
+          lifecycle: "ACTIVE",
+          archivedAt: null,
+          archivedByMembershipId: null,
+          revision: current.revision + 1,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(characters.id, id),
+            eq(characters.campaignId, auth.campaignId),
+            eq(characters.lifecycle, "ARCHIVED"),
+            eq(characters.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!updated) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "character.restored",
+        entityType: "character",
+        entityId: id,
+        entityRevision: updated.revision,
+        payload: { characterId: id, from: "ARCHIVED", to: "ACTIVE" },
+      });
+      return updated;
+    });
+    if (!restored) return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    const [entries, controllers] = await Promise.all([
+      db
+        .select()
+        .from(characterCatalogEntries)
+        .where(eq(characterCatalogEntries.characterId, id)),
+      db
+        .select({ membershipId: characterControllers.membershipId })
+        .from(characterControllers)
+        .where(eq(characterControllers.characterId, id)),
+    ]);
+    return reply.send(
+      characterDto(
+        restored,
+        entries,
+        controllers.map((row) => row.membershipId),
+      ),
+    );
   });
 
   app.post("/api/catalog", async (request, reply) => {

@@ -32,6 +32,9 @@ const character = {
     },
   ],
   revision: 1,
+  lifecycle: "ACTIVE",
+  archivedAt: null,
+  archivedByMembershipId: null,
 } satisfies CharacterDto;
 
 describe("character mutation reconciliation", () => {

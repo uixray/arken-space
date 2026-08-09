@@ -99,6 +99,16 @@ export const worldMapVisibilityEnum = pgEnum("world_map_visibility", [
 ]);
 /** Deliberately not a parent relation: hierarchy editing is outside the MVP. */
 export const worldMapScopeEnum = pgEnum("world_map_scope", ["WORLD", "REGION"]);
+/**
+ * UIX-393: characters are never hard-deleted — archiving is the GM's only
+ * removal action, reversible via an explicit restore. Deliberately a flat
+ * two-state enum (unlike `world_map_lifecycle`'s DRAFT/PUBLISHED/ARCHIVED):
+ * a character has no draft/publish distinction, only "in play" or "archived".
+ */
+export const characterLifecycleEnum = pgEnum("character_lifecycle", [
+  "ACTIVE",
+  "ARCHIVED",
+]);
 export const worldMapLocationKindEnum = pgEnum("world_map_location_kind", [
   "SETTLEMENT",
   "LANDMARK",
@@ -490,6 +500,9 @@ export const characters = pgTable(
       .$type<{ gold: number; silver: number; copper: number; sp: number }>()
       .notNull()
       .default({ gold: 0, silver: 0, copper: 0, sp: 0 }),
+    lifecycle: characterLifecycleEnum("lifecycle").notNull().default("ACTIVE"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archivedByMembershipId: uuid("archived_by_membership_id"),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -501,6 +514,19 @@ export const characters = pgTable(
   (table) => [
     index("characters_campaign_idx").on(table.campaignId),
     uniqueIndex("characters_campaign_id_id_idx").on(table.campaignId, table.id),
+    index("characters_campaign_lifecycle_idx").on(
+      table.campaignId,
+      table.lifecycle,
+    ),
+    foreignKey({
+      name: "characters_campaign_archiver_fk",
+      columns: [table.campaignId, table.archivedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("restrict"),
+    check(
+      "characters_lifecycle_shape_check",
+      sql`(${table.lifecycle} = 'ACTIVE' AND ${table.archivedAt} IS NULL AND ${table.archivedByMembershipId} IS NULL) OR (${table.lifecycle} = 'ARCHIVED' AND ${table.archivedAt} IS NOT NULL AND ${table.archivedByMembershipId} IS NOT NULL)`,
+    ),
   ],
 );
 

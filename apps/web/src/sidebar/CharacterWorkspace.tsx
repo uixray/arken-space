@@ -71,6 +71,14 @@ export function CharacterWorkspace({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
+  // UIX-393: GM-only archive/restore. `archiveTarget` drives the confirm
+  // dialog for a single character; `restoreDialogOpen` opens the separate
+  // archived-roster dialog (archived characters are excluded from
+  // `props.snapshot.characters` server-side, so they are fetched on demand).
+  const [archiveTarget, setArchiveTarget] = useState<CharacterDto | null>(
+    null,
+  );
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
 
   useEffect(() => titleRef.current?.focus(), []);
   useEffect(() => {
@@ -161,6 +169,16 @@ export function CharacterWorkspace({
               Создать персонажа
             </button>
           )}
+          {props.snapshot.me.role === "GM" && (
+            <button
+              type="button"
+              className="character-rail__restore-archived"
+              onClick={() => setRestoreDialogOpen(true)}
+            >
+              <span aria-hidden="true">🗄</span>
+              Архив персонажей
+            </button>
+          )}
           {characters.length === 0 ? (
             <p className="muted">Нет доступных персонажей.</p>
           ) : (
@@ -211,6 +229,17 @@ export function CharacterWorkspace({
                       }
                     >
                       ×
+                    </button>
+                  )}
+                  {props.snapshot.me.role === "GM" && (
+                    <button
+                      type="button"
+                      className="character-rail__archive danger-link"
+                      aria-label={`Архивировать персонажа ${character.name}`}
+                      title="Архивировать персонажа"
+                      onClick={() => setArchiveTarget(character)}
+                    >
+                      Архивировать
                     </button>
                   )}
                 </div>
@@ -311,6 +340,17 @@ export function CharacterWorkspace({
         }}
         onClose={() => setCreateCharacterOpen(false)}
       />
+      <ArchiveCharacterDialog
+        character={archiveTarget}
+        onArchive={props.onArchiveCharacter}
+        onClose={() => setArchiveTarget(null)}
+      />
+      <RestoreCharactersDialog
+        open={restoreDialogOpen}
+        onLoad={props.onLoadArchivedCharacters}
+        onRestore={props.onRestoreCharacter}
+        onClose={() => setRestoreDialogOpen(false)}
+      />
     </main>,
     document.body,
   );
@@ -410,6 +450,185 @@ function CreateCharacterDialog({
           полностью независим и остаётся редактируемым.
         </span>
       </label>
+    </ArkenDialog>
+  );
+}
+
+/**
+ * UIX-393: GM-only archive confirmation. Never a hard delete — the dialog
+ * spells out exactly what archiving detaches (scene tokens, sheet-access
+ * grants, unclaimed invites) versus what it keeps (the sheet itself, its
+ * media/catalog entries, and all chat/audit history), since a GM should not
+ * have to guess at the consequence before confirming. On failure the error
+ * stays inside the dialog and the dialog stays open — never a silent close
+ * that could be mistaken for success.
+ */
+function ArchiveCharacterDialog({
+  character,
+  onArchive,
+  onClose,
+}: {
+  character: CharacterDto | null;
+  onArchive: (character: CharacterDto) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setError("");
+    setPending(false);
+  }, [character]);
+
+  const submit = async () => {
+    if (!character) return;
+    setPending(true);
+    setError("");
+    try {
+      await onArchive(character);
+      onClose();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason.message
+          : "Не удалось архивировать персонажа. Повторите попытку.",
+      );
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <ArkenDialog
+      open={character !== null}
+      title={character ? `Архивировать «${character.name}»?` : "Архивировать?"}
+      applyLabel="Архивировать"
+      danger
+      loading={pending}
+      error={error}
+      onApply={() => void submit()}
+      onClose={() => !pending && onClose()}
+    >
+      <p className="arken-dialog-message">
+        Персонаж исчезнет из активного списка и станет недоступен для игры,
+        но не будет удалён безвозвратно — мастер сможет восстановить его в
+        любой момент через «Архив персонажей».
+      </p>
+      <ul className="arken-dialog-consequence-list">
+        <li>Токены на сценах и токен-заготовки отвяжутся от персонажа.</li>
+        <li>Доступ игроков к листу персонажа будет отозван.</li>
+        <li>Неиспользованные приглашения на этого персонажа станут недействительны.</li>
+        <li>История чата, журнал событий, галерея и лист персонажа сохранятся.</li>
+      </ul>
+    </ArkenDialog>
+  );
+}
+
+/**
+ * UIX-393: GM-only restore roster. Archived characters are excluded from
+ * `snapshot.characters` entirely (see `snapshot.ts`), so this dialog loads
+ * them on demand via a dedicated GM-only endpoint instead of reading off the
+ * shared snapshot. Restoring only flips the character back to ACTIVE; it
+ * deliberately does not reinstate detached token/controller/invite links
+ * (documented server-side) — the row disappears from this list on success.
+ */
+function RestoreCharactersDialog({
+  open,
+  onLoad,
+  onRestore,
+  onClose,
+}: {
+  open: boolean;
+  onLoad: () => Promise<CharacterDto[]>;
+  onRestore: (character: CharacterDto) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [items, setItems] = useState<CharacterDto[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError("");
+    setRowError("");
+    onLoad()
+      .then((list) => {
+        if (!cancelled) setItems(list);
+      })
+      .catch((reason) => {
+        if (cancelled) return;
+        setLoadError(
+          reason instanceof ApiError
+            ? reason.message
+            : "Не удалось загрузить архив персонажей.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, onLoad]);
+
+  const restore = async (character: CharacterDto) => {
+    setPendingId(character.id);
+    setRowError("");
+    try {
+      await onRestore(character);
+      setItems((current) => current.filter((item) => item.id !== character.id));
+    } catch (reason) {
+      setRowError(
+        reason instanceof ApiError
+          ? reason.message
+          : `Не удалось восстановить «${character.name}». Повторите попытку.`,
+      );
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  return (
+    <ArkenDialog
+      open={open}
+      title="Архив персонажей"
+      footer={false}
+      error={rowError || loadError}
+      onClose={onClose}
+    >
+      {loading ? (
+        <p className="muted">Загрузка…</p>
+      ) : items.length === 0 ? (
+        <p className="muted">В архиве нет персонажей.</p>
+      ) : (
+        <ul className="archived-character-list">
+          {items.map((character) => (
+            <li key={character.id} className="archived-character-list__item">
+              <span className="archived-character-list__name">
+                {character.name}
+              </span>
+              {character.archivedAt && (
+                <span className="muted">
+                  {new Date(character.archivedAt).toLocaleString()}
+                </span>
+              )}
+              <Button
+                view="outlined"
+                size="s"
+                loading={pendingId === character.id}
+                disabled={pendingId !== null && pendingId !== character.id}
+                onClick={() => void restore(character)}
+              >
+                Восстановить
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </ArkenDialog>
   );
 }

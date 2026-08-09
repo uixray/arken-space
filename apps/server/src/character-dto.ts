@@ -70,5 +70,8 @@ export function characterDto(
       revision: entry.revision,
     })),
     revision: character.revision,
+    lifecycle: character.lifecycle,
+    archivedAt: character.archivedAt ? character.archivedAt.toISOString() : null,
+    archivedByMembershipId: character.archivedByMembershipId,
   };
 }

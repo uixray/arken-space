@@ -945,6 +945,16 @@ export const characterCommandSchema = characterUpdateSchema.extend({
 });
 
 /**
+ * UIX-393: archive/restore are dedicated lifecycle-transition actions
+ * (mirrors `POST /api/world-maps/:id/archive` and
+ * `POST /api/world-content/:id/lifecycle`), not a mixed-in field on
+ * `characterCommandSchema` — the body carries only the CAS/idempotency
+ * envelope shared by both directions of the transition.
+ */
+export const archiveCharacterSchema = revisionCommandSchema;
+export const restoreCharacterSchema = revisionCommandSchema;
+
+/**
  * Structural fields a "create from template" preset carries over from an existing
  * character. Deliberately excludes identity (name, portrait, owner/controllers),
  * narrative text (notes/backstory) and wallet — those stay specific to each character.
@@ -1689,6 +1699,10 @@ export interface CharacterDto {
   wallet: z.infer<typeof walletSchema>;
   entries: CharacterCatalogEntryDto[];
   revision: number;
+  /** UIX-393: ACTIVE unless the GM has archived the character. */
+  lifecycle: "ACTIVE" | "ARCHIVED";
+  archivedAt: string | null;
+  archivedByMembershipId: string | null;
 }
 export interface CatalogEntryDto {
   id: string;

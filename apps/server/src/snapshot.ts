@@ -91,10 +91,27 @@ export async function buildSnapshot(
       .from(memberships)
       .where(eq(memberships.campaignId, auth.campaignId))
       .orderBy(asc(memberships.createdAt)),
+    // UIX-393: archived characters are gameplay-inactive — excluded here so
+    // they disappear from active selection/normal gameplay project-wide
+    // (roster, sheet access, token-definition/scene pickers that read off
+    // this snapshot). A dedicated GM-only endpoint
+    // (`GET /api/characters/archived`) serves the restore UI instead of
+    // widening this broadcast-to-everyone snapshot. A player whose own
+    // character gets archived does not break: `characterByOwner` below is
+    // built from this same filtered set, so `me.characterId` simply becomes
+    // `null` rather than pointing at a row absent from `characters`, and
+    // historical chat messages keep their raw `characterId` untouched (see
+    // the `messages` projection below) — the client falls back gracefully
+    // when a lookup in `snapshot.characters` misses.
     db
       .select()
       .from(characters)
-      .where(eq(characters.campaignId, auth.campaignId))
+      .where(
+        and(
+          eq(characters.campaignId, auth.campaignId),
+          eq(characters.lifecycle, "ACTIVE"),
+        ),
+      )
       .orderBy(asc(characters.createdAt)),
     db
       .select({ controller: characterControllers })
@@ -103,7 +120,12 @@ export async function buildSnapshot(
         characters,
         eq(characterControllers.characterId, characters.id),
       )
-      .where(eq(characters.campaignId, auth.campaignId)),
+      .where(
+        and(
+          eq(characters.campaignId, auth.campaignId),
+          eq(characters.lifecycle, "ACTIVE"),
+        ),
+      ),
     db
       .select()
       .from(scenes)

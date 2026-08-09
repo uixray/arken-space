@@ -37,6 +37,9 @@ function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
     wallet: { gold: 42, silver: 0, copper: 0, sp: 0 },
     entries: [],
     revision: 3,
+    lifecycle: "ACTIVE",
+    archivedAt: null,
+    archivedByMembershipId: null,
     ...overrides,
   };
 }

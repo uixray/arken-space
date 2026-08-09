@@ -3858,6 +3858,17 @@ code {
   display: grid;
   gap: var(--space-xs);
 }
+/* Shared GM-only roll toggle lives in the dice tray above, so the quick-roll
+ * panel restates the state rather than leaving a player to discover mid-roll
+ * that a stat check went only to the GM. */
+.quick-roll-panel__gm-only {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.78rem;
+}
 .activity-filters {
   margin: 0;
   padding: var(--space-xs) var(--space-sm);
@@ -4254,4 +4265,43 @@ code {
 .character-media-viewer__nav {
   display: flex;
   gap: var(--space-sm, 8px);
+}
+
+/* UIX-393: character archive/restore (character workspace GM controls). */
+.character-rail__restore-archived {
+  width: 100%;
+  margin-bottom: var(--space-sm, 8px);
+}
+.character-rail__archive {
+  min-width: 32px;
+  padding: 0 var(--space-sm, 8px);
+}
+.arken-dialog-consequence-list {
+  margin: var(--space-sm, 8px) 0 0;
+  padding-left: 1.2em;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.arken-dialog-consequence-list li {
+  margin-bottom: 0.35em;
+}
+.archived-character-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm, 8px);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.archived-character-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm, 8px);
+  padding: var(--space-sm, 8px);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.archived-character-list__name {
+  font-weight: 700;
+  flex: 1;
 }

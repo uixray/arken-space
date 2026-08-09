@@ -120,6 +120,10 @@ export type Props = {
     controllerMembershipIds: string[],
   ) => Promise<void>;
   onPatchCharacter: (id: string, patch: Partial<CharacterDto>) => Promise<void>;
+  /** UIX-393: GM-only soft-delete; never a hard delete. See `CharacterWorkspace.tsx`. */
+  onArchiveCharacter: (character: CharacterDto) => Promise<void>;
+  onRestoreCharacter: (character: CharacterDto) => Promise<void>;
+  onLoadArchivedCharacters: () => Promise<CharacterDto[]>;
   onChat: (
     body: string,
     visibility: MessageVisibility,
