@@ -48,7 +48,7 @@ import { characterTokenPlacementRequest } from "./token-placement";
 import { normalizeClientDiceResult } from "./dice-result";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
-import { RollModeControl, type RollMode } from "./RollModeControl";
+import type { RollMode } from "./RollModeControl";
 import {
   applyCharacterMutationToSnapshot,
   mergeCharacterMutationResponse,
@@ -88,99 +88,6 @@ type WorkspaceDestination =
   | "player-requests"
   | "world-encyclopedia"
   | "world-codex";
-
-function CanvasRollOverlay({
-  characterId,
-  onRoll,
-}: {
-  characterId: string | null;
-  onRoll: (
-    formula: string,
-    label?: string,
-    visibility?: MessageVisibility,
-    characterId?: string | null,
-    rollMode?: RollMode,
-  ) => Promise<void>;
-}) {
-  const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
-  const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
-  const [customRollOpen, setCustomRollOpen] = useState(false);
-  return (
-    <>
-      <section className="canvas-roll-overlay" aria-label="Быстрые броски">
-        <div className="canvas-roll-row">
-          <RollModeControl
-            value={rollMode}
-            onChange={setRollMode}
-            label="Режим броска"
-            iconOnly
-          />
-          <div className="canvas-roll-dice" aria-label="Кости">
-            {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
-              <button
-                key={sides}
-                type="button"
-                title={`Бросить d${sides}`}
-                onClick={() =>
-                  void onRoll(
-                    `1d${sides}`,
-                    `d${sides}`,
-                    visibility,
-                    characterId,
-                    rollMode,
-                  )
-                }
-              >
-                d{sides}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="canvas-roll-custom"
-            aria-label="Своя формула"
-            title="Своя формула"
-            onClick={() => setCustomRollOpen(true)}
-          >
-            <span aria-hidden="true">fx</span>
-          </button>
-          <button
-            type="button"
-            className="canvas-roll-gm-toggle"
-            aria-label="Бросок только мастеру"
-            title="Бросок только мастеру"
-            aria-pressed={visibility === "GM_ONLY"}
-            onClick={() =>
-              setVisibility((current) =>
-                current === "GM_ONLY" ? "PUBLIC" : "GM_ONLY",
-              )
-            }
-          >
-            <span aria-hidden="true">◆</span>
-          </button>
-        </div>
-      </section>
-      <TextPromptDialog
-        open={customRollOpen}
-        title="Быстрый бросок"
-        label="Формула броска"
-        initialValue="1d20"
-        applyLabel="Бросить"
-        onClose={() => setCustomRollOpen(false)}
-        onApply={async (formula) => {
-          await onRoll(
-            formula,
-            "Быстрый бросок",
-            visibility,
-            characterId,
-            rollMode,
-          );
-          setCustomRollOpen(false);
-        }}
-      />
-    </>
-  );
-}
 
 function CanvasHistoryControls({
   sceneId,
@@ -1877,7 +1784,8 @@ export function App() {
                     <button
                       aria-label="Завершить бой"
                       title="Завершить текущий бой"
-                      className="map-tool-text"
+                      className="map-tool"
+                      data-tool="ENCOUNTER_END"
                       onClick={() =>
                         void run(() =>
                           endEncounter(
@@ -1893,7 +1801,8 @@ export function App() {
                     <button
                       aria-label="Начать бой"
                       title="Начать бой из области сцены или связанной локации"
-                      className="map-tool-text"
+                      className="map-tool"
+                      data-tool="ENCOUNTER_START"
                       disabled={!activeScene}
                       onClick={() => setEncounterMenuOpen(true)}
                     >
@@ -2397,12 +2306,6 @@ export function App() {
             </Suspense>
           ) : (
             <div className="empty-map">Мастер ещё не создал сцену.</div>
-          )}
-          {!previewSnapshot && (
-            <CanvasRollOverlay
-              characterId={snapshot.me.characterId}
-              onRoll={submitRoll}
-            />
           )}
           {rollToasts.length > 0 && (
             <div className="roll-toast-stack" aria-live="polite">

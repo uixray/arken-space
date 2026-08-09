@@ -59,6 +59,7 @@ import {
 } from "../activity-roll-controls";
 import type { Props } from "../Sidebar";
 import { useFollowScroll } from "../ui/useFollowScroll";
+import { DiceTrayPanel } from "./DiceTrayPanel";
 import { QuickRollPanel } from "./QuickRollPanel";
 
 export function ChatMessageBody({
@@ -366,6 +367,12 @@ export function ActivityPanel({
             Физические кубы
           </label>
         </div>
+        <DiceTrayPanel
+          characterId={snapshot.me.characterId}
+          campaignId={snapshot.campaign.id}
+          membershipId={snapshot.me.id}
+          onRoll={onRoll}
+        />
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}
