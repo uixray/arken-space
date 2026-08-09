@@ -103,7 +103,7 @@ function CanvasHistoryControls({
 }: {
   sceneId?: string;
   disabled: boolean;
-  version: number;
+  version: string;
 }) {
   const [history, setHistory] = useState<
     Array<{ status: "APPLIED" | "UNDONE" | "INVALIDATED" }>
@@ -1239,6 +1239,19 @@ export function App() {
         (drawing) => drawing.sceneId === activeScene.id,
       )
     : [];
+  // UIX-395: undo/redo history only ever depends on the active scene's own
+  // canvas content (fog, drawings, token placement/movement) -- not on
+  // unrelated campaign events like chat, dice or audio, which used to also
+  // bump the campaign-wide snapshotVersion this used to key off, refetching
+  // /api/canvas/history on literally every event anywhere in the campaign.
+  const activeCanvasVersion = [
+    activeFog.length,
+    activeFog.reduce((max, fog) => Math.max(max, fog.revision ?? 0), 0),
+    activeDrawings.length,
+    activeDrawings.reduce((max, drawing) => Math.max(max, drawing.revision), 0),
+    activeTokens.length,
+    activeTokens.reduce((max, token) => Math.max(max, token.revision), 0),
+  ].join(":");
 
   return (
     <div className="app-shell">
@@ -1974,7 +1987,7 @@ export function App() {
                 <CanvasHistoryControls
                   sceneId={activeScene?.id}
                   disabled={!activeScene}
-                  version={snapshot.snapshotVersion}
+                  version={activeCanvasVersion}
                 />
               </div>
             )}
