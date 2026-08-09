@@ -5,6 +5,7 @@ import {
   useState,
   type ClipboardEvent,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import type {
   ChatAttachmentMetadata,
@@ -59,8 +60,19 @@ import {
 } from "../activity-roll-controls";
 import type { Props } from "../Sidebar";
 import { useFollowScroll } from "../ui/useFollowScroll";
+import { decideComposerKeydown } from "../composer-keyboard-intent";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 import { QuickRollPanel } from "./QuickRollPanel";
+
+/**
+ * UIX-388: shared tooltip/label text for the composer's send icon so
+ * ActivityPanel and ChatPanel stay word-for-word consistent, and a visible
+ * (not hover-only) hint so a player can tell which way a message will send
+ * *before* pressing Enter, not just discover it via a mouse-hover tooltip.
+ */
+const SEND_TOOLTIP =
+  "Enter — отправить всем. Ctrl+Enter — отправить только мастеру.";
+const SEND_HINT = "Enter — всем · Ctrl+Enter — только мастеру";
 
 export function ChatMessageBody({
   message,
@@ -181,7 +193,6 @@ export function ActivityPanel({
   onOpenPlayerRequestCreate: () => void;
 }) {
   const [composer, setComposer] = useState("");
-  const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const availableRollCharacters = useMemo(
@@ -229,15 +240,19 @@ export function ActivityPanel({
     void onRoll(
       intent.formula,
       intent.label,
-      visibility,
+      "PUBLIC",
       snapshot.me.characterId,
       "NORMAL",
     ).catch(() =>
       setComposerError("Не удалось выполнить бросок. Повторите попытку."),
     );
   };
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  // UIX-388: a direct submit with the chosen visibility, not a mode toggle --
+  // see composer-keyboard-intent.ts for why. Both the Send button (a normal
+  // form submit, always public) and the Enter/Ctrl+Enter keydown handler
+  // below call this with an explicit visibility rather than reading it from
+  // component state.
+  const submitComposer = async (visibility: MessageVisibility) => {
     const intent = parseComposerInput(composer, characterStats);
     if (intent.kind === "INVALID") {
       setComposerError(intent.message);
@@ -263,6 +278,27 @@ export function ActivityPanel({
       );
     }
   };
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void submitComposer("PUBLIC");
+  };
+  const onComposerKeyDown = (
+    event: ReactKeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    const action = decideComposerKeydown({
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      isComposing: event.nativeEvent.isComposing,
+    });
+    if (action === "SEND_PUBLIC") {
+      event.preventDefault();
+      void submitComposer("PUBLIC");
+    } else if (action === "SEND_GM_ONLY") {
+      event.preventDefault();
+      void submitComposer("GM_ONLY");
+    }
+  };
   const activityEvents = useMemo(
     () =>
       filterActivityEvents(
@@ -282,9 +318,9 @@ export function ActivityPanel({
     try {
       if (physicalDice) {
         const request = physicalRollChatRequest(label, bonus, rollCharacter.id);
-        await onChat(request.body, visibility, "TABLE", request.characterId);
+        await onChat(request.body, "PUBLIC", "TABLE", request.characterId);
       } else {
-        await onRoll(formula, label, visibility, rollCharacter.id, "NORMAL");
+        await onRoll(formula, label, "PUBLIC", rollCharacter.id, "NORMAL");
       }
     } catch {
       setComposerError("Не удалось выполнить бросок. Повторите попытку.");
@@ -411,26 +447,45 @@ export function ActivityPanel({
       </section>
       <div className="activity-log-toolbar">
         <span className="eyebrow">Журнал</span>
-        {timeline.length > ROLL_LOG_COLLAPSED_ENTRY_COUNT && (
-          <button
-            type="button"
-            className="activity-log-toggle"
-            aria-expanded={!rollLogCollapsed}
-            aria-controls="activity-message-list"
-            title={
-              rollLogCollapsed
-                ? "Показать всю ленту событий"
-                : "Показать только последние записи"
-            }
-            onClick={() => {
-              const next = !rollLogCollapsed;
-              setRollLogCollapsed(next);
-              writeRollLogCollapsed(window.localStorage, snapshot.me.id, next);
-            }}
-          >
-            {rollLogCollapsed ? "Развернуть" : "Свернуть"}
-          </button>
-        )}
+        <div className="activity-log-toolbar__actions">
+          {snapshot.me.role === "PLAYER" && (
+            // UIX-388: player-request creation used to sit inside the
+            // composer's primary send row, competing visually with
+            // Send/GM-only. `PlayerRequestsWorkspace` already owns the full
+            // create form (title/body/horizon/audience/character), so this
+            // is just a discoverable entry point into that existing
+            // workspace, placed with the panel's other secondary controls
+            // instead of next to the message-send action.
+            <button
+              type="button"
+              className="activity-log-toggle activity-request-open"
+              onClick={onOpenPlayerRequestCreate}
+              title="Подать заявку мастеру"
+            >
+              Заявка мастеру
+            </button>
+          )}
+          {timeline.length > ROLL_LOG_COLLAPSED_ENTRY_COUNT && (
+            <button
+              type="button"
+              className="activity-log-toggle"
+              aria-expanded={!rollLogCollapsed}
+              aria-controls="activity-message-list"
+              title={
+                rollLogCollapsed
+                  ? "Показать всю ленту событий"
+                  : "Показать только последние записи"
+              }
+              onClick={() => {
+                const next = !rollLogCollapsed;
+                setRollLogCollapsed(next);
+                writeRollLogCollapsed(window.localStorage, snapshot.me.id, next);
+              }}
+            >
+              {rollLogCollapsed ? "Развернуть" : "Свернуть"}
+            </button>
+          )}
+        </div>
       </div>
       <div
         className="message-list"
@@ -518,10 +573,11 @@ export function ActivityPanel({
           Новые события · {newItemCount}
         </Button>
       )}
-      <form className="chat-compose" onSubmit={submit}>
+      <form className="chat-compose chat-compose--single" onSubmit={submit}>
         <div className="chat-composer-input">
           <FormTextArea
             aria-label="Сообщение или бросок"
+            aria-describedby="activity-composer-hint"
             aria-expanded={slashSuggestions.length > 0}
             aria-controls={
               slashSuggestions.length > 0
@@ -534,12 +590,7 @@ export function ActivityPanel({
               setSlashHelpOpen(false);
               setComposer(event.target.value);
             }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
+            onKeyDown={onComposerKeyDown}
             rows={3}
           />
           <div className="chat-composer-actions">
@@ -561,6 +612,15 @@ export function ActivityPanel({
               onClick={() => setSlashHelpOpen((open) => !open)}
             >
               <span aria-hidden="true">/</span>
+            </Button>
+            <Button
+              className="composer-icon composer-send-action"
+              type="submit"
+              view="flat"
+              aria-label={`Отправить. ${SEND_TOOLTIP}`}
+              title={SEND_TOOLTIP}
+            >
+              <span aria-hidden="true">{"➤"}</span>
             </Button>
           </div>
           {slashSuggestions.length > 0 && (
@@ -588,30 +648,9 @@ export function ActivityPanel({
             </div>
           )}
         </div>
-        <div className="chat-compose-submit">
-          <Button className="primary" type="submit">
-            {"Отправить"}
-          </Button>
-          {snapshot.me.role === "PLAYER" && (
-            <Button
-              type="button"
-              view="flat"
-              onClick={onOpenPlayerRequestCreate}
-            >
-              Заявка
-            </Button>
-          )}
-          <label className="compact-check chat-visibility-check">
-            <FormInput
-              type="checkbox"
-              checked={visibility === "GM_ONLY"}
-              onChange={(event) =>
-                setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
-              }
-            />
-            <span>{"Только мастер"}</span>
-          </label>
-        </div>
+        <p className="composer-hint" id="activity-composer-hint">
+          {SEND_HINT}
+        </p>
       </form>
       {composerError && (
         <p className="composer-error" role="alert">
@@ -966,7 +1005,6 @@ export function ChatPanel({
   onOpenPlayerRequests: () => void;
 }) {
   const [composer, setComposer] = useState("");
-  const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const messages = useMemo(
@@ -1007,7 +1045,7 @@ export function ChatPanel({
     void onRoll(
       intent.formula,
       intent.label,
-      visibility,
+      "PUBLIC",
       snapshot.me.characterId,
       "NORMAL",
     ).catch(() =>
@@ -1037,8 +1075,9 @@ export function ChatPanel({
     onMessageFocused();
   }, [focusedMessageId, onMessageFocused, activeStream, listRef]);
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  // UIX-388: direct submit with the chosen visibility -- see
+  // composer-keyboard-intent.ts for why this isn't a persistent mode toggle.
+  const submitComposer = async (visibility: MessageVisibility) => {
     if (!canCompose) return;
     const intent = parseComposerInput(composer);
     if (intent.kind === "INVALID") {
@@ -1057,6 +1096,27 @@ export function ChatPanel({
     else if (intent.kind === "TEXT")
       await onChat(intent.body, visibility, activeStream);
     setComposer("");
+  };
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void submitComposer("PUBLIC");
+  };
+  const onComposerKeyDown = (
+    event: ReactKeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    const action = decideComposerKeydown({
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      isComposing: event.nativeEvent.isComposing,
+    });
+    if (action === "SEND_PUBLIC") {
+      event.preventDefault();
+      void submitComposer("PUBLIC");
+    } else if (action === "SEND_GM_ONLY") {
+      event.preventDefault();
+      void submitComposer("GM_ONLY");
+    }
   };
 
   return (
@@ -1134,7 +1194,7 @@ export function ChatPanel({
       )}
       {canCompose && (
         <>
-          <form className="chat-compose" onSubmit={submit}>
+          <form className="chat-compose chat-compose--single" onSubmit={submit}>
             <div className="chat-composer-input">
               <FormTextArea
                 aria-label={
@@ -1142,6 +1202,7 @@ export function ChatPanel({
                     ? "Сообщение сюжета"
                     : "Сообщение или бросок"
                 }
+                aria-describedby="chat-composer-hint"
                 aria-expanded={slashSuggestions.length > 0}
                 aria-controls={
                   slashSuggestions.length > 0
@@ -1158,12 +1219,7 @@ export function ChatPanel({
                   setSlashHelpOpen(false);
                   setComposer(event.target.value);
                 }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
+                onKeyDown={onComposerKeyDown}
                 rows={3}
               />
               <div className="chat-composer-actions">
@@ -1188,6 +1244,15 @@ export function ChatPanel({
                   onClick={() => setSlashHelpOpen((open) => !open)}
                 >
                   <span aria-hidden="true">/</span>
+                </Button>
+                <Button
+                  className="composer-icon composer-send-action"
+                  type="submit"
+                  view="flat"
+                  aria-label={`Отправить. ${SEND_TOOLTIP}`}
+                  title={SEND_TOOLTIP}
+                >
+                  <span aria-hidden="true">{"➤"}</span>
                 </Button>
               </div>
               {slashSuggestions.length > 0 && (
@@ -1215,21 +1280,9 @@ export function ChatPanel({
                 </div>
               )}
             </div>
-            <div className="chat-compose-submit">
-              <Button className="primary" type="submit">
-                {"Отправить"}
-              </Button>
-              <label className="compact-check chat-visibility-check">
-                <FormInput
-                  type="checkbox"
-                  checked={visibility === "GM_ONLY"}
-                  onChange={(event) =>
-                    setVisibility(event.target.checked ? "GM_ONLY" : "PUBLIC")
-                  }
-                />
-                <span>{"Только мастер"}</span>
-              </label>
-            </div>
+            <p className="composer-hint" id="chat-composer-hint">
+              {SEND_HINT}
+            </p>
           </form>
           {composerError && (
             <p className="composer-error" role="alert">

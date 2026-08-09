@@ -1248,9 +1248,19 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-md);
   border-top: 1px solid var(--line);
+}
+/* UIX-388: groups the collapse toggle with the (player-only) "Заявка
+   мастеру" entry point, both wrapping together at narrow sidebar widths
+   instead of the eyebrow label getting squeezed. */
+.activity-log-toolbar__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 .activity-log-toggle {
   min-height: 26px;
@@ -1262,6 +1272,10 @@ code {
 }
 .activity-log-toggle:hover {
   color: var(--text);
+}
+.activity-request-open {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
 .activity-log-truncated-note {
   margin: 0;
@@ -1394,8 +1408,10 @@ code {
   position: relative;
   min-width: 0;
 }
+/* UIX-388: room for sticker + slash + send icon buttons stacked in the
+   bottom-right corner of the textarea (see .chat-composer-actions below). */
 .chat-composer-input textarea {
-  padding-right: 76px;
+  padding-right: 108px;
 }
 .chat-composer-actions {
   position: absolute;
@@ -1404,6 +1420,34 @@ code {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+/* UIX-388: Send now lives inside the composer's input affordance area,
+   immediately after the slash-command icon, instead of a separate button
+   column that used to compete visually with GM-only controls. */
+.composer-send-action {
+  color: var(--accent);
+}
+.composer-send-action:hover,
+.composer-send-action:focus-visible {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-3));
+}
+/* Always-visible (not hover-only) explanation of what Enter vs Ctrl+Enter
+   does, so a player can tell which way a message will send *before*
+   pressing Enter -- a tooltip alone would only reach mouse users. */
+.composer-hint {
+  margin: 4px 0 0;
+  color: var(--faint);
+  font-size: 0.7rem;
+}
+/* UIX-388: with the Send button + GM-only checkbox column gone, the
+   ActivityPanel/ChatPanel composer form is a single-column stack (input,
+   then the hint line) instead of the two-column input+submit-rail grid.
+   DirectChatPanel keeps the base two-column `.chat-compose` grid for its
+   extra children (sticker picker, attach button, submit button) and is
+   unaffected. */
+.chat-compose--single {
+  grid-template-columns: 1fr;
 }
 .composer-icon {
   display: grid;
@@ -1482,31 +1526,6 @@ code {
 }
 .chat-compose textarea {
   resize: none;
-}
-.chat-compose-submit {
-  display: flex;
-  min-width: 112px;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-xs);
-}
-.chat-compose-submit .primary {
-  width: 100%;
-}
-.chat-visibility-check {
-  min-height: 32px;
-  justify-content: center;
-  padding: 4px 6px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  white-space: normal;
-}
-.chat-visibility-check:focus-within {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-.chat-visibility-check input {
-  flex: 0 0 auto;
 }
 .composer-error {
   margin: 0;
