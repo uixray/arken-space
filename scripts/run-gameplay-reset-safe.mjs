@@ -177,7 +177,7 @@ export const productionDependencies = {
         'playerAccessGrants',(select count(*) from player_access_grants where campaign_id=${c}),
         'invites',(select count(*) from invites where campaign_id=${c}),
         'chatMessages',(select count(*) from chat_messages where campaign_id=${c}),
-        'audioStates',(select count(*) from audio_states where campaign_id=${c}),
+        'audioStates',(select count(*) from campaign_audio_tracks where campaign_id=${c}),
         'actionJournal',(select count(*) from action_journal where campaign_id=${c}),
         'drawings',(select count(*) from drawings d join scenes s on s.id=d.scene_id where s.campaign_id=${c}),
         'gameEvents',(select count(*) from game_events where campaign_id=${c}),
@@ -196,7 +196,7 @@ export const productionDependencies = {
         'foreignAccessGrants',(select count(*) from player_access_grants where campaign_id<>${c}),
         'foreignInvites',(select count(*) from invites where campaign_id<>${c}),
         'foreignChatMessages',(select count(*) from chat_messages where campaign_id<>${c}),
-        'foreignAudioStates',(select count(*) from audio_states where campaign_id<>${c}),
+        'foreignAudioStates',(select count(*) from campaign_audio_tracks where campaign_id<>${c}),
         'foreignGameEvents',(select count(*) from game_events where campaign_id<>${c})
       );`,
     ]);

@@ -232,6 +232,20 @@
       "when": 1786217954226,
       "tag": "0032_square_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786284503135,
+      "tag": "0033_campaign_audio_tracks",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786284524871,
+      "tag": "0034_drop_audio_states",
+      "breakpoints": true
     }
   ]
 }

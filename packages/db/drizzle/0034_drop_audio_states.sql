@@ -1,0 +1,1 @@
+DROP TABLE "audio_states" CASCADE;

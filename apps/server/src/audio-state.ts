@@ -1,11 +1,16 @@
-import { and, eq } from "drizzle-orm";
-import { assets, audioStates } from "@arken/db";
+import { and, asc, eq } from "drizzle-orm";
+import { assets, campaignAudioTracks } from "@arken/db";
 import { inspectStoredAudioDuration } from "./storage.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
 export function effectiveAudioPosition(
-  state: typeof audioStates.$inferSelect,
+  state: {
+    playing: boolean;
+    startedAt: Date | null;
+    positionSeconds: number;
+    loop: boolean;
+  },
   now: Date,
   durationSeconds: number | null,
 ) {
@@ -45,53 +50,64 @@ export async function ensureAudioDuration(db: Database, assetId: string) {
 /**
  * Materializes an elapsed non-loop track as paused at its trusted duration.
  * The CAS update makes this safe when several snapshots reconnect together.
+ * UIX-382: now applies per track row (a campaign can have up to 4 active
+ * tracks, each with its own independent transport/deadline), so this
+ * normalizes every track for the campaign and returns the resulting rows.
  */
-export async function normalizeAudioDeadline(
+export async function normalizeAudioTrackDeadlines(
   db: Database,
   campaignId: string,
   now = new Date(),
 ) {
-  const [row] = await db
-    .select({ state: audioStates, durationSeconds: assets.durationSeconds })
-    .from(audioStates)
-    .leftJoin(assets, eq(audioStates.assetId, assets.id))
-    .where(eq(audioStates.campaignId, campaignId))
-    .limit(1);
-  if (!row) return null;
-  const { state } = row;
-  const durationSeconds =
-    row.durationSeconds ??
-    (state.assetId ? await ensureAudioDuration(db, state.assetId) : null);
-  if (
-    !state.playing ||
-    state.loop ||
-    !state.startedAt ||
-    !durationSeconds ||
-    effectiveAudioPosition(state, now, durationSeconds) < durationSeconds
-  )
-    return state;
+  const rows = await db
+    .select({ state: campaignAudioTracks, durationSeconds: assets.durationSeconds })
+    .from(campaignAudioTracks)
+    .leftJoin(assets, eq(campaignAudioTracks.assetId, assets.id))
+    .where(eq(campaignAudioTracks.campaignId, campaignId))
+    .orderBy(
+      asc(campaignAudioTracks.slotOrder),
+      asc(campaignAudioTracks.createdAt),
+    );
 
-  const [normalized] = await db
-    .update(audioStates)
-    .set({
-      playing: false,
-      positionSeconds: durationSeconds,
-      startedAt: null,
-      revision: state.revision + 1,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(audioStates.campaignId, campaignId),
-        eq(audioStates.revision, state.revision),
-      ),
-    )
-    .returning();
-  if (normalized) return normalized;
-  const [current] = await db
-    .select()
-    .from(audioStates)
-    .where(eq(audioStates.campaignId, campaignId))
-    .limit(1);
-  return current ?? null;
+  const results = await Promise.all(
+    rows.map(async (row) => {
+      const { state } = row;
+      const durationSeconds =
+        row.durationSeconds ??
+        (state.assetId ? await ensureAudioDuration(db, state.assetId) : null);
+      if (
+        !state.playing ||
+        state.loop ||
+        !state.startedAt ||
+        !durationSeconds ||
+        effectiveAudioPosition(state, now, durationSeconds) < durationSeconds
+      )
+        return state;
+
+      const [normalized] = await db
+        .update(campaignAudioTracks)
+        .set({
+          playing: false,
+          positionSeconds: durationSeconds,
+          startedAt: null,
+          revision: state.revision + 1,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(campaignAudioTracks.id, state.id),
+            eq(campaignAudioTracks.revision, state.revision),
+          ),
+        )
+        .returning();
+      if (normalized) return normalized;
+      const [current] = await db
+        .select()
+        .from(campaignAudioTracks)
+        .where(eq(campaignAudioTracks.id, state.id))
+        .limit(1);
+      return current ?? state;
+    }),
+  );
+  return results;
 }

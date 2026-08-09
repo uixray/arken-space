@@ -246,7 +246,7 @@ Drizzle schema содержит 21 прикладную таблицу.
 | Campaign/auth       | `campaigns`, `memberships`, `invites`, `player_access_grants`, `sessions`               |
 | Characters/catalog  | `characters`, `catalog_entries`, `character_catalog_entries`                            |
 | Canvas              | `scenes`, `token_definitions`, `token_controllers`, `tokens`, `fog_reveals`, `drawings` |
-| Media/audio         | `assets`, `audio_states`                                                                |
+| Media/audio         | `assets`, `campaign_audio_tracks`                                                       |
 | Communication/audit | `chat_messages`, `game_events`, `action_journal`                                        |
 | Feedback            | `feedback_reports`, `feedback_attachments`                                              |
 

@@ -1,9 +1,9 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { Server } from "socket.io";
-import { and, eq } from "drizzle-orm";
+import { and, asc, count, eq, max } from "drizzle-orm";
 import { z } from "zod";
 import {
-  audioStates,
+  campaignAudioTracks,
   actionJournal,
   assets,
   campaigns,
@@ -16,6 +16,7 @@ import {
 } from "@arken/db";
 import type {
   AudioStateDto,
+  AudioTrackDto,
   ClientToServerEvents,
   EventEnvelope,
   ServerToClientEvents,
@@ -23,6 +24,7 @@ import type {
 } from "@arken/contracts";
 import {
   audioStateUpdateSchema,
+  audioTrackCommandSchema,
   moveTokenSchema,
   rulerUpdateSchema,
 } from "@arken/contracts";
@@ -33,6 +35,9 @@ import { buildSnapshot } from "./snapshot.js";
 import { cookieValue } from "./security.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import { effectiveAudioPosition, ensureAudioDuration } from "./audio-state.js";
+
+/** UIX-382: hard cap on concurrently active tracks in the mixer. */
+const MAX_AUDIO_TRACKS = 4;
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -51,13 +56,31 @@ function tokenDto(token: EditableToken): TokenDto {
   return dto;
 }
 
-function audioDto(state: typeof audioStates.$inferSelect): AudioStateDto {
+type AudioTrackRow = typeof campaignAudioTracks.$inferSelect;
+
+/** UIX-382 compat: the legacy singular shape, derived from a single track row. */
+function audioDto(state: AudioTrackRow): AudioStateDto {
   return {
     assetId: state.assetId,
     playing: state.playing,
     positionSeconds: state.positionSeconds,
     loop: state.loop,
     startedAt: state.startedAt?.toISOString() ?? null,
+    revision: state.revision,
+    updatedAt: state.updatedAt.toISOString(),
+  };
+}
+
+function audioTrackDto(state: AudioTrackRow): AudioTrackDto {
+  return {
+    id: state.id,
+    assetId: state.assetId,
+    mixVolume: state.mixVolume,
+    playing: state.playing,
+    positionSeconds: state.positionSeconds,
+    loop: state.loop,
+    startedAt: state.startedAt?.toISOString() ?? null,
+    slotOrder: state.slotOrder,
     revision: state.revision,
     updatedAt: state.updatedAt.toISOString(),
   };
@@ -447,8 +470,9 @@ export function registerRealtime(
         const recorded = existing.payload as { result?: AudioStateDto } | null;
         const [current] = await db
           .select()
-          .from(audioStates)
-          .where(eq(audioStates.campaignId, auth.campaignId))
+          .from(campaignAudioTracks)
+          .where(eq(campaignAudioTracks.campaignId, auth.campaignId))
+          .orderBy(asc(campaignAudioTracks.slotOrder))
           .limit(1);
         return ack?.({
           ok: true,
@@ -462,9 +486,10 @@ export function registerRealtime(
         });
       }
       const [preCommandState] = await db
-        .select({ assetId: audioStates.assetId })
-        .from(audioStates)
-        .where(eq(audioStates.campaignId, auth.campaignId))
+        .select({ assetId: campaignAudioTracks.assetId })
+        .from(campaignAudioTracks)
+        .where(eq(campaignAudioTracks.campaignId, auth.campaignId))
+        .orderBy(asc(campaignAudioTracks.slotOrder))
         .limit(1);
       const ensuredDuration = preCommandState?.assetId
         ? await ensureAudioDuration(db, preCommandState.assetId)
@@ -491,23 +516,32 @@ export function registerRealtime(
             return { rejection: "ASSET_NOT_FOUND" as const };
           }
         }
-        await tx
-          .insert(audioStates)
-          .values({
-            campaignId: auth.campaignId,
-            assetId: null,
-            playing: false,
-            positionSeconds: 0,
-            loop: false,
-            startedAt: null,
-            revision: 0,
-          })
-          .onConflictDoNothing();
-        const [current] = await tx
+        // UIX-382 compat: the legacy singular audio:set path operates on the
+        // "slot 0" track — the lowest slotOrder row for this campaign,
+        // auto-vivified here if the mixer has no tracks yet. This keeps the
+        // not-yet-updated MusicBar client working unmodified against the new
+        // multi-track table.
+        let [current] = await tx
           .select()
-          .from(audioStates)
-          .where(eq(audioStates.campaignId, auth.campaignId))
+          .from(campaignAudioTracks)
+          .where(eq(campaignAudioTracks.campaignId, auth.campaignId))
+          .orderBy(asc(campaignAudioTracks.slotOrder))
           .limit(1);
+        if (!current) {
+          [current] = await tx
+            .insert(campaignAudioTracks)
+            .values({
+              campaignId: auth.campaignId,
+              assetId: null,
+              playing: false,
+              positionSeconds: 0,
+              loop: false,
+              startedAt: null,
+              slotOrder: 0,
+              revision: 0,
+            })
+            .returning();
+        }
         if (!current) return null;
 
         const expectedRevision =
@@ -609,7 +643,7 @@ export function registerRealtime(
         }
 
         const [state] = await tx
-          .update(audioStates)
+          .update(campaignAudioTracks)
           .set({
             ...next,
             revision: current.revision + 1,
@@ -617,8 +651,8 @@ export function registerRealtime(
           })
           .where(
             and(
-              eq(audioStates.campaignId, auth.campaignId),
-              eq(audioStates.revision, current.revision),
+              eq(campaignAudioTracks.id, current.id),
+              eq(campaignAudioTracks.revision, current.revision),
             ),
           )
           .returning();
@@ -667,6 +701,347 @@ export function registerRealtime(
         status: "ACCEPTED",
         sequence: result.event.sequence,
         data: dto,
+      });
+    });
+
+    // UIX-382: per-track mixer commands. Independent transport per track —
+    // each mutation targets one trackId (except ADD_TRACK, which creates the
+    // row) — but follows the exact GM-only/idempotency/CAS/audit pattern
+    // above, generalized from a single campaign-scoped row to N track rows.
+    socket.on("audio:track:set", async (input, ack) => {
+      if (auth.role !== "GM") {
+        return ack?.({ ok: false, status: "FORBIDDEN", reason: "GM_REQUIRED" });
+      }
+      const parsed = audioTrackCommandSchema.safeParse(input);
+      if (!parsed.success) {
+        return ack?.({
+          ok: false,
+          status: "INVALID",
+          reason: "INVALID_COMMAND",
+        });
+      }
+      const command = parsed.data;
+      const { actionId } = command;
+      const [existing] = await db
+        .select()
+        .from(gameEvents)
+        .where(
+          and(
+            eq(gameEvents.campaignId, auth.campaignId),
+            eq(gameEvents.actionId, actionId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        const recorded = existing.payload as {
+          result?: AudioTrackDto;
+          removedTrackId?: string;
+        } | null;
+        return ack?.({
+          ok: true,
+          status: "DUPLICATE",
+          sequence: existing.sequence,
+          ...(recorded?.result ? { data: recorded.result } : {}),
+        });
+      }
+
+      const ensuredDuration =
+        command.command !== "ADD_TRACK"
+          ? await (async () => {
+              const [preTrack] = await db
+                .select({ assetId: campaignAudioTracks.assetId })
+                .from(campaignAudioTracks)
+                .where(
+                  and(
+                    eq(campaignAudioTracks.id, command.trackId),
+                    eq(campaignAudioTracks.campaignId, auth.campaignId),
+                  ),
+                )
+                .limit(1);
+              return preTrack?.assetId
+                ? ensureAudioDuration(db, preTrack.assetId)
+                : null;
+            })()
+          : null;
+
+      const result = await db.transaction(async (tx) => {
+        if (command.command === "ADD_TRACK") {
+          if (command.assetId) {
+            const [asset] = await tx
+              .select({ campaignId: assets.campaignId, kind: assets.kind })
+              .from(assets)
+              .where(eq(assets.id, command.assetId))
+              .limit(1);
+            if (
+              !asset ||
+              asset.campaignId !== auth.campaignId ||
+              asset.kind !== "AUDIO"
+            ) {
+              return { rejection: "ASSET_NOT_FOUND" as const };
+            }
+          }
+          const [activeCountRow] = await tx
+            .select({ value: count() })
+            .from(campaignAudioTracks)
+            .where(eq(campaignAudioTracks.campaignId, auth.campaignId));
+          if (Number(activeCountRow?.value ?? 0) >= MAX_AUDIO_TRACKS) {
+            return { rejection: "TRACK_LIMIT_REACHED" as const };
+          }
+          const [maxSlotRow] = await tx
+            .select({ value: max(campaignAudioTracks.slotOrder) })
+            .from(campaignAudioTracks)
+            .where(eq(campaignAudioTracks.campaignId, auth.campaignId));
+          const nextSlot =
+            maxSlotRow?.value === null || maxSlotRow?.value === undefined
+              ? 0
+              : maxSlotRow.value + 1;
+          const [state] = await tx
+            .insert(campaignAudioTracks)
+            .values({
+              campaignId: auth.campaignId,
+              assetId: command.assetId,
+              playing: false,
+              positionSeconds: 0,
+              loop: false,
+              startedAt: null,
+              slotOrder: nextSlot,
+              revision: 0,
+            })
+            .returning();
+          if (!state) return null;
+          const [event] = await tx
+            .insert(gameEvents)
+            .values({
+              campaignId: auth.campaignId,
+              actionId,
+              membershipId: auth.membershipId,
+              type: "AUDIO_TRACK_COMMAND",
+              entityType: "AUDIO_TRACK",
+              entityId: state.id,
+              payload: { command, result: audioTrackDto(state) },
+            })
+            .returning();
+          return event ? { event, state } : null;
+        }
+
+        const [current] = await tx
+          .select()
+          .from(campaignAudioTracks)
+          .where(
+            and(
+              eq(campaignAudioTracks.id, command.trackId),
+              eq(campaignAudioTracks.campaignId, auth.campaignId),
+            ),
+          )
+          .limit(1);
+        if (!current) return { rejection: "TRACK_NOT_FOUND" as const };
+        if (current.revision !== command.revision) {
+          return { rejection: "REVISION_CONFLICT" as const, current };
+        }
+
+        if (command.command === "REMOVE_TRACK") {
+          const [deleted] = await tx
+            .delete(campaignAudioTracks)
+            .where(
+              and(
+                eq(campaignAudioTracks.id, current.id),
+                eq(campaignAudioTracks.revision, current.revision),
+              ),
+            )
+            .returning();
+          if (!deleted) {
+            return { rejection: "REVISION_CONFLICT" as const, current };
+          }
+          const [event] = await tx
+            .insert(gameEvents)
+            .values({
+              campaignId: auth.campaignId,
+              actionId,
+              membershipId: auth.membershipId,
+              type: "AUDIO_TRACK_COMMAND",
+              entityType: "AUDIO_TRACK",
+              entityId: current.id,
+              payload: { command, removedTrackId: current.id },
+            })
+            .returning();
+          return event
+            ? { event, removed: true as const, removedTrackId: current.id }
+            : null;
+        }
+
+        if (command.command === "SELECT" && command.assetId) {
+          const [asset] = await tx
+            .select({ campaignId: assets.campaignId, kind: assets.kind })
+            .from(assets)
+            .where(eq(assets.id, command.assetId))
+            .limit(1);
+          if (
+            !asset ||
+            asset.campaignId !== auth.campaignId ||
+            asset.kind !== "AUDIO"
+          ) {
+            return { rejection: "ASSET_NOT_FOUND" as const };
+          }
+        }
+
+        const [selectedAsset] = current.assetId
+          ? await tx
+              .select({ durationSeconds: assets.durationSeconds })
+              .from(assets)
+              .where(eq(assets.id, current.assetId))
+              .limit(1)
+          : [];
+        const durationSeconds = current.assetId
+          ? (selectedAsset?.durationSeconds ?? ensuredDuration)
+          : null;
+        const now = new Date();
+        const effectivePosition = effectiveAudioPosition(
+          current,
+          now,
+          durationSeconds,
+        );
+        const deadlineElapsed = Boolean(
+          current.playing &&
+          !current.loop &&
+          current.startedAt &&
+          durationSeconds &&
+          effectivePosition >= durationSeconds,
+        );
+        const logicalPlaying = deadlineElapsed ? false : current.playing;
+        let next = {
+          assetId: current.assetId,
+          mixVolume: current.mixVolume,
+          playing: logicalPlaying,
+          positionSeconds: effectivePosition,
+          loop: current.loop,
+          startedAt: logicalPlaying ? now : null,
+        };
+
+        switch (command.command) {
+          case "SELECT":
+            next = {
+              ...next,
+              assetId: command.assetId,
+              playing: command.assetId ? logicalPlaying : false,
+              positionSeconds: 0,
+              startedAt: command.assetId && logicalPlaying ? now : null,
+            };
+            break;
+          case "PLAY":
+            if (!current.assetId || !durationSeconds) {
+              return { rejection: "AUDIO_NOT_SELECTED" as const };
+            }
+            next = {
+              ...next,
+              playing: true,
+              positionSeconds:
+                effectivePosition >= durationSeconds ? 0 : effectivePosition,
+              startedAt: now,
+            };
+            break;
+          case "PAUSE":
+            next = { ...next, playing: false, startedAt: null };
+            break;
+          case "SEEK":
+            next = {
+              ...next,
+              positionSeconds: durationSeconds
+                ? Math.min(command.positionSeconds, durationSeconds)
+                : command.positionSeconds,
+              startedAt: logicalPlaying ? now : null,
+            };
+            break;
+          case "SET_LOOP":
+            next = { ...next, loop: command.loop };
+            break;
+          case "SET_MIX_VOLUME":
+            next = { ...next, mixVolume: command.mixVolume };
+            break;
+          case "END":
+            if (
+              !current.assetId ||
+              (!logicalPlaying && !deadlineElapsed) ||
+              current.loop
+            ) {
+              return { rejection: "AUDIO_END_NOT_APPLICABLE" as const };
+            }
+            next = { ...next, playing: false, startedAt: null };
+            break;
+        }
+
+        const [state] = await tx
+          .update(campaignAudioTracks)
+          .set({
+            ...next,
+            revision: current.revision + 1,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(campaignAudioTracks.id, current.id),
+              eq(campaignAudioTracks.revision, current.revision),
+            ),
+          )
+          .returning();
+        if (!state) {
+          return { rejection: "REVISION_CONFLICT" as const, current };
+        }
+        const [event] = await tx
+          .insert(gameEvents)
+          .values({
+            campaignId: auth.campaignId,
+            actionId,
+            membershipId: auth.membershipId,
+            type: "AUDIO_TRACK_COMMAND",
+            entityType: "AUDIO_TRACK",
+            entityId: state.id,
+            payload: { command, result: audioTrackDto(state) },
+          })
+          .returning();
+        return event ? { event, state } : null;
+      });
+
+      if (result && "rejection" in result) {
+        return ack?.({
+          ok: false,
+          status:
+            result.rejection === "REVISION_CONFLICT" ? "CONFLICT" : "INVALID",
+          reason: result.rejection,
+          ...(result.rejection === "REVISION_CONFLICT" && "current" in result
+            ? { data: audioTrackDto(result.current) }
+            : {}),
+        });
+      }
+      if (!result) {
+        return ack?.({
+          ok: false,
+          status: "CONFLICT",
+          reason: "AUDIO_UPDATE_FAILED",
+        });
+      }
+      if ("removed" in result && result.removed) {
+        io.to(campaignRoom(auth.campaignId)).emit(
+          "audio:track:removed",
+          envelope(result.event.sequence, actionId, {
+            trackId: result.removedTrackId,
+          }),
+        );
+        return ack?.({
+          ok: true,
+          status: "ACCEPTED",
+          sequence: result.event.sequence,
+        });
+      }
+      const trackDto = audioTrackDto(result.state);
+      io.to(campaignRoom(auth.campaignId)).emit(
+        "audio:track:state",
+        envelope(result.event.sequence, actionId, trackDto),
+      );
+      ack?.({
+        ok: true,
+        status: "ACCEPTED",
+        sequence: result.event.sequence,
+        data: trackDto,
       });
     });
 

@@ -12,7 +12,6 @@ import {
 } from "drizzle-orm";
 import {
   assets,
-  audioStates,
   campaigns,
   catalogEntries,
   characterCatalogEntries,
@@ -40,7 +39,7 @@ import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import { env } from "./env.js";
 import { normalizeLegacyEntryData } from "./entry-data.js";
 import { normalizeDiceResult, normalizeSkillCard } from "./dice-result.js";
-import { normalizeAudioDeadline } from "./audio-state.js";
+import { normalizeAudioTrackDeadlines } from "./audio-state.js";
 import {
   chatVisibilityFilter,
   canAccessStream,
@@ -58,7 +57,10 @@ export async function buildSnapshot(
   db: Database,
   auth: AuthContext,
 ): Promise<GameSnapshot> {
-  await normalizeAudioDeadline(db, auth.campaignId);
+  const normalizedAudioTracks = await normalizeAudioTrackDeadlines(
+    db,
+    auth.campaignId,
+  );
   const [campaign] = await db
     .select()
     .from(campaigns)
@@ -81,7 +83,6 @@ export async function buildSnapshot(
     assetRows,
     threadRows,
     cursorRows,
-    audioRows,
     sequenceRows,
     playerRequestRows,
   ] = await Promise.all([
@@ -183,11 +184,6 @@ export async function buildSnapshot(
           eq(chatReadCursors.membershipId, auth.membershipId),
         ),
       ),
-    db
-      .select()
-      .from(audioStates)
-      .where(eq(audioStates.campaignId, auth.campaignId))
-      .limit(1),
     db
       .select({ value: max(gameEvents.sequence) })
       .from(gameEvents)
@@ -319,7 +315,7 @@ export async function buildSnapshot(
   );
   const me = memberRows.find((member) => member.id === auth.membershipId);
   if (!me) throw new Error("Membership not found");
-  const audio = audioRows[0];
+  const audio = normalizedAudioTracks[0];
   const snapshotVersion = Number(sequenceRows[0]?.value ?? 0);
   const visibleScenes =
     auth.role === "GM"
@@ -386,7 +382,9 @@ export async function buildSnapshot(
     if (character.portraitAssetId)
       visibleAssetIds.add(character.portraitAssetId);
   }
-  if (audio?.assetId) visibleAssetIds.add(audio.assetId);
+  for (const track of normalizedAudioTracks) {
+    if (track.assetId) visibleAssetIds.add(track.assetId);
+  }
   for (const assetId of worldMapProjection.backgroundAssetIds)
     visibleAssetIds.add(assetId);
   const visibleAssets =
@@ -656,6 +654,18 @@ export async function buildSnapshot(
           revision: 0,
           updatedAt: new Date().toISOString(),
         },
+    audioTracks: normalizedAudioTracks.map((track) => ({
+      id: track.id,
+      assetId: track.assetId,
+      mixVolume: track.mixVolume,
+      playing: track.playing,
+      positionSeconds: track.positionSeconds,
+      loop: track.loop,
+      startedAt: track.startedAt?.toISOString() ?? null,
+      slotOrder: track.slotOrder,
+      revision: track.revision,
+      updatedAt: track.updatedAt.toISOString(),
+    })),
     snapshotVersion,
     schemaVersion: env.SCHEMA_VERSION,
     buildVersion: env.APP_VERSION,

@@ -24,7 +24,7 @@ describe("initial PostgreSQL migration", () => {
       expect.arrayContaining([
         "assets",
         "action_journal",
-        "audio_states",
+        "campaign_audio_tracks",
         "campaigns",
         "character_media",
         "characters",
@@ -403,6 +403,80 @@ describe("chat thread migration", () => {
         `insert into chat_read_cursors (campaign_id,membership_id,thread_id) values ('${campaign}','${member}','${foreignTable.id}')`,
       ),
     ).rejects.toThrow();
+    await database.close();
+  });
+
+  it("UIX-382: migrates an existing single-track audio_states row into campaign_audio_tracks without losing playback settings", async () => {
+    const database = new PGlite();
+    const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
+    const files = (await readdir(migrationsUrl))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    // Apply everything up to (but not including) the campaign_audio_tracks
+    // migration, so audio_states still exists in its original singular form.
+    const target = files.findIndex((file) =>
+      file.startsWith("0033_campaign_audio_tracks"),
+    );
+    expect(target).toBeGreaterThan(0);
+    for (const file of files.slice(0, target))
+      await database.exec(
+        (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
+          "--> statement-breakpoint",
+          "",
+        ),
+      );
+
+    const campaignId = "60000000-0000-0000-0000-000000000001";
+    const gmId = "60000000-0000-0000-0000-000000000002";
+    const assetId = "60000000-0000-0000-0000-000000000003";
+    await database.exec(`
+      insert into campaigns (id,name) values ('${campaignId}','Audio migration fixture');
+      insert into memberships (id,campaign_id,role,display_name) values ('${gmId}','${campaignId}','GM','GM');
+      insert into assets (id,campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes,duration_seconds)
+      values ('${assetId}','${campaignId}','${gmId}','AUDIO','Ambient','test/ambient','audio/mpeg',10,120);
+      insert into audio_states (campaign_id,asset_id,playing,position_seconds,loop,started_at,revision)
+      values ('${campaignId}','${assetId}',true,42.5,true,'2026-01-01T00:00:00Z',7);
+    `);
+
+    // Apply the remaining migrations, including 0033 (create + copy data)
+    // and 0034 (drop the old table).
+    for (const file of files.slice(target))
+      await database.exec(
+        (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
+          "--> statement-breakpoint",
+          "",
+        ),
+      );
+
+    const tracks = await database.query<{
+      campaign_id: string;
+      asset_id: string;
+      mix_volume: number;
+      playing: boolean;
+      position_seconds: number;
+      loop: boolean;
+      slot_order: number;
+      revision: number;
+    }>(
+      `select campaign_id, asset_id, mix_volume, playing, position_seconds, loop, slot_order, revision
+       from campaign_audio_tracks where campaign_id = '${campaignId}'`,
+    );
+    expect(tracks.rows).toHaveLength(1);
+    expect(tracks.rows[0]).toMatchObject({
+      campaign_id: campaignId,
+      asset_id: assetId,
+      mix_volume: 1,
+      playing: true,
+      position_seconds: 42.5,
+      loop: true,
+      slot_order: 0,
+      revision: 7,
+    });
+
+    const oldTable = await database.query<{ table_name: string }>(
+      "select table_name from information_schema.tables where table_schema = 'public' and table_name = 'audio_states'",
+    );
+    expect(oldTable.rows).toHaveLength(0);
     await database.close();
   });
 });

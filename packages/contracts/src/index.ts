@@ -1494,6 +1494,68 @@ export const audioStateUpdateSchema = z.union([
   audioCommandSchema,
   legacyAudioStateUpdateSchema,
 ]);
+
+/**
+ * UIX-382: per-track transport/mixer commands. Each active track has its own
+ * independent transport (play/pause/seek/loop), so every mutation carries a
+ * `trackId` alongside the existing `actionId`+`revision` idempotency/CAS
+ * pair. ADD_TRACK is the one exception — it creates the row, so it has no
+ * revision to check and no trackId to target.
+ *
+ * SELECT replaces a track's asset in place (same row, same trackId) rather
+ * than requiring REMOVE_TRACK+ADD_TRACK — this preserves the track's
+ * slotOrder/mixVolume/id across an asset swap, matching the legacy singular
+ * SELECT behavior and keeping the mixer UI's per-track identity stable.
+ */
+export const audioTrackCommandSchema = z.discriminatedUnion("command", [
+  z.object({
+    actionId: actionIdSchema,
+    command: z.literal("ADD_TRACK"),
+    assetId: z.string().uuid().nullable(),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.literal("REMOVE_TRACK"),
+    trackId: z.string().uuid(),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.literal("SELECT"),
+    trackId: z.string().uuid(),
+    assetId: z.string().uuid().nullable(),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.enum(["PLAY", "PAUSE", "END"]),
+    trackId: z.string().uuid(),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.literal("SEEK"),
+    trackId: z.string().uuid(),
+    positionSeconds: z.number().min(0).max(86400),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.literal("SET_LOOP"),
+    trackId: z.string().uuid(),
+    loop: z.boolean(),
+  }),
+  z.object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    command: z.literal("SET_MIX_VOLUME"),
+    trackId: z.string().uuid(),
+    mixVolume: z.number().min(0).max(1),
+  }),
+]);
+export type AudioTrackCommand = z.infer<typeof audioTrackCommandSchema>;
+
 const entryCardRequestBaseSchema = z.object({
   actionId: actionIdSchema,
   entryRevision: z.number().int().nonnegative().optional(),
@@ -1981,6 +2043,20 @@ export interface AudioStateDto {
   updatedAt: string;
 }
 
+/** UIX-382: per-track audio state (multi-track mixer, independent transport). */
+export interface AudioTrackDto {
+  id: string;
+  assetId: string | null;
+  mixVolume: number;
+  playing: boolean;
+  positionSeconds: number;
+  loop: boolean;
+  startedAt: string | null;
+  slotOrder: number;
+  revision: number;
+  updatedAt: string;
+}
+
 export interface GameSnapshot {
   campaign: {
     id: string;
@@ -2011,7 +2087,14 @@ export interface GameSnapshot {
   chatThreads: ChatThreadDto[];
   chatThreadStates: ChatThreadStateDto[];
   assets: AssetDto[];
+  /**
+   * UIX-382 compat: mirrors the "slot 0" track (the legacy singular audio
+   * slot) so the not-yet-updated MusicBar client keeps working unmodified.
+   * New clients should read `audioTracks` instead.
+   */
   audio: AudioStateDto;
+  /** UIX-382: full multi-track mixer state, ordered by slotOrder. */
+  audioTracks: AudioTrackDto[];
   snapshotVersion: number;
   schemaVersion: number;
   buildVersion: string;
@@ -2069,6 +2152,12 @@ export interface ServerToClientEvents {
   }) => void;
   "character:updated": (event: EventEnvelope<CharacterDto>) => void;
   "audio:state": (event: EventEnvelope<AudioStateDto>) => void;
+  /** UIX-382: broadcast when a track is added, mutated, or its asset is swapped. */
+  "audio:track:state": (event: EventEnvelope<AudioTrackDto>) => void;
+  /** UIX-382: broadcast when a track is removed from the mixer. */
+  "audio:track:removed": (
+    event: EventEnvelope<{ trackId: string }>,
+  ) => void;
   "map:ping": (ping: MapPing) => void;
   "ruler:updated": (
     ruler: z.infer<typeof rulerUpdateSchema> & {
@@ -2090,6 +2179,11 @@ export interface ClientToServerEvents {
   "audio:set": (
     state: z.infer<typeof audioStateUpdateSchema>,
     ack?: (result: CommandAck<AudioStateDto>) => void,
+  ) => void;
+  /** UIX-382: per-track mixer commands (independent transport per track). */
+  "audio:track:set": (
+    command: z.infer<typeof audioTrackCommandSchema>,
+    ack?: (result: CommandAck<AudioTrackDto>) => void,
   ) => void;
   "map:ping": (
     ping: { sceneId: string; x: number; y: number },

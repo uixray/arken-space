@@ -78,7 +78,7 @@ describe("backup and restore safety", () => {
 
   it("labels pre-upgrade manifests as sampled coverage", () => {
     const oldManifest = parseDatabaseCounts(
-      "assets|2\naudio_states|1\ncampaigns|1\ncharacters|6\n" +
+      "assets|2\ncampaigns|1\ncharacters|6\n" +
         "chat_messages|12\nfog_reveals|3\ngame_events|20\ninvites|0\n" +
         "memberships|7\nscenes|2\nsessions|7\ntokens|8\n",
     );
@@ -91,7 +91,7 @@ describe("backup and restore safety", () => {
     expect(query).toMatch(/ORDER BY 1;\n$/);
     expect(describeDatabaseCountCoverage(oldManifest)).toMatchObject({
       mode: "sampled",
-      countedTables: 12,
+      countedTables: 11,
       knownPersistedTables: 51,
     });
   });
@@ -124,7 +124,7 @@ describe("backup and restore safety", () => {
     });
   });
 
-  it("verifies all migration identities from 0000 through 0032", () => {
+  it("verifies all migration identities from 0000 through 0034", () => {
     const migrationsDirectory = path.join(root, "packages", "db", "drizzle");
     const expected = readExpectedMigrationLedger({
       journalPath: path.join(migrationsDirectory, "meta", "_journal.json"),
@@ -135,9 +135,9 @@ describe("backup and restore safety", () => {
       .join("\n");
     const actual = parseMigrationLedger(databaseOutput);
 
-    expect(expected).toHaveLength(33);
+    expect(expected).toHaveLength(35);
     expect(expected[0].tag).toBe("0000_nasty_emma_frost");
-    expect(expected.at(-1)?.tag).toBe("0032_square_toad");
+    expect(expected.at(-1)?.tag).toBe("0034_drop_audio_states");
     expect(() => compareMigrationLedger(expected, actual)).not.toThrow();
     expect(() =>
       compareMigrationLedgerPrefix(expected, actual.slice(0, 16)),
@@ -159,7 +159,7 @@ describe("backup and restore safety", () => {
         ...actual.slice(0, -1),
         { ...actual.at(-1)!, hash: "0".repeat(64) },
       ]),
-    ).toThrow(/identity differs at 0032_square_toad/);
+    ).toThrow(/identity differs at 0034_drop_audio_states/);
   });
 
   it("writes migration and coverage evidence without invoking restore in tests", () => {

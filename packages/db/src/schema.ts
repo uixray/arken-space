@@ -1770,22 +1770,50 @@ export const chatReadCursors = pgTable(
   ],
 );
 
-export const audioStates = pgTable("audio_states", {
-  campaignId: uuid("campaign_id")
-    .primaryKey()
-    .references(() => campaigns.id, { onDelete: "cascade" }),
-  assetId: uuid("asset_id").references(() => assets.id, {
-    onDelete: "set null",
-  }),
-  playing: boolean("playing").notNull().default(false),
-  positionSeconds: doublePrecision("position_seconds").notNull().default(0),
-  loop: boolean("loop").notNull().default(false),
-  startedAt: timestamp("started_at", { withTimezone: true }),
-  revision: integer("revision").notNull().default(0),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+/**
+ * UIX-382: per-track audio state, replacing the singular `audio_states`
+ * (campaignId-as-PK) model. Each campaign now has 0..N track rows (hard cap
+ * of 4 enforced transactionally in the realtime handler, see realtime.ts),
+ * each with its own independent transport (playing/position/loop) and its
+ * own GM-controlled mix volume. slotOrder preserves the GM's track ordering
+ * across reconnects.
+ */
+export const campaignAudioTracks = pgTable(
+  "campaign_audio_tracks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    mixVolume: doublePrecision("mix_volume").notNull().default(1),
+    playing: boolean("playing").notNull().default(false),
+    positionSeconds: doublePrecision("position_seconds").notNull().default(0),
+    loop: boolean("loop").notNull().default(false),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    slotOrder: integer("slot_order").notNull().default(0),
+    revision: integer("revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("campaign_audio_tracks_campaign_id_idx").on(table.campaignId),
+    index("campaign_audio_tracks_campaign_slot_idx").on(
+      table.campaignId,
+      table.slotOrder,
+    ),
+    check(
+      "campaign_audio_tracks_mix_volume_check",
+      sql`${table.mixVolume} >= 0 AND ${table.mixVolume} <= 1`,
+    ),
+  ],
+);
 
 /** Durable player-to-GM requests. Visibility is always filtered server-side. */
 export const playerRequests = pgTable(

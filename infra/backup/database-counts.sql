@@ -14,7 +14,7 @@ FROM (
   VALUES
     ('action_journal'),
     ('assets'),
-    ('audio_states'),
+    ('campaign_audio_tracks'),
     ('campaigns'),
     ('catalog_entries'),
     ('character_catalog_entries'),

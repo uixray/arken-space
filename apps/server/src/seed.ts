@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import {
-  audioStates,
+  campaignAudioTracks,
   campaigns,
   characters,
   gmAccessCredentials,
@@ -94,10 +94,14 @@ export async function ensureSeed(db: Database) {
       .values({ campaignId: campaign.id, name: "Путник", ...starter });
   }
 
-  await db
-    .insert(audioStates)
-    .values({ campaignId: campaign.id })
-    .onConflictDoNothing();
+  const [existingTrack] = await db
+    .select({ id: campaignAudioTracks.id })
+    .from(campaignAudioTracks)
+    .where(eq(campaignAudioTracks.campaignId, campaign.id))
+    .limit(1);
+  if (!existingTrack) {
+    await db.insert(campaignAudioTracks).values({ campaignId: campaign.id });
+  }
   await reconcileTokenOwnership(db);
   return { campaign, gm };
 }

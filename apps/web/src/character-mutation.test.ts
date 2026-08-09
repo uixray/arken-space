@@ -143,6 +143,7 @@ function snapshotWithCharacter(nextCharacter: CharacterDto): GameSnapshot {
       revision: 0,
       updatedAt: new Date(0).toISOString(),
     },
+    audioTracks: [],
     snapshotVersion: 4,
     schemaVersion: 2,
     buildVersion: "test",

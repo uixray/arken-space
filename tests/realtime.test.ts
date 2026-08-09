@@ -7,6 +7,7 @@ import { io as createClient, type Socket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
   AudioStateDto,
+  AudioTrackDto,
   ClientToServerEvents,
   CommandAck,
   ServerToClientEvents,
@@ -204,6 +205,56 @@ function audioCommand(
 ) {
   return new Promise<CommandAck<AudioStateDto>>((resolve) => {
     socket.emit("audio:set", input, resolve);
+  });
+}
+
+function audioTrackCommand(
+  socket: typeof gmClient,
+  input:
+    | { actionId: string; command: "ADD_TRACK"; assetId: string | null }
+    | {
+        actionId: string;
+        revision: number;
+        command: "REMOVE_TRACK";
+        trackId: string;
+      }
+    | {
+        actionId: string;
+        revision: number;
+        command: "SELECT";
+        trackId: string;
+        assetId: string | null;
+      }
+    | {
+        actionId: string;
+        revision: number;
+        command: "PLAY" | "PAUSE" | "END";
+        trackId: string;
+      }
+    | {
+        actionId: string;
+        revision: number;
+        command: "SEEK";
+        trackId: string;
+        positionSeconds: number;
+      }
+    | {
+        actionId: string;
+        revision: number;
+        command: "SET_LOOP";
+        trackId: string;
+        loop: boolean;
+      }
+    | {
+        actionId: string;
+        revision: number;
+        command: "SET_MIX_VOLUME";
+        trackId: string;
+        mixVolume: number;
+      },
+) {
+  return new Promise<CommandAck<AudioTrackDto>>((resolve) => {
+    socket.emit("audio:track:set", input, resolve);
   });
 }
 
@@ -657,7 +708,7 @@ describe("durable realtime token commands", () => {
 
     const rejectedRows = await database.query<{ count: number }>(`
       select (
-        (select count(*) from audio_states) +
+        (select count(*) from campaign_audio_tracks) +
         (select count(*) from game_events where type = 'AUDIO_STATE_SET')
       )::int as count
     `);
@@ -898,7 +949,7 @@ describe("durable realtime token commands", () => {
         (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
       values
         ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Short', 'test/audio-deadline', 'audio/mpeg', 10, 3);
-      insert into audio_states
+      insert into campaign_audio_tracks
         (campaign_id, asset_id, playing, position_seconds, loop, started_at, revision)
       values
         ('${ids.campaign}', '${ids.audioAsset}', true, 1, false, now() - interval '10 seconds', 4);
@@ -922,7 +973,7 @@ describe("durable realtime token commands", () => {
       position_seconds: number;
       revision: number;
     }>(
-      `select playing, position_seconds, revision from audio_states where campaign_id = '${ids.campaign}'`,
+      `select playing, position_seconds, revision from campaign_audio_tracks where campaign_id = '${ids.campaign}'`,
     );
     expect(rows.rows[0]).toMatchObject({
       playing: false,
@@ -937,7 +988,7 @@ describe("durable realtime token commands", () => {
         (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
       values
         ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Short', 'test/audio-command-deadline', 'audio/mpeg', 10, 3);
-      insert into audio_states
+      insert into campaign_audio_tracks
         (campaign_id, asset_id, playing, position_seconds, loop, started_at, revision)
       values
         ('${ids.campaign}', '${ids.audioAsset}', true, 1, false, now() - interval '10 seconds', 4);
@@ -981,7 +1032,7 @@ describe("durable realtime token commands", () => {
     });
 
     await database.exec(`
-      update audio_states
+      update campaign_audio_tracks
       set playing = true, position_seconds = 1,
           started_at = now() - interval '10 seconds'
       where campaign_id = '${ids.campaign}';
@@ -997,7 +1048,7 @@ describe("durable realtime token commands", () => {
     });
 
     await database.exec(`
-      update audio_states
+      update campaign_audio_tracks
       set playing = true, position_seconds = 1,
           started_at = now() - interval '10 seconds'
       where campaign_id = '${ids.campaign}';
@@ -1022,6 +1073,245 @@ describe("durable realtime token commands", () => {
       where campaign_id = '${ids.campaign}' and type = 'AUDIO_COMMAND'
     `);
     expect(events.rows[0]?.count).toBe(3);
+  });
+
+  it("UIX-382: caps concurrent tracks at 4 and rejects a 5th with TRACK_LIMIT_REACHED", async () => {
+    const added: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const result = await audioTrackCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        command: "ADD_TRACK",
+        assetId: null,
+      });
+      expect(result).toMatchObject({ ok: true, status: "ACCEPTED" });
+      added.push(result.data!.id);
+    }
+    expect(new Set(added).size).toBe(4);
+
+    const rejected = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      command: "ADD_TRACK",
+      assetId: null,
+    });
+    expect(rejected).toMatchObject({
+      ok: false,
+      status: "INVALID",
+      reason: "TRACK_LIMIT_REACHED",
+    });
+
+    const count = await database.query<{ count: number }>(
+      `select count(*)::int as count from campaign_audio_tracks where campaign_id = '${ids.campaign}'`,
+    );
+    expect(count.rows[0]?.count).toBe(4);
+
+    // Removing a track frees up a cap slot.
+    const removed = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      command: "REMOVE_TRACK",
+      trackId: added[0]!,
+    });
+    expect(removed).toMatchObject({ ok: true, status: "ACCEPTED" });
+    const afterRemove = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      command: "ADD_TRACK",
+      assetId: null,
+    });
+    expect(afterRemove).toMatchObject({ ok: true, status: "ACCEPTED" });
+  });
+
+  it("UIX-382: gives each track an independent transport (play/pause/seek/loop don't leak across tracks)", async () => {
+    await database.exec(`
+      insert into assets
+        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+      values
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track A', 'test/track-a', 'audio/mpeg', 10, 60),
+        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track B', 'test/track-b', 'audio/mpeg', 10, 60);
+    `);
+    const trackA = (
+      await audioTrackCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        command: "ADD_TRACK",
+        assetId: ids.audioAsset,
+      })
+    ).data!;
+    const trackB = (
+      await audioTrackCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        command: "ADD_TRACK",
+        assetId: ids.secondAudioAsset,
+      })
+    ).data!;
+
+    const playedA = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: trackA.revision,
+      command: "PLAY",
+      trackId: trackA.id,
+    });
+    expect(playedA).toMatchObject({ ok: true, data: { playing: true } });
+
+    const seekB = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: trackB.revision,
+      command: "SEEK",
+      trackId: trackB.id,
+      positionSeconds: 30,
+    });
+    expect(seekB).toMatchObject({
+      ok: true,
+      data: { playing: false, positionSeconds: 30 },
+    });
+
+    const loopB = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: seekB.data!.revision,
+      command: "SET_LOOP",
+      trackId: trackB.id,
+      loop: true,
+    });
+    expect(loopB).toMatchObject({ ok: true, data: { loop: true } });
+
+    const rows = await database.query<{
+      id: string;
+      playing: boolean;
+      position_seconds: number;
+      loop: boolean;
+    }>(
+      `select id, playing, position_seconds, loop from campaign_audio_tracks where campaign_id = '${ids.campaign}' order by slot_order`,
+    );
+    const rowA = rows.rows.find((row) => row.id === trackA.id);
+    const rowB = rows.rows.find((row) => row.id === trackB.id);
+    expect(rowA).toMatchObject({ playing: true, loop: false });
+    expect(rowB).toMatchObject({
+      playing: false,
+      position_seconds: 30,
+      loop: true,
+    });
+  });
+
+  it("UIX-382: sets and persists per-track mixVolume independently of transport", async () => {
+    const track = (
+      await audioTrackCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        command: "ADD_TRACK",
+        assetId: null,
+      })
+    ).data!;
+    expect(track.mixVolume).toBe(1);
+
+    const volumeSet = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: track.revision,
+      command: "SET_MIX_VOLUME",
+      trackId: track.id,
+      mixVolume: 0.25,
+    });
+    expect(volumeSet).toMatchObject({
+      ok: true,
+      data: { mixVolume: 0.25, playing: false },
+    });
+
+    const row = await database.query<{ mix_volume: number }>(
+      `select mix_volume from campaign_audio_tracks where id = '${track.id}'`,
+    );
+    expect(row.rows[0]?.mix_volume).toBeCloseTo(0.25);
+  });
+
+  it("UIX-382: rejects a stale-revision track command with CONFLICT and replays a duplicate actionId idempotently", async () => {
+    const track = (
+      await audioTrackCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        command: "ADD_TRACK",
+        assetId: null,
+      })
+    ).data!;
+    const setActionId = crypto.randomUUID();
+    const first = await audioTrackCommand(gmClient, {
+      actionId: setActionId,
+      revision: track.revision,
+      command: "SET_MIX_VOLUME",
+      trackId: track.id,
+      mixVolume: 0.5,
+    });
+    expect(first).toMatchObject({ ok: true, data: { revision: 1 } });
+
+    const stale = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: track.revision,
+      command: "SET_MIX_VOLUME",
+      trackId: track.id,
+      mixVolume: 0.9,
+    });
+    expect(stale).toMatchObject({
+      ok: false,
+      status: "CONFLICT",
+      reason: "REVISION_CONFLICT",
+      data: { revision: 1 },
+    });
+
+    const duplicate = await audioTrackCommand(gmClient, {
+      actionId: setActionId,
+      revision: track.revision,
+      command: "SET_MIX_VOLUME",
+      trackId: track.id,
+      mixVolume: 0.5,
+    });
+    expect(duplicate).toMatchObject({
+      ok: true,
+      status: "DUPLICATE",
+      data: { mixVolume: 0.5, revision: 1 },
+    });
+  });
+
+  it("UIX-382: forbids non-GM players from mutating tracks", async () => {
+    const track = (
+      await audioTrackCommand(gmClient, {
+        actionId: crypto.randomUUID(),
+        command: "ADD_TRACK",
+        assetId: null,
+      })
+    ).data!;
+    expect(
+      await audioTrackCommand(client as typeof gmClient, {
+        actionId: crypto.randomUUID(),
+        command: "ADD_TRACK",
+        assetId: null,
+      }),
+    ).toMatchObject({ ok: false, status: "FORBIDDEN", reason: "GM_REQUIRED" });
+    expect(
+      await audioTrackCommand(client as typeof gmClient, {
+        actionId: crypto.randomUUID(),
+        revision: track.revision,
+        command: "PLAY",
+        trackId: track.id,
+      }),
+    ).toMatchObject({ ok: false, status: "FORBIDDEN", reason: "GM_REQUIRED" });
+  });
+
+  it("UIX-382: isolates tracks across campaigns (a foreign trackId is TRACK_NOT_FOUND)", async () => {
+    await database.exec(`
+      insert into campaigns (id, name) values ('${ids.foreignCampaign}', 'Foreign');
+      insert into memberships (id, campaign_id, role, display_name)
+      values ('${ids.foreignGm}', '${ids.foreignCampaign}', 'GM', 'Foreign GM');
+    `);
+    const [foreignTrack] = (
+      await database.query<{ id: string }>(
+        `insert into campaign_audio_tracks (campaign_id) values ('${ids.foreignCampaign}') returning id`,
+      )
+    ).rows;
+
+    const result = await audioTrackCommand(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      command: "PLAY",
+      trackId: foreignTrack!.id,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      status: "INVALID",
+      reason: "TRACK_NOT_FOUND",
+    });
   });
 
   it("broadcasts ruler updates and clear events across clients", async () => {
