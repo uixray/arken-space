@@ -10,6 +10,7 @@ import type {
 import { Button } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
+import { AssetPicker } from "./ui/AssetPicker";
 import { ApiError, formatApiError } from "./api";
 import {
   WORLD_CONTENT_LIFECYCLE_LABELS,
@@ -611,19 +612,14 @@ function EntityDetail({
       </label>
       <label className="field">
         Обложка
-        <FormSelect
-          value={coverAssetId}
+        <AssetPicker
+          aria-label="Обложка"
+          value={coverAssetId || null}
+          noneLabel="Без обложки"
           disabled={busy}
-          onChange={(event) => setCoverAssetId(event.target.value)}
-          emptyMessage="Нет загруженных файлов"
-        >
-          <option value="">Без обложки</option>
-          {assets.map((asset) => (
-            <option key={asset.id} value={asset.id}>
-              {asset.name}
-            </option>
-          ))}
-        </FormSelect>
+          assets={assets.filter((asset) => asset.mimeType.startsWith("image/"))}
+          onChange={(assetId) => setCoverAssetId(assetId ?? "")}
+        />
       </label>
       <label className="field">
         Краткое описание
@@ -943,19 +939,14 @@ function MediaSection({
         </ul>
       )}
       <div className="world-content-workspace__media-form">
-        <FormSelect
-          value={assetId}
+        <AssetPicker
+          aria-label="Файл для прикрепления к галерее"
+          value={assetId || null}
+          noneLabel="Выберите файл…"
           disabled={busy}
-          onChange={(event) => setAssetId(event.target.value)}
-          emptyMessage="Нет загруженных файлов"
-        >
-          <option value="">Выберите файл…</option>
-          {assets.map((asset) => (
-            <option key={asset.id} value={asset.id}>
-              {asset.name}
-            </option>
-          ))}
-        </FormSelect>
+          assets={assets.filter((asset) => asset.mimeType.startsWith("image/"))}
+          onChange={(nextAssetId) => setAssetId(nextAssetId ?? "")}
+        />
         <FormInput
           value={caption}
           placeholder="Подпись (необязательно)"

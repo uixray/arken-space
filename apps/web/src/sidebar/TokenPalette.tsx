@@ -4,7 +4,6 @@ import { Button } from "@gravity-ui/uikit";
 import { TokenImageGenerator } from "../TokenImageGenerator";
 import {
   mergeAssets,
-  tokenAssetLabel,
   tokenDefinitionAssets,
   tokenGeneratorSources,
 } from "../token-definition-options";
@@ -12,6 +11,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ArkenDialog } from "../ui/ArkenDialog";
 import { ImageUploadField } from "../ui/ImageUploadField";
 import { FormInput, FormSelect } from "../ui/GravityFormControls";
+import { AssetPicker } from "../ui/AssetPicker";
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
 import { canPlaceTokenDefinition } from "../token-placement";
@@ -359,33 +359,15 @@ function TokenDefinitionEditor({
         </label>
         <label>
           Изображение из файлов
-          <FormSelect
-            value={assetId}
-            onChange={(event) => setAssetId(event.target.value)}
-            emptyMessage={
-              tokenDefinitionAssets(
-                mergeAssets(snapshot.assets, uploadedSource),
-              ).length === 0
-                ? "Изображений токенов пока нет"
-                : undefined
-            }
-            createAction={
-              tokenDefinitionAssets(
-                mergeAssets(snapshot.assets, uploadedSource),
-              ).length === 0
-                ? { label: "Добавить изображение", onSelect: onOpenMedia }
-                : undefined
-            }
-          >
-            <option value="">Без изображения</option>
-            {tokenDefinitionAssets(
+          <AssetPicker
+            aria-label="Изображение токена из файлов"
+            value={assetId || null}
+            assets={tokenDefinitionAssets(
               mergeAssets(snapshot.assets, uploadedSource),
-            ).map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {tokenAssetLabel(asset)}
-              </option>
-            ))}
-          </FormSelect>
+            )}
+            onChange={(nextAssetId) => setAssetId(nextAssetId ?? "")}
+            emptyAction={{ label: "Добавить изображение", onSelect: onOpenMedia }}
+          />
         </label>
         <TokenImageGenerator
           imageAssets={tokenGeneratorSources(

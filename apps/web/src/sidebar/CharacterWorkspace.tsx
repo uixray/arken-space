@@ -10,6 +10,7 @@ import { ArkenDialog } from "../ui/ArkenDialog";
 import { isEditableEventTarget } from "../input-diagnostics";
 import { ImageUploadField } from "../ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
+import { AssetPicker } from "../ui/AssetPicker";
 import { normalizeCharacterControllerIds } from "../character-controller-access-state";
 import {
   characterWorkspaceReducer,
@@ -779,26 +780,20 @@ export function CharacterPanel({
       )}
       <label className="field">
         Портрет
-        <FormSelect
-          value={character.portraitAssetId ?? ""}
-          onChange={(event) =>
+        <AssetPicker
+          aria-label="Портрет персонажа"
+          value={character.portraitAssetId ?? null}
+          noneLabel="Без портрета"
+          assets={snapshot.assets.filter((asset) => asset.kind === "PORTRAIT")}
+          onChange={(assetId) =>
             void runCharacterMutation(() =>
               onPatch(character.id, {
-                portraitAssetId: event.target.value || null,
+                portraitAssetId: assetId,
                 revision: character.revision,
               }),
             )
           }
-        >
-          <option value="">Без портрета</option>
-          {snapshot.assets
-            .filter((asset) => asset.kind === "PORTRAIT")
-            .map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {asset.name}
-              </option>
-            ))}
-        </FormSelect>
+        />
       </label>
       <ImageUploadField
         label="Загрузить портрет для персонажа"
@@ -1338,28 +1333,23 @@ export function CharacterPanel({
               </label>
               <label>
                 Изображение
-                <FormSelect
-                  value={resource.imageAssetId ?? ""}
-                  onChange={(event) => {
+                <AssetPicker
+                  aria-label={`Изображение ресурса ${key}`}
+                  value={resource.imageAssetId ?? null}
+                  assets={snapshot.assets.filter((asset) =>
+                    asset.mimeType.startsWith("image/"),
+                  )}
+                  onChange={(assetId) => {
                     const next = {
                       ...resourcesDraft,
                       [key]: {
                         ...resource,
-                        imageAssetId: event.target.value || null,
+                        imageAssetId: assetId,
                       },
                     };
                     void saveResources(next);
                   }}
-                >
-                  <option value="">Без изображения</option>
-                  {snapshot.assets
-                    .filter((asset) => asset.mimeType.startsWith("image/"))
-                    .map((asset) => (
-                      <option key={asset.id} value={asset.id}>
-                        {asset.name}
-                      </option>
-                    ))}
-                </FormSelect>
+                />
               </label>
               <label className="compact-check">
                 <input
