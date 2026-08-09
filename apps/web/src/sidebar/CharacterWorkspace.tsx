@@ -24,6 +24,9 @@ import { CharacterMediaGallery } from "./CharacterMediaGallery";
 import { CharacterActionCard } from "../SkillCards";
 import { RollModeControl, type RollMode } from "../RollModeControl";
 import { humanizeFormula } from "../formula-display";
+import { RollButton } from "./RollButton";
+import { CatalogEntryPicker } from "./CatalogEntryPicker";
+import { selectableCatalogEntries } from "./catalog-entry-selection";
 import {
   changeWalletValue,
   EMPTY_WALLET,
@@ -33,30 +36,10 @@ import {
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
 
-/**
- * UIX-389: shared two-line presentation for a rollable characteristic/skill —
- * name on its own line, humanized formula on its own line below, still a
- * single clickable button. Used by the combat-characteristics card and the
- * legacy character.skills list so both read the same way.
- */
-export function RollButton({
-  name,
-  formula,
-  disabled,
-  onClick,
-}: {
-  name: string;
-  formula: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button className="roll-button" disabled={disabled} onClick={onClick}>
-      <span className="roll-button__name">{name}</span>
-      <code className="roll-button__formula">{humanizeFormula(formula)}</code>
-    </Button>
-  );
-}
+// UIX-389/UIX-391: re-exported for backward compatibility — RollButton now
+// lives in its own module (./RollButton) so CatalogEntryPicker can import it
+// without a circular dependency on this file.
+export { RollButton } from "./RollButton";
 
 export function CharacterWorkspace({
   onClose,
@@ -303,6 +286,7 @@ export function CharacterWorkspace({
                       onReplaceControllers={props.onReplaceCharacterControllers}
                       onRoll={props.onRoll}
                       onAssignEntry={props.onAssignCatalogEntry}
+                      onCreateEntry={props.onCreateCatalogEntry}
                       onUpdateEntry={props.onUpdateCharacterEntry}
                       onDeleteEntry={props.onDeleteCharacterEntry}
                       onRollEntry={props.onRollEntry}
@@ -526,6 +510,7 @@ export function CharacterPanel({
   onReplaceControllers,
   onRoll,
   onAssignEntry,
+  onCreateEntry,
   onUpdateEntry,
   onDeleteEntry,
   onRollEntry,
@@ -543,6 +528,7 @@ export function CharacterPanel({
   onReplaceControllers: Props["onReplaceCharacterControllers"];
   onRoll: Props["onRoll"];
   onAssignEntry: Props["onAssignCatalogEntry"];
+  onCreateEntry: Props["onCreateCatalogEntry"];
   onUpdateEntry: Props["onUpdateCharacterEntry"];
   onDeleteEntry: Props["onDeleteCharacterEntry"];
   onRollEntry: Props["onRollEntry"];
@@ -570,6 +556,10 @@ export function CharacterPanel({
   };
   const [entryEditor, setEntryEditor] = useState<
     CharacterDto["entries"][number] | null
+  >(null);
+  // UIX-391: which catalog picker (if any) is open for this character sheet.
+  const [catalogPicker, setCatalogPicker] = useState<
+    "SKILL" | "ABILITY" | null
   >(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [portraitUpload, setPortraitUpload] = useState<File>();
@@ -638,11 +628,18 @@ export function CharacterPanel({
   const abilityEntries = character.entries.filter(
     (entry) => entry.kind === "ABILITY",
   );
-  const skillCatalogOptions = snapshot.catalogEntries.filter(
-    (entry) => entry.kind === "SKILL",
+  // UIX-391: exclude entries the character already has assigned so the "add
+  // existing" picker can't offer — and silently create — a duplicate
+  // assignment. See catalog-entry-selection.ts for the matching rule.
+  const skillCatalogOptions = selectableCatalogEntries(
+    snapshot.catalogEntries,
+    character.entries,
+    "SKILL",
   );
-  const abilityCatalogOptions = snapshot.catalogEntries.filter(
-    (entry) => entry.kind === "ABILITY",
+  const abilityCatalogOptions = selectableCatalogEntries(
+    snapshot.catalogEntries,
+    character.entries,
+    "ABILITY",
   );
   const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
     nextWallet = normalizeWallet(nextWallet);
@@ -1027,26 +1024,11 @@ export function CharacterPanel({
               <p className="muted">Навыки ещё не добавлены.</p>
             ) : null}
           </div>
-          {snapshot.me.role === "GM" && skillCatalogOptions.length > 0 && (
+          {snapshot.me.role === "GM" && (
             <div className="character-card__add">
-              <FormSelect
-                defaultValue=""
-                aria-label="Добавить навык из каталога"
-                onChange={(event) => {
-                  if (event.target.value)
-                    void runCharacterMutation(() =>
-                      onAssignEntry(character.id, event.target.value),
-                    );
-                  event.target.value = "";
-                }}
-              >
-                <option value="">+ Добавить навык…</option>
-                {skillCatalogOptions.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.name}
-                  </option>
-                ))}
-              </FormSelect>
+              <Button onClick={() => setCatalogPicker("SKILL")}>
+                + Добавить навык…
+              </Button>
             </div>
           )}
         </div>
@@ -1118,30 +1100,29 @@ export function CharacterPanel({
               <p className="muted">Способности ещё не добавлены.</p>
             ) : null}
           </div>
-          {snapshot.me.role === "GM" && abilityCatalogOptions.length > 0 && (
+          {snapshot.me.role === "GM" && (
             <div className="character-card__add">
-              <FormSelect
-                defaultValue=""
-                aria-label="Добавить способность из каталога"
-                onChange={(event) => {
-                  if (event.target.value)
-                    void runCharacterMutation(() =>
-                      onAssignEntry(character.id, event.target.value),
-                    );
-                  event.target.value = "";
-                }}
-              >
-                <option value="">+ Добавить способность…</option>
-                {abilityCatalogOptions.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.name}
-                  </option>
-                ))}
-              </FormSelect>
+              <Button onClick={() => setCatalogPicker("ABILITY")}>
+                + Добавить способность…
+              </Button>
             </div>
           )}
         </div>
       </div>
+      {snapshot.me.role === "GM" && catalogPicker && (
+        <CatalogEntryPicker
+          open
+          kind={catalogPicker}
+          options={
+            catalogPicker === "SKILL" ? skillCatalogOptions : abilityCatalogOptions
+          }
+          onClose={() => setCatalogPicker(null)}
+          onAssign={(catalogEntryId) =>
+            onAssignEntry(character.id, catalogEntryId)
+          }
+          onCreate={(input) => onCreateEntry(input)}
+        />
+      )}
       {entryEditor && (
         <ArkenDialog
           open

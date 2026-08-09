@@ -11,6 +11,7 @@ import {
 import type {
   AssetKind,
   AssetDto,
+  CatalogEntryDto,
   GameSnapshot,
   MapPing,
   MessageVisibility,
@@ -2949,20 +2950,24 @@ export function App() {
               setTool("PAN");
               setPreviewSnapshot(playerView);
             }}
-            onCreateCatalogEntry={(input) =>
-              run(
-                () =>
-                  api("/api/catalog", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      ...input,
-                      data: input.data ?? {},
-                      actionId: crypto.randomUUID(),
-                    }),
+            onCreateCatalogEntry={async (input) => {
+              try {
+                setError("");
+                const entry = await api<CatalogEntryDto>("/api/catalog", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    ...input,
+                    data: input.data ?? {},
+                    actionId: crypto.randomUUID(),
                   }),
-                true,
-              )
-            }
+                });
+                await load();
+                return entry;
+              } catch (reason) {
+                setError(formatApiError(reason));
+                throw reason;
+              }
+            }}
             onUpdateCatalogEntry={(id, patch) =>
               run(
                 () =>

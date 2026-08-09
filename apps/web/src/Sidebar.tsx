@@ -207,7 +207,7 @@ export type Props = {
     name: string;
     description: string;
     data?: Record<string, unknown>;
-  }) => Promise<void>;
+  }) => Promise<CatalogEntryDto>;
   onUpdateCatalogEntry: (
     id: string,
     patch: Partial<CatalogEntryDto>,

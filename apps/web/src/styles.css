@@ -1165,6 +1165,22 @@ code {
   width: 100%;
   max-width: 140px;
 }
+/* UIX-391: unified skill/ability catalog picker (search existing + create new). */
+.catalog-entry-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.catalog-entry-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.catalog-entry-picker__create {
+  align-self: flex-start;
+}
 /* UIX-389: shared two-line roll button — name on top, humanized formula
  * below — used for combat characteristics and legacy character.skills.
  * Long names/formulas wrap instead of truncating so the exact formula
