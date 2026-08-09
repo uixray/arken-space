@@ -13,14 +13,26 @@ import { formulaBonus } from "../activity-roll-controls";
 export function QuickRollPanel({
   rollCharacter,
   quickRollPending,
+  gmOnly,
   onQuickRoll,
 }: {
   rollCharacter: CharacterDto;
   quickRollPending: boolean;
+  /**
+   * Mirrors the dice tray's shared GM-only toggle (see `ActivityPanel`). The
+   * control itself lives next door, so without this the player would have no
+   * way to tell from here that a stat roll is about to go only to the GM.
+   */
+  gmOnly: boolean;
   onQuickRoll: (formula: string, label: string, bonus: number) => void;
 }) {
   return (
     <section className="quick-roll-panel" aria-label="Панель быстрых бросков">
+      {gmOnly && (
+        <p className="quick-roll-panel__gm-only" role="status">
+          <span aria-hidden="true">◆</span> Броски уйдут только мастеру
+        </p>
+      )}
       <div className="activity-quick-rolls">
         <Button
           disabled={quickRollPending}

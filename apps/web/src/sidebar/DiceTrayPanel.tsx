@@ -28,11 +28,22 @@ export function DiceTrayPanel({
   characterId,
   campaignId,
   membershipId,
+  visibility,
+  onVisibilityChange,
   onRoll,
 }: {
   characterId: string | null;
   campaignId: string;
   membershipId: string;
+  /**
+   * UIX-388 follow-up: visibility is owned by `ActivityPanel` and shared with
+   * the stat/skill quick-roll panel next door, so one toggle governs every
+   * roll made from the sidebar. Removing the composer's «Только мастеру»
+   * checkbox otherwise left stat and skill rolls permanently public, which
+   * silently dropped secret checks (perception, deception) from the game.
+   */
+  visibility: MessageVisibility;
+  onVisibilityChange: (visibility: MessageVisibility) => void;
   onRoll: (
     formula: string,
     label?: string,
@@ -41,7 +52,6 @@ export function DiceTrayPanel({
     rollMode?: RollMode,
   ) => Promise<void>;
 }) {
-  const [visibility, setVisibility] = useState<MessageVisibility>("PUBLIC");
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
   const [customRollOpen, setCustomRollOpen] = useState(false);
 
@@ -150,12 +160,12 @@ export function DiceTrayPanel({
           <button
             type="button"
             className="canvas-roll-gm-toggle"
-            aria-label="Бросок только мастеру"
-            title="Бросок только мастеру"
+            aria-label="Броски только мастеру"
+            title="Броски только мастеру (кости и характеристики)"
             aria-pressed={visibility === "GM_ONLY"}
             onClick={() =>
-              setVisibility((current) =>
-                current === "GM_ONLY" ? "PUBLIC" : "GM_ONLY",
+              onVisibilityChange(
+                visibility === "GM_ONLY" ? "PUBLIC" : "GM_ONLY",
               )
             }
           >

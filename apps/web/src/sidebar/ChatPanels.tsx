@@ -215,6 +215,14 @@ export function ActivityPanel({
     () => new Set(["ROLLS", "STORY", "REFERENCE"]),
   );
   const [quickRollPending, setQuickRollPending] = useState(false);
+  // UIX-388 follow-up: removing the composer's «Только мастеру» checkbox took
+  // the only private-roll affordance with it, leaving stat and skill rolls
+  // permanently public -- which quietly removes secret checks (perception,
+  // deception) from play. The dice tray already had its own GM-only toggle,
+  // so visibility is lifted here and shared with it: one toggle now governs
+  // every roll made from the sidebar, rather than two adjacent ones.
+  const [rollVisibility, setRollVisibility] =
+    useState<MessageVisibility>("PUBLIC");
   // UIX-372: the roll/event log can get long and spammy with quick rolls, so
   // it can be collapsed to a compact "last N entries" view independently of
   // whole-sidebar collapse or width resize.
@@ -318,9 +326,20 @@ export function ActivityPanel({
     try {
       if (physicalDice) {
         const request = physicalRollChatRequest(label, bonus, rollCharacter.id);
-        await onChat(request.body, "PUBLIC", "TABLE", request.characterId);
+        await onChat(
+          request.body,
+          rollVisibility,
+          "TABLE",
+          request.characterId,
+        );
       } else {
-        await onRoll(formula, label, "PUBLIC", rollCharacter.id, "NORMAL");
+        await onRoll(
+          formula,
+          label,
+          rollVisibility,
+          rollCharacter.id,
+          "NORMAL",
+        );
       }
     } catch {
       setComposerError("Не удалось выполнить бросок. Повторите попытку.");
@@ -407,12 +426,15 @@ export function ActivityPanel({
           characterId={snapshot.me.characterId}
           campaignId={snapshot.campaign.id}
           membershipId={snapshot.me.id}
+          visibility={rollVisibility}
+          onVisibilityChange={setRollVisibility}
           onRoll={onRoll}
         />
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}
             quickRollPending={quickRollPending}
+            gmOnly={rollVisibility === "GM_ONLY"}
             onQuickRoll={(formula, label, bonus) =>
               void submitQuickRoll(formula, label, bonus)
             }

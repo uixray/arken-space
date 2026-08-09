@@ -27,7 +27,9 @@ vi.mock("@gravity-ui/uikit", () => ({
     children?: ReactNode;
     "aria-label"?: string;
     "aria-expanded"?: boolean;
-    "aria-haspopup"?: string;
+    // Narrower than `string` so the value stays assignable to the DOM
+    // button's own aria-haspopup union.
+    "aria-haspopup"?: "menu" | "listbox" | "dialog" | "true" | boolean;
     title?: string;
   }) => (
     <button
