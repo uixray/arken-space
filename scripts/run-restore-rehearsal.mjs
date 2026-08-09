@@ -32,6 +32,9 @@ import {
   resolvePostgresReadinessPolicy,
   resolveRestoredPath,
   selectResticSnapshot,
+  stripRetiredCounts,
+  stripSupersedingOnlyCounts,
+  verifyRetiredTableMigration,
   validateRestoreProjectName,
 } from "./restore-rehearsal-core.mjs";
 
@@ -605,7 +608,20 @@ try {
     readFileSync(manifests.databaseCounts, "utf8"),
   );
   const restoredCounts = readRestoredCounts(expectedCounts);
-  compareDatabaseCounts(expectedCounts, restoredCounts);
+  const retiredTableMigration = verifyRetiredTableMigration(
+    expectedCounts,
+    restoredCounts,
+  );
+  report.retiredTableMigration = retiredTableMigration;
+  if (retiredTableMigration.length)
+    record("retired-table-migration", "passed", {
+      checked: retiredTableMigration,
+    });
+
+  compareDatabaseCounts(
+    stripRetiredCounts(expectedCounts),
+    stripSupersedingOnlyCounts(expectedCounts, restoredCounts),
+  );
   report.databaseCounts = restoredCounts;
   report.databaseCountCoverage = describeDatabaseCountCoverage(restoredCounts);
   record("database-counts", "passed", report.databaseCountCoverage);

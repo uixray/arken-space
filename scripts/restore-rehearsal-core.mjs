@@ -59,6 +59,19 @@ const applicationCountTableNames = [
 ];
 const applicationCountTables = new Set(applicationCountTableNames);
 
+/**
+ * Tables that database-counts.sql used to count before a later migration
+ * moved their data elsewhere and dropped them. A backup taken just before
+ * such a migrate-and-drop deploy always still lists the about-to-be-dropped
+ * table (it existed in the live database at backup time), so restore
+ * rehearsal must recognize it as a known, legitimately retired table rather
+ * than an unknown/leaked one -- while still proving no rows were lost, via
+ * `supersededBy` (see `verifyRetiredTableMigration`).
+ */
+const retiredCountTables = {
+  audio_states: { supersededBy: "campaign_audio_tracks" },
+};
+
 function environmentObject(value) {
   if (!value) return {};
   if (!Array.isArray(value)) return value;
@@ -129,7 +142,10 @@ export function compareDatabaseCounts(expected, actual) {
 export function describeDatabaseCountCoverage(counts) {
   const tables = Object.keys(counts).sort();
   for (const table of tables) {
-    if (!applicationCountTables.has(table))
+    if (
+      !applicationCountTables.has(table) &&
+      !Object.hasOwn(retiredCountTables, table)
+    )
       throw new Error(
         `Database count manifest contains unknown table: ${table}`,
       );
@@ -145,10 +161,87 @@ export function describeDatabaseCountCoverage(counts) {
   };
 }
 
+/** Drops retired-table keys before comparing manifest counts against a
+ * restored+migrated database, since retired tables are deliberately excluded
+ * from `buildDatabaseCountsQuery` (they no longer exist post-migration). Use
+ * `verifyRetiredTableMigration` to confirm their data actually landed in the
+ * superseding table instead of skipping verification entirely. */
+export function stripRetiredCounts(counts) {
+  return Object.fromEntries(
+    Object.entries(counts).filter(
+      ([table]) => !Object.hasOwn(retiredCountTables, table),
+    ),
+  );
+}
+
+/** The superseding table of every retired table present in `expectedCounts`
+ * -- these did not exist yet at backup time (the backup predates the
+ * migrate-and-drop deploy), so they are added on top of the manifest's own
+ * tables purely so `verifyRetiredTableMigration` has something to compare
+ * against. `stripSupersedingOnlyCounts` removes them again before the exact
+ * manifest-vs-restored equality check, since they were never "expected" in
+ * the manifest sense -- only queried as a one-time transitional check. */
+function supersedingTablesFor(expectedCounts) {
+  return [
+    ...new Set(
+      Object.entries(retiredCountTables)
+        .filter(([table]) => Object.hasOwn(expectedCounts, table))
+        .map(([, info]) => info.supersededBy)
+        .filter((table) => !Object.hasOwn(expectedCounts, table)),
+    ),
+  ];
+}
+
+export function stripSupersedingOnlyCounts(expectedCounts, actualCounts) {
+  const supersedingOnly = new Set(supersedingTablesFor(expectedCounts));
+  return Object.fromEntries(
+    Object.entries(actualCounts).filter(
+      ([table]) => !supersedingOnly.has(table),
+    ),
+  );
+}
+
+/** For each retired table present in a backup manifest, confirms its
+ * backed-up row count landed intact in the table that superseded it, so a
+ * migrate-and-drop deploy can't silently lose rows just because the retired
+ * table itself is no longer queryable after migration. */
+export function verifyRetiredTableMigration(expectedCounts, actualCounts) {
+  const checked = [];
+  for (const [table, info] of Object.entries(retiredCountTables)) {
+    if (!Object.hasOwn(expectedCounts, table)) continue;
+    const expectedCount = expectedCounts[table];
+    const supersededCount = actualCounts[info.supersededBy];
+    if (supersededCount === undefined)
+      throw new Error(
+        `Retired table ${table} expected ${expectedCount} row(s) migrated into ` +
+          `${info.supersededBy}, but ${info.supersededBy} was not counted`,
+      );
+    if (supersededCount !== expectedCount)
+      throw new Error(
+        `Retired table ${table} had ${expectedCount} row(s) at backup time, but ` +
+          `superseding table ${info.supersededBy} has ${supersededCount} after ` +
+          `restore+migrate -- data may have been lost`,
+      );
+    checked.push({
+      retiredTable: table,
+      supersededBy: info.supersededBy,
+      rows: expectedCount,
+    });
+  }
+  return checked;
+}
+
 export function buildDatabaseCountsQuery(expectedCounts) {
-  const tables = Object.keys(expectedCounts).sort();
-  if (tables.length === 0) throw new Error("Database count manifest is empty");
   describeDatabaseCountCoverage(expectedCounts);
+  const tables = [
+    ...new Set([
+      ...Object.keys(expectedCounts).filter(
+        (table) => !Object.hasOwn(retiredCountTables, table),
+      ),
+      ...supersedingTablesFor(expectedCounts),
+    ]),
+  ].sort();
+  if (tables.length === 0) throw new Error("Database count manifest is empty");
   return (
     tables
       .map(

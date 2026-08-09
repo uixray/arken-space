@@ -15,7 +15,10 @@ import {
   resolvePostgresReadinessPolicy,
   resolveRestoredPath,
   selectResticSnapshot,
+  stripRetiredCounts,
+  stripSupersedingOnlyCounts,
   validateRestoreProjectName,
+  verifyRetiredTableMigration,
 } from "../scripts/restore-rehearsal-core.mjs";
 import {
   assertVerifiedRehearsal,
@@ -122,6 +125,59 @@ describe("backup and restore safety", () => {
       knownPersistedTables: 51,
       missingTables: [],
     });
+  });
+
+  it("accepts a pre-drop backup manifest listing a since-retired table (UIX-382 transition)", () => {
+    // Simulates the exact scenario hit deploying UIX-382: a backup taken
+    // just before a migrate-and-drop deploy still lists the about-to-be
+    // dropped `audio_states` table, since it existed at backup time.
+    const preDropManifest = parseDatabaseCounts(
+      "assets|2\naudio_states|1\ncampaigns|1\nmemberships|7\n",
+    );
+    expect(() => describeDatabaseCountCoverage(preDropManifest)).not.toThrow();
+
+    const query = buildDatabaseCountsQuery(preDropManifest);
+    expect(query).not.toContain("FROM audio_states");
+    expect(query).toContain("FROM campaign_audio_tracks");
+
+    const restoredCounts = {
+      assets: 2,
+      campaigns: 1,
+      memberships: 7,
+      campaign_audio_tracks: 1,
+    };
+    expect(
+      verifyRetiredTableMigration(preDropManifest, restoredCounts),
+    ).toEqual([
+      { retiredTable: "audio_states", supersededBy: "campaign_audio_tracks", rows: 1 },
+    ]);
+    expect(() =>
+      compareDatabaseCounts(
+        stripRetiredCounts(preDropManifest),
+        stripSupersedingOnlyCounts(preDropManifest, restoredCounts),
+      ),
+    ).not.toThrow();
+  });
+
+  it("catches data loss across a retired-table migration", () => {
+    const preDropManifest = parseDatabaseCounts("audio_states|3\n");
+    expect(() =>
+      verifyRetiredTableMigration(preDropManifest, { campaign_audio_tracks: 2 }),
+    ).toThrow(/data may have been lost/);
+    expect(() =>
+      verifyRetiredTableMigration(preDropManifest, {}),
+    ).toThrow(/was not counted/);
+  });
+
+  it("does not add superseding-table scaffolding once a manifest is generated post-migration", () => {
+    // Once a fresh backup is taken with the new database-counts.sql,
+    // audio_states is simply absent and campaign_audio_tracks is a normal
+    // manifest entry -- no retired-table machinery should engage.
+    const freshManifest = parseDatabaseCounts("campaign_audio_tracks|2\n");
+    expect(buildDatabaseCountsQuery(freshManifest)).toContain(
+      "FROM campaign_audio_tracks",
+    );
+    expect(verifyRetiredTableMigration(freshManifest, {})).toEqual([]);
   });
 
   it("verifies all migration identities from 0000 through 0034", () => {
