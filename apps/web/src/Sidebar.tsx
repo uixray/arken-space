@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -396,6 +397,18 @@ export function Sidebar(props: Props) {
     () => onChatVisibilityChange(!props.collapsed),
     [onChatVisibilityChange, props.collapsed],
   );
+  // UIX-395: stable onClose for the self-fetching, React.memo-wrapped GM
+  // workspace panels (OperatorFeedbackWorkspace, WorldContentWorkspace,
+  // WorldEncyclopediaWorkspace). `onWorkspaceChange` (handleWorkspaceChange
+  // in App.tsx) is itself useCallback-stable, so this closure is stable for
+  // the component's whole lifetime — without it, `() => onWorkspaceChange(null)`
+  // inline at each usage site would be a fresh function every Sidebar
+  // render (which happens on every realtime snapshot event), defeating
+  // React.memo's shallow prop comparison on those panels.
+  const closeWorkspace = useCallback(
+    () => onWorkspaceChange(null),
+    [onWorkspaceChange],
+  );
   const activeThreadId = directMode
     ? activeDirectThreadId
     : activeFeed === "ACTIVITY"
@@ -652,10 +665,7 @@ export function Sidebar(props: Props) {
         )}
         {props.workspace === "operator-feedback" &&
           props.operatorFeedbackAllowed && (
-            <OperatorFeedbackWorkspace
-              open
-              onClose={() => props.onWorkspaceChange(null)}
-            />
+            <OperatorFeedbackWorkspace open onClose={closeWorkspace} />
           )}
         {props.workspace === "player-requests" && (
           <PlayerRequestsWorkspace
@@ -693,14 +703,11 @@ export function Sidebar(props: Props) {
           <WorldContentWorkspace
             open
             assets={props.snapshot.assets}
-            onClose={() => props.onWorkspaceChange(null)}
+            onClose={closeWorkspace}
           />
         )}
         {props.workspace === "world-codex" && (
-          <WorldEncyclopediaWorkspace
-            open
-            onClose={() => props.onWorkspaceChange(null)}
-          />
+          <WorldEncyclopediaWorkspace open onClose={closeWorkspace} />
         )}
         {props.workspace === "media" && (
           <ArkenDialog

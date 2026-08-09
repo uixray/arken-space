@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type {
   AssetDto,
   WorldContentDto,
@@ -53,8 +53,18 @@ const safeError = "Не удалось выполнить операцию. По
  * world-content-specific upload endpoint yet (see the module doc comment on
  * `world-content-routes.ts`: `assetId` has no FK, by design). A proper asset
  * picker/uploader for World Content is a gap flagged for a follow-up task.
+ *
+ * UIX-395: memoized — the entity list/detail/relations/media all self-fetch
+ * (see above); `assets` is the only prop sourced from `GameSnapshot`
+ * (`snapshot.assets`, passed through from `Sidebar.tsx`), and its array
+ * reference stays stable across realtime events that don't touch assets
+ * (App.tsx's handlers only replace `snapshot.assets` when an asset is
+ * actually uploaded/changed, never as an incidental side effect of an
+ * unrelated `setSnapshot` spread). Combined with a stable `onClose` (see
+ * `closeWorkspace` in `Sidebar.tsx`), this panel is inert to unrelated
+ * realtime snapshot events and only re-renders when assets actually change.
  */
-export function WorldContentWorkspace({
+export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   open,
   assets,
   onClose,
@@ -281,7 +291,7 @@ export function WorldContentWorkspace({
       )}
     </ArkenDialog>
   );
-}
+});
 
 function CreateEntityDialog({
   onClose,

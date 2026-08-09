@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { Button } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import {
@@ -17,7 +17,14 @@ import "./OperatorFeedbackWorkspace.css";
 
 const safeError = "Operation failed. Try again.";
 
-export function OperatorFeedbackWorkspace({
+/**
+ * UIX-395: memoized since this panel is self-fetching (fetches its own list
+ * via `refreshList`/`fetchFeedbackDetail` on `open`, not driven by
+ * `GameSnapshot`) — only `open`/`onClose` come from the parent, so a stable
+ * `onClose` (see `closeWorkspace` in `Sidebar.tsx`) lets this panel skip
+ * re-rendering on every unrelated realtime snapshot event.
+ */
+export const OperatorFeedbackWorkspace = memo(function OperatorFeedbackWorkspace({
   open,
   onClose,
 }: {
@@ -252,4 +259,4 @@ export function OperatorFeedbackWorkspace({
       </div>
     </ArkenDialog>
   );
-}
+});

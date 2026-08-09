@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type {
   WorldContentMediaDto,
   WorldContentPlayerDto,
@@ -49,7 +49,13 @@ const notFoundError =
  * No campaign discovery/overrides here (Delivery Plan step 5) — this shows
  * the full PUBLISHED canon to every caller unconditionally.
  */
-export function WorldEncyclopediaWorkspace({
+/**
+ * UIX-395: memoized — self-fetches its own list/detail data (see the module
+ * doc comment above) purely from `open`/an internal `id`, never from
+ * `GameSnapshot`, so with a stable `onClose` (see `closeWorkspace` in
+ * `Sidebar.tsx`) this panel is inert to unrelated realtime snapshot events.
+ */
+export const WorldEncyclopediaWorkspace = memo(function WorldEncyclopediaWorkspace({
   open,
   onClose,
 }: {
@@ -202,7 +208,7 @@ export function WorldEncyclopediaWorkspace({
       </div>
     </ArkenDialog>
   );
-}
+});
 
 function EntityPage({
   id,
