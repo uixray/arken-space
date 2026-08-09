@@ -518,6 +518,20 @@ export const characters = pgTable(
       table.campaignId,
       table.lifecycle,
     ),
+    /*
+     * RESTRICT keeps "who archived this" answerable, matching
+     * `feedback_operator_audits.operator_membership_id`. Note the
+     * consequence, verified against the real migrations: deleting a
+     * campaign still works (the cascade to `characters` resolves before
+     * this fires), and the gameplay reset is unaffected because it only
+     * removes PLAYER memberships while archiving is GM-only -- but
+     * deleting an individual archiver's membership IS blocked, and the
+     * shape check below forbids nulling the column while ARCHIVED. Any
+     * future "remove a GM" / "leave campaign" flow has to archive-transfer
+     * or relax this first, or it will fail on a confusing FK error.
+     * See `characters_campaign_archiver_fk` coverage in
+     * tests/character-archive-constraints.test.ts.
+     */
     foreignKey({
       name: "characters_campaign_archiver_fk",
       columns: [table.campaignId, table.archivedByMembershipId],
