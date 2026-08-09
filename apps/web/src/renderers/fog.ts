@@ -43,7 +43,10 @@ function operationGeometry(operation: FogOperation): FogGeometry {
  * single cell are approximated by that cell's midpoint sample, same
  * trade-off the original RECT-only cell decomposition already made.
  */
-export function isRectFullyRevealed(rect: Rect, reveals: readonly FogOperation[]) {
+export function isRectFullyRevealed(
+  rect: Rect,
+  reveals: readonly FogOperation[],
+) {
   if (rect.width <= 0 || rect.height <= 0) return false;
   const right = rect.x + rect.width;
   const bottom = rect.y + rect.height;
@@ -54,6 +57,18 @@ export function isRectFullyRevealed(rect: Rect, reveals: readonly FogOperation[]
       operation.y < bottom &&
       operation.y + operation.height > rect.y,
   );
+  // Nothing covers the rect, so no sample point can be revealed. Same answer
+  // the loops below would reach, without building any cut lists.
+  if (intersecting.length === 0) return false;
+  // Resolve each operation's geometry once. `operationGeometry` allocates a
+  // fresh RECT for legacy rows, and the sampling loops run it
+  // O(cells x operations) times -- hoisting it out of the hot path avoids
+  // millions of short-lived allocations per frame on a busy scene.
+  const resolved = intersecting.map((operation) => ({
+    box: operation,
+    geometry: operationGeometry(operation),
+    revealing: operation.operation !== "COVER",
+  }));
   const xs = new Set([rect.x, right]);
   const ys = new Set([rect.y, bottom]);
   for (const operation of intersecting) {
@@ -69,9 +84,28 @@ export function isRectFullyRevealed(rect: Rect, reveals: readonly FogOperation[]
       const x = (xCuts[xIndex]! + xCuts[xIndex + 1]!) / 2;
       const y = (yCuts[yIndex]! + yCuts[yIndex + 1]!) / 2;
       let visible = false;
-      for (const operation of intersecting) {
-        if (fogGeometryContains(operationGeometry(operation), { x, y }))
-          visible = operation.operation !== "COVER";
+      // Later operations win at a given point, so scanning back-to-front and
+      // stopping at the first hit gives the same answer as scanning
+      // front-to-back and letting later hits overwrite -- but normally stops
+      // after one or two tests instead of always probing every operation.
+      for (let index = resolved.length - 1; index >= 0; index--) {
+        const candidate = resolved[index]!;
+        const box = candidate.box;
+        // Every shape lies entirely inside its own stored bbox (the server
+        // derives x/y/width/height from `fogGeometryBounds`, which pads by
+        // the radius for CIRCLE/BRUSH), so a point outside the bbox can never
+        // be inside the shape. Skipping the per-shape test here matters most
+        // for BRUSH, whose containment check walks up to 256 stroke segments.
+        if (
+          x < box.x ||
+          x > box.x + box.width ||
+          y < box.y ||
+          y > box.y + box.height
+        )
+          continue;
+        if (!fogGeometryContains(candidate.geometry, { x, y })) continue;
+        visible = candidate.revealing;
+        break;
       }
       if (!visible) return false;
     }

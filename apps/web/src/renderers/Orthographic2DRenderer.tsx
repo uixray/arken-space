@@ -520,6 +520,57 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     [props.fogReveals],
   );
 
+  /*
+   * UIX-395: fog visibility is the single most expensive thing this renderer
+   * computes. `isRectFullyRevealed` decomposes the probe rect into a grid cut
+   * along every intersecting operation's edges and samples each cell, and for
+   * BRUSH strokes each sample walks the stroke path -- so it is superlinear in
+   * the number of fog operations on the scene. Both call sites used to run it
+   * inline in the render body (once per token, twice per drawing), which meant
+   * any unrelated re-render -- a chat message, a dice roll, any realtime event
+   * at all -- re-evaluated the whole scene's fog. On a busy scene that blocked
+   * the main thread long enough to trip the socket's ping timeout, which is
+   * what made the GM client feel like it was constantly stalling.
+   *
+   * Both sets below depend only on the data the answer actually derives from,
+   * so ordinary realtime traffic no longer triggers a recompute.
+   */
+  const fogHiddenTokenIds = useMemo(() => {
+    const hidden = new Set<string>();
+    // The GM is never fog-limited, so the probe is skipped entirely.
+    if (props.role === "GM") return hidden;
+    for (const token of props.tokens) {
+      if (token.controllerMembershipIds.includes(props.membershipId)) continue;
+      if (!isRectFullyRevealed(token, orderedFogReveals)) hidden.add(token.id);
+    }
+    return hidden;
+  }, [props.role, props.tokens, props.membershipId, orderedFogReveals]);
+
+  const revealedDrawingIds = useMemo(() => {
+    const revealed = new Set<string>();
+    if (props.role === "GM") return revealed;
+    for (const drawing of props.drawings) {
+      const xs = drawing.points.filter((_, index) => index % 2 === 0);
+      const ys = drawing.points.filter((_, index) => index % 2 === 1);
+      if (xs.length === 0 || ys.length === 0) continue;
+      const minX = Math.min(...xs);
+      const minY = Math.min(...ys);
+      if (
+        isRectFullyRevealed(
+          {
+            x: minX + drawing.x,
+            y: minY + drawing.y,
+            width: Math.max(...xs) - minX,
+            height: Math.max(...ys) - minY,
+          },
+          orderedFogReveals,
+        )
+      )
+        revealed.add(drawing.id);
+    }
+    return revealed;
+  }, [props.role, props.drawings, orderedFogReveals]);
+
   useEffect(() => {
     const mask = fogMaskRef.current;
     if (!mask) return;
@@ -1375,22 +1426,6 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     })),
     gridCellKey,
   );
-  const drawingRevealed = (points: number[], x: number, y: number) => {
-    const xs = points.filter((_, index) => index % 2 === 0);
-    const ys = points.filter((_, index) => index % 2 === 1);
-    const minX = Math.min(...xs) + x;
-    const minY = Math.min(...ys) + y;
-    return isRectFullyRevealed(
-      {
-        x: minX,
-        y: minY,
-        width: Math.max(...xs) - Math.min(...xs),
-        height: Math.max(...ys) - Math.min(...ys),
-      },
-      orderedFogReveals,
-    );
-  };
-
   const renderFog = () => (
     <Layer
       listening={false}
@@ -2097,16 +2132,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   (props.role === "GM" ||
                     (Boolean(props.membershipId) &&
                       drawing.authorMembershipId === props.membershipId)) &&
-                  (props.role === "GM" ||
-                    drawingRevealed(drawing.points, drawing.x, drawing.y))
+                  (props.role === "GM" || revealedDrawingIds.has(drawing.id))
                 }
                 draggable={
                   props.tool === "PAN" &&
                   (props.role === "GM" ||
                     (Boolean(props.membershipId) &&
                       drawing.authorMembershipId === props.membershipId)) &&
-                  (props.role === "GM" ||
-                    drawingRevealed(drawing.points, drawing.x, drawing.y))
+                  (props.role === "GM" || revealedDrawingIds.has(drawing.id))
                 }
                 hitStrokeWidth={Math.max(14, currentStrokeWidth) / scale}
                 shadowColor={
@@ -2227,12 +2260,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   token.x < worldDraft.width &&
                   token.y < worldDraft.height),
             )
-            .filter(
-              (token) =>
-                props.role === "GM" ||
-                token.controllerMembershipIds.includes(props.membershipId) ||
-                isRectFullyRevealed(token, orderedFogReveals),
-            )
+            .filter((token) => !fogHiddenTokenIds.has(token.id))
             .sort((a, b) =>
               a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
             )

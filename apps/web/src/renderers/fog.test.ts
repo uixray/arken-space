@@ -1,5 +1,114 @@
 import { describe, expect, it } from "vitest";
-import { fogOpacity, isRectFullyRevealed } from "./fog";
+import { fogGeometryBounds, fogGeometryContains } from "@arken/contracts";
+import type { FogGeometry } from "@arken/contracts";
+import { fogOpacity, isRectFullyRevealed, type FogOperation } from "./fog";
+
+/**
+ * UIX-395: the exact pre-optimization algorithm, kept here purely as a
+ * differential-test oracle. `isRectFullyRevealed` was made dramatically
+ * cheaper (bbox pre-check, back-to-front scan with early exit, hoisted
+ * geometry resolution) because it ran per token per render and dominated
+ * the main thread on busy scenes. Those changes must not alter a single
+ * answer, which the randomized test below asserts against this reference.
+ */
+function referenceIsRectFullyRevealed(
+  rect: { x: number; y: number; width: number; height: number },
+  reveals: readonly FogOperation[],
+) {
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  const right = rect.x + rect.width;
+  const bottom = rect.y + rect.height;
+  const intersecting = reveals.filter(
+    (operation) =>
+      operation.x < right &&
+      operation.x + operation.width > rect.x &&
+      operation.y < bottom &&
+      operation.y + operation.height > rect.y,
+  );
+  const xs = new Set([rect.x, right]);
+  const ys = new Set([rect.y, bottom]);
+  for (const operation of intersecting) {
+    xs.add(Math.max(rect.x, operation.x));
+    xs.add(Math.min(right, operation.x + operation.width));
+    ys.add(Math.max(rect.y, operation.y));
+    ys.add(Math.min(bottom, operation.y + operation.height));
+  }
+  const xCuts = [...xs].sort((a, b) => a - b);
+  const yCuts = [...ys].sort((a, b) => a - b);
+  for (let xIndex = 0; xIndex < xCuts.length - 1; xIndex++) {
+    for (let yIndex = 0; yIndex < yCuts.length - 1; yIndex++) {
+      const x = (xCuts[xIndex]! + xCuts[xIndex + 1]!) / 2;
+      const y = (yCuts[yIndex]! + yCuts[yIndex + 1]!) / 2;
+      let visible = false;
+      for (const operation of intersecting) {
+        const geometry: FogGeometry = operation.geometry ?? {
+          type: "RECT",
+          x: operation.x,
+          y: operation.y,
+          width: operation.width,
+          height: operation.height,
+        };
+        if (fogGeometryContains(geometry, { x, y }))
+          visible = operation.operation !== "COVER";
+      }
+      if (!visible) return false;
+    }
+  }
+  return true;
+}
+
+/** Deterministic PRNG so a failure is always reproducible. */
+function createRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function randomOperation(random: () => number): FogOperation {
+  const operation = random() < 0.5 ? "REVEAL" : "COVER";
+  const shape = random();
+  const px = () => Math.round(random() * 200);
+  let geometry: FogGeometry;
+  if (shape < 0.25) {
+    geometry = {
+      type: "RECT",
+      x: px(),
+      y: px(),
+      width: 1 + Math.round(random() * 80),
+      height: 1 + Math.round(random() * 80),
+    };
+  } else if (shape < 0.5) {
+    geometry = {
+      type: "CIRCLE",
+      center: { x: px(), y: px() },
+      radius: 1 + Math.round(random() * 40),
+    };
+  } else if (shape < 0.75) {
+    geometry = {
+      type: "POLYGON",
+      points: [
+        { x: px(), y: px() },
+        { x: px(), y: px() },
+        { x: px(), y: px() },
+      ],
+    };
+  } else {
+    geometry = {
+      type: "BRUSH",
+      points: Array.from({ length: 2 + Math.round(random() * 4) }, () => ({
+        x: px(),
+        y: px(),
+      })),
+      radius: 1 + Math.round(random() * 25),
+    };
+  }
+  // Mirrors the server: the row's x/y/width/height columns are always
+  // `fogGeometryBounds(geometry)` (see `canonicalizeFogGeometry`).
+  const bounds = fogGeometryBounds(geometry);
+  return { ...bounds, operation, geometry };
+}
 
 describe("player fog invariants", () => {
   const reveals = [{ x: 100, y: 200, width: 80, height: 60 }];
@@ -172,5 +281,50 @@ describe("player fog invariants", () => {
         brushReveal,
       ]),
     ).toBe(false);
+  });
+});
+
+describe("fog evaluator optimization is behaviour-preserving (UIX-395)", () => {
+  it("matches the pre-optimization algorithm across randomized mixed-shape scenes", () => {
+    const random = createRandom(20260809);
+    let checked = 0;
+    let revealedCount = 0;
+    for (let scene = 0; scene < 250; scene++) {
+      const reveals = Array.from(
+        { length: 1 + Math.round(random() * 7) },
+        () => randomOperation(random),
+      );
+      for (let probe = 0; probe < 4; probe++) {
+        const rect = {
+          x: Math.round(random() * 200),
+          y: Math.round(random() * 200),
+          width: 1 + Math.round(random() * 30),
+          height: 1 + Math.round(random() * 30),
+        };
+        const expected = referenceIsRectFullyRevealed(rect, reveals);
+        expect({ rect, result: isRectFullyRevealed(rect, reveals) }).toEqual({
+          rect,
+          result: expected,
+        });
+        checked++;
+        if (expected) revealedCount++;
+      }
+    }
+    expect(checked).toBe(1000);
+    // Guard against a degenerate corpus that only ever exercises the
+    // "nothing is revealed" path and would pass even if the optimization
+    // broke the revealed case.
+    expect(revealedCount).toBeGreaterThan(20);
+  });
+
+  it("still short-circuits when no operation intersects the rect", () => {
+    expect(
+      isRectFullyRevealed({ x: 500, y: 500, width: 10, height: 10 }, [
+        { x: 0, y: 0, width: 100, height: 100, operation: "REVEAL" },
+      ]),
+    ).toBe(false);
+    expect(isRectFullyRevealed({ x: 0, y: 0, width: 10, height: 10 }, [])).toBe(
+      false,
+    );
   });
 });
