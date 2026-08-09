@@ -1,5 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { parseSkillCard } from "./SkillCards";
+import { parseSkillCard, SkillChatCard, type SkillCard } from "./SkillCards";
 
 const dice = {
   total: 17,
@@ -79,5 +81,61 @@ describe("parseSkillCard", () => {
       entry: { name: "Flame Lash" },
       result: { total: 17 },
     });
+  });
+});
+
+describe("SkillChatCard (UIX-389 formula humanization)", () => {
+  const baseCard: SkillCard = {
+    version: 1,
+    mode: "EXECUTE",
+    characterName: "Aria",
+    entry: {
+      id: "entry-1",
+      name: "Flame Lash",
+      kind: "ABILITY",
+      description: "A controlled burst.",
+      revision: 4,
+      sourceCatalogEntryId: null,
+      sourceRemoved: false,
+    },
+    action: {
+      id: "lash",
+      label: "Attack",
+      kind: "HIT",
+      formula: "1d20 + agility",
+      modifiers: [],
+    },
+    result: { total: 17, breakdown: "1d20 + 3" },
+    uses: null,
+  };
+
+  it("never renders the raw stat key from the formula", () => {
+    const html = renderToStaticMarkup(createElement(SkillChatCard, { card: baseCard }));
+    expect(html).toContain("Ловкость");
+    expect(html).not.toContain("agility");
+  });
+
+  it("humanizes every stat token for a multi-stat formula", () => {
+    const html = renderToStaticMarkup(
+      createElement(SkillChatCard, {
+        card: {
+          ...baseCard,
+          action: { ...baseCard.action!, formula: "1d20 + strength + agility" },
+        },
+      }),
+    );
+    expect(html).toContain("Сила");
+    expect(html).toContain("Ловкость");
+    expect(html).not.toContain("strength");
+    expect(html).not.toContain("agility");
+  });
+
+  it("renders an empty formula without throwing when there is no action", () => {
+    const html = renderToStaticMarkup(
+      createElement(SkillChatCard, {
+        card: { ...baseCard, mode: "SHARE", action: null },
+      }),
+    );
+    expect(html).toContain("Flame Lash");
   });
 });

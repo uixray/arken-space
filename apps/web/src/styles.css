@@ -1056,16 +1056,30 @@ code {
 }
 .stat-field {
   display: grid;
-  grid-template-columns: 38px 1fr;
+  /* UIX-389: the label column used to be a fixed 38px, which is far too
+   * narrow for long Russian stat labels (e.g. "Внимательность") and made
+   * them collide with the numeric input. The label now gets the flexible
+   * share of the row and wraps; the input column only needs to fit a
+   * 3-character value ("-20" through "20"), so it stays a small fixed
+   * track. */
+  grid-template-columns: minmax(0, 1fr) 3.75rem;
+  align-items: center;
   border: 1px solid var(--line);
   background: var(--surface-2);
 }
 .stat-field > span {
-  display: grid;
-  place-items: center;
+  padding: 4px 6px;
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.stat-field .g-text-input {
+  /* Gravity's TextInput wrapper defaults to width: 100%, which would
+   * otherwise fight the fixed 3.75rem grid track above. */
+  width: 100%;
 }
 .stat-field input {
   min-width: 0;
@@ -1151,12 +1165,29 @@ code {
   width: 100%;
   max-width: 140px;
 }
-.action-row {
+/* UIX-389: shared two-line roll button — name on top, humanized formula
+ * below — used for combat characteristics and legacy character.skills.
+ * Long names/formulas wrap instead of truncating so the exact formula
+ * text stays readable. */
+.roll-button {
   display: flex;
-  justify-content: space-between;
-  gap: var(--space-md);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   width: 100%;
+  height: auto;
+  padding: 6px 8px;
   text-align: left;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.roll-button__name {
+  font-weight: 700;
+}
+.roll-button__formula {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 .plain-row {
   display: flex;

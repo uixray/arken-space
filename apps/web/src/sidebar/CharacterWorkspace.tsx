@@ -22,6 +22,7 @@ import {
 import { CharacterMediaGallery } from "./CharacterMediaGallery";
 import { CharacterActionCard } from "../SkillCards";
 import { RollModeControl, type RollMode } from "../RollModeControl";
+import { humanizeFormula } from "../formula-display";
 import {
   changeWalletValue,
   EMPTY_WALLET,
@@ -30,6 +31,31 @@ import {
 } from "../wallet";
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
+
+/**
+ * UIX-389: shared two-line presentation for a rollable characteristic/skill —
+ * name on its own line, humanized formula on its own line below, still a
+ * single clickable button. Used by the combat-characteristics card and the
+ * legacy character.skills list so both read the same way.
+ */
+export function RollButton({
+  name,
+  formula,
+  disabled,
+  onClick,
+}: {
+  name: string;
+  formula: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button className="roll-button" disabled={disabled} onClick={onClick}>
+      <span className="roll-button__name">{name}</span>
+      <code className="roll-button__formula">{humanizeFormula(formula)}</code>
+    </Button>
+  );
+}
 
 export function CharacterWorkspace({
   onClose,
@@ -916,22 +942,31 @@ export function CharacterPanel({
         <div className="character-card character-card--combat">
           <h3 className="character-card__header">Боевые характеристики</h3>
           <div className="character-card__body">
-            <Button
-              disabled={!editable || rollPending}
-              onClick={() =>
-                void submitCharacterRoll("1d20 + agility", "Инициатива")
-              }
-            >
-              Инициатива (d20 + Ловкость)
-            </Button>
-            <Button
-              disabled={!editable || rollPending}
-              onClick={() =>
-                void submitCharacterRoll("1d20 + reaction", "Бросок?")
-              }
-            >
-              {"Бросок? (d20 + Бросок?)"}
-            </Button>
+            {/* UIX-389: only Инициатива/Реакция have real backing data
+             * today (both are arkenSystem.stats entries). Выносливость and
+             * Мана exist as resource pools (physicalPower/magicPower) but
+             * those are current/max trackers, not roll formulas, so there
+             * is nothing meaningful to wire a roll button to yet — see the
+             * "Ресурсы и кошелёк" section below for their current display.
+             * Ближний бой, Дальний бой, Реген Выносливости, and Реген Маны
+             * have no backing field at all. Left out rather than
+             * fabricated; likely UIX-391 territory. */}
+            {(
+              [
+                { key: "agility", label: "Инициатива", formula: "1d20 + agility" },
+                { key: "reaction", label: "Реакция", formula: "1d20 + reaction" },
+              ] as const
+            ).map((combat) => (
+              <RollButton
+                key={combat.key}
+                name={combat.label}
+                formula={combat.formula}
+                disabled={!editable || rollPending}
+                onClick={() =>
+                  void submitCharacterRoll(combat.formula, combat.label)
+                }
+              />
+            ))}
           </div>
         </div>
         <div className="character-card character-card--skills">
@@ -939,17 +974,15 @@ export function CharacterPanel({
           <div className="character-card__body">
             {character.skills.length > 0 &&
               character.skills.map((skill) => (
-                <Button
-                  className="action-row"
+                <RollButton
                   key={skill.key}
+                  name={skill.name}
+                  formula={skill.formula}
                   disabled={rollPending}
                   onClick={() =>
                     void submitCharacterRoll(skill.formula, skill.name)
                   }
-                >
-                  <span>{skill.name}</span>
-                  <code>{skill.formula}</code>
-                </Button>
+                />
               ))}
             {skillEntries.length ? (
               skillEntries.map((entry) => (
@@ -1037,7 +1070,7 @@ export function CharacterPanel({
                         void submitCharacterRoll(spell.formula!, spell.name)
                       }
                     >
-                      Бросить {spell.formula}
+                      Бросить {humanizeFormula(spell.formula)}
                     </Button>
                   )}
                 </div>

@@ -2,6 +2,7 @@
 import { useId, useRef, useState } from "react";
 import type { CharacterCatalogEntryDto } from "@arken/contracts";
 import type { DiceCritical } from "./dice-critical";
+import { humanizeFormula } from "./formula-display";
 
 type RollAction = NonNullable<
   CharacterCatalogEntryDto["data"]["rollActions"]
@@ -328,7 +329,11 @@ export function SkillChatCard({
           )}
           <span>
             <b>{card.action?.label}</b>
-            <code>{card.action?.formula}</code>
+            <code>
+              {card.action?.formula
+                ? humanizeFormula(card.action.formula)
+                : ""}
+            </code>
             {critical && (
               <span className="roll-critical-label">{critical.label}</span>
             )}
