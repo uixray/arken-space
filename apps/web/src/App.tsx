@@ -28,11 +28,8 @@ import type { StoryDraftInput } from "./StoryChannel";
 import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
 import { fetchOperatorCapability } from "./operator-feedback";
-import { appendChatMessage, reconcileChatRead } from "./chat-state";
-import {
-  appendDirectMessageResponse,
-  upsertDirectThread,
-} from "./direct-chat-state";
+import { appendChatMessage } from "./chat-state";
+import { upsertDirectThread } from "./direct-chat-state";
 import { isEditableEventTarget } from "./input-diagnostics";
 import { setErrorReportContext } from "./error-report-context";
 import {
@@ -54,6 +51,7 @@ import { useSceneActions } from "./use-scene-actions";
 import { useWorldMapActions } from "./use-world-map-actions";
 import { useLatestRef } from "./use-latest-ref";
 import { useTokenDefinitionActions } from "./use-token-definition-actions";
+import { useChatActions } from "./use-chat-actions";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -1238,6 +1236,13 @@ export function App() {
     run,
     snapshotRef,
     activeSceneRef,
+  });
+  const chatActions = useChatActions({
+    run,
+    setSnapshot,
+    snapshotRef,
+    knownChatMessageIdsRef,
+    activeChatThreadIdRef,
   });
 
   if (authRequired) return <AuthGate onAuthenticated={load} />;
@@ -2707,106 +2712,13 @@ export function App() {
               });
               await loadStoryPosts();
             }}
-            onChat={async (body, visibility, stream, characterId) =>
-              run(() =>
-                api("/api/chat", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    body,
-                    visibility,
-                    stream,
-                    characterId: characterId ?? snapshot.me.characterId,
-                  }),
-                }),
-              )
-            }
-            onSticker={async (target, stickerId) => {
-              const message = await api<
-                import("@arken/contracts").ChatMessageDto
-              >("/api/chat/stickers", {
-                method: "POST",
-                body: JSON.stringify({
-                  actionId: crypto.randomUUID(),
-                  stickerId,
-                  ...target,
-                }),
-              });
-              knownChatMessageIdsRef.current.add(message.id);
-              setSnapshot((current) => {
-                if (!current) return current;
-                return "threadId" in target
-                  ? appendDirectMessageResponse(current, message, {
-                      activeThreadId: activeChatThreadIdRef.current,
-                      ownMembershipId: current.me.id,
-                    })
-                  : appendChatMessage(current, message, message.sequence, {
-                      activeThreadId: message.threadId,
-                      ownMembershipId: current.me.id,
-                    });
-              });
-            }}
-            onCreateDirectThread={async (participantMembershipId) => {
-              const thread = await api<
-                import("@arken/contracts").DirectChatThreadDto
-              >("/api/chat/direct", {
-                method: "POST",
-                body: JSON.stringify({ participantMembershipId }),
-              });
-              setSnapshot((current) =>
-                current ? upsertDirectThread(current, thread) : current,
-              );
-              return thread;
-            }}
-            onDirectChat={async (threadId, body, attachmentContentIds) => {
-              const message = await api<
-                import("@arken/contracts").ChatMessageDto
-              >("/api/chat/direct/messages", {
-                method: "POST",
-                body: JSON.stringify({
-                  actionId: crypto.randomUUID(),
-                  threadId,
-                  body,
-                  characterId: snapshot.me.characterId,
-                  attachmentContentIds,
-                }),
-              });
-              knownChatMessageIdsRef.current.add(message.id);
-              setSnapshot((current) =>
-                current
-                  ? appendDirectMessageResponse(current, message, {
-                      activeThreadId: activeChatThreadIdRef.current,
-                      ownMembershipId: current.me.id,
-                    })
-                  : current,
-              );
-            }}
-            onUploadChatAttachment={async (file) => {
-              const form = new FormData();
-              form.append("file", file);
-              return api<import("@arken/contracts").ChatAttachmentMetadata>(
-                "/api/chat/attachments",
-                { method: "POST", body: form },
-              );
-            }}
-            onActiveChatThreadChange={(threadId) => {
-              activeChatThreadIdRef.current = threadId;
-            }}
-            onMarkChatRead={async (threadId, sequence) => {
-              const cursor = await api<
-                import("@arken/contracts").ChatReadCursorDto
-              >("/api/chat/read", {
-                method: "POST",
-                body: JSON.stringify({
-                  actionId: crypto.randomUUID(),
-                  threadId,
-                  sequence,
-                }),
-              });
-              setSnapshot((current) =>
-                current ? reconcileChatRead(current, cursor) : current,
-              );
-            }}
+            onChat={chatActions.onChat}
+            onSticker={chatActions.onSticker}
+            onCreateDirectThread={chatActions.onCreateDirectThread}
+            onDirectChat={chatActions.onDirectChat}
+            onUploadChatAttachment={chatActions.onUploadChatAttachment}
+            onActiveChatThreadChange={chatActions.onActiveChatThreadChange}
+            onMarkChatRead={chatActions.onMarkChatRead}
             onRoll={submitRoll}
             onCreateCharacter={async (name, template) =>
               run(
