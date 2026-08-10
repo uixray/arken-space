@@ -10,8 +10,6 @@ import type {
   AssetDto,
   ChatStream,
   CatalogEntryDto,
-  ChatAttachmentMetadata,
-  DirectChatThreadDto,
   CharacterDto,
   GameSnapshot,
   MessageVisibility,
@@ -117,29 +115,8 @@ export type Props = {
     controllerMembershipIds: string[],
   ) => Promise<void>;
   onPatchCharacter: (id: string, patch: Partial<CharacterDto>) => Promise<void>;
-  onChat: (
-    body: string,
-    visibility: MessageVisibility,
-    stream: ChatStream,
-    characterId?: string | null,
-  ) => Promise<void>;
-  onCreateDirectThread: (
-    participantMembershipId: string,
-  ) => Promise<DirectChatThreadDto>;
-  onDirectChat: (
-    threadId: string,
-    body: string,
-    attachmentContentIds: string[],
-  ) => Promise<void>;
-  onSticker: (
-    target: { threadId: string } | { stream: "TABLE" | "STORY" },
-    stickerId: string,
-  ) => Promise<void>;
-  onUploadChatAttachment: (file: File) => Promise<ChatAttachmentMetadata>;
   storyPosts: Array<StoryPostDto | StoryPostAdminDto>;
   storyNextCursor: string | null;
-  onMarkChatRead: (threadId: string, sequence: number) => Promise<void>;
-  onActiveChatThreadChange: (threadId: string | null) => void;
   onRoll: (
     formula: string,
     label?: string,
@@ -289,6 +266,7 @@ export function Sidebar(props: Props) {
     worldMap: worldMapActions,
     playerRequest: playerRequestActions,
     story: storyActions,
+    chat: chatActions,
   } = useCampaignActions();
   const {
     onChatVisibilityChange,
@@ -296,9 +274,8 @@ export function Sidebar(props: Props) {
     requestedChatMessageId,
     onWorkspaceChange,
     sceneDialogRequest,
-    onActiveChatThreadChange,
-    onMarkChatRead,
   } = props;
+  const { onActiveChatThreadChange, onMarkChatRead } = chatActions;
   const { messages: snapshotMessages, chatThreads: snapshotChatThreads } =
     props.snapshot;
   const isGm = props.snapshot.me.role === "GM";
@@ -487,18 +464,18 @@ export function Sidebar(props: Props) {
             snapshot={props.snapshot}
             activeThreadId={activeDirectThreadId}
             onActiveThreadChange={setActiveDirectThreadId}
-            onCreateThread={props.onCreateDirectThread}
-            onDirectChat={props.onDirectChat}
-            onSticker={props.onSticker}
-            onUploadAttachment={props.onUploadChatAttachment}
-            onMarkChatRead={props.onMarkChatRead}
+            onCreateThread={chatActions.onCreateDirectThread}
+            onDirectChat={chatActions.onDirectChat}
+            onSticker={chatActions.onSticker}
+            onUploadAttachment={chatActions.onUploadChatAttachment}
+            onMarkChatRead={chatActions.onMarkChatRead}
           />
         ) : activeFeed === "ACTIVITY" ? (
           <ActivityPanel
             snapshot={props.snapshot}
             storyPosts={props.storyPosts}
-            onChat={props.onChat}
-            onSticker={props.onSticker}
+            onChat={chatActions.onChat}
+            onSticker={chatActions.onSticker}
             onRoll={props.onRoll}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
@@ -519,15 +496,15 @@ export function Sidebar(props: Props) {
             onPublish={isGm ? storyActions.onPublishStoryPost : undefined}
             onUpdate={isGm ? storyActions.onUpdateStoryPost : undefined}
             onArchive={isGm ? storyActions.onArchiveStoryPost : undefined}
-            onUploadImage={isGm ? props.onUploadChatAttachment : undefined}
+            onUploadImage={isGm ? chatActions.onUploadChatAttachment : undefined}
           />
         ) : (
           <ChatPanel
             snapshot={props.snapshot}
-            onChat={props.onChat}
-            onSticker={props.onSticker}
+            onChat={chatActions.onChat}
+            onSticker={chatActions.onSticker}
             onRoll={props.onRoll}
-            onMarkChatRead={props.onMarkChatRead}
+            onMarkChatRead={chatActions.onMarkChatRead}
             activeStream={activeFeed}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}

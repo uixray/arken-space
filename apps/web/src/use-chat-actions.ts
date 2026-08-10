@@ -3,8 +3,10 @@ import type {
   ChatAttachmentMetadata,
   ChatMessageDto,
   ChatReadCursorDto,
+  ChatStream,
   DirectChatThreadDto,
   GameSnapshot,
+  MessageVisibility,
 } from "@arken/contracts";
 import { api } from "./api";
 import { appendChatMessage, reconcileChatRead } from "./chat-state";
@@ -12,7 +14,6 @@ import {
   appendDirectMessageResponse,
   upsertDirectThread,
 } from "./direct-chat-state";
-import type { Props as SidebarProps } from "./Sidebar";
 
 /**
  * UIX-398 — chat commands.
@@ -31,16 +32,29 @@ import type { Props as SidebarProps } from "./Sidebar";
  * `knownChatMessageIdsRef` and `activeChatThreadIdRef` are already refs owned
  * by App, so they pass through unchanged.
  */
-export type ChatActions = Pick<
-  SidebarProps,
-  | "onChat"
-  | "onSticker"
-  | "onCreateDirectThread"
-  | "onDirectChat"
-  | "onUploadChatAttachment"
-  | "onActiveChatThreadChange"
-  | "onMarkChatRead"
->;
+export interface ChatActions {
+  onChat: (
+    body: string,
+    visibility: MessageVisibility,
+    stream: ChatStream,
+    characterId?: string | null,
+  ) => Promise<void>;
+  onSticker: (
+    target: { threadId: string } | { stream: "TABLE" | "STORY" },
+    stickerId: string,
+  ) => Promise<void>;
+  onCreateDirectThread: (
+    participantMembershipId: string,
+  ) => Promise<DirectChatThreadDto>;
+  onDirectChat: (
+    threadId: string,
+    body: string,
+    attachmentContentIds: string[],
+  ) => Promise<void>;
+  onUploadChatAttachment: (file: File) => Promise<ChatAttachmentMetadata>;
+  onActiveChatThreadChange: (threadId: string | null) => void;
+  onMarkChatRead: (threadId: string, sequence: number) => Promise<void>;
+}
 
 export function useChatActions(dependencies: {
   /** Stable — see `use-mutation-runners.ts`. */

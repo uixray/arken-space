@@ -59,6 +59,7 @@ import {
   type ActivityFilter,
 } from "../activity-roll-controls";
 import type { Props } from "../Sidebar";
+import type { ChatActions } from "../use-chat-actions";
 import { useFollowScroll } from "../ui/useFollowScroll";
 import { decideComposerKeydown } from "../composer-keyboard-intent";
 import { DiceTrayPanel } from "./DiceTrayPanel";
@@ -185,8 +186,8 @@ export function ActivityPanel({
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
-  onChat: Props["onChat"];
-  onSticker: Props["onSticker"];
+  onChat: ChatActions["onChat"];
+  onSticker: ChatActions["onSticker"];
   onRoll: Props["onRoll"];
   focusedMessageId: string | null;
   onMessageFocused: () => void;
@@ -696,11 +697,11 @@ export function DirectChatPanel({
   snapshot: GameSnapshot;
   activeThreadId: string | null;
   onActiveThreadChange: (threadId: string | null) => void;
-  onCreateThread: Props["onCreateDirectThread"];
-  onDirectChat: Props["onDirectChat"];
-  onSticker: Props["onSticker"];
-  onUploadAttachment: Props["onUploadChatAttachment"];
-  onMarkChatRead: Props["onMarkChatRead"];
+  onCreateThread: ChatActions["onCreateDirectThread"];
+  onDirectChat: ChatActions["onDirectChat"];
+  onSticker: ChatActions["onSticker"];
+  onUploadAttachment: ChatActions["onUploadChatAttachment"];
+  onMarkChatRead: ChatActions["onMarkChatRead"];
 }) {
   const threads = directThreads(snapshot);
   const contacts = directChatContacts(snapshot);
@@ -1017,10 +1018,10 @@ export function ChatPanel({
   onOpenPlayerRequests,
 }: {
   snapshot: GameSnapshot;
-  onChat: Props["onChat"];
-  onSticker: Props["onSticker"];
+  onChat: ChatActions["onChat"];
+  onSticker: ChatActions["onSticker"];
   onRoll: Props["onRoll"];
-  onMarkChatRead: Props["onMarkChatRead"];
+  onMarkChatRead: ChatActions["onMarkChatRead"];
   activeStream: ChatStream;
   focusedMessageId: string | null;
   onMessageFocused: () => void;

@@ -2636,13 +2636,6 @@ export function App() {
             onReplaceCharacterControllers={replaceCharacterControllers}
             storyPosts={storyPosts}
             storyNextCursor={storyNextCursor}
-            onChat={chatActions.onChat}
-            onSticker={chatActions.onSticker}
-            onCreateDirectThread={chatActions.onCreateDirectThread}
-            onDirectChat={chatActions.onDirectChat}
-            onUploadChatAttachment={chatActions.onUploadChatAttachment}
-            onActiveChatThreadChange={chatActions.onActiveChatThreadChange}
-            onMarkChatRead={chatActions.onMarkChatRead}
             onRoll={submitRoll}
             onCreateCharacter={async (name, template) =>
               run(
