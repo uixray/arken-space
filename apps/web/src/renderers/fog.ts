@@ -28,26 +28,32 @@ function operationGeometry(operation: FogOperation): FogGeometry {
 }
 
 /**
- * A query rect counts as "fully revealed" only when every point inside it is
- * under an active REVEAL once every intersecting fog operation is applied in
- * order (later operations in `reveals` override earlier ones at a given
- * point, matching the durable REVEAL/COVER journal semantics).
+ * Samples the query rect and reports whether any point in it is `target`.
  *
- * This decomposes the query rect into a grid of cells cut along each
- * intersecting operation's bbox edges (exact for RECT-vs-RECT, since a
- * rectangle's membership never changes within such a cell) and samples the
- * midpoint of every cell against the ordered operations using
- * `fogGeometryContains`, so CIRCLE/POLYGON/BRUSH shapes are evaluated with
- * the same point-in-shape test the server and contracts package already use
- * elsewhere. Non-rectangular boundaries that cut through the interior of a
- * single cell are approximated by that cell's midpoint sample, same
- * trade-off the original RECT-only cell decomposition already made.
+ * The rect is decomposed into a grid of cells cut along each intersecting
+ * operation's bbox edges (exact for RECT-vs-RECT, since a rectangle's
+ * membership never changes within such a cell) and the midpoint of every cell
+ * is tested against the ordered operations using `fogGeometryContains`, so
+ * CIRCLE/POLYGON/BRUSH shapes are evaluated with the same point-in-shape test
+ * the server and contracts package already use elsewhere. Non-rectangular
+ * boundaries that cut through the interior of a single cell are approximated
+ * by that cell's midpoint sample, the same trade-off the original RECT-only
+ * decomposition already made.
+ *
+ * Later operations in `reveals` override earlier ones at a given point,
+ * matching the durable REVEAL/COVER journal semantics.
+ *
+ * Both public questions below reduce to this one scan, asking about opposite
+ * targets — which is the point of sharing it: "fully revealed" and "fully
+ * hidden" are not each other's negation (a partially revealed rect is
+ * neither), so they have to come from the same sampling or they will disagree
+ * at the edges.
  */
-export function isRectFullyRevealed(
+function containsPointWhere(
   rect: Rect,
   reveals: readonly FogOperation[],
-) {
-  if (rect.width <= 0 || rect.height <= 0) return false;
+  target: boolean,
+): boolean {
   const right = rect.x + rect.width;
   const bottom = rect.y + rect.height;
   const intersecting = reveals.filter(
@@ -57,9 +63,10 @@ export function isRectFullyRevealed(
       operation.y < bottom &&
       operation.y + operation.height > rect.y,
   );
-  // Nothing covers the rect, so no sample point can be revealed. Same answer
-  // the loops below would reach, without building any cut lists.
-  if (intersecting.length === 0) return false;
+  // Nothing intersects, so every point is unrevealed: fog is the default
+  // state and REVEAL operations are what open it. Same answer the loops below
+  // would reach, without building any cut lists.
+  if (intersecting.length === 0) return target === false;
   // Resolve each operation's geometry once. `operationGeometry` allocates a
   // fresh RECT for legacy rows, and the sampling loops run it
   // O(cells x operations) times -- hoisting it out of the hot path avoids
@@ -107,12 +114,73 @@ export function isRectFullyRevealed(
         visible = candidate.revealing;
         break;
       }
-      if (!visible) return false;
+      if (visible === target) return true;
     }
   }
-  return true;
+  return false;
+}
+
+/**
+ * True only when every point inside the rect is revealed.
+ *
+ * Used for drawings, which stay hidden until the area they occupy is fully
+ * open. Deliberately *not* the rule for tokens — see `isRectFullyHidden`.
+ */
+export function isRectFullyRevealed(
+  rect: Rect,
+  reveals: readonly FogOperation[],
+) {
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  return !containsPointWhere(rect, reveals, false);
+}
+
+/**
+ * True only when no point inside the rect is revealed.
+ *
+ * UIX-399: this is the rule for hiding a token. The previous one hid a token
+ * that was not *fully* revealed, so a single pixel of overlap made it vanish
+ * from the players' view entirely — reported from the 09.08 session, and the
+ * opposite of what a partially lit figure should look like.
+ *
+ * A degenerate rect has no interior to reveal, so it counts as hidden; that
+ * keeps this total rather than leaving a case where a token is neither
+ * revealed nor hidden.
+ */
+export function isRectFullyHidden(
+  rect: Rect,
+  reveals: readonly FogOperation[],
+) {
+  if (rect.width <= 0 || rect.height <= 0) return true;
+  return !containsPointWhere(rect, reveals, true);
 }
 
 export function fogOpacity(role: "GM" | "PLAYER") {
   return role === "GM" ? 0.35 : 1;
+}
+
+/**
+ * Which tokens fog hides from this viewer.
+ *
+ * Lives here rather than inline in the renderer so the *decision* is testable,
+ * not just the geometry underneath it. Both are needed: the predicates being
+ * correct says nothing about which one the caller reaches for, and picking the
+ * wrong one is exactly the defect UIX-399 was.
+ */
+export function fogHiddenTokenIds(
+  tokens: readonly (Rect & {
+    id: string;
+    controllerMembershipIds: readonly string[];
+  })[],
+  reveals: readonly FogOperation[],
+  viewer: { role: "GM" | "PLAYER"; membershipId: string },
+): Set<string> {
+  const hidden = new Set<string>();
+  // The GM is never fog-limited, so the probe is skipped entirely.
+  if (viewer.role === "GM") return hidden;
+  for (const token of tokens) {
+    // You always see what you control, wherever it has wandered off to.
+    if (token.controllerMembershipIds.includes(viewer.membershipId)) continue;
+    if (isRectFullyHidden(token, reveals)) hidden.add(token.id);
+  }
+  return hidden;
 }

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { fogGeometryBounds, fogGeometryContains } from "@arken/contracts";
 import type { FogGeometry } from "@arken/contracts";
-import { fogOpacity, isRectFullyRevealed, type FogOperation } from "./fog";
+import {
+  fogHiddenTokenIds,
+  fogOpacity,
+  isRectFullyHidden,
+  isRectFullyRevealed,
+  type FogOperation,
+} from "./fog";
 
 /**
  * UIX-395: the exact pre-optimization algorithm, kept here purely as a
@@ -326,5 +332,111 @@ describe("fog evaluator optimization is behaviour-preserving (UIX-395)", () => {
     expect(isRectFullyRevealed({ x: 0, y: 0, width: 10, height: 10 }, [])).toBe(
       false,
     );
+  });
+});
+
+/**
+ * UIX-399: a token used to disappear the moment any part of it touched fog,
+ * because the hide rule was "not fully revealed". These pin the new rule and,
+ * just as importantly, pin that the two questions are *not* negations of each
+ * other — a partially lit rect answers false to both.
+ */
+describe("partial fog hides a token only when nothing of it is lit", () => {
+  const reveals = [{ x: 100, y: 100, width: 100, height: 100 }];
+
+  it("keeps a token visible when a single edge overlaps the lit area", () => {
+    // One pixel of overlap: the reported case.
+    const barelyOverlapping = { x: 199, y: 150, width: 40, height: 40 };
+    expect(isRectFullyHidden(barelyOverlapping, reveals)).toBe(false);
+    expect(isRectFullyRevealed(barelyOverlapping, reveals)).toBe(false);
+  });
+
+  it("hides a token that is entirely outside the lit area", () => {
+    expect(
+      isRectFullyHidden({ x: 300, y: 300, width: 40, height: 40 }, reveals),
+    ).toBe(true);
+  });
+
+  it("hides everything when nothing has been revealed at all", () => {
+    expect(isRectFullyHidden({ x: 0, y: 0, width: 10, height: 10 }, [])).toBe(
+      true,
+    );
+  });
+
+  it("treats a later COVER as hiding what an earlier REVEAL had lit", () => {
+    const token = { x: 110, y: 110, width: 20, height: 20 };
+    expect(isRectFullyHidden(token, reveals)).toBe(false);
+    expect(
+      isRectFullyHidden(token, [
+        ...reveals,
+        { x: 100, y: 100, width: 100, height: 100, operation: "COVER" },
+      ]),
+    ).toBe(true);
+  });
+
+  it("agrees with the full-reveal test wherever the answer is unambiguous", () => {
+    const random = createRandom(20260810);
+    let bothFalse = 0;
+    for (let scene = 0; scene < 200; scene++) {
+      const operations = Array.from(
+        { length: 1 + Math.round(random() * 6) },
+        () => randomOperation(random),
+      );
+      for (let probe = 0; probe < 5; probe++) {
+        const rect = {
+          x: Math.round(random() * 200),
+          y: Math.round(random() * 200),
+          width: 1 + Math.round(random() * 30),
+          height: 1 + Math.round(random() * 30),
+        };
+        const revealed = isRectFullyRevealed(rect, operations);
+        const hidden = isRectFullyHidden(rect, operations);
+        // Never both: a rect cannot be entirely lit and entirely dark.
+        expect(revealed && hidden).toBe(false);
+        if (!revealed && !hidden) bothFalse++;
+      }
+    }
+    // The partially lit case is the whole reason this task exists, so a
+    // corpus that never produced one would make the assertion above vacuous.
+    expect(bothFalse).toBeGreaterThan(20);
+  });
+});
+
+describe("which tokens fog hides from a player", () => {
+  const reveals = [
+    { x: 100, y: 100, width: 100, height: 100, operation: "REVEAL" as const },
+  ];
+  const token = (
+    id: string,
+    x: number,
+    controllerMembershipIds: string[] = [],
+  ) => ({ id, x, y: 150, width: 40, height: 40, controllerMembershipIds });
+
+  const viewer = { role: "PLAYER" as const, membershipId: "player-1" };
+
+  it("hides only the token with nothing lit", () => {
+    const hidden = fogHiddenTokenIds(
+      [token("lit", 120), token("edge", 199), token("dark", 400)],
+      reveals,
+      viewer,
+    );
+    expect([...hidden]).toEqual(["dark"]);
+  });
+
+  it("never hides a token the viewer controls", () => {
+    const hidden = fogHiddenTokenIds(
+      [token("mine", 400, ["player-1"]), token("theirs", 400, ["player-2"])],
+      reveals,
+      viewer,
+    );
+    expect([...hidden]).toEqual(["theirs"]);
+  });
+
+  it("hides nothing from the GM", () => {
+    const hidden = fogHiddenTokenIds([token("dark", 400)], reveals, {
+      role: "GM",
+      membershipId: "gm-1",
+    });
+    expect(hidden.size).toBe(0);
   });
 });

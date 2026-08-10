@@ -23,7 +23,7 @@ import Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
 import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
-import { isRectFullyRevealed } from "./fog";
+import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { fitRect } from "./camera-fit";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
@@ -578,16 +578,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
    * Both sets below depend only on the data the answer actually derives from,
    * so ordinary realtime traffic no longer triggers a recompute.
    */
-  const fogHiddenTokenIds = useMemo(() => {
-    const hidden = new Set<string>();
-    // The GM is never fog-limited, so the probe is skipped entirely.
-    if (props.role === "GM") return hidden;
-    for (const token of props.tokens) {
-      if (token.controllerMembershipIds.includes(props.membershipId)) continue;
-      if (!isRectFullyRevealed(token, orderedFogReveals)) hidden.add(token.id);
-    }
-    return hidden;
-  }, [props.role, props.tokens, props.membershipId, orderedFogReveals]);
+  const hiddenTokenIds = useMemo(
+    () =>
+      fogHiddenTokenIds(props.tokens, orderedFogReveals, {
+        role: props.role,
+        membershipId: props.membershipId,
+      }),
+    [props.role, props.tokens, props.membershipId, orderedFogReveals],
+  );
 
   const revealedDrawingIds = useMemo(() => {
     const revealed = new Set<string>();
@@ -2303,7 +2301,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   token.x < worldDraft.width &&
                   token.y < worldDraft.height),
             )
-            .filter((token) => !fogHiddenTokenIds.has(token.id))
+            .filter((token) => !hiddenTokenIds.has(token.id))
             .sort((a, b) =>
               a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
             )
