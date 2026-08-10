@@ -49,6 +49,7 @@ import { useDismissibleDetails } from "./ui/dismissible-details";
 import { characterTokenPlacementRequest } from "./token-placement";
 import { normalizeClientDiceResult } from "./dice-result";
 import { applyBulkMoveResult } from "./canvas-bulk-move";
+import { useMutationRunners } from "./use-mutation-runners";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -833,29 +834,19 @@ export function App() {
     };
   }, [authRequired, campaignId, loadStoryPosts]);
 
-  const run = async (action: () => Promise<unknown>, refresh = false) => {
-    try {
-      setError("");
-      await action();
-      if (refresh) await load();
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Операция не выполнена",
-      );
-      throw reason;
-    }
-  };
-
-  /** World-map commands always reconcile the authoritative snapshot. A conflict
-   * means another GM changed a revision, so reload before exposing retry UI. */
-  const runWorldMapMutation = async (action: () => Promise<unknown>) => {
-    try {
-      await run(action, true);
-    } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 409) await load();
-      throw reason;
-    }
-  };
+  /*
+   * UIX-398 step A0. These four back 45 call sites between them and used to
+   * be plain function declarations here — a fresh identity every render, so
+   * every handler closing over one was unstable too, and no React.memo below
+   * the sidebar could hold. They now live in `use-mutation-runners.ts`, where
+   * the identity guarantee is actually testable.
+   */
+  const {
+    run,
+    runResult,
+    runWorldMapMutation,
+    recoverFromCanvasMutation,
+  } = useMutationRunners({ load, setError });
 
   /**
    * UIX-396 stage 1: recovery for the fast spatial entities (token geometry,
@@ -872,22 +863,6 @@ export function App() {
    * Anything else (5xx, network failure) is still treated as "local state may
    * be arbitrarily wrong" and falls back to the full rebuild.
    */
-  const recoverFromCanvasMutation = async (reason: unknown) => {
-    const conflict = reason instanceof ApiError && reason.status === 409;
-    if (!conflict) await load();
-    setError(formatApiError(reason));
-  };
-
-  const runResult = async <T,>(action: () => Promise<T>): Promise<T> => {
-    try {
-      setError("");
-      return await action();
-    } catch (reason) {
-      setError(formatApiError(reason));
-      throw reason;
-    }
-  };
-
   const handOffToNextPlayer = async () => {
     const finishHandoff = () => {
       setSocket(null);
