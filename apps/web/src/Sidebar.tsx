@@ -26,11 +26,12 @@ import type {
 } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import type { GameSocket } from "./realtime";
+import { useCampaignActions } from "./campaign-actions-context";
 import type { CharacterTemplateFields } from "./character-workspace-state";
 import type { RollMode } from "./RollModeControl";
 import type { TokenFramePreset } from "./token-image-editor-state";
 import { ArkenDialog } from "./ui/ArkenDialog";
-import { SceneManagerDialog, type SceneDraft } from "./ui/SceneManagerDialog";
+import { SceneManagerDialog } from "./ui/SceneManagerDialog";
 import { StoryChannel, type StoryDraftInput } from "./StoryChannel";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
@@ -173,22 +174,6 @@ export type Props = {
   onListPlayerAccess: () => Promise<PlayerAccessDto[]>;
   onRotatePlayerAccess: (id: string) => Promise<PlayerAccessSecretDto>;
   onRevokePlayerAccess: (id: string) => Promise<void>;
-  onSaveScene: (
-    scene: GameSnapshot["scenes"][number] | null,
-    draft: SceneDraft,
-  ) => Promise<void>;
-  onActivateScene: (sceneId: string) => Promise<void>;
-  /** @deprecated SceneManagerDialog owns scene editing. */
-  onCreateScene: (name: string) => Promise<void>;
-  /** @deprecated SceneManagerDialog owns scene editing. */
-  onAssignMap: (sceneId: string, assetId: string | null) => Promise<void>;
-  /** @deprecated SceneManagerDialog owns scene editing. */
-  onRenameScene: (
-    sceneId: string,
-    revision: number,
-    name: string,
-  ) => Promise<void>;
-  onViewScene: (sceneId: string) => void;
   viewedSceneId: string | null;
   sceneDialogRequest: number;
   onRenameMembership: (
@@ -378,6 +363,9 @@ export type Props = {
 };
 
 export function Sidebar(props: Props) {
+  // UIX-398 step B: scene commands arrive by context rather than as six props
+  // threaded through every layer. See campaign-actions-context.tsx.
+  const { scene: sceneActions } = useCampaignActions();
   const {
     onChatVisibilityChange,
     onRequestedChatMessageHandled,
@@ -661,9 +649,9 @@ export function Sidebar(props: Props) {
             snapshot={props.snapshot}
             viewedSceneId={props.viewedSceneId}
             onClose={() => props.onWorkspaceChange(null)}
-            onView={props.onViewScene}
-            onPublish={props.onActivateScene}
-            onSave={props.onSaveScene}
+            onView={sceneActions.onViewScene}
+            onPublish={sceneActions.onActivateScene}
+            onSave={sceneActions.onSaveScene}
             onUpload={props.onUpload}
           />
         )}
@@ -687,7 +675,7 @@ export function Sidebar(props: Props) {
             snapshot={props.snapshot}
             onClose={() => props.onWorkspaceChange(null)}
             onOpenScene={(sceneId) => {
-              props.onViewScene(sceneId);
+              sceneActions.onViewScene(sceneId);
               props.onWorkspaceChange(null);
             }}
             onCreateMap={props.onCreateWorldMap}

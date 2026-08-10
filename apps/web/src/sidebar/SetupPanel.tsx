@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useCampaignActions } from "../campaign-actions-context";
 import type {
   CatalogEntryDto,
   GameSnapshot,
@@ -15,6 +16,8 @@ import { TextPromptDialog } from "../ui/TextPromptDialog";
 import type { Props } from "../Sidebar";
 
 export function SetupPanel(props: Props) {
+  // UIX-398 step B: scene commands come from context, not through Sidebar.
+  const { scene: sceneActions } = useCampaignActions();
   const [activeSetupTab, setActiveSetupTab] = useState<
     "OVERVIEW" | "CHARACTERS" | "CATALOG"
   >("OVERVIEW");
@@ -317,7 +320,7 @@ export function SetupPanel(props: Props) {
           Активная
           <FormSelect
             value={activeScene?.id ?? ""}
-            onChange={(event) => props.onActivateScene(event.target.value)}
+            onChange={(event) => sceneActions.onActivateScene(event.target.value)}
           >
             {props.snapshot.scenes.map((scene) => (
               <option key={scene.id} value={scene.id}>
@@ -337,7 +340,7 @@ export function SetupPanel(props: Props) {
             <FormSelect
               value={activeScene.mapAssetId ?? ""}
               onChange={(event) =>
-                props.onAssignMap(activeScene.id, event.target.value || null)
+                sceneActions.onAssignMap(activeScene.id, event.target.value || null)
               }
             >
               <option value="">Без карты</option>
@@ -354,7 +357,7 @@ export function SetupPanel(props: Props) {
           onSubmit={async (event) => {
             event.preventDefault();
             if (!sceneName) return;
-            await props.onCreateScene(sceneName);
+            await sceneActions.onCreateScene(sceneName);
             setSceneName("");
           }}
         >
@@ -494,7 +497,7 @@ export function SetupPanel(props: Props) {
         onClose={() => setRenameSceneOpen(false)}
         onApply={async (name) => {
           if (!activeScene) return;
-          await props.onRenameScene(
+          await sceneActions.onRenameScene(
             activeScene.id,
             activeScene.revision ?? 0,
             name,

@@ -53,6 +53,7 @@ import { useCatalogActions } from "./use-catalog-actions";
 import { useStoryActions } from "./use-story-actions";
 import { usePlayerRequestActions } from "./use-player-request-actions";
 import { useAssetActions } from "./use-asset-actions";
+import { CampaignActionsContext } from "./campaign-actions-context";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -1263,6 +1264,38 @@ export function App() {
     activeChatThreadIdRef,
   });
 
+  /*
+   * UIX-398 step B. Every domain object above is stable, so this one is too —
+   * which is what makes delivering them by context safe. Context has no
+   * selective subscription, so a value that changed would re-render every
+   * consumer on every change; see `campaign-actions-context.tsx`, and the
+   * test that rejects any non-function smuggled in here.
+   */
+  const campaignActions = useMemo(
+    () => ({
+      scene: sceneActions,
+      worldMap: worldMapActions,
+      token: tokenActions,
+      chat: chatActions,
+      access: accessActions,
+      catalog: catalogActions,
+      story: storyActions,
+      playerRequest: playerRequestActions,
+      asset: assetActions,
+    }),
+    [
+      sceneActions,
+      worldMapActions,
+      tokenActions,
+      chatActions,
+      accessActions,
+      catalogActions,
+      storyActions,
+      playerRequestActions,
+      assetActions,
+    ],
+  );
+
   if (authRequired) return <AuthGate onAuthenticated={load} />;
 
   if (!snapshot)
@@ -1314,6 +1347,7 @@ export function App() {
   ].join(":");
 
   return (
+    <CampaignActionsContext.Provider value={campaignActions}>
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
@@ -2639,12 +2673,6 @@ export function App() {
             onRevokePlayerAccess={accessActions.onRevokePlayerAccess}
             sceneDialogRequest={sceneDialogRequest}
             viewedSceneId={activeScene?.id ?? null}
-            onViewScene={sceneActions.onViewScene}
-            onSaveScene={sceneActions.onSaveScene}
-            onCreateScene={sceneActions.onCreateScene}
-            onActivateScene={sceneActions.onActivateScene}
-            onAssignMap={sceneActions.onAssignMap}
-            onRenameScene={sceneActions.onRenameScene}
             onRenameMembership={accessActions.onRenameMembership}
             onCreateToken={tokenActions.onCreateToken}
             onUpload={assetActions.uploadAsset}
@@ -2720,5 +2748,6 @@ export function App() {
         }}
       />
     </div>
+    </CampaignActionsContext.Provider>
   );
 }
