@@ -6,15 +6,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
-  AssetKind,
-  AssetDto,
   ChatStream,
-  CatalogEntryDto,
   CharacterDto,
   GameSnapshot,
   MessageVisibility,
-  PlayerAccessDto,
-  PlayerAccessSecretDto,
   StoryPostAdminDto,
   StoryPostDto,
 } from "@arken/contracts";
@@ -22,8 +17,6 @@ import { Button } from "@gravity-ui/uikit";
 import type { GameSocket } from "./realtime";
 import { useCampaignActions } from "./campaign-actions-context";
 import type { CharacterTemplateFields } from "./character-workspace-state";
-import type { RollMode } from "./RollModeControl";
-import type { TokenFramePreset } from "./token-image-editor-state";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { SceneManagerDialog } from "./ui/SceneManagerDialog";
 import { StoryChannel } from "./StoryChannel";
@@ -99,76 +92,9 @@ export type Props = {
     name: string,
     template?: CharacterTemplateFields,
   ) => Promise<void>;
-  onCreateInvite: (
-    characterId: string,
-    label: string,
-  ) => Promise<PlayerAccessSecretDto>;
-  onListPlayerAccess: () => Promise<PlayerAccessDto[]>;
-  onRotatePlayerAccess: (id: string) => Promise<PlayerAccessSecretDto>;
-  onRevokePlayerAccess: (id: string) => Promise<void>;
   viewedSceneId: string | null;
   sceneDialogRequest: number;
-  onRenameMembership: (
-    membershipId: string,
-    revision: number,
-    name: string,
-  ) => Promise<void>;
-  onUpload: (file: File, kind: AssetKind) => Promise<AssetDto>;
-  onGenerateTokenImage: (input: {
-    sourceAssetId: string;
-    cropX: number;
-    cropY: number;
-    zoom: number;
-    frame: TokenFramePreset;
-    name?: string;
-  }) => Promise<AssetDto>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
-  onCreateCatalogEntry: (input: {
-    kind: "SKILL" | "ABILITY";
-    name: string;
-    description: string;
-    data?: Record<string, unknown>;
-  }) => Promise<CatalogEntryDto>;
-  onUpdateCatalogEntry: (
-    id: string,
-    patch: Partial<CatalogEntryDto>,
-  ) => Promise<void>;
-  onDeleteCatalogEntry: (id: string, revision: number) => Promise<void>;
-  onAssignCatalogEntry: (
-    characterId: string,
-    catalogEntryId: string,
-  ) => Promise<void>;
-  onUpdateCharacterEntry: (
-    characterId: string,
-    id: string,
-    patch: {
-      kind?: "SKILL" | "ABILITY";
-      name?: string;
-      description?: string;
-      data?: Record<string, unknown>;
-      revision?: number;
-    },
-  ) => Promise<void>;
-  onDeleteCharacterEntry: (
-    characterId: string,
-    id: string,
-    revision: number,
-  ) => Promise<void>;
-  onRollEntry: (
-    characterId: string,
-    entryId: string,
-    input: {
-      mode: "EXECUTE" | "SHARE";
-      rollActionId?: string;
-      entryRevision: number;
-      rollMode?: RollMode;
-    },
-  ) => Promise<void>;
-  onRechargeEntry: (
-    characterId: string,
-    entryId: string,
-    revision: number,
-  ) => Promise<void>;
   onUpdateCounters: (
     characterId: string,
     revision: number,
@@ -237,6 +163,7 @@ export function Sidebar(props: Props) {
     playerRequest: playerRequestActions,
     story: storyActions,
     chat: chatActions,
+    asset: assetActions,
   } = useCampaignActions();
   const {
     onChatVisibilityChange,
@@ -523,7 +450,7 @@ export function Sidebar(props: Props) {
             onView={sceneActions.onViewScene}
             onPublish={sceneActions.onActivateScene}
             onSave={sceneActions.onSaveScene}
-            onUpload={props.onUpload}
+            onUpload={assetActions.uploadAsset}
           />
         )}
         {props.workspace === "operator-feedback" &&
@@ -580,7 +507,7 @@ export function Sidebar(props: Props) {
             variant="workspace"
             onClose={() => props.onWorkspaceChange(null)}
           >
-            <MediaPanel snapshot={props.snapshot} onUpload={props.onUpload} />
+            <MediaPanel snapshot={props.snapshot} onUpload={assetActions.uploadAsset} />
           </ArkenDialog>
         )}
       </div>

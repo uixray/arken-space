@@ -12,7 +12,7 @@ import {
   sortMediaByOrdering,
   stepViewerItem,
 } from "../character-media-gallery-state";
-import type { Props } from "../Sidebar";
+import type { AssetActions } from "../use-asset-actions";
 
 const CATEGORY_OPTIONS = Object.keys(
   CHARACTER_MEDIA_CATEGORY_LABELS,
@@ -45,7 +45,7 @@ export function CharacterMediaGallery({
   characterName: string;
   editable: boolean;
   isGm: boolean;
-  onUpload: Props["onUpload"];
+  onUpload: AssetActions["uploadAsset"];
 }) {
   const [items, setItems] = useState<CharacterMediaDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -293,7 +293,7 @@ function AttachMediaForm({
 }: {
   characterId: string;
   isGm: boolean;
-  onUpload: Props["onUpload"];
+  onUpload: AssetActions["uploadAsset"];
   onAttached: (created: CharacterMediaDto) => void;
 }) {
   const [file, setFile] = useState<File>();

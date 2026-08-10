@@ -317,15 +317,8 @@ export function CharacterWorkspace({
                       onPatch={props.onPatchCharacter}
                       onReplaceControllers={props.onReplaceCharacterControllers}
                       onRoll={props.onRoll}
-                      onAssignEntry={props.onAssignCatalogEntry}
-                      onCreateEntry={props.onCreateCatalogEntry}
-                      onUpdateEntry={props.onUpdateCharacterEntry}
-                      onDeleteEntry={props.onDeleteCharacterEntry}
-                      onRollEntry={props.onRollEntry}
-                      onRechargeEntry={props.onRechargeEntry}
                       onUpdateCounters={props.onUpdateCounters}
                       onCampaignClock={props.onCampaignClock}
-                      onUpload={props.onUpload}
                     />
                   </div>
                 </article>
@@ -731,15 +724,8 @@ export function CharacterPanel({
   onPatch,
   onReplaceControllers,
   onRoll,
-  onAssignEntry,
-  onCreateEntry,
-  onUpdateEntry,
-  onDeleteEntry,
-  onRollEntry,
-  onRechargeEntry,
   onUpdateCounters,
   onCampaignClock,
-  onUpload,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -749,16 +735,13 @@ export function CharacterPanel({
   onPatch: Props["onPatchCharacter"];
   onReplaceControllers: Props["onReplaceCharacterControllers"];
   onRoll: Props["onRoll"];
-  onAssignEntry: Props["onAssignCatalogEntry"];
-  onCreateEntry: Props["onCreateCatalogEntry"];
-  onUpdateEntry: Props["onUpdateCharacterEntry"];
-  onDeleteEntry: Props["onDeleteCharacterEntry"];
-  onRollEntry: Props["onRollEntry"];
-  onRechargeEntry: Props["onRechargeEntry"];
   onUpdateCounters: Props["onUpdateCounters"];
   onCampaignClock: Props["onCampaignClock"];
-  onUpload: Props["onUpload"];
 }) {
+  // The catalog handlers are read here rather than passed in: this panel is
+  // the only place that uses them, so threading them through the workspace
+  // above only made two components know about them instead of one.
+  const { catalog: catalogActions, asset: assetActions } = useCampaignActions();
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
@@ -1024,7 +1007,7 @@ export function CharacterPanel({
         onClick={() =>
           void runCharacterMutation(async () => {
             if (!portraitUpload) return;
-            const asset = await onUpload(portraitUpload, "PORTRAIT");
+            const asset = await assetActions.uploadAsset(portraitUpload, "PORTRAIT");
             await onPatch(character.id, {
               portraitAssetId: asset.id,
               revision: character.revision,
@@ -1041,7 +1024,7 @@ export function CharacterPanel({
         characterName={character.name}
         editable={Boolean(canEditMedia)}
         isGm={snapshot.me.role === "GM"}
-        onUpload={onUpload}
+        onUpload={assetActions.uploadAsset}
       />
       {snapshot.me.role === "GM" && (
         <div className="subsection">
@@ -1205,7 +1188,7 @@ export function CharacterPanel({
                     entry={entry}
                     disabled={!editable}
                     onAction={(input) =>
-                      onRollEntry(character.id, entry.id, {
+                      catalogActions.onRollEntry(character.id, entry.id, {
                         ...input,
                         ...(rollMode ? { rollMode } : {}),
                       })
@@ -1215,7 +1198,7 @@ export function CharacterPanel({
                     <Button
                       disabled={!editable}
                       onClick={() =>
-                        onRechargeEntry(character.id, entry.id, entry.revision)
+                        catalogActions.onRechargeEntry(character.id, entry.id, entry.revision)
                       }
                     >
                       Перезарядить
@@ -1229,7 +1212,7 @@ export function CharacterPanel({
                       <Button
                         className="danger-link"
                         onClick={() =>
-                          void onDeleteEntry(
+                          void catalogActions.onDeleteCharacterEntry(
                             character.id,
                             entry.id,
                             entry.revision,
@@ -1281,7 +1264,7 @@ export function CharacterPanel({
                     entry={entry}
                     disabled={!editable}
                     onAction={(input) =>
-                      onRollEntry(character.id, entry.id, {
+                      catalogActions.onRollEntry(character.id, entry.id, {
                         ...input,
                         ...(rollMode ? { rollMode } : {}),
                       })
@@ -1291,7 +1274,7 @@ export function CharacterPanel({
                     <Button
                       disabled={!editable}
                       onClick={() =>
-                        onRechargeEntry(character.id, entry.id, entry.revision)
+                        catalogActions.onRechargeEntry(character.id, entry.id, entry.revision)
                       }
                     >
                       Перезарядить
@@ -1305,7 +1288,7 @@ export function CharacterPanel({
                       <Button
                         className="danger-link"
                         onClick={() =>
-                          void onDeleteEntry(
+                          void catalogActions.onDeleteCharacterEntry(
                             character.id,
                             entry.id,
                             entry.revision,
@@ -1340,9 +1323,9 @@ export function CharacterPanel({
           }
           onClose={() => setCatalogPicker(null)}
           onAssign={(catalogEntryId) =>
-            onAssignEntry(character.id, catalogEntryId)
+            catalogActions.onAssignCatalogEntry(character.id, catalogEntryId)
           }
-          onCreate={(input) => onCreateEntry(input)}
+          onCreate={(input) => catalogActions.onCreateCatalogEntry(input)}
         />
       )}
       {entryEditor && (
@@ -1357,7 +1340,7 @@ export function CharacterPanel({
             existing={entryEditor}
             onCancel={() => setEntryEditor(null)}
             onSubmit={async (input) => {
-              await onUpdateEntry(character.id, entryEditor.id, {
+              await catalogActions.onUpdateCharacterEntry(character.id, entryEditor.id, {
                 ...input,
                 revision: entryEditor.revision,
               });

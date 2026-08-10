@@ -2,14 +2,14 @@ import { useMemo, useState } from "react";
 import type { AssetKind, GameSnapshot } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { ImageUploadField } from "../ui/ImageUploadField";
-import type { Props } from "../Sidebar";
+import type { AssetActions } from "../use-asset-actions";
 
 export function MediaPanel({
   snapshot,
   onUpload,
 }: {
   snapshot: GameSnapshot;
-  onUpload: Props["onUpload"];
+  onUpload: AssetActions["uploadAsset"];
 }) {
   const [drafts, setDrafts] = useState<Partial<Record<AssetKind, File>>>({});
   const [uploading, setUploading] = useState<AssetKind | null>(null);

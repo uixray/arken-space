@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { AssetDto, AssetKind } from "@arken/contracts";
 import { api } from "./api";
-import type { Props as SidebarProps } from "./Sidebar";
+import type { TokenFramePreset } from "./token-image-editor-state";
 
 /**
  * UIX-398 — asset upload and token-image generation.
@@ -15,9 +15,14 @@ import type { Props as SidebarProps } from "./Sidebar";
  */
 export interface AssetActions {
   uploadAsset: (file: File, kind: AssetKind) => Promise<AssetDto>;
-  // Derived rather than restated: the transform carries a frame preset union
-  // that a hand-written copy got wrong once already.
-  generateTokenImage: SidebarProps["onGenerateTokenImage"];
+  generateTokenImage: (input: {
+    sourceAssetId: string;
+    cropX: number;
+    cropY: number;
+    zoom: number;
+    frame: TokenFramePreset;
+    name?: string;
+  }) => Promise<AssetDto>;
 }
 
 export function useAssetActions(dependencies: {

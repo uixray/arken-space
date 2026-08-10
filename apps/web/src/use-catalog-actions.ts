@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CatalogEntryDto } from "@arken/contracts";
+import type { RollMode } from "./RollModeControl";
 import { api, formatApiError } from "./api";
-import type { Props as SidebarProps } from "./Sidebar";
 
 /**
  * UIX-398 — the shared skill/ability catalog and its per-character
@@ -13,17 +13,54 @@ import type { Props as SidebarProps } from "./Sidebar";
  *
  * Nothing reads render-scoped state, so no ref is needed.
  */
-export type CatalogActions = Pick<
-  SidebarProps,
-  | "onCreateCatalogEntry"
-  | "onUpdateCatalogEntry"
-  | "onDeleteCatalogEntry"
-  | "onAssignCatalogEntry"
-  | "onUpdateCharacterEntry"
-  | "onDeleteCharacterEntry"
-  | "onRollEntry"
-  | "onRechargeEntry"
->;
+export interface CatalogActions {
+  onCreateCatalogEntry: (input: {
+    kind: "SKILL" | "ABILITY";
+    name: string;
+    description: string;
+    data?: Record<string, unknown>;
+  }) => Promise<CatalogEntryDto>;
+  onUpdateCatalogEntry: (
+    id: string,
+    patch: Partial<CatalogEntryDto>,
+  ) => Promise<void>;
+  onDeleteCatalogEntry: (id: string, revision: number) => Promise<void>;
+  onAssignCatalogEntry: (
+    characterId: string,
+    catalogEntryId: string,
+  ) => Promise<void>;
+  onUpdateCharacterEntry: (
+    characterId: string,
+    id: string,
+    patch: {
+      kind?: "SKILL" | "ABILITY";
+      name?: string;
+      description?: string;
+      data?: Record<string, unknown>;
+      revision?: number;
+    },
+  ) => Promise<void>;
+  onDeleteCharacterEntry: (
+    characterId: string,
+    id: string,
+    revision: number,
+  ) => Promise<void>;
+  onRollEntry: (
+    characterId: string,
+    entryId: string,
+    input: {
+      mode: "EXECUTE" | "SHARE";
+      rollActionId?: string;
+      entryRevision: number;
+      rollMode?: RollMode;
+    },
+  ) => Promise<void>;
+  onRechargeEntry: (
+    characterId: string,
+    entryId: string,
+    revision: number,
+  ) => Promise<void>;
+}
 
 const withAction = (body: Record<string, unknown> = {}) =>
   JSON.stringify({ ...body, actionId: crypto.randomUUID() });

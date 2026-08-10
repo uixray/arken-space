@@ -15,11 +15,12 @@ import { AssetPicker } from "../ui/AssetPicker";
 import type { Props } from "../Sidebar";
 import { useCampaignActions } from "../campaign-actions-context";
 import type { TokenDefinitionActions } from "../use-token-definition-actions";
+import type { AssetActions } from "../use-asset-actions";
 import { Empty } from "./MediaPanel";
 import { canPlaceTokenDefinition } from "../token-placement";
 
 export function PalettePanel(props: Props) {
-  const { token: tokenActions } = useCampaignActions();
+  const { token: tokenActions, asset: assetActions } = useCampaignActions();
   const definitions = props.snapshot.tokenDefinitions ?? [];
   const [editor, setEditor] = useState<
     (typeof definitions)[number] | "NEW" | null
@@ -116,7 +117,7 @@ export function PalettePanel(props: Props) {
               {props.snapshot.me.role !== "GM" && (
                 <TokenImageAssignment
                   definition={definition}
-                  onUpload={props.onUpload}
+                  onUpload={assetActions.uploadAsset}
                   onPatch={tokenActions.onPatchTokenDefinition}
                 />
               )}
@@ -142,8 +143,8 @@ export function PalettePanel(props: Props) {
           key={editor === "NEW" ? "new" : `${editor.id}:${editor.revision}`}
           snapshot={props.snapshot}
           definition={editor === "NEW" ? undefined : editor}
-          onUpload={props.onUpload}
-          onGenerateTokenImage={props.onGenerateTokenImage}
+          onUpload={assetActions.uploadAsset}
+          onGenerateTokenImage={assetActions.generateTokenImage}
           onCancel={() => setEditor(null)}
           onCreate={tokenActions.onCreateTokenDefinition}
           onPatch={tokenActions.onPatchTokenDefinition}
@@ -185,7 +186,7 @@ function TokenImageAssignment({
   onPatch,
 }: {
   definition: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
-  onUpload: Props["onUpload"];
+  onUpload: AssetActions["uploadAsset"];
   onPatch: TokenDefinitionActions["onPatchTokenDefinition"];
 }) {
   const [file, setFile] = useState<File>();
@@ -248,8 +249,8 @@ function TokenDefinitionEditor({
 }: {
   snapshot: GameSnapshot;
   definition?: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
-  onUpload: Props["onUpload"];
-  onGenerateTokenImage: Props["onGenerateTokenImage"];
+  onUpload: AssetActions["uploadAsset"];
+  onGenerateTokenImage: AssetActions["generateTokenImage"];
   onCancel: () => void;
   onCreate: TokenDefinitionActions["onCreateTokenDefinition"];
   onPatch: TokenDefinitionActions["onPatchTokenDefinition"];

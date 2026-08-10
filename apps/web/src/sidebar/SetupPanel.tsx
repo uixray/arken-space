@@ -17,7 +17,12 @@ import type { Props } from "../Sidebar";
 
 export function SetupPanel(props: Props) {
   // UIX-398 step B: scene commands come from context, not through Sidebar.
-  const { scene: sceneActions, token: tokenActions } = useCampaignActions();
+  const {
+    scene: sceneActions,
+    token: tokenActions,
+    catalog: catalogActions,
+    access: accessActions,
+  } = useCampaignActions();
   const [activeSetupTab, setActiveSetupTab] = useState<
     "OVERVIEW" | "CHARACTERS" | "CATALOG"
   >("OVERVIEW");
@@ -50,7 +55,7 @@ export function SetupPanel(props: Props) {
   const activeScene = props.snapshot.scenes.find((scene) => scene.active);
   const maps = props.snapshot.assets.filter((asset) => asset.kind === "MAP");
   const refreshPlayerAccess = async () =>
-    setPlayerAccess(await props.onListPlayerAccess());
+    setPlayerAccess(await accessActions.onListPlayerAccess());
   useEffect(() => {
     void refreshPlayerAccess();
     // The setup panel loads once; mutations refresh the list explicitly.
@@ -119,7 +124,7 @@ export function SetupPanel(props: Props) {
                 <Button
                   className="danger-link"
                   onClick={() =>
-                    void props.onDeleteCatalogEntry(entry.id, entry.revision)
+                    void catalogActions.onDeleteCatalogEntry(entry.id, entry.revision)
                   }
                 >
                   Удалить шаблон
@@ -145,9 +150,9 @@ export function SetupPanel(props: Props) {
               onCancel={() => setCatalogEditor(null)}
               onSubmit={async (input: CatalogEntryFormInput) => {
                 if (catalogEditor === "NEW")
-                  await props.onCreateCatalogEntry(input);
+                  await catalogActions.onCreateCatalogEntry(input);
                 else
-                  await props.onUpdateCatalogEntry(catalogEditor.id, {
+                  await catalogActions.onUpdateCatalogEntry(catalogEditor.id, {
                     ...input,
                     revision: catalogEditor.revision,
                   });
@@ -266,7 +271,7 @@ export function SetupPanel(props: Props) {
               } catch {
                 return;
               }
-              await props.onCreateCatalogEntry({
+              await catalogActions.onCreateCatalogEntry({
                 kind: catalogKind,
                 name: catalogName.trim(),
                 description: catalogDescription,
@@ -424,7 +429,7 @@ export function SetupPanel(props: Props) {
         </label>
         <Button
           onClick={async () => {
-            const result = await props.onCreateInvite(
+            const result = await accessActions.onCreateInvite(
               inviteCharacter,
               props.snapshot.characters.find(
                 (item) => item.id === inviteCharacter,
@@ -455,7 +460,7 @@ export function SetupPanel(props: Props) {
               <>
                 <Button
                   onClick={async () => {
-                    const result = await props.onRotatePlayerAccess(grant.id);
+                    const result = await accessActions.onRotatePlayerAccess(grant.id);
                     setInviteUrl(result.url ?? "");
                     await refreshPlayerAccess();
                   }}
@@ -464,7 +469,7 @@ export function SetupPanel(props: Props) {
                 </Button>
                 <Button
                   onClick={async () => {
-                    await props.onRevokePlayerAccess(grant.id);
+                    await accessActions.onRevokePlayerAccess(grant.id);
                     setInviteUrl("");
                     await refreshPlayerAccess();
                   }}
@@ -485,7 +490,7 @@ export function SetupPanel(props: Props) {
         onApply={async (name) => {
           if (!renameMember) return;
           const target = renameMember;
-          await props.onRenameMembership(target.id, target.revision ?? 0, name);
+          await accessActions.onRenameMembership(target.id, target.revision ?? 0, name);
           setRenameMember(null);
         }}
       />

@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import type { PlayerAccessDto, PlayerAccessSecretDto } from "@arken/contracts";
 import { api } from "./api";
-import type { Props as SidebarProps } from "./Sidebar";
 
 /**
  * UIX-398 — player access and membership naming.
@@ -17,14 +16,20 @@ import type { Props as SidebarProps } from "./Sidebar";
  * which owns the outcome, and routing them through `run` would clear the
  * shared error banner on every listing.
  */
-export type AccessActions = Pick<
-  SidebarProps,
-  | "onCreateInvite"
-  | "onListPlayerAccess"
-  | "onRotatePlayerAccess"
-  | "onRevokePlayerAccess"
-  | "onRenameMembership"
->;
+export interface AccessActions {
+  onCreateInvite: (
+    characterId: string,
+    label: string,
+  ) => Promise<PlayerAccessSecretDto>;
+  onListPlayerAccess: () => Promise<PlayerAccessDto[]>;
+  onRotatePlayerAccess: (id: string) => Promise<PlayerAccessSecretDto>;
+  onRevokePlayerAccess: (id: string) => Promise<void>;
+  onRenameMembership: (
+    membershipId: string,
+    revision: number,
+    name: string,
+  ) => Promise<void>;
+}
 
 const withAction = (body: Record<string, unknown> = {}) =>
   JSON.stringify({ ...body, actionId: crypto.randomUUID() });

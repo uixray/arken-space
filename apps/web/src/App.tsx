@@ -2646,15 +2646,8 @@ export function App() {
                 true,
               )
             }
-            onCreateInvite={accessActions.onCreateInvite}
-            onListPlayerAccess={accessActions.onListPlayerAccess}
-            onRotatePlayerAccess={accessActions.onRotatePlayerAccess}
-            onRevokePlayerAccess={accessActions.onRevokePlayerAccess}
             sceneDialogRequest={sceneDialogRequest}
             viewedSceneId={activeScene?.id ?? null}
-            onRenameMembership={accessActions.onRenameMembership}
-            onUpload={assetActions.uploadAsset}
-            onGenerateTokenImage={assetActions.generateTokenImage}
             onPreviewPlayer={async (membershipId) => {
               const playerView = await api<GameSnapshot>(
                 `/api/preview/${membershipId}`,
@@ -2662,14 +2655,6 @@ export function App() {
               setTool("PAN");
               setPreviewSnapshot(playerView);
             }}
-            onCreateCatalogEntry={catalogActions.onCreateCatalogEntry}
-            onUpdateCatalogEntry={catalogActions.onUpdateCatalogEntry}
-            onDeleteCatalogEntry={catalogActions.onDeleteCatalogEntry}
-            onAssignCatalogEntry={catalogActions.onAssignCatalogEntry}
-            onUpdateCharacterEntry={catalogActions.onUpdateCharacterEntry}
-            onDeleteCharacterEntry={catalogActions.onDeleteCharacterEntry}
-            onRollEntry={catalogActions.onRollEntry}
-            onRechargeEntry={catalogActions.onRechargeEntry}
             onUpdateCounters={updateCharacterCounters}
             onCampaignClock={(command, revision) =>
               run(
