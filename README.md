@@ -61,3 +61,8 @@ for their reasoning but are not a description of how the system works today.
 - [Testing](./docs/testing.md) — kinds of tests, DOM environment, what to use where.
 - [Release checklist](./docs/production-release-checklist.md) — the mandatory deploy gates.
 - [Operations](./docs/operations.md) — backup, restore, incident checks.
+
+Documentation is updated in the same commit as the code. The checkable half of
+that rule is enforced: `tests/documentation-freshness.test.ts` fails the suite
+when the schema, migrations, routes or realtime events drift from what
+[architecture.md](./docs/architecture.md) says about them.
