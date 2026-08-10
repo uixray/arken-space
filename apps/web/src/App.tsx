@@ -52,6 +52,7 @@ import { useWorldMapActions } from "./use-world-map-actions";
 import { useLatestRef } from "./use-latest-ref";
 import { useTokenDefinitionActions } from "./use-token-definition-actions";
 import { useChatActions } from "./use-chat-actions";
+import { useAccessActions } from "./use-access-actions";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -1237,6 +1238,7 @@ export function App() {
     snapshotRef,
     activeSceneRef,
   });
+  const accessActions = useAccessActions({ run });
   const chatActions = useChatActions({
     run,
     setSnapshot,
@@ -2734,42 +2736,10 @@ export function App() {
                 true,
               )
             }
-            onCreateInvite={async (characterId, label) => {
-              const result = await api<
-                import("@arken/contracts").PlayerAccessSecretDto
-              >("/api/invites", {
-                method: "POST",
-                body: JSON.stringify({
-                  characterId,
-                  label,
-                  expiresInHours: 168,
-                  actionId: crypto.randomUUID(),
-                }),
-              });
-              return result;
-            }}
-            onListPlayerAccess={() =>
-              api<import("@arken/contracts").PlayerAccessDto[]>(
-                "/api/player-access",
-              )
-            }
-            onRotatePlayerAccess={(id) =>
-              api<import("@arken/contracts").PlayerAccessSecretDto>(
-                `/api/player-access/${id}/rotate`,
-                {
-                  method: "POST",
-                  body: JSON.stringify({ actionId: crypto.randomUUID() }),
-                },
-              )
-            }
-            onRevokePlayerAccess={(id) =>
-              run(() =>
-                api(`/api/player-access/${id}/revoke`, {
-                  method: "POST",
-                  body: JSON.stringify({ actionId: crypto.randomUUID() }),
-                }),
-              )
-            }
+            onCreateInvite={accessActions.onCreateInvite}
+            onListPlayerAccess={accessActions.onListPlayerAccess}
+            onRotatePlayerAccess={accessActions.onRotatePlayerAccess}
+            onRevokePlayerAccess={accessActions.onRevokePlayerAccess}
             sceneDialogRequest={sceneDialogRequest}
             viewedSceneId={activeScene?.id ?? null}
             onViewScene={sceneActions.onViewScene}
@@ -2778,18 +2748,7 @@ export function App() {
             onActivateScene={sceneActions.onActivateScene}
             onAssignMap={sceneActions.onAssignMap}
             onRenameScene={sceneActions.onRenameScene}
-            onRenameMembership={(membershipId, revision, name) =>
-              run(() =>
-                api(`/api/memberships/${membershipId}/name`, {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    revision,
-                    name,
-                  }),
-                }),
-              )
-            }
+            onRenameMembership={accessActions.onRenameMembership}
             onCreateToken={tokenActions.onCreateToken}
             onUpload={async (file, kind: AssetKind) => {
               const form = new FormData();
