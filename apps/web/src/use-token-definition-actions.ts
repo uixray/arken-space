@@ -2,7 +2,6 @@ import { useMemo, type MutableRefObject } from "react";
 import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import { api } from "./api";
 import { characterTokenPlacementRequest } from "./token-placement";
-import type { Props as SidebarProps } from "./Sidebar";
 
 /**
  * UIX-398 — token-definition commands.
@@ -22,15 +21,43 @@ import type { Props as SidebarProps } from "./Sidebar";
  * The refs are read only inside handlers, which run from user events — never
  * during render, where a latest-ref may legitimately lag a frame.
  */
-export type TokenDefinitionActions = Pick<
-  SidebarProps,
-  | "onPlaceTokenDefinition"
-  | "onDeleteTokenDefinition"
-  | "onPatchTokenDefinition"
-  | "onCreateTokenDefinition"
-  | "onReplaceTokenControllers"
-  | "onCreateToken"
->;
+export interface TokenDefinitionActions {
+  /**
+   * Places a definition on the active scene, letting the server pick the
+   * square. The canvas has its own drag-and-drop placement that also carries
+   * a point — a genuinely different operation, still owned by App.
+   */
+  onPlaceTokenDefinition: (definitionId: string) => Promise<void>;
+  onDeleteTokenDefinition: (
+    definitionId: string,
+    revision: number,
+  ) => Promise<void>;
+  onPatchTokenDefinition: (
+    definitionId: string,
+    revision: number,
+    patch: {
+      name?: string;
+      defaultAssetId?: string | null;
+      characterId?: string | null;
+      defaultWidth?: number;
+      defaultHeight?: number;
+    },
+  ) => Promise<void>;
+  onCreateTokenDefinition: (input: {
+    name: string;
+    characterId: string | null;
+    defaultAssetId: string | null;
+    defaultWidth: number;
+    defaultHeight: number;
+    controllerMembershipIds: string[];
+  }) => Promise<void>;
+  onReplaceTokenControllers: (
+    definitionId: string,
+    revision: number,
+    controllerMembershipIds: string[],
+  ) => Promise<void>;
+  onCreateToken: (characterId: string) => Promise<void>;
+}
 
 const withAction = (body: Record<string, unknown> = {}) =>
   JSON.stringify({ ...body, actionId: crypto.randomUUID() });

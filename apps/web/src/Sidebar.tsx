@@ -80,35 +80,6 @@ export type Props = {
   requestedCharacterId?: string | null;
   socket: GameSocket | null;
   presence: Array<{ membershipId: string; online: boolean }>;
-  onPlaceTokenDefinition: (definitionId: string) => Promise<void>;
-  onDeleteTokenDefinition: (
-    definitionId: string,
-    revision: number,
-  ) => Promise<void>;
-  onPatchTokenDefinition: (
-    definitionId: string,
-    revision: number,
-    patch: {
-      name?: string;
-      defaultAssetId?: string | null;
-      characterId?: string | null;
-      defaultWidth?: number;
-      defaultHeight?: number;
-    },
-  ) => Promise<void>;
-  onCreateTokenDefinition: (input: {
-    name: string;
-    characterId: string | null;
-    defaultAssetId: string | null;
-    defaultWidth: number;
-    defaultHeight: number;
-    controllerMembershipIds: string[];
-  }) => Promise<void>;
-  onReplaceTokenControllers: (
-    definitionId: string,
-    revision: number,
-    controllerMembershipIds: string[],
-  ) => Promise<void>;
   onReplaceCharacterControllers: (
     characterId: string,
     revision: number,
@@ -142,7 +113,6 @@ export type Props = {
     revision: number,
     name: string,
   ) => Promise<void>;
-  onCreateToken: (characterId: string) => Promise<void>;
   onUpload: (file: File, kind: AssetKind) => Promise<AssetDto>;
   onGenerateTokenImage: (input: {
     sourceAssetId: string;

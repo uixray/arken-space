@@ -33,7 +33,6 @@ const emptyDraft = (): Draft => ({
 
 export function PlayerRequestsWorkspace({
   open,
-  createMode,
   snapshot,
   onClose,
   onCreate,
@@ -41,7 +40,6 @@ export function PlayerRequestsWorkspace({
   onAction,
 }: {
   open: boolean;
-  createMode?: boolean;
   snapshot: GameSnapshot;
   onClose: () => void;
   onCreate: (input: ReturnType<typeof createRequestPayload>) => Promise<void>;

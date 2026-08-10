@@ -17,7 +17,7 @@ import type { Props } from "../Sidebar";
 
 export function SetupPanel(props: Props) {
   // UIX-398 step B: scene commands come from context, not through Sidebar.
-  const { scene: sceneActions } = useCampaignActions();
+  const { scene: sceneActions, token: tokenActions } = useCampaignActions();
   const [activeSetupTab, setActiveSetupTab] = useState<
     "OVERVIEW" | "CHARACTERS" | "CATALOG"
   >("OVERVIEW");
@@ -401,7 +401,7 @@ export function SetupPanel(props: Props) {
           </FormSelect>
         </label>
         <Button
-          onClick={() => props.onCreateToken(tokenCharacter)}
+          onClick={() => tokenActions.onCreateToken(tokenCharacter)}
           disabled={!tokenCharacter || !activeScene}
         >
           Добавить токен в центр

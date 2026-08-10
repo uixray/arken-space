@@ -13,10 +13,13 @@ import { ImageUploadField } from "../ui/ImageUploadField";
 import { FormInput, FormSelect } from "../ui/GravityFormControls";
 import { AssetPicker } from "../ui/AssetPicker";
 import type { Props } from "../Sidebar";
+import { useCampaignActions } from "../campaign-actions-context";
+import type { TokenDefinitionActions } from "../use-token-definition-actions";
 import { Empty } from "./MediaPanel";
 import { canPlaceTokenDefinition } from "../token-placement";
 
 export function PalettePanel(props: Props) {
+  const { token: tokenActions } = useCampaignActions();
   const definitions = props.snapshot.tokenDefinitions ?? [];
   const [editor, setEditor] = useState<
     (typeof definitions)[number] | "NEW" | null
@@ -78,7 +81,7 @@ export function PalettePanel(props: Props) {
             >
               <Button
                 className="palette-place"
-                onClick={() => props.onPlaceTokenDefinition(definition.id)}
+                onClick={() => tokenActions.onPlaceTokenDefinition(definition.id)}
                 title="Поставить экземпляр токена на активную сцену"
               >
                 {asset ? (
@@ -94,7 +97,7 @@ export function PalettePanel(props: Props) {
                 aria-label={`Изображение токена ${definition.name}`}
                 value={definition.defaultAssetId ?? ""}
                 onChange={(event) =>
-                  void props.onPatchTokenDefinition(
+                  void tokenActions.onPatchTokenDefinition(
                     definition.id,
                     definition.revision,
                     { defaultAssetId: event.target.value || null },
@@ -114,7 +117,7 @@ export function PalettePanel(props: Props) {
                 <TokenImageAssignment
                   definition={definition}
                   onUpload={props.onUpload}
-                  onPatch={props.onPatchTokenDefinition}
+                  onPatch={tokenActions.onPatchTokenDefinition}
                 />
               )}
               {props.snapshot.me.role === "GM" && (
@@ -142,9 +145,9 @@ export function PalettePanel(props: Props) {
           onUpload={props.onUpload}
           onGenerateTokenImage={props.onGenerateTokenImage}
           onCancel={() => setEditor(null)}
-          onCreate={props.onCreateTokenDefinition}
-          onPatch={props.onPatchTokenDefinition}
-          onReplaceControllers={props.onReplaceTokenControllers}
+          onCreate={tokenActions.onCreateTokenDefinition}
+          onPatch={tokenActions.onPatchTokenDefinition}
+          onReplaceControllers={tokenActions.onReplaceTokenControllers}
           onOpenCharacters={() => {
             setEditor(null);
             props.onWorkspaceChange("setup");
@@ -169,7 +172,7 @@ export function PalettePanel(props: Props) {
           if (!deleteDefinition) return;
           const target = deleteDefinition;
           setDeleteDefinition(null);
-          void props.onDeleteTokenDefinition(target.id, target.revision);
+          void tokenActions.onDeleteTokenDefinition(target.id, target.revision);
         }}
       />
     </section>
@@ -183,7 +186,7 @@ function TokenImageAssignment({
 }: {
   definition: NonNullable<GameSnapshot["tokenDefinitions"]>[number];
   onUpload: Props["onUpload"];
-  onPatch: Props["onPatchTokenDefinition"];
+  onPatch: TokenDefinitionActions["onPatchTokenDefinition"];
 }) {
   const [file, setFile] = useState<File>();
   const [saving, setSaving] = useState(false);
@@ -248,9 +251,9 @@ function TokenDefinitionEditor({
   onUpload: Props["onUpload"];
   onGenerateTokenImage: Props["onGenerateTokenImage"];
   onCancel: () => void;
-  onCreate: Props["onCreateTokenDefinition"];
-  onPatch: Props["onPatchTokenDefinition"];
-  onReplaceControllers: Props["onReplaceTokenControllers"];
+  onCreate: TokenDefinitionActions["onCreateTokenDefinition"];
+  onPatch: TokenDefinitionActions["onPatchTokenDefinition"];
+  onReplaceControllers: TokenDefinitionActions["onReplaceTokenControllers"];
   onOpenCharacters: () => void;
   onOpenMedia: () => void;
 }) {

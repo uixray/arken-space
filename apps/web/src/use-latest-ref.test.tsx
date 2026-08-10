@@ -14,6 +14,13 @@ function Harness({ onRead }: { onRead: (value: number) => void }) {
   const latest = useLatestRef(count);
   // Deliberately no dependency on `count`: the whole point is that this
   // handler is built once and still sees the current value.
+  //
+  // The React Compiler declines to optimize this component because it infers
+  // a dependency on `latest.current` that the written list does not contain.
+  // That is the pattern under test, not a defect in it — reading a ref is how
+  // the handler stays stable — so the rule is silenced here and only here.
+  // Bailing out costs nothing: the manual memo is what the test asserts.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const read = useCallback(() => onRead(latest.current), [latest, onRead]);
   return (
     <>

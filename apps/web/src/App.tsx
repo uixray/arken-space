@@ -2627,11 +2627,6 @@ export function App() {
             workspace={workspace}
             operatorFeedbackAllowed={operatorFeedbackAllowed}
             onWorkspaceChange={handleWorkspaceChange}
-            onPlaceTokenDefinition={tokenActions.onPlaceTokenDefinition}
-            onDeleteTokenDefinition={tokenActions.onDeleteTokenDefinition}
-            onPatchTokenDefinition={tokenActions.onPatchTokenDefinition}
-            onCreateTokenDefinition={tokenActions.onCreateTokenDefinition}
-            onReplaceTokenControllers={tokenActions.onReplaceTokenControllers}
             onPatchCharacter={patchCharacter}
             onReplaceCharacterControllers={replaceCharacterControllers}
             storyPosts={storyPosts}
@@ -2658,7 +2653,6 @@ export function App() {
             sceneDialogRequest={sceneDialogRequest}
             viewedSceneId={activeScene?.id ?? null}
             onRenameMembership={accessActions.onRenameMembership}
-            onCreateToken={tokenActions.onCreateToken}
             onUpload={assetActions.uploadAsset}
             onGenerateTokenImage={assetActions.generateTokenImage}
             onPreviewPlayer={async (membershipId) => {
