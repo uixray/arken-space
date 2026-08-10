@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -46,13 +47,13 @@ import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { useDismissibleDetails } from "./ui/dismissible-details";
-import { characterTokenPlacementRequest } from "./token-placement";
 import { normalizeClientDiceResult } from "./dice-result";
 import { applyBulkMoveResult } from "./canvas-bulk-move";
 import { useMutationRunners } from "./use-mutation-runners";
 import { useSceneActions } from "./use-scene-actions";
 import { useWorldMapActions } from "./use-world-map-actions";
 import { useLatestRef } from "./use-latest-ref";
+import { useTokenDefinitionActions } from "./use-token-definition-actions";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -1207,6 +1208,38 @@ export function App() {
     setGridPreview(null);
   }, [renderedActiveSceneId]);
 
+  /*
+   * UIX-398: the active scene is derived here, above the auth and loading
+   * guards below, rather than alongside the other render derivations.
+   *
+   * The Rules of Hooks forbid calling a hook after a conditional return, and
+   * the remaining action domains (tokens, chat, player access) all need to
+   * read the active scene from a stable handler — which means a hook, which
+   * means it has to exist before those guards. Deriving it here and reusing
+   * the result below keeps a single source of truth rather than computing it
+   * twice; it is nullable up here for the same reason `renderedActiveSceneId`
+   * above is.
+   */
+  const activeSceneValue = useMemo(() => {
+    const view = previewSnapshot ?? snapshot;
+    if (!view) return undefined;
+    const broadcast =
+      view.scenes.find((scene) => scene.active) ?? view.scenes[0];
+    // The GM can look at a scene other than the broadcast one; players always
+    // see whatever is being broadcast. `!previewSnapshot` short-circuits
+    // first, so reading the role off `view` matches the original behaviour of
+    // reading it off `snapshot`.
+    return !previewSnapshot && view.me.role === "GM" && viewedSceneId
+      ? (view.scenes.find((scene) => scene.id === viewedSceneId) ?? broadcast)
+      : broadcast;
+  }, [previewSnapshot, snapshot, viewedSceneId]);
+  const activeSceneRef = useLatestRef(activeSceneValue);
+  const tokenActions = useTokenDefinitionActions({
+    run,
+    snapshotRef,
+    activeSceneRef,
+  });
+
   if (authRequired) return <AuthGate onAuthenticated={load} />;
 
   if (!snapshot)
@@ -1224,11 +1257,8 @@ export function App() {
   const viewSnapshot = previewSnapshot ?? snapshot;
   const broadcastScene =
     viewSnapshot.scenes.find((scene) => scene.active) ?? viewSnapshot.scenes[0];
-  const activeScene =
-    !previewSnapshot && snapshot.me.role === "GM" && viewedSceneId
-      ? (viewSnapshot.scenes.find((scene) => scene.id === viewedSceneId) ??
-        broadcastScene)
-      : broadcastScene;
+  // Derived above the guards so a hook can read it; see `activeSceneValue`.
+  const activeScene = activeSceneValue;
   const activeTokens = activeScene
     ? viewSnapshot.tokens.filter((token) => token.sceneId === activeScene.id)
     : [];
@@ -2624,72 +2654,11 @@ export function App() {
                 throw reason;
               }
             }}
-            onPlaceTokenDefinition={async (definitionId) =>
-              run(() =>
-                api(`/api/token-definitions/${definitionId}/placements`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    definitionId,
-                    sceneId: activeScene?.id,
-                  }),
-                }),
-              )
-            }
-            onDeleteTokenDefinition={async (definitionId, revision) =>
-              run(() =>
-                api(`/api/token-definitions/${definitionId}`, {
-                  method: "DELETE",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    revision,
-                  }),
-                }),
-              )
-            }
-            onPatchTokenDefinition={(definitionId, revision, patch) =>
-              run(() =>
-                api(`/api/token-definitions/${definitionId}`, {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    ...patch,
-                    actionId: crypto.randomUUID(),
-                    revision,
-                  }),
-                }),
-              )
-            }
-            onCreateTokenDefinition={(input) =>
-              run(
-                () =>
-                  api("/api/token-definitions", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      ...input,
-                      actionId: crypto.randomUUID(),
-                    }),
-                  }),
-                true,
-              ).then(() => undefined)
-            }
-            onReplaceTokenControllers={(
-              definitionId,
-              revision,
-              controllerMembershipIds,
-            ) =>
-              run(
-                () =>
-                  api(`/api/token-definitions/${definitionId}/controllers`, {
-                    method: "PUT",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision,
-                      controllerMembershipIds,
-                    }),
-                  }),
-                true,
-              ).then(() => undefined)
-            }
+            onPlaceTokenDefinition={tokenActions.onPlaceTokenDefinition}
+            onDeleteTokenDefinition={tokenActions.onDeleteTokenDefinition}
+            onPatchTokenDefinition={tokenActions.onPatchTokenDefinition}
+            onCreateTokenDefinition={tokenActions.onCreateTokenDefinition}
+            onReplaceTokenControllers={tokenActions.onReplaceTokenControllers}
             onPatchCharacter={patchCharacter}
             onReplaceCharacterControllers={replaceCharacterControllers}
             storyPosts={storyPosts}
@@ -2909,24 +2878,7 @@ export function App() {
                 }),
               )
             }
-            onCreateToken={async (characterId) => {
-              if (!activeScene) return;
-              const request = characterTokenPlacementRequest(
-                snapshot,
-                characterId,
-                activeScene,
-                crypto.randomUUID(),
-              );
-              if (!request) return;
-              await run(
-                () =>
-                  api(request.path, {
-                    method: "POST",
-                    body: JSON.stringify(request.body),
-                  }),
-                true,
-              );
-            }}
+            onCreateToken={tokenActions.onCreateToken}
             onUpload={async (file, kind: AssetKind) => {
               const form = new FormData();
               form.append("file", file);
