@@ -48,6 +48,7 @@ import { ErrorState, LoadingState } from "./ui/EntityState";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { characterTokenPlacementRequest } from "./token-placement";
 import { normalizeClientDiceResult } from "./dice-result";
+import { applyBulkMoveResult } from "./canvas-bulk-move";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -2333,8 +2334,8 @@ export function App() {
                     }),
                   )
                 }
-                onBulkMove={(targets, delta) =>
-                  runResult(() =>
+                onBulkMove={async (targets, delta) => {
+                  const acknowledgement = await runResult(() =>
                     api<{
                       revisions: {
                         tokens: Record<string, number>;
@@ -2351,8 +2352,32 @@ export function App() {
                         targets,
                       }),
                     }),
-                  )
-                }
+                  );
+                  // UIX-396 stage 2: the response carries the new revision for
+                  // every moved entity and used to be thrown away, so a second
+                  // drag before the broadcast landed still sent the superseded
+                  // one and was rejected with a 409 -- losing the move on the
+                  // app's most frequent action. See canvas-bulk-move.ts.
+                  const revisions = acknowledgement?.revisions;
+                  setSnapshot((current) =>
+                    current
+                      ? {
+                          ...current,
+                          tokens: applyBulkMoveResult(
+                            current.tokens,
+                            revisions?.tokens,
+                            delta,
+                          ) as GameSnapshot["tokens"],
+                          drawings: applyBulkMoveResult(
+                            current.drawings ?? [],
+                            revisions?.drawings,
+                            delta,
+                          ) as GameSnapshot["drawings"],
+                        }
+                      : current,
+                  );
+                  return acknowledgement;
+                }}
                 onBulkDelete={(selection) =>
                   run(() =>
                     api("/api/canvas/bulk", {
