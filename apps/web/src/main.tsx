@@ -17,6 +17,7 @@ import {
   installClientEventFlushTriggers,
   installGlobalErrorReporting,
 } from "./error-reporting";
+import { installPerformanceReporting } from "./performance-reporting";
 import "./ui/gravity-foundation.css";
 import "./styles.css";
 
@@ -26,6 +27,7 @@ installInputDiagnostics();
 // captured too, independent of auth/campaign state.
 installGlobalErrorReporting();
 installClientEventFlushTriggers();
+installPerformanceReporting();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

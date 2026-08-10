@@ -5,7 +5,8 @@ type ClientEventName =
   | "window.error"
   | "window.unhandled_rejection"
   | "realtime.disconnected"
-  | "api.request_failed";
+  | "api.request_failed"
+  | "client.performance";
 
 const allowedContextKeys = new Set([
   "actionId",
@@ -20,6 +21,28 @@ const allowedContextKeys = new Set([
   "sceneId",
   "status",
   "tool",
+  // UIX-407 performance summary fields.
+  "blockingMs",
+  "interactions",
+  "longTasks",
+  "longestTaskMs",
+  "slowInteractions",
+  "slowestInteraction",
+  "slowestInteractionMs",
+  "windowMs",
+]);
+
+/** Context keys whose value is a number rather than a bounded string. */
+const numericContextKeys = new Set([
+  "line",
+  "status",
+  "blockingMs",
+  "interactions",
+  "longTasks",
+  "longestTaskMs",
+  "slowInteractions",
+  "slowestInteractionMs",
+  "windowMs",
 ]);
 
 const sensitiveKey = /authorization|cookie|password|secret|token/i;
@@ -88,6 +111,42 @@ const renderFailureEventSchema = z
   .merge(structuralExtrasSchema)
   .strict();
 
+/**
+ * UIX-407: a window of client performance measurements, already reduced to
+ * one record on the client (see `performance-samples.ts`).
+ *
+ * Declared strictly rather than riding on the permissive standard event,
+ * because every field is a number and `slowestInteraction` is a DOM event
+ * type from a fixed vocabulary. Nothing here can carry user content, and
+ * saying so in the schema is what makes that checkable rather than assumed.
+ */
+const performanceCountSchema = z.number().int().nonnegative().max(1_000_000);
+
+const performanceEventSchema = z
+  .object({
+    level: z.literal("info"),
+    event: z.literal("client.performance"),
+    context: z
+      .object({
+        longTasks: performanceCountSchema,
+        blockingMs: performanceCountSchema,
+        longestTaskMs: performanceCountSchema,
+        interactions: performanceCountSchema,
+        slowInteractions: performanceCountSchema,
+        slowestInteractionMs: performanceCountSchema,
+        // DOM event type: "pointerdown", "keydown", and the like.
+        slowestInteraction: z
+          .string()
+          .regex(/^[a-z]{1,30}$/)
+          .optional(),
+        windowMs: performanceCountSchema,
+        sceneId: z.string().max(64).optional(),
+        role: z.string().max(16).optional(),
+      })
+      .strict(),
+  })
+  .strict();
+
 const standardClientEventSchema = z
   .object({
     level: z.enum(["info", "warn", "error"]),
@@ -105,11 +164,12 @@ const standardClientEventSchema = z
 
 export const clientEventSchema = z.union([
   renderFailureEventSchema,
+  performanceEventSchema,
   standardClientEventSchema,
 ]);
 
 function safeContextValue(key: string, value: unknown) {
-  if (["line", "status"].includes(key))
+  if (numericContextKeys.has(key))
     return typeof value === "number" && Number.isFinite(value)
       ? value
       : undefined;
@@ -139,6 +199,7 @@ export function safeClientMessage(event: ClientEventName) {
     "window.unhandled_rejection": "Unhandled browser rejection",
     "realtime.disconnected": "Realtime connection interrupted",
     "api.request_failed": "API request failed",
+    "client.performance": "Client performance window",
   };
   return labels[event];
 }

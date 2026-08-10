@@ -126,4 +126,107 @@ describe("client error reports never carry user content into the log", () => {
     expect(serialized).toContain("TypeError");
     expect(serialized).toContain("renderChat");
   });
+
+  /**
+   * UIX-407: the performance window is a separate schema variant, so it needs
+   * its own route-level proof. Numbers cannot leak content, but the route has
+   * to actually accept them — an earlier draft passed the pure-helper tests
+   * while the sanitizer silently dropped every measurement, because only
+   * `line` and `status` were allowed through as numeric values.
+   */
+  it("accepts a performance window and keeps its measurements intact", async () => {
+    const [campaign] = await db.select().from(schema.campaigns).limit(1);
+    const [gm] = await db
+      .select()
+      .from(schema.memberships)
+      .where(eq(schema.memberships.role, "GM"))
+      .limit(1);
+    if (!campaign || !gm) throw new Error("seed failed");
+    const session = "y".repeat(40);
+    await db.insert(schema.sessions).values({
+      membershipId: gm.id,
+      tokenHash: hashToken(session),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/client-logs",
+      headers: { cookie: `${env.SESSION_COOKIE_NAME}=${session}` },
+      payload: {
+        level: "info",
+        event: "client.performance",
+        context: {
+          longTasks: 12,
+          blockingMs: 4321,
+          longestTaskMs: 890,
+          interactions: 40,
+          slowInteractions: 7,
+          slowestInteractionMs: 3120,
+          slowestInteraction: "pointerdown",
+          windowMs: 60000,
+          role: "GM",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    const record = logged.at(-1) as { context?: Record<string, unknown> };
+    // The whole point of the feature: these survive the sanitizer as numbers.
+    expect(record.context).toMatchObject({
+      longTasks: 12,
+      blockingMs: 4321,
+      longestTaskMs: 890,
+      slowInteractions: 7,
+      slowestInteractionMs: 3120,
+      slowestInteraction: "pointerdown",
+      windowMs: 60000,
+    });
+  });
+
+  it("rejects a performance window carrying anything but measurements", async () => {
+    const [gm] = await db
+      .select()
+      .from(schema.memberships)
+      .where(eq(schema.memberships.role, "GM"))
+      .limit(1);
+    if (!gm) throw new Error("seed failed");
+    const session = "x".repeat(40);
+    await db.insert(schema.sessions).values({
+      membershipId: gm.id,
+      tokenHash: hashToken(session),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/client-logs",
+      headers: { cookie: `${env.SESSION_COOKIE_NAME}=${session}` },
+      payload: {
+        level: "info",
+        event: "client.performance",
+        // A free-text field would be the way user content could reach this
+        // event; the strict schema has to refuse the request outright rather
+        // than accept it and rely on the sanitizer downstream.
+        message: "Дариус тайно предал отряд",
+        context: {
+          longTasks: 1,
+          blockingMs: 1,
+          longestTaskMs: 1,
+          interactions: 1,
+          slowInteractions: 1,
+          slowestInteractionMs: 1,
+          windowMs: 1,
+        },
+      },
+    });
+
+    // Not 400: the ZodError -> 400 mapping lives in the server bootstrap
+    // (`index.ts` setErrorHandler), which this harness does not register, so
+    // the same rejection surfaces as a 500 here. Production answers 400 —
+    // verified against the live endpoint. What matters either way is that the
+    // request was refused rather than accepted, and that nothing was logged.
+    expect(response.statusCode).not.toBe(202);
+    expect(JSON.stringify(logged)).not.toContain("Дариус");
+  });
 });

@@ -964,9 +964,13 @@ export function registerRoutes(
           // Structural-only: class name + bounded stack frames describe
           // code, never user content (see telemetry.ts). occurrenceCount
           // reflects client-side dedup of repeated identical errors.
-          errorName: body.errorName,
-          stack: body.stack,
-          occurrenceCount: body.occurrenceCount,
+          // Absent on performance windows, which carry measurements rather
+          // than a failure — hence the presence checks rather than a direct
+          // read off the union.
+          errorName: "errorName" in body ? body.errorName : undefined,
+          stack: "stack" in body ? body.stack : undefined,
+          occurrenceCount:
+            "occurrenceCount" in body ? body.occurrenceCount : undefined,
           requestId: request.id,
         },
         "client.event",

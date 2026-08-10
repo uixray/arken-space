@@ -7,6 +7,7 @@ import {
   toWirePayload,
   type BufferedErrorReport,
   type ErrorReportInput,
+  type ReportContext,
 } from "./error-report-buffer";
 
 export class ApiError extends Error {
@@ -169,6 +170,32 @@ function writeReports(next: BufferedErrorReport[]): void {
 export function reportClientEvent(input: ErrorReportInput) {
   writeReports(enqueueErrorReport(readReports(), input));
   void flushClientEventBuffer();
+}
+
+/**
+ * UIX-407: sends one event immediately, without the durable buffer.
+ *
+ * Only for measurements, where the buffer's dedup would merge distinct
+ * samples that happen to share a signature, and where losing one costs
+ * nothing. Errors must keep going through `reportClientEvent`.
+ */
+export async function sendClientEventNow(payload: {
+  level: "info" | "warn" | "error";
+  event: string;
+  context?: ReportContext;
+}): Promise<boolean> {
+  try {
+    const response = await fetch("/api/client-logs", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Test-only: clears the in-memory buffer cache so tests don't leak state. */
