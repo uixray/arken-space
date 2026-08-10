@@ -52,7 +52,12 @@ All implementation, generated code and commits for arken-space must stay inside 
 
 ## Codebase documentation
 
-- [Architecture](./docs/architecture.md) — runtime, modules, data model and request/realtime flows.
-- [Development guide](./docs/development-guide.md) — clean setup, commands, tests and safe change recipes.
-- [Skills matrix](./docs/skills-matrix.md) — required competencies, ownership and review checklists.
-- [Codebase audit](./docs/codebase-audit.md) — current strengths, risks, drift and recommended priorities.
+Start at the [documentation index](./docs/README.md). It separates the handful of
+maintained documents from the ~60 dated per-ticket checkpoints, which are kept
+for their reasoning but are not a description of how the system works today.
+
+- [Architecture](./docs/architecture.md) — runtime, modules, data model, realtime and client structure.
+- [Development guide](./docs/development-guide.md) — setup, commands, change recipes, and the traps already hit in this codebase.
+- [Testing](./docs/testing.md) — kinds of tests, DOM environment, what to use where.
+- [Release checklist](./docs/production-release-checklist.md) — the mandatory deploy gates.
+- [Operations](./docs/operations.md) — backup, restore, incident checks.

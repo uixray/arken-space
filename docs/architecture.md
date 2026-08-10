@@ -1,18 +1,27 @@
 # Архитектура Arken Space
 
 Документ описывает фактическое устройство проекта на ревизии
-`abcb2efc25e8e9664fdf2becd66b9645e22f82ae` от 2026-07-19. Продуктовые
-решения и причины их принятия вынесены в
+`8e7370e` от 2026-08-10 (в production — `5652ccc`). Продуктовые решения и
+причины их принятия вынесены в
 [architecture-decisions-2026-07-14.md](./architecture-decisions-2026-07-14.md),
 а найденные при чтении кода ограничения — в
 [codebase-audit.md](./codebase-audit.md).
+
+> Документ описывает **как есть**, а не как задумано. Если код и этот текст
+> расходятся — прав код, а расхождение стоит починить здесь же. Числа ниже
+> (таблицы, маршруты, миграции) проверяются командами из
+> [development-guide.md](./development-guide.md#проверить-факты-из-архитектуры),
+> а не переписываются на глаз.
 
 ## Назначение и границы
 
 Arken Space — приватный web-first virtual tabletop для одного мастера и до
 шести игроков. Текущий поддерживаемый сценарий — одна кампания, desktop-браузеры,
-одна активная ортографическая 2D-сцена, квадратная сетка, токены, ручной туман
-войны, рисунки, персонажи, чат, серверные броски и синхронизированная музыка.
+одна активная ортографическая 2D-сцена, квадратная сетка, токены, туман войны
+произвольной формы, рисунки, персонажи, чат (общий, личные треды, стикеры),
+серверные броски, каталог навыков и способностей, карты мира с положением
+партии, сюжетный канал, заявки игроков, столкновения и синхронизированная
+музыка.
 
 Isometric/3D, несколько одновременно активных уровней, публичная регистрация,
 голос/видео, offline mode и горизонтальное масштабирование пока не входят в
@@ -137,14 +146,22 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
+Всего **78** HTTP-маршрутов в `routes.ts`, плюс отдельные модули маршрутов для
+карт мира и содержимого мира.
+
 | Домен              | Маршруты                                                                                                  |
 | ------------------ | --------------------------------------------------------------------------------------------------------- |
 | Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                         |
 | Membership/access  | rename membership, legacy invite, list/revoke/rotate persistent player access                             |
-| Characters/catalog | character CRUD, campaign catalog, assignment snapshots, counters, recharge, roll                          |
+| Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll      |
 | Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo |
-| Communication      | chat, dice, campaign clock, synchronized audio                                                            |
-| Media/feedback     | asset upload/content, public suggestions, authenticated reports, client logs                              |
+| Столкновения       | создание, переходы состояний, применение результатов                                                      |
+| Карты мира         | `world-map-routes.ts` — карты, локации, привязка сцен, положение партии                                   |
+| Содержимое мира    | `world-content-routes.ts` — шаблоны сущностей мира, экземпляры, действия, связи                           |
+| Общение            | чат (общий, треды, вложения, курсоры прочтения), стикеры, кубы, часы кампании, синхронная музыка          |
+| Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                              |
+| Заявки игроков     | создание, редактирование, переходы состояний                                                              |
+| Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`     |
 
 Подробные request-схемы являются экспортами `@arken/contracts`. REST response и
 error shapes централизованы не полностью, поэтому при добавлении endpoint нужно
@@ -160,9 +177,20 @@ Socket после аутентификации входит в комнаты:
 - `campaign:<campaignId>:gm` для мастера.
 
 При подключении и явном `game:resync` сервер посылает полный role-filtered
-`GameSnapshot`. Durable realtime-команды — `token:moved` и `audio:set`; они имеют
-ack, `actionId`, revision checks, DB transaction и `game_events`. `token:moving`,
-`ruler:*` и `map:ping` — эфемерные события и в БД не сохраняются.
+`GameSnapshot`. Durable realtime-команды — `token:moved`, `audio:set` и
+`audio:track:set`; они имеют ack, `actionId`, revision checks, DB transaction и
+`game_events`. Эфемерные события в БД не сохраняются: `token:moving`, `ruler:*`,
+`map:ping` и `cursor:*`.
+
+Полный список: клиент шлёт `token:moved`, `token:moving`, `audio:set`,
+`audio:track:set`, `map:ping`, `ruler:update`, `ruler:clear`, `cursor:move`,
+`cursor:gone`, `game:resync`; сервер шлёт `game:snapshot`, `token:moving`,
+`map:ping`, `ruler:updated`, `ruler:cleared`, `cursor:moved`, `cursor:gone`.
+
+**Курсоры разделены по комнатам намеренно.** Курсор игрока уходит в общую
+комнату кампании, курсор ГМ — только в GM-комнату: ГМ видит сквозь туман, и
+координаты, по которым ходит его указатель, выдали бы скрытое. Это защитное
+решение, а не недоделка — его отмена должна быть осознанной (см. UIX-403).
 
 Большинство HTTP mutations вызывает полный snapshot broadcast каждому socket,
 а token/audio/chat/fog частично используют точечные events. Это гибридная модель:
@@ -214,6 +242,57 @@ boundary. `App.tsx` — composition root: загружает `/api/bootstrap`, �
 `window.location.pathname`, а игровое состояние сосредоточено в React hooks
 внутри `App`. Canvas renderer лениво импортируется отдельным chunk.
 
+### Команды: доменные хуки и контекст действий
+
+UIX-398 разделил «действия» и «состояние». Все команды кампании собраны в
+доменные хуки `use-*-actions.ts` (сцены, карты мира, токены, чат, доступы,
+каталог, сюжет, заявки, ассеты) и раздаются через `CampaignActionsContext`
+вместо того, чтобы протаскиваться пропсами через каждый слой. Пропсов у
+`Sidebar` стало 26 вместо 83.
+
+**Инвариант, на котором всё держится: в контексте не должно быть ни одного
+изменяемого значения.** У React-контекста нет выборочной подписки — при смене
+значения перерисовываются все потребители. Это безопасно только потому, что там
+лежат исключительно функции, стабильные на всё время жизни компонента, поэтому
+значение контекста не меняется никогда. Положите туда `snapshot`, выбранный id
+или любое живое значение — гарантия исчезнет молча, приложение продолжит
+работать, просто начнёт перерисовывать всё дерево на каждое игровое событие.
+Инвариант закреплён тестом `campaign-actions-context.test.tsx`, который обходит
+значение и отвергает всё, что не является функцией.
+
+Стабильность обработчиков достигается двумя приёмами:
+
+- обработчик, которому нужно свежее значение, читает его через
+  `use-latest-ref.ts`, а не через замыкание с зависимостью. Зависимость от
+  `snapshot` пересоздавала бы обработчик на каждое игровое событие — то есть
+  ровно тогда, когда стабильность нужнее всего;
+- там, где хватает функции-обновителя `setSnapshot((current) => ...)`,
+  обработчик вообще не замыкается на состояние и стабилен даром.
+
+Состояние по-прежнему ходит пропсами. Селективные подписки (`useSyncExternalStore`
+с селекторами) — этап C в
+[app-tsx-decomposition-plan.md](./app-tsx-decomposition-plan.md), намеренно
+закрытый до замеров на боевой игре.
+
+### Телеметрия клиента
+
+Два независимых канала, оба в `/api/client-logs`:
+
+- **Ошибки** (`error-reporting.ts`, `error-report-buffer.ts`) — глобальные
+  перехватчики ставятся при инициализации модуля, до монтирования React, чтобы
+  ловить и падения на старте. Отчёты буферизуются в `localStorage`, схлопываются
+  по сигнатуре и переживают перезагрузку: потерянная ошибка невосстановима.
+- **Замеры** (`performance-samples.ts`, `performance-reporting.ts`) — `longtask`
+  и `event` timing, сведённые в одну запись на окно и отправляемые не чаще раза
+  в минуту, и только если есть что показать. Идут **мимо** буфера: он схлопывает
+  по сигнатуре, а у всех окон замеров сигнатура одна и различаются они как раз
+  числами. Потерянная выборка ничего не стоит, следующая через минуту.
+
+Свободный текст с клиента сервер не логирует никогда: `safeClientMessage`
+заменяет сообщение на константу по типу события, а `sanitizeClientContext`
+пропускает только ключи из списка. Класс ошибки и кадры стека описывают **код**,
+а не данные пользователя, поэтому сохраняются целиком.
+
 ### Поток mutation на клиенте
 
 ```mermaid
@@ -239,16 +318,22 @@ sequenceDiagram
 
 ## Данные
 
-Drizzle schema содержит 21 прикладную таблицу.
+Drizzle schema содержит **51** прикладную таблицу.
 
-| Группа              | Таблицы                                                                                 |
-| ------------------- | --------------------------------------------------------------------------------------- |
-| Campaign/auth       | `campaigns`, `memberships`, `invites`, `player_access_grants`, `sessions`               |
-| Characters/catalog  | `characters`, `catalog_entries`, `character_catalog_entries`                            |
-| Canvas              | `scenes`, `token_definitions`, `token_controllers`, `tokens`, `fog_reveals`, `drawings` |
-| Media/audio         | `assets`, `campaign_audio_tracks`                                                       |
-| Communication/audit | `chat_messages`, `game_events`, `action_journal`                                        |
-| Feedback            | `feedback_reports`, `feedback_attachments`                                              |
+| Группа             | Таблицы                                                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Campaign/auth      | `campaigns`, `memberships`, `invites`, `player_access_grants`, `sessions`, `gm_access_credentials`                                                      |
+| Characters/catalog | `characters`, `character_controllers`, `character_media`, `catalog_entries`, `character_catalog_entries`, `player_likeness_consents`                    |
+| Canvas             | `scenes`, `token_definitions`, `token_controllers`, `tokens`, `fog_reveals`, `drawings`, `encounters`                                                   |
+| Карты мира         | `world_maps`, `world_map_locations`, `world_map_location_scenes`, `world_map_party_position`                                                            |
+| Содержимое мира    | `world_content`, `world_content_instances`, `world_content_actions`, `world_content_instance_actions`, `world_content_media`, `world_content_relations` |
+| Общение            | `chat_messages`, `chat_threads`, `chat_read_cursors`, `chat_attachments`, `chat_attachment_uploads`                                                     |
+| Стикеры            | `stickers`, `sticker_packs`, `sticker_pack_entitlements`, `sticker_media`                                                                               |
+| Сюжетный канал     | `story_posts`, `story_post_revisions`, `story_post_media`, `story_import_batches`, `story_import_sources`                                               |
+| Заявки игроков     | `player_requests`                                                                                                                                       |
+| Media/audio        | `assets`, `campaign_audio_tracks`                                                                                                                       |
+| Аудит              | `game_events`, `action_journal`                                                                                                                         |
+| Обратная связь     | `feedback_reports`, `feedback_attachments`, `feedback_operator_audits`                                                                                  |
 
 Ключевые отношения:
 
@@ -261,9 +346,17 @@ Drizzle schema содержит 21 прикладную таблицу.
 - assets лежат в БД как metadata, а content — на файловой системе;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0015` применяются при старте server-контейнера до запуска
+Миграции `0000`–`0035` применяются при старте server-контейнера до запуска
 Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
+
+> **Журнал миграций — не документация, а исполняемый список.** Drizzle
+> применяет только те `.sql`, что перечислены в
+> `packages/db/drizzle/meta/_journal.json`. Файл без записи в журнале
+> локально пройдёт незамеченным (тесты поднимают схему иначе) и **молча не
+> применится в production**. Это уже случалось дважды; с тех пор согласованность
+> журнала, файлов и снапшотов закреплена тестом
+> `tests/migration-integrity.test.ts`.
 
 ## Эксплуатация и восстановление
 
