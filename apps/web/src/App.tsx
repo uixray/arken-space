@@ -625,31 +625,18 @@ export function App() {
       ),
     );
   }, [campaignId, loadStoryPosts]);
+  // UIX-397: global window.error/unhandledrejection handlers are now
+  // registered at app start (main.tsx installGlobalErrorReporting), so they
+  // capture startup/login/bootstrap failures too. This effect only keeps the
+  // non-content state snapshot they read (scene/tool/role/build) current.
   useEffect(() => {
-    if (!campaignId) return;
-    const onError = (event: ErrorEvent) =>
-      reportClientEvent({
-        level: "error",
-        event: "window.error",
-        message: event.message,
-        context: { filename: event.filename, line: event.lineno },
-      });
-    const onRejection = (event: PromiseRejectionEvent) =>
-      reportClientEvent({
-        level: "error",
-        event: "window.unhandled_rejection",
-        message:
-          event.reason instanceof Error
-            ? event.reason.message
-            : String(event.reason),
-      });
-    window.addEventListener("error", onError);
-    window.addEventListener("unhandledrejection", onRejection);
-    return () => {
-      window.removeEventListener("error", onError);
-      window.removeEventListener("unhandledrejection", onRejection);
-    };
-  }, [campaignId]);
+    setErrorReportContext({
+      sceneId: activeScene?.id,
+      tool,
+      role: snapshot?.me.role,
+      buildRevision: snapshot?.buildRevision,
+    });
+  }, [activeScene?.id, tool, snapshot?.me.role, snapshot?.buildRevision]);
   useEffect(() => {
     if (!campaignId || authRequired) return;
     const next = createGameSocket();
@@ -866,6 +853,27 @@ export function App() {
       if (reason instanceof ApiError && reason.status === 409) await load();
       throw reason;
     }
+  };
+
+  /**
+   * UIX-396 stage 1: recovery for the fast spatial entities (token geometry,
+   * drawings), where a failure used to trigger `load()` -- a full
+   * `/api/bootstrap` rebuild (20 server queries) plus a whole-tree re-render.
+   *
+   * A 409 here means someone else's write won. That write was already
+   * broadcast to this client over the socket, so the authoritative state is
+   * either already applied or in flight: refetching everything to learn what
+   * we are about to be told anyway is pure cost, and it is most likely to
+   * happen exactly when the user is working quickly. So a conflict now only
+   * surfaces the message and lets the broadcast converge us.
+   *
+   * Anything else (5xx, network failure) is still treated as "local state may
+   * be arbitrarily wrong" and falls back to the full rebuild.
+   */
+  const recoverFromCanvasMutation = async (reason: unknown) => {
+    const conflict = reason instanceof ApiError && reason.status === 409;
+    if (!conflict) await load();
+    setError(formatApiError(reason));
   };
 
   const runResult = async <T,>(action: () => Promise<T>): Promise<T> => {
@@ -2244,8 +2252,7 @@ export function App() {
                         : current,
                     );
                   } catch (reason) {
-                    await load();
-                    setError(formatApiError(reason));
+                    await recoverFromCanvasMutation(reason);
                     throw reason;
                   }
                 }}
@@ -2293,8 +2300,13 @@ export function App() {
                         : current,
                     );
                   } catch (reason) {
-                    if (reason instanceof ApiError && reason.status === 409)
-                      await load();
+                    // This used to rebuild everything on 409 and stay silent
+                    // on every other failure -- backwards on both counts. A
+                    // conflict is the one case the broadcast already corrects,
+                    // while a 5xx or a dropped connection is what actually
+                    // leaves local state untrustworthy, and swallowing it left
+                    // the user's edit silently discarded.
+                    await recoverFromCanvasMutation(reason);
                     throw reason;
                   }
                 }}
