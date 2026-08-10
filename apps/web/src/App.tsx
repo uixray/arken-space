@@ -78,7 +78,10 @@ import {
 } from "./EncounterConfirmDialog";
 import { endEncounter } from "./encounter-actions";
 import { locationSceneNames } from "./world-map-workspace-state";
-import type { CursorPresence } from "./renderers/cursor-presence";
+import {
+  applyCursorMoved,
+  type CursorPresence,
+} from "./renderers/cursor-presence";
 import {
   CURSOR_PREFERENCE_DEFAULT,
   readCursorPreference,
@@ -381,6 +384,9 @@ export function App() {
   // UIX-392: ephemeral cursor presence, keyed by membershipId so a later
   // cursor:moved always replaces a member's previous position instead of
   // accumulating a trail.
+  // Read by the socket handlers, which are registered once per connection and
+  // must not be torn down just to learn who "I" am.
+  const ownMembershipIdRef = useLatestRef(snapshot?.me.id);
   const [cursors, setCursors] = useState<CursorPresence[]>([]);
   const [cursorPreference, setCursorPreference] = useState(
     CURSOR_PREFERENCE_DEFAULT,
@@ -754,10 +760,9 @@ export function App() {
       ),
     );
     next.on("cursor:moved", (cursor) =>
-      setCursors((current) => [
-        ...current.filter((item) => item.membershipId !== cursor.membershipId),
-        cursor,
-      ]),
+      setCursors((current) =>
+        applyCursorMoved(current, cursor, ownMembershipIdRef.current),
+      ),
     );
     next.on("cursor:gone", (event) =>
       setCursors((current) =>
@@ -836,7 +841,7 @@ export function App() {
       setSocket(null);
       setCursors([]);
     };
-  }, [authRequired, campaignId, loadStoryPosts]);
+  }, [authRequired, campaignId, loadStoryPosts, ownMembershipIdRef]);
 
   /*
    * UIX-398 step A0. These four back 45 call sites between them and used to
