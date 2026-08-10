@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { api } from "./api";
 import { betaPlayerByHandle, betaPlayers } from "@arken/contracts";
 import { FormInput, FormTextArea } from "./ui/GravityFormControls";
+import { LandingGuide } from "./LandingGuide";
 
 type FeedbackStatus = "idle" | "sending" | "sent";
 
@@ -198,6 +199,8 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           ))}
         </div>
       </section>
+
+      <LandingGuide />
 
       <section
         className="landing-section landing-roadmap"

@@ -4322,3 +4322,118 @@ code {
   font-size: 12px;
   line-height: 1.4;
 }
+
+/* UIX-415: pre-login guide. Matches the landing page's existing card
+   language (1px border, --surface fill, --muted body) rather than inventing a
+   second visual system on the same page. */
+.guide-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.guide-feature {
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.guide-feature h3 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+}
+.guide-feature p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.guide-toggle {
+  padding: 12px 20px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.guide-toggle:hover {
+  border-color: var(--accent, currentColor);
+}
+.guide-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 28px;
+  margin-top: 28px;
+}
+.guide-shortcuts__preface {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+.guide-section__title {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+.guide-section__hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.guide-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+/* Keys on the left, meaning on the right: the reader is scanning for one key,
+   so the column has to be a straight edge rather than ragged. */
+.guide-row {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: 14px;
+  align-items: baseline;
+}
+.guide-row dd {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.guide-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.guide-keys__plus {
+  margin: 0 2px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.guide-key,
+.guide-command {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  background: var(--surface);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.guide-command {
+  border-bottom-width: 1px;
+}
+.guide-badge {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .guide-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
