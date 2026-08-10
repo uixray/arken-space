@@ -51,6 +51,7 @@ import { normalizeClientDiceResult } from "./dice-result";
 import { applyBulkMoveResult } from "./canvas-bulk-move";
 import { useMutationRunners } from "./use-mutation-runners";
 import { useSceneActions } from "./use-scene-actions";
+import { useWorldMapActions } from "./use-world-map-actions";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -852,6 +853,10 @@ export function App() {
   // UIX-398 step A1: the scene domain, now a single stable object instead of
   // six inline arrows rebuilt on every render.
   const sceneActions = useSceneActions({ run, setViewedSceneId });
+  const worldMapActions = useWorldMapActions({
+    runWorldMapMutation,
+    runResult,
+  });
 
   /**
    * UIX-396 stage 1: recovery for the fast spatial entities (token geometry,
@@ -3060,164 +3065,20 @@ export function App() {
               )
             }
             onUpdateCounters={updateCharacterCounters}
-            onCreateWorldMap={(input) =>
-              runWorldMapMutation(() =>
-                api("/api/world-maps", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    ...input,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onSetWorldMapDraftBackground={(map, assetId) =>
-              runWorldMapMutation(() =>
-                api(`/api/world-maps/${map.id}/draft-background`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    backgroundAssetId: assetId,
-                    revision: map.revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onApproveWorldMapBackground={(map) =>
-              runWorldMapMutation(() =>
-                api(`/api/world-maps/${map.id}/approve-background`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    revision: map.revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onPublishWorldMap={(map) =>
-              runWorldMapMutation(() =>
-                api(`/api/world-maps/${map.id}/publish`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    revision: map.revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onArchiveWorldMap={(map) =>
-              runWorldMapMutation(() =>
-                api(`/api/world-maps/${map.id}/archive`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    revision: map.revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            // UIX-393: characters are never hard-deleted; archive/restore is a
-            // GM-only revision/CAS transition, same conflict-reload shape as
-            // world-map lifecycle transitions above — reused directly rather
-            // than duplicating the 409-reload logic under a new name.
-            onArchiveCharacter={(character) =>
-              runWorldMapMutation(() =>
-                api(`/api/characters/${character.id}/archive`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    revision: character.revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onRestoreCharacter={(character) =>
-              runWorldMapMutation(() =>
-                api(`/api/characters/${character.id}/restore`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    revision: character.revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onLoadArchivedCharacters={() =>
-              runResult(() =>
-                api<import("@arken/contracts").CharacterDto[]>(
-                  "/api/characters/archived",
-                ),
-              )
-            }
-            onCreateWorldMapLocation={(input) =>
-              runWorldMapMutation(() =>
-                api("/api/world-maps/locations", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    ...input,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onUpdateWorldMapLocation={(location, input) =>
-              runWorldMapMutation(() =>
-                api(`/api/world-maps/locations/${location.id}`, {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    ...input,
-                    revision: location.revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onLinkWorldMapLocationScene={(location, sceneId) =>
-              runWorldMapMutation(() =>
-                api(
-                  `/api/world-maps/locations/${location.id}/scenes/${sceneId}`,
-                  {
-                    method: "POST",
-                    body: JSON.stringify({ actionId: crypto.randomUUID() }),
-                  },
-                ),
-              )
-            }
-            onUnlinkWorldMapLocationScene={(location, sceneId) =>
-              runWorldMapMutation(() =>
-                api(
-                  `/api/world-maps/locations/${location.id}/scenes/${sceneId}`,
-                  {
-                    method: "DELETE",
-                    body: JSON.stringify({ actionId: crypto.randomUUID() }),
-                  },
-                ),
-              )
-            }
-            onSetWorldMapPartyPosition={(mapId, locationId, revision) =>
-              runWorldMapMutation(() =>
-                api("/api/world-maps/party-position", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    mapId,
-                    locationId,
-                    revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
-            onClearWorldMapPartyPosition={(revision) =>
-              runWorldMapMutation(() =>
-                api("/api/world-maps/party-position", {
-                  method: "DELETE",
-                  body: JSON.stringify({
-                    revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                }),
-              )
-            }
+            onCreateWorldMap={worldMapActions.onCreateWorldMap}
+            onSetWorldMapDraftBackground={worldMapActions.onSetWorldMapDraftBackground}
+            onApproveWorldMapBackground={worldMapActions.onApproveWorldMapBackground}
+            onPublishWorldMap={worldMapActions.onPublishWorldMap}
+            onArchiveWorldMap={worldMapActions.onArchiveWorldMap}
+            onArchiveCharacter={worldMapActions.onArchiveCharacter}
+            onRestoreCharacter={worldMapActions.onRestoreCharacter}
+            onLoadArchivedCharacters={worldMapActions.onLoadArchivedCharacters}
+            onCreateWorldMapLocation={worldMapActions.onCreateWorldMapLocation}
+            onUpdateWorldMapLocation={worldMapActions.onUpdateWorldMapLocation}
+            onLinkWorldMapLocationScene={worldMapActions.onLinkWorldMapLocationScene}
+            onUnlinkWorldMapLocationScene={worldMapActions.onUnlinkWorldMapLocationScene}
+            onSetWorldMapPartyPosition={worldMapActions.onSetWorldMapPartyPosition}
+            onClearWorldMapPartyPosition={worldMapActions.onClearWorldMapPartyPosition}
             onCampaignClock={(command, revision) =>
               run(
                 () =>
