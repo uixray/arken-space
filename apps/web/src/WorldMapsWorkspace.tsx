@@ -21,13 +21,13 @@ import {
   worldMapCapabilities,
 } from "./world-map-workspace-state";
 
-type MapDraft = {
+export type MapDraft = {
   name: string;
   scope: WorldMapScope;
   visibility: WorldMapVisibility;
 };
 
-type LocationDraft = {
+export type LocationDraft = {
   name: string;
   kind: WorldMapLocationKind;
   summary: string;

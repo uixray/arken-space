@@ -1,7 +1,11 @@
 import { useMemo } from "react";
-import type { CharacterDto } from "@arken/contracts";
+import type {
+  CharacterDto,
+  WorldMapDto,
+  WorldMapLocationDto,
+} from "@arken/contracts";
 import { api } from "./api";
-import type { Props as SidebarProps } from "./Sidebar";
+import type { LocationDraft, MapDraft } from "./WorldMapsWorkspace";
 
 /**
  * UIX-398 step A2 — world-map commands, plus the character archive/restore
@@ -13,28 +17,46 @@ import type { Props as SidebarProps } from "./Sidebar";
  * in, the plan's assumption that handlers would generally need one is looking
  * like the exception rather than the rule.
  *
- * Signatures are derived from `Sidebar`'s own props rather than restated:
- * three of them carry sizeable inline object types, and a second copy would
- * drift out of step the first time a field is added. Type-only import, so no
- * runtime cycle with App.
+ * Signatures were originally derived from `Sidebar`'s props. That stopped
+ * working once step B moved these onto the context and removed them from
+ * `Sidebar`: the Pick silently resolved to `unknown`. The context is the
+ * contract now, so the shapes are stated here and the draft types come from
+ * the workspace that owns them.
  */
-export type WorldMapActions = Pick<
-  SidebarProps,
-  | "onCreateWorldMap"
-  | "onSetWorldMapDraftBackground"
-  | "onApproveWorldMapBackground"
-  | "onPublishWorldMap"
-  | "onArchiveWorldMap"
-  | "onArchiveCharacter"
-  | "onRestoreCharacter"
-  | "onLoadArchivedCharacters"
-  | "onCreateWorldMapLocation"
-  | "onUpdateWorldMapLocation"
-  | "onLinkWorldMapLocationScene"
-  | "onUnlinkWorldMapLocationScene"
-  | "onSetWorldMapPartyPosition"
-  | "onClearWorldMapPartyPosition"
->;
+export interface WorldMapActions {
+  onCreateWorldMap: (input: MapDraft) => Promise<void>;
+  onSetWorldMapDraftBackground: (
+    map: WorldMapDto,
+    assetId: string | null,
+  ) => Promise<void>;
+  onApproveWorldMapBackground: (map: WorldMapDto) => Promise<void>;
+  onPublishWorldMap: (map: WorldMapDto) => Promise<void>;
+  onArchiveWorldMap: (map: WorldMapDto) => Promise<void>;
+  onArchiveCharacter: (character: CharacterDto) => Promise<void>;
+  onRestoreCharacter: (character: CharacterDto) => Promise<void>;
+  onLoadArchivedCharacters: () => Promise<CharacterDto[]>;
+  onCreateWorldMapLocation: (
+    input: LocationDraft & { mapId: string },
+  ) => Promise<void>;
+  onUpdateWorldMapLocation: (
+    location: WorldMapLocationDto,
+    input: LocationDraft,
+  ) => Promise<void>;
+  onLinkWorldMapLocationScene: (
+    location: WorldMapLocationDto,
+    sceneId: string,
+  ) => Promise<void>;
+  onUnlinkWorldMapLocationScene: (
+    location: WorldMapLocationDto,
+    sceneId: string,
+  ) => Promise<void>;
+  onSetWorldMapPartyPosition: (
+    mapId: string,
+    locationId: string,
+    revision: number | null,
+  ) => Promise<void>;
+  onClearWorldMapPartyPosition: (revision: number) => Promise<void>;
+}
 
 const withAction = (body: Record<string, unknown> = {}) =>
   JSON.stringify({ ...body, actionId: crypto.randomUUID() });

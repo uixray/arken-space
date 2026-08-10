@@ -1,6 +1,7 @@
 import { useMemo, type MutableRefObject } from "react";
 import { api } from "./api";
-import type { Props as SidebarProps } from "./Sidebar";
+import type { StoryPostAdminDto } from "@arken/contracts";
+import type { StoryDraftInput } from "./StoryChannel";
 
 /**
  * UIX-398 — GM story-channel commands.
@@ -15,14 +16,16 @@ import type { Props as SidebarProps } from "./Sidebar";
  * routing them through `run(action, true)` would rebuild the whole snapshot
  * for a post that does not appear in it.
  */
-export type StoryActions = Pick<
-  SidebarProps,
-  | "onLoadMoreStoryPosts"
-  | "onCreateStoryDraft"
-  | "onUpdateStoryPost"
-  | "onPublishStoryPost"
-  | "onArchiveStoryPost"
->;
+export interface StoryActions {
+  onLoadMoreStoryPosts: () => Promise<void>;
+  onCreateStoryDraft: (input: StoryDraftInput) => Promise<void>;
+  onUpdateStoryPost: (
+    post: StoryPostAdminDto,
+    input: StoryDraftInput,
+  ) => Promise<void>;
+  onPublishStoryPost: (post: StoryPostAdminDto) => Promise<void>;
+  onArchiveStoryPost: (post: StoryPostAdminDto) => Promise<void>;
+}
 
 const withAction = (body: Record<string, unknown> = {}) =>
   JSON.stringify({ ...body, actionId: crypto.randomUUID() });

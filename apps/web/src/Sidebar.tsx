@@ -19,10 +19,6 @@ import type {
   PlayerAccessSecretDto,
   StoryPostAdminDto,
   StoryPostDto,
-  WorldMapDto,
-  WorldMapLocationDto,
-  WorldMapScope,
-  WorldMapVisibility,
 } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import type { GameSocket } from "./realtime";
@@ -32,7 +28,7 @@ import type { RollMode } from "./RollModeControl";
 import type { TokenFramePreset } from "./token-image-editor-state";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { SceneManagerDialog } from "./ui/SceneManagerDialog";
-import { StoryChannel, type StoryDraftInput } from "./StoryChannel";
+import { StoryChannel } from "./StoryChannel";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { WorldContentWorkspace } from "./WorldContentWorkspace";
@@ -121,10 +117,6 @@ export type Props = {
     controllerMembershipIds: string[],
   ) => Promise<void>;
   onPatchCharacter: (id: string, patch: Partial<CharacterDto>) => Promise<void>;
-  /** UIX-393: GM-only soft-delete; never a hard delete. See `CharacterWorkspace.tsx`. */
-  onArchiveCharacter: (character: CharacterDto) => Promise<void>;
-  onRestoreCharacter: (character: CharacterDto) => Promise<void>;
-  onLoadArchivedCharacters: () => Promise<CharacterDto[]>;
   onChat: (
     body: string,
     visibility: MessageVisibility,
@@ -146,14 +138,6 @@ export type Props = {
   onUploadChatAttachment: (file: File) => Promise<ChatAttachmentMetadata>;
   storyPosts: Array<StoryPostDto | StoryPostAdminDto>;
   storyNextCursor: string | null;
-  onLoadMoreStoryPosts: () => Promise<void>;
-  onCreateStoryDraft: (input: StoryDraftInput) => Promise<void>;
-  onPublishStoryPost: (post: StoryPostAdminDto) => Promise<void>;
-  onUpdateStoryPost: (
-    post: StoryPostAdminDto,
-    input: StoryDraftInput,
-  ) => Promise<void>;
-  onArchiveStoryPost: (post: StoryPostAdminDto) => Promise<void>;
   onMarkChatRead: (threadId: string, sequence: number) => Promise<void>;
   onActiveChatThreadChange: (threadId: string | null) => void;
   onRoll: (
@@ -260,23 +244,6 @@ export type Props = {
   requestedChatMessageId: string | null;
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
-  onOpenPlayerRequestCreate: () => void;
-  onCreatePlayerRequest: (input: {
-    title: string;
-    body: string;
-    horizon: "NOW" | "BEFORE_BREAK" | "NEXT_SESSION";
-    audience: "PUBLIC" | "GM_ONLY";
-    characterId: string | null;
-  }) => Promise<void>;
-  onUpdatePlayerRequest: (
-    request: import("@arken/contracts").PlayerRequestDto,
-    input: { title: string; body: string },
-  ) => Promise<void>;
-  onPlayerRequestAction: (
-    request: import("@arken/contracts").PlayerRequestDto,
-    action: import("@arken/contracts").PlayerRequestTransition,
-    resolutionNote?: string,
-  ) => Promise<void>;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   /** UIX-372: pointer handlers driving the sidebar's drag-to-resize width
@@ -312,60 +279,17 @@ export type Props = {
       | "world-codex"
       | null,
   ) => void;
-  onCreateWorldMap: (input: {
-    name: string;
-    scope: WorldMapScope;
-    visibility: WorldMapVisibility;
-  }) => Promise<void>;
-  onSetWorldMapDraftBackground: (
-    map: WorldMapDto,
-    assetId: string | null,
-  ) => Promise<void>;
-  onApproveWorldMapBackground: (map: WorldMapDto) => Promise<void>;
-  onPublishWorldMap: (map: WorldMapDto) => Promise<void>;
-  onArchiveWorldMap: (map: WorldMapDto) => Promise<void>;
-  onCreateWorldMapLocation: (input: {
-    mapId: string;
-    name: string;
-    kind: WorldMapLocationDto["kind"];
-    summary: string;
-    gmNotes: string;
-    visibility: WorldMapLocationDto["visibility"];
-    x: number;
-    y: number;
-  }) => Promise<void>;
-  onUpdateWorldMapLocation: (
-    location: WorldMapLocationDto,
-    input: {
-      name: string;
-      kind: WorldMapLocationDto["kind"];
-      summary: string;
-      gmNotes: string;
-      visibility: WorldMapLocationDto["visibility"];
-      x: number;
-      y: number;
-    },
-  ) => Promise<void>;
-  onLinkWorldMapLocationScene: (
-    location: WorldMapLocationDto,
-    sceneId: string,
-  ) => Promise<void>;
-  onUnlinkWorldMapLocationScene: (
-    location: WorldMapLocationDto,
-    sceneId: string,
-  ) => Promise<void>;
-  onSetWorldMapPartyPosition: (
-    mapId: string,
-    locationId: string,
-    revision: number | null,
-  ) => Promise<void>;
-  onClearWorldMapPartyPosition: (revision: number) => Promise<void>;
 };
 
 export function Sidebar(props: Props) {
   // UIX-398 step B: scene commands arrive by context rather than as six props
   // threaded through every layer. See campaign-actions-context.tsx.
-  const { scene: sceneActions } = useCampaignActions();
+  const {
+    scene: sceneActions,
+    worldMap: worldMapActions,
+    playerRequest: playerRequestActions,
+    story: storyActions,
+  } = useCampaignActions();
   const {
     onChatVisibilityChange,
     onRequestedChatMessageHandled,
@@ -578,23 +502,23 @@ export function Sidebar(props: Props) {
             onRoll={props.onRoll}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
-            onOpenPlayerRequestCreate={props.onOpenPlayerRequestCreate}
+            onOpenPlayerRequestCreate={playerRequestActions.onOpenPlayerRequestCreate}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel
             posts={props.storyPosts}
             nextCursor={props.storyNextCursor}
-            onLoadMore={props.onLoadMoreStoryPosts}
+            onLoadMore={storyActions.onLoadMoreStoryPosts}
             legacyMessages={messagesForStream(
               props.snapshot.messages,
               "STORY",
               props.snapshot.chatThreads,
             )}
             isGm={isGm}
-            onCreateDraft={isGm ? props.onCreateStoryDraft : undefined}
-            onPublish={isGm ? props.onPublishStoryPost : undefined}
-            onUpdate={isGm ? props.onUpdateStoryPost : undefined}
-            onArchive={isGm ? props.onArchiveStoryPost : undefined}
+            onCreateDraft={isGm ? storyActions.onCreateStoryDraft : undefined}
+            onPublish={isGm ? storyActions.onPublishStoryPost : undefined}
+            onUpdate={isGm ? storyActions.onUpdateStoryPost : undefined}
+            onArchive={isGm ? storyActions.onArchiveStoryPost : undefined}
             onUploadImage={isGm ? props.onUploadChatAttachment : undefined}
           />
         ) : (
@@ -664,9 +588,9 @@ export function Sidebar(props: Props) {
             open
             snapshot={props.snapshot}
             onClose={() => props.onWorkspaceChange(null)}
-            onCreate={props.onCreatePlayerRequest}
-            onUpdate={props.onUpdatePlayerRequest}
-            onAction={props.onPlayerRequestAction}
+            onCreate={playerRequestActions.onCreatePlayerRequest}
+            onUpdate={playerRequestActions.onUpdatePlayerRequest}
+            onAction={playerRequestActions.onPlayerRequestAction}
           />
         )}
         {props.workspace === "world-maps" && (
@@ -678,17 +602,17 @@ export function Sidebar(props: Props) {
               sceneActions.onViewScene(sceneId);
               props.onWorkspaceChange(null);
             }}
-            onCreateMap={props.onCreateWorldMap}
-            onSetDraftBackground={props.onSetWorldMapDraftBackground}
-            onApproveBackground={props.onApproveWorldMapBackground}
-            onPublishMap={props.onPublishWorldMap}
-            onArchiveMap={props.onArchiveWorldMap}
-            onCreateLocation={props.onCreateWorldMapLocation}
-            onUpdateLocation={props.onUpdateWorldMapLocation}
-            onLinkLocationScene={props.onLinkWorldMapLocationScene}
-            onUnlinkLocationScene={props.onUnlinkWorldMapLocationScene}
-            onSetPartyPosition={props.onSetWorldMapPartyPosition}
-            onClearPartyPosition={props.onClearWorldMapPartyPosition}
+            onCreateMap={worldMapActions.onCreateWorldMap}
+            onSetDraftBackground={worldMapActions.onSetWorldMapDraftBackground}
+            onApproveBackground={worldMapActions.onApproveWorldMapBackground}
+            onPublishMap={worldMapActions.onPublishWorldMap}
+            onArchiveMap={worldMapActions.onArchiveWorldMap}
+            onCreateLocation={worldMapActions.onCreateWorldMapLocation}
+            onUpdateLocation={worldMapActions.onUpdateWorldMapLocation}
+            onLinkLocationScene={worldMapActions.onLinkWorldMapLocationScene}
+            onUnlinkLocationScene={worldMapActions.onUnlinkWorldMapLocationScene}
+            onSetPartyPosition={worldMapActions.onSetWorldMapPartyPosition}
+            onClearPartyPosition={worldMapActions.onClearWorldMapPartyPosition}
           />
         )}
         {props.workspace === "world-encyclopedia" && isGm && (

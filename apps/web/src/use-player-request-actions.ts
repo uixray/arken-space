@@ -1,8 +1,11 @@
 import { useMemo, type Dispatch, type SetStateAction } from "react";
-import type { GameSnapshot, PlayerRequestDto } from "@arken/contracts";
+import type {
+  GameSnapshot,
+  PlayerRequestDto,
+  PlayerRequestTransition,
+} from "@arken/contracts";
 import { api, ApiError } from "./api";
 import { applyPlayerRequestChanged } from "./player-request-realtime";
-import type { Props as SidebarProps } from "./Sidebar";
 
 /**
  * UIX-398 — durable player requests.
@@ -18,13 +21,25 @@ import type { Props as SidebarProps } from "./Sidebar";
  * correction is on its way regardless, whereas a request's new state is not
  * pushed the same way and has to be fetched.
  */
-export type PlayerRequestActions = Pick<
-  SidebarProps,
-  | "onOpenPlayerRequestCreate"
-  | "onCreatePlayerRequest"
-  | "onUpdatePlayerRequest"
-  | "onPlayerRequestAction"
->;
+export interface PlayerRequestActions {
+  onOpenPlayerRequestCreate: () => void;
+  onCreatePlayerRequest: (input: {
+    title: string;
+    body: string;
+    horizon: PlayerRequestDto["horizon"];
+    audience: PlayerRequestDto["audience"];
+    characterId: string | null;
+  }) => Promise<void>;
+  onUpdatePlayerRequest: (
+    request: PlayerRequestDto,
+    input: { title: string; body: string },
+  ) => Promise<void>;
+  onPlayerRequestAction: (
+    request: PlayerRequestDto,
+    action: PlayerRequestTransition,
+    resolutionNote?: string,
+  ) => Promise<void>;
+}
 
 const withAction = (body: Record<string, unknown> = {}) =>
   JSON.stringify({ ...body, actionId: crypto.randomUUID() });

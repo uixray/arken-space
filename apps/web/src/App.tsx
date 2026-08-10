@@ -2627,10 +2627,6 @@ export function App() {
             workspace={workspace}
             operatorFeedbackAllowed={operatorFeedbackAllowed}
             onWorkspaceChange={handleWorkspaceChange}
-            onOpenPlayerRequestCreate={playerRequestActions.onOpenPlayerRequestCreate}
-            onCreatePlayerRequest={playerRequestActions.onCreatePlayerRequest}
-            onUpdatePlayerRequest={playerRequestActions.onUpdatePlayerRequest}
-            onPlayerRequestAction={playerRequestActions.onPlayerRequestAction}
             onPlaceTokenDefinition={tokenActions.onPlaceTokenDefinition}
             onDeleteTokenDefinition={tokenActions.onDeleteTokenDefinition}
             onPatchTokenDefinition={tokenActions.onPatchTokenDefinition}
@@ -2640,11 +2636,6 @@ export function App() {
             onReplaceCharacterControllers={replaceCharacterControllers}
             storyPosts={storyPosts}
             storyNextCursor={storyNextCursor}
-            onLoadMoreStoryPosts={storyActions.onLoadMoreStoryPosts}
-            onCreateStoryDraft={storyActions.onCreateStoryDraft}
-            onUpdateStoryPost={storyActions.onUpdateStoryPost}
-            onPublishStoryPost={storyActions.onPublishStoryPost}
-            onArchiveStoryPost={storyActions.onArchiveStoryPost}
             onChat={chatActions.onChat}
             onSticker={chatActions.onSticker}
             onCreateDirectThread={chatActions.onCreateDirectThread}
@@ -2693,20 +2684,6 @@ export function App() {
             onRollEntry={catalogActions.onRollEntry}
             onRechargeEntry={catalogActions.onRechargeEntry}
             onUpdateCounters={updateCharacterCounters}
-            onCreateWorldMap={worldMapActions.onCreateWorldMap}
-            onSetWorldMapDraftBackground={worldMapActions.onSetWorldMapDraftBackground}
-            onApproveWorldMapBackground={worldMapActions.onApproveWorldMapBackground}
-            onPublishWorldMap={worldMapActions.onPublishWorldMap}
-            onArchiveWorldMap={worldMapActions.onArchiveWorldMap}
-            onArchiveCharacter={worldMapActions.onArchiveCharacter}
-            onRestoreCharacter={worldMapActions.onRestoreCharacter}
-            onLoadArchivedCharacters={worldMapActions.onLoadArchivedCharacters}
-            onCreateWorldMapLocation={worldMapActions.onCreateWorldMapLocation}
-            onUpdateWorldMapLocation={worldMapActions.onUpdateWorldMapLocation}
-            onLinkWorldMapLocationScene={worldMapActions.onLinkWorldMapLocationScene}
-            onUnlinkWorldMapLocationScene={worldMapActions.onUnlinkWorldMapLocationScene}
-            onSetWorldMapPartyPosition={worldMapActions.onSetWorldMapPartyPosition}
-            onClearWorldMapPartyPosition={worldMapActions.onClearWorldMapPartyPosition}
             onCampaignClock={(command, revision) =>
               run(
                 () =>

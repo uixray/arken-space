@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { arkenSystem } from "@arken/system";
@@ -45,6 +46,8 @@ export function CharacterWorkspace({
   onClose,
   ...props
 }: Props & { onClose: () => void }) {
+  // UIX-398 step B: archive/restore come from context, not through Sidebar.
+  const { worldMap: worldMapActions } = useCampaignActions();
   const characters = useMemo(() => {
     const visible =
       props.snapshot.me.role === "GM"
@@ -342,13 +345,13 @@ export function CharacterWorkspace({
       />
       <ArchiveCharacterDialog
         character={archiveTarget}
-        onArchive={props.onArchiveCharacter}
+        onArchive={worldMapActions.onArchiveCharacter}
         onClose={() => setArchiveTarget(null)}
       />
       <RestoreCharactersDialog
         open={restoreDialogOpen}
-        onLoad={props.onLoadArchivedCharacters}
-        onRestore={props.onRestoreCharacter}
+        onLoad={worldMapActions.onLoadArchivedCharacters}
+        onRestore={worldMapActions.onRestoreCharacter}
         onClose={() => setRestoreDialogOpen(false)}
       />
     </main>,
