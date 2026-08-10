@@ -12,7 +12,6 @@ import {
 import type {
   AssetKind,
   AssetDto,
-  CatalogEntryDto,
   GameSnapshot,
   MapPing,
   MessageVisibility,
@@ -20,11 +19,10 @@ import type {
   StoryPostDto,
   TokenDto,
 } from "@arken/contracts";
-import { api, ApiError, formatApiError, reportClientEvent } from "./api";
+import { api, ApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { Sidebar } from "./Sidebar";
-import type { StoryDraftInput } from "./StoryChannel";
 import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
 import { fetchOperatorCapability } from "./operator-feedback";
@@ -53,6 +51,8 @@ import { useLatestRef } from "./use-latest-ref";
 import { useTokenDefinitionActions } from "./use-token-definition-actions";
 import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
+import { useCatalogActions } from "./use-catalog-actions";
+import { useStoryActions } from "./use-story-actions";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -1239,6 +1239,12 @@ export function App() {
     activeSceneRef,
   });
   const accessActions = useAccessActions({ run });
+  const catalogActions = useCatalogActions({ run, load, setError });
+  const storyNextCursorRef = useLatestRef(storyNextCursor);
+  const storyActions = useStoryActions({
+    loadStoryPosts,
+    storyNextCursorRef,
+  });
   const chatActions = useChatActions({
     run,
     setSnapshot,
@@ -2670,50 +2676,11 @@ export function App() {
             onReplaceCharacterControllers={replaceCharacterControllers}
             storyPosts={storyPosts}
             storyNextCursor={storyNextCursor}
-            onLoadMoreStoryPosts={async () => {
-              if (storyNextCursor) await loadStoryPosts(storyNextCursor);
-            }}
-            onCreateStoryDraft={async (input: StoryDraftInput) => {
-              await api("/api/story/posts", {
-                method: "POST",
-                body: JSON.stringify({
-                  ...input,
-                  actionId: crypto.randomUUID(),
-                }),
-              });
-              await loadStoryPosts();
-            }}
-            onUpdateStoryPost={async (post, input) => {
-              await api(`/api/story/posts/${post.id}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  ...input,
-                  actionId: crypto.randomUUID(),
-                  revision: post.revision,
-                }),
-              });
-              await loadStoryPosts();
-            }}
-            onPublishStoryPost={async (post) => {
-              await api(`/api/story/posts/${post.id}/publish`, {
-                method: "POST",
-                body: JSON.stringify({
-                  actionId: crypto.randomUUID(),
-                  revision: post.revision,
-                }),
-              });
-              await loadStoryPosts();
-            }}
-            onArchiveStoryPost={async (post) => {
-              await api(`/api/story/posts/${post.id}/archive`, {
-                method: "POST",
-                body: JSON.stringify({
-                  actionId: crypto.randomUUID(),
-                  revision: post.revision,
-                }),
-              });
-              await loadStoryPosts();
-            }}
+            onLoadMoreStoryPosts={storyActions.onLoadMoreStoryPosts}
+            onCreateStoryDraft={storyActions.onCreateStoryDraft}
+            onUpdateStoryPost={storyActions.onUpdateStoryPost}
+            onPublishStoryPost={storyActions.onPublishStoryPost}
+            onArchiveStoryPost={storyActions.onArchiveStoryPost}
             onChat={chatActions.onChat}
             onSticker={chatActions.onSticker}
             onCreateDirectThread={chatActions.onCreateDirectThread}
@@ -2784,124 +2751,14 @@ export function App() {
               setTool("PAN");
               setPreviewSnapshot(playerView);
             }}
-            onCreateCatalogEntry={async (input) => {
-              try {
-                setError("");
-                const entry = await api<CatalogEntryDto>("/api/catalog", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    ...input,
-                    data: input.data ?? {},
-                    actionId: crypto.randomUUID(),
-                  }),
-                });
-                await load();
-                return entry;
-              } catch (reason) {
-                setError(formatApiError(reason));
-                throw reason;
-              }
-            }}
-            onUpdateCatalogEntry={(id, patch) =>
-              run(
-                () =>
-                  api(`/api/catalog/${id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify({
-                      ...patch,
-                      actionId: crypto.randomUUID(),
-                    }),
-                  }),
-                true,
-              )
-            }
-            onDeleteCatalogEntry={(id, revision) =>
-              run(
-                () =>
-                  api(`/api/catalog/${id}`, {
-                    method: "DELETE",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision,
-                    }),
-                  }),
-                true,
-              )
-            }
-            onAssignCatalogEntry={(characterId, catalogEntryId) =>
-              run(
-                () =>
-                  api(`/api/characters/${characterId}/catalog`, {
-                    method: "POST",
-                    body: JSON.stringify({
-                      catalogEntryId,
-                      actionId: crypto.randomUUID(),
-                    }),
-                  }),
-                true,
-              )
-            }
-            onUpdateCharacterEntry={(characterId, id, patch) =>
-              run(
-                () =>
-                  api(`/api/characters/${characterId}/catalog/${id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify({
-                      ...patch,
-                      actionId: crypto.randomUUID(),
-                    }),
-                  }),
-                true,
-              )
-            }
-            onDeleteCharacterEntry={(characterId, id, revision) =>
-              run(
-                () =>
-                  api(`/api/characters/${characterId}/catalog/${id}`, {
-                    method: "DELETE",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision,
-                    }),
-                  }),
-                true,
-              )
-            }
-            onRollEntry={(characterId, entryId, input) => {
-              const { mode, ...request } = input;
-              return run(
-                () =>
-                  api(
-                    `/api/characters/${characterId}/catalog/${entryId}/roll`,
-                    {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        ...request,
-                        ...(mode === "SHARE" ? { mode } : {}),
-                        visibility: "PUBLIC",
-                      }),
-                    },
-                  ),
-                true,
-              );
-            }}
-            onRechargeEntry={(characterId, entryId, revision) =>
-              run(
-                () =>
-                  api(
-                    `/api/characters/${characterId}/catalog/${entryId}/recharge`,
-                    {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision,
-                      }),
-                    },
-                  ),
-                true,
-              )
-            }
+            onCreateCatalogEntry={catalogActions.onCreateCatalogEntry}
+            onUpdateCatalogEntry={catalogActions.onUpdateCatalogEntry}
+            onDeleteCatalogEntry={catalogActions.onDeleteCatalogEntry}
+            onAssignCatalogEntry={catalogActions.onAssignCatalogEntry}
+            onUpdateCharacterEntry={catalogActions.onUpdateCharacterEntry}
+            onDeleteCharacterEntry={catalogActions.onDeleteCharacterEntry}
+            onRollEntry={catalogActions.onRollEntry}
+            onRechargeEntry={catalogActions.onRechargeEntry}
             onUpdateCounters={updateCharacterCounters}
             onCreateWorldMap={worldMapActions.onCreateWorldMap}
             onSetWorldMapDraftBackground={worldMapActions.onSetWorldMapDraftBackground}
