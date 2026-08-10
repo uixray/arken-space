@@ -23,3 +23,8 @@ apps/server/uploads/
 .gemini/
 .kimi/
 AGENTS.md
+
+# Linked git worktrees kept inside the checkout (Codex/Antigravity branches).
+# They are real repositories, not files of this one; without this the release
+# checklist's clean-tree gate fails on them.
+.worktrees/
