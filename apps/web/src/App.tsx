@@ -10,8 +10,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
-  AssetKind,
-  AssetDto,
   GameSnapshot,
   MapPing,
   MessageVisibility,
@@ -53,6 +51,8 @@ import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
 import { useStoryActions } from "./use-story-actions";
+import { usePlayerRequestActions } from "./use-player-request-actions";
+import { useAssetActions } from "./use-asset-actions";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -1240,6 +1240,16 @@ export function App() {
   });
   const accessActions = useAccessActions({ run });
   const catalogActions = useCatalogActions({ run, load, setError });
+  const assetActions = useAssetActions({ load });
+  const openPlayerRequests = useCallback(
+    () => handleWorkspaceChange("player-requests"),
+    [handleWorkspaceChange],
+  );
+  const playerRequestActions = usePlayerRequestActions({
+    setSnapshot,
+    load,
+    openPlayerRequests,
+  });
   const storyNextCursorRef = useLatestRef(storyNextCursor);
   const storyActions = useStoryActions({
     loadStoryPosts,
@@ -1537,21 +1547,7 @@ export function App() {
             assets={snapshot.assets}
             role={snapshot.me.role}
             socket={socket}
-            onUpload={async (file) => {
-              const form = new FormData();
-              form.append("file", file);
-              const asset = await api<AssetDto>("/api/assets?kind=AUDIO", {
-                method: "POST",
-                headers: { "x-action-id": crypto.randomUUID() },
-                body: form,
-              });
-              await load();
-              return {
-                ...asset,
-                url: `/api/assets/${asset.id}/content`,
-                createdAt: String(asset.createdAt),
-              };
-            }}
+            onUpload={(file) => assetActions.uploadAsset(file, "AUDIO")}
           />
           <details className="account-menu">
             <summary aria-label="Меню сеанса" title="Меню сеанса">
@@ -2597,76 +2593,10 @@ export function App() {
             workspace={workspace}
             operatorFeedbackAllowed={operatorFeedbackAllowed}
             onWorkspaceChange={handleWorkspaceChange}
-            onOpenPlayerRequestCreate={() =>
-              handleWorkspaceChange("player-requests")
-            }
-            onCreatePlayerRequest={async (input) => {
-              try {
-                const request = await api<
-                  import("@arken/contracts").PlayerRequestDto
-                >("/api/player-requests", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    ...input,
-                    actionId: crypto.randomUUID(),
-                  }),
-                });
-                setSnapshot((current) =>
-                  applyPlayerRequestChanged(current, request),
-                );
-              } catch (reason) {
-                if (reason instanceof ApiError && reason.status === 409)
-                  await load();
-                throw reason;
-              }
-            }}
-            onUpdatePlayerRequest={async (currentRequest, input) => {
-              try {
-                const request = await api<
-                  import("@arken/contracts").PlayerRequestDto
-                >(`/api/player-requests/${currentRequest.id}`, {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    ...input,
-                    revision: currentRequest.revision,
-                    actionId: crypto.randomUUID(),
-                  }),
-                });
-                setSnapshot((current) =>
-                  applyPlayerRequestChanged(current, request),
-                );
-              } catch (reason) {
-                if (reason instanceof ApiError && reason.status === 409)
-                  await load();
-                throw reason;
-              }
-            }}
-            onPlayerRequestAction={async (
-              currentRequest,
-              action,
-              resolutionNote,
-            ) => {
-              try {
-                const request = await api<
-                  import("@arken/contracts").PlayerRequestDto
-                >(`/api/player-requests/${currentRequest.id}/actions`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    revision: currentRequest.revision,
-                    action,
-                    ...(resolutionNote ? { resolutionNote } : {}),
-                  }),
-                });
-                setSnapshot((current) =>
-                  applyPlayerRequestChanged(current, request),
-                );
-              } catch (reason) {
-                if (reason instanceof ApiError && reason.status === 409)
-                  await load();
-                throw reason;
-              }
-            }}
+            onOpenPlayerRequestCreate={playerRequestActions.onOpenPlayerRequestCreate}
+            onCreatePlayerRequest={playerRequestActions.onCreatePlayerRequest}
+            onUpdatePlayerRequest={playerRequestActions.onUpdatePlayerRequest}
+            onPlayerRequestAction={playerRequestActions.onPlayerRequestAction}
             onPlaceTokenDefinition={tokenActions.onPlaceTokenDefinition}
             onDeleteTokenDefinition={tokenActions.onDeleteTokenDefinition}
             onPatchTokenDefinition={tokenActions.onPatchTokenDefinition}
@@ -2717,33 +2647,8 @@ export function App() {
             onRenameScene={sceneActions.onRenameScene}
             onRenameMembership={accessActions.onRenameMembership}
             onCreateToken={tokenActions.onCreateToken}
-            onUpload={async (file, kind: AssetKind) => {
-              const form = new FormData();
-              form.append("file", file);
-              const asset = await api<AssetDto>(`/api/assets?kind=${kind}`, {
-                method: "POST",
-                headers: { "x-action-id": crypto.randomUUID() },
-                body: form,
-              });
-              await load();
-              return {
-                ...asset,
-                url: `/api/assets/${asset.id}/content`,
-                createdAt: String(asset.createdAt),
-              };
-            }}
-            onGenerateTokenImage={async ({ sourceAssetId, ...transform }) => {
-              const asset = await api<AssetDto>(
-                `/api/assets/${sourceAssetId}/token`,
-                {
-                  method: "POST",
-                  headers: { "x-action-id": crypto.randomUUID() },
-                  body: JSON.stringify(transform),
-                },
-              );
-              await load();
-              return asset;
-            }}
+            onUpload={assetActions.uploadAsset}
+            onGenerateTokenImage={assetActions.generateTokenImage}
             onPreviewPlayer={async (membershipId) => {
               const playerView = await api<GameSnapshot>(
                 `/api/preview/${membershipId}`,
