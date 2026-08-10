@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { api, ApiError, formatApiError } from "./api";
+import {
+  api,
+  ApiError,
+  flushClientEventBuffer,
+  formatApiError,
+  reportClientEvent,
+  resetClientEventBufferForTest,
+} from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetClientEventBufferForTest();
 });
 
 describe("api telemetry and correlation", () => {
@@ -149,5 +157,58 @@ describe("api telemetry and correlation", () => {
 
     const telemetry = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
     expect(telemetry.context.operation).toBe(operation);
+  });
+});
+
+describe("client event buffer durability", () => {
+  it("keeps a report buffered when the network is unavailable, and sends it on the next flush", async () => {
+    const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    reportClientEvent({
+      level: "error",
+      event: "window.error",
+      errorName: "TypeError",
+      stack: "TypeError: boom\n    at f (file.js:1:1)",
+    });
+    // Let the failed send's microtasks settle.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Network recovers; a later flush (e.g. triggered by the `online` event)
+    // resends the still-buffered report instead of having lost it.
+    vi.unstubAllGlobals();
+    const recoveredFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", recoveredFetch);
+    await flushClientEventBuffer();
+
+    expect(recoveredFetch).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(recoveredFetch.mock.calls[0]![1].body as string);
+    expect(body.event).toBe("window.error");
+    expect(body.errorName).toBe("TypeError");
+  });
+
+  it("keeps a pre-auth (401) report buffered and flushes it after login", async () => {
+    const preAuthFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }));
+    vi.stubGlobal("fetch", preAuthFetch);
+
+    reportClientEvent({ level: "error", event: "window.error", errorName: "Error" });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(preAuthFetch).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+    const postAuthFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", postAuthFetch);
+    await flushClientEventBuffer();
+
+    expect(postAuthFetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -102,6 +102,57 @@ describe("server telemetry safety", () => {
       expect(clientEventSchema.safeParse(unsafe).success).toBe(false);
   });
 
+  it("accepts structural stack/errorName/occurrenceCount but never a raw message body", () => {
+    const privateText = "Кто-то сказал приватную фразу в чате ГМу";
+    const parsed = clientEventSchema.parse({
+      level: "error",
+      event: "window.error",
+      message: privateText,
+      errorName: "ApiError",
+      occurrenceCount: 7,
+      stack: [
+        { function: "handleClick", file: "/assets/index-BK6doIJ2.js", line: 1, column: 12345 },
+      ],
+      context: { sceneId: "scene-1", tool: "PAN", role: "GM" },
+    });
+    expect(parsed.errorName).toBe("ApiError");
+    expect(parsed.occurrenceCount).toBe(7);
+    // The message is accepted by the schema (compat), but the log line the
+    // server actually writes is always the fixed label — this is the
+    // acceptance criterion: no path from a client-supplied message to the
+    // persisted server record.
+    const loggedMessage = safeClientMessage(parsed.event);
+    expect(loggedMessage).toBe("Browser runtime error");
+    expect(loggedMessage).not.toContain(privateText);
+    expect(sanitizeClientContext(parsed.context)).toEqual({
+      sceneId: "scene-1",
+      tool: "PAN",
+      role: "GM",
+    });
+  });
+
+  it("bounds stack frames and rejects malformed frames", () => {
+    const tooManyFrames = Array.from({ length: 21 }, () => ({
+      file: "a.js",
+      line: 1,
+      column: 1,
+    }));
+    expect(
+      clientEventSchema.safeParse({
+        level: "error",
+        event: "window.error",
+        stack: tooManyFrames,
+      }).success,
+    ).toBe(false);
+    expect(
+      clientEventSchema.safeParse({
+        level: "error",
+        event: "window.error",
+        stack: [{ file: "a.js", line: 1, column: 1, extra: "nope" }],
+      }).success,
+    ).toBe(false);
+  });
+
   it("only correlates valid action IDs", () => {
     const actionId = crypto.randomUUID();
     expect(requestActionId(actionId)).toBe(actionId);

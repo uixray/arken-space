@@ -13,11 +13,19 @@ import { App } from "./App";
 import { AppErrorBoundary } from "./AppErrorBoundary";
 import { appToaster } from "./ui/toaster";
 import { installInputDiagnostics } from "./input-diagnostics";
+import {
+  installClientEventFlushTriggers,
+  installGlobalErrorReporting,
+} from "./error-reporting";
 import "./ui/gravity-foundation.css";
 import "./styles.css";
 
 configure({ lang: "ru" });
 installInputDiagnostics();
+// UIX-397: register before React mounts so startup/login-screen errors are
+// captured too, independent of auth/campaign state.
+installGlobalErrorReporting();
+installClientEventFlushTriggers();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

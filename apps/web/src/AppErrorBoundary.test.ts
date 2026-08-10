@@ -24,7 +24,7 @@ describe("AppErrorBoundary telemetry", () => {
     const visibleCode = /UI-[0-9A-F]{8}/.exec(html)?.[0];
 
     expect(visibleCode).toBe(state.code);
-    expect(reportRenderFailure).toHaveBeenCalledWith(visibleCode, "TypeError");
+    expect(reportRenderFailure).toHaveBeenCalledWith(visibleCode, error);
     expect(consoleError).toHaveBeenCalledWith("app.render_failed", {
       code: visibleCode,
     });

@@ -1,4 +1,13 @@
 import { rememberApiFailure } from "./feedback-diagnostics";
+import {
+  enqueueErrorReport,
+  loadReports,
+  removeReport,
+  saveReports,
+  toWirePayload,
+  type BufferedErrorReport,
+  type ErrorReportInput,
+} from "./error-report-buffer";
 
 export class ApiError extends Error {
   constructor(
@@ -141,17 +150,63 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export function reportClientEvent(input: {
-  level: "info" | "warn" | "error";
-  event: string;
-  message?: string;
-  context?: Record<string, unknown>;
-}) {
-  void fetch("/api/client-logs", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-    keepalive: true,
-  }).catch(() => undefined);
+// UIX-397: reports are buffered (localStorage-backed, bounded, deduped)
+// instead of being fire-and-forget, so a failed send or a pre-auth error is
+// not lost and a burst of identical errors does not exhaust the server's
+// client-logs rate limit (120/hour).
+let reportsCache: BufferedErrorReport[] | null = null;
+
+function readReports(): BufferedErrorReport[] {
+  if (!reportsCache) reportsCache = loadReports();
+  return reportsCache;
+}
+
+function writeReports(next: BufferedErrorReport[]): void {
+  reportsCache = next;
+  saveReports(next);
+}
+
+export function reportClientEvent(input: ErrorReportInput) {
+  writeReports(enqueueErrorReport(readReports(), input));
+  void flushClientEventBuffer();
+}
+
+/** Test-only: clears the in-memory buffer cache so tests don't leak state. */
+export function resetClientEventBufferForTest(): void {
+  reportsCache = [];
+  saveReports([]);
+}
+
+let flushing = false;
+
+async function sendReport(report: BufferedErrorReport): Promise<boolean> {
+  try {
+    const response = await fetch("/api/client-logs", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(toWirePayload(report)),
+      keepalive: true,
+    });
+    // 401 (not yet authenticated) is expected pre-login: keep the report
+    // buffered and try again after auth instead of dropping it.
+    return response.ok || response.status === 202;
+  } catch {
+    return false;
+  }
+}
+
+/** Attempts to drain the buffer; stops at the first failure (assume offline). */
+export async function flushClientEventBuffer(): Promise<void> {
+  if (flushing) return;
+  flushing = true;
+  try {
+    for (const report of readReports()) {
+      const sent = await sendReport(report);
+      if (!sent) return;
+      writeReports(removeReport(readReports(), report.id));
+    }
+  } finally {
+    flushing = false;
+  }
 }

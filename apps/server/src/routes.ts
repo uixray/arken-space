@@ -961,6 +961,12 @@ export function registerRoutes(
           event: body.event,
           message: safeClientMessage(body.event),
           context: sanitizeClientContext(body.context),
+          // Structural-only: class name + bounded stack frames describe
+          // code, never user content (see telemetry.ts). occurrenceCount
+          // reflects client-side dedup of repeated identical errors.
+          errorName: body.errorName,
+          stack: body.stack,
+          occurrenceCount: body.occurrenceCount,
           requestId: request.id,
         },
         "client.event",

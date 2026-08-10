@@ -12,13 +12,16 @@ const nativeErrorNames = new Set([
   "URIError",
 ]);
 
-export function reportRenderFailure(code: string, errorName: string) {
+export function reportRenderFailure(code: string, error: Error) {
+  const errorName = nativeErrorNames.has(error.name) ? error.name : "Error";
   reportClientEvent({
     level: "error",
     event: "app.render_failed",
-    context: {
-      code,
-      errorName: nativeErrorNames.has(errorName) ? errorName : "Error",
-    },
+    errorName,
+    // The stack describes code (file/line/function), not the component's
+    // data, so it is safe to send in full — the render error's message and
+    // React's componentStack (which can embed props/state text) are not.
+    stack: error.stack,
+    context: { code, errorName },
   });
 }

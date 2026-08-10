@@ -33,6 +33,7 @@ import {
   upsertDirectThread,
 } from "./direct-chat-state";
 import { isEditableEventTarget } from "./input-diagnostics";
+import { setErrorReportContext } from "./error-report-context";
 import {
   addRollToast,
   removeRollToast,
@@ -631,12 +632,12 @@ export function App() {
   // non-content state snapshot they read (scene/tool/role/build) current.
   useEffect(() => {
     setErrorReportContext({
-      sceneId: activeScene?.id,
+      sceneId: snapshot?.scenes.find((scene) => scene.active)?.id,
       tool,
       role: snapshot?.me.role,
       buildRevision: snapshot?.buildRevision,
     });
-  }, [activeScene?.id, tool, snapshot?.me.role, snapshot?.buildRevision]);
+  }, [snapshot, tool]);
   useEffect(() => {
     if (!campaignId || authRequired) return;
     const next = createGameSocket();

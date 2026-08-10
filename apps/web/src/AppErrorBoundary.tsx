@@ -19,7 +19,7 @@ export class AppErrorBoundary extends Component<
 
   componentDidCatch(error: Error) {
     console.error("app.render_failed", { code: this.state.code });
-    reportRenderFailure(this.state.code, error.name);
+    reportRenderFailure(this.state.code, error);
   }
 
   render() {
