@@ -1314,7 +1314,7 @@ describe("durable realtime token commands", () => {
     });
   });
 
-  it("broadcasts ruler updates and clear events across clients", async () => {
+  it("broadcasts ruler updates and clear events across clients (single-segment back-compat)", async () => {
     const updated = new Promise<
       Parameters<ServerToClientEvents["ruler:updated"]>[0]
     >((resolve) => {
@@ -1322,21 +1322,22 @@ describe("durable realtime token commands", () => {
     });
     client.emit("ruler:update", {
       sceneId: ids.scene,
-      startX: 10,
-      startY: 20,
-      endX: 110,
-      endY: 120,
+      points: [
+        { x: 10, y: 20 },
+        { x: 110, y: 120 },
+      ],
     });
     const updatePayload = await updated;
     expect(updatePayload).toMatchObject({
       sceneId: ids.scene,
       membershipId: ids.player,
-      startX: 10,
-      startY: 20,
-      endX: 110,
-      endY: 120,
+      points: [
+        { x: 10, y: 20 },
+        { x: 110, y: 120 },
+      ],
     });
-    expect(typeof updatePayload.distance).toBe("number");
+    // Grid enabled, size 64: hypot(100, 100) / 64.
+    expect(updatePayload.distance).toBeCloseTo(Math.hypot(100, 100) / 64, 10);
 
     const cleared = new Promise<
       Parameters<ServerToClientEvents["ruler:cleared"]>[0]
@@ -1349,6 +1350,114 @@ describe("durable realtime token commands", () => {
       sceneId: ids.scene,
       membershipId: ids.player,
     });
+  });
+
+  it("UIX-381: broadcasts the server-computed total distance across every leg of a multi-segment ruler", async () => {
+    const updated = new Promise<
+      Parameters<ServerToClientEvents["ruler:updated"]>[0]
+    >((resolve) => {
+      otherClient.once("ruler:updated", resolve);
+    });
+    // Three legs of grid-unit distance 1, 2, and 3 respectively (each a
+    // 3-4-5-style right triangle scaled so /64 lands on a whole number).
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [
+        { x: 0, y: 0 },
+        { x: 0 + 192, y: 0 + 256 }, // hypot(192,256)=320 -> 320/64 = 5
+        { x: 192, y: 256 + 384 }, // hypot(0,384)=384 -> /64 = 6
+        { x: 192 + 448, y: 640 }, // hypot(448,0)=448 -> /64 = 7
+      ],
+    });
+    const updatePayload = await updated;
+    expect(updatePayload.distance).toBeCloseTo(5 + 6 + 7, 10);
+    client.emit("ruler:clear", { sceneId: ids.scene });
+  });
+
+  it("UIX-381: rejects invalid ruler geometry (too few points, non-finite, over the point cap)", async () => {
+    // rulerQueue is a strict FIFO (see the comment above it in realtime.ts),
+    // so every one of these emits is fully processed -- and, if invalid,
+    // dropped without broadcasting -- before the final valid emit is
+    // processed. Asserting exactly one broadcast arrived, and that it's the
+    // valid one, proves all five invalid payloads above it were rejected
+    // rather than merely still in flight.
+    const received: Array<Parameters<ServerToClientEvents["ruler:updated"]>[0]> =
+      [];
+    const onUpdated = (
+      payload: Parameters<ServerToClientEvents["ruler:updated"]>[0],
+    ) => received.push(payload);
+    otherClient.on("ruler:updated", onUpdated);
+
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [{ x: 0, y: 0 }], // too few points
+    });
+    client.emit("ruler:update", { sceneId: ids.scene, points: [] });
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [
+        { x: 0, y: 0 },
+        { x: Number.NaN, y: 1 },
+      ],
+    });
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [
+        { x: 0, y: 0 },
+        { x: Number.POSITIVE_INFINITY, y: 1 },
+      ],
+    });
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: Array.from({ length: 65 }, (_, i) => ({ x: i, y: i })), // over the RULER_MAX_POINTS cap
+    });
+
+    const validPoints = [
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+    ];
+    const updated = new Promise<void>((resolve) => {
+      otherClient.once("ruler:updated", () => resolve());
+    });
+    client.emit("ruler:update", { sceneId: ids.scene, points: validPoints });
+    await updated;
+
+    otherClient.off("ruler:updated", onUpdated);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ sceneId: ids.scene, points: validPoints });
+    client.emit("ruler:clear", { sceneId: ids.scene });
+  });
+
+  it("UIX-381: preserves the rulerQueue ordering guarantee for a multi-segment update immediately followed by clear", async () => {
+    // Regression coverage for the ordering comment above `rulerQueue` in
+    // apps/server/src/realtime.ts: an update fired right before a clear (as
+    // happens on the last pointermove of a drag immediately followed by
+    // pointerup/Escape) must still broadcast update-then-clear in order, or
+    // every client is left with a stale line nothing clears afterwards.
+    const events: string[] = [];
+    const updatedPromise = new Promise<void>((resolve) => {
+      otherClient.once("ruler:updated", () => {
+        events.push("updated");
+        resolve();
+      });
+    });
+    const clearedPromise = new Promise<void>((resolve) => {
+      otherClient.once("ruler:cleared", () => {
+        events.push("cleared");
+        resolve();
+      });
+    });
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+        { x: 20, y: 0 },
+      ],
+    });
+    client.emit("ruler:clear", { sceneId: ids.scene });
+    await Promise.all([updatedPromise, clearedPromise]);
+    expect(events).toEqual(["updated", "cleared"]);
   });
 });
 

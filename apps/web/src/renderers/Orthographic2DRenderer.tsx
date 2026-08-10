@@ -21,20 +21,26 @@ import {
 import useImage from "use-image";
 import Konva from "konva";
 import type { SceneRendererProps } from "./SceneRenderer";
+import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { isRectFullyRevealed } from "./fog";
 import { fitRect } from "./camera-fit";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
+  appendRulerWaypoint,
   canMoveMapToken,
   clearSettledTokenResizeDraft,
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
+  moveRulerDraft,
   resolveMapToolShortcut,
   resolveMapWheelGesture,
+  rulerDraftPoints,
   shouldBeginMapPan,
+  startRulerDraft,
   type MapObjectRef,
+  type RulerDraft,
 } from "./map-interaction";
 import {
   canSelectToken,
@@ -358,18 +364,55 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     height: props.scene.height,
   });
   const [lockAspect, setLockAspect] = useState(true);
-  const [rulerStart, setRulerStart] = useState<{ x: number; y: number } | null>(
-    null,
-  );
-  const [rulerEnd, setRulerEnd] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  // UIX-381: multi-segment ruler drag. `rulerDraftRef` mirrors `rulerDraft`
+  // state so event handlers and the window-level Ctrl listener always read
+  // the current draft synchronously (same ref-mirrors-state pattern as
+  // `drawingPointsRef`/`drawingPoints` above), while `rulerDraft` state
+  // drives the actual redraw.
+  const [rulerDraft, setRulerDraft] = useState<RulerDraft | null>(null);
+  const rulerDraftRef = useRef<RulerDraft | null>(null);
+  const setRulerDraftState = (next: RulerDraft | null) => {
+    rulerDraftRef.current = next;
+    setRulerDraft(next);
+  };
+  const finishRulerRef = useRef<() => void>(() => undefined);
+  // Escape and any tool switch both flow through `props.tool` changing (see
+  // `handleMapKeyDown`'s unconditional `onToolSelect("PAN")` on Escape), so a
+  // single tool-change effect is enough to cover both cleanup paths and keep
+  // the fix for "Escape leaves a stale line" working for multi-segment drafts.
   useEffect(() => {
-    if (props.tool === "RULER" || !rulerStart) return;
+    if (props.tool === "RULER" || !rulerDraftRef.current) return;
     props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
-    setRulerStart(null);
-    setRulerEnd(null);
-  }, [props.tool, rulerStart, props.socket, props.scene.id]);
+    setRulerDraftState(null);
+  }, [props.tool, props.socket, props.scene.id]);
+  useEffect(() => {
+    if (props.tool !== "RULER") return;
+    // UIX-381: commit the current live point as a waypoint on Ctrl keydown
+    // (not Ctrl+click -- the pointer button stays held down for the whole
+    // multi-segment drag, so there is no separate click to hook, and
+    // keydown is what's actually usable mid-drag). Only the bare `Control`
+    // keydown is handled (never combined with other keys), key-repeat is
+    // ignored so holding Ctrl doesn't spam waypoints, and editable targets
+    // are excluded via the same guard as the Escape handler -- so this never
+    // shadows a real Ctrl+<key> browser/OS shortcut, and preventDefault on
+    // the lone modifier keydown stops it from opening a context menu.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Control" || event.repeat) return;
+      if (shouldIgnoreGlobalShortcut(event)) return;
+      const current = rulerDraftRef.current;
+      if (!current) return;
+      const next = appendRulerWaypoint(current);
+      if (next === current) return;
+      setRulerDraftState(next);
+      props.socket?.emit("ruler:update", {
+        sceneId: props.scene.id,
+        points: rulerDraftPoints(next),
+      });
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.tool, props.socket, props.scene.id]);
   const [mapImage] = useImage(
     props.assets.find((asset) => asset.id === props.scene.mapAssetId)?.url ??
       "",
@@ -704,20 +747,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
 
   const displayRulers = useMemo(() => {
     const result = [...props.rulers];
-    if (rulerStart && rulerEnd) {
-      const dx = rulerEnd.x - rulerStart.x;
-      const dy = rulerEnd.y - rulerStart.y;
+    if (rulerDraft) {
+      const points = rulerDraftPoints(rulerDraft);
       const gridSize = props.scene.grid.enabled ? props.scene.grid.size : 1;
-      const distance = Math.hypot(dx, dy) / gridSize;
       const localRuler = {
         sceneId: props.scene.id,
         membershipId: props.membershipId,
         displayName: "Вы",
-        startX: rulerStart.x,
-        startY: rulerStart.y,
-        endX: rulerEnd.x,
-        endY: rulerEnd.y,
-        distance,
+        points,
+        distance: rulerPolylineDistance(points, gridSize),
       };
       const index = result.findIndex(
         (r) => r.membershipId === props.membershipId,
@@ -731,8 +769,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     return result;
   }, [
     props.rulers,
-    rulerStart,
-    rulerEnd,
+    rulerDraft,
     props.scene.grid,
     props.scene.id,
     props.membershipId,
@@ -1171,8 +1208,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setDrawingPoints(points);
     }
     if (props.tool === "RULER") {
-      setRulerStart(point);
-      setRulerEnd(point);
+      setRulerDraftState(startRulerDraft(point));
     }
   };
 
@@ -1257,14 +1293,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         setDrawingPoints(next);
       }
     }
-    if (props.tool === "RULER" && rulerStart) {
-      setRulerEnd(point);
+    if (props.tool === "RULER" && rulerDraftRef.current) {
+      const next = moveRulerDraft(rulerDraftRef.current, point);
+      setRulerDraftState(next);
       props.socket?.emit("ruler:update", {
         sceneId: props.scene.id,
-        startX: rulerStart.x,
-        startY: rulerStart.y,
-        endX: point.x,
-        endY: point.y,
+        points: rulerDraftPoints(next),
       });
     }
   };
@@ -1360,8 +1394,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     }
     if (props.tool === "RULER") {
       props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
-      setRulerStart(null);
-      setRulerEnd(null);
+      setRulerDraftState(null);
     }
   };
 
@@ -1373,6 +1406,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       handlePointerMove();
     };
     brushUpRef.current = () => void handleBrushUp();
+    // UIX-381: pointer cancel (e.g. a touch drag interrupted by the OS, or
+    // losing pointer capture) must clear the multi-segment draft the same
+    // way an ordinary release does -- see finishOutsideStage below, which
+    // covers the case where the up/cancel event never reaches the Stage.
+    finishRulerRef.current = () => {
+      if (!rulerDraftRef.current) return;
+      props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
+      setRulerDraftState(null);
+    };
   });
 
   useEffect(() => {
@@ -1385,6 +1427,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       panStartRef.current = null;
       if (drawingActiveRef.current) finishDrawingRef.current();
       if (brushActiveRef.current) brushUpRef.current();
+      finishRulerRef.current();
     };
     window.addEventListener("mousemove", trackOutsideStage, true);
     window.addEventListener("mouseup", finishOutsideStage, true);
@@ -2588,14 +2631,46 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
 
         <Layer listening={false}>
           {displayRulers.map((ruler) => {
+            // UIX-381: `points` is the committed waypoints plus (while a
+            // local drag is live) the in-progress segment following the
+            // pointer. A lone point (drag just started, no movement yet) has
+            // nothing to draw a segment with, so it renders as just the
+            // start marker.
+            const points = ruler.points;
+            if (points.length < 2) {
+              const only = points[0];
+              return only ? (
+                <Circle
+                  key={ruler.membershipId}
+                  x={only.x}
+                  y={only.y}
+                  radius={4 / scale}
+                  fill={visual.color.selection}
+                />
+              ) : null;
+            }
             const gridEnabled = props.scene.grid.enabled;
             const unitSuffix = gridEnabled ? " кл." : " px (без сетки)";
             const labelText = `${ruler.displayName}: ${ruler.distance.toFixed(1)}${unitSuffix}`;
             const estimatedWidth = Math.max(50, labelText.length * 8 + 12);
+            const first = points[0]!;
+            const last = points[points.length - 1]!;
+            const beforeLast = points[points.length - 2]!;
             return (
               <Group key={ruler.membershipId}>
+                {points.length > 2 && (
+                  <Line
+                    points={points
+                      .slice(0, -1)
+                      .flatMap((point) => [point.x, point.y])}
+                    stroke={visual.color.selection}
+                    strokeWidth={2.5 / scale}
+                    dash={[6 / scale, 4 / scale]}
+                    lineJoin="round"
+                  />
+                )}
                 <Arrow
-                  points={[ruler.startX, ruler.startY, ruler.endX, ruler.endY]}
+                  points={[beforeLast.x, beforeLast.y, last.x, last.y]}
                   stroke={visual.color.selection}
                   fill={visual.color.selection}
                   strokeWidth={2.5 / scale}
@@ -2604,12 +2679,21 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                   pointerWidth={10 / scale}
                 />
                 <Circle
-                  x={ruler.startX}
-                  y={ruler.startY}
+                  x={first.x}
+                  y={first.y}
                   radius={4 / scale}
                   fill={visual.color.selection}
                 />
-                <Group x={ruler.endX + 8 / scale} y={ruler.endY - 14 / scale}>
+                {points.slice(1, -1).map((waypoint, index) => (
+                  <Circle
+                    key={index}
+                    x={waypoint.x}
+                    y={waypoint.y}
+                    radius={3 / scale}
+                    fill={visual.color.selection}
+                  />
+                ))}
+                <Group x={last.x + 8 / scale} y={last.y - 14 / scale}>
                   <Rect
                     x={-4 / scale}
                     y={-2 / scale}

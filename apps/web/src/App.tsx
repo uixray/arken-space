@@ -367,10 +367,7 @@ export function App() {
       sceneId: string;
       membershipId: string;
       displayName: string;
-      startX: number;
-      startY: number;
-      endX: number;
-      endY: number;
+      points: Array<{ x: number; y: number }>;
       distance: number;
     }>
   >([]);

@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest";
+import { RULER_MAX_POINTS } from "@arken/contracts";
 import {
+  appendRulerWaypoint,
   canMoveMapToken,
   clearSettledTokenResizeDraft,
   createInitialMapInteractionState,
   createValidatedMapObjectRef,
   mapInteractionReducer,
+  moveRulerDraft,
   resolveMapToolShortcut,
   resolveMapWheelGesture,
+  rulerDraftPoints,
   shouldBeginMapPan,
+  startRulerDraft,
   type MapInteractionAction,
   type MapInteractionState,
   type MapObjectRef,
+  type RulerDraft,
 } from "./map-interaction";
 
 const token: MapObjectRef = { kind: "token", objectId: "token-1", revision: 3 };
@@ -223,5 +229,83 @@ describe("mapInteractionReducer", () => {
       }),
     ).toBe(drafts);
     expect(clearSettledTokenResizeDraft(drafts, "token", latest)).toEqual({});
+  });
+});
+
+describe("ruler draft (UIX-381 multi-segment waypoints)", () => {
+  it("starts a draft with the drag start as both the sole waypoint and the live point", () => {
+    const draft = startRulerDraft({ x: 0, y: 0 });
+    expect(draft.waypoints).toEqual([{ x: 0, y: 0 }]);
+    expect(draft.live).toEqual({ x: 0, y: 0 });
+    expect(rulerDraftPoints(draft)).toEqual([{ x: 0, y: 0 }]);
+  });
+
+  it("moving the live point alone reflects a single in-progress segment (back-compat)", () => {
+    const draft = moveRulerDraft(startRulerDraft({ x: 0, y: 0 }), {
+      x: 10,
+      y: 10,
+    });
+    expect(rulerDraftPoints(draft)).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+    ]);
+  });
+
+  it("Ctrl commits the live point as a waypoint and the next segment continues from it", () => {
+    let draft = startRulerDraft({ x: 0, y: 0 });
+    draft = moveRulerDraft(draft, { x: 10, y: 10 });
+    draft = appendRulerWaypoint(draft);
+    expect(draft.waypoints).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+    ]);
+    expect(draft.live).toEqual({ x: 10, y: 10 });
+
+    draft = moveRulerDraft(draft, { x: 20, y: 0 });
+    expect(rulerDraftPoints(draft)).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+      { x: 20, y: 0 },
+    ]);
+  });
+
+  it("repeats across several waypoints", () => {
+    let draft = startRulerDraft({ x: 0, y: 0 });
+    for (const point of [
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+    ]) {
+      draft = appendRulerWaypoint(moveRulerDraft(draft, point));
+    }
+    draft = moveRulerDraft(draft, { x: 20, y: 20 });
+    expect(rulerDraftPoints(draft)).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 20, y: 20 },
+    ]);
+  });
+
+  it("does not commit a duplicate waypoint when the pointer has not moved (e.g. Ctrl pressed twice)", () => {
+    const draft = startRulerDraft({ x: 0, y: 0 });
+    const committed = appendRulerWaypoint(draft);
+    expect(committed).toBe(draft);
+    expect(committed.waypoints).toEqual([{ x: 0, y: 0 }]);
+  });
+
+  it("stops committing new waypoints once the RULER_MAX_POINTS cap would be exceeded", () => {
+    let draft: RulerDraft = startRulerDraft({ x: 0, y: 0 });
+    // Reserve one slot for the live point: only RULER_MAX_POINTS - 1
+    // waypoints should ever be committable.
+    for (let i = 1; i < RULER_MAX_POINTS + 5; i++) {
+      draft = appendRulerWaypoint(moveRulerDraft(draft, { x: i, y: 0 }));
+    }
+    expect(draft.waypoints.length).toBe(RULER_MAX_POINTS - 1);
+    // The live segment still fits within the cap.
+    expect(rulerDraftPoints(draft).length).toBeLessThanOrEqual(
+      RULER_MAX_POINTS,
+    );
   });
 });

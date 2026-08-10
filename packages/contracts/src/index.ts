@@ -1,6 +1,8 @@
 import { z } from "zod";
 export * from "./fog-geometry.js";
 import { fogGeometrySchema } from "./fog-geometry.js";
+export * from "./ruler-geometry.js";
+import { rulerUpdateSchema } from "./ruler-geometry.js";
 export {
   betaPlayerByHandle,
   betaPlayers,
@@ -859,14 +861,6 @@ export const sceneCanvasConfigSchema = z.object({
     })
     .optional(),
 });
-export const rulerUpdateSchema = z.object({
-  sceneId: z.string().uuid(),
-  startX: z.number().finite(),
-  startY: z.number().finite(),
-  endX: z.number().finite(),
-  endY: z.number().finite(),
-});
-
 /**
  * UIX-392: ephemeral cursor presence. Bounds mirror `backgroundFrame`'s
  * world-coordinate range above — generous enough for legitimate pointer

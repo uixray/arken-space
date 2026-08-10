@@ -27,6 +27,7 @@ import {
   audioTrackCommandSchema,
   cursorMoveSchema,
   moveTokenSchema,
+  rulerPolylineDistance,
   rulerUpdateSchema,
 } from "@arken/contracts";
 import type { AuthContext, SessionAuthContext } from "./auth.js";
@@ -1072,14 +1073,14 @@ export function registerRealtime(
           )
           .limit(1);
         if (!scene) return;
-        const dx = parsed.data.endX - parsed.data.startX;
-        const dy = parsed.data.endY - parsed.data.startY;
         io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
           ...parsed.data,
           membershipId: auth.membershipId,
           displayName: auth.displayName,
-          distance:
-            Math.hypot(dx, dy) / (scene.grid.enabled ? scene.grid.size : 1),
+          distance: rulerPolylineDistance(
+            parsed.data.points,
+            scene.grid.enabled ? scene.grid.size : 1,
+          ),
         });
       });
     });

@@ -1,4 +1,4 @@
-import type { Role } from "@arken/contracts";
+import { RULER_MAX_POINTS, type Role } from "@arken/contracts";
 
 export type MapTool =
   | "PAN"
@@ -41,6 +41,51 @@ export function shouldBeginMapPan(
     (button === 2 && targetIsCanvas) ||
     (button === 0 && tool === "PAN" && targetIsCanvas)
   );
+}
+
+/**
+ * UIX-381: multi-segment ruler drag state. `waypoints` are already-committed
+ * points (the drag start is always `waypoints[0]`); `live` is the pointer's
+ * current, not-yet-committed position. `null` means no ruler drag is in
+ * progress -- both the pointerdown that starts a measurement and the reset
+ * on Escape/tool-change/pointer-cancel go through this single state shape so
+ * every cleanup path is the same "set it back to null" operation.
+ */
+export type RulerDraft = Readonly<{
+  waypoints: readonly Point[];
+  live: Point;
+}>;
+
+export function startRulerDraft(point: Point): RulerDraft {
+  return { waypoints: [point], live: point };
+}
+
+export function moveRulerDraft(draft: RulerDraft, point: Point): RulerDraft {
+  return { ...draft, live: point };
+}
+
+/**
+ * Commits the draft's current live point as a waypoint, so the next segment
+ * continues from there. A no-op (returns the same reference) when there is
+ * nothing new to commit (the live point already equals the last waypoint --
+ * e.g. Ctrl pressed before any pointer movement) or when committing would
+ * push the polyline past the server's `RULER_MAX_POINTS` cap -- one slot is
+ * always reserved for the still-uncommitted live segment so
+ * `rulerDraftPoints` never itself exceeds the cap.
+ */
+export function appendRulerWaypoint(draft: RulerDraft): RulerDraft {
+  const last = draft.waypoints[draft.waypoints.length - 1];
+  if (last && last.x === draft.live.x && last.y === draft.live.y) return draft;
+  if (draft.waypoints.length >= RULER_MAX_POINTS - 1) return draft;
+  return { waypoints: [...draft.waypoints, draft.live], live: draft.live };
+}
+
+/** Committed waypoints plus the live in-progress segment, ready to send/render. */
+export function rulerDraftPoints(draft: RulerDraft): Point[] {
+  const last = draft.waypoints[draft.waypoints.length - 1];
+  if (last && last.x === draft.live.x && last.y === draft.live.y)
+    return [...draft.waypoints];
+  return [...draft.waypoints, draft.live];
 }
 
 export function resolveMapWheelGesture(input: {

@@ -30,14 +30,12 @@ export interface SceneRendererProps {
   cursors: CursorPresence[];
   /** UIX-392: local opt-out — when false, this client's own pointer never emits `cursor:move`. */
   cursorSendEnabled: boolean;
+  /** UIX-381: ordered polyline waypoints (>=2 points); a single segment is just a 2-point polyline. */
   rulers: Array<{
     sceneId: string;
     membershipId: string;
     displayName: string;
-    startX: number;
-    startY: number;
-    endX: number;
-    endY: number;
+    points: Array<{ x: number; y: number }>;
     distance: number;
   }>;
   onFogCreate: (
