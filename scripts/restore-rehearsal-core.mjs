@@ -60,6 +60,14 @@ const applicationCountTableNames = [
 const applicationCountTables = new Set(applicationCountTableNames);
 
 /**
+ * Exported so tests can compare this list directly against the other two
+ * places backup coverage is declared (`infra/backup/database-counts.sql` and
+ * the schema's own `pgTable` set). Drift between them once silently dropped
+ * five tables out of disaster-recovery coverage.
+ */
+export { applicationCountTableNames };
+
+/**
  * Tables that database-counts.sql used to count before a later migration
  * moved their data elsewhere and dropped them. A backup taken just before
  * such a migrate-and-drop deploy always still lists the about-to-be-dropped

@@ -1247,6 +1247,22 @@ describe("Pool B HTTP boundaries", () => {
     });
     expect(assigned.statusCode).toBe(201);
     const entry = assigned.json();
+    // UIX-391 relies on the server rejecting a second assignment of the same
+    // catalog entry rather than silently creating a duplicate: the in-sheet
+    // picker filters already-assigned entries out of its list, but that is a
+    // convenience, not the guarantee. A fresh actionId is used deliberately
+    // so this exercises the duplicate-assignment guard itself and not the
+    // generic idempotent-replay path.
+    const duplicateAssignment = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), catalogEntryId: template.id },
+    });
+    expect(duplicateAssignment.statusCode).toBe(409);
+    expect(duplicateAssignment.json()).toMatchObject({
+      error: "CATALOG_ALREADY_ASSIGNED",
+    });
     const playerEdit = await app.inject({
       method: "PATCH",
       url: `/api/characters/${ids.character}/catalog/${entry.id}`,

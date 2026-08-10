@@ -19,6 +19,7 @@ import {
   stripSupersedingOnlyCounts,
   validateRestoreProjectName,
   verifyRetiredTableMigration,
+  applicationCountTableNames,
 } from "../scripts/restore-rehearsal-core.mjs";
 import {
   assertVerifiedRehearsal,
@@ -118,11 +119,24 @@ describe("backup and restore safety", () => {
       countedTables.map((table) => [table, 0]),
     );
 
+    // Backup coverage is spread across three lists that must agree: the
+    // schema's own tables, the SQL allowlist, and
+    // `applicationCountTableNames` in restore-rehearsal-core.mjs. Drift
+    // between them once silently dropped five tables out of disaster-recovery
+    // coverage, so all three are compared directly here. The expected size is
+    // derived rather than hardcoded: a hand-maintained number has to be
+    // bumped on every migration, which is friction that eventually gets
+    // bumped carelessly.
     expect(countedTables).toEqual(persistedTables);
+    // Direct three-way comparison. This previously held only transitively,
+    // via hardcoded counts inside `describeDatabaseCountCoverage`'s expected
+    // shape, which made a drift report as a confusing off-by-N rather than
+    // naming the table that went missing.
+    expect([...applicationCountTableNames].sort()).toEqual(persistedTables);
     expect(describeDatabaseCountCoverage(syntheticCounts)).toEqual({
       mode: "full",
-      countedTables: 51,
-      knownPersistedTables: 51,
+      countedTables: persistedTables.length,
+      knownPersistedTables: persistedTables.length,
       missingTables: [],
     });
   });
@@ -180,7 +194,7 @@ describe("backup and restore safety", () => {
     expect(verifyRetiredTableMigration(freshManifest, {})).toEqual([]);
   });
 
-  it("verifies all migration identities from 0000 through 0035", () => {
+  it("verifies every migration identity in the journal", () => {
     const migrationsDirectory = path.join(root, "packages", "db", "drizzle");
     const expected = readExpectedMigrationLedger({
       journalPath: path.join(migrationsDirectory, "meta", "_journal.json"),
@@ -191,9 +205,14 @@ describe("backup and restore safety", () => {
       .join("\n");
     const actual = parseMigrationLedger(databaseOutput);
 
-    expect(expected).toHaveLength(36);
+    // Length and newest tag are deliberately not pinned here: they change on
+    // every migration, and a number that must be hand-bumped each time
+    // eventually gets bumped without thought. Journal/file/snapshot
+    // consistency is asserted properly in tests/migration-integrity.test.ts;
+    // what matters here is that the ledger has content, starts at the real
+    // genesis migration, and compares correctly.
+    expect(expected.length).toBeGreaterThan(30);
     expect(expected[0].tag).toBe("0000_nasty_emma_frost");
-    expect(expected.at(-1)?.tag).toBe("0035_equal_shard");
     expect(() => compareMigrationLedger(expected, actual)).not.toThrow();
     expect(() =>
       compareMigrationLedgerPrefix(expected, actual.slice(0, 16)),
