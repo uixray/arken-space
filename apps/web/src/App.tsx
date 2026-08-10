@@ -52,6 +52,7 @@ import { applyBulkMoveResult } from "./canvas-bulk-move";
 import { useMutationRunners } from "./use-mutation-runners";
 import { useSceneActions } from "./use-scene-actions";
 import { useWorldMapActions } from "./use-world-map-actions";
+import { useLatestRef } from "./use-latest-ref";
 import type { MapTool } from "./renderers/map-interaction";
 import { normalizeWallet } from "./wallet";
 import type { RollMode } from "./RollModeControl";
@@ -941,7 +942,18 @@ export function App() {
       }),
     );
 
-  const replaceCharacterControllers = async (
+  /*
+   * UIX-398 — the character domain is the first that genuinely reads live
+   * state: `patchCharacter` needs the current snapshot to resolve a
+   * character's base revision. Depending on `snapshot` in a `useCallback`
+   * would rebuild these on every game event — a chat message would
+   * invalidate them — so they read it through `useLatestRef` instead and keep
+   * a fixed identity. Safe here because both are only ever invoked from user
+   * events, never during render.
+   */
+  const snapshotRef = useLatestRef(snapshot);
+
+  const replaceCharacterControllers = useCallback(async (
     characterId: string,
     revision: number,
     controllerMembershipIds: string[],
@@ -981,15 +993,16 @@ export function App() {
       setSnapshot((current) => reconcileGameSnapshot(current, canonical));
       throw reason;
     }
-  };
+  }, []);
 
-  const patchCharacter = (
+  const patchCharacter = useCallback((
     id: string,
     patch: Partial<import("@arken/contracts").CharacterDto>,
   ) => {
     const requestedRevision =
       patch.revision ??
-      snapshot?.characters.find((character) => character.id === id)?.revision;
+      snapshotRef.current?.characters.find((character) => character.id === id)
+        ?.revision;
     setSnapshot((current) =>
       current
         ? {
@@ -1014,7 +1027,9 @@ export function App() {
       const { revision: _revision, ...updates } = patch;
       const base =
         previousCharacter ??
-        snapshot?.characters.find((character) => character.id === id);
+        snapshotRef.current?.characters.find(
+          (character) => character.id === id,
+        );
       if (!base) throw new Error("CHARACTER_NOT_FOUND");
       const response = await api<unknown>(`/api/characters/${id}`, {
         method: "PATCH",
@@ -1062,7 +1077,7 @@ export function App() {
         await queueTail;
         throw reason;
       });
-  };
+  }, [snapshotRef]);
 
   const updateCharacterCounters = (
     characterId: string,
