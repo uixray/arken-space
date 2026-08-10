@@ -20,6 +20,7 @@ import type {
 import { api, ApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
+import { CursorPresenceMenu } from "./ui/CursorPresenceMenu";
 import { Sidebar } from "./Sidebar";
 import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
@@ -84,6 +85,7 @@ import {
 } from "./renderers/cursor-presence";
 import {
   CURSOR_PREFERENCE_DEFAULT,
+  type CursorPreference,
   readCursorPreference,
   writeCursorPreference,
 } from "./cursor-preference";
@@ -567,25 +569,35 @@ export function App() {
   useEffect(() => {
     if (!campaignId || !snapshot) return;
     setCursorPreference(
-      readCursorPreference(window.localStorage, campaignId, snapshot.me.id),
+      readCursorPreference(
+        window.localStorage,
+        campaignId,
+        snapshot.me.id,
+        snapshot.me.role === "GM" ? "GM" : "PLAYER",
+      ),
     );
   }, [campaignId, snapshot?.me.id]);
-  const toggleCursorPreference = useCallback(() => {
-    setCursorPreference((current) => {
-      const next = {
-        sendEnabled: !current.sendEnabled,
-        receiveEnabled: !current.receiveEnabled,
-      };
-      if (campaignId && snapshot)
-        writeCursorPreference(
-          window.localStorage,
-          campaignId,
-          snapshot.me.id,
-          next,
-        );
-      return next;
-    });
-  }, [campaignId, snapshot]);
+  const updateCursorPreference = useCallback(
+    (next: CursorPreference) => {
+      setCursorPreference((current) => {
+        // Turning broadcasting off has to retract the last position, not just
+        // stop sending new ones: otherwise the cursor freezes where it was and
+        // stays on everyone's screen — for a GM, on exactly the spot they
+        // decided to stop showing.
+        if (current.sendEnabled && !next.sendEnabled)
+          socket?.emit("cursor:gone");
+        if (campaignId && snapshot)
+          writeCursorPreference(
+            window.localStorage,
+            campaignId,
+            snapshot.me.id,
+            next,
+          );
+        return next;
+      });
+    },
+    [campaignId, snapshot, socket],
+  );
 
   const loadStoryPosts = useCallback(async (cursor?: string) => {
     const query = new URLSearchParams({ limit: "50" });
@@ -1987,20 +1999,11 @@ export function App() {
               >
                 Пинг
               </button>
-              <button
-                aria-label="Курсоры участников"
-                title={
-                  cursorPreference.sendEnabled
-                    ? "Скрыть курсоры участников (перестать показывать и отправлять свой)"
-                    : "Показывать курсоры участников"
-                }
-                className="map-tool"
-                data-tool="CURSOR_PRESENCE"
-                aria-pressed={cursorPreference.sendEnabled}
-                onClick={toggleCursorPreference}
-              >
-                Курсоры
-              </button>
+              <CursorPresenceMenu
+                preference={cursorPreference}
+                role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
+                onChange={updateCursorPreference}
+              />
               {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
                 <>
                   <GridSettings
@@ -2174,6 +2177,9 @@ export function App() {
                     : []
                 }
                 cursorSendEnabled={cursorPreference.sendEnabled}
+                cursorShared={
+                  snapshot.me.role === "GM" && cursorPreference.sendEnabled
+                }
                 gmFogOpacity={gmFogOpacity}
                 gmFogVisible={gmFogVisible}
                 gmGridVisible={gmGridVisible}

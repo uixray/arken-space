@@ -19,7 +19,7 @@ let db: ReturnType<typeof drizzle<typeof schema>>;
 const realtimeEmissions: Array<{
   rooms: string[];
   event: string;
-  request: any;
+  request: unknown;
 }> = [];
 const realtime = {
   to(room: string) {
@@ -29,7 +29,7 @@ const realtime = {
         rooms.push(nextRoom);
         return target;
       },
-      emit(event: string, request: any) {
+      emit(event: string, request: unknown) {
         realtimeEmissions.push({ rooms: [...rooms], event, request });
       },
     };

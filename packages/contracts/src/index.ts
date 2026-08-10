@@ -872,6 +872,17 @@ export const cursorMoveSchema = z.object({
   sceneId: z.string().uuid(),
   x: z.number().finite().min(-16384).max(16384),
   y: z.number().finite().min(-16384).max(16384),
+  /**
+   * UIX-403: only meaningful for a GM, who by default broadcasts to the GM
+   * room alone — a GM sees through fog, so their pointer would otherwise
+   * disclose what is under it. Setting this asks the server to relay to the
+   * whole campaign instead, which is the GM deliberately choosing to point at
+   * something in front of the players.
+   *
+   * Absent means false: an older client, or one that never enabled it, keeps
+   * the safe behaviour rather than inheriting the risky one.
+   */
+  shared: z.boolean().optional(),
 });
 
 export const characterUpdateSchema = z.object({
@@ -954,7 +965,13 @@ export const restoreCharacterSchema = revisionCommandSchema;
  * narrative text (notes/backstory) and wallet — those stay specific to each character.
  */
 export const characterTemplateFieldsSchema = characterUpdateSchema
-  .pick({ stats: true, skills: true, spells: true, inventory: true, resources: true })
+  .pick({
+    stats: true,
+    skills: true,
+    spells: true,
+    inventory: true,
+    resources: true,
+  })
   .partial();
 export const createCharacterSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -2176,9 +2193,7 @@ export interface ServerToClientEvents {
   /** UIX-382: broadcast when a track is added, mutated, or its asset is swapped. */
   "audio:track:state": (event: EventEnvelope<AudioTrackDto>) => void;
   /** UIX-382: broadcast when a track is removed from the mixer. */
-  "audio:track:removed": (
-    event: EventEnvelope<{ trackId: string }>,
-  ) => void;
+  "audio:track:removed": (event: EventEnvelope<{ trackId: string }>) => void;
   "map:ping": (ping: MapPing) => void;
   "ruler:updated": (
     ruler: z.infer<typeof rulerUpdateSchema> & {
@@ -2189,9 +2204,10 @@ export interface ServerToClientEvents {
   ) => void;
   "ruler:cleared": (ruler: { sceneId: string; membershipId: string }) => void;
   /**
-   * UIX-392: ephemeral cursor presence, broadcast per the fog-safety split
-   * (GM cursors -> GM room only; player cursors -> full campaign room). Not
-   * persisted — see `cursorMoveSchema` above.
+   * UIX-392/UIX-403: ephemeral cursor presence. Player cursors go to the full
+   * campaign room; a GM cursor goes to the GM room unless that GM has chosen
+   * to share it (`shared` on `cursor:move`). Not persisted — see
+   * `cursorMoveSchema` above.
    */
   "cursor:moved": (cursor: {
     membershipId: string;
@@ -2272,9 +2288,9 @@ export type WorldContentReviewStatus = z.infer<
 const worldContentAliasesSchema = z
   .array(z.string().trim().min(1).max(120))
   .max(50);
-const worldContentTagsSchema = z.array(z.string().trim().min(1).max(60)).max(
-  50,
-);
+const worldContentTagsSchema = z
+  .array(z.string().trim().min(1).max(60))
+  .max(50);
 const worldContentSlugSchema = z
   .string()
   .trim()
@@ -2337,9 +2353,7 @@ export const worldContentPlayerDtoSchema = z.object({
   revision: z.number().int().nonnegative(),
   updatedAt: z.string().datetime(),
 });
-export type WorldContentPlayerDto = z.infer<
-  typeof worldContentPlayerDtoSchema
->;
+export type WorldContentPlayerDto = z.infer<typeof worldContentPlayerDtoSchema>;
 
 export const createWorldContentSchema = z
   .object({
@@ -2539,7 +2553,13 @@ export const createWorldContentInstanceSchema = z
   .object({
     actionId: z.string().uuid(),
     worldContentId: z.string().uuid(),
-    displayNameOverride: z.string().trim().min(1).max(200).nullable().optional(),
+    displayNameOverride: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .nullable()
+      .optional(),
     currentState: z.string().trim().max(4000).nullable().optional(),
     gmNotes: z.string().trim().max(20000).nullable().optional(),
     portraitAssetId: z.string().uuid().nullable().optional(),
@@ -2558,7 +2578,13 @@ export const updateWorldContentInstanceSchema = z
   .object({
     actionId: z.string().uuid(),
     revision: z.number().int().nonnegative(),
-    displayNameOverride: z.string().trim().min(1).max(200).nullable().optional(),
+    displayNameOverride: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .nullable()
+      .optional(),
     currentState: z.string().trim().max(4000).nullable().optional(),
     gmNotes: z.string().trim().max(20000).nullable().optional(),
     portraitAssetId: z.string().uuid().nullable().optional(),

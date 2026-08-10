@@ -1381,8 +1381,9 @@ describe("durable realtime token commands", () => {
     // processed. Asserting exactly one broadcast arrived, and that it's the
     // valid one, proves all five invalid payloads above it were rejected
     // rather than merely still in flight.
-    const received: Array<Parameters<ServerToClientEvents["ruler:updated"]>[0]> =
-      [];
+    const received: Array<
+      Parameters<ServerToClientEvents["ruler:updated"]>[0]
+    > = [];
     const onUpdated = (
       payload: Parameters<ServerToClientEvents["ruler:updated"]>[0],
     ) => received.push(payload);
@@ -1424,7 +1425,10 @@ describe("durable realtime token commands", () => {
 
     otherClient.off("ruler:updated", onUpdated);
     expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({ sceneId: ids.scene, points: validPoints });
+    expect(received[0]).toMatchObject({
+      sceneId: ids.scene,
+      points: validPoints,
+    });
     client.emit("ruler:clear", { sceneId: ids.scene });
   });
 
@@ -1469,9 +1473,9 @@ describe("cursor presence (UIX-392)", () => {
     };
     client.on("cursor:moved", onLeak);
     otherClient.on("cursor:moved", onLeak);
-    const gmSeen = new Promise<Parameters<ServerToClientEvents["cursor:moved"]>[0]>(
-      (resolve) => gmClient.once("cursor:moved", resolve),
-    );
+    const gmSeen = new Promise<
+      Parameters<ServerToClientEvents["cursor:moved"]>[0]
+    >((resolve) => gmClient.once("cursor:moved", resolve));
     gmClient.emit("cursor:move", { sceneId: ids.scene, x: 40, y: 60 });
     await expect(gmSeen).resolves.toMatchObject({
       membershipId: ids.gm,
@@ -1486,10 +1490,61 @@ describe("cursor presence (UIX-392)", () => {
     otherClient.off("cursor:moved", onLeak);
   });
 
-  it("broadcasts a player cursor to both the GM and every player in the campaign", async () => {
-    const gmSeen = new Promise<Parameters<ServerToClientEvents["cursor:moved"]>[0]>(
-      (resolve) => gmClient.once("cursor:moved", resolve),
+  /**
+   * UIX-403: the GM can now choose to point at something in front of the
+   * players. The default stays private — the interesting assertions are that
+   * opting in actually reaches them, and that opting back out retracts the
+   * last position instead of leaving it frozen on their screens.
+   */
+  it("broadcasts a shared GM cursor to the players", async () => {
+    const playerSeen = new Promise<
+      Parameters<ServerToClientEvents["cursor:moved"]>[0]
+    >((resolve) => client.once("cursor:moved", resolve));
+    gmClient.emit("cursor:move", {
+      sceneId: ids.scene,
+      x: 70,
+      y: 80,
+      shared: true,
+    });
+    await expect(playerSeen).resolves.toMatchObject({
+      membershipId: ids.gm,
+      role: "GM",
+      x: 70,
+      y: 80,
+    });
+  });
+
+  it("retracts a shared GM cursor from the players when sharing stops", async () => {
+    const playerSaw = new Promise<unknown>((resolve) =>
+      client.once("cursor:moved", resolve),
     );
+    gmClient.emit("cursor:move", {
+      sceneId: ids.scene,
+      x: 10,
+      y: 10,
+      shared: true,
+    });
+    await playerSaw;
+
+    const playerGone = new Promise<{ membershipId: string }>((resolve) =>
+      client.once("cursor:gone", resolve),
+    );
+    // The GM turns sharing off. Their client stops sending, but a position
+    // already on screen has to be taken back — the server does that on the
+    // first unshared message.
+    //
+    // The wait is required: the server drops cursor moves less than 40ms apart
+    // as a floor under the client's rAF batching, and without it this second
+    // emit from the same socket is discarded before it can retract anything.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    gmClient.emit("cursor:move", { sceneId: ids.scene, x: 11, y: 11 });
+    await expect(playerGone).resolves.toMatchObject({ membershipId: ids.gm });
+  });
+
+  it("broadcasts a player cursor to both the GM and every player in the campaign", async () => {
+    const gmSeen = new Promise<
+      Parameters<ServerToClientEvents["cursor:moved"]>[0]
+    >((resolve) => gmClient.once("cursor:moved", resolve));
     const otherPlayerSeen = new Promise<
       Parameters<ServerToClientEvents["cursor:moved"]>[0]
     >((resolve) => otherClient.once("cursor:moved", resolve));
@@ -1532,9 +1587,9 @@ describe("cursor presence (UIX-392)", () => {
   });
 
   it("broadcasts cursor:gone when a socket that sent a cursor disconnects", async () => {
-    const gone = new Promise<Parameters<ServerToClientEvents["cursor:gone"]>[0]>(
-      (resolve) => gmClient.once("cursor:gone", resolve),
-    );
+    const gone = new Promise<
+      Parameters<ServerToClientEvents["cursor:gone"]>[0]
+    >((resolve) => gmClient.once("cursor:gone", resolve));
     client.emit("cursor:move", { sceneId: ids.scene, x: 5, y: 5 });
     await new Promise((resolve) => setTimeout(resolve, 30));
     client.disconnect();
@@ -1552,9 +1607,9 @@ describe("cursor presence (UIX-392)", () => {
   });
 
   it("honors an explicit client-driven cursor:gone signal", async () => {
-    const gone = new Promise<Parameters<ServerToClientEvents["cursor:gone"]>[0]>(
-      (resolve) => gmClient.once("cursor:gone", resolve),
-    );
+    const gone = new Promise<
+      Parameters<ServerToClientEvents["cursor:gone"]>[0]
+    >((resolve) => gmClient.once("cursor:gone", resolve));
     client.emit("cursor:move", { sceneId: ids.scene, x: 5, y: 5 });
     await new Promise((resolve) => setTimeout(resolve, 30));
     client.emit("cursor:gone");

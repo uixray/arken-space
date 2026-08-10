@@ -30,6 +30,12 @@ export interface SceneRendererProps {
   cursors: CursorPresence[];
   /** UIX-392: local opt-out — when false, this client's own pointer never emits `cursor:move`. */
   cursorSendEnabled: boolean;
+  /**
+   * GM only: whether this GM's cursor is relayed to players rather than kept
+   * to the GM room. Players ignore it — their cursor already goes to the whole
+   * campaign whenever `cursorSendEnabled` is set.
+   */
+  cursorShared: boolean;
   /** UIX-381: ordered polyline waypoints (>=2 points); a single segment is just a 2-point polyline. */
   rulers: Array<{
     sceneId: string;

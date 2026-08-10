@@ -27,7 +27,6 @@ import { requireAuth } from "./auth.js";
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type RequestDb = Database | Transaction;
-type RequestRow = typeof playerRequests.$inferSelect;
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
 const campaignRoom = (id: string) => `campaign:${id}`;
 const gmRoom = (id: string) => `campaign:${id}:gm`;

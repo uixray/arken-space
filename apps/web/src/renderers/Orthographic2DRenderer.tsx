@@ -454,20 +454,25 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   useEffect(() => {
     const socket = props.socket;
     const sceneId = props.scene.id;
+    const shared = props.cursorShared;
     cursorBatcherRef.current = new CursorMoveBatcher<{ x: number; y: number }>(
       {
         schedule: (callback) => requestAnimationFrame(callback),
         cancel: (handle) => cancelAnimationFrame(handle),
       },
       (point) => {
-        socket?.emit("cursor:move", { sceneId, x: point.x, y: point.y });
+        socket?.emit("cursor:move", { sceneId, x: point.x, y: point.y, shared });
       },
     );
     return () => {
       cursorBatcherRef.current?.cancel();
       cursorBatcherRef.current = null;
     };
-  }, [props.socket, props.scene.id]);
+    // `cursorShared` belongs here for the same reason as the socket and the
+    // scene: the callback closes over it, and a stale closure would keep
+    // relaying to the audience the GM just switched away from. Rebuilding the
+    // batcher on a button press costs one cancelled frame.
+  }, [props.socket, props.scene.id, props.cursorShared]);
   // Explicit "gone" signals: scene switch/unmount (this effect's own
   // cleanup) and window blur. An idle timeout (scheduled per pointer move,
   // see handlePointerMove) covers plain inactivity. The server's disconnect

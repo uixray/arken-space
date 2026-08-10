@@ -1172,8 +1172,19 @@ export function registerRealtime(
     // otherwise generate pure noise for every other client.
     let hasBroadcastCursor = false;
 
-    const cursorRoom = () =>
-      auth.role === "GM" ? gmRoom(auth.campaignId) : campaignRoom(auth.campaignId);
+    // UIX-403: a GM's cursor reaches players only when that GM asks for it on
+    // the event itself. Keeping the choice on each message rather than in
+    // per-socket state means there is no stored flag that can drift out of
+    // step with what the GM sees in their own interface.
+    const cursorRoom = (shared = false) =>
+      auth.role === "GM" && !shared
+        ? gmRoom(auth.campaignId)
+        : campaignRoom(auth.campaignId);
+    // Which audience the last position went to, so `cursor:gone` can be sent
+    // to that same audience. Telling the campaign room to forget a cursor it
+    // never saw is harmless; failing to tell it leaves the GM's last position
+    // frozen on every player's screen — precisely the frame they were hiding.
+    let lastCursorShared = false;
 
     socket.on("cursor:move", async (input) => {
       const parsed = cursorMoveSchema.safeParse(input);
@@ -1193,13 +1204,22 @@ export function registerRealtime(
         .limit(1);
       if (!scene) return;
       hasBroadcastCursor = true;
+      const shared = parsed.data.shared === true;
+      // Moving from shared to private has to retract the old position from the
+      // players, or it simply stops updating and stays where it was.
+      if (lastCursorShared && !shared)
+        io.to(campaignRoom(auth.campaignId)).emit("cursor:gone", {
+          membershipId: auth.membershipId,
+        });
+      lastCursorShared = shared;
       // Fog-safety split (UIX-392): a GM can see everything, so any
       // coordinate their cursor visits could disclose something hidden if
-      // shown to a player — broadcast to the GM room only. A player's own
-      // cursor never exceeds what that player can already see on their own
-      // fog-limited view (this app's fog is role-uniform, not per-player
-      // secret), so it is safe to broadcast to the full campaign room.
-      io.to(cursorRoom()).emit("cursor:moved", {
+      // shown to a player — the GM room is the default audience, and only the
+      // GM themselves can widen it (UIX-403). A player's own cursor never
+      // exceeds what that player can already see on their own fog-limited
+      // view (this app's fog is role-uniform, not per-player secret), so it is
+      // always safe to broadcast to the full campaign room.
+      io.to(cursorRoom(shared)).emit("cursor:moved", {
         membershipId: auth.membershipId,
         displayName: auth.displayName,
         role: auth.role,
@@ -1212,7 +1232,7 @@ export function registerRealtime(
     socket.on("cursor:gone", () => {
       if (!hasBroadcastCursor) return;
       hasBroadcastCursor = false;
-      io.to(cursorRoom()).emit("cursor:gone", {
+      io.to(cursorRoom(lastCursorShared)).emit("cursor:gone", {
         membershipId: auth.membershipId,
       });
     });
@@ -1231,7 +1251,7 @@ export function registerRealtime(
       // (cursor:gone above) covers the graceful cases, but a dropped
       // connection never gets to emit that, so it must be handled here too.
       if (hasBroadcastCursor)
-        io.to(cursorRoom()).emit("cursor:gone", {
+        io.to(cursorRoom(lastCursorShared)).emit("cursor:gone", {
           membershipId: auth.membershipId,
         });
       const key = presenceKey(auth.campaignId, auth.membershipId);

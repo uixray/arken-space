@@ -4305,3 +4305,20 @@ code {
   font-weight: 700;
   flex: 1;
 }
+
+/* UIX-403: the two cursor-visibility switches, behind one toolbar button.
+   The map toolbar has no room for two more buttons, and these are settings
+   rather than tools — they belong in a panel, not on the strip. */
+.cursor-presence-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-width: 280px;
+  padding: var(--space-md);
+}
+.cursor-presence-menu__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
