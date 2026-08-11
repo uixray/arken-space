@@ -3677,6 +3677,11 @@ code {
 .map-toolbar .map-tool[data-tool="REDO"]::before {
   content: "\21B7";
 }
+/* UIX-427: the cursor-settings button had no rule here, so it rendered as an
+   empty square. A north-west arrowhead is the shape every pointer already is. */
+.map-toolbar .map-tool[data-tool="CURSOR_PRESENCE"]::before {
+  content: "\2196";
+}
 .grid-settings .toolbar-detail-trigger[data-tool="GRID"]::before {
   content: "\0023";
 }

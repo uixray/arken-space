@@ -3,19 +3,18 @@ import { Popup, Switch } from "@gravity-ui/uikit";
 import type { CursorPreference } from "../cursor-preference";
 
 /**
- * UIX-403: the two cursor settings, which until now shared one button that
- * flipped both at once.
+ * UIX-403/UIX-427: cursor visibility, which is one setting for a player and
+ * two for a GM.
  *
- * They answer different questions — "should the others see me" and "should I
- * see the others" — and a single control could not express, say, "watch
- * everyone but stay invisible myself". The map toolbar has no room for two
- * more buttons, so they live behind one.
+ * A player gets a plain toggle for other people's cursors. The second switch
+ * exists in the data model but has nothing to offer them: their own cursor is
+ * never drawn back to them, and unlike a GM they have nothing to hide — a
+ * player's pointer only ever moves over what the players can already see. A
+ * menu holding one switch is two clicks for a job the toolbar does in one, so
+ * they do not get a menu at all.
  *
- * The sending switch reads differently by role on purpose. A player's cursor
- * has always gone to the whole campaign; a GM's has gone to the GM room alone,
- * because a GM sees through fog and their pointer would give away what is
- * under it. So for a GM this switch is the deliberate act of pointing at
- * something in front of the players, and its label says exactly that.
+ * A GM keeps the menu, because for them the sending switch is a real decision:
+ * it shows the players where they are pointing, fog included.
  */
 export function CursorPresenceMenu({
   preference,
@@ -28,14 +27,35 @@ export function CursorPresenceMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
-  const isGm = role === "GM";
+
+  if (role !== "GM")
+    return (
+      <button
+        type="button"
+        title={
+          preference.receiveEnabled
+            ? "Скрыть курсоры остальных"
+            : "Показывать курсоры остальных"
+        }
+        className="map-tool"
+        data-tool="CURSOR_PRESENCE"
+        aria-pressed={preference.receiveEnabled}
+        onClick={() =>
+          onChange({
+            ...preference,
+            receiveEnabled: !preference.receiveEnabled,
+          })
+        }
+      >
+        Курсоры
+      </button>
+    );
 
   return (
     <>
       <button
         ref={setAnchor}
         type="button"
-        aria-label="Курсоры участников"
         aria-haspopup="dialog"
         aria-expanded={open}
         title="Настроить видимость курсоров"
@@ -64,14 +84,12 @@ export function CursorPresenceMenu({
             checked={preference.sendEnabled}
             onUpdate={(sendEnabled) => onChange({ ...preference, sendEnabled })}
           >
-            {isGm ? "Показывать мой курсор игрокам" : "Показывать мой курсор"}
+            Показывать мой курсор игрокам
           </Switch>
-          {isGm && (
-            <p className="cursor-presence-menu__note">
-              Игроки увидят, куда вы указываете, — в том числе на скрытых
-              туманом участках карты.
-            </p>
-          )}
+          <p className="cursor-presence-menu__note">
+            Игроки увидят, куда вы указываете, — в том числе на скрытых туманом
+            участках карты.
+          </p>
         </div>
       </Popup>
     </>
