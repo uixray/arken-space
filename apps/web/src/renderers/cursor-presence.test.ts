@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyCursorMoved, type CursorPresence } from "./cursor-presence";
 
-const cursor = (
-  membershipId: string,
-  x: number,
-  y = 0,
-): CursorPresence => ({
+const cursor = (membershipId: string, x: number, y = 0): CursorPresence => ({
   membershipId,
   displayName: membershipId,
   role: "PLAYER",
@@ -21,7 +17,11 @@ describe("applyCursorMoved", () => {
   });
 
   it("replaces a member's previous position rather than trailing it", () => {
-    const after = applyCursorMoved([cursor("other", 10)], cursor("other", 90), "me");
+    const after = applyCursorMoved(
+      [cursor("other", 10)],
+      cursor("other", 90),
+      "me",
+    );
     expect(after).toHaveLength(1);
     expect(after[0]?.x).toBe(90);
   });

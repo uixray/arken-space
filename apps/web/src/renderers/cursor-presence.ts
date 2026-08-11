@@ -26,7 +26,8 @@ export function applyCursorMoved(
   cursor: CursorPresence,
   ownMembershipId: string | undefined,
 ): CursorPresence[] {
-  if (cursor.membershipId === ownMembershipId) return current as CursorPresence[];
+  if (cursor.membershipId === ownMembershipId)
+    return current as CursorPresence[];
   return [
     ...current.filter((item) => item.membershipId !== cursor.membershipId),
     cursor,
