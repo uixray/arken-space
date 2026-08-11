@@ -326,7 +326,12 @@ export function mapInteractionReducer(
   }
 }
 
-const TOOL_SHORTCUTS: Readonly<Record<string, MapTool>> = {
+/**
+ * Exported so the landing-page guide can be checked for completeness, not
+ * only for correctness: a tool that gains a shortcut and is never documented
+ * is as much a defect as one documented wrongly.
+ */
+export const TOOL_SHORTCUTS: Readonly<Record<string, MapTool>> = {
   v: "PAN",
   d: "DRAW",
   r: "RULER",

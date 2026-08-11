@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveMapToolShortcut } from "./renderers/map-interaction";
+import {
+  resolveMapToolShortcut,
+  TOOL_SHORTCUTS,
+} from "./renderers/map-interaction";
 import { getSlashCommandSuggestions } from "./chat-composer";
 import { decideComposerKeydown } from "./composer-keyboard-intent";
 import {
@@ -54,6 +57,32 @@ describe("the landing guide describes shortcuts that exist", () => {
           }, the code says otherwise`,
         ).toBe(isGmOnly);
       }
+  });
+
+  /**
+   * The checks above prove nothing the guide says is false. This one proves
+   * nothing true is missing — the other half, and the half that let Ctrl+Z
+   * and Ctrl+Shift+Z ship undocumented: they exist, they work, and the guide
+   * simply never mentioned them.
+   *
+   * Only the tool table is covered. Keys handled inline in the canvas key
+   * handler (arrows, zoom, Enter, Delete) have no list to compare against;
+   * closing that gap properly means giving them one.
+   */
+  it("documents every tool shortcut the canvas defines", () => {
+    const documented = new Set(
+      canvasSections
+        .flatMap((section) => section.shortcuts)
+        .map((shortcut) => shortcut.keys.at(-1)!.toLowerCase()),
+    );
+
+    const missing = Object.keys(TOOL_SHORTCUTS).filter(
+      (key) => !documented.has(key.toLowerCase()),
+    );
+    expect(
+      missing,
+      "these tools have a shortcut the guide never mentions",
+    ).toEqual([]);
   });
 
   it("does not offer a player a fog tool", () => {
