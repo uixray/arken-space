@@ -461,7 +461,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         cancel: (handle) => cancelAnimationFrame(handle),
       },
       (point) => {
-        socket?.emit("cursor:move", { sceneId, x: point.x, y: point.y, shared });
+        socket?.emit("cursor:move", {
+          sceneId,
+          x: point.x,
+          y: point.y,
+          shared,
+        });
       },
     );
     return () => {
@@ -955,10 +960,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     else if (event.key.toLowerCase() === "o")
       dispatchInteraction({ type: "toggle-object-list" });
     else if (event.key === "Enter") {
-      if (isPolygonTool && polygonPoints.length >= 3) void handlePolygonComplete();
+      if (isPolygonTool && polygonPoints.length >= 3)
+        void handlePolygonComplete();
       else openSelectedAction();
-    }
-    else if (event.key === "Delete") requestSelectedDelete();
+    } else if (event.key === "Delete") requestSelectedDelete();
     else return;
     event.preventDefault();
     event.stopPropagation();
@@ -1597,18 +1602,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <Line
             points={[
               ...polygonPoints.flatMap((point) => [point.x, point.y]),
-              ...(polygonPreview
-                ? [polygonPreview.x, polygonPreview.y]
-                : []),
+              ...(polygonPreview ? [polygonPreview.x, polygonPreview.y] : []),
             ]}
             closed={polygonPoints.length >= 2 && Boolean(polygonPreview)}
             stroke={visual.color.editHighlight}
             strokeWidth={2 / scale}
-            fill={
-              polygonPoints.length >= 2
-                ? visual.color.fogDraft
-                : undefined
-            }
+            fill={polygonPoints.length >= 2 ? visual.color.fogDraft : undefined}
             opacity={visual.opacity.fogDraft}
           />
           {polygonPoints.map((point, index) => (
@@ -1642,6 +1641,322 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     stagePosition: position,
     scale,
   });
+  // UIX-426: the same list the single token layer used to render. Split out
+  // so it can be drawn in two passes with the fog layer between them.
+  const tokensOnStage = props.tokens
+    .filter((token) => token.layer !== "MAP")
+    .filter(
+      (token) => token.layer !== "GM" || (props.role === "GM" && showGmLayer),
+    )
+    .filter((token) => token.visible || props.role === "GM")
+    .filter(
+      (token) =>
+        props.role === "GM" ||
+        (token.x + token.width > 0 &&
+          token.y + token.height > 0 &&
+          token.x < worldDraft.width &&
+          token.y < worldDraft.height),
+    )
+    .filter((token) => !hiddenTokenIds.has(token.id))
+    .sort((a, b) => (a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0));
+
+  /** A player always sees their own token, even deep in unexplored fog. */
+  const ownsToken = (token: (typeof tokensOnStage)[number]) =>
+    token.controllerMembershipIds.includes(props.membershipId);
+
+  const renderTokenNode = (sourceToken: (typeof tokensOnStage)[number]) => {
+    const token = resizeDrafts[sourceToken.id]
+      ? { ...sourceToken, ...resizeDrafts[sourceToken.id] }
+      : sourceToken;
+    const canMove = canMoveMapToken({
+      tool: props.tool,
+      role: props.role,
+      locked: token.locked,
+      membershipId: props.membershipId,
+      controllerMembershipIds: token.controllerMembershipIds,
+    });
+    const url = assetUrl(token.assetId);
+    const dragPosition = dragPositions[token.id];
+    const tokenStack =
+      tokenStacks[
+        gridCellKey(dragPosition?.x ?? token.x, dragPosition?.y ?? token.y)
+      ];
+    const isStackRepresentative =
+      tokenStack?.representativeId === token.id && tokenStack.count > 1;
+    const imageMask = getTokenImageMask(token.width, token.height);
+    const common = {
+      x: 0,
+      y: 0,
+      width: token.width,
+      height: token.height,
+      rotation: token.rotation,
+      draggable: false,
+      opacity: token.layer === "GM" ? 0.45 : token.visible ? 1 : 0.45,
+      onDragMove: () => undefined,
+      onDragEnd: () => undefined,
+    };
+    const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!isDirectTokenDrag(event.target, event.currentTarget)) return;
+      setDragPositions((current) => ({
+        ...current,
+        [token.id]: {
+          x: event.target.x(),
+          y: event.target.y(),
+          revision: token.revision,
+        },
+      }));
+      props.socket?.emit("token:moving", {
+        actionId: crypto.randomUUID(),
+        tokenId: token.id,
+        x: event.target.x(),
+        y: event.target.y(),
+        z: token.z,
+        levelId: token.levelId,
+        revision: token.revision,
+      });
+    };
+    const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!isDirectTokenDrag(event.target, event.currentTarget)) return;
+      const x = snap(event.target.x());
+      const y = snap(event.target.y());
+      if (
+        selectedTokenIds.includes(token.id) &&
+        selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+        props.onBulkMove
+      ) {
+        event.target.position({ x, y });
+        enqueueMove({ x: x - token.x, y: y - token.y });
+        return;
+      }
+      event.target.position({ x, y });
+      setDragPositions((current) => ({
+        ...current,
+        [token.id]: { x, y, revision: token.revision },
+      }));
+      props.socket?.emit(
+        "token:moved",
+        {
+          actionId: crypto.randomUUID(),
+          tokenId: token.id,
+          x,
+          y,
+          z: token.z,
+          levelId: token.levelId,
+          revision: token.revision,
+        },
+        (ack) => {
+          if (!ack.ok) {
+            setDragPositions((current) => {
+              const next = { ...current };
+              delete next[token.id];
+              return next;
+            });
+            props.socket?.emit("game:resync", ack.sequence);
+          }
+        },
+      );
+    };
+    return (
+      <Group
+        key={token.id}
+        x={dragPosition?.x ?? token.x}
+        y={dragPosition?.y ?? token.y}
+        draggable={canMove}
+        onDragMove={onDragMove}
+        onDragEnd={onDragEnd}
+        onMouseEnter={() => setHoveredTokenId(token.id)}
+        onMouseLeave={() => setHoveredTokenId(null)}
+        onClick={(event) => {
+          if (
+            event.evt.button !== 0 ||
+            !canSelectToken(token, {
+              role: props.role,
+              membershipId: props.membershipId,
+              fogReveals: orderedFogReveals,
+              world: worldDraft,
+              showGmLayer,
+            })
+          )
+            return;
+          selectObject({
+            kind: "token",
+            objectId: token.id,
+            revision: token.revision,
+          });
+        }}
+        onContextMenu={(event) => {
+          event.evt.preventDefault();
+          event.cancelBubble = true;
+          // Right drag pans only from empty canvas; on a token it
+          // consistently opens the contextual actions.
+          if (props.role !== "GM") return;
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          setTokenMenu({
+            token,
+            x: event.evt.clientX - rect.left,
+            y: event.evt.clientY - rect.top,
+          });
+        }}
+      >
+        {selectedTokenIds.includes(token.id) && (
+          <Rect
+            x={-4 / scale}
+            y={-4 / scale}
+            width={token.width + 8 / scale}
+            height={token.height + 8 / scale}
+            stroke={visual.color.selection}
+            strokeWidth={2 / scale}
+            dash={[6 / scale, 3 / scale]}
+            listening={false}
+          />
+        )}
+        {isStackRepresentative && (
+          <Circle
+            x={token.width / 2}
+            y={token.height / 2}
+            radius={Math.max(token.width, token.height) / 2 + 5}
+            stroke={visual.color.attention}
+            strokeWidth={3 / scale}
+            dash={[5 / scale, 4 / scale]}
+            listening={false}
+          />
+        )}
+        {url ? (
+          <>
+            <Group
+              clipFunc={(context) => {
+                context.arc(
+                  imageMask.centerX,
+                  imageMask.centerY,
+                  imageMask.radius,
+                  0,
+                  Math.PI * 2,
+                  false,
+                );
+              }}
+            >
+              <TokenImage
+                src={url}
+                tokenId={token.id}
+                onAvailabilityChange={setTokenImageAvailability}
+                onUnmount={removeTokenImageAvailability}
+                {...common}
+              />
+            </Group>
+            <Circle
+              x={imageMask.centerX}
+              y={imageMask.centerY}
+              radius={imageMask.radius}
+              stroke={token.frameColor ?? visual.color.tokenFrameDefault}
+              strokeWidth={(token.frameColor ? 3 : 2) / scale}
+              listening={false}
+            />
+          </>
+        ) : (
+          <Group {...common}>
+            <Circle
+              x={token.width / 2}
+              y={token.height / 2}
+              radius={Math.min(token.width, token.height) / 2}
+              fill={token.baseColor}
+              stroke={token.frameColor ?? visual.color.tokenFrameDefault}
+              strokeWidth={2}
+            />
+            <Text
+              text={token.name.slice(0, 2).toUpperCase()}
+              width={token.width}
+              height={token.height}
+              align="center"
+              verticalAlign="middle"
+              fill={visual.color.tokenLabel}
+              fontSize={Math.max(12, token.width / 3)}
+            />
+          </Group>
+        )}
+        <Text
+          x={-16}
+          y={token.height + 5}
+          width={token.width + 32}
+          align="center"
+          text={`${token.name}${
+            isStackRepresentative ? ` +${tokenStack!.count - 1}` : ""
+          }`}
+          fill={visual.color.tokenName}
+          fontSize={13}
+          listening={false}
+          visible={
+            hoveredTokenId === token.id || canMove || isStackRepresentative
+          }
+        />
+        {props.role === "GM" &&
+          props.tool === "PAN" &&
+          selectedTokenIds.length === 1 &&
+          selectedTokenIds[0] === token.id && (
+            <Circle
+              x={token.width}
+              y={token.height}
+              radius={7 / scale}
+              fill={visual.color.selection}
+              stroke={visual.color.selectionOutline}
+              strokeWidth={1 / scale}
+              draggable
+              onMouseDown={(event) => {
+                event.cancelBubble = true;
+              }}
+              onDragMove={(event) => {
+                event.cancelBubble = true;
+                const aspect = token.width / token.height;
+                const width = Math.max(16, event.target.x());
+                const height = Math.max(16, width / aspect);
+                setResizeDrafts((current) => ({
+                  ...current,
+                  [token.id]: {
+                    width,
+                    height,
+                    revision: token.revision,
+                  },
+                }));
+              }}
+              onDragEnd={(event) => {
+                event.cancelBubble = true;
+                const width = Math.round(Math.max(16, event.target.x()));
+                const height = Math.round(width / (token.width / token.height));
+
+                const expected = {
+                  width,
+                  height,
+                  revision: token.revision,
+                };
+                const request = props.onTokenResize?.(
+                  token.id,
+                  token.revision,
+                  { width, height },
+                );
+                if (!request) {
+                  setResizeDrafts((current) =>
+                    clearSettledTokenResizeDraft(current, token.id, expected),
+                  );
+                  return;
+                }
+                void request
+                  .then(() =>
+                    setResizeDrafts((current) =>
+                      clearSettledTokenResizeDraft(current, token.id, expected),
+                    ),
+                  )
+                  .catch(() =>
+                    setResizeDrafts((current) =>
+                      clearSettledTokenResizeDraft(current, token.id, expected),
+                    ),
+                  );
+              }}
+            />
+          )}
+      </Group>
+    );
+  };
+
   return (
     <div
       className="map-viewport"
@@ -2288,349 +2603,25 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           </Layer>
         )}
 
-        {renderFog()}
+        {props.role === "GM" && renderFog()}
 
-        <Layer {...playerClip}>
-          {props.tokens
-            .filter((token) => token.layer !== "MAP")
-            .filter(
-              (token) =>
-                token.layer !== "GM" || (props.role === "GM" && showGmLayer),
-            )
-            .filter((token) => token.visible || props.role === "GM")
-            .filter(
-              (token) =>
-                props.role === "GM" ||
-                (token.x + token.width > 0 &&
-                  token.y + token.height > 0 &&
-                  token.x < worldDraft.width &&
-                  token.y < worldDraft.height),
-            )
-            .filter((token) => !hiddenTokenIds.has(token.id))
-            .sort((a, b) =>
-              a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
-            )
-            .map((sourceToken) => {
-              const token = resizeDrafts[sourceToken.id]
-                ? { ...sourceToken, ...resizeDrafts[sourceToken.id] }
-                : sourceToken;
-              const canMove = canMoveMapToken({
-                tool: props.tool,
-                role: props.role,
-                locked: token.locked,
-                membershipId: props.membershipId,
-                controllerMembershipIds: token.controllerMembershipIds,
-              });
-              const url = assetUrl(token.assetId);
-              const dragPosition = dragPositions[token.id];
-              const tokenStack =
-                tokenStacks[
-                  gridCellKey(
-                    dragPosition?.x ?? token.x,
-                    dragPosition?.y ?? token.y,
-                  )
-                ];
-              const isStackRepresentative =
-                tokenStack?.representativeId === token.id &&
-                tokenStack.count > 1;
-              const imageMask = getTokenImageMask(token.width, token.height);
-              const common = {
-                x: 0,
-                y: 0,
-                width: token.width,
-                height: token.height,
-                rotation: token.rotation,
-                draggable: false,
-                opacity: token.layer === "GM" ? 0.45 : token.visible ? 1 : 0.45,
-                onDragMove: () => undefined,
-                onDragEnd: () => undefined,
-              };
-              const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
-                if (!isDirectTokenDrag(event.target, event.currentTarget))
-                  return;
-                setDragPositions((current) => ({
-                  ...current,
-                  [token.id]: {
-                    x: event.target.x(),
-                    y: event.target.y(),
-                    revision: token.revision,
-                  },
-                }));
-                props.socket?.emit("token:moving", {
-                  actionId: crypto.randomUUID(),
-                  tokenId: token.id,
-                  x: event.target.x(),
-                  y: event.target.y(),
-                  z: token.z,
-                  levelId: token.levelId,
-                  revision: token.revision,
-                });
-              };
-              const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
-                if (!isDirectTokenDrag(event.target, event.currentTarget))
-                  return;
-                const x = snap(event.target.x());
-                const y = snap(event.target.y());
-                if (
-                  selectedTokenIds.includes(token.id) &&
-                  selectedTokenIds.length + selectedDrawingIds.length > 1 &&
-                  props.onBulkMove
-                ) {
-                  event.target.position({ x, y });
-                  enqueueMove({ x: x - token.x, y: y - token.y });
-                  return;
-                }
-                event.target.position({ x, y });
-                setDragPositions((current) => ({
-                  ...current,
-                  [token.id]: { x, y, revision: token.revision },
-                }));
-                props.socket?.emit(
-                  "token:moved",
-                  {
-                    actionId: crypto.randomUUID(),
-                    tokenId: token.id,
-                    x,
-                    y,
-                    z: token.z,
-                    levelId: token.levelId,
-                    revision: token.revision,
-                  },
-                  (ack) => {
-                    if (!ack.ok) {
-                      setDragPositions((current) => {
-                        const next = { ...current };
-                        delete next[token.id];
-                        return next;
-                      });
-                      props.socket?.emit("game:resync", ack.sequence);
-                    }
-                  },
-                );
-              };
-              return (
-                <Group
-                  key={token.id}
-                  x={dragPosition?.x ?? token.x}
-                  y={dragPosition?.y ?? token.y}
-                  draggable={canMove}
-                  onDragMove={onDragMove}
-                  onDragEnd={onDragEnd}
-                  onMouseEnter={() => setHoveredTokenId(token.id)}
-                  onMouseLeave={() => setHoveredTokenId(null)}
-                  onClick={(event) => {
-                    if (
-                      event.evt.button !== 0 ||
-                      !canSelectToken(token, {
-                        role: props.role,
-                        membershipId: props.membershipId,
-                        fogReveals: orderedFogReveals,
-                        world: worldDraft,
-                        showGmLayer,
-                      })
-                    )
-                      return;
-                    selectObject({
-                      kind: "token",
-                      objectId: token.id,
-                      revision: token.revision,
-                    });
-                  }}
-                  onContextMenu={(event) => {
-                    event.evt.preventDefault();
-                    event.cancelBubble = true;
-                    // Right drag pans only from empty canvas; on a token it
-                    // consistently opens the contextual actions.
-                    if (props.role !== "GM") return;
-                    const rect = containerRef.current?.getBoundingClientRect();
-                    if (!rect) return;
-                    setTokenMenu({
-                      token,
-                      x: event.evt.clientX - rect.left,
-                      y: event.evt.clientY - rect.top,
-                    });
-                  }}
-                >
-                  {selectedTokenIds.includes(token.id) && (
-                    <Rect
-                      x={-4 / scale}
-                      y={-4 / scale}
-                      width={token.width + 8 / scale}
-                      height={token.height + 8 / scale}
-                      stroke={visual.color.selection}
-                      strokeWidth={2 / scale}
-                      dash={[6 / scale, 3 / scale]}
-                      listening={false}
-                    />
-                  )}
-                  {isStackRepresentative && (
-                    <Circle
-                      x={token.width / 2}
-                      y={token.height / 2}
-                      radius={Math.max(token.width, token.height) / 2 + 5}
-                      stroke={visual.color.attention}
-                      strokeWidth={3 / scale}
-                      dash={[5 / scale, 4 / scale]}
-                      listening={false}
-                    />
-                  )}
-                  {url ? (
-                    <>
-                      <Group
-                        clipFunc={(context) => {
-                          context.arc(
-                            imageMask.centerX,
-                            imageMask.centerY,
-                            imageMask.radius,
-                            0,
-                            Math.PI * 2,
-                            false,
-                          );
-                        }}
-                      >
-                        <TokenImage
-                          src={url}
-                          tokenId={token.id}
-                          onAvailabilityChange={setTokenImageAvailability}
-                          onUnmount={removeTokenImageAvailability}
-                          {...common}
-                        />
-                      </Group>
-                      <Circle
-                        x={imageMask.centerX}
-                        y={imageMask.centerY}
-                        radius={imageMask.radius}
-                        stroke={
-                          token.frameColor ?? visual.color.tokenFrameDefault
-                        }
-                        strokeWidth={(token.frameColor ? 3 : 2) / scale}
-                        listening={false}
-                      />
-                    </>
-                  ) : (
-                    <Group {...common}>
-                      <Circle
-                        x={token.width / 2}
-                        y={token.height / 2}
-                        radius={Math.min(token.width, token.height) / 2}
-                        fill={token.baseColor}
-                        stroke={
-                          token.frameColor ?? visual.color.tokenFrameDefault
-                        }
-                        strokeWidth={2}
-                      />
-                      <Text
-                        text={token.name.slice(0, 2).toUpperCase()}
-                        width={token.width}
-                        height={token.height}
-                        align="center"
-                        verticalAlign="middle"
-                        fill={visual.color.tokenLabel}
-                        fontSize={Math.max(12, token.width / 3)}
-                      />
-                    </Group>
-                  )}
-                  <Text
-                    x={-16}
-                    y={token.height + 5}
-                    width={token.width + 32}
-                    align="center"
-                    text={`${token.name}${
-                      isStackRepresentative ? ` +${tokenStack!.count - 1}` : ""
-                    }`}
-                    fill={visual.color.tokenName}
-                    fontSize={13}
-                    listening={false}
-                    visible={
-                      hoveredTokenId === token.id ||
-                      canMove ||
-                      isStackRepresentative
-                    }
-                  />
-                  {props.role === "GM" &&
-                    props.tool === "PAN" &&
-                    selectedTokenIds.length === 1 &&
-                    selectedTokenIds[0] === token.id && (
-                      <Circle
-                        x={token.width}
-                        y={token.height}
-                        radius={7 / scale}
-                        fill={visual.color.selection}
-                        stroke={visual.color.selectionOutline}
-                        strokeWidth={1 / scale}
-                        draggable
-                        onMouseDown={(event) => {
-                          event.cancelBubble = true;
-                        }}
-                        onDragMove={(event) => {
-                          event.cancelBubble = true;
-                          const aspect = token.width / token.height;
-                          const width = Math.max(16, event.target.x());
-                          const height = Math.max(16, width / aspect);
-                          setResizeDrafts((current) => ({
-                            ...current,
-                            [token.id]: {
-                              width,
-                              height,
-                              revision: token.revision,
-                            },
-                          }));
-                        }}
-                        onDragEnd={(event) => {
-                          event.cancelBubble = true;
-                          const width = Math.round(
-                            Math.max(16, event.target.x()),
-                          );
-                          const height = Math.round(
-                            width / (token.width / token.height),
-                          );
-
-                          const expected = {
-                            width,
-                            height,
-                            revision: token.revision,
-                          };
-                          const request = props.onTokenResize?.(
-                            token.id,
-                            token.revision,
-                            { width, height },
-                          );
-                          if (!request) {
-                            setResizeDrafts((current) =>
-                              clearSettledTokenResizeDraft(
-                                current,
-                                token.id,
-                                expected,
-                              ),
-                            );
-                            return;
-                          }
-                          void request
-                            .then(() =>
-                              setResizeDrafts((current) =>
-                                clearSettledTokenResizeDraft(
-                                  current,
-                                  token.id,
-                                  expected,
-                                ),
-                              ),
-                            )
-                            .catch(() =>
-                              setResizeDrafts((current) =>
-                                clearSettledTokenResizeDraft(
-                                  current,
-                                  token.id,
-                                  expected,
-                                ),
-                              ),
-                            );
-                        }}
-                      />
-                    )}
-                </Group>
-              );
-            })}
-        </Layer>
+        {props.role === "GM" ? (
+          <Layer {...playerClip}>{tokensOnStage.map(renderTokenNode)}</Layer>
+        ) : (
+          <>
+            {/* UIX-426: fog must occlude what it covers, so everyone else's
+                tokens are drawn under it and only the emerged part shows. */}
+            <Layer {...playerClip}>
+              {tokensOnStage
+                .filter((token) => !ownsToken(token))
+                .map(renderTokenNode)}
+            </Layer>
+            {renderFog()}
+            <Layer {...playerClip}>
+              {tokensOnStage.filter(ownsToken).map(renderTokenNode)}
+            </Layer>
+          </>
+        )}
 
         <Layer listening={false}>
           {displayRulers.map((ruler) => {
