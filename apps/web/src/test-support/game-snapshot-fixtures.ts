@@ -1,4 +1,9 @@
-import type { AudioStateDto, GameSnapshot, MembershipDto } from "@arken/contracts";
+import type {
+  AudioStateDto,
+  GameSnapshot,
+  MembershipDto,
+} from "@arken/contracts";
+import { starterStatLayout } from "@arken/system";
 
 /**
  * Builds a minimal-but-typed `GameSnapshot` for component tests.
@@ -51,6 +56,9 @@ export function buildGameSnapshot(
       day: 1,
       battleActive: false,
       battleCounter: 0,
+      // Реалистичное значение, а не пустой массив: фикстура, у которой нет ни
+      // одной строки раскладки, не поймает ошибку в коде, который её читает.
+      statLayout: starterStatLayout,
       revision: 1,
     },
     me,

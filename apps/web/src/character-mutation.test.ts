@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { starterStatLayout } from "@arken/system";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import {
   applyCharacterMutationToSnapshot,
@@ -119,6 +120,9 @@ function snapshotWithCharacter(nextCharacter: CharacterDto): GameSnapshot {
       day: 1,
       battleActive: false,
       battleCounter: 0,
+      // Реалистичное значение, а не пустой массив: фикстура, у которой нет ни
+      // одной строки раскладки, не поймает ошибку в коде, который её читает.
+      statLayout: starterStatLayout,
       revision: 1,
     },
     me: {

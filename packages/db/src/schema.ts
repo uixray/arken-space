@@ -177,11 +177,10 @@ export const characterMediaCategoryEnum = pgEnum("character_media_category", [
  * GM_ONLY is a stricter tier than the default: hidden from the character's
  * own owner too, for GM-authored notes/media (AC8).
  */
-export const characterMediaVisibilityEnum = pgEnum("character_media_visibility", [
-  "OWNER_GM",
-  "PARTY",
-  "GM_ONLY",
-]);
+export const characterMediaVisibilityEnum = pgEnum(
+  "character_media_visibility",
+  ["OWNER_GM", "PARTY", "GM_ONLY"],
+);
 export const encounterStatusEnum = pgEnum("encounter_status", [
   "ACTIVE",
   "ENDED",
@@ -244,6 +243,28 @@ export const campaigns = pgTable("campaigns", {
   systemVersion: integer("system_version").notNull().default(1),
   activeSceneId: uuid("active_scene_id"),
   day: integer("day").notNull().default(1),
+  /**
+   * UIX-424: раскладка характеристик кампании — какие строки, в каких группах,
+   * под какими подписями. Значения персонажей лежат отдельно, в
+   * `characters.stats`; здесь только описание показа, общее для всех.
+   *
+   * Пусто у существующих кампаний: стартовое наполнение подставляется при
+   * чтении, чтобы не мигрировать данные ради значения по умолчанию.
+   */
+  statLayout: jsonb("stat_layout")
+    .$type<
+      Array<{
+        id: string;
+        label: string;
+        rows: Array<{
+          key: string;
+          label: string;
+          source?: "STAT" | "RESOURCE";
+        }>;
+      }>
+    >()
+    .notNull()
+    .default([]),
   battleActive: boolean("battle_active").notNull().default(false),
   battleCounter: integer("battle_counter").notNull().default(0),
   revision: integer("revision").notNull().default(0),
@@ -2069,10 +2090,7 @@ export const encounters = pgTable(
   },
   (table) => [
     index("encounters_campaign_idx").on(table.campaignId),
-    uniqueIndex("encounters_campaign_id_id_idx").on(
-      table.campaignId,
-      table.id,
-    ),
+    uniqueIndex("encounters_campaign_id_id_idx").on(table.campaignId, table.id),
     /** At most one ACTIVE encounter per campaign. */
     uniqueIndex("encounters_campaign_active_idx")
       .on(table.campaignId)
@@ -2182,10 +2200,7 @@ export const worldContent = pgTable(
   },
   (table) => [
     uniqueIndex("world_content_slug_idx").on(table.slug),
-    index("world_content_type_lifecycle_idx").on(
-      table.type,
-      table.lifecycle,
-    ),
+    index("world_content_type_lifecycle_idx").on(table.type, table.lifecycle),
     index("world_content_lifecycle_updated_idx").on(
       table.lifecycle,
       table.updatedAt,
@@ -2388,9 +2403,7 @@ export const worldContentInstances = pgTable(
   },
   (table) => [
     index("world_content_instances_campaign_idx").on(table.campaignId),
-    index("world_content_instances_world_content_idx").on(
-      table.worldContentId,
-    ),
+    index("world_content_instances_world_content_idx").on(table.worldContentId),
     index("world_content_instances_campaign_world_content_idx").on(
       table.campaignId,
       table.worldContentId,

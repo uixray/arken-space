@@ -163,7 +163,11 @@ describe("backup and restore safety", () => {
     expect(
       verifyRetiredTableMigration(preDropManifest, restoredCounts),
     ).toEqual([
-      { retiredTable: "audio_states", supersededBy: "campaign_audio_tracks", rows: 1 },
+      {
+        retiredTable: "audio_states",
+        supersededBy: "campaign_audio_tracks",
+        rows: 1,
+      },
     ]);
     expect(() =>
       compareDatabaseCounts(
@@ -176,11 +180,13 @@ describe("backup and restore safety", () => {
   it("catches data loss across a retired-table migration", () => {
     const preDropManifest = parseDatabaseCounts("audio_states|3\n");
     expect(() =>
-      verifyRetiredTableMigration(preDropManifest, { campaign_audio_tracks: 2 }),
+      verifyRetiredTableMigration(preDropManifest, {
+        campaign_audio_tracks: 2,
+      }),
     ).toThrow(/data may have been lost/);
-    expect(() =>
-      verifyRetiredTableMigration(preDropManifest, {}),
-    ).toThrow(/was not counted/);
+    expect(() => verifyRetiredTableMigration(preDropManifest, {})).toThrow(
+      /was not counted/,
+    );
   });
 
   it("does not add superseding-table scaffolding once a manifest is generated post-migration", () => {
@@ -229,12 +235,16 @@ describe("backup and restore safety", () => {
         { ...actual.at(-1)!, id: actual.length + 1 },
       ]),
     ).toThrow(/exceeds checkout/);
-    expect(() =>
-      compareMigrationLedger(expected, [
-        ...actual.slice(0, -1),
-        { ...actual.at(-1)!, hash: "0".repeat(64) },
-      ]),
-    ).toThrow(/identity differs at 0035_equal_shard/);
+    expect(
+      () =>
+        compareMigrationLedger(expected, [
+          ...actual.slice(0, -1),
+          { ...actual.at(-1)!, hash: "0".repeat(64) },
+        ]),
+      // Тег выводится, а не вписан: файл сам предупреждает выше, что жёсткие
+      // числа «однажды поправят не думая», и захардкоженный тег последней
+      // миграции ломался бы при каждой новой.
+    ).toThrow(new RegExp(`identity differs at ${expected.at(-1)!.tag}`));
   });
 
   it("writes migration and coverage evidence without invoking restore in tests", () => {

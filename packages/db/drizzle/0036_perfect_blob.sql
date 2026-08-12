@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "stat_layout" jsonb DEFAULT '[]'::jsonb NOT NULL;

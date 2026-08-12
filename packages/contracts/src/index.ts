@@ -2176,6 +2176,8 @@ export interface GameSnapshot {
     day: number;
     battleActive: boolean;
     battleCounter: number;
+    /** UIX-424: раскладка характеристик кампании (см. `statLayoutSchema`). */
+    statLayout: StatLayout;
     revision: number;
   };
   me: MembershipDto;

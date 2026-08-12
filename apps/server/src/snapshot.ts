@@ -10,6 +10,8 @@ import {
   ne,
   or,
 } from "drizzle-orm";
+import { starterStatLayout } from "@arken/system";
+import { statLayoutSchema, type StatLayout } from "@arken/contracts";
 import {
   assets,
   campaigns,
@@ -52,6 +54,22 @@ import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
+
+/**
+ * UIX-424: раскладка приходит из `jsonb`, то есть может быть чем угодно —
+ * написанным старой версией, поправленным руками в базе, недописанным. Поэтому
+ * она разбирается схемой, а не приводится к типу: неверная раскладка иначе
+ * молча уехала бы всем клиентам и сломала карточку у каждого.
+ *
+ * Пустая колонка — это кампания, созданная до появления раскладки. Стартовая
+ * подставляется при чтении, а не миграцией данных: такая кампания ничем не
+ * отличается от новой, и записывать ей копию значения по умолчанию незачем.
+ */
+function resolveStatLayout(stored: unknown): StatLayout {
+  const parsed = statLayoutSchema.safeParse(stored);
+  if (parsed.success && parsed.data.length > 0) return parsed.data;
+  return statLayoutSchema.parse(starterStatLayout);
+}
 
 export async function buildSnapshot(
   db: Database,
@@ -426,6 +444,7 @@ export async function buildSnapshot(
       day: campaign.day,
       battleActive: campaign.battleActive,
       battleCounter: campaign.battleCounter,
+      statLayout: resolveStatLayout(campaign.statLayout),
       revision: campaign.revision,
     },
     me: {
