@@ -542,6 +542,80 @@ export const fixedCharacteristicsSchema = z.object({
   magicPower: z.number().finite(),
 });
 
+/**
+ * UIX-424 — раскладка характеристик кампании.
+ *
+ * Значения персонажа лежат плоской записью `ключ → число` в `characters.stats`,
+ * и именно её читает движок формул. Раскладка описывает **только то, как эта
+ * запись показывается**: какие строки, в каких группах, под какими подписями.
+ * Поэтому она общая на кампанию, а не своя у каждого персонажа.
+ */
+export const STAT_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Откуда строка берёт значение.
+ *
+ * `STAT` — обычное число из `characters.stats`.
+ *
+ * `RESOURCE` — пул из `characters.resources` (выносливость, мана): у него есть
+ * текущее и максимум, и правится он иначе. Без этого признака строка «Мана»
+ * либо завела бы второе число рядом с настоящим ресурсом, либо ресурс перестал
+ * бы редактироваться из карточки.
+ */
+export const statRowSourceSchema = z.enum(["STAT", "RESOURCE"]);
+
+export const statRowSchema = z.object({
+  /**
+   * Латиница без пробелов — это требование движка формул, а не стиль: имя
+   * характеристики попадает в формулу вида `1d20 + agility`. Ключ неизменяем
+   * после создания, иначе формулы, ссылающиеся на него, поедут молча.
+   */
+  key: z.string().regex(STAT_KEY_PATTERN).max(40),
+  label: z.string().trim().min(1).max(60),
+  source: statRowSourceSchema.default("STAT"),
+});
+
+export const statGroupSchema = z.object({
+  id: z.enum(["characteristics", "combat", "skills", "talents"]),
+  label: z.string().trim().min(1).max(60),
+  rows: z.array(statRowSchema).max(60),
+});
+
+export const statLayoutSchema = z
+  .array(statGroupSchema)
+  .max(8)
+  .superRefine((groups, context) => {
+    // Ключи уникальны **через все группы**, а не внутри одной: значения живут в
+    // одной плоской записи, и два одинаковых ключа в разных группах — это две
+    // строки, редактирующие одно число. Разойдутся они молча.
+    const seen = new Set<string>();
+    for (const [groupIndex, group] of groups.entries())
+      for (const [rowIndex, row] of group.rows.entries()) {
+        if (seen.has(row.key))
+          context.addIssue({
+            code: "custom",
+            message: `ключ «${row.key}» встречается больше одного раза`,
+            path: [groupIndex, "rows", rowIndex, "key"],
+          });
+        seen.add(row.key);
+      }
+
+    const ids = new Set<string>();
+    for (const [index, group] of groups.entries()) {
+      if (ids.has(group.id))
+        context.addIssue({
+          code: "custom",
+          message: `группа «${group.id}» объявлена дважды`,
+          path: [index, "id"],
+        });
+      ids.add(group.id);
+    }
+  });
+
+export type StatRow = z.infer<typeof statRowSchema>;
+export type StatGroup = z.infer<typeof statGroupSchema>;
+export type StatLayout = z.infer<typeof statLayoutSchema>;
+
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });
 export const inviteClaimSchema = z.object({
   token: z.string().min(32).max(512),
