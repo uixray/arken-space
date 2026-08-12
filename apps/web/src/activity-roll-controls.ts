@@ -54,9 +54,7 @@ export function readRollLogCollapsed(
   membershipId: string,
 ): boolean {
   try {
-    return (
-      storage.getItem(rollLogCollapsedStorageKey(membershipId)) === "true"
-    );
+    return storage.getItem(rollLogCollapsedStorageKey(membershipId)) === "true";
   } catch {
     return false;
   }

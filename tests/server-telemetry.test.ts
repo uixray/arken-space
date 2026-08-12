@@ -111,7 +111,12 @@ describe("server telemetry safety", () => {
       errorName: "ApiError",
       occurrenceCount: 7,
       stack: [
-        { function: "handleClick", file: "/assets/index-BK6doIJ2.js", line: 1, column: 12345 },
+        {
+          function: "handleClick",
+          file: "/assets/index-BK6doIJ2.js",
+          line: 1,
+          column: 12345,
+        },
       ],
       context: { sceneId: "scene-1", tool: "PAN", role: "GM" },
     });

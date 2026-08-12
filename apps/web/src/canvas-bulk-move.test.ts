@@ -26,17 +26,25 @@ describe("applyBulkMoveResult", () => {
     // The server may skip numbers (another write landed in between). Guessing
     // revision+1 would send a stale value on the next mutation, which is the
     // whole failure this fixes.
-    const [moved] = applyBulkMoveResult([token("a", 0, 0, 3)], { a: 9 }, {
-      x: 0,
-      y: 0,
-    });
+    const [moved] = applyBulkMoveResult(
+      [token("a", 0, 0, 3)],
+      { a: 9 },
+      {
+        x: 0,
+        y: 0,
+      },
+    );
     expect(moved?.revision).toBe(9);
   });
 
   it("lets a second immediate move send a fresh revision", () => {
     // The regression in one test: drag, then drag again before any broadcast.
-    let tokens: readonly { id: string; x: number; y: number; revision: number }[] =
-      [token("a", 0, 0, 1)];
+    let tokens: readonly {
+      id: string;
+      x: number;
+      y: number;
+      revision: number;
+    }[] = [token("a", 0, 0, 1)];
     tokens = applyBulkMoveResult(tokens, { a: 2 }, { x: 10, y: 0 });
     const revisionSentBySecondDrag = tokens[0]!.revision;
     expect(revisionSentBySecondDrag).toBe(2);
@@ -55,10 +63,14 @@ describe("applyBulkMoveResult", () => {
   });
 
   it("handles a zero delta without disturbing coordinates", () => {
-    const [moved] = applyBulkMoveResult([token("a", 4, 6, 1)], { a: 2 }, {
-      x: 0,
-      y: 0,
-    });
+    const [moved] = applyBulkMoveResult(
+      [token("a", 4, 6, 1)],
+      { a: 2 },
+      {
+        x: 0,
+        y: 0,
+      },
+    );
     expect(moved).toEqual({ id: "a", x: 4, y: 6, revision: 2 });
   });
 });

@@ -330,9 +330,7 @@ export function SkillChatCard({
           <span>
             <b>{card.action?.label}</b>
             <code>
-              {card.action?.formula
-                ? humanizeFormula(card.action.formula)
-                : ""}
+              {card.action?.formula ? humanizeFormula(card.action.formula) : ""}
             </code>
             {critical && (
               <span className="roll-critical-label">{critical.label}</span>

@@ -4,6 +4,8 @@ import {
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "./chat-composer";
+import { statLabelsFromLayout } from "./stat-keys";
+import { starterStatLayout } from "@arken/system";
 
 function fakeClipboardData(
   items: Array<{ kind: string; type: string; file?: File }>,
@@ -16,6 +18,13 @@ function fakeClipboardData(
     })) as unknown as DataTransferItemList,
   };
 }
+
+/**
+ * UIX-424: подписи характеристик приходят из раскладки кампании, а не лежат в
+ * композере копией. Тесты берут их из настоящей стартовой раскладки — тогда
+ * они проверяют то, что увидит игрок, а не выдуманный набор.
+ */
+const labels = statLabelsFromLayout(starterStatLayout);
 
 describe("parseComposerInput", () => {
   it("keeps ordinary text separate from explicit roll syntax", () => {
@@ -43,12 +52,12 @@ describe("parseComposerInput", () => {
 
   it("turns an available characteristic slash command into a d20 check", () => {
     const stats = { agility: 3, strength: 1 };
-    expect(parseComposerInput("/agility", stats)).toEqual({
+    expect(parseComposerInput("/agility", stats, labels)).toEqual({
       kind: "ROLL",
       formula: "1d20 + agility",
       label: "Проверка: Ловкость",
     });
-    expect(parseComposerInput("/knowledge", stats)).toEqual({
+    expect(parseComposerInput("/knowledge", stats, labels)).toEqual({
       kind: "TEXT",
       body: "/knowledge",
     });
@@ -88,7 +97,7 @@ describe("getSlashCommandSuggestions", () => {
       expect.objectContaining({ command: "/d20" }),
     ]);
     expect(getSlashCommandSuggestions("/ro")).toHaveLength(1);
-    expect(getSlashCommandSuggestions("/ag", { agility: 4 })).toEqual([
+    expect(getSlashCommandSuggestions("/ag", { agility: 4 }, labels)).toEqual([
       expect.objectContaining({
         command: "/agility",
         description: "Ловкость: бросок 1d20 + 4",
@@ -97,15 +106,29 @@ describe("getSlashCommandSuggestions", () => {
     ]);
   });
 
-  it("offers the standard magic power characteristic without duplicates", () => {
-    const suggestions = getSlashCommandSuggestions("/", { magicPower: 5 });
+  /**
+   * UIX-424: раньше здесь проверялось, что «Сила магии» предлагается ровно
+   * один раз. Мастер убрал её из характеристик: `magicPower` теперь ключ
+   * ресурса «Мана», а модификатором бросков магии стал навык «Магия».
+   *
+   * Значит правило поменялось на противоположное — ресурс предлагать нельзя.
+   * Он пул с текущим и максимумом, и бросок «1d20 + мана» взял бы не то число.
+   */
+  it("не предлагает ресурс как характеристику", () => {
+    const suggestions = getSlashCommandSuggestions(
+      "/",
+      { magicPower: 5 },
+      labels,
+    );
     expect(
       suggestions.filter((item) => item.command === "/magicPower"),
-    ).toHaveLength(1);
-    expect(parseComposerInput("/magicPower", { magicPower: 5 })).toEqual({
-      kind: "ROLL",
-      formula: "1d20 + magicPower",
-      label: "Проверка: Сила магии",
+    ).toHaveLength(0);
+    // И разбор такой команды не превращается в бросок.
+    expect(
+      parseComposerInput("/magicPower", { magicPower: 5 }, labels),
+    ).toEqual({
+      kind: "TEXT",
+      body: "/magicPower",
     });
   });
 

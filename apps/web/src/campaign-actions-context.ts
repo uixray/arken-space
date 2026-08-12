@@ -43,8 +43,9 @@ export interface CampaignActions {
 
 /** Applied directly in `App.tsx`; there is no wrapper component, so this
  * file exports no component and stays a plain module. */
-export const CampaignActionsContext =
-  createContext<CampaignActions | null>(null);
+export const CampaignActionsContext = createContext<CampaignActions | null>(
+  null,
+);
 
 export function useCampaignActions(): CampaignActions {
   const actions = useContext(CampaignActionsContext);
@@ -52,6 +53,8 @@ export function useCampaignActions(): CampaignActions {
   // and every call site would otherwise need a null check for a case that
   // cannot legitimately happen at runtime.
   if (!actions)
-    throw new Error("useCampaignActions requires the campaign actions provider");
+    throw new Error(
+      "useCampaignActions requires the campaign actions provider",
+    );
   return actions;
 }

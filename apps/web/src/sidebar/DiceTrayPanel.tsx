@@ -61,7 +61,9 @@ export function DiceTrayPanel({
     heightRef.current = height;
   }, [height]);
   useEffect(() => {
-    setHeight(readDiceTrayHeight(window.localStorage, campaignId, membershipId));
+    setHeight(
+      readDiceTrayHeight(window.localStorage, campaignId, membershipId),
+    );
   }, [campaignId, membershipId]);
   const resizeDragRef = useRef<{
     pointerId: number;
@@ -71,9 +73,8 @@ export function DiceTrayPanel({
   const onResizeHandleDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (event.button !== 0) return;
-      const block = event.currentTarget.closest<HTMLElement>(
-        ".dice-tray-panel",
-      );
+      const block =
+        event.currentTarget.closest<HTMLElement>(".dice-tray-panel");
       const rect = block?.getBoundingClientRect();
       if (!rect) return;
       resizeDragRef.current = {

@@ -4,19 +4,31 @@ import { isNearListBottom } from "./useFollowScroll";
 describe("isNearListBottom", () => {
   it("treats an exact bottom scroll position as at bottom", () => {
     expect(
-      isNearListBottom({ scrollHeight: 1000, scrollTop: 700, clientHeight: 300 }),
+      isNearListBottom({
+        scrollHeight: 1000,
+        scrollTop: 700,
+        clientHeight: 300,
+      }),
     ).toBe(true);
   });
 
   it("treats a position within the threshold as at bottom", () => {
     expect(
-      isNearListBottom({ scrollHeight: 1000, scrollTop: 660, clientHeight: 300 }),
+      isNearListBottom({
+        scrollHeight: 1000,
+        scrollTop: 660,
+        clientHeight: 300,
+      }),
     ).toBe(true);
   });
 
   it("treats a position beyond the threshold as not at bottom", () => {
     expect(
-      isNearListBottom({ scrollHeight: 1000, scrollTop: 600, clientHeight: 300 }),
+      isNearListBottom({
+        scrollHeight: 1000,
+        scrollTop: 600,
+        clientHeight: 300,
+      }),
     ).toBe(false);
   });
 

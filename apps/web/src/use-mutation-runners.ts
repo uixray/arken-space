@@ -64,7 +64,7 @@ export function useMutationRunners(dependencies: {
   );
 
   const runResult = useCallback(
-    async <T,>(action: () => Promise<T>): Promise<T> => {
+    async <T>(action: () => Promise<T>): Promise<T> => {
       try {
         setError("");
         return await action();

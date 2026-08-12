@@ -23,7 +23,9 @@ export function readSidebarWidth(
   membershipId: string,
 ): number | null {
   try {
-    const raw = storage.getItem(sidebarWidthStorageKey(campaignId, membershipId));
+    const raw = storage.getItem(
+      sidebarWidthStorageKey(campaignId, membershipId),
+    );
     if (!raw) return null;
     const parsed = Number(raw);
     return Number.isFinite(parsed) ? clampSidebarWidth(parsed) : null;

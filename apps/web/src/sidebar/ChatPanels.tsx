@@ -20,6 +20,7 @@ import {
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "../chat-composer";
+import { statLabelsFromLayout } from "../stat-keys";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
@@ -234,11 +235,17 @@ export function ActivityPanel({
     snapshot.characters.find(
       (character) => character.id === snapshot.me.characterId,
     )?.stats ?? {};
+  // UIX-424: подписи характеристик берутся из раскладки кампании — здесь их
+  // копии больше нет.
+  const statLabels = useMemo(
+    () => statLabelsFromLayout(snapshot.campaign.statLayout),
+    [snapshot.campaign.statLayout],
+  );
   const slashSuggestions = slashHelpOpen
-    ? getSlashCommandSuggestions("/", characterStats)
-    : getSlashCommandSuggestions(composer, characterStats);
+    ? getSlashCommandSuggestions("/", characterStats, statLabels)
+    : getSlashCommandSuggestions(composer, characterStats, statLabels);
   const executeActivitySuggestion = (insertion: string) => {
-    const intent = parseComposerInput(insertion, characterStats);
+    const intent = parseComposerInput(insertion, characterStats, statLabels);
     setSlashHelpOpen(false);
     if (intent.kind !== "ROLL") {
       setComposer(insertion);
@@ -262,7 +269,7 @@ export function ActivityPanel({
   // below call this with an explicit visibility rather than reading it from
   // component state.
   const submitComposer = async (visibility: MessageVisibility) => {
-    const intent = parseComposerInput(composer, characterStats);
+    const intent = parseComposerInput(composer, characterStats, statLabels);
     if (intent.kind === "INVALID") {
       setComposerError(intent.message);
       return;
@@ -364,8 +371,9 @@ export function ActivityPanel({
   // reliable "did new content arrive" signal whether the log is collapsed
   // or expanded.
   const latestActivityEventId = activityEvents.at(-1)?.id;
-  const { listRef, newItemCount, scrollToBottom, onScroll } =
-    useFollowScroll(latestActivityEventId);
+  const { listRef, newItemCount, scrollToBottom, onScroll } = useFollowScroll(
+    latestActivityEventId,
+  );
   // Jumping to a specific message (e.g. from a notification) must be able to
   // reveal it even if the log is currently collapsed to its compact view.
   useEffect(() => {
@@ -502,7 +510,11 @@ export function ActivityPanel({
               onClick={() => {
                 const next = !rollLogCollapsed;
                 setRollLogCollapsed(next);
-                writeRollLogCollapsed(window.localStorage, snapshot.me.id, next);
+                writeRollLogCollapsed(
+                  window.localStorage,
+                  snapshot.me.id,
+                  next,
+                );
               }}
             >
               {rollLogCollapsed ? "Развернуть" : "Свернуть"}

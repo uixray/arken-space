@@ -72,9 +72,7 @@ describe("activity roll controls", () => {
   });
 
   it("defaults the roll-log to expanded and only accepts the explicit true value", () => {
-    expect(readRollLogCollapsed({ getItem: () => null }, "member")).toBe(
-      false,
-    );
+    expect(readRollLogCollapsed({ getItem: () => null }, "member")).toBe(false);
     expect(readRollLogCollapsed({ getItem: () => "false" }, "member")).toBe(
       false,
     );

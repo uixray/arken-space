@@ -862,12 +862,8 @@ export function App() {
    * the sidebar could hold. They now live in `use-mutation-runners.ts`, where
    * the identity guarantee is actually testable.
    */
-  const {
-    run,
-    runResult,
-    runWorldMapMutation,
-    recoverFromCanvasMutation,
-  } = useMutationRunners({ load, setError });
+  const { run, runResult, runWorldMapMutation, recoverFromCanvasMutation } =
+    useMutationRunners({ load, setError });
 
   // UIX-398 step A1: the scene domain, now a single stable object instead of
   // six inline arrows rebuilt on every render.
@@ -971,131 +967,137 @@ export function App() {
    */
   const snapshotRef = useLatestRef(snapshot);
 
-  const replaceCharacterControllers = useCallback(async (
-    characterId: string,
-    revision: number,
-    controllerMembershipIds: string[],
-  ) => {
-    try {
-      const response = await api<{
-        ok: true;
-        controllerMembershipIds: string[];
-        revision: number;
-      }>(`/api/characters/${characterId}/controllers`, {
-        method: "PUT",
-        body: JSON.stringify({
-          actionId: crypto.randomUUID(),
-          revision,
-          controllerMembershipIds,
-        }),
-      });
+  const replaceCharacterControllers = useCallback(
+    async (
+      characterId: string,
+      revision: number,
+      controllerMembershipIds: string[],
+    ) => {
+      try {
+        const response = await api<{
+          ok: true;
+          controllerMembershipIds: string[];
+          revision: number;
+        }>(`/api/characters/${characterId}/controllers`, {
+          method: "PUT",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+            controllerMembershipIds,
+          }),
+        });
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                characters: current.characters.map((character) =>
+                  character.id === characterId &&
+                  character.revision <= response.revision
+                    ? {
+                        ...character,
+                        controllerMembershipIds:
+                          response.controllerMembershipIds,
+                        revision: response.revision,
+                      }
+                    : character,
+                ),
+              }
+            : current,
+        );
+      } catch (reason) {
+        const canonical = await api<GameSnapshot>("/api/bootstrap");
+        setSnapshot((current) => reconcileGameSnapshot(current, canonical));
+        throw reason;
+      }
+    },
+    [],
+  );
+
+  const patchCharacter = useCallback(
+    (id: string, patch: Partial<import("@arken/contracts").CharacterDto>) => {
+      const requestedRevision =
+        patch.revision ??
+        snapshotRef.current?.characters.find((character) => character.id === id)
+          ?.revision;
       setSnapshot((current) =>
         current
           ? {
               ...current,
               characters: current.characters.map((character) =>
-                character.id === characterId &&
-                character.revision <= response.revision
+                character.id === id
                   ? {
                       ...character,
-                      controllerMembershipIds: response.controllerMembershipIds,
-                      revision: response.revision,
+                      ...patch,
+                      stats: patch.stats
+                        ? { ...character.stats, ...patch.stats }
+                        : character.stats,
                     }
                   : character,
               ),
             }
           : current,
       );
-    } catch (reason) {
-      const canonical = await api<GameSnapshot>("/api/bootstrap");
-      setSnapshot((current) => reconcileGameSnapshot(current, canonical));
-      throw reason;
-    }
-  }, []);
-
-  const patchCharacter = useCallback((
-    id: string,
-    patch: Partial<import("@arken/contracts").CharacterDto>,
-  ) => {
-    const requestedRevision =
-      patch.revision ??
-      snapshotRef.current?.characters.find((character) => character.id === id)
-        ?.revision;
-    setSnapshot((current) =>
-      current
-        ? {
-            ...current,
-            characters: current.characters.map((character) =>
-              character.id === id
-                ? {
-                    ...character,
-                    ...patch,
-                    stats: patch.stats
-                      ? { ...character.stats, ...patch.stats }
-                      : character.stats,
-                  }
-                : character,
-            ),
-          }
-        : current,
-    );
-    const previous =
-      characterMutationQueuesRef.current.get(id) ?? Promise.resolve(undefined);
-    const operation = previous.then(async (previousCharacter) => {
-      const { revision: _revision, ...updates } = patch;
-      const base =
-        previousCharacter ??
-        snapshotRef.current?.characters.find(
-          (character) => character.id === id,
+      const previous =
+        characterMutationQueuesRef.current.get(id) ??
+        Promise.resolve(undefined);
+      const operation = previous.then(async (previousCharacter) => {
+        const { revision: _revision, ...updates } = patch;
+        const base =
+          previousCharacter ??
+          snapshotRef.current?.characters.find(
+            (character) => character.id === id,
+          );
+        if (!base) throw new Error("CHARACTER_NOT_FOUND");
+        const response = await api<unknown>(`/api/characters/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...updates,
+            actionId: crypto.randomUUID(),
+            revision: base.revision ?? requestedRevision,
+          }),
+        });
+        let updated = mergeCharacterMutationResponse(base, response);
+        if (!updated) {
+          const refreshed = await api<GameSnapshot>("/api/bootstrap");
+          setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
+          updated =
+            refreshed.characters.find((character) => character.id === id) ??
+            null;
+        }
+        if (!updated) throw new Error("CHARACTER_NOT_FOUND");
+        setSnapshot((current) =>
+          applyCharacterMutationToSnapshot(current, updated),
         );
-      if (!base) throw new Error("CHARACTER_NOT_FOUND");
-      const response = await api<unknown>(`/api/characters/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          ...updates,
-          actionId: crypto.randomUUID(),
-          revision: base.revision ?? requestedRevision,
-        }),
+        return updated;
       });
-      let updated = mergeCharacterMutationResponse(base, response);
-      if (!updated) {
-        const refreshed = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
-        updated =
-          refreshed.characters.find((character) => character.id === id) ?? null;
-      }
-      if (!updated) throw new Error("CHARACTER_NOT_FOUND");
-      setSnapshot((current) =>
-        applyCharacterMutationToSnapshot(current, updated),
-      );
-      return updated;
-    });
-    // Keep the queue tail fulfilled after a failed mutation. Later local edits
-    // then rebase on the freshly loaded canonical revision instead of being
-    // skipped because an earlier promise rejected.
-    const queueTail = operation
-      .catch(async (reason) => {
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Не удалось сохранить персонажа",
-        );
-        const canonical = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot(canonical);
-        return canonical.characters.find((character) => character.id === id);
-      })
-      .finally(() => {
-        if (characterMutationQueuesRef.current.get(id) === queueTail)
-          characterMutationQueuesRef.current.delete(id);
-      });
-    characterMutationQueuesRef.current.set(id, queueTail);
-    return operation
-      .then(() => undefined)
-      .catch(async (reason) => {
-        await queueTail;
-        throw reason;
-      });
-  }, [snapshotRef]);
+      // Keep the queue tail fulfilled after a failed mutation. Later local edits
+      // then rebase on the freshly loaded canonical revision instead of being
+      // skipped because an earlier promise rejected.
+      const queueTail = operation
+        .catch(async (reason) => {
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Не удалось сохранить персонажа",
+          );
+          const canonical = await api<GameSnapshot>("/api/bootstrap");
+          setSnapshot(canonical);
+          return canonical.characters.find((character) => character.id === id);
+        })
+        .finally(() => {
+          if (characterMutationQueuesRef.current.get(id) === queueTail)
+            characterMutationQueuesRef.current.delete(id);
+        });
+      characterMutationQueuesRef.current.set(id, queueTail);
+      return operation
+        .then(() => undefined)
+        .catch(async (reason) => {
+          await queueTail;
+          throw reason;
+        });
+    },
+    [snapshotRef],
+  );
 
   const updateCharacterCounters = (
     characterId: string,
@@ -1342,8 +1344,9 @@ export function App() {
   // time (server-enforced). Its presence drives the "Начать бой" ↔
   // "Завершить бой" toolbar swap.
   const activeEncounter =
-    viewSnapshot.encounters?.find((encounter) => encounter.status === "ACTIVE") ??
-    null;
+    viewSnapshot.encounters?.find(
+      (encounter) => encounter.status === "ACTIVE",
+    ) ?? null;
   const activeDrawings = activeScene
     ? (viewSnapshot.drawings ?? []).filter(
         (drawing) => drawing.sceneId === activeScene.id,
@@ -1365,1349 +1368,1370 @@ export function App() {
 
   return (
     <CampaignActionsContext.Provider value={campaignActions}>
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <strong>arken-space</strong>
-          {snapshot.me.role === "GM" && !previewSnapshot ? (
-            <button
-              type="button"
-              className="campaign-name-button"
-              aria-label="Переименовать кампанию"
-              onClick={() => setCampaignRenameOpen(true)}
-            >
-              {viewSnapshot.campaign.name}
-              <span className="campaign-name-button__icon" aria-hidden="true">
-                &#x270e;
-              </span>
-            </button>
-          ) : (
-            <span>{viewSnapshot.campaign.name}</span>
-          )}
-        </div>
-        <div className="scene-switcher">
-          {snapshot.me.role === "GM" && !previewSnapshot ? (
-            <details ref={scenePickerRef} className="scene-picker">
-              <summary
-                aria-label="Выбрать просматриваемую сцену"
-                aria-haspopup="listbox"
-              >
-                {activeScene?.mapAssetId &&
-                viewSnapshot.assets.find(
-                  (asset) => asset.id === activeScene.mapAssetId,
-                ) ? (
-                  <img
-                    src={
-                      viewSnapshot.assets.find(
-                        (asset) => asset.id === activeScene.mapAssetId,
-                      )!.url
-                    }
-                    alt=""
-                  />
-                ) : (
-                  <span
-                    className="scene-picker__placeholder"
-                    aria-hidden="true"
-                  />
-                )}
-                <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
-                <span aria-hidden="true">⌄</span>
-              </summary>
-              <div
-                className="scene-picker__menu"
-                role="listbox"
-                aria-label="Сцены"
-              >
-                {viewSnapshot.scenes.map((scene) => {
-                  const background = viewSnapshot.assets.find(
-                    (asset) => asset.id === scene.mapAssetId,
-                  );
-                  const tokenCount = viewSnapshot.tokens.filter(
-                    (token) => token.sceneId === scene.id,
-                  ).length;
-                  return (
-                    <button
-                      key={scene.id}
-                      type="button"
-                      role="option"
-                      aria-selected={scene.id === activeScene?.id}
-                      onClick={(event) => {
-                        setViewedSceneId(scene.id);
-                        event.currentTarget
-                          .closest("details")
-                          ?.removeAttribute("open");
-                      }}
-                    >
-                      {background ? (
-                        <img src={background.url} alt="" />
-                      ) : (
-                        <span
-                          className="scene-picker__placeholder"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span>
-                        <strong>{scene.name}</strong>
-                        <small>{tokenCount} токенов</small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </details>
-          ) : (
-            <div
-              className="scene-picker scene-picker--readonly"
-              aria-label="Активная сцена"
-            >
-              <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
-            </div>
-          )}
-          {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
-            <button
-              className="topbar-icon-button publish-scene"
-              aria-label={
-                activeScene.id === broadcastScene?.id ||
-                activeScene.id === recentlyPublishedSceneId
-                  ? "Сцена уже показана игрокам"
-                  : "Показать выбранную сцену игрокам"
-              }
-              title={
-                activeScene.id === broadcastScene?.id ||
-                activeScene.id === recentlyPublishedSceneId
-                  ? "Сцена у игроков"
-                  : "Показать выбранную сцену игрокам"
-              }
-              aria-pressed={
-                activeScene.id === broadcastScene?.id ||
-                activeScene.id === recentlyPublishedSceneId
-              }
-              onClick={() => {
-                void run(async () => {
-                  await api("/api/scenes/activate", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      sceneId: activeScene.id,
-                    }),
-                  });
-                  setRecentlyPublishedSceneId(activeScene.id);
-                  notify({
-                    title: "Игроки перемещены",
-                    message: `Активная сцена: ${activeScene.name}`,
-                    tone: "success",
-                  });
-                });
-              }}
-            >
-              <span aria-hidden="true">
-                {activeScene.id === broadcastScene?.id ? "⇥" : "◉"}
-              </span>
-            </button>
-          )}
-          {!previewSnapshot && snapshot.me.role === "GM" && (
-            <button
-              className="topbar-icon-button"
-              aria-label="Создать сцену"
-              title="Создать новую сцену"
-              onClick={() => setSceneDialogRequest((value) => value + 1)}
-            >
-              <span aria-hidden="true">&#xff0b;</span>
-            </button>
-          )}
-        </div>
-        <details ref={workspaceMenuRef} className="workspace-menu">
-          <summary aria-label="Открыть рабочее пространство">
-            <span>Рабочее пространство</span>
-            <span className="workspace-menu__chevron" aria-hidden="true">
-              &#x2304;
-            </span>
-          </summary>
-          <div className="workspace-menu__content">
-            <button
-              type="button"
-              onClick={() => handleWorkspaceChange("characters")}
-            >
-              Персонажи
-            </button>
-            <button
-              type="button"
-              onClick={() => handleWorkspaceChange("tokens")}
-            >
-              Токены
-            </button>
-            {snapshot.me.role === "GM" ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleWorkspaceChange("scenes")}
-                >
-                  Сцены
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleWorkspaceChange("setup")}
-                >
-                  Подготовка
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleWorkspaceChange("world-encyclopedia")}
-                >
-                  Энциклопедия мира
-                </button>
-              </>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => handleWorkspaceChange("world-maps")}
-            >
-              World maps
-            </button>
-            <button
-              type="button"
-              onClick={() => handleWorkspaceChange("world-codex")}
-            >
-              Энциклопедия
-            </button>
-            <button
-              type="button"
-              onClick={() => handleWorkspaceChange("player-requests")}
-            >
-              {snapshot.me.role === "GM" ? "Открытые заявки" : "Мои заявки"}
-            </button>
-            {operatorFeedbackAllowed && (
+      <div className="app-shell">
+        <header className="topbar">
+          <div className="brand">
+            <strong>arken-space</strong>
+            {snapshot.me.role === "GM" && !previewSnapshot ? (
               <button
                 type="button"
-                onClick={() => handleWorkspaceChange("operator-feedback")}
+                className="campaign-name-button"
+                aria-label="Переименовать кампанию"
+                onClick={() => setCampaignRenameOpen(true)}
               >
-                Operator feedback
+                {viewSnapshot.campaign.name}
+                <span className="campaign-name-button__icon" aria-hidden="true">
+                  &#x270e;
+                </span>
               </button>
+            ) : (
+              <span>{viewSnapshot.campaign.name}</span>
             )}
-            <button
-              type="button"
-              onClick={() => handleWorkspaceChange("media")}
-            >
-              Файлы
-            </button>
           </div>
-        </details>
-        <div className="status-line">
-          <MusicBar
-            audio={snapshot.audio}
-            assets={snapshot.assets}
-            role={snapshot.me.role}
-            socket={socket}
-            onUpload={(file) => assetActions.uploadAsset(file, "AUDIO")}
-          />
-          <details className="account-menu">
-            <summary aria-label="Меню сеанса" title="Меню сеанса">
-              <span aria-hidden="true">&#x2630;</span>
-            </summary>
-            <div className="account-menu__content">
-              <span
-                className={connection === "ONLINE" ? "status online" : "status"}
-              >
-                {connection === "ONLINE"
-                  ? "в сети"
-                  : connection === "RESYNCING"
-                    ? "синхронизация"
-                    : connection === "OFFLINE"
-                      ? "нет связи"
-                      : "переподключение"}
-              </span>
-              {connection !== "ONLINE" && (
-                <button
-                  onClick={() => {
-                    setConnection("RESYNCING");
-                    socket?.emit("game:resync", snapshot.snapshotVersion);
-                  }}
-                >
-                  Синхронизировать
-                </button>
-              )}
-              <span className="account-menu__identity">
-                {previewSnapshot
-                  ? `Просмотр: ${viewSnapshot.me.displayName}`
-                  : snapshot.me.role === "PLAYER"
-                    ? `Вы играете как: ${snapshot.me.displayName}`
-                    : `${snapshot.me.displayName} · ${snapshot.me.role}`}
-              </span>
-              <span
-                className="account-menu__build"
-                title={`Схема ${snapshot.schemaVersion}, сборка ${snapshot.buildVersion}, Git ${snapshot.buildRevision ?? "unknown"}`}
-              >
-                v{snapshot.snapshotVersion} ·{" "}
-                {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
-              </span>
-              {!previewSnapshot && (
-                <FeedbackReporter
-                  buildVersion={snapshot.buildVersion}
-                  buildRevision={snapshot.buildRevision}
-                  connection={connection}
-                />
-              )}
-              {previewSnapshot && (
-                <button onClick={() => setPreviewSnapshot(null)}>
-                  Вернуться к мастеру
-                </button>
-              )}
-              {snapshot.me.role === "PLAYER" && !previewSnapshot ? (
-                <button onClick={() => setPlayerHandoffOpen(true)}>
-                  Сменить игрока
-                </button>
-              ) : (
-                <button
-                  onClick={async () => {
-                    await api("/api/auth/logout", { method: "POST" });
-                    window.location.replace("/");
-                  }}
-                >
-                  Выйти
-                </button>
-              )}
-            </div>
-          </details>
-        </div>
-      </header>
-      <ArkenDialog
-        open={playerHandoffOpen}
-        title="Сменить игрока?"
-        applyLabel="Сменить игрока"
-        loading={playerHandoffPending}
-        error={playerHandoffError}
-        onApply={() => void handOffToNextPlayer()}
-        onClose={() => {
-          if (!playerHandoffPending) {
-            setPlayerHandoffError("");
-            setPlayerHandoffOpen(false);
-          }
-        }}
-      >
-        <p className="arken-dialog-message">
-          Завершите текущие действия перед передачей компьютера: несохранённые
-          данные в открытых формах будут потеряны. Следующий игрок войдёт по
-          своей личной ссылке. На общем экране не открывайте личные заметки или
-          сообщения, которые не должны видеть другие игроки.
-        </p>
-      </ArkenDialog>
-      <TextPromptDialog
-        open={campaignRenameOpen}
-        title="Название кампании"
-        label="Название кампании"
-        initialValue={snapshot.campaign.name}
-        applyLabel="Сохранить"
-        onClose={() => setCampaignRenameOpen(false)}
-        onApply={async (name) => {
-          const updated = await api<GameSnapshot["campaign"]>("/api/campaign", {
-            method: "PATCH",
-            body: JSON.stringify({
-              actionId: crypto.randomUUID(),
-              revision: snapshot.campaign.revision,
-              name,
-            }),
-          });
-          setSnapshot((current) =>
-            current ? { ...current, campaign: updated } : current,
-          );
-          setCampaignRenameOpen(false);
-        }}
-      />
-      {/*
-       * UIX-311 Stage 4: "Начать бой" chooser — SCENE_REGION is only offered
-       * here (tactical-canvas context); LINKED_SCENE opens the same
-       * location/scene picker used from the world-map workspace.
-       */}
-      <ArkenDialog
-        open={encounterMenuOpen}
-        title="Начать бой"
-        footer={false}
-        onClose={() => setEncounterMenuOpen(false)}
-      >
-        <div className="encounter-menu">
-          <button
-            type="button"
-            className="primary"
-            disabled={!activeScene}
-            onClick={() => {
-              setEncounterMenuOpen(false);
-              setTool("SCENE_REGION");
-            }}
-          >
-            Выделить область текущей сцены
-          </button>
-          <button
-            type="button"
-            disabled={!broadcastScene}
-            onClick={() => {
-              setEncounterMenuOpen(false);
-              setEncounterScenePickerOpen(true);
-            }}
-          >
-            Перейти в другую локацию
-          </button>
-        </div>
-      </ArkenDialog>
-      <ArkenDialog
-        open={encounterScenePickerOpen}
-        title="Выбор локации"
-        footer={false}
-        onClose={() => setEncounterScenePickerOpen(false)}
-      >
-        <div className="encounter-scene-picker">
-          {broadcastScene &&
-            (viewSnapshot.worldMaps?.locations ?? [])
-              .map((location) => ({
-                location,
-                scenes: locationSceneNames(location, viewSnapshot.scenes),
-              }))
-              .filter((entry) => entry.scenes.length > 0)
-              .map(({ location, scenes }) => (
-                <div
-                  key={location.id}
-                  className="encounter-scene-picker__group"
-                >
-                  <strong>{location.name}</strong>
-                  {scenes.map((scene) => (
-                    <button
-                      key={scene.id}
-                      type="button"
-                      onClick={() => {
-                        setEncounterScenePickerOpen(false);
-                        setEncounterDraft({
-                          mode: "LINKED_SCENE",
-                          sourceScene: broadcastScene,
-                          targetSceneId: scene.id,
-                          targetSceneName: scene.name,
-                          locationId: location.id,
-                        });
-                      }}
-                    >
-                      {scene.name}
-                    </button>
-                  ))}
-                </div>
-              ))}
-          {!(viewSnapshot.worldMaps?.locations ?? []).some(
-            (location) => location.sceneIds.length > 0,
-          ) ? <p>Нет локаций со связанными сценами.</p> : null}
-        </div>
-      </ArkenDialog>
-      <EncounterConfirmDialog
-        draft={encounterDraft}
-        snapshot={viewSnapshot}
-        onClose={() => setEncounterDraft(null)}
-        onStarted={() => setEncounterDraft(null)}
-      />
-      <div
-        className={`workbench${
-          sidebarCollapsed && !previewSnapshot ? " is-sidebar-collapsed" : ""
-        }`}
-        style={
-          sidebarWidth != null
-            ? ({ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties)
-            : undefined
-        }
-      >
-        {sidebarCollapsed && !previewSnapshot && (
-          <button
-            type="button"
-            className="sidebar-restore-button"
-            aria-controls="activity-sidebar"
-            aria-label="Развернуть боковую панель"
-            title="Развернуть боковую панель"
-            aria-expanded="false"
-            onClick={() => handleSidebarCollapsedChange(false)}
-          >
-            <span aria-hidden="true">&#x2039;</span>
-          </button>
-        )}
-        <main
-          className={`map-shell${
-            workspace === "characters" ||
-            workspace === "setup" ||
-            workspace === "world-maps"
-              ? " is-workspace-hidden"
-              : ""
-          }`}
-          aria-hidden={
-            workspace === "characters" ||
-            workspace === "setup" ||
-            workspace === "world-maps"
-          }
-        >
-          <div
-            className="map-toolbar"
-            role="toolbar"
-            aria-label="Инструменты карты"
-          >
-            <div className="toolbar-group">
-              <button
-                aria-label="Перемещение"
-                title="Перемещение по карте (средняя кнопка мыши)"
-                className="map-tool"
-                data-tool="PAN"
-                aria-pressed={tool === "PAN"}
-                onClick={() => setTool("PAN")}
-              >
-                Перемещение
-              </button>
-              {!previewSnapshot && snapshot.me.role === "GM" && (
-                <>
-                  <button
-                    aria-label="Открыть туман"
-                    title="Открыть выбранную область тумана"
-                    className="map-tool"
-                    data-tool="FOG"
-                    aria-pressed={tool === "FOG"}
-                    onClick={() => setTool("FOG")}
-                  >
-                    Открыть туман
-                  </button>
-                  <button
-                    aria-label="Закрыть туман"
-                    title="Закрыть выбранную область туманом"
-                    className="map-tool"
-                    data-tool="COVER"
-                    aria-pressed={tool === "COVER"}
-                    onClick={() => setTool("COVER")}
-                  >
-                    Закрыть туман
-                  </button>
-                  <button
-                    aria-label="Открыть туман кистью"
-                    title="Открыть туман круглой кистью (клик или протяжка)"
-                    className="map-tool"
-                    data-tool="FOG_BRUSH"
-                    aria-pressed={tool === "FOG_BRUSH"}
-                    onClick={() => setTool("FOG_BRUSH")}
-                  >
-                    Кисть тумана
-                  </button>
-                  <button
-                    aria-label="Закрыть туман кистью"
-                    title="Закрыть область круглой кистью тумана"
-                    className="map-tool"
-                    data-tool="COVER_BRUSH"
-                    aria-pressed={tool === "COVER_BRUSH"}
-                    onClick={() => setTool("COVER_BRUSH")}
-                  >
-                    Кисть покрытия
-                  </button>
-                  {(tool === "FOG_BRUSH" || tool === "COVER_BRUSH") && (
-                    <label className="map-tool-text" title="Радиус кисти тумана">
-                      Радиус
-                      <input
-                        type="range"
-                        min={8}
-                        max={200}
-                        step={4}
-                        value={fogBrushRadius}
-                        onChange={(event) =>
-                          setFogBrushRadius(Number(event.target.value))
-                        }
-                        aria-label="Радиус кисти тумана"
-                        style={{ verticalAlign: "middle", margin: "0 6px" }}
-                      />
-                      {fogBrushRadius}
-                    </label>
-                  )}
-                  <button
-                    aria-label="Открыть туман полигоном"
-                    title="Открыть туман многоугольником (клик — вершина, Enter/двойной клик — завершить, Esc — отмена)"
-                    className="map-tool"
-                    data-tool="FOG_POLYGON"
-                    aria-pressed={tool === "FOG_POLYGON"}
-                    onClick={() => setTool("FOG_POLYGON")}
-                  >
-                    Полигон тумана
-                  </button>
-                  <button
-                    aria-label="Закрыть туман полигоном"
-                    title="Закрыть область многоугольником тумана (клик — вершина, Enter/двойной клик — завершить, Esc — отмена)"
-                    className="map-tool"
-                    data-tool="COVER_POLYGON"
-                    aria-pressed={tool === "COVER_POLYGON"}
-                    onClick={() => setTool("COVER_POLYGON")}
-                  >
-                    Полигон покрытия
-                  </button>
-                  {/*
-                   * UIX-311 Stage 4: real GM "Начать бой" / "Завершить бой"
-                   * entry point, replacing the Stage 2/3 temp triggers. Only
-                   * one encounter can be ACTIVE at a time (server-enforced),
-                   * so the button swaps based on activeEncounter.
-                   */}
-                  {activeEncounter ? (
-                    <button
-                      aria-label="Завершить бой"
-                      title="Завершить текущий бой"
-                      className="map-tool"
-                      data-tool="ENCOUNTER_END"
-                      onClick={() =>
-                        void run(() =>
-                          endEncounter(
-                            activeEncounter.id,
-                            activeEncounter.revision,
-                          ),
-                        )
-                      }
-                    >
-                      Завершить бой
-                    </button>
-                  ) : (
-                    <button
-                      aria-label="Начать бой"
-                      title="Начать бой из области сцены или связанной локации"
-                      className="map-tool"
-                      data-tool="ENCOUNTER_START"
-                      disabled={!activeScene}
-                      onClick={() => setEncounterMenuOpen(true)}
-                    >
-                      Начать бой
-                    </button>
-                  )}
-                </>
-              )}
-              <button
-                aria-label="Рисование"
-                title="Нарисовать линию на карте"
-                className="map-tool"
-                data-tool="DRAW"
-                aria-pressed={tool === "DRAW"}
-                onClick={() => setTool("DRAW")}
-              >
-                Рисование
-              </button>
-              <button
-                aria-label="Линейка"
-                title="Измерить расстояние на карте"
-                className="map-tool"
-                data-tool="RULER"
-                aria-pressed={tool === "RULER"}
-                onClick={() => setTool("RULER")}
-              >
-                Линейка
-              </button>
-              <button
-                aria-label="Пинг"
-                title="Показать точку группе"
-                className="map-tool"
-                data-tool="PING"
-                aria-pressed={tool === "PING"}
-                onClick={() => setTool("PING")}
-              >
-                Пинг
-              </button>
-              <CursorPresenceMenu
-                preference={cursorPreference}
-                role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
-                onChange={updateCursorPreference}
-              />
-              {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
-                <>
-                  <GridSettings
-                    scene={activeScene}
-                    onPreview={setGridPreview}
-                    onSave={(grid) =>
-                      run(
-                        () =>
-                          api(`/api/scenes/${activeScene.id}/canvas`, {
-                            method: "PATCH",
-                            body: JSON.stringify({
-                              actionId: crypto.randomUUID(),
-                              revision: activeScene.revision ?? 0,
-                              grid,
-                            }),
-                          }),
-                        true,
-                      )
-                    }
-                  />
-                  <details ref={resizeSettingsRef} className="resize-settings">
-                    <summary
-                      aria-label="Настройки размера карты"
-                      title="Настройки размера карты"
-                      className="toolbar-detail-trigger"
-                      data-tool="RESIZE"
-                    >
-                      Размер карты
-                    </summary>
-                    <div className="resize-settings-popover">
-                      <button
-                        aria-pressed={canvasEditMode === "BACKGROUND"}
-                        onClick={() => {
-                          setTool("PAN");
-                          setCanvasEditMode("BACKGROUND");
-                        }}
-                      >
-                        Изображение
-                      </button>
-                      <button
-                        aria-pressed={canvasEditMode === "WORLD"}
-                        onClick={() => {
-                          setTool("PAN");
-                          setCanvasEditMode("WORLD");
-                        }}
-                      >
-                        Область
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCanvasEditMode(null);
-                          if (resizeSettingsRef.current) {
-                            resizeSettingsRef.current.open = false;
-                            resizeSettingsRef.current
-                              .querySelector<HTMLElement>("summary")
-                              ?.focus();
-                          }
-                        }}
-                      >
-                        Готово
-                      </button>
-                    </div>
-                  </details>
-                </>
-              )}
-            </div>
-            {!previewSnapshot && (
-              <div className="toolbar-history">
-                <CanvasHistoryControls
-                  sceneId={activeScene?.id}
-                  disabled={!activeScene}
-                  version={activeCanvasVersion}
-                />
-              </div>
-            )}
-            {!previewSnapshot && (
-              <details className="toolbar-overflow">
+          <div className="scene-switcher">
+            {snapshot.me.role === "GM" && !previewSnapshot ? (
+              <details ref={scenePickerRef} className="scene-picker">
                 <summary
-                  aria-label="Дополнительные инструменты"
-                  title="Дополнительные инструменты карты"
+                  aria-label="Выбрать просматриваемую сцену"
+                  aria-haspopup="listbox"
                 >
-                  •••
-                </summary>
-                <div className="toolbar-overflow-menu">
-                  {snapshot.me.role === "GM" && (
-                    <div className="fog-view-controls">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={gmGridVisible}
-                          onChange={(event) => {
-                            const visible = event.target.checked;
-                            setGmGridVisible(visible);
-                            localStorage.setItem(
-                              "arken.gmGridVisible",
-                              String(visible),
-                            );
-                          }}
-                        />
-                        Показывать сетку
-                      </label>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={gmFogVisible}
-                          onChange={(event) =>
-                            setGmFogVisible(event.target.checked)
-                          }
-                        />
-                        Показывать туман
-                      </label>
-                      <label>
-                        Прозрачность мастера
-                        <input
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.05"
-                          value={gmFogOpacity}
-                          onChange={(event) => {
-                            const value = Number(event.target.value);
-                            setGmFogOpacity(value);
-                            localStorage.setItem(
-                              "arken.gmFogOpacity",
-                              String(value),
-                            );
-                          }}
-                        />
-                      </label>
-                    </div>
+                  {activeScene?.mapAssetId &&
+                  viewSnapshot.assets.find(
+                    (asset) => asset.id === activeScene.mapAssetId,
+                  ) ? (
+                    <img
+                      src={
+                        viewSnapshot.assets.find(
+                          (asset) => asset.id === activeScene.mapAssetId,
+                        )!.url
+                      }
+                      alt=""
+                    />
+                  ) : (
+                    <span
+                      className="scene-picker__placeholder"
+                      aria-hidden="true"
+                    />
                   )}
+                  <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
+                  <span aria-hidden="true">⌄</span>
+                </summary>
+                <div
+                  className="scene-picker__menu"
+                  role="listbox"
+                  aria-label="Сцены"
+                >
+                  {viewSnapshot.scenes.map((scene) => {
+                    const background = viewSnapshot.assets.find(
+                      (asset) => asset.id === scene.mapAssetId,
+                    );
+                    const tokenCount = viewSnapshot.tokens.filter(
+                      (token) => token.sceneId === scene.id,
+                    ).length;
+                    return (
+                      <button
+                        key={scene.id}
+                        type="button"
+                        role="option"
+                        aria-selected={scene.id === activeScene?.id}
+                        onClick={(event) => {
+                          setViewedSceneId(scene.id);
+                          event.currentTarget
+                            .closest("details")
+                            ?.removeAttribute("open");
+                        }}
+                      >
+                        {background ? (
+                          <img src={background.url} alt="" />
+                        ) : (
+                          <span
+                            className="scene-picker__placeholder"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <span>
+                          <strong>{scene.name}</strong>
+                          <small>{tokenCount} токенов</small>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </details>
+            ) : (
+              <div
+                className="scene-picker scene-picker--readonly"
+                aria-label="Активная сцена"
+              >
+                <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
+              </div>
             )}
-          </div>
-          {activeScene ? (
-            <Suspense
-              fallback={<div className="empty-map">Загружаем карту…</div>}
-            >
-              <Orthographic2DRenderer
-                scene={
-                  gridPreview
-                    ? { ...activeScene, grid: gridPreview }
-                    : activeScene
+            {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
+              <button
+                className="topbar-icon-button publish-scene"
+                aria-label={
+                  activeScene.id === broadcastScene?.id ||
+                  activeScene.id === recentlyPublishedSceneId
+                    ? "Сцена уже показана игрокам"
+                    : "Показать выбранную сцену игрокам"
                 }
-                tokens={activeTokens}
-                fogReveals={activeFog}
-                drawings={activeDrawings}
-                assets={viewSnapshot.assets}
-                role={viewSnapshot.me.role}
-                onOpenCharacter={(characterId) => {
-                  setRequestedCharacterId(null);
-                  handleWorkspaceChange("characters");
-                  requestAnimationFrame(() =>
-                    setRequestedCharacterId(characterId),
-                  );
-                }}
-                membershipId={viewSnapshot.me.id}
-                socket={socket}
-                tool={tool}
-                onToolSelect={setTool}
-                pings={pings.filter((ping) => ping.sceneId === activeScene.id)}
-                rulers={rulers.filter(
-                  (ruler) => ruler.sceneId === activeScene.id,
-                )}
-                cursors={
-                  cursorPreference.receiveEnabled
-                    ? cursors.filter(
-                        (cursor) => cursor.sceneId === activeScene.id,
-                      )
-                    : []
+                title={
+                  activeScene.id === broadcastScene?.id ||
+                  activeScene.id === recentlyPublishedSceneId
+                    ? "Сцена у игроков"
+                    : "Показать выбранную сцену игрокам"
                 }
-                cursorSendEnabled={cursorPreference.sendEnabled}
-                cursorShared={
-                  snapshot.me.role === "GM" && cursorPreference.sendEnabled
+                aria-pressed={
+                  activeScene.id === broadcastScene?.id ||
+                  activeScene.id === recentlyPublishedSceneId
                 }
-                gmFogOpacity={gmFogOpacity}
-                gmFogVisible={gmFogVisible}
-                gmGridVisible={gmGridVisible}
-                fogBrushRadius={fogBrushRadius}
-                encounters={viewSnapshot.encounters}
-                onEncounterRegionSelect={(rect) => {
-                  // UIX-311 Stage 4: the committed drag rect opens the real
-                  // GM confirm step (EncounterConfirmDialog) instead of
-                  // starting combat silently.
-                  setTool("PAN");
-                  setEncounterDraft({
-                    mode: "SCENE_REGION",
-                    sourceScene: activeScene,
-                    targetSceneId: activeScene.id,
-                    targetSceneName: activeScene.name,
-                    focusRegion: rect,
-                  });
-                }}
-                canvasEditMode={canvasEditMode}
-                onCanvasEditCancel={() => setCanvasEditMode(null)}
-                onCanvasPatch={(patch) =>
-                  run(() =>
-                    api(`/api/scenes/${activeScene.id}/canvas`, {
-                      method: "PATCH",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision: activeScene.revision ?? 0,
-                        ...patch,
-                      }),
-                    }),
-                  )
-                }
-                onFogCreate={async (payload) => {
-                  const isCover =
-                    tool === "COVER" ||
-                    tool === "COVER_BRUSH" ||
-                    tool === "COVER_POLYGON";
-                  await run(() =>
-                    api("/api/fog-reveals", {
+                onClick={() => {
+                  void run(async () => {
+                    await api("/api/scenes/activate", {
                       method: "POST",
                       body: JSON.stringify({
                         actionId: crypto.randomUUID(),
                         sceneId: activeScene.id,
-                        operation: isCover ? "COVER" : "REVEAL",
-                        ...payload,
                       }),
-                    }),
-                  );
+                    });
+                    setRecentlyPublishedSceneId(activeScene.id);
+                    notify({
+                      title: "Игроки перемещены",
+                      message: `Активная сцена: ${activeScene.name}`,
+                      tone: "success",
+                    });
+                  });
                 }}
-                onDrawingCreate={async (drawing) => {
-                  let created:
-                    import("@arken/contracts").DrawingDto | undefined;
-                  await run(async () => {
-                    created = await api<import("@arken/contracts").DrawingDto>(
-                      "/api/drawings",
-                      {
+              >
+                <span aria-hidden="true">
+                  {activeScene.id === broadcastScene?.id ? "⇥" : "◉"}
+                </span>
+              </button>
+            )}
+            {!previewSnapshot && snapshot.me.role === "GM" && (
+              <button
+                className="topbar-icon-button"
+                aria-label="Создать сцену"
+                title="Создать новую сцену"
+                onClick={() => setSceneDialogRequest((value) => value + 1)}
+              >
+                <span aria-hidden="true">&#xff0b;</span>
+              </button>
+            )}
+          </div>
+          <details ref={workspaceMenuRef} className="workspace-menu">
+            <summary aria-label="Открыть рабочее пространство">
+              <span>Рабочее пространство</span>
+              <span className="workspace-menu__chevron" aria-hidden="true">
+                &#x2304;
+              </span>
+            </summary>
+            <div className="workspace-menu__content">
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange("characters")}
+              >
+                Персонажи
+              </button>
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange("tokens")}
+              >
+                Токены
+              </button>
+              {snapshot.me.role === "GM" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleWorkspaceChange("scenes")}
+                  >
+                    Сцены
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleWorkspaceChange("setup")}
+                  >
+                    Подготовка
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleWorkspaceChange("world-encyclopedia")}
+                  >
+                    Энциклопедия мира
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange("world-maps")}
+              >
+                World maps
+              </button>
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange("world-codex")}
+              >
+                Энциклопедия
+              </button>
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange("player-requests")}
+              >
+                {snapshot.me.role === "GM" ? "Открытые заявки" : "Мои заявки"}
+              </button>
+              {operatorFeedbackAllowed && (
+                <button
+                  type="button"
+                  onClick={() => handleWorkspaceChange("operator-feedback")}
+                >
+                  Operator feedback
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange("media")}
+              >
+                Файлы
+              </button>
+            </div>
+          </details>
+          <div className="status-line">
+            <MusicBar
+              audio={snapshot.audio}
+              assets={snapshot.assets}
+              role={snapshot.me.role}
+              socket={socket}
+              onUpload={(file) => assetActions.uploadAsset(file, "AUDIO")}
+            />
+            <details className="account-menu">
+              <summary aria-label="Меню сеанса" title="Меню сеанса">
+                <span aria-hidden="true">&#x2630;</span>
+              </summary>
+              <div className="account-menu__content">
+                <span
+                  className={
+                    connection === "ONLINE" ? "status online" : "status"
+                  }
+                >
+                  {connection === "ONLINE"
+                    ? "в сети"
+                    : connection === "RESYNCING"
+                      ? "синхронизация"
+                      : connection === "OFFLINE"
+                        ? "нет связи"
+                        : "переподключение"}
+                </span>
+                {connection !== "ONLINE" && (
+                  <button
+                    onClick={() => {
+                      setConnection("RESYNCING");
+                      socket?.emit("game:resync", snapshot.snapshotVersion);
+                    }}
+                  >
+                    Синхронизировать
+                  </button>
+                )}
+                <span className="account-menu__identity">
+                  {previewSnapshot
+                    ? `Просмотр: ${viewSnapshot.me.displayName}`
+                    : snapshot.me.role === "PLAYER"
+                      ? `Вы играете как: ${snapshot.me.displayName}`
+                      : `${snapshot.me.displayName} · ${snapshot.me.role}`}
+                </span>
+                <span
+                  className="account-menu__build"
+                  title={`Схема ${snapshot.schemaVersion}, сборка ${snapshot.buildVersion}, Git ${snapshot.buildRevision ?? "unknown"}`}
+                >
+                  v{snapshot.snapshotVersion} ·{" "}
+                  {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
+                </span>
+                {!previewSnapshot && (
+                  <FeedbackReporter
+                    buildVersion={snapshot.buildVersion}
+                    buildRevision={snapshot.buildRevision}
+                    connection={connection}
+                  />
+                )}
+                {previewSnapshot && (
+                  <button onClick={() => setPreviewSnapshot(null)}>
+                    Вернуться к мастеру
+                  </button>
+                )}
+                {snapshot.me.role === "PLAYER" && !previewSnapshot ? (
+                  <button onClick={() => setPlayerHandoffOpen(true)}>
+                    Сменить игрока
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      await api("/api/auth/logout", { method: "POST" });
+                      window.location.replace("/");
+                    }}
+                  >
+                    Выйти
+                  </button>
+                )}
+              </div>
+            </details>
+          </div>
+        </header>
+        <ArkenDialog
+          open={playerHandoffOpen}
+          title="Сменить игрока?"
+          applyLabel="Сменить игрока"
+          loading={playerHandoffPending}
+          error={playerHandoffError}
+          onApply={() => void handOffToNextPlayer()}
+          onClose={() => {
+            if (!playerHandoffPending) {
+              setPlayerHandoffError("");
+              setPlayerHandoffOpen(false);
+            }
+          }}
+        >
+          <p className="arken-dialog-message">
+            Завершите текущие действия перед передачей компьютера: несохранённые
+            данные в открытых формах будут потеряны. Следующий игрок войдёт по
+            своей личной ссылке. На общем экране не открывайте личные заметки
+            или сообщения, которые не должны видеть другие игроки.
+          </p>
+        </ArkenDialog>
+        <TextPromptDialog
+          open={campaignRenameOpen}
+          title="Название кампании"
+          label="Название кампании"
+          initialValue={snapshot.campaign.name}
+          applyLabel="Сохранить"
+          onClose={() => setCampaignRenameOpen(false)}
+          onApply={async (name) => {
+            const updated = await api<GameSnapshot["campaign"]>(
+              "/api/campaign",
+              {
+                method: "PATCH",
+                body: JSON.stringify({
+                  actionId: crypto.randomUUID(),
+                  revision: snapshot.campaign.revision,
+                  name,
+                }),
+              },
+            );
+            setSnapshot((current) =>
+              current ? { ...current, campaign: updated } : current,
+            );
+            setCampaignRenameOpen(false);
+          }}
+        />
+        {/*
+         * UIX-311 Stage 4: "Начать бой" chooser — SCENE_REGION is only offered
+         * here (tactical-canvas context); LINKED_SCENE opens the same
+         * location/scene picker used from the world-map workspace.
+         */}
+        <ArkenDialog
+          open={encounterMenuOpen}
+          title="Начать бой"
+          footer={false}
+          onClose={() => setEncounterMenuOpen(false)}
+        >
+          <div className="encounter-menu">
+            <button
+              type="button"
+              className="primary"
+              disabled={!activeScene}
+              onClick={() => {
+                setEncounterMenuOpen(false);
+                setTool("SCENE_REGION");
+              }}
+            >
+              Выделить область текущей сцены
+            </button>
+            <button
+              type="button"
+              disabled={!broadcastScene}
+              onClick={() => {
+                setEncounterMenuOpen(false);
+                setEncounterScenePickerOpen(true);
+              }}
+            >
+              Перейти в другую локацию
+            </button>
+          </div>
+        </ArkenDialog>
+        <ArkenDialog
+          open={encounterScenePickerOpen}
+          title="Выбор локации"
+          footer={false}
+          onClose={() => setEncounterScenePickerOpen(false)}
+        >
+          <div className="encounter-scene-picker">
+            {broadcastScene &&
+              (viewSnapshot.worldMaps?.locations ?? [])
+                .map((location) => ({
+                  location,
+                  scenes: locationSceneNames(location, viewSnapshot.scenes),
+                }))
+                .filter((entry) => entry.scenes.length > 0)
+                .map(({ location, scenes }) => (
+                  <div
+                    key={location.id}
+                    className="encounter-scene-picker__group"
+                  >
+                    <strong>{location.name}</strong>
+                    {scenes.map((scene) => (
+                      <button
+                        key={scene.id}
+                        type="button"
+                        onClick={() => {
+                          setEncounterScenePickerOpen(false);
+                          setEncounterDraft({
+                            mode: "LINKED_SCENE",
+                            sourceScene: broadcastScene,
+                            targetSceneId: scene.id,
+                            targetSceneName: scene.name,
+                            locationId: location.id,
+                          });
+                        }}
+                      >
+                        {scene.name}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+            {!(viewSnapshot.worldMaps?.locations ?? []).some(
+              (location) => location.sceneIds.length > 0,
+            ) ? (
+              <p>Нет локаций со связанными сценами.</p>
+            ) : null}
+          </div>
+        </ArkenDialog>
+        <EncounterConfirmDialog
+          draft={encounterDraft}
+          snapshot={viewSnapshot}
+          onClose={() => setEncounterDraft(null)}
+          onStarted={() => setEncounterDraft(null)}
+        />
+        <div
+          className={`workbench${
+            sidebarCollapsed && !previewSnapshot ? " is-sidebar-collapsed" : ""
+          }`}
+          style={
+            sidebarWidth != null
+              ? ({ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties)
+              : undefined
+          }
+        >
+          {sidebarCollapsed && !previewSnapshot && (
+            <button
+              type="button"
+              className="sidebar-restore-button"
+              aria-controls="activity-sidebar"
+              aria-label="Развернуть боковую панель"
+              title="Развернуть боковую панель"
+              aria-expanded="false"
+              onClick={() => handleSidebarCollapsedChange(false)}
+            >
+              <span aria-hidden="true">&#x2039;</span>
+            </button>
+          )}
+          <main
+            className={`map-shell${
+              workspace === "characters" ||
+              workspace === "setup" ||
+              workspace === "world-maps"
+                ? " is-workspace-hidden"
+                : ""
+            }`}
+            aria-hidden={
+              workspace === "characters" ||
+              workspace === "setup" ||
+              workspace === "world-maps"
+            }
+          >
+            <div
+              className="map-toolbar"
+              role="toolbar"
+              aria-label="Инструменты карты"
+            >
+              <div className="toolbar-group">
+                <button
+                  aria-label="Перемещение"
+                  title="Перемещение по карте (средняя кнопка мыши)"
+                  className="map-tool"
+                  data-tool="PAN"
+                  aria-pressed={tool === "PAN"}
+                  onClick={() => setTool("PAN")}
+                >
+                  Перемещение
+                </button>
+                {!previewSnapshot && snapshot.me.role === "GM" && (
+                  <>
+                    <button
+                      aria-label="Открыть туман"
+                      title="Открыть выбранную область тумана"
+                      className="map-tool"
+                      data-tool="FOG"
+                      aria-pressed={tool === "FOG"}
+                      onClick={() => setTool("FOG")}
+                    >
+                      Открыть туман
+                    </button>
+                    <button
+                      aria-label="Закрыть туман"
+                      title="Закрыть выбранную область туманом"
+                      className="map-tool"
+                      data-tool="COVER"
+                      aria-pressed={tool === "COVER"}
+                      onClick={() => setTool("COVER")}
+                    >
+                      Закрыть туман
+                    </button>
+                    <button
+                      aria-label="Открыть туман кистью"
+                      title="Открыть туман круглой кистью (клик или протяжка)"
+                      className="map-tool"
+                      data-tool="FOG_BRUSH"
+                      aria-pressed={tool === "FOG_BRUSH"}
+                      onClick={() => setTool("FOG_BRUSH")}
+                    >
+                      Кисть тумана
+                    </button>
+                    <button
+                      aria-label="Закрыть туман кистью"
+                      title="Закрыть область круглой кистью тумана"
+                      className="map-tool"
+                      data-tool="COVER_BRUSH"
+                      aria-pressed={tool === "COVER_BRUSH"}
+                      onClick={() => setTool("COVER_BRUSH")}
+                    >
+                      Кисть покрытия
+                    </button>
+                    {(tool === "FOG_BRUSH" || tool === "COVER_BRUSH") && (
+                      <label
+                        className="map-tool-text"
+                        title="Радиус кисти тумана"
+                      >
+                        Радиус
+                        <input
+                          type="range"
+                          min={8}
+                          max={200}
+                          step={4}
+                          value={fogBrushRadius}
+                          onChange={(event) =>
+                            setFogBrushRadius(Number(event.target.value))
+                          }
+                          aria-label="Радиус кисти тумана"
+                          style={{ verticalAlign: "middle", margin: "0 6px" }}
+                        />
+                        {fogBrushRadius}
+                      </label>
+                    )}
+                    <button
+                      aria-label="Открыть туман полигоном"
+                      title="Открыть туман многоугольником (клик — вершина, Enter/двойной клик — завершить, Esc — отмена)"
+                      className="map-tool"
+                      data-tool="FOG_POLYGON"
+                      aria-pressed={tool === "FOG_POLYGON"}
+                      onClick={() => setTool("FOG_POLYGON")}
+                    >
+                      Полигон тумана
+                    </button>
+                    <button
+                      aria-label="Закрыть туман полигоном"
+                      title="Закрыть область многоугольником тумана (клик — вершина, Enter/двойной клик — завершить, Esc — отмена)"
+                      className="map-tool"
+                      data-tool="COVER_POLYGON"
+                      aria-pressed={tool === "COVER_POLYGON"}
+                      onClick={() => setTool("COVER_POLYGON")}
+                    >
+                      Полигон покрытия
+                    </button>
+                    {/*
+                     * UIX-311 Stage 4: real GM "Начать бой" / "Завершить бой"
+                     * entry point, replacing the Stage 2/3 temp triggers. Only
+                     * one encounter can be ACTIVE at a time (server-enforced),
+                     * so the button swaps based on activeEncounter.
+                     */}
+                    {activeEncounter ? (
+                      <button
+                        aria-label="Завершить бой"
+                        title="Завершить текущий бой"
+                        className="map-tool"
+                        data-tool="ENCOUNTER_END"
+                        onClick={() =>
+                          void run(() =>
+                            endEncounter(
+                              activeEncounter.id,
+                              activeEncounter.revision,
+                            ),
+                          )
+                        }
+                      >
+                        Завершить бой
+                      </button>
+                    ) : (
+                      <button
+                        aria-label="Начать бой"
+                        title="Начать бой из области сцены или связанной локации"
+                        className="map-tool"
+                        data-tool="ENCOUNTER_START"
+                        disabled={!activeScene}
+                        onClick={() => setEncounterMenuOpen(true)}
+                      >
+                        Начать бой
+                      </button>
+                    )}
+                  </>
+                )}
+                <button
+                  aria-label="Рисование"
+                  title="Нарисовать линию на карте"
+                  className="map-tool"
+                  data-tool="DRAW"
+                  aria-pressed={tool === "DRAW"}
+                  onClick={() => setTool("DRAW")}
+                >
+                  Рисование
+                </button>
+                <button
+                  aria-label="Линейка"
+                  title="Измерить расстояние на карте"
+                  className="map-tool"
+                  data-tool="RULER"
+                  aria-pressed={tool === "RULER"}
+                  onClick={() => setTool("RULER")}
+                >
+                  Линейка
+                </button>
+                <button
+                  aria-label="Пинг"
+                  title="Показать точку группе"
+                  className="map-tool"
+                  data-tool="PING"
+                  aria-pressed={tool === "PING"}
+                  onClick={() => setTool("PING")}
+                >
+                  Пинг
+                </button>
+                <CursorPresenceMenu
+                  preference={cursorPreference}
+                  role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
+                  onChange={updateCursorPreference}
+                />
+                {!previewSnapshot &&
+                  snapshot.me.role === "GM" &&
+                  activeScene && (
+                    <>
+                      <GridSettings
+                        scene={activeScene}
+                        onPreview={setGridPreview}
+                        onSave={(grid) =>
+                          run(
+                            () =>
+                              api(`/api/scenes/${activeScene.id}/canvas`, {
+                                method: "PATCH",
+                                body: JSON.stringify({
+                                  actionId: crypto.randomUUID(),
+                                  revision: activeScene.revision ?? 0,
+                                  grid,
+                                }),
+                              }),
+                            true,
+                          )
+                        }
+                      />
+                      <details
+                        ref={resizeSettingsRef}
+                        className="resize-settings"
+                      >
+                        <summary
+                          aria-label="Настройки размера карты"
+                          title="Настройки размера карты"
+                          className="toolbar-detail-trigger"
+                          data-tool="RESIZE"
+                        >
+                          Размер карты
+                        </summary>
+                        <div className="resize-settings-popover">
+                          <button
+                            aria-pressed={canvasEditMode === "BACKGROUND"}
+                            onClick={() => {
+                              setTool("PAN");
+                              setCanvasEditMode("BACKGROUND");
+                            }}
+                          >
+                            Изображение
+                          </button>
+                          <button
+                            aria-pressed={canvasEditMode === "WORLD"}
+                            onClick={() => {
+                              setTool("PAN");
+                              setCanvasEditMode("WORLD");
+                            }}
+                          >
+                            Область
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCanvasEditMode(null);
+                              if (resizeSettingsRef.current) {
+                                resizeSettingsRef.current.open = false;
+                                resizeSettingsRef.current
+                                  .querySelector<HTMLElement>("summary")
+                                  ?.focus();
+                              }
+                            }}
+                          >
+                            Готово
+                          </button>
+                        </div>
+                      </details>
+                    </>
+                  )}
+              </div>
+              {!previewSnapshot && (
+                <div className="toolbar-history">
+                  <CanvasHistoryControls
+                    sceneId={activeScene?.id}
+                    disabled={!activeScene}
+                    version={activeCanvasVersion}
+                  />
+                </div>
+              )}
+              {!previewSnapshot && (
+                <details className="toolbar-overflow">
+                  <summary
+                    aria-label="Дополнительные инструменты"
+                    title="Дополнительные инструменты карты"
+                  >
+                    •••
+                  </summary>
+                  <div className="toolbar-overflow-menu">
+                    {snapshot.me.role === "GM" && (
+                      <div className="fog-view-controls">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={gmGridVisible}
+                            onChange={(event) => {
+                              const visible = event.target.checked;
+                              setGmGridVisible(visible);
+                              localStorage.setItem(
+                                "arken.gmGridVisible",
+                                String(visible),
+                              );
+                            }}
+                          />
+                          Показывать сетку
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={gmFogVisible}
+                            onChange={(event) =>
+                              setGmFogVisible(event.target.checked)
+                            }
+                          />
+                          Показывать туман
+                        </label>
+                        <label>
+                          Прозрачность мастера
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={gmFogOpacity}
+                            onChange={(event) => {
+                              const value = Number(event.target.value);
+                              setGmFogOpacity(value);
+                              localStorage.setItem(
+                                "arken.gmFogOpacity",
+                                String(value),
+                              );
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
+            {activeScene ? (
+              <Suspense
+                fallback={<div className="empty-map">Загружаем карту…</div>}
+              >
+                <Orthographic2DRenderer
+                  scene={
+                    gridPreview
+                      ? { ...activeScene, grid: gridPreview }
+                      : activeScene
+                  }
+                  tokens={activeTokens}
+                  fogReveals={activeFog}
+                  drawings={activeDrawings}
+                  assets={viewSnapshot.assets}
+                  role={viewSnapshot.me.role}
+                  onOpenCharacter={(characterId) => {
+                    setRequestedCharacterId(null);
+                    handleWorkspaceChange("characters");
+                    requestAnimationFrame(() =>
+                      setRequestedCharacterId(characterId),
+                    );
+                  }}
+                  membershipId={viewSnapshot.me.id}
+                  socket={socket}
+                  tool={tool}
+                  onToolSelect={setTool}
+                  pings={pings.filter(
+                    (ping) => ping.sceneId === activeScene.id,
+                  )}
+                  rulers={rulers.filter(
+                    (ruler) => ruler.sceneId === activeScene.id,
+                  )}
+                  cursors={
+                    cursorPreference.receiveEnabled
+                      ? cursors.filter(
+                          (cursor) => cursor.sceneId === activeScene.id,
+                        )
+                      : []
+                  }
+                  cursorSendEnabled={cursorPreference.sendEnabled}
+                  cursorShared={
+                    snapshot.me.role === "GM" && cursorPreference.sendEnabled
+                  }
+                  gmFogOpacity={gmFogOpacity}
+                  gmFogVisible={gmFogVisible}
+                  gmGridVisible={gmGridVisible}
+                  fogBrushRadius={fogBrushRadius}
+                  encounters={viewSnapshot.encounters}
+                  onEncounterRegionSelect={(rect) => {
+                    // UIX-311 Stage 4: the committed drag rect opens the real
+                    // GM confirm step (EncounterConfirmDialog) instead of
+                    // starting combat silently.
+                    setTool("PAN");
+                    setEncounterDraft({
+                      mode: "SCENE_REGION",
+                      sourceScene: activeScene,
+                      targetSceneId: activeScene.id,
+                      targetSceneName: activeScene.name,
+                      focusRegion: rect,
+                    });
+                  }}
+                  canvasEditMode={canvasEditMode}
+                  onCanvasEditCancel={() => setCanvasEditMode(null)}
+                  onCanvasPatch={(patch) =>
+                    run(() =>
+                      api(`/api/scenes/${activeScene.id}/canvas`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          revision: activeScene.revision ?? 0,
+                          ...patch,
+                        }),
+                      }),
+                    )
+                  }
+                  onFogCreate={async (payload) => {
+                    const isCover =
+                      tool === "COVER" ||
+                      tool === "COVER_BRUSH" ||
+                      tool === "COVER_POLYGON";
+                    await run(() =>
+                      api("/api/fog-reveals", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          sceneId: activeScene.id,
+                          operation: isCover ? "COVER" : "REVEAL",
+                          ...payload,
+                        }),
+                      }),
+                    );
+                  }}
+                  onDrawingCreate={async (drawing) => {
+                    let created:
+                      import("@arken/contracts").DrawingDto | undefined;
+                    await run(async () => {
+                      created = await api<
+                        import("@arken/contracts").DrawingDto
+                      >("/api/drawings", {
                         method: "POST",
                         body: JSON.stringify({
                           actionId: crypto.randomUUID(),
                           sceneId: activeScene.id,
                           ...drawing,
                         }),
-                      },
-                    );
-                  });
-                  if (created) {
-                    const reconciled = created;
-                    setSnapshot((current) => {
-                      if (!current) return current;
-                      const drawings = current.drawings ?? [];
-                      if (drawings.some((item) => item.id === reconciled.id))
-                        return current;
-                      return {
-                        ...current,
-                        drawings: [...drawings, reconciled],
-                      };
+                      });
                     });
-                  }
-                  return created;
-                }}
-                onPing={(point) => {
-                  socket?.emit(
-                    "map:ping",
-                    {
-                      sceneId: activeScene.id,
-                      ...point,
-                    },
-                    (result) => {
-                      if (!result.ok && result.reason === "NO_VISIBLE_PLAYERS")
-                        notify({
-                          title:
-                            "На карте нет игроков, которые могут это увидеть",
-                          tone: "info",
-                        });
-                    },
-                  );
-                }}
-                onPlaceTokenDefinition={async (definitionId, point) =>
-                  run(() =>
-                    api(`/api/token-definitions/${definitionId}/placements`, {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        definitionId,
+                    if (created) {
+                      const reconciled = created;
+                      setSnapshot((current) => {
+                        if (!current) return current;
+                        const drawings = current.drawings ?? [];
+                        if (drawings.some((item) => item.id === reconciled.id))
+                          return current;
+                        return {
+                          ...current,
+                          drawings: [...drawings, reconciled],
+                        };
+                      });
+                    }
+                    return created;
+                  }}
+                  onPing={(point) => {
+                    socket?.emit(
+                      "map:ping",
+                      {
                         sceneId: activeScene.id,
                         ...point,
-                      }),
-                    }),
-                  )
-                }
-                onTokenLayerChange={(tokenId, revision, layer) =>
-                  run(() =>
-                    api(`/api/tokens/${tokenId}/layer`, {
-                      method: "PATCH",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision,
-                        layer,
-                      }),
-                    }),
-                  )
-                }
-                onTokenDelete={(tokenId, revision) =>
-                  run(() =>
-                    api(`/api/tokens/${tokenId}`, {
-                      method: "DELETE",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision,
-                      }),
-                    }),
-                  )
-                }
-                onTokenResize={async (tokenId, revision, size) => {
-                  const actionId = crypto.randomUUID();
-                  try {
-                    const updated = await runResult(() =>
-                      api<TokenDto>(`/api/tokens/${tokenId}/size`, {
-                        method: "PATCH",
-                        headers: { "x-action-id": actionId },
+                      },
+                      (result) => {
+                        if (
+                          !result.ok &&
+                          result.reason === "NO_VISIBLE_PLAYERS"
+                        )
+                          notify({
+                            title:
+                              "На карте нет игроков, которые могут это увидеть",
+                            tone: "info",
+                          });
+                      },
+                    );
+                  }}
+                  onPlaceTokenDefinition={async (definitionId, point) =>
+                    run(() =>
+                      api(`/api/token-definitions/${definitionId}/placements`, {
+                        method: "POST",
                         body: JSON.stringify({
-                          actionId,
+                          actionId: crypto.randomUUID(),
+                          definitionId,
+                          sceneId: activeScene.id,
+                          ...point,
+                        }),
+                      }),
+                    )
+                  }
+                  onTokenLayerChange={(tokenId, revision, layer) =>
+                    run(() =>
+                      api(`/api/tokens/${tokenId}/layer`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
                           revision,
-                          ...size,
+                          layer,
+                        }),
+                      }),
+                    )
+                  }
+                  onTokenDelete={(tokenId, revision) =>
+                    run(() =>
+                      api(`/api/tokens/${tokenId}`, {
+                        method: "DELETE",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          revision,
+                        }),
+                      }),
+                    )
+                  }
+                  onTokenResize={async (tokenId, revision, size) => {
+                    const actionId = crypto.randomUUID();
+                    try {
+                      const updated = await runResult(() =>
+                        api<TokenDto>(`/api/tokens/${tokenId}/size`, {
+                          method: "PATCH",
+                          headers: { "x-action-id": actionId },
+                          body: JSON.stringify({
+                            actionId,
+                            revision,
+                            ...size,
+                          }),
+                        }),
+                      );
+                      setSnapshot((current) =>
+                        current
+                          ? {
+                              ...current,
+                              tokens: current.tokens.map((token) =>
+                                token.id === updated.id ? updated : token,
+                              ),
+                            }
+                          : current,
+                      );
+                    } catch (reason) {
+                      await recoverFromCanvasMutation(reason);
+                      throw reason;
+                    }
+                  }}
+                  onTokenAppearanceChange={(tokenId, revision, appearance) =>
+                    run(() =>
+                      api(`/api/tokens/${tokenId}/appearance`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          revision,
+                          ...appearance,
+                        }),
+                      }),
+                    )
+                  }
+                  onDrawingUpdate={async (drawingId, revision, patch) => {
+                    try {
+                      const updated = await runResult(() =>
+                        api<import("@arken/contracts").DrawingDto>(
+                          `/api/drawings/${drawingId}`,
+                          {
+                            method: "PATCH",
+                            body: JSON.stringify({
+                              actionId: crypto.randomUUID(),
+                              revision,
+                              ...patch,
+                            }),
+                          },
+                        ),
+                      );
+                      // Apply the PATCH response (with its new revision)
+                      // directly rather than waiting for the broadcast
+                      // snapshot round-trip: on a slow network the broadcast
+                      // can lag behind the next debounced edit, which would
+                      // otherwise keep reading a stale revision and 409 on
+                      // every subsequent request.
+                      setSnapshot((current) =>
+                        current
+                          ? {
+                              ...current,
+                              drawings: (current.drawings ?? []).map((item) =>
+                                item.id === updated.id ? updated : item,
+                              ),
+                            }
+                          : current,
+                      );
+                    } catch (reason) {
+                      // This used to rebuild everything on 409 and stay silent
+                      // on every other failure -- backwards on both counts. A
+                      // conflict is the one case the broadcast already corrects,
+                      // while a 5xx or a dropped connection is what actually
+                      // leaves local state untrustworthy, and swallowing it left
+                      // the user's edit silently discarded.
+                      await recoverFromCanvasMutation(reason);
+                      throw reason;
+                    }
+                  }}
+                  onDrawingDelete={(drawingId, revision) =>
+                    run(() =>
+                      api(`/api/drawings/${drawingId}`, {
+                        method: "DELETE",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          revision,
+                        }),
+                      }),
+                    )
+                  }
+                  onDrawingCopy={(drawingId, revision) =>
+                    run(() =>
+                      api(`/api/drawings/${drawingId}/copy`, {
+                        method: "POST",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          revision,
+                        }),
+                      }),
+                    )
+                  }
+                  onBulkMove={async (targets, delta) => {
+                    const acknowledgement = await runResult(() =>
+                      api<{
+                        revisions: {
+                          tokens: Record<string, number>;
+                          drawings: Record<string, number>;
+                        };
+                      }>("/api/canvas/bulk", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          sceneId: activeScene.id,
+                          operation: "MOVE",
+                          deltaX: delta.x,
+                          deltaY: delta.y,
+                          targets,
                         }),
                       }),
                     );
+                    // UIX-396 stage 2: the response carries the new revision for
+                    // every moved entity and used to be thrown away, so a second
+                    // drag before the broadcast landed still sent the superseded
+                    // one and was rejected with a 409 -- losing the move on the
+                    // app's most frequent action. See canvas-bulk-move.ts.
+                    const revisions = acknowledgement?.revisions;
                     setSnapshot((current) =>
                       current
                         ? {
                             ...current,
-                            tokens: current.tokens.map((token) =>
-                              token.id === updated.id ? updated : token,
-                            ),
+                            tokens: applyBulkMoveResult(
+                              current.tokens,
+                              revisions?.tokens,
+                              delta,
+                            ) as GameSnapshot["tokens"],
+                            drawings: applyBulkMoveResult(
+                              current.drawings ?? [],
+                              revisions?.drawings,
+                              delta,
+                            ) as GameSnapshot["drawings"],
                           }
                         : current,
                     );
-                  } catch (reason) {
-                    await recoverFromCanvasMutation(reason);
-                    throw reason;
+                    return acknowledgement;
+                  }}
+                  onBulkDelete={(selection) =>
+                    run(() =>
+                      api("/api/canvas/bulk", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          sceneId: activeScene.id,
+                          operation: "DELETE",
+                          targets: [
+                            ...selection.tokenIds.flatMap((id) => {
+                              const token = activeTokens.find(
+                                (item) => item.id === id,
+                              );
+                              return token
+                                ? [
+                                    {
+                                      targetType: "TOKEN" as const,
+                                      targetId: id,
+                                      revision: token.revision,
+                                    },
+                                  ]
+                                : [];
+                            }),
+                            ...selection.drawingIds.flatMap((id) => {
+                              const drawing = activeDrawings.find(
+                                (item) => item.id === id,
+                              );
+                              return drawing
+                                ? [
+                                    {
+                                      targetType: "DRAWING" as const,
+                                      targetId: id,
+                                      revision: drawing.revision,
+                                    },
+                                  ]
+                                : [];
+                            }),
+                          ],
+                        }),
+                      }),
+                    )
                   }
-                }}
-                onTokenAppearanceChange={(tokenId, revision, appearance) =>
-                  run(() =>
-                    api(`/api/tokens/${tokenId}/appearance`, {
-                      method: "PATCH",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision,
-                        ...appearance,
-                      }),
-                    }),
-                  )
-                }
-                onDrawingUpdate={async (drawingId, revision, patch) => {
-                  try {
-                    const updated = await runResult(() =>
-                      api<import("@arken/contracts").DrawingDto>(
-                        `/api/drawings/${drawingId}`,
-                        {
-                          method: "PATCH",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            revision,
-                            ...patch,
-                          }),
-                        },
-                      ),
-                    );
-                    // Apply the PATCH response (with its new revision)
-                    // directly rather than waiting for the broadcast
-                    // snapshot round-trip: on a slow network the broadcast
-                    // can lag behind the next debounced edit, which would
-                    // otherwise keep reading a stale revision and 409 on
-                    // every subsequent request.
-                    setSnapshot((current) =>
-                      current
-                        ? {
-                            ...current,
-                            drawings: (current.drawings ?? []).map((item) =>
-                              item.id === updated.id ? updated : item,
-                            ),
-                          }
-                        : current,
-                    );
-                  } catch (reason) {
-                    // This used to rebuild everything on 409 and stay silent
-                    // on every other failure -- backwards on both counts. A
-                    // conflict is the one case the broadcast already corrects,
-                    // while a 5xx or a dropped connection is what actually
-                    // leaves local state untrustworthy, and swallowing it left
-                    // the user's edit silently discarded.
-                    await recoverFromCanvasMutation(reason);
-                    throw reason;
-                  }
-                }}
-                onDrawingDelete={(drawingId, revision) =>
-                  run(() =>
-                    api(`/api/drawings/${drawingId}`, {
-                      method: "DELETE",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision,
-                      }),
-                    }),
-                  )
-                }
-                onDrawingCopy={(drawingId, revision) =>
-                  run(() =>
-                    api(`/api/drawings/${drawingId}/copy`, {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision,
-                      }),
-                    }),
-                  )
-                }
-                onBulkMove={async (targets, delta) => {
-                  const acknowledgement = await runResult(() =>
-                    api<{
-                      revisions: {
-                        tokens: Record<string, number>;
-                        drawings: Record<string, number>;
-                      };
-                    }>("/api/canvas/bulk", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        sceneId: activeScene.id,
-                        operation: "MOVE",
-                        deltaX: delta.x,
-                        deltaY: delta.y,
-                        targets,
-                      }),
-                    }),
-                  );
-                  // UIX-396 stage 2: the response carries the new revision for
-                  // every moved entity and used to be thrown away, so a second
-                  // drag before the broadcast landed still sent the superseded
-                  // one and was rejected with a 409 -- losing the move on the
-                  // app's most frequent action. See canvas-bulk-move.ts.
-                  const revisions = acknowledgement?.revisions;
-                  setSnapshot((current) =>
-                    current
-                      ? {
-                          ...current,
-                          tokens: applyBulkMoveResult(
-                            current.tokens,
-                            revisions?.tokens,
-                            delta,
-                          ) as GameSnapshot["tokens"],
-                          drawings: applyBulkMoveResult(
-                            current.drawings ?? [],
-                            revisions?.drawings,
-                            delta,
-                          ) as GameSnapshot["drawings"],
-                        }
-                      : current,
-                  );
-                  return acknowledgement;
-                }}
-                onBulkDelete={(selection) =>
-                  run(() =>
-                    api("/api/canvas/bulk", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        sceneId: activeScene.id,
-                        operation: "DELETE",
-                        targets: [
-                          ...selection.tokenIds.flatMap((id) => {
-                            const token = activeTokens.find(
-                              (item) => item.id === id,
-                            );
-                            return token
-                              ? [
-                                  {
-                                    targetType: "TOKEN" as const,
-                                    targetId: id,
-                                    revision: token.revision,
-                                  },
-                                ]
-                              : [];
-                          }),
-                          ...selection.drawingIds.flatMap((id) => {
-                            const drawing = activeDrawings.find(
-                              (item) => item.id === id,
-                            );
-                            return drawing
-                              ? [
-                                  {
-                                    targetType: "DRAWING" as const,
-                                    targetId: id,
-                                    revision: drawing.revision,
-                                  },
-                                ]
-                              : [];
-                          }),
-                        ],
-                      }),
-                    }),
-                  )
-                }
-              />
-            </Suspense>
-          ) : (
-            <div className="empty-map">Мастер ещё не создал сцену.</div>
-          )}
-          {rollToasts.length > 0 && (
-            <div className="roll-toast-stack" aria-live="polite">
-              {rollToasts.map(({ message, appearanceId }) => (
-                <div
-                  className="roll-toast"
-                  key={`${message.id}-${appearanceId}`}
-                >
-                  <button
-                    className="roll-toast-open"
-                    onClick={() => {
-                      handleSidebarCollapsedChange(false);
-                      setRequestedChatMessageId(message.id);
-                      setRollToasts((current) =>
-                        removeRollToast(current, message.id),
-                      );
-                    }}
+                />
+              </Suspense>
+            ) : (
+              <div className="empty-map">Мастер ещё не создал сцену.</div>
+            )}
+            {rollToasts.length > 0 && (
+              <div className="roll-toast-stack" aria-live="polite">
+                {rollToasts.map(({ message, appearanceId }) => (
+                  <div
+                    className="roll-toast"
+                    key={`${message.id}-${appearanceId}`}
                   >
-                    <strong>
-                      {message.displayName}: {message.body}
-                    </strong>
-                    <span>
-                      {normalizeClientDiceResult(message.dice)?.total ?? "—"}
-                    </span>
-                  </button>
-                  <button
-                    className="roll-toast-close"
-                    aria-label="Закрыть уведомление"
-                    onClick={() =>
-                      setRollToasts((current) =>
-                        removeRollToast(current, message.id),
-                      )
-                    }
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          {!previewSnapshot && (
-            <details className="token-tray">
-              <summary>
-                Токены · {snapshot.tokenDefinitions?.length ?? 0}
-              </summary>
-              <div className="token-tray-list">
-                {(snapshot.tokenDefinitions?.length ?? 0) === 0 && (
-                  <p className="muted">
-                    {snapshot.me.role === "GM"
-                      ? "Создайте токен персонажа в подготовке."
-                      : "Мастер ещё не назначил вам доступные токены."}
-                  </p>
-                )}
-                {(snapshot.tokenDefinitions ?? []).map((definition) => {
-                  const asset = snapshot.assets.find(
-                    (item) => item.id === definition.defaultAssetId,
-                  );
-                  return (
                     <button
-                      key={definition.id}
-                      draggable
-                      onDragStart={(event) =>
-                        event.dataTransfer.setData(
-                          "application/x-arken-token-definition",
-                          definition.id,
-                        )
-                      }
+                      className="roll-toast-open"
+                      onClick={() => {
+                        handleSidebarCollapsedChange(false);
+                        setRequestedChatMessageId(message.id);
+                        setRollToasts((current) =>
+                          removeRollToast(current, message.id),
+                        );
+                      }}
+                    >
+                      <strong>
+                        {message.displayName}: {message.body}
+                      </strong>
+                      <span>
+                        {normalizeClientDiceResult(message.dice)?.total ?? "—"}
+                      </span>
+                    </button>
+                    <button
+                      className="roll-toast-close"
+                      aria-label="Закрыть уведомление"
                       onClick={() =>
-                        activeScene &&
-                        void run(() =>
-                          api(
-                            `/api/token-definitions/${definition.id}/placements`,
-                            {
-                              method: "POST",
-                              body: JSON.stringify({
-                                actionId: crypto.randomUUID(),
-                                definitionId: definition.id,
-                                sceneId: activeScene.id,
-                              }),
-                            },
-                          ),
+                        setRollToasts((current) =>
+                          removeRollToast(current, message.id),
                         )
                       }
                     >
-                      {asset ? (
-                        <img src={asset.url} alt="" />
-                      ) : (
-                        <span>{definition.name.slice(0, 2).toUpperCase()}</span>
-                      )}
-                      <strong>{definition.name}</strong>
+                      ×
                     </button>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
-            </details>
+            )}
+            {!previewSnapshot && (
+              <details className="token-tray">
+                <summary>
+                  Токены · {snapshot.tokenDefinitions?.length ?? 0}
+                </summary>
+                <div className="token-tray-list">
+                  {(snapshot.tokenDefinitions?.length ?? 0) === 0 && (
+                    <p className="muted">
+                      {snapshot.me.role === "GM"
+                        ? "Создайте токен персонажа в подготовке."
+                        : "Мастер ещё не назначил вам доступные токены."}
+                    </p>
+                  )}
+                  {(snapshot.tokenDefinitions ?? []).map((definition) => {
+                    const asset = snapshot.assets.find(
+                      (item) => item.id === definition.defaultAssetId,
+                    );
+                    return (
+                      <button
+                        key={definition.id}
+                        draggable
+                        onDragStart={(event) =>
+                          event.dataTransfer.setData(
+                            "application/x-arken-token-definition",
+                            definition.id,
+                          )
+                        }
+                        onClick={() =>
+                          activeScene &&
+                          void run(() =>
+                            api(
+                              `/api/token-definitions/${definition.id}/placements`,
+                              {
+                                method: "POST",
+                                body: JSON.stringify({
+                                  actionId: crypto.randomUUID(),
+                                  definitionId: definition.id,
+                                  sceneId: activeScene.id,
+                                }),
+                              },
+                            ),
+                          )
+                        }
+                      >
+                        {asset ? (
+                          <img src={asset.url} alt="" />
+                        ) : (
+                          <span>
+                            {definition.name.slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                        <strong>{definition.name}</strong>
+                      </button>
+                    );
+                  })}
+                </div>
+              </details>
+            )}
+          </main>
+          {previewSnapshot ? (
+            <aside className="sidebar">
+              <div className="panel-scroll">
+                <section className="panel-section">
+                  <span className="eyebrow">Режим мастера</span>
+                  <h2>Глазами игрока</h2>
+                  <p>
+                    Сейчас показаны только активная сцена, видимые токены и
+                    файлы, доступные игроку {viewSnapshot.me.displayName}.
+                  </p>
+                  <button onClick={() => setPreviewSnapshot(null)}>
+                    Завершить просмотр
+                  </button>
+                </section>
+              </div>
+            </aside>
+          ) : (
+            <Sidebar
+              snapshot={snapshot}
+              requestedCharacterId={requestedCharacterId}
+              socket={socket}
+              presence={presence}
+              requestedChatMessageId={requestedChatMessageId}
+              onRequestedChatMessageHandled={handleRequestedChatMessage}
+              onChatVisibilityChange={handleChatVisibilityChange}
+              collapsed={sidebarCollapsed}
+              onCollapsedChange={handleSidebarCollapsedChange}
+              onResizeHandleDown={handleSidebarResizeStart}
+              onResizeHandleMove={handleSidebarResizeMove}
+              onResizeHandleUp={handleSidebarResizeEnd}
+              workspace={workspace}
+              operatorFeedbackAllowed={operatorFeedbackAllowed}
+              onWorkspaceChange={handleWorkspaceChange}
+              onPatchCharacter={patchCharacter}
+              onReplaceCharacterControllers={replaceCharacterControllers}
+              storyPosts={storyPosts}
+              storyNextCursor={storyNextCursor}
+              onRoll={submitRoll}
+              onCreateCharacter={async (name, template) =>
+                run(
+                  () =>
+                    api("/api/characters", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        name,
+                        actionId: crypto.randomUUID(),
+                        ...(template ? { template } : {}),
+                      }),
+                    }),
+                  true,
+                )
+              }
+              sceneDialogRequest={sceneDialogRequest}
+              viewedSceneId={activeScene?.id ?? null}
+              onPreviewPlayer={async (membershipId) => {
+                const playerView = await api<GameSnapshot>(
+                  `/api/preview/${membershipId}`,
+                );
+                setTool("PAN");
+                setPreviewSnapshot(playerView);
+              }}
+              onUpdateCounters={updateCharacterCounters}
+              onCampaignClock={(command, revision) =>
+                run(
+                  () =>
+                    api("/api/campaign/clock", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        command,
+                        revision,
+                      }),
+                    }),
+                  true,
+                )
+              }
+            />
           )}
-        </main>
-        {previewSnapshot ? (
-          <aside className="sidebar">
-            <div className="panel-scroll">
-              <section className="panel-section">
-                <span className="eyebrow">Режим мастера</span>
-                <h2>Глазами игрока</h2>
-                <p>
-                  Сейчас показаны только активная сцена, видимые токены и файлы,
-                  доступные игроку {viewSnapshot.me.displayName}.
-                </p>
-                <button onClick={() => setPreviewSnapshot(null)}>
-                  Завершить просмотр
-                </button>
-              </section>
-            </div>
-          </aside>
-        ) : (
-          <Sidebar
-            snapshot={snapshot}
-            requestedCharacterId={requestedCharacterId}
-            socket={socket}
-            presence={presence}
-            requestedChatMessageId={requestedChatMessageId}
-            onRequestedChatMessageHandled={handleRequestedChatMessage}
-            onChatVisibilityChange={handleChatVisibilityChange}
-            collapsed={sidebarCollapsed}
-            onCollapsedChange={handleSidebarCollapsedChange}
-            onResizeHandleDown={handleSidebarResizeStart}
-            onResizeHandleMove={handleSidebarResizeMove}
-            onResizeHandleUp={handleSidebarResizeEnd}
-            workspace={workspace}
-            operatorFeedbackAllowed={operatorFeedbackAllowed}
-            onWorkspaceChange={handleWorkspaceChange}
-            onPatchCharacter={patchCharacter}
-            onReplaceCharacterControllers={replaceCharacterControllers}
-            storyPosts={storyPosts}
-            storyNextCursor={storyNextCursor}
-            onRoll={submitRoll}
-            onCreateCharacter={async (name, template) =>
-              run(
-                () =>
-                  api("/api/characters", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      name,
-                      actionId: crypto.randomUUID(),
-                      ...(template ? { template } : {}),
-                    }),
+        </div>
+        <TextPromptDialog
+          open={createSceneOpen}
+          title="Новая сцена"
+          label="Название сцены"
+          applyLabel="Создать"
+          onClose={() => setCreateSceneOpen(false)}
+          onApply={async (name) => {
+            await run(async () => {
+              const scene = await api<import("@arken/contracts").SceneDto>(
+                "/api/scenes",
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    actionId: crypto.randomUUID(),
+                    name,
                   }),
-                true,
-              )
-            }
-            sceneDialogRequest={sceneDialogRequest}
-            viewedSceneId={activeScene?.id ?? null}
-            onPreviewPlayer={async (membershipId) => {
-              const playerView = await api<GameSnapshot>(
-                `/api/preview/${membershipId}`,
+                },
               );
-              setTool("PAN");
-              setPreviewSnapshot(playerView);
-            }}
-            onUpdateCounters={updateCharacterCounters}
-            onCampaignClock={(command, revision) =>
-              run(
-                () =>
-                  api("/api/campaign/clock", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      command,
-                      revision,
-                    }),
-                  }),
-                true,
-              )
-            }
-          />
-        )}
+              setViewedSceneId(scene.id);
+            }, true);
+            setCreateSceneOpen(false);
+          }}
+        />
       </div>
-      <TextPromptDialog
-        open={createSceneOpen}
-        title="Новая сцена"
-        label="Название сцены"
-        applyLabel="Создать"
-        onClose={() => setCreateSceneOpen(false)}
-        onApply={async (name) => {
-          await run(async () => {
-            const scene = await api<import("@arken/contracts").SceneDto>(
-              "/api/scenes",
-              {
-                method: "POST",
-                body: JSON.stringify({
-                  actionId: crypto.randomUUID(),
-                  name,
-                }),
-              },
-            );
-            setViewedSceneId(scene.id);
-          }, true);
-          setCreateSceneOpen(false);
-        }}
-      />
-    </div>
     </CampaignActionsContext.Provider>
   );
 }

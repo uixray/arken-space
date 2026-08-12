@@ -440,21 +440,25 @@ export type EncounterPreflightResponse = z.infer<
 
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
+export const STAT_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
 export const rollActionKindSchema = z.enum(["HIT", "DAMAGE", "CUSTOM"]);
 export const modifierSourceSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("CHARACTERISTIC"),
-    key: z.enum([
-      "strength",
-      "agility",
-      "endurance",
-      "vitality",
-      "knowledge",
-      "intelligence",
-      "willpower",
-      "charisma",
-    ]),
+    /**
+     * UIX-424: раньше здесь были восемь литералов — пятая копия списка
+     * характеристик, и именно она делала форму способности неполной: мастер не
+     * мог сослаться на реакцию, внимательность и силу магии, хотя система их
+     * определяла.
+     *
+     * Теперь это ключ раскладки. Проверять его существование здесь нечем:
+     * раскладка принадлежит кампании, а схема о кампании не знает. Существование
+     * проверяет тот, кто применяет модификатор, — и уже проверяет: движок
+     * бросков отвечает «стат не найден».
+     */
+    key: z.string().regex(STAT_KEY_PATTERN).max(40),
   }),
   z.object({
     type: z.literal("ENTRY_VALUE"),
@@ -550,7 +554,6 @@ export const fixedCharacteristicsSchema = z.object({
  * запись показывается**: какие строки, в каких группах, под какими подписями.
  * Поэтому она общая на кампанию, а не своя у каждого персонажа.
  */
-export const STAT_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 /**
  * Откуда строка берёт значение.

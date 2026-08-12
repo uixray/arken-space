@@ -12,10 +12,7 @@
  * "flip a switch for future messages".
  */
 export type ComposerKeydownAction =
-  | "SEND_PUBLIC"
-  | "SEND_GM_ONLY"
-  | "NEWLINE"
-  | "IGNORE";
+  "SEND_PUBLIC" | "SEND_GM_ONLY" | "NEWLINE" | "IGNORE";
 
 export function decideComposerKeydown(event: {
   key: string;

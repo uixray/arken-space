@@ -273,8 +273,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
             />
           ) : (
             <p className="muted">
-              Выберите сущность слева, чтобы просмотреть или отредактировать
-              её.
+              Выберите сущность слева, чтобы просмотреть или отредактировать её.
             </p>
           )}
         </section>
@@ -918,7 +917,10 @@ function MediaSection({
         <ul className="world-content-workspace__media-grid">
           {sorted.map((item, index) => (
             <li key={item.id}>
-              <img src={`/api/assets/${item.assetId}/content`} alt={item.caption ?? ""} />
+              <img
+                src={`/api/assets/${item.assetId}/content`}
+                alt={item.caption ?? ""}
+              />
               {item.caption && <p>{item.caption}</p>}
               <div className="world-content-workspace__media-actions">
                 <Button

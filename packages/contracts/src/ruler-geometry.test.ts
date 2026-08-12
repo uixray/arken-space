@@ -90,9 +90,9 @@ describe("ruler geometry (UIX-381)", () => {
         rulerUpdateSchema.safeParse({ sceneId, points: [{ x: 0, y: 0 }] })
           .success,
       ).toBe(false);
-      expect(
-        rulerUpdateSchema.safeParse({ sceneId, points: [] }).success,
-      ).toBe(false);
+      expect(rulerUpdateSchema.safeParse({ sceneId, points: [] }).success).toBe(
+        false,
+      );
     });
 
     it("rejects non-finite coordinates", () => {

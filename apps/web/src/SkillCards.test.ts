@@ -110,7 +110,9 @@ describe("SkillChatCard (UIX-389 formula humanization)", () => {
   };
 
   it("never renders the raw stat key from the formula", () => {
-    const html = renderToStaticMarkup(createElement(SkillChatCard, { card: baseCard }));
+    const html = renderToStaticMarkup(
+      createElement(SkillChatCard, { card: baseCard }),
+    );
     expect(html).toContain("Ловкость");
     expect(html).not.toContain("agility");
   });

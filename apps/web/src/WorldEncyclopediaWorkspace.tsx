@@ -55,160 +55,162 @@ const notFoundError =
  * `GameSnapshot`, so with a stable `onClose` (see `closeWorkspace` in
  * `Sidebar.tsx`) this panel is inert to unrelated realtime snapshot events.
  */
-export const WorldEncyclopediaWorkspace = memo(function WorldEncyclopediaWorkspace({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  const [items, setItems] = useState<WorldContentPlayerDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState("");
-  const [filterType, setFilterType] = useState<WorldContentType | "">("");
-  const [filterTags, setFilterTags] = useState("");
-  const [filterQ, setFilterQ] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export const WorldEncyclopediaWorkspace = memo(
+  function WorldEncyclopediaWorkspace({
+    open,
+    onClose,
+  }: {
+    open: boolean;
+    onClose: () => void;
+  }) {
+    const [items, setItems] = useState<WorldContentPlayerDto[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [listError, setListError] = useState("");
+    const [filterType, setFilterType] = useState<WorldContentType | "">("");
+    const [filterTags, setFilterTags] = useState("");
+    const [filterQ, setFilterQ] = useState("");
+    const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    setListError("");
-    try {
-      const list = await fetchWorldContentPlayerList({
-        type: filterType || undefined,
-        tags: parseTagList(filterTags),
-        q: filterQ.trim() || undefined,
-      });
-      setItems(list);
-    } catch (reason) {
-      setListError(formatApiError(reason, safeError));
-    } finally {
-      setLoading(false);
-    }
-  };
+    const load = async () => {
+      setLoading(true);
+      setListError("");
+      try {
+        const list = await fetchWorldContentPlayerList({
+          type: filterType || undefined,
+          tags: parseTagList(filterTags),
+          q: filterQ.trim() || undefined,
+        });
+        setItems(list);
+      } catch (reason) {
+        setListError(formatApiError(reason, safeError));
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  useEffect(() => {
-    if (!open) return;
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+    useEffect(() => {
+      if (!open) return;
+      void load();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
-  return (
-    <ArkenDialog
-      open={open}
-      footer={false}
-      title="Энциклопедия"
-      variant="workspace"
-      className="world-encyclopedia-workspace"
-      workspaceDraggable={false}
-      onClose={onClose}
-    >
-      <div className="world-encyclopedia-workspace__grid">
-        <section className="world-encyclopedia-workspace__list-pane">
-          <div className="world-encyclopedia-workspace__filters">
-            <label className="field">
-              Тип
-              <FormSelect
-                value={filterType}
-                onChange={(event) =>
-                  setFilterType(event.target.value as WorldContentType | "")
-                }
-              >
-                <option value="">Все типы</option>
-                {WORLD_CONTENT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {WORLD_CONTENT_TYPE_LABELS[type]}
-                  </option>
-                ))}
-              </FormSelect>
-            </label>
-            <label className="field">
-              Поиск
-              <FormInput
-                value={filterQ}
-                placeholder="Название, описание, алиас…"
-                onChange={(event) => setFilterQ(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void load();
-                }}
-              />
-            </label>
-            <label className="field">
-              Теги (через запятую)
-              <FormInput
-                value={filterTags}
-                placeholder="fraction, port"
-                onChange={(event) => setFilterTags(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void load();
-                }}
-              />
-            </label>
-            <Button onClick={() => void load()} disabled={loading}>
-              Применить
-            </Button>
-          </div>
-          {listError && (
-            <p className="field-error" role="alert">
-              {listError}
-            </p>
-          )}
-          {loading ? (
-            <p className="muted">Загрузка…</p>
-          ) : items.length === 0 ? (
-            <p className="muted">Ничего не найдено.</p>
-          ) : (
-            <ul className="world-encyclopedia-workspace__list">
-              {items.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={
-                      item.id === selectedId
-                        ? "world-encyclopedia-workspace__row is-selected"
-                        : "world-encyclopedia-workspace__row"
-                    }
-                    onClick={() => setSelectedId(item.id)}
-                  >
-                    <span className="world-encyclopedia-workspace__row-name">
-                      {item.name}
-                    </span>
-                    <span className="world-encyclopedia-workspace__row-type">
-                      {WORLD_CONTENT_TYPE_LABELS[item.type]}
-                    </span>
-                    {item.tags.length > 0 && (
-                      <span className="world-encyclopedia-workspace__row-tags">
-                        {item.tags.map((tag) => (
-                          <span key={tag} className="chip">
-                            {tag}
-                          </span>
-                        ))}
+    return (
+      <ArkenDialog
+        open={open}
+        footer={false}
+        title="Энциклопедия"
+        variant="workspace"
+        className="world-encyclopedia-workspace"
+        workspaceDraggable={false}
+        onClose={onClose}
+      >
+        <div className="world-encyclopedia-workspace__grid">
+          <section className="world-encyclopedia-workspace__list-pane">
+            <div className="world-encyclopedia-workspace__filters">
+              <label className="field">
+                Тип
+                <FormSelect
+                  value={filterType}
+                  onChange={(event) =>
+                    setFilterType(event.target.value as WorldContentType | "")
+                  }
+                >
+                  <option value="">Все типы</option>
+                  {WORLD_CONTENT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {WORLD_CONTENT_TYPE_LABELS[type]}
+                    </option>
+                  ))}
+                </FormSelect>
+              </label>
+              <label className="field">
+                Поиск
+                <FormInput
+                  value={filterQ}
+                  placeholder="Название, описание, алиас…"
+                  onChange={(event) => setFilterQ(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void load();
+                  }}
+                />
+              </label>
+              <label className="field">
+                Теги (через запятую)
+                <FormInput
+                  value={filterTags}
+                  placeholder="fraction, port"
+                  onChange={(event) => setFilterTags(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void load();
+                  }}
+                />
+              </label>
+              <Button onClick={() => void load()} disabled={loading}>
+                Применить
+              </Button>
+            </div>
+            {listError && (
+              <p className="field-error" role="alert">
+                {listError}
+              </p>
+            )}
+            {loading ? (
+              <p className="muted">Загрузка…</p>
+            ) : items.length === 0 ? (
+              <p className="muted">Ничего не найдено.</p>
+            ) : (
+              <ul className="world-encyclopedia-workspace__list">
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className={
+                        item.id === selectedId
+                          ? "world-encyclopedia-workspace__row is-selected"
+                          : "world-encyclopedia-workspace__row"
+                      }
+                      onClick={() => setSelectedId(item.id)}
+                    >
+                      <span className="world-encyclopedia-workspace__row-name">
+                        {item.name}
                       </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section className="world-encyclopedia-workspace__detail-pane">
-          {selectedId ? (
-            <EntityPage
-              key={selectedId}
-              id={selectedId}
-              onNavigate={setSelectedId}
-              onMissing={() => setSelectedId(null)}
-            />
-          ) : (
-            <p className="muted">
-              Выберите статью слева, чтобы прочитать её.
-            </p>
-          )}
-        </section>
-      </div>
-    </ArkenDialog>
-  );
-});
+                      <span className="world-encyclopedia-workspace__row-type">
+                        {WORLD_CONTENT_TYPE_LABELS[item.type]}
+                      </span>
+                      {item.tags.length > 0 && (
+                        <span className="world-encyclopedia-workspace__row-tags">
+                          {item.tags.map((tag) => (
+                            <span key={tag} className="chip">
+                              {tag}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="world-encyclopedia-workspace__detail-pane">
+            {selectedId ? (
+              <EntityPage
+                key={selectedId}
+                id={selectedId}
+                onNavigate={setSelectedId}
+                onMissing={() => setSelectedId(null)}
+              />
+            ) : (
+              <p className="muted">
+                Выберите статью слева, чтобы прочитать её.
+              </p>
+            )}
+          </section>
+        </div>
+      </ArkenDialog>
+    );
+  },
+);
 
 function EntityPage({
   id,
@@ -221,9 +223,7 @@ function EntityPage({
 }) {
   const [entity, setEntity] = useState<WorldContentPlayerDto | null>(null);
   const [media, setMedia] = useState<WorldContentMediaDto[]>([]);
-  const [relations, setRelations] = useState<WorldContentRelationEdgeDto[]>(
-    [],
-  );
+  const [relations, setRelations] = useState<WorldContentRelationEdgeDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -352,7 +352,8 @@ function EntityPage({
                   className="world-encyclopedia-workspace__relation-link"
                   onClick={() => onNavigate(edge.entity.id)}
                 >
-                  {WORLD_CONTENT_TYPE_LABELS[edge.entity.type]}: {edge.entity.name}
+                  {WORLD_CONTENT_TYPE_LABELS[edge.entity.type]}:{" "}
+                  {edge.entity.name}
                 </Button>
                 <span className="muted"> ({edge.relationType})</span>
               </li>

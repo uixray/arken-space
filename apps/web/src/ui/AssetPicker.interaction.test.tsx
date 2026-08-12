@@ -70,7 +70,10 @@ describe("AssetPicker interaction", () => {
     const user = userEvent.setup();
     renderComponent(
       <AssetPicker
-        assets={[asset({ id: "a", name: "Alpha" }), asset({ id: "b", name: "Beta" })]}
+        assets={[
+          asset({ id: "a", name: "Alpha" }),
+          asset({ id: "b", name: "Beta" }),
+        ]}
         value={null}
         onChange={() => {}}
         noneLabel="Без изображения"
@@ -112,15 +115,21 @@ describe("AssetPicker interaction", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Hero Portrait" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Villain Portrait" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Hero Portrait" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Villain Portrait" }),
+    ).toBeInTheDocument();
 
     await user.type(
       screen.getByRole("textbox", { name: "Поиск изображений по имени" }),
       "hero",
     );
 
-    expect(screen.getByRole("button", { name: "Hero Portrait" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Hero Portrait" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Villain Portrait" }),
     ).not.toBeInTheDocument();
@@ -139,7 +148,9 @@ describe("AssetPicker interaction", () => {
     );
 
     expect(screen.getByText("Нет доступных изображений.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Загрузить изображение" }));
+    await user.click(
+      screen.getByRole("button", { name: "Загрузить изображение" }),
+    );
     expect(onSelect).toHaveBeenCalledOnce();
   });
 });

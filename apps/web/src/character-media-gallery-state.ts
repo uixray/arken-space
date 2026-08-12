@@ -1,7 +1,14 @@
-import type { CharacterMediaCategory, CharacterMediaDto, CharacterMediaVisibility } from "@arken/contracts";
+import type {
+  CharacterMediaCategory,
+  CharacterMediaDto,
+  CharacterMediaVisibility,
+} from "@arken/contracts";
 
 /** UI labels for `CharacterMediaCategory`; shared by the owner gallery view. */
-export const CHARACTER_MEDIA_CATEGORY_LABELS: Record<CharacterMediaCategory, string> = {
+export const CHARACTER_MEDIA_CATEGORY_LABELS: Record<
+  CharacterMediaCategory,
+  string
+> = {
   CHARACTER_ART: "Арт персонажа",
   ARTIFACT: "Артефакт",
   ITEM: "Предмет",
@@ -11,7 +18,10 @@ export const CHARACTER_MEDIA_CATEGORY_LABELS: Record<CharacterMediaCategory, str
 };
 
 /** UI labels for `CharacterMediaVisibility`. */
-export const CHARACTER_MEDIA_VISIBILITY_LABELS: Record<CharacterMediaVisibility, string> = {
+export const CHARACTER_MEDIA_VISIBILITY_LABELS: Record<
+  CharacterMediaVisibility,
+  string
+> = {
   OWNER_GM: "Владелец и мастер",
   PARTY: "Вся группа",
   GM_ONLY: "Только мастер",
@@ -42,10 +52,12 @@ export function computeAdjacentSwap(
   items: readonly CharacterMediaDto[],
   id: string,
   direction: "up" | "down",
-): [
-  { id: string; revision: number; ordering: number },
-  { id: string; revision: number; ordering: number },
-] | null {
+):
+  | [
+      { id: string; revision: number; ordering: number },
+      { id: string; revision: number; ordering: number },
+    ]
+  | null {
   const sorted = sortMediaByOrdering(items);
   const index = sorted.findIndex((item) => item.id === id);
   if (index === -1) return null;
@@ -55,7 +67,11 @@ export function computeAdjacentSwap(
   const neighbor = sorted[neighborIndex]!;
   return [
     { id: current.id, revision: current.revision, ordering: neighbor.ordering },
-    { id: neighbor.id, revision: neighbor.revision, ordering: current.ordering },
+    {
+      id: neighbor.id,
+      revision: neighbor.revision,
+      ordering: current.ordering,
+    },
   ];
 }
 

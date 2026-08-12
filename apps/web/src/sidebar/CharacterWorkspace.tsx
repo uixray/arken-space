@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { statLabelsFromLayout } from "../stat-keys";
 import { useCampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
@@ -78,9 +79,7 @@ export function CharacterWorkspace({
   // dialog for a single character; `restoreDialogOpen` opens the separate
   // archived-roster dialog (archived characters are excluded from
   // `props.snapshot.characters` server-side, so they are fetched on demand).
-  const [archiveTarget, setArchiveTarget] = useState<CharacterDto | null>(
-    null,
-  );
+  const [archiveTarget, setArchiveTarget] = useState<CharacterDto | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
 
   useEffect(() => titleRef.current?.focus(), []);
@@ -506,15 +505,20 @@ function ArchiveCharacterDialog({
       onClose={() => !pending && onClose()}
     >
       <p className="arken-dialog-message">
-        Персонаж исчезнет из активного списка и станет недоступен для игры,
-        но не будет удалён безвозвратно — мастер сможет восстановить его в
-        любой момент через «Архив персонажей».
+        Персонаж исчезнет из активного списка и станет недоступен для игры, но
+        не будет удалён безвозвратно — мастер сможет восстановить его в любой
+        момент через «Архив персонажей».
       </p>
       <ul className="arken-dialog-consequence-list">
         <li>Токены на сценах и токен-заготовки отвяжутся от персонажа.</li>
         <li>Доступ игроков к листу персонажа будет отозван.</li>
-        <li>Неиспользованные приглашения на этого персонажа станут недействительны.</li>
-        <li>История чата, журнал событий, галерея и лист персонажа сохранятся.</li>
+        <li>
+          Неиспользованные приглашения на этого персонажа станут
+          недействительны.
+        </li>
+        <li>
+          История чата, журнал событий, галерея и лист персонажа сохранятся.
+        </li>
       </ul>
     </ArkenDialog>
   );
@@ -742,6 +746,7 @@ export function CharacterPanel({
   // the only place that uses them, so threading them through the workspace
   // above only made two components know about them instead of one.
   const { catalog: catalogActions, asset: assetActions } = useCampaignActions();
+  const statLabels = statLabelsFromLayout(snapshot.campaign.statLayout);
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
@@ -1007,7 +1012,10 @@ export function CharacterPanel({
         onClick={() =>
           void runCharacterMutation(async () => {
             if (!portraitUpload) return;
-            const asset = await assetActions.uploadAsset(portraitUpload, "PORTRAIT");
+            const asset = await assetActions.uploadAsset(
+              portraitUpload,
+              "PORTRAIT",
+            );
             await onPatch(character.id, {
               portraitAssetId: asset.id,
               revision: character.revision,
@@ -1150,8 +1158,16 @@ export function CharacterPanel({
              * fabricated; likely UIX-391 territory. */}
             {(
               [
-                { key: "agility", label: "Инициатива", formula: "1d20 + agility" },
-                { key: "reaction", label: "Реакция", formula: "1d20 + reaction" },
+                {
+                  key: "agility",
+                  label: "Инициатива",
+                  formula: "1d20 + agility",
+                },
+                {
+                  key: "reaction",
+                  label: "Реакция",
+                  formula: "1d20 + reaction",
+                },
               ] as const
             ).map((combat) => (
               <RollButton
@@ -1198,7 +1214,11 @@ export function CharacterPanel({
                     <Button
                       disabled={!editable}
                       onClick={() =>
-                        catalogActions.onRechargeEntry(character.id, entry.id, entry.revision)
+                        catalogActions.onRechargeEntry(
+                          character.id,
+                          entry.id,
+                          entry.revision,
+                        )
                       }
                     >
                       Перезарядить
@@ -1274,7 +1294,11 @@ export function CharacterPanel({
                     <Button
                       disabled={!editable}
                       onClick={() =>
-                        catalogActions.onRechargeEntry(character.id, entry.id, entry.revision)
+                        catalogActions.onRechargeEntry(
+                          character.id,
+                          entry.id,
+                          entry.revision,
+                        )
                       }
                     >
                       Перезарядить
@@ -1316,10 +1340,13 @@ export function CharacterPanel({
       </div>
       {snapshot.me.role === "GM" && catalogPicker && (
         <CatalogEntryPicker
+          statLabels={statLabels}
           open
           kind={catalogPicker}
           options={
-            catalogPicker === "SKILL" ? skillCatalogOptions : abilityCatalogOptions
+            catalogPicker === "SKILL"
+              ? skillCatalogOptions
+              : abilityCatalogOptions
           }
           onClose={() => setCatalogPicker(null)}
           onAssign={(catalogEntryId) =>
@@ -1336,14 +1363,19 @@ export function CharacterPanel({
           onClose={() => setEntryEditor(null)}
         >
           <CatalogEntryForm
+            statLabels={statLabels}
             key={entryEditor.id}
             existing={entryEditor}
             onCancel={() => setEntryEditor(null)}
             onSubmit={async (input) => {
-              await catalogActions.onUpdateCharacterEntry(character.id, entryEditor.id, {
-                ...input,
-                revision: entryEditor.revision,
-              });
+              await catalogActions.onUpdateCharacterEntry(
+                character.id,
+                entryEditor.id,
+                {
+                  ...input,
+                  revision: entryEditor.revision,
+                },
+              );
               setEntryEditor(null);
             }}
           />

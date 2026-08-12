@@ -10,6 +10,8 @@ import {
   chatCommands,
   chatSection,
 } from "./landing-guide-content";
+import { statLabelsFromLayout } from "./stat-keys";
+import { starterStatLayout } from "@arken/system";
 
 /**
  * A guide that promises a shortcut the app does not have is worse than no
@@ -121,12 +123,15 @@ describe("the landing guide describes chat behaviour that exists", () => {
 
   it("offers only slash commands the composer suggests", () => {
     const stats = { agility: 3, strength: 2 };
+    // Подписи — из настоящей стартовой раскладки: композер больше не носит
+    // собственный список характеристик.
+    const labels = statLabelsFromLayout(starterStatLayout);
     for (const { command } of chatCommands) {
       // The last entry is a bare formula, not a command — it is a real
       // feature, but not one the suggestion list knows about.
       if (!command.startsWith("/")) continue;
       const name = command.split(" ")[0]!;
-      const suggestions = getSlashCommandSuggestions(name, stats).map(
+      const suggestions = getSlashCommandSuggestions(name, stats, labels).map(
         (item) => item.command,
       );
       expect(

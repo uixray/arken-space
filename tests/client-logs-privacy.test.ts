@@ -60,10 +60,14 @@ beforeEach(async () => {
   app.log.warn = capture as typeof app.log.warn;
   app.log.error = capture as typeof app.log.error;
   await app.register(cookie);
-  registerRoutes(app, db as never, {
-    in: () => ({ fetchSockets: async () => [] }),
-    to: () => ({ emit() {} }),
-  } as never);
+  registerRoutes(
+    app,
+    db as never,
+    {
+      in: () => ({ fetchSockets: async () => [] }),
+      to: () => ({ emit() {} }),
+    } as never,
+  );
   await app.ready();
 });
 

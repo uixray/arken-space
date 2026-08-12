@@ -13,9 +13,7 @@ describe("humanizeFormula", () => {
   });
 
   it("replaces the same key when it repeats", () => {
-    expect(humanizeFormula("agility + agility")).toBe(
-      "Ловкость + Ловкость",
-    );
+    expect(humanizeFormula("agility + agility")).toBe("Ловкость + Ловкость");
   });
 
   it("returns formulas with no stat tokens unchanged", () => {
@@ -37,9 +35,7 @@ describe("humanizeFormula", () => {
 
   it("is word-boundary safe: a key that is a substring of another word is left alone", () => {
     // "agility" must not be humanized inside an unrelated longer identifier.
-    expect(humanizeFormula("1d20 + agilityBonus")).toBe(
-      "1d20 + agilityBonus",
-    );
+    expect(humanizeFormula("1d20 + agilityBonus")).toBe("1d20 + agilityBonus");
     expect(humanizeFormula("1d20 + superstrength")).toBe(
       "1d20 + superstrength",
     );
@@ -56,9 +52,7 @@ describe("humanizeFormula", () => {
     expect(humanizeFormula("1d20 + intelligence")).toBe("1d20 + Интеллект");
     expect(humanizeFormula("1d20 + willpower")).toBe("1d20 + Сила воли");
     expect(humanizeFormula("1d20 + charisma")).toBe("1d20 + Харизма");
-    expect(humanizeFormula("1d20 + attention")).toBe(
-      "1d20 + Внимательность",
-    );
+    expect(humanizeFormula("1d20 + attention")).toBe("1d20 + Внимательность");
     expect(humanizeFormula("1d20 + magicPower")).toBe("1d20 + Сила магии");
   });
 

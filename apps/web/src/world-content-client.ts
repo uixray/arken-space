@@ -154,7 +154,8 @@ export type WorldContentListQuery = {
 function listQueryString(query: WorldContentListQuery): string {
   const params = new URLSearchParams();
   if (query.type) params.set("type", query.type);
-  if (query.tags && query.tags.length > 0) params.set("tags", query.tags.join(","));
+  if (query.tags && query.tags.length > 0)
+    params.set("tags", query.tags.join(","));
   if (query.q) params.set("q", query.q);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
@@ -175,7 +176,9 @@ export const fetchWorldContentDetail = (id: string) =>
  * "what do players see" preview can only read player-safe fields even
  * though the raw JSON they receive is the fuller GM DTO.
  */
-export const fetchWorldContentPlayerList = (query: WorldContentListQuery = {}) =>
+export const fetchWorldContentPlayerList = (
+  query: WorldContentListQuery = {},
+) =>
   api<WorldContentPlayerDto[]>(`/api/world-content${listQueryString(query)}`);
 
 export const fetchWorldContentPlayerDetail = (id: string) =>
@@ -224,7 +227,10 @@ export type UpdateWorldContentInput = {
   coverAssetId?: string | null;
 };
 
-export const updateWorldContent = (id: string, input: UpdateWorldContentInput) =>
+export const updateWorldContent = (
+  id: string,
+  input: UpdateWorldContentInput,
+) =>
   api<WorldContentDto>(`/api/world-content/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }),
@@ -235,10 +241,17 @@ export const transitionWorldContentLifecycle = (
   revision: number,
   lifecycle: WorldContentLifecycle,
 ) =>
-  api<WorldContentDto>(`/api/world-content/${encodeURIComponent(id)}/lifecycle`, {
-    method: "POST",
-    body: JSON.stringify({ revision, lifecycle, actionId: crypto.randomUUID() }),
-  });
+  api<WorldContentDto>(
+    `/api/world-content/${encodeURIComponent(id)}/lifecycle`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        revision,
+        lifecycle,
+        actionId: crypto.randomUUID(),
+      }),
+    },
+  );
 
 export const archiveWorldContent = (id: string, revision: number) =>
   api<WorldContentDto>(`/api/world-content/${encodeURIComponent(id)}`, {
@@ -248,7 +261,11 @@ export const archiveWorldContent = (id: string, revision: number) =>
 
 export const createWorldContentRelation = (
   fromId: string,
-  input: { toWorldContentId: string; relationType: string; note?: string | null },
+  input: {
+    toWorldContentId: string;
+    relationType: string;
+    note?: string | null;
+  },
 ) =>
   api<WorldContentRelationDto>(
     `/api/world-content/${encodeURIComponent(fromId)}/relations`,
@@ -268,10 +285,13 @@ export const addWorldContentMedia = (
   id: string,
   input: { assetId: string; caption?: string | null },
 ) =>
-  api<WorldContentMediaDto>(`/api/world-content/${encodeURIComponent(id)}/media`, {
-    method: "POST",
-    body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }),
-  });
+  api<WorldContentMediaDto>(
+    `/api/world-content/${encodeURIComponent(id)}/media`,
+    {
+      method: "POST",
+      body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }),
+    },
+  );
 
 export const updateWorldContentMedia = (
   worldContentId: string,

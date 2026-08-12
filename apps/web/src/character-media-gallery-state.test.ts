@@ -6,7 +6,9 @@ import {
   stepViewerItem,
 } from "./character-media-gallery-state";
 
-function makeMedia(overrides: Partial<CharacterMediaDto> = {}): CharacterMediaDto {
+function makeMedia(
+  overrides: Partial<CharacterMediaDto> = {},
+): CharacterMediaDto {
   return {
     id: "media-1",
     campaignId: "campaign-1",
@@ -52,7 +54,10 @@ describe("sortMediaByOrdering", () => {
   });
 
   it("does not mutate the input array", () => {
-    const items = [makeMedia({ id: "b", ordering: 1 }), makeMedia({ id: "a", ordering: 0 })];
+    const items = [
+      makeMedia({ id: "b", ordering: 1 }),
+      makeMedia({ id: "a", ordering: 0 }),
+    ];
     const original = [...items];
     sortMediaByOrdering(items);
     expect(items).toEqual(original);

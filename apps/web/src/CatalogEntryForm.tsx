@@ -31,20 +31,16 @@ type ValueRow = { id: string; key: string; value: string };
 
 type Props = {
   existing?: CatalogEntryDto;
+  /**
+   * UIX-424: подписи характеристик из раскладки кампании. Раньше здесь лежал
+   * собственный список, и он успел разойтись с остальными — предлагал восемь
+   * характеристик из одиннадцати, молча лишая мастера реакции, внимательности
+   * и силы магии.
+   */
+  statLabels: Record<string, string>;
   onSubmit: (input: CatalogEntryFormInput) => void | Promise<void>;
   onCancel: () => void;
 };
-
-const characteristics = [
-  ["strength", "Сила"],
-  ["agility", "Ловкость"],
-  ["endurance", "Выносливость"],
-  ["vitality", "Живучесть"],
-  ["knowledge", "Знания"],
-  ["intelligence", "Интеллект"],
-  ["willpower", "Сила воли"],
-  ["charisma", "Харизма"],
-] as const;
 
 let localId = 0;
 function nextId(prefix: string) {
@@ -100,7 +96,13 @@ function emptyAction(order: number): EditableRollAction {
   };
 }
 
-export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
+export function CatalogEntryForm({
+  existing,
+  statLabels,
+  onSubmit,
+  onCancel,
+}: Props) {
+  const characteristics = Object.entries(statLabels);
   const [kind, setKind] = useState<CatalogEntryDto["kind"]>(
     existing?.kind ?? "SKILL",
   );
@@ -212,7 +214,7 @@ export function CatalogEntryForm({ existing, onSubmit, onCancel }: Props) {
         action.modifierSource === "CHARACTERISTIC"
           ? {
               type: "CHARACTERISTIC",
-              key: action.modifierKey as (typeof characteristics)[number][0],
+              key: action.modifierKey,
             }
           : action.modifierSource === "ENTRY_VALUE"
             ? ({ type: "ENTRY_VALUE", key: action.modifierKey } as const)

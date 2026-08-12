@@ -25,24 +25,17 @@ const slashCommands: SlashCommandSuggestion[] = [
   },
 ];
 
-const characteristicLabels: Record<string, string> = {
-  strength: "Сила",
-  agility: "Ловкость",
-  endurance: "Выносливость",
-  vitality: "Живучесть",
-  knowledge: "Знания",
-  intelligence: "Интеллект",
-  willpower: "Воля",
-  charisma: "Харизма",
-  reaction: "Реакция",
-  attention: "Внимательность",
-  magicPower: "Сила магии",
-};
-
-function supportedCharacteristics(stats: Record<string, number> = {}) {
+/**
+ * UIX-424: подписи приходят из раскладки кампании, а не лежат здесь копией.
+ * Прежний список успел разойтись с остальными тремя, и «Воля» в нём называлась
+ * не так, как «Сила воли» везде ещё.
+ */
+function supportedCharacteristics(
+  stats: Record<string, number> = {},
+  labels: Record<string, string>,
+) {
   return Object.entries(stats ?? {}).filter(
-    ([key, value]) =>
-      Object.hasOwn(characteristicLabels, key) && Number.isFinite(value),
+    ([key, value]) => Object.hasOwn(labels, key) && Number.isFinite(value),
   );
 }
 
@@ -59,14 +52,15 @@ function parseBareDiceFormula(body: string): string | null {
 export function getSlashCommandSuggestions(
   value: string,
   stats: Record<string, number> = {},
+  labels: Record<string, string> = {},
 ): SlashCommandSuggestion[] {
   if (!value.startsWith("/") || value.includes("\n")) return [];
   const query = value.slice(1).trimStart().toLocaleLowerCase("ru");
   if (query.includes(" ")) return [];
-  const characteristicCommands = supportedCharacteristics(stats).map(
+  const characteristicCommands = supportedCharacteristics(stats, labels).map(
     ([key, value]) => ({
       command: `/${key}`,
-      description: `${characteristicLabels[key]}: бросок 1d20 + ${value}`,
+      description: `${labels[key]}: бросок 1d20 + ${value}`,
       example: `/${key}`,
       insertion: `/${key}`,
     }),
@@ -100,6 +94,7 @@ export function extractPastedImageFile(
 export function parseComposerInput(
   value: string,
   stats: Record<string, number> = {},
+  labels: Record<string, string> = {},
 ): ComposerIntent {
   const body = value.trim();
   if (!body)
@@ -115,7 +110,7 @@ export function parseComposerInput(
     .exec(body)?.[1]
     ?.toLocaleLowerCase("en-US");
   const characteristicKey = characteristic
-    ? supportedCharacteristics(stats).find(
+    ? supportedCharacteristics(stats, labels).find(
         ([key]) => key.toLocaleLowerCase("en-US") === characteristic,
       )?.[0]
     : undefined;
@@ -123,7 +118,7 @@ export function parseComposerInput(
     return {
       kind: "ROLL",
       formula: `1d20 + ${characteristicKey}`,
-      label: `Проверка: ${characteristicLabels[characteristicKey]}`,
+      label: `Проверка: ${labels[characteristicKey]}`,
     };
   }
   if (!/^\/roll(?:\s|$)/i.test(body)) return { kind: "TEXT", body };

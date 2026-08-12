@@ -88,11 +88,9 @@ describe("world content media ordering", () => {
   const items = [media("a", 0), media("b", 1), media("c", 2)];
 
   it("sorts by ordering with a stable id tie-break", () => {
-    expect(sortWorldContentMedia([items[2]!, items[0]!, items[1]!]).map((i) => i.id)).toEqual([
-      "a",
-      "b",
-      "c",
-    ]);
+    expect(
+      sortWorldContentMedia([items[2]!, items[0]!, items[1]!]).map((i) => i.id),
+    ).toEqual(["a", "b", "c"]);
   });
 
   it("swaps a middle entry with its neighbor, without touching revision", () => {

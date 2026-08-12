@@ -119,7 +119,10 @@ export function computeErrorSignature(input: {
 }): string {
   const topFrames = input.stackFrames
     .slice(0, SIGNATURE_FRAME_COUNT)
-    .map((frame) => `${frame.file ?? ""}:${frame.line ?? ""}:${frame.column ?? ""}`)
+    .map(
+      (frame) =>
+        `${frame.file ?? ""}:${frame.line ?? ""}:${frame.column ?? ""}`,
+    )
     .join("|");
   const structuralContext = [input.context?.operation, input.context?.code]
     .filter((value) => value !== undefined && value !== null)

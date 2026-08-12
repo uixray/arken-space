@@ -34,7 +34,10 @@ function asset(overrides: Partial<AssetDto> = {}): AssetDto {
 
 describe("asset-picker-logic (pure helpers)", () => {
   it("filters assets by case-insensitive name match", () => {
-    const assets = [asset({ id: "a", name: "Hero Portrait" }), asset({ id: "b", name: "Villain" })];
+    const assets = [
+      asset({ id: "a", name: "Hero Portrait" }),
+      asset({ id: "b", name: "Villain" }),
+    ];
     expect(filterAssetsByName(assets, "hero")).toEqual([assets[0]]);
     expect(filterAssetsByName(assets, "")).toEqual(assets);
     expect(filterAssetsByName(assets, "zzz")).toEqual([]);
@@ -57,7 +60,9 @@ describe("asset-picker-logic (pure helpers)", () => {
   });
 
   it("flags a selected id that no longer exists as missing", () => {
-    expect(resolveAssetSelection([asset({ id: "other" })], "deleted-id")).toEqual({
+    expect(
+      resolveAssetSelection([asset({ id: "other" })], "deleted-id"),
+    ).toEqual({
       selectedAsset: null,
       selectedMissing: true,
     });

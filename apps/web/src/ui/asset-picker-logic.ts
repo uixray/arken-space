@@ -1,7 +1,10 @@
 import type { AssetDto } from "@arken/contracts";
 
 /** Case-insensitive name filter used by the AssetPicker's search field. */
-export function filterAssetsByName(assets: AssetDto[], query: string): AssetDto[] {
+export function filterAssetsByName(
+  assets: AssetDto[],
+  query: string,
+): AssetDto[] {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) return assets;
   return assets.filter((asset) => asset.name.toLowerCase().includes(trimmed));
@@ -34,6 +37,7 @@ export function computeArrowNavIndex(
 ): number | null {
   if (total <= 0) return null;
   if (key === "ArrowRight" || key === "ArrowDown") return (index + 1) % total;
-  if (key === "ArrowLeft" || key === "ArrowUp") return (index - 1 + total) % total;
+  if (key === "ArrowLeft" || key === "ArrowUp")
+    return (index - 1 + total) % total;
   return null;
 }

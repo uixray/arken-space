@@ -118,3 +118,26 @@ export function formulasReferencingKey<T extends { formula?: string }>(
   const pattern = new RegExp(`(^|[^a-zA-Z0-9_])${key}([^a-zA-Z0-9_]|$)`);
   return entries.filter((entry) => pattern.test(entry.formula ?? ""));
 }
+
+/**
+ * Плоская карта «ключ → подпись» из раскладки кампании.
+ *
+ * Существует затем, чтобы у списка характеристик остался **один** источник.
+ * До UIX-424 он был продублирован в четырёх местах, и одна из копий уже
+ * разошлась с остальными: форма способности предлагала восемь характеристик
+ * из одиннадцати, молча лишая мастера трёх.
+ *
+ * Строки-ресурсы (выносливость, мана) сюда не попадают: их значение — пул с
+ * текущим и максимумом, а не модификатор, и в формуле броска ему не место.
+ */
+export function statLabelsFromLayout(
+  layout: readonly {
+    rows: readonly { key: string; label: string; source?: string }[];
+  }[],
+): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const group of layout)
+    for (const row of group.rows)
+      if (row.source !== "RESOURCE") labels[row.key] = row.label;
+  return labels;
+}

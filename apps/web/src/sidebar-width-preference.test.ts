@@ -24,9 +24,9 @@ describe("sidebar width preference", () => {
   });
 
   it("returns null when nothing is stored or the value is invalid", () => {
-    expect(readSidebarWidth({ getItem: () => null }, "campaign", "member")).toBe(
-      null,
-    );
+    expect(
+      readSidebarWidth({ getItem: () => null }, "campaign", "member"),
+    ).toBe(null);
     expect(
       readSidebarWidth({ getItem: () => "not-a-number" }, "campaign", "member"),
     ).toBe(null);
@@ -36,9 +36,9 @@ describe("sidebar width preference", () => {
     expect(
       readSidebarWidth({ getItem: () => "9000" }, "campaign", "member"),
     ).toBe(SIDEBAR_WIDTH_MAX);
-    expect(readSidebarWidth({ getItem: () => "420" }, "campaign", "member")).toBe(
-      420,
-    );
+    expect(
+      readSidebarWidth({ getItem: () => "420" }, "campaign", "member"),
+    ).toBe(420);
   });
 
   it("survives unavailable storage", () => {

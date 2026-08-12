@@ -29,7 +29,11 @@ const { RollButton } = await import("./CharacterWorkspace");
 describe("RollButton (UIX-389 shared two-line roll presentation)", () => {
   it("shows the name and a humanized formula, never the raw stat key", () => {
     const html = renderToStaticMarkup(
-      <RollButton name="Реакция" formula="1d20 + reaction" onClick={() => {}} />,
+      <RollButton
+        name="Реакция"
+        formula="1d20 + reaction"
+        onClick={() => {}}
+      />,
     );
     expect(html).toContain("Реакция");
     expect(html).toContain("d20"); // dice notation stays untouched
@@ -52,7 +56,11 @@ describe("RollButton (UIX-389 shared two-line roll presentation)", () => {
 
   it("does not raise for an unrecognized token and leaves it visible as-is", () => {
     const html = renderToStaticMarkup(
-      <RollButton name="Особый бросок" formula="1d20 + luck" onClick={() => {}} />,
+      <RollButton
+        name="Особый бросок"
+        formula="1d20 + luck"
+        onClick={() => {}}
+      />,
     );
     expect(html).toContain("luck");
   });

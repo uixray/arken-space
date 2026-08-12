@@ -24,8 +24,7 @@ export function isNearListBottom(
   threshold = FOLLOW_SCROLL_BOTTOM_THRESHOLD,
 ): boolean {
   return (
-    metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight <
-    threshold
+    metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight < threshold
   );
 }
 
@@ -49,16 +48,13 @@ export function useFollowScroll(
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [newItemCount, setNewItemCount] = useState(0);
 
-  const scrollToBottom = useCallback(
-    (behavior: ScrollBehavior = "auto") => {
-      const list = listRef.current;
-      if (list) list.scrollTo({ top: list.scrollHeight, behavior });
-      followRef.current = true;
-      setIsAtBottom(true);
-      setNewItemCount(0);
-    },
-    [],
-  );
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const list = listRef.current;
+    if (list) list.scrollTo({ top: list.scrollHeight, behavior });
+    followRef.current = true;
+    setIsAtBottom(true);
+    setNewItemCount(0);
+  }, []);
 
   useEffect(() => {
     followRef.current = true;
@@ -72,8 +68,7 @@ export function useFollowScroll(
 
   useEffect(() => {
     const list = listRef.current;
-    if (!list || latestItemKey === null || latestItemKey === undefined)
-      return;
+    if (!list || latestItemKey === null || latestItemKey === undefined) return;
     if (followRef.current) {
       list.scrollTo({ top: list.scrollHeight });
       setNewItemCount(0);

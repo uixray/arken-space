@@ -82,7 +82,9 @@ export function PalettePanel(props: Props) {
             >
               <Button
                 className="palette-place"
-                onClick={() => tokenActions.onPlaceTokenDefinition(definition.id)}
+                onClick={() =>
+                  tokenActions.onPlaceTokenDefinition(definition.id)
+                }
                 title="Поставить экземпляр токена на активную сцену"
               >
                 {asset ? (
@@ -370,7 +372,10 @@ function TokenDefinitionEditor({
               mergeAssets(snapshot.assets, uploadedSource),
             )}
             onChange={(nextAssetId) => setAssetId(nextAssetId ?? "")}
-            emptyAction={{ label: "Добавить изображение", onSelect: onOpenMedia }}
+            emptyAction={{
+              label: "Добавить изображение",
+              onSelect: onOpenMedia,
+            }}
           />
         </label>
         <TokenImageGenerator

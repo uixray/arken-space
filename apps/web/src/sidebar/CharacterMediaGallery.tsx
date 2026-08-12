@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CharacterMediaCategory, CharacterMediaDto, CharacterMediaVisibility } from "@arken/contracts";
+import type {
+  CharacterMediaCategory,
+  CharacterMediaDto,
+  CharacterMediaVisibility,
+} from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { api, ApiError, formatApiError } from "../api";
 import { ArkenDialog } from "../ui/ArkenDialog";
@@ -121,7 +125,9 @@ export function CharacterMediaGallery({
       setItems((current) => current.filter((entry) => entry.id !== item.id));
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 409) await load();
-      setError(formatApiError(reason, "Не удалось убрать изображение из галереи."));
+      setError(
+        formatApiError(reason, "Не удалось убрать изображение из галереи."),
+      );
     } finally {
       setPendingId(null);
     }
@@ -195,7 +201,9 @@ export function CharacterMediaGallery({
                   </Button>
                   <Button
                     size="s"
-                    disabled={index === sorted.length - 1 || pendingId === item.id}
+                    disabled={
+                      index === sorted.length - 1 || pendingId === item.id
+                    }
                     aria-label="Переместить ниже"
                     title="Переместить ниже"
                     onClick={() => void reorder(item.id, "down")}
@@ -239,9 +247,7 @@ export function CharacterMediaGallery({
           characterId={characterId}
           isGm={isGm}
           onUpload={onUpload}
-          onAttached={(created) =>
-            setItems((current) => [...current, created])
-          }
+          onAttached={(created) => setItems((current) => [...current, created])}
         />
       )}
       {viewerItem && (
@@ -275,7 +281,11 @@ function GalleryImage({ assetId, alt }: { assetId: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   if (failed)
     return (
-      <span className="character-media-gallery__broken" role="img" aria-label="Изображение недоступно">
+      <span
+        className="character-media-gallery__broken"
+        role="img"
+        aria-label="Изображение недоступно"
+      >
         Изображение недоступно
       </span>
     );
@@ -297,9 +307,11 @@ function AttachMediaForm({
   onAttached: (created: CharacterMediaDto) => void;
 }) {
   const [file, setFile] = useState<File>();
-  const [category, setCategory] = useState<CharacterMediaCategory>("CHARACTER_ART");
+  const [category, setCategory] =
+    useState<CharacterMediaCategory>("CHARACTER_ART");
   const [caption, setCaption] = useState("");
-  const [visibility, setVisibility] = useState<CharacterMediaVisibility>("OWNER_GM");
+  const [visibility, setVisibility] =
+    useState<CharacterMediaVisibility>("OWNER_GM");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -334,7 +346,9 @@ function AttachMediaForm({
       setFile(undefined);
       setCaption("");
     } catch (reason) {
-      setError(formatApiError(reason, "Не удалось добавить изображение в галерею."));
+      setError(
+        formatApiError(reason, "Не удалось добавить изображение в галерею."),
+      );
     } finally {
       setBusy(false);
     }
@@ -395,7 +409,11 @@ function AttachMediaForm({
           {error}
         </p>
       )}
-      <Button disabled={!file || busy} loading={busy} onClick={() => void attach()}>
+      <Button
+        disabled={!file || busy}
+        loading={busy}
+        onClick={() => void attach()}
+      >
         Добавить в галерею
       </Button>
     </div>
@@ -578,17 +596,26 @@ function MediaViewer({
         }}
       >
         {failed ? (
-          <div className="character-media-viewer__broken" role="img" aria-label="Изображение недоступно">
+          <div
+            className="character-media-viewer__broken"
+            role="img"
+            aria-label="Изображение недоступно"
+          >
             Изображение недоступно
           </div>
         ) : (
           <img
             src={assetUrl(item.assetId)}
-            alt={item.caption || `${characterName}: ${CHARACTER_MEDIA_CATEGORY_LABELS[item.category]}`}
+            alt={
+              item.caption ||
+              `${characterName}: ${CHARACTER_MEDIA_CATEGORY_LABELS[item.category]}`
+            }
             onError={() => setFailed(true)}
           />
         )}
-        {item.caption && <p className="character-media-viewer__caption">{item.caption}</p>}
+        {item.caption && (
+          <p className="character-media-viewer__caption">{item.caption}</p>
+        )}
         {items.length > 1 && (
           <div className="character-media-viewer__nav">
             <Button

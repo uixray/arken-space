@@ -3,7 +3,10 @@ import type { CatalogEntryDto } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { ArkenDialog } from "../ui/ArkenDialog";
 import { FormInput } from "../ui/GravityFormControls";
-import { CatalogEntryForm, type CatalogEntryFormInput } from "../CatalogEntryForm";
+import {
+  CatalogEntryForm,
+  type CatalogEntryFormInput,
+} from "../CatalogEntryForm";
 import { RollButton } from "./RollButton";
 import { previewFormula } from "./catalog-entry-preview";
 
@@ -23,12 +26,15 @@ export function CatalogEntryPicker({
   open,
   kind,
   options,
+  statLabels,
   onClose,
   onAssign,
   onCreate,
 }: {
   open: boolean;
   kind: "SKILL" | "ABILITY";
+  /** UIX-424: подписи характеристик из раскладки, для формы создания. */
+  statLabels: Record<string, string>;
   /** Already filtered to this kind and excluding entries already assigned to the character. */
   options: CatalogEntryDto[];
   onClose: () => void;
@@ -130,6 +136,7 @@ export function CatalogEntryPicker({
         </div>
       ) : (
         <CatalogEntryForm
+          statLabels={statLabels}
           onCancel={() => setMode("SELECT")}
           onSubmit={async (input) => {
             // Creation itself may throw — CatalogEntryForm's own catch shows

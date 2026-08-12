@@ -2,7 +2,10 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen } from "../test-support/render";
-import { gmSnapshot, playerSnapshot } from "../test-support/game-snapshot-fixtures";
+import {
+  gmSnapshot,
+  playerSnapshot,
+} from "../test-support/game-snapshot-fixtures";
 import type { ImageUploadFieldProps } from "../ui/ImageUploadField";
 
 // UIX-383: MediaPanel had no component test at all before this file --
@@ -65,7 +68,9 @@ describe("MediaPanel upload sections by role", () => {
   });
 
   it("hides GM-only asset kinds (maps, other images, audio) from a PLAYER", () => {
-    renderComponent(<MediaPanel snapshot={playerSnapshot()} onUpload={vi.fn()} />);
+    renderComponent(
+      <MediaPanel snapshot={playerSnapshot()} onUpload={vi.fn()} />,
+    );
 
     expect(screen.getByText("Изображения токенов")).toBeInTheDocument();
     expect(screen.getByText("Портреты персонажей")).toBeInTheDocument();

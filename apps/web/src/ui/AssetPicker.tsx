@@ -38,9 +38,7 @@ function BrokenThumb({ label }: { label: string }) {
 function Thumb({ asset }: { asset: AssetDto }) {
   const [failed, setFailed] = useState(false);
   if (failed || !asset.url) return <BrokenThumb label={asset.name} />;
-  return (
-    <img src={asset.url} alt="" onError={() => setFailed(true)} />
-  );
+  return <img src={asset.url} alt="" onError={() => setFailed(true)} />;
 }
 
 /**
@@ -88,7 +86,10 @@ export function AssetPicker({
 
   if (loading) {
     return (
-      <div className="asset-picker asset-picker--loading" aria-label={ariaLabel}>
+      <div
+        className="asset-picker asset-picker--loading"
+        aria-label={ariaLabel}
+      >
         Загрузка изображений…
       </div>
     );
@@ -182,7 +183,9 @@ export function AssetPicker({
         </p>
       )}
       {assets.length > 0 && filtered.length === 0 && (
-        <p className="asset-picker__empty">Ничего не найдено по запросу «{filter}».</p>
+        <p className="asset-picker__empty">
+          Ничего не найдено по запросу «{filter}».
+        </p>
       )}
     </div>
   );

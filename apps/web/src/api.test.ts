@@ -162,7 +162,9 @@ describe("api telemetry and correlation", () => {
 
 describe("client event buffer durability", () => {
   it("keeps a report buffered when the network is unavailable, and sends it on the next flush", async () => {
-    const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetchMock);
 
     reportClientEvent({
@@ -197,7 +199,11 @@ describe("client event buffer durability", () => {
       .mockResolvedValueOnce(new Response(null, { status: 401 }));
     vi.stubGlobal("fetch", preAuthFetch);
 
-    reportClientEvent({ level: "error", event: "window.error", errorName: "Error" });
+    reportClientEvent({
+      level: "error",
+      event: "window.error",
+      errorName: "Error",
+    });
     await Promise.resolve();
     await Promise.resolve();
     expect(preAuthFetch).toHaveBeenCalledTimes(1);

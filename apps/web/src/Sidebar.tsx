@@ -376,7 +376,9 @@ export function Sidebar(props: Props) {
             onRoll={props.onRoll}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
-            onOpenPlayerRequestCreate={playerRequestActions.onOpenPlayerRequestCreate}
+            onOpenPlayerRequestCreate={
+              playerRequestActions.onOpenPlayerRequestCreate
+            }
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel
@@ -393,7 +395,9 @@ export function Sidebar(props: Props) {
             onPublish={isGm ? storyActions.onPublishStoryPost : undefined}
             onUpdate={isGm ? storyActions.onUpdateStoryPost : undefined}
             onArchive={isGm ? storyActions.onArchiveStoryPost : undefined}
-            onUploadImage={isGm ? chatActions.onUploadChatAttachment : undefined}
+            onUploadImage={
+              isGm ? chatActions.onUploadChatAttachment : undefined
+            }
           />
         ) : (
           <ChatPanel
@@ -484,7 +488,9 @@ export function Sidebar(props: Props) {
             onCreateLocation={worldMapActions.onCreateWorldMapLocation}
             onUpdateLocation={worldMapActions.onUpdateWorldMapLocation}
             onLinkLocationScene={worldMapActions.onLinkWorldMapLocationScene}
-            onUnlinkLocationScene={worldMapActions.onUnlinkWorldMapLocationScene}
+            onUnlinkLocationScene={
+              worldMapActions.onUnlinkWorldMapLocationScene
+            }
             onSetPartyPosition={worldMapActions.onSetWorldMapPartyPosition}
             onClearPartyPosition={worldMapActions.onClearWorldMapPartyPosition}
           />
@@ -507,7 +513,10 @@ export function Sidebar(props: Props) {
             variant="workspace"
             onClose={() => props.onWorkspaceChange(null)}
           >
-            <MediaPanel snapshot={props.snapshot} onUpload={assetActions.uploadAsset} />
+            <MediaPanel
+              snapshot={props.snapshot}
+              onUpload={assetActions.uploadAsset}
+            />
           </ArkenDialog>
         )}
       </div>

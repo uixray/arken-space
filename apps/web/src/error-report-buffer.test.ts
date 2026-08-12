@@ -63,15 +63,31 @@ describe("parseStackFrames", () => {
 describe("computeErrorSignature", () => {
   it("is stable for the same error shape regardless of message", () => {
     const frames = parseStackFrames(V8_STACK);
-    const a = computeErrorSignature({ errorName: "TypeError", event: "window.error", stackFrames: frames });
-    const b = computeErrorSignature({ errorName: "TypeError", event: "window.error", stackFrames: frames });
+    const a = computeErrorSignature({
+      errorName: "TypeError",
+      event: "window.error",
+      stackFrames: frames,
+    });
+    const b = computeErrorSignature({
+      errorName: "TypeError",
+      event: "window.error",
+      stackFrames: frames,
+    });
     expect(a).toBe(b);
   });
 
   it("differs for a different error class or location", () => {
     const frames = parseStackFrames(V8_STACK);
-    const base = computeErrorSignature({ errorName: "TypeError", event: "window.error", stackFrames: frames });
-    const otherClass = computeErrorSignature({ errorName: "RangeError", event: "window.error", stackFrames: frames });
+    const base = computeErrorSignature({
+      errorName: "TypeError",
+      event: "window.error",
+      stackFrames: frames,
+    });
+    const otherClass = computeErrorSignature({
+      errorName: "RangeError",
+      event: "window.error",
+      stackFrames: frames,
+    });
     const otherFrames = computeErrorSignature({
       errorName: "TypeError",
       event: "window.error",
@@ -116,7 +132,9 @@ describe("enqueueErrorReport dedup", () => {
 });
 
 describe("pruneReports bounds", () => {
-  function report(overrides: Partial<BufferedErrorReport>): BufferedErrorReport {
+  function report(
+    overrides: Partial<BufferedErrorReport>,
+  ): BufferedErrorReport {
     return {
       id: overrides.id ?? Math.random().toString(36),
       level: "error",
@@ -132,8 +150,16 @@ describe("pruneReports bounds", () => {
 
   it("drops entries older than the age bound", () => {
     const now = "2026-08-10T12:00:00.000Z";
-    const fresh = report({ id: "fresh", signature: "fresh", lastAt: "2026-08-10T11:00:00.000Z" });
-    const stale = report({ id: "stale", signature: "stale", lastAt: "2026-08-08T00:00:00.000Z" });
+    const fresh = report({
+      id: "fresh",
+      signature: "fresh",
+      lastAt: "2026-08-10T11:00:00.000Z",
+    });
+    const stale = report({
+      id: "stale",
+      signature: "stale",
+      lastAt: "2026-08-08T00:00:00.000Z",
+    });
     const result = pruneReports([fresh, stale], now);
     expect(result.map((r) => r.id)).toEqual(["fresh"]);
   });
@@ -144,14 +170,18 @@ describe("pruneReports bounds", () => {
       report({
         id: `r${i}`,
         signature: `r${i}`,
-        lastAt: new Date(Date.parse(now) - (MAX_BUFFERED_REPORTS + 5 - i) * 1000).toISOString(),
+        lastAt: new Date(
+          Date.parse(now) - (MAX_BUFFERED_REPORTS + 5 - i) * 1000,
+        ).toISOString(),
       }),
     );
     const result = pruneReports(many, now);
     expect(result).toHaveLength(MAX_BUFFERED_REPORTS);
     // The oldest entries (r0..r4) should have been dropped; the newest kept.
     expect(result.some((r) => r.id === "r0")).toBe(false);
-    expect(result.some((r) => r.id === `r${MAX_BUFFERED_REPORTS + 4}`)).toBe(true);
+    expect(result.some((r) => r.id === `r${MAX_BUFFERED_REPORTS + 4}`)).toBe(
+      true,
+    );
   });
 });
 

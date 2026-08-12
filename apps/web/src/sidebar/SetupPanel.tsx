@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { statLabelsFromLayout } from "../stat-keys";
 import { useCampaignActions } from "../campaign-actions-context";
 import type {
   CatalogEntryDto,
@@ -17,6 +18,7 @@ import type { Props } from "../Sidebar";
 
 export function SetupPanel(props: Props) {
   // UIX-398 step B: scene commands come from context, not through Sidebar.
+  const statLabels = statLabelsFromLayout(props.snapshot.campaign.statLayout);
   const {
     scene: sceneActions,
     token: tokenActions,
@@ -124,7 +126,10 @@ export function SetupPanel(props: Props) {
                 <Button
                   className="danger-link"
                   onClick={() =>
-                    void catalogActions.onDeleteCatalogEntry(entry.id, entry.revision)
+                    void catalogActions.onDeleteCatalogEntry(
+                      entry.id,
+                      entry.revision,
+                    )
                   }
                 >
                   Удалить шаблон
@@ -145,6 +150,7 @@ export function SetupPanel(props: Props) {
             onClose={() => setCatalogEditor(null)}
           >
             <CatalogEntryForm
+              statLabels={statLabels}
               key={catalogEditor === "NEW" ? "new" : catalogEditor.id}
               existing={catalogEditor === "NEW" ? undefined : catalogEditor}
               onCancel={() => setCatalogEditor(null)}
@@ -325,7 +331,9 @@ export function SetupPanel(props: Props) {
           Активная
           <FormSelect
             value={activeScene?.id ?? ""}
-            onChange={(event) => sceneActions.onActivateScene(event.target.value)}
+            onChange={(event) =>
+              sceneActions.onActivateScene(event.target.value)
+            }
           >
             {props.snapshot.scenes.map((scene) => (
               <option key={scene.id} value={scene.id}>
@@ -345,7 +353,10 @@ export function SetupPanel(props: Props) {
             <FormSelect
               value={activeScene.mapAssetId ?? ""}
               onChange={(event) =>
-                sceneActions.onAssignMap(activeScene.id, event.target.value || null)
+                sceneActions.onAssignMap(
+                  activeScene.id,
+                  event.target.value || null,
+                )
               }
             >
               <option value="">Без карты</option>
@@ -460,7 +471,9 @@ export function SetupPanel(props: Props) {
               <>
                 <Button
                   onClick={async () => {
-                    const result = await accessActions.onRotatePlayerAccess(grant.id);
+                    const result = await accessActions.onRotatePlayerAccess(
+                      grant.id,
+                    );
                     setInviteUrl(result.url ?? "");
                     await refreshPlayerAccess();
                   }}
@@ -490,7 +503,11 @@ export function SetupPanel(props: Props) {
         onApply={async (name) => {
           if (!renameMember) return;
           const target = renameMember;
-          await accessActions.onRenameMembership(target.id, target.revision ?? 0, name);
+          await accessActions.onRenameMembership(
+            target.id,
+            target.revision ?? 0,
+            name,
+          );
           setRenameMember(null);
         }}
       />

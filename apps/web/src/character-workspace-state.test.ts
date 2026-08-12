@@ -17,7 +17,12 @@ function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
     portraitAssetId: "asset-1",
     stats: { strength: 3, agility: 2 },
     skills: [
-      { key: "stealth", name: "Скрытность", rank: 1, formula: "1d20 + agility" },
+      {
+        key: "stealth",
+        name: "Скрытность",
+        rank: 1,
+        formula: "1d20 + agility",
+      },
     ],
     spells: [
       {

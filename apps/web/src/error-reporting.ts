@@ -67,7 +67,10 @@ export function installClientEventFlushTriggers(
 ) {
   const onOnline = () => void flushClientEventBuffer();
   target.addEventListener("online", onOnline);
-  const timer = setInterval(() => void flushClientEventBuffer(), FLUSH_INTERVAL_MS);
+  const timer = setInterval(
+    () => void flushClientEventBuffer(),
+    FLUSH_INTERVAL_MS,
+  );
   void flushClientEventBuffer();
 
   return () => {

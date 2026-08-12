@@ -47,9 +47,12 @@ function observe(
   // `supportedEntryTypes` is the only reliable feature test: an unsupported
   // type throws from `observe()` in some browsers and is silently ignored in
   // others, and neither tells the caller anything useful.
-  if (!PerformanceObserver.supportedEntryTypes?.includes(type)) return undefined;
+  if (!PerformanceObserver.supportedEntryTypes?.includes(type))
+    return undefined;
   try {
-    const observer = new PerformanceObserver((list) => callback(list.getEntries()));
+    const observer = new PerformanceObserver((list) =>
+      callback(list.getEntries()),
+    );
     observer.observe({ type, buffered: true, ...options });
     return () => observer.disconnect();
   } catch {
@@ -72,10 +75,12 @@ async function sendSummary(aggregator: PerformanceAggregator, nowMs: number) {
   });
 }
 
-export function installPerformanceReporting(options: {
-  now?: () => number;
-  windowMs?: number;
-} = {}) {
+export function installPerformanceReporting(
+  options: {
+    now?: () => number;
+    windowMs?: number;
+  } = {},
+) {
   const now = options.now ?? (() => performance.now());
   const windowMs = options.windowMs ?? REPORT_WINDOW_MS;
   const aggregator = createPerformanceAggregator(now());
@@ -87,12 +92,16 @@ export function installPerformanceReporting(options: {
   const disconnectInteractions = observe(
     "event",
     (entries) => {
-      for (const entry of entries) aggregator.addInteraction(entry.name, entry.duration);
+      for (const entry of entries)
+        aggregator.addInteraction(entry.name, entry.duration);
     },
     { durationThreshold: INTERACTION_THRESHOLD_MS },
   );
 
-  const timer = setInterval(() => void sendSummary(aggregator, now()), windowMs);
+  const timer = setInterval(
+    () => void sendSummary(aggregator, now()),
+    windowMs,
+  );
 
   return () => {
     disconnectLongTasks?.();

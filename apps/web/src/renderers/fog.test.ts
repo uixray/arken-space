@@ -296,9 +296,8 @@ describe("fog evaluator optimization is behaviour-preserving (UIX-395)", () => {
     let checked = 0;
     let revealedCount = 0;
     for (let scene = 0; scene < 250; scene++) {
-      const reveals = Array.from(
-        { length: 1 + Math.round(random() * 7) },
-        () => randomOperation(random),
+      const reveals = Array.from({ length: 1 + Math.round(random() * 7) }, () =>
+        randomOperation(random),
       );
       for (let probe = 0; probe < 4; probe++) {
         const rect = {
