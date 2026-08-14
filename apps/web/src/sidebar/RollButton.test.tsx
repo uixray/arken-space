@@ -58,10 +58,12 @@ describe("RollButton (UIX-389 shared two-line roll presentation)", () => {
     const html = renderToStaticMarkup(
       <RollButton
         name="Особый бросок"
-        formula="1d20 + luck"
+        // UIX-424: «Удача» стала характеристикой, и подставлять её сюда как
+        // неизвестный токен больше нельзя. `endurance` снята с бросков совсем.
+        formula="1d20 + endurance"
         onClick={() => {}}
       />,
     );
-    expect(html).toContain("luck");
+    expect(html).toContain("endurance");
   });
 });

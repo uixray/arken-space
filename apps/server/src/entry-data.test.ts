@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { entryDataSchema } from "@arken/contracts";
+import { arkenSystem } from "@arken/system";
 import {
   normalizeLegacyEntryData,
   normalizeLegacyFormula,
@@ -35,15 +36,19 @@ describe("normalizeLegacyEntryData", () => {
 
 describe("normalizeLegacyStats", () => {
   it("keeps canonical values and fills missing aliases deterministically", () => {
-    expect(
-      normalizeLegacyStats({ mind: 4, spirit: 5, intelligence: 9 }),
-    ).toEqual({
-      intelligence: 9,
-      willpower: 5,
-      reaction: 0,
-      attention: 0,
-      magicPower: 0,
-    });
+    const stats = normalizeLegacyStats({ mind: 4, spirit: 5, intelligence: 9 });
+    // Псевдонимы переехали в канонические ключи, а исходные исчезли.
+    expect(stats).toMatchObject({ intelligence: 9, willpower: 5 });
+    expect(stats.mind).toBeUndefined();
+    expect(stats.spirit).toBeUndefined();
+    // UIX-424: добираются все строки раскладки, а не три выписанных ключа.
+    // Иначе бросок на характеристику, добавленную после создания персонажа,
+    // отвечает «стат не найден».
+    for (const stat of arkenSystem.stats)
+      expect(Number.isFinite(stats[stat.key]), stat.key).toBe(true);
+    expect(stats.luck).toBe(0);
+    // Ключа, которого нет в системе, добор не выдумывает.
+    expect(stats.knowledge).toBeUndefined();
   });
 });
 

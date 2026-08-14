@@ -130,6 +130,29 @@ export function formulasReferencingKey<T extends { formula?: string }>(
  * Строки-ресурсы (выносливость, мана) сюда не попадают: их значение — пул с
  * текущим и максимумом, а не модификатор, и в формуле броска ему не место.
  */
+/**
+ * Числовые строки одной группы раскладки.
+ *
+ * Строки `RESOURCE` отфильтрованы: у пула нет одного числа, которое можно
+ * положить в поле ввода или в формулу броска. Их редактирование — блок ресурсов
+ * (UIX-424, шаг 8).
+ *
+ * Группы неизвестной кампании может не быть вовсе — тогда пусто, а не падение:
+ * раскладка приходит из базы и не обязана содержать то, чего ждёт карточка.
+ */
+export function statRowsOfGroup(
+  layout: readonly {
+    id: string;
+    rows: readonly { key: string; label: string; source?: string }[];
+  }[],
+  groupId: string,
+): { key: string; label: string }[] {
+  const group = layout.find((candidate) => candidate.id === groupId);
+  return (group?.rows ?? [])
+    .filter((row) => row.source !== "RESOURCE")
+    .map(({ key, label }) => ({ key, label }));
+}
+
 export function statLabelsFromLayout(
   layout: readonly {
     rows: readonly { key: string; label: string; source?: string }[];

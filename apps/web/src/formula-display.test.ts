@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { humanizeFormula } from "./formula-display";
+import { arkenSystem } from "@arken/system";
 
 describe("humanizeFormula", () => {
   it("replaces a single stat key with its localized label", () => {
@@ -27,9 +28,12 @@ describe("humanizeFormula", () => {
   });
 
   it("leaves unknown/unrecognized tokens untouched instead of crashing", () => {
-    expect(humanizeFormula("1d20 + luck")).toBe("1d20 + luck");
-    expect(humanizeFormula("1d20 + strength + luck")).toBe(
-      "1d20 + Сила + luck",
+    // UIX-424: раньше здесь стоял `luck` — теперь это настоящая
+    // характеристика. Нераспознанным должен быть ключ, которого в системе нет
+    // и не появится: например, снятая с бросков «Выносливость».
+    expect(humanizeFormula("1d20 + endurance")).toBe("1d20 + endurance");
+    expect(humanizeFormula("1d20 + strength + endurance")).toBe(
+      "1d20 + Сила + endurance",
     );
   });
 
@@ -44,16 +48,15 @@ describe("humanizeFormula", () => {
     expect(humanizeFormula("1d20 + reaction")).toBe("1d20 + Реакция");
   });
 
-  it("handles every fixed stat key from the system definition", () => {
-    expect(humanizeFormula("1d20 + strength")).toBe("1d20 + Сила");
-    expect(humanizeFormula("1d20 + endurance")).toBe("1d20 + Выносливость");
-    expect(humanizeFormula("1d20 + vitality")).toBe("1d20 + Живучесть");
-    expect(humanizeFormula("1d20 + knowledge")).toBe("1d20 + Знания");
-    expect(humanizeFormula("1d20 + intelligence")).toBe("1d20 + Интеллект");
-    expect(humanizeFormula("1d20 + willpower")).toBe("1d20 + Сила воли");
-    expect(humanizeFormula("1d20 + charisma")).toBe("1d20 + Харизма");
-    expect(humanizeFormula("1d20 + attention")).toBe("1d20 + Внимательность");
-    expect(humanizeFormula("1d20 + magicPower")).toBe("1d20 + Сила магии");
+  it("handles every stat key the system defines", () => {
+    // Перечислять их здесь заново значило бы завести ещё одну копию списка —
+    // ту самую, из-за которой UIX-424 и начался. Проверяется правило: каждый
+    // ключ системы получает подпись, и ни один не остаётся ключом.
+    for (const stat of arkenSystem.stats)
+      expect(humanizeFormula(`1d20 + ${stat.key}`), stat.key).toBe(
+        `1d20 + ${stat.label}`,
+      );
+    expect(arkenSystem.stats.length).toBeGreaterThan(0);
   });
 
   it("does not mangle dice notation or arithmetic operators", () => {

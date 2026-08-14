@@ -1,3 +1,5 @@
+import { arkenSystem } from "@arken/system";
+
 export function normalizeLegacyStats(value: unknown): Record<string, number> {
   if (!value || typeof value !== "object") return {};
   const stats = { ...(value as Record<string, number>) };
@@ -9,9 +11,18 @@ export function normalizeLegacyStats(value: unknown): Record<string, number> {
     stats.willpower = spirit as number;
   delete stats.mind;
   delete stats.spirit;
-  if (!Number.isFinite(stats.reaction)) stats.reaction = 0;
-  if (!Number.isFinite(stats.attention)) stats.attention = 0;
-  if (!Number.isFinite(stats.magicPower)) stats.magicPower = 0;
+  /**
+   * UIX-424: персонаж, созданный до появления строки, её значения не имеет, а
+   * `stats[key]` в движке формул — прямой поиск: отсутствующий ключ даёт
+   * «Стат не найден» **в момент броска**. Раньше здесь были выписаны три ключа,
+   * добавленных задним числом; теперь добираются все, какие знает система.
+   *
+   * Ключи, которых в системе больше нет (`endurance`, `knowledge`), не
+   * стираются: раскладка их не показывает, но мастеру они нужны, когда он
+   * разбирает формулу, сломавшуюся на их удалении.
+   */
+  for (const stat of arkenSystem.stats)
+    if (!Number.isFinite(stats[stat.key])) stats[stat.key] = stat.defaultValue;
   return stats;
 }
 

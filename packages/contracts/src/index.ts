@@ -532,19 +532,25 @@ export const entryDataSchema = z
         });
     }
   });
-export const fixedCharacteristicsSchema = z.object({
-  strength: z.number().finite(),
-  agility: z.number().finite(),
-  endurance: z.number().finite(),
-  vitality: z.number().finite(),
-  knowledge: z.number().finite(),
-  intelligence: z.number().finite(),
-  willpower: z.number().finite(),
-  charisma: z.number().finite(),
-  reaction: z.number().finite(),
-  attention: z.number().finite(),
-  magicPower: z.number().finite(),
-});
+/**
+ * UIX-424 — значения характеристик персонажа.
+ *
+ * Раньше здесь стоял объект из одиннадцати полей, и это делало набор
+ * характеристик закрытым: добавить строку мастер не мог, потому что патч с
+ * незнакомым ключом отвергался контрактом.
+ *
+ * Теперь набор задаёт раскладка кампании (`statLayoutSchema` ниже), а контракт
+ * проверяет только **форму** записи: ключ, пригодный для формулы, и конечное
+ * число. Проверить принадлежность ключа раскладке отсюда нечем — раскладка
+ * лежит у кампании, а этот патч про персонажа.
+ *
+ * Запись и так частичная: патч меняет одну характеристику, а сервер сливает его
+ * с сохранённым. Поэтому `.partial()` при использовании больше не нужен.
+ */
+export const characterStatsSchema = z.record(
+  z.string().regex(STAT_KEY_PATTERN).max(40),
+  z.number().finite(),
+);
 
 /**
  * UIX-424 — раскладка характеристик кампании.
@@ -966,8 +972,8 @@ export const characterUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   portraitAssetId: z.string().uuid().nullable().optional(),
   // Character edits may update one characteristic at a time. The server merges
-  // this patch into the canonical fixed set instead of replacing the object.
-  stats: fixedCharacteristicsSchema.partial().optional(),
+  // this patch into the stored record instead of replacing it.
+  stats: characterStatsSchema.optional(),
   skills: z
     .array(
       z.object({

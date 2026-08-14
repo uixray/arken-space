@@ -1,7 +1,6 @@
 export interface StatDefinition {
   key: string;
   label: string;
-  shortLabel: string;
   min: number;
   max: number;
   defaultValue: number;
@@ -25,33 +24,6 @@ export interface SystemDefinition {
   }>;
   quickRolls: Array<{ key: string; label: string; formula: string }>;
 }
-
-const fixedStats = [
-  ["strength", "Сила", "СИЛ"],
-  ["agility", "Ловкость", "ЛОВ"],
-  ["endurance", "Выносливость", "ВЫН"],
-  ["vitality", "Живучесть", "ЖИВ"],
-  ["knowledge", "Знания", "ЗНА"],
-  ["intelligence", "Интеллект", "ИНТ"],
-  ["willpower", "Сила воли", "ВОЛ"],
-  ["charisma", "Харизма", "ХАР"],
-  [
-    "reaction",
-    "\u0420\u0435\u0430\u043a\u0446\u0438\u044f",
-    "\u0420\u0415\u0410",
-  ],
-  [
-    "attention",
-    "\u0412\u043d\u0438\u043c\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c",
-    "\u0412\u041d\u041c",
-  ],
-
-  [
-    "magicPower",
-    "\u0421\u0438\u043b\u0430 \u043c\u0430\u0433\u0438\u0438",
-    "\u041c\u0410\u0413",
-  ],
-] as const;
 
 /**
  * UIX-424 — стартовая раскладка характеристик новой кампании.
@@ -113,17 +85,37 @@ export const starterStatLayout: StarterStatGroup[] = [
   },
 ];
 
+/**
+ * Числовые строки стартовой раскладки — те, что лежат в `characters.stats`.
+ *
+ * Строки `RESOURCE` сюда не попадают: их значение — пул с текущим и максимумом,
+ * а не число, которое можно подставить в формулу. Кнопка быстрого броска на
+ * такой строке дала бы бросок не по тому числу.
+ */
+const layoutStats = starterStatLayout.flatMap((group) =>
+  group.rows.filter((row) => row.source === "STAT"),
+);
+
+/**
+ * Границы числовой характеристики. Одни для всех строк: раскладка задаёт, какие
+ * строки есть, но не их допустимый разброс.
+ */
+export const STAT_VALUE_RANGE = { min: -20, max: 20, defaultValue: 0 };
+
 export const arkenSystem: SystemDefinition = {
   id: "arken-core",
   version: 2,
   name: "Arken Core",
-  stats: fixedStats.map(([key, label, shortLabel]) => ({
+  /**
+   * Набор берётся из раскладки, а не из своего списка рядом. До UIX-424 список
+   * здесь был отдельным, и удаление характеристики из одного места оставляло
+   * кнопку быстрого броска в другом — она нажималась и отвечала «стат не
+   * найден» посреди игры.
+   */
+  stats: layoutStats.map(({ key, label }) => ({
     key,
     label,
-    shortLabel,
-    min: -20,
-    max: 20,
-    defaultValue: 0,
+    ...STAT_VALUE_RANGE,
   })),
   starterSkills: [
     {
@@ -140,7 +132,7 @@ export const arkenSystem: SystemDefinition = {
     },
   ],
   starterSpells: [],
-  quickRolls: fixedStats.map(([key, label]) => ({
+  quickRolls: layoutStats.map(({ key, label }) => ({
     key,
     label,
     formula: `1d20 + ${key}`,

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { statLabelsFromLayout } from "../stat-keys";
+import { statLabelsFromLayout, statRowsOfGroup } from "../stat-keys";
 import { useCampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
-import { arkenSystem } from "@arken/system";
+import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
 import { CatalogEntryForm } from "../CatalogEntryForm";
 import { ApiError } from "../api";
@@ -747,6 +747,11 @@ export function CharacterPanel({
   // above only made two components know about them instead of one.
   const { catalog: catalogActions, asset: assetActions } = useCampaignActions();
   const statLabels = statLabelsFromLayout(snapshot.campaign.statLayout);
+  const characteristicRows = statRowsOfGroup(
+    snapshot.campaign.statLayout,
+    "characteristics",
+  );
+  const combatRows = statRowsOfGroup(snapshot.campaign.statLayout, "combat");
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
@@ -1108,21 +1113,18 @@ export function CharacterPanel({
         <div className="character-card character-card--stats">
           <h3 className="character-card__header">Характеристики</h3>
           <div className="character-card__body">
-            {[
-              ...arkenSystem.stats.filter(
-                (stat) => stat.key !== "reaction" && stat.key !== "magicPower",
-              ),
-              ...arkenSystem.stats.filter((stat) => stat.key === "magicPower"),
-            ].map((stat) => (
+            {characteristicRows.map((stat) => (
               <label key={stat.key} className="stat-field">
                 <span>{stat.label}</span>
                 <FormInput
                   key={`${character.id}-${stat.key}-${character.revision}`}
                   type="number"
-                  defaultValue={character.stats[stat.key] ?? stat.defaultValue}
+                  defaultValue={
+                    character.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue
+                  }
                   disabled={!editable}
-                  min={stat.min}
-                  max={stat.max}
+                  min={STAT_VALUE_RANGE.min}
+                  max={STAT_VALUE_RANGE.max}
                   onBlur={(event) =>
                     void runCharacterMutation(() =>
                       onPatch(character.id, {
@@ -1147,36 +1149,21 @@ export function CharacterPanel({
         <div className="character-card character-card--combat">
           <h3 className="character-card__header">Боевые характеристики</h3>
           <div className="character-card__body">
-            {/* UIX-389: only Инициатива/Реакция have real backing data
-             * today (both are arkenSystem.stats entries). Выносливость and
-             * Мана exist as resource pools (physicalPower/magicPower) but
-             * those are current/max trackers, not roll formulas, so there
-             * is nothing meaningful to wire a roll button to yet — see the
-             * "Ресурсы и кошелёк" section below for their current display.
-             * Ближний бой, Дальний бой, Реген Выносливости, and Реген Маны
-             * have no backing field at all. Left out rather than
-             * fabricated; likely UIX-391 territory. */}
-            {(
-              [
-                {
-                  key: "agility",
-                  label: "Инициатива",
-                  formula: "1d20 + agility",
-                },
-                {
-                  key: "reaction",
-                  label: "Реакция",
-                  formula: "1d20 + reaction",
-                },
-              ] as const
-            ).map((combat) => (
+            {/* UIX-424: строки берутся из раскладки кампании. Прежде здесь
+             * стояли две выписанные вручную строки, и «Инициатива» бросалась
+             * на ловкость — своей характеристики у неё не было. Теперь есть.
+             *
+             * Строки-ресурсы (Выносливость, Мана) сюда не попадают: у пула нет
+             * одного числа для формулы. Их показывает блок «Ресурсы и кошелёк»
+             * ниже, а быстрые счётчики к ним — шаг 8. */}
+            {combatRows.map((combat) => (
               <RollButton
                 key={combat.key}
                 name={combat.label}
-                formula={combat.formula}
+                formula={`1d20 + ${combat.key}`}
                 disabled={!editable || rollPending}
                 onClick={() =>
-                  void submitCharacterRoll(combat.formula, combat.label)
+                  void submitCharacterRoll(`1d20 + ${combat.key}`, combat.label)
                 }
               />
             ))}

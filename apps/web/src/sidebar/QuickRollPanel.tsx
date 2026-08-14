@@ -34,18 +34,10 @@ export function QuickRollPanel({
         </p>
       )}
       <div className="activity-quick-rolls">
-        <Button
-          disabled={quickRollPending}
-          onClick={() =>
-            onQuickRoll(
-              "1d20 + agility",
-              "Инициатива",
-              rollCharacter.stats.agility ?? 0,
-            )
-          }
-        >
-          Инициатива
-        </Button>
+        {/* UIX-424: «Инициатива» больше не отдельная кнопка поверх броска на
+         * ловкость — это настоящая характеристика раскладки, и кнопка на неё
+         * приходит из списка ниже. Оставить обе значило бы дать две кнопки с
+         * одной подписью и разными числами. */}
         {arkenSystem.stats.map((stat) => (
           <Button
             key={stat.key}
