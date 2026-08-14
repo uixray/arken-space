@@ -3,8 +3,8 @@ import { Popup, Switch } from "@gravity-ui/uikit";
 import type { CursorPreference } from "../cursor-preference";
 
 /**
- * UIX-403/UIX-427: cursor visibility, which is one setting for a player and
- * two for a GM.
+ * UIX-403: cursor visibility, which is one setting for a player and two for a
+ * GM.
  *
  * A player gets a plain toggle for other people's cursors. The second switch
  * exists in the data model but has nothing to offer them: their own cursor is

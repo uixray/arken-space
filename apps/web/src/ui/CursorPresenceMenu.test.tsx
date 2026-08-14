@@ -35,7 +35,7 @@ vi.mock("@gravity-ui/uikit", () => ({
 }));
 
 /**
- * UIX-427: the two roles get different controls, and the reason is not
+ * UIX-403: the two roles get different controls, and the reason is not
  * cosmetic — offering a player a switch for their own cursor is offering a
  * setting that changes nothing they can observe.
  */
