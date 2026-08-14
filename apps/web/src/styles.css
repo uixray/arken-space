@@ -1099,6 +1099,25 @@ code {
   color: var(--muted);
   font-size: 0.72rem;
 }
+/* UIX-424: бросок и переименование делят одну полосу. Строк в карточке
+ * десяток, и отдельный ряд под каждую кнопку удвоил бы её высоту. */
+.stat-field__actions {
+  display: flex;
+  grid-column: 1 / -1;
+}
+.stat-field__actions > button {
+  flex: 1 1 auto;
+}
+.stat-field__actions > .stat-field__rename {
+  flex: 0 0 2.25rem;
+  border-left: 1px solid var(--line);
+}
+.stat-field__add {
+  width: 100%;
+  min-height: 28px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
 .character-card-row {
   display: flex;
   flex-wrap: wrap;

@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { statLabelsFromLayout, statRowsOfGroup } from "../stat-keys";
+import {
+  statKeyFromLabel,
+  statLabelsFromLayout,
+  statRowsOfGroup,
+  uniqueStatKey,
+} from "../stat-keys";
 import { useCampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
-import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
 import { CatalogEntryForm } from "../CatalogEntryForm";
 import { ApiError } from "../api";
@@ -28,6 +32,7 @@ import { RollModeControl, type RollMode } from "../RollModeControl";
 import { humanizeFormula } from "../formula-display";
 import { RollButton } from "./RollButton";
 import { CatalogEntryPicker } from "./CatalogEntryPicker";
+import { StatLayoutCard } from "./StatLayoutCard";
 import { selectableCatalogEntries } from "./catalog-entry-selection";
 import {
   changeWalletValue,
@@ -745,7 +750,11 @@ export function CharacterPanel({
   // The catalog handlers are read here rather than passed in: this panel is
   // the only place that uses them, so threading them through the workspace
   // above only made two components know about them instead of one.
-  const { catalog: catalogActions, asset: assetActions } = useCampaignActions();
+  const {
+    catalog: catalogActions,
+    asset: assetActions,
+    statLayout: statLayoutActions,
+  } = useCampaignActions();
   const statLabels = statLabelsFromLayout(snapshot.campaign.statLayout);
   const characteristicRows = statRowsOfGroup(
     snapshot.campaign.statLayout,
@@ -769,6 +778,57 @@ export function CharacterPanel({
       );
     }
   };
+  /**
+   * UIX-424, шаг 5 — правка раскладки.
+   *
+   * Раскладка уходит целиком: она общая на кампанию и меняется под её
+   * ревизией, поэтому две одновременные правки должны разойтись конфликтом, а
+   * не слиться. Ошибки не глушим — их показывает окно ввода, рядом с тем, что
+   * не получилось.
+   */
+  const layout = snapshot.campaign.statLayout;
+  const saveLayout = (next: typeof layout) =>
+    statLayoutActions.onUpdateStatLayout(next, snapshot.campaign.revision);
+
+  const renameStatRow = (key: string, label: string) =>
+    saveLayout(
+      layout.map((group) => ({
+        ...group,
+        // Ключ не трогаем: на него ссылаются формулы навыков и способностей,
+        // и переименование не должно их ломать. Меняется только подпись.
+        rows: group.rows.map((row) =>
+          row.key === key ? { ...row, label } : row,
+        ),
+      })),
+    );
+
+  const addStatRow = (groupId: string, label: string) => {
+    const taken = layout.flatMap((group) => group.rows.map((row) => row.key));
+    const key = uniqueStatKey(statKeyFromLabel(label), taken);
+    // Из подписи вроде «—» или «2» ключ не получается: парсер формул не примет
+    // ни пустое имя, ни начинающееся с цифры. Отказ здесь виден мастеру в том
+    // же окне; молча записанная строка сломала бы первый же бросок по ней.
+    if (!key)
+      throw new Error(
+        "Из этого названия не получается имя для формул. Добавьте в него буквы.",
+      );
+    return saveLayout(
+      layout.map((group) =>
+        group.id === groupId
+          ? { ...group, rows: [...group.rows, { key, label, source: "STAT" }] }
+          : group,
+      ),
+    );
+  };
+
+  const changeStatValue = (target: CharacterDto, key: string, value: number) =>
+    void runCharacterMutation(() =>
+      onPatch(target.id, {
+        stats: { [key]: value },
+        revision: target.revision,
+      }),
+    );
+
   const [entryEditor, setEntryEditor] = useState<
     CharacterDto["entries"][number] | null
   >(null);
@@ -1110,65 +1170,34 @@ export function CharacterPanel({
             <p className="muted">Портрет не назначен.</p>
           )}
         </div>
-        <div className="character-card character-card--stats">
-          <h3 className="character-card__header">Характеристики</h3>
-          <div className="character-card__body">
-            {characteristicRows.map((stat) => (
-              <label key={stat.key} className="stat-field">
-                <span>{stat.label}</span>
-                <FormInput
-                  key={`${character.id}-${stat.key}-${character.revision}`}
-                  type="number"
-                  defaultValue={
-                    character.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue
-                  }
-                  disabled={!editable}
-                  min={STAT_VALUE_RANGE.min}
-                  max={STAT_VALUE_RANGE.max}
-                  onBlur={(event) =>
-                    void runCharacterMutation(() =>
-                      onPatch(character.id, {
-                        stats: { [stat.key]: Number(event.target.value) },
-                        revision: character.revision,
-                      }),
-                    )
-                  }
-                />
-                <Button
-                  disabled={!editable || rollPending}
-                  onClick={() =>
-                    void submitCharacterRoll(`1d20 + ${stat.key}`, stat.label)
-                  }
-                >
-                  Бросок
-                </Button>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="character-card character-card--combat">
-          <h3 className="character-card__header">Боевые характеристики</h3>
-          <div className="character-card__body">
-            {/* UIX-424: строки берутся из раскладки кампании. Прежде здесь
-             * стояли две выписанные вручную строки, и «Инициатива» бросалась
-             * на ловкость — своей характеристики у неё не было. Теперь есть.
-             *
-             * Строки-ресурсы (Выносливость, Мана) сюда не попадают: у пула нет
-             * одного числа для формулы. Их показывает блок «Ресурсы и кошелёк»
-             * ниже, а быстрые счётчики к ним — шаг 8. */}
-            {combatRows.map((combat) => (
-              <RollButton
-                key={combat.key}
-                name={combat.label}
-                formula={`1d20 + ${combat.key}`}
-                disabled={!editable || rollPending}
-                onClick={() =>
-                  void submitCharacterRoll(`1d20 + ${combat.key}`, combat.label)
-                }
-              />
-            ))}
-          </div>
-        </div>
+        <StatLayoutCard
+          title="Характеристики"
+          modifier="stats"
+          rows={characteristicRows}
+          values={character.stats}
+          valuesRevisionKey={`${character.id}-${character.revision}`}
+          editable={Boolean(editable)}
+          rollPending={rollPending}
+          canEditLayout={snapshot.me.role === "GM"}
+          onChangeValue={(key, value) => changeStatValue(character, key, value)}
+          onRoll={(formula, label) => void submitCharacterRoll(formula, label)}
+          onRenameRow={renameStatRow}
+          onAddRow={(label) => addStatRow("characteristics", label)}
+        />
+        <StatLayoutCard
+          title="Боевые характеристики"
+          modifier="combat"
+          rows={combatRows}
+          values={character.stats}
+          valuesRevisionKey={`${character.id}-${character.revision}`}
+          editable={Boolean(editable)}
+          rollPending={rollPending}
+          canEditLayout={snapshot.me.role === "GM"}
+          onChangeValue={(key, value) => changeStatValue(character, key, value)}
+          onRoll={(formula, label) => void submitCharacterRoll(formula, label)}
+          onRenameRow={renameStatRow}
+          onAddRow={(label) => addStatRow("combat", label)}
+        />
         <div className="character-card character-card--skills">
           <h3 className="character-card__header">Навыки</h3>
           <div className="character-card__body">

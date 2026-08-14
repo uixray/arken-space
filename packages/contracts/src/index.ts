@@ -625,6 +625,23 @@ export type StatRow = z.infer<typeof statRowSchema>;
 export type StatGroup = z.infer<typeof statGroupSchema>;
 export type StatLayout = z.infer<typeof statLayoutSchema>;
 
+/**
+ * UIX-424, шаг 5 — правка раскладки мастером.
+ *
+ * Передаётся раскладка целиком, а не отдельная операция: она общая на кампанию
+ * и меняется под ревизией, значит две одновременные правки должны разойтись
+ * конфликтом, а не слиться. Частичные операции пришлось бы сливать вручную и
+ * гадать, что имел в виду второй мастер.
+ *
+ * Что из присланного примут — решает сервер: удаление строки на этом шаге
+ * отвергается, потому что проверка ссылок из формул появляется только на шаге 6.
+ */
+export const updateStatLayoutSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  layout: statLayoutSchema,
+});
+
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });
 export const inviteClaimSchema = z.object({
   token: z.string().min(32).max(512),

@@ -65,7 +65,7 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
  * подставляется при чтении, а не миграцией данных: такая кампания ничем не
  * отличается от новой, и записывать ей копию значения по умолчанию незачем.
  */
-function resolveStatLayout(stored: unknown): StatLayout {
+export function resolveStatLayout(stored: unknown): StatLayout {
   const parsed = statLayoutSchema.safeParse(stored);
   if (parsed.success && parsed.data.length > 0) return parsed.data;
   return statLayoutSchema.parse(starterStatLayout);

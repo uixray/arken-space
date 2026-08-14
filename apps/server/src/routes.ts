@@ -57,6 +57,7 @@ import {
   characterCountersCommandSchema,
   rechargeEntryCommandSchema,
   renameCampaignSchema,
+  updateStatLayoutSchema,
   deleteTokenSchema,
   gmLoginSchema,
   inviteClaimSchema,
@@ -111,8 +112,9 @@ import { createSession, requireAuth } from "./auth.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
-import { buildSnapshot } from "./snapshot.js";
+import { buildSnapshot, resolveStatLayout } from "./snapshot.js";
 import { characterDto, normalizeCharacterWallet } from "./character-dto.js";
+import { rejectDestructiveLayoutChange } from "./stat-layout.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
@@ -6563,6 +6565,88 @@ export function registerRoutes(
     if (!updated) return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return updated;
+  });
+
+  /**
+   * UIX-424, шаг 5 — правка раскладки характеристик кампании.
+   *
+   * Раскладка одна на всех, поэтому это команда мастера под ревизией кампании,
+   * рядом с переименованием. Что именно разрешено менять — в
+   * `rejectDestructiveLayoutChange`: пока набор ключей может только расти.
+   */
+  app.patch("/api/campaign/stat-layout", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = updateStatLayoutSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) {
+      const [replayed] = await db
+        .select()
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      return replayed
+        ? reply.code(200).send(replayed)
+        : reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    }
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    // Сравнение с **разрешённой** раскладкой, а не с сохранённой: у кампании,
+    // которая раскладку ни разу не правила, в базе пусто, а видит она
+    // стартовую. Сравнив с пустым, сервер пропустил бы удаление любой строки.
+    const rejection = rejectDestructiveLayoutChange(
+      resolveStatLayout(current.statLayout),
+      body.layout,
+    );
+    if (rejection) return reply.code(409).send(rejection);
+    const updatedLayout = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(campaigns)
+        .set({
+          statLayout: body.layout,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.stat-layout.updated",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: next.revision,
+        // Ключи, а не раскладка целиком: журнал должен отвечать на вопрос
+        // «когда появилась эта строка», не храня копию всей структуры.
+        payload: {
+          keys: body.layout.flatMap((group) =>
+            group.rows.map((row) => row.key),
+          ),
+        },
+      });
+      return next;
+    });
+    if (!updatedLayout)
+      return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updatedLayout;
   });
 
   app.patch("/api/characters/:id/counters", async (request, reply) => {

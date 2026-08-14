@@ -51,6 +51,7 @@ import { useTokenDefinitionActions } from "./use-token-definition-actions";
 import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
+import { useStatLayoutActions } from "./use-stat-layout-actions";
 import { useStoryActions } from "./use-story-actions";
 import { usePlayerRequestActions } from "./use-player-request-actions";
 import { useAssetActions } from "./use-asset-actions";
@@ -1261,6 +1262,7 @@ export function App() {
   const accessActions = useAccessActions({ run });
   const catalogActions = useCatalogActions({ run, load, setError });
   const assetActions = useAssetActions({ load });
+  const statLayoutActions = useStatLayoutActions({ load });
   const openPlayerRequests = useCallback(
     () => handleWorkspaceChange("player-requests"),
     [handleWorkspaceChange],
@@ -1301,6 +1303,7 @@ export function App() {
       story: storyActions,
       playerRequest: playerRequestActions,
       asset: assetActions,
+      statLayout: statLayoutActions,
     }),
     [
       sceneActions,
@@ -1312,6 +1315,7 @@ export function App() {
       storyActions,
       playerRequestActions,
       assetActions,
+      statLayoutActions,
     ],
   );
 

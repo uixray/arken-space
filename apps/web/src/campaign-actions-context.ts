@@ -8,6 +8,7 @@ import type { CatalogActions } from "./use-catalog-actions";
 import type { StoryActions } from "./use-story-actions";
 import type { PlayerRequestActions } from "./use-player-request-actions";
 import type { AssetActions } from "./use-asset-actions";
+import type { StatLayoutActions } from "./use-stat-layout-actions";
 
 /**
  * UIX-398 step B — campaign commands, delivered by context instead of by
@@ -39,6 +40,7 @@ export interface CampaignActions {
   story: StoryActions;
   playerRequest: PlayerRequestActions;
   asset: AssetActions;
+  statLayout: StatLayoutActions;
 }
 
 /** Applied directly in `App.tsx`; there is no wrapper component, so this
