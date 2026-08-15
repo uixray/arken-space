@@ -70,6 +70,40 @@ export function nextChatStream(
   return null;
 }
 
+/**
+ * Сколько сообщений потока клиент держит в памяти при **автоматическом**
+ * пополнении — то есть когда приходит новое сообщение.
+ *
+ * UIX-450: ограничение существует, чтобы длинная сессия не растила состояние
+ * бесконечно, и относится только к тому, что приходит само. Историю, которую
+ * человек подгрузил прокруткой, оно не трогает: она ограничена его терпением,
+ * а выбросить её при первом же чужом сообщении значило бы вернуть прокрутку
+ * в начало ровно в тот момент, когда за столом что-то происходит.
+ */
+export const MAX_AUTO_THREAD_MESSAGES = 500;
+
+/**
+ * UIX-450 — подшивает подгруженную страницу истории.
+ *
+ * Дедупликация по `id`, а не по номеру: страница может пересечься с тем, что
+ * уже пришло событием `chat:created`, и совпадение по номеру между потоками
+ * ничего не значит.
+ */
+export function mergeChatHistory(
+  snapshot: GameSnapshot,
+  history: readonly ChatMessageDto[],
+): GameSnapshot {
+  const known = new Set(snapshot.messages.map((item) => item.id));
+  const added = history.filter((item) => !known.has(item.id));
+  if (added.length === 0) return snapshot;
+  return {
+    ...snapshot,
+    messages: [...snapshot.messages, ...added].sort(
+      (left, right) => left.sequence - right.sequence,
+    ),
+  };
+}
+
 export function appendChatMessage(
   snapshot: GameSnapshot,
   message: ChatMessageDto,
@@ -88,7 +122,7 @@ export function appendChatMessage(
     message,
   ]
     .sort((left, right) => left.sequence - right.sequence)
-    .slice(-200);
+    .slice(-MAX_AUTO_THREAD_MESSAGES);
   if (!threadMessages.some((item) => item.id === message.id)) return snapshot;
   const messages = [...otherThreads, ...threadMessages].sort(
     (left, right) => left.sequence - right.sequence,

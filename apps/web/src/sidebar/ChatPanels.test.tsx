@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
+import { CampaignActionsContext } from "../campaign-actions-context";
 
 // UIX-388: same mocking precedent as RollButton.test.tsx / AppErrorBoundary
 // test.ts -- vitest runs this repo's tests under `environment: "node"` (no
@@ -92,18 +93,31 @@ function baseSnapshot(): GameSnapshot {
 }
 
 function renderTablePanel() {
+  // UIX-450: панель подгружает старые сообщения через контекст действий,
+  // поэтому провайдер обязателен. Заглушка возвращает пустую страницу — тесты
+  // здесь про композер, а не про историю.
   return renderToStaticMarkup(
-    <ChatPanel
-      snapshot={baseSnapshot()}
-      onChat={noop as never}
-      onSticker={noop as never}
-      onRoll={noop as never}
-      onMarkChatRead={noop as never}
-      activeStream="TABLE"
-      focusedMessageId={null}
-      onMessageFocused={() => {}}
-      onOpenPlayerRequests={() => {}}
-    />,
+    <CampaignActionsContext.Provider
+      value={
+        {
+          chatHistory: {
+            onLoadThreadHistory: async () => ({ loaded: 0, hasMore: false }),
+          },
+        } as never
+      }
+    >
+      <ChatPanel
+        snapshot={baseSnapshot()}
+        onChat={noop as never}
+        onSticker={noop as never}
+        onRoll={noop as never}
+        onMarkChatRead={noop as never}
+        activeStream="TABLE"
+        focusedMessageId={null}
+        onMessageFocused={() => {}}
+        onOpenPlayerRequests={() => {}}
+      />
+    </CampaignActionsContext.Provider>,
   );
 }
 

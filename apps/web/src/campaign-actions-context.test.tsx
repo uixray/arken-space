@@ -30,6 +30,7 @@ function makeActions(overrides: Record<string, unknown> = {}): CampaignActions {
     playerRequest: domain,
     asset: domain,
     statLayout: domain,
+    chatHistory: domain,
     ...overrides,
   } as CampaignActions;
 }

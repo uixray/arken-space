@@ -5,7 +5,10 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { editableToken } from "../apps/server/src/realtime.js";
-import { buildSnapshot } from "../apps/server/src/snapshot.js";
+import {
+  buildSnapshot,
+  SNAPSHOT_MESSAGES_PER_THREAD,
+} from "../apps/server/src/snapshot.js";
 
 const ids = {
   campaign: "00000000-0000-4000-8000-000000000001",
@@ -198,7 +201,7 @@ describe("role-filtered snapshots", () => {
     expect(snapshot.assets).toHaveLength(2);
   });
 
-  it("loads at most 200 ACL-filtered messages per stream", async () => {
+  it("везёт последние сообщения потока, а не всю историю", async () => {
     await database.exec(`
       delete from chat_messages where campaign_id = '${ids.campaign}';
       insert into chat_messages (campaign_id,membership_id,thread_id,visibility,body,created_at,sequence)
@@ -225,10 +228,16 @@ describe("role-filtered snapshots", () => {
     const story = snapshot.messages.filter(
       (message) => message.stream === "STORY",
     );
-    expect(table).toHaveLength(200);
-    expect(story).toHaveLength(200);
-    expect(table[0]?.body).toBe("table-3");
-    expect(story[0]?.body).toBe("story-3");
+    // UIX-450: было 200 на поток, и это давало две трети трафика рассылки —
+    // 1 726 КБ из 2 580 на боевых данных. Теперь последние 20, остальное
+    // подгружается маршрутом истории.
+    expect(table).toHaveLength(SNAPSHOT_MESSAGES_PER_THREAD);
+    expect(story).toHaveLength(SNAPSHOT_MESSAGES_PER_THREAD);
+    // Именно **последние**: обрезка с того конца сделала бы ленту при
+    // подключении показывающей начало кампании вместо того, что происходит.
+    expect(table.at(-1)?.body).toBe("table-202");
+    expect(story.at(-1)?.body).toBe("story-202");
+    expect(table[0]?.body).toBe("table-183");
     expect(
       snapshot.chatThreadStates.find((state) => state.stream === "TABLE"),
     ).toMatchObject({ latestSequence: 202, unreadCount: 202 });

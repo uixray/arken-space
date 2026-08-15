@@ -1486,6 +1486,20 @@ code {
 /* Always-visible (not hover-only) explanation of what Enter vs Ctrl+Enter
    does, so a player can tell which way a message will send *before*
    pressing Enter -- a tooltip alone would only reach mouse users. */
+/* UIX-450: кнопка подгрузки истории стоит первой в списке сообщений. */
+.chat-load-more {
+  align-self: center;
+  margin: var(--space-xs) 0;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.chat-load-more:disabled {
+  opacity: 0.6;
+}
 .composer-hint {
   margin: 4px 0 0;
   color: var(--faint);

@@ -69,6 +69,7 @@ import { useFollowScroll } from "../ui/useFollowScroll";
 import { decideComposerKeydown } from "../composer-keyboard-intent";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 import { ApiError } from "../api";
+import { useThreadHistory } from "../use-thread-history";
 import { QuickRollPanel } from "./QuickRollPanel";
 import { ResourceCounters } from "./ResourceCounters";
 
@@ -1120,6 +1121,12 @@ export function ChatPanel({
   const latestMessage = messages.at(-1);
   const thread = threadForStream(snapshot, activeStream);
   const threadId = thread?.id;
+  const {
+    hasMore: historyHasMore,
+    pending: historyPending,
+    error: historyError,
+    loadOlder,
+  } = useThreadHistory(messages);
   const latestMessageId = latestMessage?.id;
   const latestSequence = latestMessage?.sequence;
   const { listRef, isAtBottom, newItemCount, scrollToBottom, onScroll } =
@@ -1232,6 +1239,25 @@ export function ChatPanel({
         ref={listRef}
         onScroll={onScroll}
       >
+        {/* UIX-450: кнопка вверху списка, а не автоподгрузка по прокрутке.
+         * Автоподгрузка в ленте, куда постоянно приходит новое, дёргает
+         * позицию прокрутки под рукой у читающего; здесь человек сам решает,
+         * когда уйти в прошлое. */}
+        {threadId && historyHasMore && (
+          <button
+            type="button"
+            className="chat-load-more"
+            disabled={historyPending}
+            onClick={() => void loadOlder(threadId)}
+          >
+            {historyPending ? "Загружаю…" : "Показать более ранние"}
+          </button>
+        )}
+        {historyError && (
+          <p className="chat-empty" role="alert">
+            {historyError}
+          </p>
+        )}
         {timeline.length === 0 && (
           <p className="chat-empty">В этом потоке пока нет сообщений.</p>
         )}

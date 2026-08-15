@@ -52,6 +52,7 @@ import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
+import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
 import { usePlayerRequestActions } from "./use-player-request-actions";
 import { useAssetActions } from "./use-asset-actions";
@@ -1263,6 +1264,7 @@ export function App() {
   const catalogActions = useCatalogActions({ run, load, setError });
   const assetActions = useAssetActions({ load });
   const statLayoutActions = useStatLayoutActions({ load });
+  const chatHistoryActions = useChatHistoryActions({ setSnapshot });
   const openPlayerRequests = useCallback(
     () => handleWorkspaceChange("player-requests"),
     [handleWorkspaceChange],
@@ -1304,6 +1306,7 @@ export function App() {
       playerRequest: playerRequestActions,
       asset: assetActions,
       statLayout: statLayoutActions,
+      chatHistory: chatHistoryActions,
     }),
     [
       sceneActions,
@@ -1316,6 +1319,7 @@ export function App() {
       playerRequestActions,
       assetActions,
       statLayoutActions,
+      chatHistoryActions,
     ],
   );
 

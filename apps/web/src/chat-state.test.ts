@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChatMessageDto, GameSnapshot } from "@arken/contracts";
 import {
   appendChatMessage,
+  MAX_AUTO_THREAD_MESSAGES,
   messagesForStream,
   streamForMessage,
   nextChatStream,
@@ -54,13 +55,17 @@ describe("appendChatMessage", () => {
     expect(appendChatMessage(once, message, 22)).toBe(once);
   });
 
-  it("keeps only the accepted 200-message window", () => {
-    const messages = Array.from({ length: 200 }, (_, index) =>
-      messageAt(`m-${String(index).padStart(3, "0")}`, index + 1),
+  it("держит окно автоматического пополнения, не выбрасывая подгруженное", () => {
+    const messages = Array.from(
+      { length: MAX_AUTO_THREAD_MESSAGES },
+      (_, index) => messageAt(`m-${String(index).padStart(3, "0")}`, index + 1),
     );
-    const newest = messageAt("newest", 201);
+    // Номер строго больше последнего в окне: сообщение приходит новым, а не
+    // задним числом.
+    const newest = messageAt("newest", MAX_AUTO_THREAD_MESSAGES + 1);
     const result = appendChatMessage({ ...snapshot, messages }, newest, 21);
-    expect(result.messages).toHaveLength(200);
+    expect(result.messages).toHaveLength(MAX_AUTO_THREAD_MESSAGES);
+    // Самое старое вытеснено, самое новое на месте: окно едет вперёд.
     expect(result.messages[0]?.id).toBe("m-001");
     expect(result.messages.at(-1)?.id).toBe("newest");
   });
@@ -79,8 +84,9 @@ describe("appendChatMessage", () => {
   });
 
   it("excludes an unseen message older than the retained window", () => {
-    const messages = Array.from({ length: 200 }, (_, index) =>
-      messageAt(`m-${index}`, index + 2),
+    const messages = Array.from(
+      { length: MAX_AUTO_THREAD_MESSAGES },
+      (_, index) => messageAt(`m-${index}`, index + 2),
     );
     const current = { ...snapshot, messages };
     expect(appendChatMessage(current, messageAt("too-old", 1), 21)).toBe(
@@ -104,23 +110,30 @@ describe("appendChatMessage", () => {
     ]);
   });
 
-  it("retains 200 messages independently per thread", () => {
-    const table = Array.from({ length: 200 }, (_, index) =>
+  it("держит окно независимо для каждого потока", () => {
+    const table = Array.from({ length: MAX_AUTO_THREAD_MESSAGES }, (_, index) =>
       messageAt(`table-${index}`, index + 1),
     );
-    const rolls = Array.from({ length: 200 }, (_, index) => ({
-      ...messageAt(`roll-${index}`, index + 201),
-      threadId: "rolls-thread",
-      stream: "ROLLS" as const,
-    }));
+    const rolls = Array.from(
+      { length: MAX_AUTO_THREAD_MESSAGES },
+      (_, index) => ({
+        ...messageAt(`roll-${index}`, index + MAX_AUTO_THREAD_MESSAGES + 1),
+        threadId: "rolls-thread",
+        stream: "ROLLS" as const,
+      }),
+    );
     const result = appendChatMessage(
       { ...snapshot, messages: [...table, ...rolls] },
-      messageAt("table-new", 401),
-      401,
+      messageAt("table-new", MAX_AUTO_THREAD_MESSAGES * 2 + 1),
+      MAX_AUTO_THREAD_MESSAGES * 2 + 1,
     );
-    expect(result.messages).toHaveLength(400);
+    // Окно считается по потоку, а не по всей ленте: два полных потока и одно
+    // новое сообщение дают два окна, а вытесняется только самое старое в том
+    // потоке, куда сообщение пришло.
+    expect(result.messages).toHaveLength(MAX_AUTO_THREAD_MESSAGES * 2);
     expect(result.messages.some((item) => item.id === "roll-0")).toBe(true);
     expect(result.messages.some((item) => item.id === "table-0")).toBe(false);
+    expect(result.messages.some((item) => item.id === "table-new")).toBe(true);
   });
 
   it("selects and resolves the authoritative stream", () => {

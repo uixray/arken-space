@@ -52,6 +52,20 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
  * подставляется при чтении, а не миграцией данных: такая кампания ничем не
  * отличается от новой, и записывать ей копию значения по умолчанию незачем.
  */
+/**
+ * UIX-450 — сколько последних сообщений потока едет в снапшоте.
+ *
+ * Было 200 на поток, и это давало две трети всего трафика рассылки: 1 726 КБ
+ * из 2 580 на боевых данных, по 246 КБ каждому сокету на каждое движение
+ * токена. Потоков минимум три — их создаёт триггер при вставке кампании, —
+ * значит потолок был шестьсот сообщений на сборку, семь раз за действие.
+ *
+ * Двадцать, а не ноль: лента при подключении не должна быть пустой, и
+ * реконнект не должен выглядеть как потеря переписки. Остальное подгружается
+ * маршрутом `/api/chat/threads/:threadId/messages` по кнопке.
+ */
+export const SNAPSHOT_MESSAGES_PER_THREAD = 20;
+
 export function resolveStatLayout(stored: unknown): StatLayout {
   const parsed = statLayoutSchema.safeParse(stored);
   if (parsed.success && parsed.data.length > 0) return parsed.data;
@@ -242,7 +256,7 @@ export async function buildSnapshot(
           ),
         )
         .orderBy(desc(chatMessages.sequence))
-        .limit(200),
+        .limit(SNAPSHOT_MESSAGES_PER_THREAD),
     ),
   );
   const visiblePlayerRequestIds = new Set(
