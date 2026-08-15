@@ -9,6 +9,7 @@ import type {
   ChatStream,
   CharacterDto,
   GameSnapshot,
+  InitiativeParticipantDto,
   MessageVisibility,
   StoryPostAdminDto,
   StoryPostDto,
@@ -94,6 +95,12 @@ export type Props = {
   ) => Promise<void>;
   viewedSceneId: string | null;
   sceneDialogRequest: number;
+  /** UIX-431: выделение с карты и правка очереди ходов. */
+  selectedTokenIds: readonly string[];
+  onUpdateInitiative: (
+    participants: InitiativeParticipantDto[],
+    revision: number,
+  ) => Promise<void>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
   onUpdateCounters: (
     characterId: string,
@@ -380,6 +387,8 @@ export function Sidebar(props: Props) {
               playerRequestActions.onOpenPlayerRequestCreate
             }
             onUpdateCounters={props.onUpdateCounters}
+            selectedTokenIds={props.selectedTokenIds}
+            onUpdateInitiative={props.onUpdateInitiative}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel

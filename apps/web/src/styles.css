@@ -3937,6 +3937,61 @@ code {
    `useWorkspaceWindow`-driven draggable/z-indexed window per UIX-363; see
    the layer-order comment near `.dice-tray-panel` below for why that
    competed with popovers/dialogs). */
+/* UIX-431: очередь ходов. Строка — номер, имя, бросок и управление; номер
+ * фиксированной ширины, чтобы имена не прыгали по горизонтали при переходе с
+ * однозначных позиций на двузначные. */
+.initiative-panel {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--line);
+}
+.initiative-panel h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.initiative-panel__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.initiative-panel__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.initiative-panel__position {
+  min-width: 1.6em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.initiative-panel__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.initiative-panel__value {
+  width: 4.5em;
+}
+.initiative-panel__value-read {
+  min-width: 2.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.initiative-panel__actions {
+  display: flex;
+  gap: 2px;
+}
+.initiative-panel__controls,
+.initiative-panel__add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
 .quick-roll-panel {
   display: grid;
   gap: var(--space-xs);

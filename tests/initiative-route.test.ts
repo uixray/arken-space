@@ -239,9 +239,9 @@ describe("очередь ходов", () => {
     const actionId = crypto.randomUUID();
     const revision = await campaignRevision();
     const participants = [{ id: crypto.randomUUID(), name: "Волк" }];
-    expect((await patchInitiative(participants, revision, actionId)).statusCode).toBe(
-      200,
-    );
+    expect(
+      (await patchInitiative(participants, revision, actionId)).statusCode,
+    ).toBe(200);
     const replay = await patchInitiative(participants, revision, actionId);
     expect(replay.statusCode).toBe(200);
     expect(await campaignRevision()).toBe(revision + 1);
@@ -356,12 +356,15 @@ describe("что из очереди приходит игроку", () => {
       ],
       await campaignRevision(),
     );
-    const playerSnapshot = await buildSnapshot(db as never, {
-      membershipId: ids.player,
-      campaignId: ids.campaign,
-      role: "PLAYER",
-      displayName: "Игрок",
-    } as never);
+    const playerSnapshot = await buildSnapshot(
+      db as never,
+      {
+        membershipId: ids.player,
+        campaignId: ids.campaign,
+        role: "PLAYER",
+        displayName: "Игрок",
+      } as never,
+    );
     expect(playerSnapshot.campaign.initiative).toMatchObject([
       { name: "Ллойд" },
     ]);
@@ -369,12 +372,15 @@ describe("что из очереди приходит игроку", () => {
       ids.hiddenToken,
     );
 
-    const gmSnapshot = await buildSnapshot(db as never, {
-      membershipId: ids.gm,
-      campaignId: ids.campaign,
-      role: "GM",
-      displayName: "Мастер",
-    } as never);
+    const gmSnapshot = await buildSnapshot(
+      db as never,
+      {
+        membershipId: ids.gm,
+        campaignId: ids.campaign,
+        role: "GM",
+        displayName: "Мастер",
+      } as never,
+    );
     expect(gmSnapshot.campaign.initiative).toHaveLength(2);
   });
 });

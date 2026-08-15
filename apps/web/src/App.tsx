@@ -52,6 +52,7 @@ import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
+import { useInitiativeActions } from "./use-initiative-actions";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
 import { usePlayerRequestActions } from "./use-player-request-actions";
@@ -1278,6 +1279,13 @@ export function App() {
   const catalogActions = useCatalogActions({ run, load, setError });
   const assetActions = useAssetActions({ load });
   const statLayoutActions = useStatLayoutActions({ load });
+  /**
+   * UIX-431: выделение рамкой живёт в рендерере, а нужно оно панели очереди в
+   * боковой колонке. Поднято сюда, а не продублировано: второй набор «что
+   * выделено» разошёлся бы с подсветкой на карте при первом же клике.
+   */
+  const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
+  const initiativeActions = useInitiativeActions({ load });
   const chatHistoryActions = useChatHistoryActions({ setSnapshot });
   const openPlayerRequests = useCallback(
     () => handleWorkspaceChange("player-requests"),
@@ -2202,6 +2210,7 @@ export function App() {
                     );
                   }}
                   membershipId={viewSnapshot.me.id}
+                  onSelectionChange={setSelectedTokenIds}
                   socket={socket}
                   tool={tool}
                   onToolSelect={setTool}
@@ -2669,6 +2678,8 @@ export function App() {
             </aside>
           ) : (
             <Sidebar
+              selectedTokenIds={selectedTokenIds}
+              onUpdateInitiative={initiativeActions.onUpdateInitiative}
               snapshot={snapshot}
               requestedCharacterId={requestedCharacterId}
               socket={socket}

@@ -751,6 +751,32 @@ export const updateInitiativeSchema = z.object({
   participants: initiativeOrderSchema,
 });
 
+/**
+ * Порядок по броскам — по убыванию, «ещё не бросал» уходит вниз.
+ *
+ * Используется только кнопкой «пересортировать»: ввод числа порядок не меняет.
+ * Это главное требование задачи — часть бросков идёт физическими кубами, и
+ * автосортировка на каждый ввод рушила бы расстановку, которую мастер собрал
+ * руками. Сортировка устойчива: равные броски сохраняют взаимный порядок,
+ * поэтому решённая мастером ничья не перетасовывается сама.
+ */
+export function sortByInitiative<T extends { initiative: number | null }>(
+  participants: readonly T[],
+): T[] {
+  return participants
+    .map((participant, index) => ({ participant, index }))
+    .sort((left, right) => {
+      const a = left.participant.initiative;
+      const b = right.participant.initiative;
+      if (a === null && b === null) return left.index - right.index;
+      if (a === null) return 1;
+      if (b === null) return -1;
+      if (a !== b) return b - a;
+      return left.index - right.index;
+    })
+    .map(({ participant }) => participant);
+}
+
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });
 export const inviteClaimSchema = z.object({
   token: z.string().min(32).max(512),

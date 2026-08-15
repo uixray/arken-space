@@ -68,6 +68,12 @@ export interface SceneRendererProps {
     width: number;
     height: number;
   }) => void;
+  /**
+   * UIX-431: рамка выделения — то, чем мастер вводит группу в бой, а панель
+   * очереди живёт в боковой колонке. Рендерер сообщает наружу, что выделено;
+   * решать, что с этим делать, — не его дело.
+   */
+  onSelectionChange?: (tokenIds: string[]) => void;
   onDrawingCreate: (drawing: {
     points: number[];
     color: string;

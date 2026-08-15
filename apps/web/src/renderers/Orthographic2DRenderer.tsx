@@ -25,6 +25,7 @@ import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { fitRect } from "./camera-fit";
+import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   appendRulerWaypoint,
@@ -221,6 +222,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     null,
   );
   const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
+  // UIX-431: наружу уходит сам факт изменения выделения. Через ref, чтобы
+  // эффект не перезапускался от каждой новой функции в пропсах.
+  const onSelectionChangeRef = useLatestRef(props.onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current?.(selectedTokenIds);
+  }, [selectedTokenIds, onSelectionChangeRef]);
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([]);
   const [marquee, setMarquee] = useState<{
     startX: number;

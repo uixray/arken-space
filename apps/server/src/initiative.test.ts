@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  projectInitiative,
-  resolveParticipantName,
-  sortByInitiative,
-} from "./initiative.js";
+import { sortByInitiative } from "@arken/contracts";
+import { projectInitiative, resolveParticipantName } from "./initiative.js";
 
 const names = (entries: Array<[string, string]>) => new Map(entries);
 

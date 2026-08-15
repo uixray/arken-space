@@ -11,6 +11,7 @@ import type {
   ChatAttachmentMetadata,
   ChatStream,
   GameSnapshot,
+  InitiativeParticipantDto,
   MessageVisibility,
 } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
@@ -25,6 +26,7 @@ import {
   statResourceRowsFromLayout,
   statRowsFromLayout,
 } from "../stat-keys";
+import { InitiativePanel } from "./InitiativePanel";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
@@ -204,6 +206,8 @@ export function ActivityPanel({
   onMessageFocused,
   onOpenPlayerRequestCreate,
   onUpdateCounters,
+  selectedTokenIds,
+  onUpdateInitiative,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -215,7 +219,14 @@ export function ActivityPanel({
   onOpenPlayerRequestCreate: () => void;
   /** UIX-424, шаг 8: счётчики выносливости и маны правят те же `resources`. */
   onUpdateCounters: Props["onUpdateCounters"];
+  /** UIX-431: выделенные рамкой токены — из них пополняется очередь ходов. */
+  selectedTokenIds: readonly string[];
+  onUpdateInitiative: (
+    participants: InitiativeParticipantDto[],
+    revision: number,
+  ) => Promise<void>;
 }) {
+  const [initiativePending, setInitiativePending] = useState(false);
   const [composer, setComposer] = useState("");
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
@@ -452,6 +463,20 @@ export function ActivityPanel({
       id="chat-panel-activity"
       aria-labelledby="chat-tab-activity"
     >
+      {snapshot.campaign.battleActive && (
+        <InitiativePanel
+          participants={snapshot.campaign.initiative}
+          isGm={snapshot.me.role === "GM"}
+          pending={initiativePending}
+          selectedTokenIds={selectedTokenIds}
+          onUpdate={(next) => {
+            setInitiativePending(true);
+            void onUpdateInitiative(next, snapshot.campaign.revision).finally(
+              () => setInitiativePending(false),
+            );
+          }}
+        />
+      )}
       <section className="activity-roll-controls" aria-label="Быстрые броски">
         <div className="activity-roll-controls__heading">
           <strong>Быстрые броски</strong>
