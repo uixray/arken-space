@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   statKeyFromLabel,
+  moveStatRow,
   statLabelsFromLayout,
   statRowsOfGroup,
   uniqueStatKey,
@@ -10,7 +11,7 @@ import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { CatalogEntryForm } from "../CatalogEntryForm";
-import { ApiError } from "../api";
+import { ApiError, formatApiError } from "../api";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 import { ArkenDialog } from "../ui/ArkenDialog";
 import { isEditableEventTarget } from "../input-diagnostics";
@@ -768,6 +769,7 @@ export function CharacterPanel({
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
   const [characterMutationError, setCharacterMutationError] = useState("");
+  const [statLayoutError, setStatLayoutError] = useState("");
   const runCharacterMutation = async (action: () => Promise<unknown>) => {
     setCharacterMutationError("");
     try {
@@ -834,6 +836,40 @@ export function CharacterPanel({
         rows: group.rows.filter((row) => row.key !== key),
       })),
     );
+
+  /**
+   * Порядок строк — часть раскладки: в этом же порядке идут кнопки в панели
+   * быстрых бросков. Ресурсы карточка не показывает, поэтому меняются местами
+   * видимые соседи, а не соседи по массиву, — иначе нажатие выглядело бы как
+   * «ничего не произошло».
+   */
+  const moveStatRowBy = async (key: string, direction: "up" | "down") => {
+    const next = moveStatRow(
+      layout,
+      key,
+      direction,
+      (row) => row.source !== "RESOURCE",
+    );
+    // Строка уже с краю — пустую правку не отправляем: она подняла бы ревизию
+    // кампании и разошлась бы всем клиентам, ничего не изменив.
+    if (!next) return;
+    setStatLayoutError("");
+    try {
+      await saveLayout(next);
+    } catch (reason) {
+      /**
+       * У стрелок, в отличие от переименования и удаления, нет своего окна, где
+       * показать отказ. Без этой ветки конфликт ревизий (мастер в двух
+       * вкладках) выглядел бы как «кнопка нажалась, порядок не изменился», и
+       * ошибка ушла бы в необработанное отклонение промиса, то есть никуда.
+       */
+      setStatLayoutError(
+        reason instanceof ApiError && reason.status === 409
+          ? "Раскладка изменилась в другой сессии. Обновите страницу и повторите."
+          : formatApiError(reason, "Не удалось изменить порядок строк"),
+      );
+    }
+  };
 
   const changeStatValue = (target: CharacterDto, key: string, value: number) =>
     void runCharacterMutation(() =>
@@ -1031,6 +1067,11 @@ export function CharacterPanel({
           {characterMutationError}
         </p>
       )}
+      {statLayoutError && (
+        <p className="field-error" role="alert">
+          {statLayoutError}
+        </p>
+      )}
       {showCharacterPicker && snapshot.me.role === "GM" && (
         <label className="field">
           Персонаж
@@ -1198,6 +1239,7 @@ export function CharacterPanel({
           onRenameRow={renameStatRow}
           onAddRow={(label) => addStatRow("characteristics", label)}
           onDeleteRow={deleteStatRow}
+          onMoveRow={moveStatRowBy}
         />
         <StatLayoutCard
           title="Боевые характеристики"
@@ -1213,6 +1255,7 @@ export function CharacterPanel({
           onRenameRow={renameStatRow}
           onAddRow={(label) => addStatRow("combat", label)}
           onDeleteRow={deleteStatRow}
+          onMoveRow={moveStatRowBy}
         />
         <div className="character-card character-card--skills">
           <h3 className="character-card__header">Навыки</h3>

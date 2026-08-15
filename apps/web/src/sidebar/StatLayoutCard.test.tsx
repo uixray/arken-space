@@ -137,6 +137,7 @@ const renderCard = (
     onRenameRow: vi.fn(async () => {}),
     onAddRow: vi.fn(async () => {}),
     onDeleteRow: vi.fn(async () => {}),
+    onMoveRow: vi.fn(async () => {}),
     ...overrides,
   };
   renderComponent(<StatLayoutCard {...props} />);
@@ -204,6 +205,23 @@ describe("карточка группы характеристик", () => {
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(props.onAddRow).toHaveBeenCalledWith("Внимательность");
+  });
+
+  it("переставляет строку и не предлагает двигать крайние за край", async () => {
+    const props = renderCard();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Переместить «Ловкость» выше" }),
+    );
+    expect(props.onMoveRow).toHaveBeenCalledWith("agility", "up");
+
+    // Верхнюю вверх и нижнюю вниз двигать некуда — кнопки должны быть
+    // недоступны, иначе нажатие уходит в сервер и ничего не меняет.
+    expect(
+      screen.getByRole("button", { name: "Переместить «Сила» выше" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Переместить «Ловкость» ниже" }),
+    ).toBeDisabled();
   });
 
   it("удаляет строку по подтверждению", async () => {

@@ -125,16 +125,6 @@ export function formulasReferencingKey<T extends { formula?: string }>(
 }
 
 /**
- * Числовые строки одной группы раскладки.
- *
- * Строки `RESOURCE` отфильтрованы: у пула нет одного числа, которое можно
- * положить в поле ввода или в формулу броска. Их редактирование — блок ресурсов
- * (UIX-424, шаг 8).
- *
- * Группы неизвестной кампании может не быть вовсе — тогда пусто, а не падение:
- * раскладка приходит из базы и не обязана содержать то, чего ждёт карточка.
- */
-/**
  * Все числовые строки раскладки, по порядку групп.
  *
  * Существует затем же, зачем `statLabelsFromLayout`: панель быстрых бросков
@@ -187,4 +177,52 @@ export function statLabelsFromLayout(
     for (const row of group.rows)
       if (row.source !== "RESOURCE") labels[row.key] = row.label;
   return labels;
+}
+
+/**
+ * UIX-424, шаг 7 — перестановка строки внутри её группы.
+ *
+ * Порядок строк — часть раскладки, а не украшение: в этом же порядке идут
+ * кнопки в панели быстрых бросков, и мастер расставляет их так, как ему
+ * удобно тянуться на игре.
+ *
+ * Возвращает `null`, когда двигать некуда: строка уже с краю, или такого ключа
+ * в раскладке нет. Пустая правка иначе ушла бы на сервер, подняла бы ревизию
+ * кампании и разошлась бы всем клиентам, ничего не изменив.
+ *
+ * `movable` отсеивает строки, которых мастер в карточке не видит: между двумя
+ * характеристиками в группе стоят ресурсы, и обмен с ними выглядел бы как
+ * «кнопка нажалась, а ничего не произошло». Меняются местами видимые соседи, а
+ * невидимые строки остаются на своих местах в массиве — на их отрисовку это не
+ * влияет, они находятся по ключу.
+ *
+ * Ключи не трогаются вовсе — на них ссылаются формулы; меняется только порядок.
+ */
+export function moveStatRow<G extends { rows: readonly { key: string }[] }>(
+  layout: readonly G[],
+  key: string,
+  direction: "up" | "down",
+  // Тип строки берётся из самой раскладки, а не отдельным параметром: иначе
+  // вызывающий получил бы `{ key: string }` и не смог бы посмотреть на
+  // `source`, ради которого предикат и нужен.
+  movable: (row: G["rows"][number]) => boolean = () => true,
+): G[] | null {
+  const groupIndex = layout.findIndex((group) =>
+    group.rows.some((row) => row.key === key),
+  );
+  if (groupIndex === -1) return null;
+
+  const group = layout[groupIndex]!;
+  const from = group.rows.findIndex((row) => row.key === key);
+  const step = direction === "up" ? -1 : 1;
+  let to = from + step;
+  while (to >= 0 && to < group.rows.length && !movable(group.rows[to]!))
+    to += step;
+  if (to < 0 || to >= group.rows.length) return null;
+
+  const rows = [...group.rows];
+  [rows[from], rows[to]] = [rows[to]!, rows[from]!];
+  return layout.map((candidate, index) =>
+    index === groupIndex ? { ...candidate, rows } : candidate,
+  );
 }

@@ -62,6 +62,7 @@ export function StatLayoutCard({
   onRenameRow,
   onAddRow,
   onDeleteRow,
+  onMoveRow,
 }: {
   title: string;
   modifier: string;
@@ -81,6 +82,14 @@ export function StatLayoutCard({
   onRenameRow: (key: string, label: string) => Promise<void>;
   onAddRow: (label: string) => Promise<void>;
   onDeleteRow: (key: string) => Promise<void>;
+  /**
+   * UIX-424, шаг 7. Стрелки, а не перетаскивание: в проекте так уже
+   * переставляются галерея персонажа и содержимое энциклопедии, они работают с
+   * клавиатуры без отдельной поддержки, и их поведение проверяется тестом.
+   * Перетаскивание можно добавить сверху той же чистой функцией, если мышью
+   * окажется нужнее.
+   */
+  onMoveRow: (key: string, direction: "up" | "down") => Promise<void>;
 }) {
   // `null` — окно закрыто; `{ key: undefined }` — добавление новой строки.
   const [editing, setEditing] = useState<{ key?: string } | null>(null);
@@ -125,7 +134,7 @@ export function StatLayoutCard({
     <div className={`character-card character-card--${modifier}`}>
       <h3 className="character-card__header">{title}</h3>
       <div className="character-card__body">
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <label key={row.key} className="stat-field">
             <span>{row.label}</span>
             <FormInput
@@ -150,6 +159,32 @@ export function StatLayoutCard({
               </Button>
               {canEditLayout && (
                 <>
+                  <Button
+                    view="flat"
+                    className="stat-field__rename"
+                    disabled={index === 0}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void onMoveRow(row.key, "up");
+                    }}
+                    aria-label={`Переместить «${row.label}» выше`}
+                    title="Переместить выше"
+                  >
+                    <span aria-hidden="true">↑</span>
+                  </Button>
+                  <Button
+                    view="flat"
+                    className="stat-field__rename"
+                    disabled={index === rows.length - 1}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void onMoveRow(row.key, "down");
+                    }}
+                    aria-label={`Переместить «${row.label}» ниже`}
+                    title="Переместить ниже"
+                  >
+                    <span aria-hidden="true">↓</span>
+                  </Button>
                   <Button
                     view="flat"
                     className="stat-field__rename"
