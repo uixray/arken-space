@@ -1,6 +1,10 @@
 import { useState } from "react";
 import type { MessageVisibility } from "@arken/contracts";
 import { RollModeControl, type RollMode } from "../RollModeControl";
+import {
+  ROLL_MODIFIER_HINT,
+  rollModeFromEvent,
+} from "../roll-modifier-keys";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 
 /**
@@ -58,14 +62,16 @@ export function DiceTrayPanel({
               <button
                 key={sides}
                 type="button"
-                title={`Бросить d${sides}`}
-                onClick={() =>
+                title={`Бросить d${sides} · ${ROLL_MODIFIER_HINT}`}
+                onClick={(event) =>
                   void onRoll(
                     `1d${sides}`,
                     `d${sides}`,
                     visibility,
                     characterId,
-                    rollMode,
+                    // UIX-456: зажатая клавиша перекрывает переключатель на
+                    // один бросок и не трогает выставленный режим.
+                    rollModeFromEvent(event.nativeEvent, rollMode),
                   )
                 }
               >

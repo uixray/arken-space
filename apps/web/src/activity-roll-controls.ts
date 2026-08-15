@@ -1,3 +1,5 @@
+import { rollModeLabel } from "./roll-modifier-keys";
+import type { RollMode } from "./roll-mode";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import type { ActivityEvent } from "./activity-feed";
 
@@ -27,9 +29,26 @@ export function filterActivityEvents(
   });
 }
 
-export function physicalRollMessage(label: string, bonus: number): string {
+export function physicalRollMessage(
+  label: string,
+  bonus: number,
+  mode: RollMode = "NORMAL",
+): string {
   const signed = bonus >= 0 ? `+${bonus}` : String(bonus);
-  return `Физический бросок · ${label} · бонус ${signed}. Бросьте d20 и прибавьте ${signed} к значению куба.`;
+  /**
+   * UIX-456: зажатая клавиша обязана дойти и до настоящего кубика. Система
+   * результата физического броска не считает, но сказать «киньте два и
+   * возьмите больший» она может — иначе Ctrl над физическим броском тихо
+   * ничего не делает, и человек узнаёт об этом посреди игры.
+   */
+  const instruction =
+    mode === "ADVANTAGE"
+      ? "Бросьте два d20, возьмите больший"
+      : mode === "DISADVANTAGE"
+        ? "Бросьте два d20, возьмите меньший"
+        : "Бросьте d20";
+  const suffix = rollModeLabel(mode) ? ` · ${rollModeLabel(mode)}` : "";
+  return `Физический бросок · ${label}${suffix} · бонус ${signed}. ${instruction} и прибавьте ${signed} к значению куба.`;
 }
 
 export function physicalRollBonus(message: string): string | null {
@@ -97,9 +116,10 @@ export function physicalRollChatRequest(
   label: string,
   bonus: number,
   characterId: string,
+  mode: RollMode = "NORMAL",
 ) {
   return {
-    body: physicalRollMessage(label, bonus),
+    body: physicalRollMessage(label, bonus, mode),
     characterId,
   };
 }

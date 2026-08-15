@@ -3,6 +3,11 @@ import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
 import { formulaBonus } from "../activity-roll-controls";
 import { usePanelResize } from "../use-panel-resize";
+import {
+  ROLL_MODIFIER_HINT,
+  rollModeFromEvent,
+} from "../roll-modifier-keys";
+import type { RollMode } from "../roll-mode";
 
 /**
  * Plain, non-draggable character-stat quick-roll panel (UIX-387). Previously
@@ -36,7 +41,12 @@ export function QuickRollPanel({
    * way to tell from here that a stat roll is about to go only to the GM.
    */
   gmOnly: boolean;
-  onQuickRoll: (formula: string, label: string, bonus: number) => void;
+  onQuickRoll: (
+    formula: string,
+    label: string,
+    bonus: number,
+    mode: RollMode,
+  ) => void;
 }) {
   /**
    * UIX-455: ручка высоты живёт здесь, а не у костей. Кнопок тут столько,
@@ -72,12 +82,14 @@ export function QuickRollPanel({
             <Button
               key={stat.key}
               disabled={quickRollPending}
-              onClick={() =>
+              title={`${stat.label} · ${ROLL_MODIFIER_HINT}`}
+              onClick={(event) =>
                 onQuickRoll(
                   `1d20 + ${stat.key}`,
                   stat.label,
                   rollCharacter.stats[stat.key] ??
                     STAT_VALUE_RANGE.defaultValue,
+                  rollModeFromEvent(event.nativeEvent),
                 )
               }
             >
@@ -88,11 +100,13 @@ export function QuickRollPanel({
             <Button
               key={skill.key}
               disabled={quickRollPending}
-              onClick={() =>
+              title={`${skill.name} · ${ROLL_MODIFIER_HINT}`}
+              onClick={(event) =>
                 onQuickRoll(
                   skill.formula,
                   skill.name,
                   formulaBonus(skill.formula, rollCharacter.stats),
+                  rollModeFromEvent(event.nativeEvent),
                 )
               }
             >

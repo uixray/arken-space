@@ -28,6 +28,7 @@ import {
   statRowsFromLayout,
 } from "../stat-keys";
 import { InitiativePanel } from "./InitiativePanel";
+import type { RollMode } from "../roll-mode";
 import { RollAvatar } from "./RollAvatar";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
@@ -414,13 +415,24 @@ export function ActivityPanel({
     formula: string,
     label: string,
     bonus: number,
+    /**
+     * UIX-456: до сих пор здесь стояло жёсткое `"NORMAL"` — броски инициативы
+     * и ближнего боя не умели быть с преимуществом вовсе, хотя сервер это
+     * считает и переключатель у костей существует.
+     */
+    mode: RollMode = "NORMAL",
   ) => {
     if (!rollCharacter) return;
     setQuickRollPending(true);
     setComposerError("");
     try {
       if (physicalDice) {
-        const request = physicalRollChatRequest(label, bonus, rollCharacter.id);
+        const request = physicalRollChatRequest(
+          label,
+          bonus,
+          rollCharacter.id,
+          mode,
+        );
         await onChat(
           request.body,
           rollVisibility,
@@ -428,13 +440,7 @@ export function ActivityPanel({
           request.characterId,
         );
       } else {
-        await onRoll(
-          formula,
-          label,
-          rollVisibility,
-          rollCharacter.id,
-          "NORMAL",
-        );
+        await onRoll(formula, label, rollVisibility, rollCharacter.id, mode);
       }
     } catch {
       setComposerError("Не удалось выполнить бросок. Повторите попытку.");
@@ -555,8 +561,8 @@ export function ActivityPanel({
             rows={statRowsFromLayout(snapshot.campaign.statLayout)}
             quickRollPending={quickRollPending}
             gmOnly={rollVisibility === "GM_ONLY"}
-            onQuickRoll={(formula, label, bonus) =>
-              void submitQuickRoll(formula, label, bonus)
+            onQuickRoll={(formula, label, bonus, mode) =>
+              void submitQuickRoll(formula, label, bonus, mode)
             }
           />
         ) : (
