@@ -74,6 +74,18 @@ import { QuickRollPanel } from "./QuickRollPanel";
  */
 const SEND_TOOLTIP =
   "Enter — отправить всем. Ctrl+Enter — отправить только мастеру.";
+/**
+ * UIX-419: подсказка больше не занимает места в композере.
+ *
+ * Она была видимой строкой рядом с полем ввода — намеренно, чтобы игрок узнал
+ * про Ctrl+Enter до нажатия, а не наведением мыши. На узкой боковой панели это
+ * обошлось дороже пользы: строка отъедала половину ширины, и вводить сообщение
+ * стало неудобно всем и всегда ради подсказки, нужной один раз.
+ *
+ * Теперь текст остаётся в разметке для программ чтения с экрана (на него
+ * ссылается `aria-describedby` у поля ввода), а глазами он читается во
+ * всплывающей подсказке кнопки отправки — `SEND_TOOLTIP` выше, слово в слово.
+ */
 const SEND_HINT = "Enter — всем · Ctrl+Enter — только мастеру";
 
 export function ChatMessageBody({
@@ -684,7 +696,10 @@ export function ActivityPanel({
             </div>
           )}
         </div>
-        <p className="composer-hint" id="activity-composer-hint">
+        <p
+          className="composer-hint visually-hidden"
+          id="activity-composer-hint"
+        >
           {SEND_HINT}
         </p>
       </form>
@@ -1316,7 +1331,10 @@ export function ChatPanel({
                 </div>
               )}
             </div>
-            <p className="composer-hint" id="chat-composer-hint">
+            <p
+              className="composer-hint visually-hidden"
+              id="chat-composer-hint"
+            >
               {SEND_HINT}
             </p>
           </form>
