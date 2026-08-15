@@ -25,6 +25,30 @@ corepack pnpm dev
 
 Open `http://localhost:5173/gm/<GM_ACCESS_TOKEN>`. The server exchanges the token for an HttpOnly session and removes it from the address bar.
 
+### Two traps in that sequence
+
+**`dev:db` does not publish a port.** `docker-compose.yml` describes production, where the server reaches PostgreSQL over the Compose network and the database is deliberately not exposed to the host. A local server started outside Compose cannot reach it. Publish it from a machine-local `docker-compose.override.yml`, which is gitignored precisely because `infra/deploy/build-and-start.sh` calls bare `docker compose` and would otherwise pick it up in production:
+
+```yaml
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5433:5432"
+```
+
+Pick a port that is free. 5432 is often taken by a native PostgreSQL service, and the failure looks like `password authentication failed for user "arken"` — the connection reached a different database, not the container.
+
+**`db:migrate` ignores `.env`.** Nothing in this repository loads `.env` into the process environment; `packages/db/src/migrate.ts` reads `process.env.DATABASE_URL` and otherwise falls back to `postgres://arken:arken@localhost:5432/arken`. Export the variable for the command, or it will migrate whatever answers on that address:
+
+```powershell
+$env:DATABASE_URL = "postgres://arken:<password>@localhost:5433/arken"
+corepack pnpm db:migrate
+```
+
+The same applies to `corepack pnpm dev`: the server validates its environment through Zod and needs the variables present in the shell.
+
+`POSTGRES_PASSWORD` is applied only when the database volume is first initialised. Changing it in `.env` later does not change the password of an existing volume.
+
 ## Multiplayer verification
 
 With Docker Engine running, execute the isolated multiplayer story:
