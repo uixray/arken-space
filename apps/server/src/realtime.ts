@@ -259,6 +259,35 @@ export function registerRealtime(
       "realtime.connected",
     );
 
+    /**
+     * UIX-408 — мастер сообщает, какую сцену рассматривает.
+     *
+     * Ответом идёт свежий снапшот **этому одному сокету**: смена
+     * рассматриваемой сцены меняет то, что ему нужно (туман и рисунки другой
+     * сцены), и это осознанное действие одного человека, а не повод для
+     * рассылки всем.
+     */
+    socket.on("scene:view", async (view) => {
+      // Игроку видима ровно активная сцена; принимать от него «смотрю другую»
+      // значило бы дать способ запросить туман закрытой сцены.
+      if (auth.role !== "GM") return;
+      const sceneId = typeof view?.sceneId === "string" ? view.sceneId : null;
+      if (sceneId) {
+        const [scene] = await db
+          .select({ id: scenes.id })
+          .from(scenes)
+          .where(
+            and(eq(scenes.id, sceneId), eq(scenes.campaignId, auth.campaignId)),
+          )
+          .limit(1);
+        // Сцена чужой кампании — молча игнорируем: отвечать «такой нет» значит
+        // подтверждать, что она где-то есть.
+        if (!scene) return;
+      }
+      socket.data.viewedSceneId = sceneId;
+      socket.emit("game:snapshot", await buildSnapshot(db, auth));
+    });
+
     socket.on("game:resync", async (knownSequence) => {
       const snapshot = await buildSnapshot(db, auth);
       log.info(
@@ -1277,5 +1306,11 @@ export function registerRealtime(
 declare module "socket.io" {
   interface SocketData {
     auth: SessionAuthContext;
+    /**
+     * UIX-408: сцена, которую мастер рассматривает, не переключая игроков.
+     * Живёт на сокете, а не в базе: это состояние взгляда, а не кампании, и
+     * после перезагрузки страницы мастер всегда возвращается к транслируемой.
+     */
+    viewedSceneId?: string | null;
   }
 }

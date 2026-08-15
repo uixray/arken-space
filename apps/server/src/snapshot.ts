@@ -1,4 +1,15 @@
-import { and, asc, count, desc, eq, gt, max, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  max,
+  ne,
+  or,
+} from "drizzle-orm";
 import { starterStatLayout } from "@arken/system";
 import {
   fogHiddenTokenIds,
@@ -66,6 +77,9 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
  */
 export const SNAPSHOT_MESSAGES_PER_THREAD = 20;
 
+/** Заведомо несуществующая сцена: см. `canvasSceneIds` ниже. */
+const NO_SCENE = "00000000-0000-0000-0000-000000000000";
+
 export function resolveStatLayout(stored: unknown): StatLayout {
   const parsed = statLayoutSchema.safeParse(stored);
   if (parsed.success && parsed.data.length > 0) return parsed.data;
@@ -75,6 +89,16 @@ export function resolveStatLayout(stored: unknown): StatLayout {
 export async function buildSnapshot(
   db: Database,
   auth: AuthContext,
+  /**
+   * UIX-408 — сцены сверх активной, туман и рисунки которых нужны этому
+   * зрителю. На практике это одна сцена: та, которую мастер рассматривает, не
+   * переключая игроков (`scene:view`).
+   *
+   * Пусто по умолчанию, поэтому все шесть прочих вызовов `buildSnapshot`
+   * (bootstrap, диагностика, предпросмотр глазами игрока, проверка доступа к
+   * файлу) работают без правок.
+   */
+  extraSceneIds: readonly string[] = [],
 ): Promise<GameSnapshot> {
   const normalizedAudioTracks = await normalizeAudioTrackDeadlines(
     db,
@@ -86,6 +110,29 @@ export async function buildSnapshot(
     .where(eq(campaigns.id, auth.campaignId))
     .limit(1);
   if (!campaign) throw new Error("Campaign not found");
+
+  /**
+   * UIX-408 — сцены, чей канвас нужен этому зрителю.
+   *
+   * Игроку это ровно транслируемая сцена. Мастеру — она же плюс та, которую
+   * он рассматривает: две из шести, а не «все на всякий случай». Раньше
+   * тянулись все, а лишнее отсеивалось уже в DTO — 270 записей тумана и 114
+   * рисунков читались на каждый из семи сокетов при каждом действии.
+   *
+   * Пустой список сюда попасть не должен: `inArray` по пустому массиву — это
+   * запрос, который никогда ничего не вернёт, и туман пропал бы у всех.
+   */
+  const canvasSceneIds = [
+    ...new Set(
+      [
+        campaign.activeSceneId,
+        ...(auth.role === "GM" ? extraSceneIds : []),
+      ].filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  // У кампании без активной сцены канвас показывать нечего; заведомо пустой
+  // идентификатор оставляет запрос корректным и результат пустым.
+  if (canvasSceneIds.length === 0) canvasSceneIds.push(NO_SCENE);
 
   const [
     memberRows,
@@ -188,14 +235,27 @@ export async function buildSnapshot(
     db
       .select({ fog: fogReveals })
       .from(fogReveals)
+      // `innerJoin` остаётся: у `fog_reveals` нет колонки кампании, и
+      // принадлежность определяется только через сцену. Замена join'а на
+      // отбор по списку id сняла бы единственную проверку арендатора.
       .innerJoin(scenes, eq(fogReveals.sceneId, scenes.id))
-      .where(eq(scenes.campaignId, auth.campaignId))
+      .where(
+        and(
+          eq(scenes.campaignId, auth.campaignId),
+          inArray(fogReveals.sceneId, canvasSceneIds),
+        ),
+      )
       .orderBy(asc(fogReveals.sequence)),
     db
       .select({ drawing: drawings })
       .from(drawings)
       .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
-      .where(eq(scenes.campaignId, auth.campaignId))
+      .where(
+        and(
+          eq(scenes.campaignId, auth.campaignId),
+          inArray(drawings.sceneId, canvasSceneIds),
+        ),
+      )
       .orderBy(asc(drawings.createdAt)),
     db
       .select()

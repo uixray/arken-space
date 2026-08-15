@@ -1254,6 +1254,20 @@ export function App() {
       ? (view.scenes.find((scene) => scene.id === viewedSceneId) ?? broadcast)
       : broadcast;
   }, [previewSnapshot, snapshot, viewedSceneId]);
+  /**
+   * UIX-408 — сервер должен знать, какую сцену рассматривает мастер.
+   *
+   * Без этого сузить выборку тумана и рисунков нельзя: `viewedSceneId` —
+   * локальное состояние клиента, и мастер, открывший сцену для подготовки,
+   * получил бы её пустой, а потом рисовал бы туман поверх пустоты.
+   *
+   * Сервер отвечает свежим снапшотом этому одному сокету — одна сборка на одно
+   * осознанное действие мастера.
+   */
+  useEffect(() => {
+    socket?.emit("scene:view", { sceneId: viewedSceneId });
+  }, [socket, viewedSceneId]);
+
   const activeSceneRef = useLatestRef(activeSceneValue);
   const tokenActions = useTokenDefinitionActions({
     run,

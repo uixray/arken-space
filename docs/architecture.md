@@ -185,8 +185,16 @@ Socket после аутентификации входит в комнаты:
 
 Полный список: клиент шлёт `token:moved`, `token:moving`, `audio:set`,
 `audio:track:set`, `map:ping`, `ruler:update`, `ruler:clear`, `cursor:move`,
-`cursor:gone`, `game:resync`; сервер шлёт `game:snapshot`, `token:moving`,
-`map:ping`, `ruler:updated`, `ruler:cleared`, `cursor:moved`, `cursor:gone`.
+`cursor:gone`, `scene:view`, `game:resync`; сервер шлёт `game:snapshot`,
+`token:moving`, `map:ping`, `ruler:updated`, `ruler:cleared`, `cursor:moved`,
+`cursor:gone`, `fog:created`.
+
+`scene:view` (UIX-408) сообщает серверу, какую сцену рассматривает мастер, не
+переключая игроков. Без этого знания выборку тумана и рисунков нельзя сузить:
+`viewedSceneId` — локальное состояние клиента. Сервер принимает событие только
+от мастера, проверяет принадлежность сцены кампании и отвечает свежим
+снапшотом **этому одному сокету**. Снапшот везёт канвас активной сцены плюс
+рассматриваемой — две сцены из шести вместо всех.
 
 **Курсоры разделены по комнатам намеренно.** Курсор игрока уходит в общую
 комнату кампании, курсор ГМ — только в GM-комнату: ГМ видит сквозь туман, и

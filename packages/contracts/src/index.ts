@@ -2386,6 +2386,18 @@ export interface ClientToServerEvents {
   "cursor:move": (cursor: z.infer<typeof cursorMoveSchema>) => void;
   /** UIX-392: explicit "no longer pointing at anything" signal (scene switch, blur, inactivity). */
   "cursor:gone": () => void;
+  /**
+   * UIX-408 — какую сцену мастер сейчас рассматривает.
+   *
+   * Мастер может открыть сцену, не переключая на неё игроков: `viewedSceneId`
+   * живёт локальным состоянием клиента, и сервер о нём не знает ничего. Чтобы
+   * сузить выборку тумана и рисунков до нужных сцен, а не тянуть все шесть,
+   * это знание надо сообщить.
+   *
+   * `null` — вернулся к транслируемой сцене. Событие игроку бессмысленно: у
+   * него видима ровно активная сцена, и сервер его от игрока не принимает.
+   */
+  "scene:view": (view: { sceneId: string | null }) => void;
   "game:resync": (knownSequence?: number) => void;
 }
 

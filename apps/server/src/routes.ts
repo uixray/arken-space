@@ -199,6 +199,28 @@ const gmRoom = (id: string) => `campaign:${id}:gm`;
 const memberRoom = (id: string) => `member:${id}`;
 const sessionRoom = (id: string) => `session:${id}`;
 
+/**
+ * UIX-408 — видна ли этому сокету сцена, к которой относится канвас.
+ *
+ * Игроку видима ровно транслируемая сцена; мастеру — она же плюс та, которую
+ * он рассматривает (`scene:view`). Та же выборка, что у снапшота, — иначе
+ * событие и снапшот разошлись бы, а расхождение здесь означает туман сцены,
+ * которой в снапшоте нет.
+ */
+/** Рассматриваемая сцена сокета, если она есть, — в виде списка для снапшота. */
+function viewedScenes(data: { viewedSceneId?: string | null }): string[] {
+  return data.viewedSceneId ? [data.viewedSceneId] : [];
+}
+
+function canvasSceneVisibleTo(
+  data: { auth?: { role: string }; viewedSceneId?: string | null },
+  campaign: { activeSceneId: string | null },
+  sceneId: string,
+) {
+  if (sceneId === campaign.activeSceneId) return true;
+  return data.auth?.role === "GM" && data.viewedSceneId === sceneId;
+}
+
 async function broadcastSnapshots(
   io: RealtimeServer,
   db: Database,
@@ -210,7 +232,12 @@ async function broadcastSnapshots(
       sockets.map(async (socket) => {
         const auth = socket.data.auth;
         if (auth?.campaignId === campaignId) {
-          socket.emit("game:snapshot", await buildSnapshot(db, auth));
+          // UIX-408: мастеру приходит канвас и той сцены, которую он
+          // рассматривает, — иначе он рисовал бы туман поверх якобы пустой.
+          socket.emit(
+            "game:snapshot",
+            await buildSnapshot(db, auth, viewedScenes(socket.data)),
+          );
         }
       }),
     );
@@ -232,7 +259,7 @@ async function broadcastSnapshots(
       const auth = socket.data.auth;
       if (auth?.campaignId !== campaignId) return;
       const socketStartedAt = performance.now();
-      const snapshot = await buildSnapshot(db, auth);
+      const snapshot = await buildSnapshot(db, auth, viewedScenes(socket.data));
       const ms = performance.now() - socketStartedAt;
       const { bytes, byField } = measureSnapshot(snapshot);
       perSocket.push({ role: auth.role, bytes, ms });
@@ -3599,12 +3626,34 @@ export function registerRoutes(
     });
     const { reveal, event } = result;
     if (reveal) {
-      io.to(campaignRoom(auth.campaignId)).emit("fog:created", {
+      /**
+       * UIX-408: событие уходит только тем, у кого эта сцена в снапшоте.
+       *
+       * Раньше оно летело всей кампании, а лишнее отсеивалось на клиенте при
+       * отрисовке. После сужения выборки это перестало быть безобидным:
+       * клиент пришивает пришедший туман к `snapshot.fogReveals` без проверки
+       * сцены, и накопленное пережило бы любое число рассылок — инвариант «в
+       * снапшоте туман только видимых сцен» ломался бы прямо на проводе.
+       */
+      const envelope = {
         sequence: Number(event.sequence),
         actionId,
         emittedAt: event.createdAt.toISOString(),
         data: reveal,
-      });
+      };
+      const [current] = await db
+        .select({ activeSceneId: campaigns.activeSceneId })
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      for (const socket of await io
+        .in(campaignRoom(auth.campaignId))
+        .fetchSockets())
+        if (
+          current &&
+          canvasSceneVisibleTo(socket.data, current, reveal.sceneId)
+        )
+          socket.emit("fog:created", envelope);
     }
     return reply.code(201).send(reveal);
   });

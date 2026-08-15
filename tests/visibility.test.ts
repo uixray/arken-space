@@ -430,14 +430,55 @@ describe("туман и рисунки в снапшоте", () => {
     expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([activeFog]);
   });
 
-  it("мастеру сейчас приезжает туман всех сцен", async () => {
-    // Фиксируется **текущее** поведение, а не желаемое: сужение до
-    // «активная плюс просматриваемая» — следующий этап, и этот тест обязан
-    // поменяться вместе с ним осознанно, а не молча.
+  it("мастеру без просматриваемой сцены — тоже только активная", async () => {
+    // UIX-408: раньше сюда приезжал туман всех шести сцен, и лишнее
+    // отсеивалось уже в DTO. На боевых данных это 270 записей тумана и 114
+    // рисунков, читаемых на каждый из семи сокетов при каждом действии.
     const db = drizzle(database, { schema });
     const snapshot = await snapshotFor(db, ids.gm, "GM");
+    expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([activeFog]);
+  });
+
+  it("мастеру с просматриваемой сценой — обе", async () => {
+    // Мастер готовит сцену, не переключая игроков. Без её тумана он рисовал бы
+    // поверх якобы пустой сцены, а ключ подгрузки истории отмен считался бы по
+    // пустым массивам.
+    const db = drizzle(database, { schema });
+    const snapshot = await buildSnapshot(
+      db as never,
+      {
+        membershipId: ids.gm,
+        campaignId: ids.campaign,
+        role: "GM",
+        displayName: "GM",
+      },
+      [ids.closedScene],
+    );
     expect(snapshot.fogReveals.map((fog) => fog.id).sort()).toEqual(
       [activeFog, closedFog].sort(),
     );
+  });
+
+  it("не отдаёт игроку туман сцены, которую он якобы рассматривает", async () => {
+    // Список дополнительных сцен приходит с сокета, и принять его от игрока
+    // значило бы дать способ запросить туман закрытой сцены.
+    //
+    // Проверяется здесь **исход**, а не конкретная защита: их две. Выборка
+    // сужается по роли, и независимо от неё DTO отсеивает всё, чего нет в
+    // `visibleSceneIds`. Снятие любой одной этот тест не роняет — проверено
+    // диверсией, — и это осознанная избыточность на границе приватности, а не
+    // недосмотр. Роняет его только снятие обеих.
+    const db = drizzle(database, { schema });
+    const snapshot = await buildSnapshot(
+      db as never,
+      {
+        membershipId: ids.player,
+        campaignId: ids.campaign,
+        role: "PLAYER",
+        displayName: "Player",
+      },
+      [ids.closedScene],
+    );
+    expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([activeFog]);
   });
 });
