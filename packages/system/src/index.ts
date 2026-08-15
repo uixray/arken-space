@@ -102,6 +102,23 @@ const layoutStats = starterStatLayout.flatMap((group) =>
  */
 export const STAT_VALUE_RANGE = { min: -20, max: 20, defaultValue: 0 };
 
+/**
+ * UIX-425 — какая характеристика задаёт скорость восстановления ресурса.
+ *
+ * Отдых восстанавливает не «до максимума», а на величину регена из карточки
+ * персонажа. Связь ресурса с его строкой регена не выводится из имени
+ * (`physicalPower` против `enduranceRegen`), поэтому она записана явно.
+ *
+ * Ресурс, которого здесь нет, отдыхом не восстанавливается: правило системы
+ * говорит «на величину регена», а у неизвестного ресурса регена нет. Мастер,
+ * заведший свой ресурс, восстанавливает его вручную — счётчиками рядом с
+ * бросками.
+ */
+export const RESOURCE_REGEN_STAT: Readonly<Record<string, string>> = {
+  physicalPower: "enduranceRegen",
+  magicPower: "manaRegen",
+};
+
 export const arkenSystem: SystemDefinition = {
   id: "arken-core",
   version: 2,

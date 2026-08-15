@@ -107,7 +107,7 @@ import {
   tokenControllers,
   tokenDefinitions,
 } from "@arken/db";
-import { createStarterCharacter } from "@arken/system";
+import { createStarterCharacter, RESOURCE_REGEN_STAT } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
@@ -407,22 +407,50 @@ function formatResourceChanges(before: Resources, after: Resources) {
   return changes.length > 0 ? `ресурсы: ${changes.join(", ")}` : "";
 }
 
+/**
+ * UIX-425 — отдых восстанавливает ресурсы на величину регена.
+ *
+ * Правило системы: длинный отдых даёт реген из карточки персонажа, короткий —
+ * половину с округлением **вниз**, сверх максимума не восстанавливается.
+ *
+ * Было три расхождения сразу, и все в сторону «слишком щедро»: длинный отдых
+ * восстанавливал до максимума, короткий давал четверть максимума вместо
+ * половины регена, а округление шло вверх. У персонажа с маной 20 и регеном 9
+ * длинный отдых давал +20 вместо +9 — ограничение ресурса в игре фактически
+ * не работало.
+ *
+ * Ресурс без строки регена отдыхом не восстанавливается: «на величину регена»
+ * у неизвестного ресурса величины не имеет. Такие ресурсы правятся вручную
+ * счётчиками рядом с бросками.
+ */
 function applyCharacterRest(
   resources: Resources,
   rest: "SHORT" | "LONG" | "CATCH_BREATH",
+  stats: Record<string, number>,
 ): Resources {
   return Object.fromEntries(
     Object.entries(resources).map(([key, resource]) => {
       const recoverable = resource.recoverable !== false;
+      // «Перевести дух» касается только выносливости — это передышка, а не сон.
       const targeted =
         recoverable && (rest !== "CATCH_BREATH" || key === "physicalPower");
       if (!targeted) return [key, resource];
+
+      const regenStat = RESOURCE_REGEN_STAT[key];
+      const regen = regenStat ? (stats[regenStat] ?? 0) : 0;
+      if (regen <= 0) return [key, resource];
+
       const maximum = resource.maximum ?? resource.current;
-      const current =
-        rest === "LONG"
-          ? maximum
-          : Math.min(maximum, resource.current + Math.ceil(maximum * 0.25));
-      return [key, { ...resource, current, maximum }];
+      // Половина регена вниз: реген 9 при коротком отдыхе даёт 4, а не 5.
+      const gain = rest === "LONG" ? regen : Math.floor(regen / 2);
+      return [
+        key,
+        {
+          ...resource,
+          current: Math.min(maximum, resource.current + gain),
+          maximum,
+        },
+      ];
     }),
   );
 }
@@ -6652,7 +6680,11 @@ export function registerRoutes(
             .where(eq(characters.campaignId, auth.campaignId));
           for (const character of characterRows) {
             const beforeResources = character.resources as Resources;
-            const afterResources = applyCharacterRest(beforeResources, "LONG");
+            const afterResources = applyCharacterRest(
+              beforeResources,
+              "LONG",
+              normalizeLegacyStats(character.stats),
+            );
             if (
               JSON.stringify(beforeResources) === JSON.stringify(afterResources)
             )
@@ -6940,7 +6972,11 @@ export function registerRoutes(
         .send({ error: "CHARACTER_CONFLICT", revision: character!.revision });
     }
     const nextResources = body.rest
-      ? applyCharacterRest((character!.resources ?? {}) as Resources, body.rest)
+      ? applyCharacterRest(
+          (character!.resources ?? {}) as Resources,
+          body.rest,
+          normalizeLegacyStats(character!.stats),
+        )
       : body.resources;
     const changes = [
       body.wallet

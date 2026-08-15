@@ -1168,6 +1168,7 @@ export function CharacterPanel({
               : "вне боя"}
           </p>
           <Button
+            title="Полный реген выносливости и маны всем персонажам, +1 день"
             onClick={() =>
               onCampaignClock("LONG_REST", snapshot.campaign.revision)
             }
@@ -1538,17 +1539,22 @@ export function CharacterPanel({
           );
         })}
         <div className="inline-fields character-rest-controls">
+          {/* UIX-425: подпись обещала +25% от максимума, а система
+           * восстанавливает на величину регена из карточки. Обещание в кнопке
+           * — такая же часть механики, как и код за ней. */}
           <Button
             disabled={!editable || countersPending > 0}
+            title="Половина регена выносливости, округление вниз"
             onClick={() => void runRest("CATCH_BREATH")}
           >
             Перевести дух
           </Button>
           <Button
             disabled={!editable || countersPending > 0}
+            title="Половина регена выносливости и маны, округление вниз"
             onClick={() => void runRest("SHORT")}
           >
-            Короткий отдых (+25%)
+            Короткий отдых
           </Button>
         </div>
       </div>

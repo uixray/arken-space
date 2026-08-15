@@ -1783,8 +1783,11 @@ describe("Pool B HTTP boundaries", () => {
   });
 
   it("applies short and long rests to every recoverable resource", async () => {
+    // UIX-425: отдых восстанавливает на величину регена из карточки, поэтому
+    // у персонажа теперь есть строки регена. Без них восстанавливать нечего, и
+    // маршрут отвечает отказом «нечего менять».
     await database.exec(
-      `update characters set resources = '{"physicalPower":{"current":1,"maximum":10,"recoverable":true},"magicPower":{"current":2,"maximum":8,"recoverable":true},"charges":{"current":1,"maximum":4,"recoverable":false}}'::jsonb where id = '${ids.character}'`,
+      `update characters set resources = '{"physicalPower":{"current":1,"maximum":10,"recoverable":true},"magicPower":{"current":2,"maximum":8,"recoverable":true},"charges":{"current":1,"maximum":4,"recoverable":false}}'::jsonb, stats = stats || '{"enduranceRegen":4,"manaRegen":3}'::jsonb where id = '${ids.character}'`,
     );
     const [beforeRest] = await db
       .select({ resources: schema.characters.resources })
@@ -1805,11 +1808,13 @@ describe("Pool B HTTP boundaries", () => {
       },
     });
     expect(shortRest.statusCode, JSON.stringify(shortRest.json())).toBe(200);
+    // Половина регена вниз: 4/2 = 2 и 3/2 = 1. Прежнее правило давало четверть
+    // максимума с округлением вверх, то есть 3 и 2.
     expect(shortRest.json()).toMatchObject({
       revision: 1,
       resources: {
-        physicalPower: { current: 4, maximum: 10 },
-        magicPower: { current: 4, maximum: 8 },
+        physicalPower: { current: 3, maximum: 10 },
+        magicPower: { current: 3, maximum: 8 },
         charges: { current: 1, maximum: 4, recoverable: false },
       },
     });
@@ -1825,11 +1830,12 @@ describe("Pool B HTTP boundaries", () => {
       },
     });
     expect(longRest.statusCode).toBe(200);
+    // Полный реген, а не до максимума: 3 + 4 и 3 + 3.
     expect(longRest.json()).toMatchObject({
       revision: 2,
       resources: {
-        physicalPower: { current: 10, maximum: 10 },
-        magicPower: { current: 8, maximum: 8 },
+        physicalPower: { current: 7, maximum: 10 },
+        magicPower: { current: 6, maximum: 8 },
         charges: { current: 1, maximum: 4, recoverable: false },
       },
     });
@@ -1843,8 +1849,11 @@ describe("Pool B HTTP boundaries", () => {
   });
 
   it("applies a campaign-wide long rest atomically", async () => {
+    // UIX-425: отдых восстанавливает на величину регена из карточки, поэтому
+    // у персонажа теперь есть строки регена. Без них восстанавливать нечего, и
+    // маршрут отвечает отказом «нечего менять».
     await database.exec(
-      `update characters set resources = '{"physicalPower":{"current":1,"maximum":10,"recoverable":true},"magicPower":{"current":2,"maximum":8,"recoverable":true},"charges":{"current":1,"maximum":4,"recoverable":false}}'::jsonb where id = '${ids.character}'`,
+      `update characters set resources = '{"physicalPower":{"current":1,"maximum":10,"recoverable":true},"magicPower":{"current":2,"maximum":8,"recoverable":true},"charges":{"current":1,"maximum":4,"recoverable":false}}'::jsonb, stats = stats || '{"enduranceRegen":4,"manaRegen":3}'::jsonb where id = '${ids.character}'`,
     );
     const response = await app.inject({
       method: "POST",
@@ -1865,11 +1874,12 @@ describe("Pool B HTTP boundaries", () => {
       })
       .from(schema.characters)
       .where(eq(schema.characters.id, ids.character));
+    // Общий отдых партии идёт по тому же правилу: 1 + 4 и 2 + 3.
     expect(rested).toMatchObject({
       revision: 1,
       resources: {
-        physicalPower: { current: 10, maximum: 10 },
-        magicPower: { current: 8, maximum: 8 },
+        physicalPower: { current: 5, maximum: 10 },
+        magicPower: { current: 5, maximum: 8 },
         charges: { current: 1, maximum: 4, recoverable: false },
       },
     });
