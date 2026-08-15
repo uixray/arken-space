@@ -11,7 +11,11 @@ import {
   or,
 } from "drizzle-orm";
 import { starterStatLayout } from "@arken/system";
-import { statLayoutSchema, type StatLayout } from "@arken/contracts";
+import {
+  fogHiddenTokenIds,
+  statLayoutSchema,
+  type StatLayout,
+} from "@arken/contracts";
 import {
   assets,
   campaigns,
@@ -378,7 +382,7 @@ export async function buildSnapshot(
               .get(character.id)
               ?.includes(auth.membershipId),
         );
-  const visibleTokens = tokenRows.filter(
+  const allowedTokens = tokenRows.filter(
     ({ token, definition }) =>
       visibleSceneIds.has(token.sceneId) &&
       (auth.role === "GM" || (token.visible && token.layer !== "GM")) &&
@@ -392,6 +396,54 @@ export async function buildSnapshot(
     list.push(row.token_controllers.membershipId);
     controllersByDefinition.set(row.token_controllers.tokenDefinitionId, list);
   }
+
+  /**
+   * UIX-449 — токен целиком под туманом игроку не отправляется вовсе.
+   *
+   * Раньше туман скрывал его только на отрисовке, а координаты уходили: игрок,
+   * открывший devtools, видел, где стоит засада и сколько там юнитов. Правило
+   * скрытия — то же самое, что у рендера (`fogHiddenTokenIds` из контракта), а
+   * не вторая его копия: разойдясь, они дали бы либо утечку, либо токен,
+   * пропавший с экрана без причины.
+   *
+   * Частично вышедший из тумана токен по-прежнему отправляется и рисуется
+   * частично — правило UIX-426 не трогаем.
+   *
+   * Порядок операций тумана значим (поздние перекрывают ранние), поэтому
+   * группировка идёт по уже отсортированным строкам.
+   */
+  const revealsByScene = new Map<string, (typeof fogRows)[number]["fog"][]>();
+  for (const { fog } of fogRows) {
+    const list = revealsByScene.get(fog.sceneId) ?? [];
+    list.push(fog);
+    revealsByScene.set(fog.sceneId, list);
+  }
+  const hiddenByFog = new Set<string>();
+  if (auth.role !== "GM")
+    for (const sceneId of new Set(
+      allowedTokens.map(({ token }) => token.sceneId),
+    )) {
+      const sceneTokens = allowedTokens
+        .filter(({ token }) => token.sceneId === sceneId)
+        .map(({ token, definition }) => ({
+          id: token.id,
+          x: token.x,
+          y: token.y,
+          width: token.width,
+          height: token.height,
+          controllerMembershipIds:
+            controllersByDefinition.get(definition.id) ?? [],
+        }));
+      for (const id of fogHiddenTokenIds(
+        sceneTokens,
+        revealsByScene.get(sceneId) ?? [],
+        { role: auth.role, membershipId: auth.membershipId },
+      ))
+        hiddenByFog.add(id);
+    }
+  const visibleTokens = allowedTokens.filter(
+    ({ token }) => !hiddenByFog.has(token.id),
+  );
   const entriesByCharacter = new Map<
     string,
     (typeof assignedRows)[number]["entry"][]
