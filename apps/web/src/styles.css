@@ -3993,8 +3993,15 @@ code {
 }
 
 .quick-roll-panel {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   gap: var(--space-xs);
+}
+.quick-roll-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 /* Shared GM-only roll toggle lives in the dice tray above, so the quick-roll
  * panel restates the state rather than leaving a player to discover mid-roll
@@ -4121,8 +4128,7 @@ code {
    canvas-bottom `.canvas-roll-overlay` floating overlay (removed) into
    normal sidebar document flow, so it participates in `.activity-feed`'s
    grid sizing instead of absolutely covering canvas or chat content.
-   Vertically resizable via `.dice-tray-resize-handle`, mirroring
-   `.sidebar-resize-handle`'s pointer-capture drag pattern but for height. */
+   UIX-455: высоту здесь больше не тянут — кнопок фиксированное число. */
 .dice-tray-panel {
   position: relative;
   display: flex;
@@ -4138,10 +4144,15 @@ code {
   overflow: auto;
   padding: 6px;
 }
-.dice-tray-resize-handle {
+/* UIX-455: ручка общая для растягиваемых панелей и вдвое уже прежних 8px —
+   полоса в восемь пикселей читалась как самостоятельный элемент, хотя это
+   кромка. Область захвата возвращается псевдоэлементом ниже: тонкая полоса
+   выглядит верно, но попасть в неё указателем тяжело. */
+.panel-resize-handle {
+  position: relative;
   flex: 0 0 auto;
   width: 100%;
-  height: 8px;
+  height: 4px;
   border: 0;
   border-top: 1px solid var(--line);
   padding: 0;
@@ -4149,10 +4160,17 @@ code {
   cursor: row-resize;
   touch-action: none;
 }
-.dice-tray-resize-handle:hover,
-.dice-tray-resize-handle:focus-visible {
+.panel-resize-handle:hover,
+.panel-resize-handle:focus-visible {
   background: var(--accent);
   opacity: 0.35;
+}
+/* Полоса тонкая, а попадать в неё нужно пальцем и мышью: невидимая область
+   захвата вокруг кромки делает 4px по виду и 14px по факту. */
+.panel-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: -5px 0;
 }
 
 /* Collapsible activity sidebar. The aside remains mounted so chat state and

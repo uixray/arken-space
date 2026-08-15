@@ -511,8 +511,6 @@ export function ActivityPanel({
         </div>
         <DiceTrayPanel
           characterId={snapshot.me.characterId}
-          campaignId={snapshot.campaign.id}
-          membershipId={snapshot.me.id}
           visibility={rollVisibility}
           onVisibilityChange={setRollVisibility}
           onRoll={onRoll}
@@ -529,6 +527,8 @@ export function ActivityPanel({
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}
+            campaignId={snapshot.campaign.id}
+            membershipId={snapshot.me.id}
             rows={statRowsFromLayout(snapshot.campaign.statLayout)}
             quickRollPending={quickRollPending}
             gmOnly={rollVisibility === "GM_ONLY"}
