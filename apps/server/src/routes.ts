@@ -113,6 +113,8 @@ import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot, resolveStatLayout } from "./snapshot.js";
+import { loadThreadHistory } from "./chat-history.js";
+import { listVisiblePlayerRequests } from "./player-requests.js";
 import {
   largestFields,
   measureSnapshot,
@@ -6272,6 +6274,49 @@ export function registerRoutes(
     for (const membershipId of directThreadMemberIds(thread))
       io.to(memberRoom(membershipId)).emit("chat:created", envelope);
     return reply.code(201).send(saved.dto);
+  });
+
+  /**
+   * UIX-450 — страница истории одного потока.
+   *
+   * До этого маршрута истории неоткуда было взяться, кроме снапшота, и именно
+   * поэтому снапшот вёз по 200 сообщений на поток каждому при каждом действии:
+   * две трети всего трафика рассылки (1 726 КБ из 2 580 на боевых данных).
+   *
+   * Проекция — общая с снапшотом (`projectChatMessages`), включая проверки
+   * видимости стикеров, вложений и заявок. Своей копии здесь нет намеренно:
+   * разойдясь, она разошлась бы в сторону «показали лишнее».
+   */
+  app.get("/api/chat/threads/:threadId/messages", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const params = z
+      .object({ threadId: z.string().uuid() })
+      .parse(request.params);
+    const query = z
+      .object({
+        before: z.coerce.number().int().positive().optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      })
+      .parse(request.query);
+
+    const memberRows = await db
+      .select()
+      .from(memberships)
+      .where(eq(memberships.campaignId, auth.campaignId));
+    const visibleRequests = await listVisiblePlayerRequests(db, auth);
+
+    return loadThreadHistory(db, auth, {
+      threadId: params.threadId,
+      before: query.before,
+      limit: query.limit,
+      memberNameById: new Map(
+        memberRows.map((member) => [member.id, member.displayName]),
+      ),
+      visiblePlayerRequestIds: new Set(
+        visibleRequests.map((item: { id: string }) => item.id),
+      ),
+    });
   });
 
   app.post("/api/chat", async (request, reply) => {

@@ -2,7 +2,13 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const routesUrl = new URL("../apps/server/src/routes.ts", import.meta.url);
-const snapshotUrl = new URL("../apps/server/src/snapshot.ts", import.meta.url);
+// UIX-450: проекция сообщений переехала из `snapshot.ts` в отдельный модуль,
+// чтобы маршрут истории отдавал ровно её же, а не свою копию. Инвариант тот
+// же, проверяется в новом месте.
+const chatHistoryUrl = new URL(
+  "../apps/server/src/chat-history.ts",
+  import.meta.url,
+);
 
 describe("direct chat server security invariants", () => {
   it("bounds multipart before buffering and accounts for every media owner", async () => {
@@ -25,11 +31,13 @@ describe("direct chat server security invariants", () => {
   });
 
   it("restores attachment metadata only for messages already authorized in snapshot", async () => {
-    const source = await readFile(snapshotUrl, "utf8");
+    const source = await readFile(chatHistoryUrl, "utf8");
     expect(source).toContain("attachmentsByMessage");
-    expect(source).toContain(
-      "inArray(chatAttachments.messageId, visibleMessageIds)",
-    );
+    // Идентификаторы для запроса вложений берутся из `rows` — набора, уже
+    // прошедшего проверки видимости выше. Возьми их из непроверенного
+    // источника, и вложения приедут к тому, кому само сообщение не видно.
+    expect(source).toContain("const messageIds = rows.map");
+    expect(source).toContain("inArray(chatAttachments.messageId, messageIds)");
     expect(source).toContain("contentId: upload.contentId");
     expect(source).not.toContain("storageKey: upload.storageKey");
   });

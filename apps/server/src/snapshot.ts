@@ -1,15 +1,4 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gt,
-  inArray,
-  max,
-  ne,
-  or,
-} from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, max, ne, or } from "drizzle-orm";
 import { starterStatLayout } from "@arken/system";
 import {
   fogHiddenTokenIds,
@@ -24,17 +13,12 @@ import {
   characterControllers,
   characters,
   chatMessages,
-  chatAttachments,
-  chatAttachmentUploads,
   chatReadCursors,
   chatThreads,
   drawings,
   fogReveals,
   gameEvents,
   memberships,
-  playerLikenessConsents,
-  stickerPacks,
-  stickers,
   scenes,
   tokens,
   tokenControllers,
@@ -44,16 +28,15 @@ import type { AuthContext } from "./auth.js";
 import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import { env } from "./env.js";
 import { normalizeLegacyEntryData } from "./entry-data.js";
-import { normalizeDiceResult, normalizeSkillCard } from "./dice-result.js";
 import { normalizeAudioTrackDeadlines } from "./audio-state.js";
 import {
   chatVisibilityFilter,
   canAccessStream,
   unknownPlayerDisplayName,
 } from "./chat.js";
-import { revokedStickerTombstone } from "./sticker-access.js";
 import { buildWorldMapsSnapshot } from "./world-maps.js";
 import { characterDto } from "./character-dto.js";
+import { projectChatMessages } from "./chat-history.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
 
@@ -265,73 +248,9 @@ export async function buildSnapshot(
   const visiblePlayerRequestIds = new Set(
     playerRequestRows.map((request) => request.id),
   );
-  const messageRows = visibleThreadRows
-    .flatMap((thread, index) =>
-      (messageGroups[index] ?? []).map((message) => ({ message, thread })),
-    )
-    .filter(
-      ({ message }) =>
-        (!message.stickerViewerMembershipIds ||
-          message.stickerViewerMembershipIds.includes(auth.membershipId)) &&
-        (!message.playerRequestId ||
-          visiblePlayerRequestIds.has(message.playerRequestId)),
-    );
-  const visibleMessageIds = messageRows.map(({ message }) => message.id);
-  const stickerIds = messageRows.flatMap(({ message }) =>
-    message.stickerId ? [message.stickerId] : [],
+  const messageRows = visibleThreadRows.flatMap((thread, index) =>
+    (messageGroups[index] ?? []).map((message) => ({ message, thread })),
   );
-  const revokedStickerRows = stickerIds.length
-    ? await db
-        .select({ id: stickers.id })
-        .from(stickers)
-        .innerJoin(
-          stickerPacks,
-          and(
-            eq(stickerPacks.id, stickers.packId),
-            eq(stickerPacks.campaignId, stickers.campaignId),
-          ),
-        )
-        .innerJoin(
-          playerLikenessConsents,
-          and(
-            eq(playerLikenessConsents.packId, stickerPacks.id),
-            eq(playerLikenessConsents.campaignId, stickerPacks.campaignId),
-          ),
-        )
-        .where(
-          and(
-            eq(stickers.campaignId, auth.campaignId),
-            inArray(stickers.id, stickerIds),
-            eq(stickerPacks.subject, "PLAYER"),
-            eq(playerLikenessConsents.status, "REVOKED"),
-          ),
-        )
-    : [];
-  const revokedStickerIds = new Set(revokedStickerRows.map((row) => row.id));
-  const attachmentRows = visibleMessageIds.length
-    ? await db
-        .select({ attachment: chatAttachments, upload: chatAttachmentUploads })
-        .from(chatAttachments)
-        .innerJoin(
-          chatAttachmentUploads,
-          and(
-            eq(chatAttachmentUploads.campaignId, chatAttachments.campaignId),
-            eq(chatAttachmentUploads.contentId, chatAttachments.contentId),
-          ),
-        )
-        .where(
-          and(
-            eq(chatAttachments.campaignId, auth.campaignId),
-            inArray(chatAttachments.messageId, visibleMessageIds),
-          ),
-        )
-    : [];
-  const attachmentsByMessage = new Map<string, typeof attachmentRows>();
-  for (const item of attachmentRows) {
-    const items = attachmentsByMessage.get(item.attachment.messageId) ?? [];
-    items.push(item);
-    attachmentsByMessage.set(item.attachment.messageId, items);
-  }
   const unreadGroups = await Promise.all(
     visibleThreadRows.map((thread) =>
       db
@@ -489,6 +408,14 @@ export async function buildSnapshot(
               (asset.kind === "TOKEN" || asset.kind === "PORTRAIT")),
         );
 
+  // UIX-450: та же проекция, что отдаёт маршрут истории. Копия этих четырёх
+  // проверок видимости разошлась бы с оригиналом в сторону «показали лишнее».
+  const projectedMessages = await projectChatMessages(db, auth, {
+    rows: messageRows,
+    memberNameById,
+    visiblePlayerRequestIds,
+  });
+
   return {
     campaign: {
       id: campaign.id,
@@ -627,44 +554,7 @@ export async function buildSnapshot(
     worldMaps: worldMapProjection.snapshot,
     playerRequests: playerRequestRows,
     encounters: encounterRows,
-    messages: messageRows
-      .sort((left, right) => left.message.sequence - right.message.sequence)
-      .map(({ message, thread }) => ({
-        id: message.id,
-        sequence: message.sequence,
-        membershipId: message.membershipId,
-        displayName:
-          memberNameById.get(message.membershipId) ?? unknownPlayerDisplayName,
-        characterId: message.characterId,
-        body: message.body,
-        playerRequestId: message.playerRequestId,
-        visibility: message.visibility,
-        kind: message.kind,
-        threadId: message.threadId,
-        stream: thread.stream,
-        dice: normalizeDiceResult(message.dice),
-        skillCard: normalizeSkillCard(message.dice),
-        stickerId:
-          message.stickerId && revokedStickerIds.has(message.stickerId)
-            ? null
-            : message.stickerId,
-        stickerPresentation:
-          message.stickerId && revokedStickerIds.has(message.stickerId)
-            ? revokedStickerTombstone
-            : message.stickerPresentation,
-        attachments: (attachmentsByMessage.get(message.id) ?? []).map(
-          ({ upload }) => ({
-            contentId: upload.contentId,
-            fileName: upload.fileName,
-            mimeType: upload.mimeType,
-            sizeBytes: upload.sizeBytes,
-            width: upload.width,
-            height: upload.height,
-            createdAt: upload.createdAt.toISOString(),
-          }),
-        ),
-        createdAt: message.createdAt.toISOString(),
-      })),
+    messages: projectedMessages,
     chatThreads: visibleThreadRows.map((thread) => {
       const common = {
         id: thread.id,
