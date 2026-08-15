@@ -775,7 +775,12 @@ export const createTokenSchema = z.object({
   characterId: z.string().uuid().nullable().optional(),
   ownerMembershipId: z.string().uuid().nullable().optional(),
   assetId: z.string().uuid().nullable().optional(),
-  name: z.string().trim().min(1).max(80),
+  /**
+   * UIX-400: у токена персонажа имени может не быть — он зовётся как
+   * персонаж и переименовывается вместе с ним. Без персонажа имя обязательно,
+   * это проверяет сервер: наследовать было бы не от кого.
+   */
+  name: z.string().trim().min(1).max(80).optional(),
   x: z.number().finite(),
   y: z.number().finite(),
   z: z.number().finite().default(0),
@@ -891,7 +896,11 @@ export const createTokenDefinitionSchema = z.object({
 export const tokenDefinitionUpdateSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
-  name: z.string().trim().min(1).max(80).optional(),
+  /**
+   * UIX-400: `null` — «зовусь как мой персонаж». Отличается от отсутствия
+   * поля: не передали — имя не трогаем, передали `null` — просим наследовать.
+   */
+  name: z.string().trim().min(1).max(80).nullable().optional(),
   defaultAssetId: z.string().uuid().nullable().optional(),
   characterId: z.string().uuid().nullable().optional(),
   defaultWidth: z.number().min(16).max(1024).optional(),

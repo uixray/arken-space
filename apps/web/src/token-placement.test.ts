@@ -73,7 +73,9 @@ describe("character token placement", () => {
         sceneId: scene.id,
         characterId: character.id,
         ownerMembershipId: character.ownerMembershipId,
-        name: character.name,
+        // UIX-400: имя не передаётся — токен персонажа зовётся как персонаж и
+        // переименовывается вместе с ним. Копия имени в момент создания и была
+        // причиной «Хориста», оставшегося у «Могучего Тэйна».
         x: 800,
         y: 500,
         width: 64,

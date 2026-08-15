@@ -63,7 +63,9 @@ export function characterTokenPlacementRequest(
       sceneId: scene.id,
       characterId,
       ownerMembershipId: character.ownerMembershipId,
-      name: character.name,
+      // UIX-400: имя не копируется — токен зовётся как персонаж и
+      // переименовывается вместе с ним. Копия здесь и была причиной «Хориста»
+      // у «Могучего Тэйна»: имя фиксировалось в момент создания навсегда.
       x: scene.width / 2,
       y: scene.height / 2,
       width: scene.grid.size,

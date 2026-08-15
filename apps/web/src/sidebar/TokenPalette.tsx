@@ -96,6 +96,41 @@ export function PalettePanel(props: Props) {
                 )}
               </Button>
               <strong className="palette-card__title">{definition.name}</strong>
+              {(() => {
+                /**
+                 * UIX-400: маркер расхождения, а не требование его устранить.
+                 *
+                 * Расхождение — нормальное состояние для «Тейн верхом», и
+                 * диалог с мастером здесь был бы навязчивым. Но у пяти
+                 * определений на боевых данных оно есть, и одно из них
+                 * («Хорист» у «Могучего Тэйна») — настоящая ошибка, которую
+                 * иначе нечем починить.
+                 */
+                const character = props.snapshot.characters.find(
+                  (item) => item.id === definition.characterId,
+                );
+                if (!character || !definition.ownName) return null;
+                if (definition.ownName === character.name) return null;
+                return (
+                  <p className="palette-card__mismatch">
+                    <span>Персонаж: {character.name}</span>
+                    <Button
+                      size="s"
+                      view="flat"
+                      title="Токен станет зваться как персонаж и будет переименовываться вместе с ним"
+                      onClick={() =>
+                        void tokenActions.onPatchTokenDefinition(
+                          definition.id,
+                          definition.revision,
+                          { name: null },
+                        )
+                      }
+                    >
+                      Назвать по персонажу
+                    </Button>
+                  </p>
+                );
+              })()}
               <FormSelect
                 aria-label={`Изображение токена ${definition.name}`}
                 value={definition.defaultAssetId ?? ""}
@@ -264,7 +299,12 @@ function TokenDefinitionEditor({
   const gridSize = activeScene?.grid.enabled ? activeScene.grid.size : 64;
   const initialWidth = (definition?.defaultWidth ?? 64) / gridSize;
   const initialHeight = (definition?.defaultHeight ?? 64) / gridSize;
-  const [name, setName] = useState(definition?.name ?? "");
+  /**
+   * UIX-400: редактируется **собственное** имя, а не то, что видно на карте.
+   * Иначе «сохранить» у токена, следующего за персонажем, превратило бы
+   * наследование в намеренную копию — молча и навсегда.
+   */
+  const [name, setName] = useState(definition?.ownName ?? "");
   const [characterId, setCharacterId] = useState(definition?.characterId ?? "");
   const [assetId, setAssetId] = useState(definition?.defaultAssetId ?? "");
   const [width, setWidth] = useState(initialWidth);
@@ -284,7 +324,9 @@ function TokenDefinitionEditor({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!name.trim()) return setError("Укажите название токена.");
+    // Имя обязательно, только когда наследовать не от кого.
+    if (!name.trim() && !characterId)
+      return setError("Укажите название токена или выберите персонажа.");
     setSaving(true);
     setError("");
     try {
@@ -294,7 +336,8 @@ function TokenDefinitionEditor({
         if (!selectedAssetId) selectedAssetId = uploaded.id;
       }
       const input = {
-        name: name.trim(),
+        // Пустое поле у токена с персонажем — это «зовусь как он».
+        name: name.trim() || null,
         characterId: characterId || null,
         defaultAssetId: selectedAssetId,
         // The API keeps pixel values for backwards compatibility. The editor

@@ -1487,6 +1487,15 @@ code {
    does, so a player can tell which way a message will send *before*
    pressing Enter -- a tooltip alone would only reach mouse users. */
 /* UIX-450: кнопка подгрузки истории стоит первой в списке сообщений. */
+/* UIX-400: подпись о расхождении имени токена и персонажа. */
+.palette-card__mismatch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
 .chat-load-more {
   align-self: center;
   margin: var(--space-xs) 0;

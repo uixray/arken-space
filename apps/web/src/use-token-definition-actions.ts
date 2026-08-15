@@ -36,7 +36,8 @@ export interface TokenDefinitionActions {
     definitionId: string,
     revision: number,
     patch: {
-      name?: string;
+      /** UIX-400: `null` — «зовусь как мой персонаж», отсутствие — не трогать. */
+      name?: string | null;
       defaultAssetId?: string | null;
       characterId?: string | null;
       defaultWidth?: number;
@@ -44,7 +45,8 @@ export interface TokenDefinitionActions {
     },
   ) => Promise<void>;
   onCreateTokenDefinition: (input: {
-    name: string;
+    /** UIX-400: `null` — «зовусь как мой персонаж». */
+    name: string | null;
     characterId: string | null;
     defaultAssetId: string | null;
     defaultWidth: number;

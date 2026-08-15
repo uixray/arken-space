@@ -1694,6 +1694,24 @@ export function registerRoutes(
       await tx
         .delete(characterControllers)
         .where(eq(characterControllers.characterId, id));
+      /**
+       * UIX-400: перед отвязкой имя материализуется.
+       *
+       * Определение без своего имени зовётся как персонаж; убрав ссылку и не
+       * записав имя, мы получили бы токен, у которого подписи взяться неоткуда
+       * — и `token_definitions_name_check` этого не позволит. Архивация
+       * пакетная и без формы, спросить некого, поэтому имя фиксируется молча:
+       * это ровно то, что человек видел на карте до архивации.
+       */
+      await tx
+        .update(tokenDefinitions)
+        .set({ name: sql`coalesce(${tokenDefinitions.name}, ${updated.name})` })
+        .where(
+          and(
+            eq(tokenDefinitions.characterId, id),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+          ),
+        );
       await tx
         .update(tokenDefinitions)
         .set({ characterId: null })
@@ -2669,6 +2687,9 @@ export function registerRoutes(
       if (controllerMembershipIds.some((id) => !validIds.has(id)))
         return reply.code(404).send({ error: "CONTROLLER_NOT_FOUND" });
     }
+    // UIX-400: имя обязательно, когда наследовать не от кого.
+    if (!body.name && !body.characterId)
+      return reply.code(400).send({ error: "TOKEN_NAME_REQUIRED" });
     const placement = await db.transaction(async (tx) => {
       await tx.execute(
         sql`select id from scenes where id = ${scene.id} and campaign_id = ${auth.campaignId} for update`,
@@ -2715,7 +2736,8 @@ export function registerRoutes(
               campaignId: auth.campaignId,
               characterId: body.characterId ?? null,
               defaultAssetId: body.assetId ?? null,
-              name: body.name,
+              // UIX-400: без имени определение наследует его от персонажа.
+              name: body.name ?? null,
               defaultWidth: body.width,
               defaultHeight: body.height,
             })
@@ -2732,6 +2754,10 @@ export function registerRoutes(
         .insert(tokens)
         .values({
           ...tokenInput,
+          // UIX-400: `tokens.name` только пишется и никогда не читается —
+          // подпись всегда берётся из определения. Колонка `notNull`, поэтому
+          // отсутствующее имя записывается пустой строкой, а не NULL.
+          name: tokenInput.name ?? "",
           definitionId: definition.id,
           characterId: definition.characterId,
           ownerMembershipId: tokenOwnerMembershipId,
@@ -3402,6 +3428,19 @@ export function registerRoutes(
       return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
     if (current.revision !== body.revision)
       return reply.code(409).send({ error: "TOKEN_DEFINITION_CONFLICT" });
+    /**
+     * UIX-400: определение без имени и без персонажа наследовать не от кого.
+     *
+     * Здесь, в отличие от архивации, отвечаем отказом, а не подставляем имя
+     * молча: это диалог, мастер на месте, и «сохранили какое-то имя» хуже
+     * явного «введите имя». Проверяется состояние **после** патча, иначе
+     * снятие персонажа и снятие имени по отдельности прошли бы обе.
+     */
+    const nextName = body.name === undefined ? current.name : body.name;
+    const nextCharacterId =
+      body.characterId === undefined ? current.characterId : body.characterId;
+    if (!nextName && !nextCharacterId)
+      return reply.code(400).send({ error: "TOKEN_NAME_REQUIRED" });
     if (auth.role !== "GM") {
       if (body.defaultWidth !== undefined || body.defaultHeight !== undefined)
         return reply.code(403).send({ error: "TOKEN_SIZE_FORBIDDEN" });
