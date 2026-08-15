@@ -96,7 +96,8 @@ describe("character mutation reconciliation", () => {
     });
     const stale = {
       ...snapshot,
-      characters: [character],
+      characterIdentities: [],
+  characters: [character],
       snapshotVersion: 3,
     };
     const equalSequenceButStaleCharacter = {
@@ -126,6 +127,7 @@ function snapshotWithCharacter(nextCharacter: CharacterDto): GameSnapshot {
       statLayout: starterStatLayout,
       revision: 1,
     },
+    characterIdentities: [],
     me: {
       id: "membership-1",
       role: "PLAYER",

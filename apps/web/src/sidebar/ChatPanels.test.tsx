@@ -85,6 +85,8 @@ function baseSnapshot(): GameSnapshot {
     me: { id: "member-1", role: "PLAYER", characterId: null },
     campaign: { id: "campaign-1" },
     characters: [],
+    characterIdentities: [],
+    assets: [],
     catalogEntries: [],
     messages: [],
     chatThreads: [],

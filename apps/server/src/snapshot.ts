@@ -584,6 +584,34 @@ export async function buildSnapshot(
     if (character.portraitAssetId)
       visibleAssetIds.add(character.portraitAssetId);
   }
+  /**
+   * UIX-454 — «кто это бросил» в ленте.
+   *
+   * До сих пор игрок получал только своих персонажей, поэтому у чужого броска
+   * подписи персонажа не было вовсе: интерфейс подставлял слово «Персонаж» —
+   * плашку, которая занимает место и не сообщает ничего.
+   *
+   * Отдаётся минимум и только про тех, кто и так сидит за столом: имя и
+   * портрет персонажей, у которых есть владелец или управляющий. Ни
+   * характеристик, ни ресурсов, ни заметок — они остаются за фильтром
+   * `visibleCharacters`.
+   *
+   * NPC мастера сюда не попадают намеренно: у них нет управляющего, и бросок
+   * за скрытого «Лучника в кустах» подписан именем мастера — как и был.
+   */
+  const characterIdentities = characterRows
+    .filter(
+      (character) =>
+        character.ownerMembershipId ||
+        (controllersByCharacter.get(character.id)?.length ?? 0) > 0,
+    )
+    .map((character) => ({
+      id: character.id,
+      name: character.name,
+      portraitAssetId: character.portraitAssetId,
+    }));
+  for (const identity of characterIdentities)
+    if (identity.portraitAssetId) visibleAssetIds.add(identity.portraitAssetId);
   for (const track of normalizedAudioTracks) {
     if (track.assetId) visibleAssetIds.add(track.assetId);
   }
@@ -689,6 +717,7 @@ export async function buildSnapshot(
       revision: scene.revision,
       active: campaign.activeSceneId === scene.id,
     })),
+    characterIdentities,
     catalogEntries:
       auth.role === "GM"
         ? catalogRows.map((entry) => ({

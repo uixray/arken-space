@@ -6,6 +6,7 @@ import {
   type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import type {
   ChatAttachmentMetadata,
@@ -27,6 +28,7 @@ import {
   statRowsFromLayout,
 } from "../stat-keys";
 import { InitiativePanel } from "./InitiativePanel";
+import { RollAvatar } from "./RollAvatar";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
@@ -102,11 +104,14 @@ export function ChatMessageBody({
   catalogEntryIds,
   playerRequests,
   onOpenPlayerRequests,
+  avatar,
 }: {
   message: GameSnapshot["messages"][number];
   catalogEntryIds?: ReadonlySet<string>;
   playerRequests?: GameSnapshot["playerRequests"];
   onOpenPlayerRequests?: () => void;
+  /** UIX-454: портрет бросающего; у не-бросков не показывается. */
+  avatar?: ReactNode;
 }) {
   if (message.playerRequestId)
     return (
@@ -157,13 +162,28 @@ export function ChatMessageBody({
     );
   if (message.kind !== "DICE" || !dice) {
     const physicalBonus = physicalRollBonus(message.body);
+    /**
+     * UIX-454: физический бросок рисуется тем же макетом, что обычный. Раньше
+     * он выпадал сюда, в обычный текст, и в ленте это выглядело как сообщение
+     * другого рода — хотя за столом это тот же бросок, просто кубик настоящий.
+     * На месте итога стоит бонус: результата система не знает и не должна
+     * делать вид, что знает.
+     */
+    if (physicalBonus)
+      return (
+        <div className="roll-result roll-result--physical">
+          {avatar}
+          <div className="roll-details">
+            <div>{message.body}</div>
+            <small>Бросьте кубик и прибавьте бонус</small>
+          </div>
+          <strong className="roll-total" aria-label="Бонус к броску">
+            {physicalBonus}
+          </strong>
+        </div>
+      );
     return (
       <>
-        {physicalBonus && (
-          <strong className="physical-roll-bonus">
-            Бонус к кубу {physicalBonus}
-          </strong>
-        )}
         <p>{message.body}</p>
         {message.attachments?.map((attachment) => (
           <figure className="chat-attachment" key={attachment.contentId}>
@@ -182,9 +202,7 @@ export function ChatMessageBody({
     <div
       className={`roll-result${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
     >
-      <strong className="roll-total" aria-label="Итог броска">
-        {dice.total}
-      </strong>
+      {avatar}
       <div className="roll-details">
         <div>{message.body}</div>
         {critical && (
@@ -192,6 +210,11 @@ export function ChatMessageBody({
         )}
         <small>{formatDiceBreakdown(dice)}</small>
       </div>
+      {/* Итог справа: глаз ищет число на краю строки, а не в середине, и в
+       * ленте из десятка бросков они выстраиваются в столбец. */}
+      <strong className="roll-total" aria-label="Итог броска">
+        {dice.total}
+      </strong>
     </div>
   );
 }
@@ -1143,6 +1166,28 @@ export function ChatPanel({
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
   );
+  /**
+   * UIX-454: личность и портрет бросающего. Ищется по `characterIdentities` —
+   * набору, который приходит и игроку тоже; поиск по `characters` работал бы
+   * только для своих, а чужие вырождались бы в заглушку.
+   */
+  const identityById = useMemo(
+    () =>
+      new Map(
+        snapshot.characterIdentities.map((identity) => [identity.id, identity]),
+      ),
+    [snapshot.characterIdentities],
+  );
+  const assetUrlById = useMemo(
+    () => new Map(snapshot.assets.map((asset) => [asset.id, asset.url])),
+    [snapshot.assets],
+  );
+  const identityFor = (characterId: string | null) =>
+    characterId ? (identityById.get(characterId) ?? null) : null;
+  const portraitUrlFor = (characterId: string | null) => {
+    const portraitAssetId = identityFor(characterId)?.portraitAssetId;
+    return portraitAssetId ? (assetUrlById.get(portraitAssetId) ?? null) : null;
+  };
   const latestMessage = messages.at(-1);
   const thread = threadForStream(snapshot, activeStream);
   const threadId = thread?.id;
@@ -1300,13 +1345,11 @@ export function ChatPanel({
             >
               <header>
                 <strong>{item.message.displayName}</strong>
-                {item.message.characterId && (
-                  <span className="message-character">
-                    {snapshot.characters.find(
-                      (character) => character.id === item.message.characterId,
-                    )?.name ?? "Персонаж"}
-                  </span>
-                )}
+                {/* UIX-454: плашка с именем персонажа убрана. У чужого броска
+                 * она вырождалась в слово «Персонаж» — занимала место и не
+                 * сообщала ничего, потому что чужие персонажи игроку не
+                 * приходили. Теперь личность видна портретом слева от броска,
+                 * а имя — в подсказке к нему. */}
                 <time>
                   {new Date(item.message.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",
@@ -1322,6 +1365,13 @@ export function ChatPanel({
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequests}
+                avatar={
+                  <RollAvatar
+                    identity={identityFor(item.message.characterId)}
+                    fallbackName={item.message.displayName}
+                    assetUrl={portraitUrlFor(item.message.characterId)}
+                  />
+                }
               />
             </article>
           ),

@@ -2378,6 +2378,20 @@ export interface InitiativeParticipantDto {
   initiative: number | null;
 }
 
+/**
+ * UIX-454 — минимальная публичная личность персонажа: кто бросил кубик.
+ *
+ * Отдельно от `CharacterDto` намеренно. Тот приходит только владельцу и
+ * мастеру и несёт характеристики, ресурсы, заметки; здесь — имя и портрет тех,
+ * кто и так сидит за столом, и ничего сверх. Одно поле «а покажем ещё и...»
+ * превратило бы сводку в утечку карточки.
+ */
+export interface PublicCharacterIdentityDto {
+  id: string;
+  name: string;
+  portraitAssetId: string | null;
+}
+
 export interface GameSnapshot {
   campaign: {
     id: string;
@@ -2404,6 +2418,11 @@ export interface GameSnapshot {
   /** Safe peers available to the current member for a direct chat. */
   directChatContacts?: DirectChatContactDto[];
   characters: CharacterDto[];
+  /**
+   * UIX-454: имя и портрет персонажей с владельцем или управляющим — чтобы
+   * лента бросков показывала, кто бросает, а не слово «Персонаж».
+   */
+  characterIdentities: PublicCharacterIdentityDto[];
   catalogEntries: CatalogEntryDto[];
   scenes: SceneDto[];
   tokens: TokenDto[];

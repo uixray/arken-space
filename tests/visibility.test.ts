@@ -355,14 +355,13 @@ describe("снапшоты двух игроков не смешиваются",
     expect(mine.me.id).toBe(ids.player);
     expect(theirs.me.id).toBe(ids.otherPlayer);
 
-    // Персонаж чужого игрока не приезжает ни строкой, ни идентификатором:
-    // в его заметках лежит «secret notes», и это ровно то, что проверяет
-    // мультиплеерный прогон — только здесь оно проверяется за секунды.
+    // Карточка чужого игрока не приезжает: в его заметках лежит «secret
+    // notes», и это ровно то, что проверяет мультиплеерный прогон — только
+    // здесь оно проверяется за секунды.
     expect(mine.characters.map((character) => character.id)).toEqual([
       ids.playerCharacter,
     ]);
     expect(JSON.stringify(mine)).not.toContain("secret notes");
-    expect(JSON.stringify(mine)).not.toContain(ids.otherCharacter);
 
     // И симметрично: правка, «случайно» отдающая всё всем, обязана уронить обе
     // стороны, а не одну.
@@ -370,7 +369,29 @@ describe("снапшоты двух игроков не смешиваются",
       ids.otherCharacter,
     ]);
     expect(JSON.stringify(theirs)).not.toContain("player notes");
-    expect(JSON.stringify(theirs)).not.toContain(ids.playerCharacter);
+
+    /**
+     * UIX-454: идентификатор чужого персонажа теперь появляется — но ровно в
+     * одном месте и ровно тремя полями. Прежняя проверка «не встречается
+     * нигде» стала неверной, поэтому она не ослаблена, а заменена на точную:
+     * где именно позволено, и что там лежит.
+     *
+     * Мастер решил показывать аватары бросающих; всё остальное о чужом
+     * персонаже остаётся закрытым, и это здесь и закреплено.
+     */
+    const identity = mine.characterIdentities.find(
+      (item) => item.id === ids.otherCharacter,
+    );
+    expect(Object.keys(identity ?? {}).sort()).toEqual([
+      "id",
+      "name",
+      "portraitAssetId",
+    ]);
+    const withoutIdentities = JSON.stringify({
+      ...mine,
+      characterIdentities: [],
+    });
+    expect(withoutIdentities).not.toContain(ids.otherCharacter);
   });
 
   it("схлопывает списки участников каждому под себя", async () => {

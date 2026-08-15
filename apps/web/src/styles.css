@@ -1382,11 +1382,35 @@ code {
   line-height: 1.45;
   white-space: pre-wrap;
 }
+/* UIX-454: аватар — детали — итог. Итог справа, потому что глаз ищет число на
+   краю строки: в ленте из десятка бросков они выстраиваются в столбец, а не
+   пляшут по середине вслед за длиной формулы. */
 .roll-result {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   border: 1px solid var(--line);
   background: var(--surface-2);
+}
+.roll-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin: 6px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-1);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.roll-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .roll-result.roll-result--critical-failure,
 .skill-chat-card.roll-result--critical-failure {
@@ -1420,23 +1444,17 @@ code {
   place-items: center;
   min-width: 48px;
   padding: 8px;
-  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
   color: var(--accent);
   font-size: 1.6rem;
   line-height: 1;
 }
-.physical-roll-bonus {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  margin: 6px 0 0;
-  padding: 5px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 65%, var(--line));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--accent) 18%, var(--surface-raised));
-  color: var(--text);
-  font-size: 1rem;
-  font-variant-numeric: tabular-nums;
+/* Физический бросок — тот же макет, но на месте итога бонус: результат
+   выпадает на настоящем кубике, и система его не знает. Приглушённый цвет
+   отличает «прибавьте столько-то» от посчитанного числа. */
+.roll-result--physical .roll-total {
+  color: var(--muted);
+  font-size: 1.3rem;
 }
 .roll-details > div {
   padding: 6px 8px 0;
