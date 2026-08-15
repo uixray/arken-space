@@ -60,7 +60,10 @@ export async function normalizeAudioTrackDeadlines(
   now = new Date(),
 ) {
   const rows = await db
-    .select({ state: campaignAudioTracks, durationSeconds: assets.durationSeconds })
+    .select({
+      state: campaignAudioTracks,
+      durationSeconds: assets.durationSeconds,
+    })
     .from(campaignAudioTracks)
     .leftJoin(assets, eq(campaignAudioTracks.assetId, assets.id))
     .where(eq(campaignAudioTracks.campaignId, campaignId))

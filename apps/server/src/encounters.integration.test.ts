@@ -37,7 +37,11 @@ const ids = {
   tokenDefinitionB: id(),
   tokenOnSceneB: id(), // PLAYER-layer token already placed on sceneB, controlled by `player`
 };
-const secrets = { gm: "g".repeat(40), player: "p".repeat(40), foreign: "f".repeat(40) };
+const secrets = {
+  gm: "g".repeat(40),
+  player: "p".repeat(40),
+  foreign: "f".repeat(40),
+};
 const headers = (secret: string) => ({
   cookie: `${env.SESSION_COOKIE_NAME}=${secret}`,
 });
@@ -211,7 +215,11 @@ beforeAll(async () => {
   });
   await db.insert(schema.tokenDefinitions).values([
     { id: ids.tokenDefinition, campaignId: ids.campaign, name: "Hero" },
-    { id: ids.tokenDefinitionB, campaignId: ids.campaign, name: "Hero (scene B)" },
+    {
+      id: ids.tokenDefinitionB,
+      campaignId: ids.campaign,
+      name: "Hero (scene B)",
+    },
   ]);
   await db.insert(schema.tokens).values([
     {
@@ -363,7 +371,9 @@ describe("encounter start authorization and validation", () => {
 
 describe("atomic LINKED_SCENE start", () => {
   it("activates the destination scene and transfers only PLAYER-layer tokens by relative position, in one broadcast", async () => {
-    const response = await startLinked(secrets.gm, { locationId: ids.location });
+    const response = await startLinked(secrets.gm, {
+      locationId: ids.location,
+    });
     expect(response.statusCode).toBe(201);
     const encounter = response.json();
     expect(encounter).toMatchObject({
@@ -446,8 +456,7 @@ describe("encounter end authorization", () => {
       })
     ).json();
     expect(
-      stillActive.find((row: { id: string }) => row.id === started.id)
-        ?.status,
+      stillActive.find((row: { id: string }) => row.id === started.id)?.status,
     ).toBe("ACTIVE");
     await endEncounter(secrets.gm, started.id, started.revision);
   });
@@ -580,7 +589,11 @@ describe("one-active-encounter-at-a-time and idempotency", () => {
     expect(replayed.statusCode).toBe(200);
     expect(replayed.json()).toEqual(first.json());
 
-    const againstEnded = await endEncounter(secrets.gm, started.id, first.json().revision);
+    const againstEnded = await endEncounter(
+      secrets.gm,
+      started.id,
+      first.json().revision,
+    );
     expect(againstEnded.statusCode).toBe(409);
     expect(againstEnded.json().error).toBe("ENCOUNTER_NOT_ACTIVE");
   });

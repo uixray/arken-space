@@ -154,7 +154,10 @@ async function findActiveEncounter(db: EncounterDb, campaignId: string) {
     .select()
     .from(encounters)
     .where(
-      and(eq(encounters.campaignId, campaignId), eq(encounters.status, "ACTIVE")),
+      and(
+        eq(encounters.campaignId, campaignId),
+        eq(encounters.status, "ACTIVE"),
+      ),
     )
     .limit(1);
   return row ?? null;
@@ -196,7 +199,10 @@ export async function computeMissingTokenMembers(
     .select({ id: memberships.id })
     .from(memberships)
     .where(
-      and(eq(memberships.campaignId, campaignId), eq(memberships.role, "PLAYER")),
+      and(
+        eq(memberships.campaignId, campaignId),
+        eq(memberships.role, "PLAYER"),
+      ),
     );
   if (!partyMembers.length) return [];
 
@@ -328,7 +334,8 @@ export function registerEncounterRoutes(
             sourceSceneId: sourceScene.id,
             targetSceneId: targetScene.id,
             focusRegion: body.mode === "SCENE_REGION" ? body.focusRegion : null,
-            locationId: body.mode === "LINKED_SCENE" ? (body.locationId ?? null) : null,
+            locationId:
+              body.mode === "LINKED_SCENE" ? (body.locationId ?? null) : null,
             sourceSceneRevision: body.sourceSceneRevision,
             initiatorMembershipId: auth.membershipId,
           })
@@ -409,12 +416,21 @@ export function registerEncounterRoutes(
     if (!parsed.success) return fail(reply, 400, "INVALID_REQUEST");
     const body = parsed.data;
     const hash = commandHash("ENCOUNTER_ENDED", id, body);
-    const prior = await replay(db, auth, body.actionId, "ENCOUNTER_ENDED", id, hash);
+    const prior = await replay(
+      db,
+      auth,
+      body.actionId,
+      "ENCOUNTER_ENDED",
+      id,
+      hash,
+    );
     if (prior.kind === "CONFLICT")
       return fail(reply, 409, "ACTION_ID_CONFLICT");
     if (prior.kind === "MATCH") {
       const row = await findEncounterById(db, auth.campaignId, id);
-      return row ? encounterDto(row) : fail(reply, 500, "ENCOUNTER_PROJECTION_FAILED");
+      return row
+        ? encounterDto(row)
+        : fail(reply, 500, "ENCOUNTER_PROJECTION_FAILED");
     }
 
     const existing = await findEncounterById(db, auth.campaignId, id);
@@ -492,7 +508,12 @@ export function registerEncounterRoutes(
     const [targetScene] = await db
       .select({ id: scenes.id })
       .from(scenes)
-      .where(and(eq(scenes.campaignId, auth.campaignId), eq(scenes.id, targetSceneId)))
+      .where(
+        and(
+          eq(scenes.campaignId, auth.campaignId),
+          eq(scenes.id, targetSceneId),
+        ),
+      )
       .limit(1);
     if (!targetScene) return fail(reply, 404, "TARGET_SCENE_NOT_FOUND");
 

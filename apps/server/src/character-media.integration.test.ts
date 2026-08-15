@@ -305,7 +305,9 @@ describe("character media HTTP: edit", () => {
 
 describe("character media HTTP: detach", () => {
   it("lets owner and GM detach but not other players, and hides detached rows from list", async () => {
-    const created = (await createMedia(secrets.gm, { visibility: "PARTY" })).json();
+    const created = (
+      await createMedia(secrets.gm, { visibility: "PARTY" })
+    ).json();
     const forbidden = await app.inject({
       method: "POST",
       url: `/api/character-media/${created.id}/detach`,
@@ -380,9 +382,9 @@ describe("character media HTTP: GM manages media on a character they don't own (
         headers: headers(secrets.owner),
       })
     ).json();
-    expect(
-      ownerList.some((row: { id: string }) => row.id === first.id),
-    ).toBe(false);
+    expect(ownerList.some((row: { id: string }) => row.id === first.id)).toBe(
+      false,
+    );
 
     const editRes = await app.inject({
       method: "PATCH",

@@ -1,0 +1,55 @@
+name: checks
+
+# UIX-441: до этого файла ни typecheck, ни lint, ни тесты не запускались сами —
+# ни на push, ни на PR, ни на коммит. Зелёный прогон означал «кто-то не забыл»,
+# а не «код проверен».
+#
+# Деплой сюда сознательно не входит: он остаётся ручным по
+# docs/production-release-checklist.md, где перед выкладкой обязательны
+# restic-бэкап и репетиция восстановления в изолированном окружении.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Новый push в ту же ветку отменяет предыдущий прогон: проверять предпоследний
+# коммит незачем, а очередь он занимает.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Пакеты воркспейса собираются ДО тестов. Часть набора импортирует
+      # `@arken/contracts`, `@arken/system` и `@arken/db` через `dist`, и на
+      # устаревшей сборке тесты врут: проверено на UIX-424, где добор
+      # характеристик «не работал», пока пакет не пересобрали.
+      - run: pnpm build
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      # Гейт включён после разовой правки 13 файлов. Держать красную проверку,
+      # которую все игнорируют, хуже, чем не иметь её вовсе.
+      - run: pnpm format:check
+
+      - run: pnpm test
+
+      # Playwright и мультиплеерный прогон сюда не входят: они поднимают
+      # Docker Compose со своим PostgreSQL, идут минутами и капризны. Их место
+      # в CI — отдельное решение, а не довесок к первому же workflow.

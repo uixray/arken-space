@@ -1,9 +1,6 @@
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { worldContent } from "@arken/db";
-import type {
-  WorldContentDto,
-  WorldContentPlayerDto,
-} from "@arken/contracts";
+import type { WorldContentDto, WorldContentPlayerDto } from "@arken/contracts";
 
 /**
  * Server-side ACL core for World Content (UIX-245 Stage 1, AC4/AC10).
@@ -138,9 +135,7 @@ type WorldContentPlayerRow = {
 };
 
 /** Builds the player-facing DTO from a row already narrowed to `worldContentPlayerColumns` — there is no `gmOnlyText` to accidentally include. */
-export function toPlayerDto(
-  row: WorldContentPlayerRow,
-): WorldContentPlayerDto {
+export function toPlayerDto(row: WorldContentPlayerRow): WorldContentPlayerDto {
   return {
     id: row.id,
     slug: row.slug,

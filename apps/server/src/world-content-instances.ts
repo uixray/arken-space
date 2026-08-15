@@ -128,7 +128,9 @@ export function registerWorldContentInstanceRoutes(
     const query = listQuerySchema.parse(request.query);
     const conditions = [eq(worldContentInstances.campaignId, auth.campaignId)];
     if (query.worldContentId)
-      conditions.push(eq(worldContentInstances.worldContentId, query.worldContentId));
+      conditions.push(
+        eq(worldContentInstances.worldContentId, query.worldContentId),
+      );
     const rows = await db
       .select()
       .from(worldContentInstances)
@@ -204,7 +206,11 @@ export function registerWorldContentInstanceRoutes(
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(worldContentInstances)
-        .set({ ...changes, revision: existing.revision + 1, updatedAt: new Date() })
+        .set({
+          ...changes,
+          revision: existing.revision + 1,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(worldContentInstances.id, id),

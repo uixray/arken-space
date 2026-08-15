@@ -55,22 +55,16 @@ describe("character media ACL matrix", () => {
   });
 
   it("lets another player see PARTY-shared media", () => {
-    expect(canViewCharacterMedia(otherPlayerAuth, subject("PARTY"))).toBe(
-      true,
-    );
+    expect(canViewCharacterMedia(otherPlayerAuth, subject("PARTY"))).toBe(true);
   });
 
   it("hides GM-only media from the character's own owner (AC8)", () => {
     expect(canViewCharacterMedia(ownerAuth, subject("GM_ONLY"))).toBe(false);
-    expect(canMutateCharacterMedia(ownerAuth, subject("GM_ONLY"))).toBe(
-      false,
-    );
+    expect(canMutateCharacterMedia(ownerAuth, subject("GM_ONLY"))).toBe(false);
   });
 
   it("restricts mutation to the owner and GM, never other players", () => {
-    expect(canMutateCharacterMedia(ownerAuth, subject("OWNER_GM"))).toBe(
-      true,
-    );
+    expect(canMutateCharacterMedia(ownerAuth, subject("OWNER_GM"))).toBe(true);
     expect(canMutateCharacterMedia(ownerAuth, subject("PARTY"))).toBe(true);
     expect(canMutateCharacterMedia(gm, subject("GM_ONLY"))).toBe(true);
     expect(canMutateCharacterMedia(otherPlayerAuth, subject("PARTY"))).toBe(

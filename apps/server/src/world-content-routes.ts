@@ -95,12 +95,16 @@ async function findAction(db: RequestDb, actionId: string) {
 function isUniqueViolation(error: unknown, constraint: string): boolean {
   for (const candidate of [error, (error as { cause?: unknown })?.cause]) {
     if (typeof candidate !== "object" || candidate === null) continue;
-    if (!("code" in candidate) || (candidate as { code?: unknown }).code !== "23505")
+    if (
+      !("code" in candidate) ||
+      (candidate as { code?: unknown }).code !== "23505"
+    )
       continue;
     const name =
       ("constraint_name" in candidate &&
         (candidate as { constraint_name?: unknown }).constraint_name) ||
-      ("constraint" in candidate && (candidate as { constraint?: unknown }).constraint);
+      ("constraint" in candidate &&
+        (candidate as { constraint?: unknown }).constraint);
     if (name === constraint) return true;
   }
   return false;
@@ -169,9 +173,7 @@ const idParams = z.object({ id: z.string().uuid() }).strict();
 const mediaParams = z
   .object({ id: z.string().uuid(), mediaId: z.string().uuid() })
   .strict();
-const relationParams = z
-  .object({ relationId: z.string().uuid() })
-  .strict();
+const relationParams = z.object({ relationId: z.string().uuid() }).strict();
 const listQuerySchema = z
   .object({
     type: worldContentTypeSchema.optional(),
@@ -296,13 +298,20 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const otherRows = await db
       .select(worldContentEntityRefColumns)
       .from(worldContent)
-      .where(and(inArray(worldContent.id, otherIds), worldContentVisibility(authCtx)));
+      .where(
+        and(
+          inArray(worldContent.id, otherIds),
+          worldContentVisibility(authCtx),
+        ),
+      );
     const otherById = new Map(otherRows.map((row) => [row.id, row]));
 
     const result: WorldContentRelationEdgeDto[] = [];
     for (const edge of edges) {
       const isOutgoing = edge.fromWorldContentId === id;
-      const otherId = isOutgoing ? edge.toWorldContentId : edge.fromWorldContentId;
+      const otherId = isOutgoing
+        ? edge.toWorldContentId
+        : edge.fromWorldContentId;
       const other = otherById.get(otherId);
       // Not visible to this caller (e.g. a player and the other entity is
       // DRAFT/ARCHIVED) -> drop the edge entirely, not just the entity data.
@@ -403,9 +412,16 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(worldContent)
-        .set({ ...changes, revision: existing.revision + 1, updatedAt: new Date() })
+        .set({
+          ...changes,
+          revision: existing.revision + 1,
+          updatedAt: new Date(),
+        })
         .where(
-          and(eq(worldContent.id, id), eq(worldContent.revision, existing.revision)),
+          and(
+            eq(worldContent.id, id),
+            eq(worldContent.revision, existing.revision),
+          ),
         )
         .returning();
       if (!row) return null;
@@ -447,9 +463,16 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(worldContent)
-        .set({ lifecycle: body.lifecycle, revision: existing.revision + 1, updatedAt: new Date() })
+        .set({
+          lifecycle: body.lifecycle,
+          revision: existing.revision + 1,
+          updatedAt: new Date(),
+        })
         .where(
-          and(eq(worldContent.id, id), eq(worldContent.revision, existing.revision)),
+          and(
+            eq(worldContent.id, id),
+            eq(worldContent.revision, existing.revision),
+          ),
         )
         .returning();
       if (!row) return null;
@@ -492,9 +515,16 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const archived = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(worldContent)
-        .set({ lifecycle: "ARCHIVED", revision: existing.revision + 1, updatedAt: new Date() })
+        .set({
+          lifecycle: "ARCHIVED",
+          revision: existing.revision + 1,
+          updatedAt: new Date(),
+        })
         .where(
-          and(eq(worldContent.id, id), eq(worldContent.revision, existing.revision)),
+          and(
+            eq(worldContent.id, id),
+            eq(worldContent.revision, existing.revision),
+          ),
         )
         .returning();
       if (!row) return null;
@@ -560,36 +590,40 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     }
   });
 
-  app.delete("/api/world-content/relations/:relationId", async (request, reply) => {
-    const auth = await requireAuth(request, reply, db);
-    if (!auth) return;
-    if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
-    const { relationId } = relationParams.parse(request.params);
-    const body = deleteWorldContentRelationSchema.parse(request.body);
-    if (await findAction(db, body.actionId))
-      return reply.code(200).send({ duplicate: true });
-    const [existing] = await db
-      .select()
-      .from(worldContentRelations)
-      .where(eq(worldContentRelations.id, relationId))
-      .limit(1);
-    if (!existing) return fail(reply, 404, "WORLD_CONTENT_RELATION_NOT_FOUND");
-    await db.transaction(async (tx) => {
-      await tx
-        .delete(worldContentRelations)
-        .where(eq(worldContentRelations.id, relationId));
-      await tx.insert(worldContentActions).values({
-        actionId: body.actionId,
-        type: "world_content.relation_deleted",
-        entityType: "world_content_relation",
-        entityId: relationId,
-        entityRevision: existing.revision,
-        actorMembershipId: auth.membershipId,
-        payload: existing,
+  app.delete(
+    "/api/world-content/relations/:relationId",
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
+      const { relationId } = relationParams.parse(request.params);
+      const body = deleteWorldContentRelationSchema.parse(request.body);
+      if (await findAction(db, body.actionId))
+        return reply.code(200).send({ duplicate: true });
+      const [existing] = await db
+        .select()
+        .from(worldContentRelations)
+        .where(eq(worldContentRelations.id, relationId))
+        .limit(1);
+      if (!existing)
+        return fail(reply, 404, "WORLD_CONTENT_RELATION_NOT_FOUND");
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(worldContentRelations)
+          .where(eq(worldContentRelations.id, relationId));
+        await tx.insert(worldContentActions).values({
+          actionId: body.actionId,
+          type: "world_content.relation_deleted",
+          entityType: "world_content_relation",
+          entityId: relationId,
+          entityRevision: existing.revision,
+          actorMembershipId: auth.membershipId,
+          payload: existing,
+        });
       });
-    });
-    return reply.code(204).send();
-  });
+      return reply.code(204).send();
+    },
+  );
 
   app.post("/api/world-content/:id/media", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
@@ -651,7 +685,10 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
       .select()
       .from(worldContentMedia)
       .where(
-        and(eq(worldContentMedia.id, mediaId), eq(worldContentMedia.worldContentId, id)),
+        and(
+          eq(worldContentMedia.id, mediaId),
+          eq(worldContentMedia.worldContentId, id),
+        ),
       )
       .limit(1);
     if (!existing) return fail(reply, 404, "WORLD_CONTENT_MEDIA_NOT_FOUND");
@@ -677,34 +714,42 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     return reply.send(mediaDto(updated));
   });
 
-  app.delete("/api/world-content/:id/media/:mediaId", async (request, reply) => {
-    const auth = await requireAuth(request, reply, db);
-    if (!auth) return;
-    if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
-    const { id, mediaId } = mediaParams.parse(request.params);
-    const body = removeWorldContentMediaSchema.parse(request.body);
-    if (await findAction(db, body.actionId))
-      return reply.code(200).send({ duplicate: true });
-    const [existing] = await db
-      .select()
-      .from(worldContentMedia)
-      .where(
-        and(eq(worldContentMedia.id, mediaId), eq(worldContentMedia.worldContentId, id)),
-      )
-      .limit(1);
-    if (!existing) return fail(reply, 404, "WORLD_CONTENT_MEDIA_NOT_FOUND");
-    await db.transaction(async (tx) => {
-      await tx.delete(worldContentMedia).where(eq(worldContentMedia.id, mediaId));
-      await tx.insert(worldContentActions).values({
-        actionId: body.actionId,
-        type: "world_content.media_removed",
-        entityType: "world_content_media",
-        entityId: mediaId,
-        entityRevision: 0,
-        actorMembershipId: auth.membershipId,
-        payload: existing,
+  app.delete(
+    "/api/world-content/:id/media/:mediaId",
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
+      const { id, mediaId } = mediaParams.parse(request.params);
+      const body = removeWorldContentMediaSchema.parse(request.body);
+      if (await findAction(db, body.actionId))
+        return reply.code(200).send({ duplicate: true });
+      const [existing] = await db
+        .select()
+        .from(worldContentMedia)
+        .where(
+          and(
+            eq(worldContentMedia.id, mediaId),
+            eq(worldContentMedia.worldContentId, id),
+          ),
+        )
+        .limit(1);
+      if (!existing) return fail(reply, 404, "WORLD_CONTENT_MEDIA_NOT_FOUND");
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(worldContentMedia)
+          .where(eq(worldContentMedia.id, mediaId));
+        await tx.insert(worldContentActions).values({
+          actionId: body.actionId,
+          type: "world_content.media_removed",
+          entityType: "world_content_media",
+          entityId: mediaId,
+          entityRevision: 0,
+          actorMembershipId: auth.membershipId,
+          payload: existing,
+        });
       });
-    });
-    return reply.code(204).send();
-  });
+      return reply.code(204).send();
+    },
+  );
 }

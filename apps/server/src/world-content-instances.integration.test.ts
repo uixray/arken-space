@@ -316,7 +316,11 @@ describe("world content instances HTTP: update", () => {
       method: "PATCH",
       url: `/api/world-content-instances/${created.id}`,
       headers: headers(secrets.foreignGm),
-      payload: { actionId: id(), revision: created.revision, currentState: "x" },
+      payload: {
+        actionId: id(),
+        revision: created.revision,
+        currentState: "x",
+      },
     });
     expect(res.statusCode).toBe(404);
   });
@@ -327,7 +331,11 @@ describe("world content instances HTTP: update", () => {
       method: "PATCH",
       url: `/api/world-content-instances/${created.id}`,
       headers: headers(secrets.player),
-      payload: { actionId: id(), revision: created.revision, currentState: "x" },
+      payload: {
+        actionId: id(),
+        revision: created.revision,
+        currentState: "x",
+      },
     });
     expect(res.statusCode).toBe(403);
   });
@@ -415,7 +423,9 @@ describe("world content instances: campaign cascade delete", () => {
     expect(res.statusCode).toBe(201);
     const created = res.json();
 
-    await db.delete(schema.campaigns).where(eq(schema.campaigns.id, ids.cascadeCampaign));
+    await db
+      .delete(schema.campaigns)
+      .where(eq(schema.campaigns.id, ids.cascadeCampaign));
 
     const [row] = await db
       .select()

@@ -94,9 +94,7 @@ export function canDetachCharacterMedia(
  * `characters.ownerMembershipId` is available. Does not filter on
  * `detachedAt` — callers decide whether detached rows are included.
  */
-export function characterMediaVisibility(
-  auth: CharacterMediaAuthContext,
-): SQL {
+export function characterMediaVisibility(auth: CharacterMediaAuthContext): SQL {
   if (auth.role === "GM") return sql`true`;
   return or(
     eq(characterMedia.visibility, "PARTY"),
@@ -121,7 +119,11 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type RequestDb = Database | Transaction;
 type CharacterMediaRow = typeof characterMedia.$inferSelect;
 
-function fail(reply: { code: (n: number) => { send: (b: unknown) => unknown } }, status: number, error: string) {
+function fail(
+  reply: { code: (n: number) => { send: (b: unknown) => unknown } },
+  status: number,
+  error: string,
+) {
   return reply.code(status).send({ error });
 }
 
@@ -129,7 +131,12 @@ async function findAction(db: RequestDb, campaignId: string, actionId: string) {
   const [event] = await db
     .select()
     .from(gameEvents)
-    .where(and(eq(gameEvents.campaignId, campaignId), eq(gameEvents.actionId, actionId)))
+    .where(
+      and(
+        eq(gameEvents.campaignId, campaignId),
+        eq(gameEvents.actionId, actionId),
+      ),
+    )
     .limit(1);
   return event ?? null;
 }
@@ -153,11 +160,23 @@ function toDto(row: CharacterMediaRow): CharacterMediaDto {
   };
 }
 
-async function findCharacter(db: RequestDb, campaignId: string, characterId: string) {
+async function findCharacter(
+  db: RequestDb,
+  campaignId: string,
+  characterId: string,
+) {
   const [row] = await db
-    .select({ id: characters.id, ownerMembershipId: characters.ownerMembershipId })
+    .select({
+      id: characters.id,
+      ownerMembershipId: characters.ownerMembershipId,
+    })
     .from(characters)
-    .where(and(eq(characters.campaignId, campaignId), eq(characters.id, characterId)))
+    .where(
+      and(
+        eq(characters.campaignId, campaignId),
+        eq(characters.id, characterId),
+      ),
+    )
     .limit(1);
   return row ?? null;
 }
@@ -165,15 +184,23 @@ async function findCharacter(db: RequestDb, campaignId: string, characterId: str
 /** Loads a character_media row plus the owning character's ownerMembershipId, for ACL checks. */
 async function findMediaRow(db: RequestDb, campaignId: string, id: string) {
   const [row] = await db
-    .select({ media: characterMedia, characterOwnerMembershipId: characters.ownerMembershipId })
+    .select({
+      media: characterMedia,
+      characterOwnerMembershipId: characters.ownerMembershipId,
+    })
     .from(characterMedia)
     .innerJoin(characters, eq(characterMedia.characterId, characters.id))
-    .where(and(eq(characterMedia.campaignId, campaignId), eq(characterMedia.id, id)))
+    .where(
+      and(eq(characterMedia.campaignId, campaignId), eq(characterMedia.id, id)),
+    )
     .limit(1);
   return row ?? null;
 }
 
-export function registerCharacterMediaRoutes(app: FastifyInstance, db: Database) {
+export function registerCharacterMediaRoutes(
+  app: FastifyInstance,
+  db: Database,
+) {
   app.post("/api/characters/:characterId/media", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -190,7 +217,12 @@ export function registerCharacterMediaRoutes(app: FastifyInstance, db: Database)
     const [asset] = await db
       .select({ id: assets.id })
       .from(assets)
-      .where(and(eq(assets.id, body.assetId), eq(assets.campaignId, auth.campaignId)))
+      .where(
+        and(
+          eq(assets.id, body.assetId),
+          eq(assets.campaignId, auth.campaignId),
+        ),
+      )
       .limit(1);
     if (!asset) return fail(reply, 404, "ASSET_NOT_FOUND");
     const visibility = body.visibility ?? "OWNER_GM";
@@ -295,7 +327,11 @@ export function registerCharacterMediaRoutes(app: FastifyInstance, db: Database)
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(characterMedia)
-        .set({ ...changes, revision: found.media.revision + 1, updatedAt: new Date() })
+        .set({
+          ...changes,
+          revision: found.media.revision + 1,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(characterMedia.id, id),
@@ -344,7 +380,11 @@ export function registerCharacterMediaRoutes(app: FastifyInstance, db: Database)
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(characterMedia)
-        .set({ ordering: body.ordering, revision: found.media.revision + 1, updatedAt: new Date() })
+        .set({
+          ordering: body.ordering,
+          revision: found.media.revision + 1,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(characterMedia.id, id),

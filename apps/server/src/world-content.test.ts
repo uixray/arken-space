@@ -69,13 +69,11 @@ describe("world content player projection (AC4)", () => {
   it("keeps gmOnlyText and provenance in the GM-only DTO schema, distinct from the player schema", () => {
     expect(worldContentDtoSchema.shape.gmOnlyText).toBeDefined();
     expect(
-      (worldContentPlayerDtoSchema.shape as Record<string, unknown>)
-        .gmOnlyText,
+      (worldContentPlayerDtoSchema.shape as Record<string, unknown>).gmOnlyText,
     ).toBeUndefined();
     expect(worldContentDtoSchema.shape.provenance).toBeDefined();
     expect(
-      (worldContentPlayerDtoSchema.shape as Record<string, unknown>)
-        .provenance,
+      (worldContentPlayerDtoSchema.shape as Record<string, unknown>).provenance,
     ).toBeUndefined();
   });
 });

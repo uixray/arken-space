@@ -41,10 +41,17 @@ beforeAll(async () => {
       ),
     );
   db = drizzle(database, { schema });
-  await db.insert(schema.campaigns).values([{ id: ids.campaign, name: "Campaign" }]);
+  await db
+    .insert(schema.campaigns)
+    .values([{ id: ids.campaign, name: "Campaign" }]);
   await db.insert(schema.memberships).values([
     { id: ids.gm, campaignId: ids.campaign, role: "GM", displayName: "GM" },
-    { id: ids.player, campaignId: ids.campaign, role: "PLAYER", displayName: "Player" },
+    {
+      id: ids.player,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Player",
+    },
   ]);
   for (const [membershipId, secret] of [
     [ids.gm, secrets.gm],
@@ -72,7 +79,10 @@ const createBody = (overrides: Record<string, unknown> = {}) => ({
   name: "The Hollow Keep",
   ...overrides,
 });
-async function createEntity(secret: string, overrides: Record<string, unknown> = {}) {
+async function createEntity(
+  secret: string,
+  overrides: Record<string, unknown> = {},
+) {
   return app.inject({
     method: "POST",
     url: "/api/world-content",
@@ -136,20 +146,32 @@ describe("world content HTTP: create", () => {
 
 describe("world content HTTP: list + get visibility", () => {
   it("hides DRAFT/ARCHIVED from a player at the DB query level, not just client-side", async () => {
-    const draft = (await createEntity(secrets.gm, { name: "Draft Thing" })).json();
-    const published = (await createEntity(secrets.gm, { name: "Published Thing" })).json();
+    const draft = (
+      await createEntity(secrets.gm, { name: "Draft Thing" })
+    ).json();
+    const published = (
+      await createEntity(secrets.gm, { name: "Published Thing" })
+    ).json();
     const publishRes = await publish(published.id, 0);
     expect(publishRes.statusCode).toBe(200);
     const publishedRow = publishRes.json();
 
     const gmList = (
-      await app.inject({ method: "GET", url: "/api/world-content", headers: headers(secrets.gm) })
+      await app.inject({
+        method: "GET",
+        url: "/api/world-content",
+        headers: headers(secrets.gm),
+      })
     ).json();
     const gmIds = gmList.map((r: { id: string }) => r.id);
     expect(gmIds).toEqual(expect.arrayContaining([draft.id, publishedRow.id]));
 
     const playerList = (
-      await app.inject({ method: "GET", url: "/api/world-content", headers: headers(secrets.player) })
+      await app.inject({
+        method: "GET",
+        url: "/api/world-content",
+        headers: headers(secrets.player),
+      })
     ).json();
     const playerIds = playerList.map((r: { id: string }) => r.id);
     expect(playerIds).toContain(publishedRow.id);
@@ -183,22 +205,38 @@ describe("world content HTTP: list + get visibility", () => {
       })
     ).json();
     const other = (
-      await createEntity(secrets.gm, { type: "LOCATION", name: "Quiet Village", tags: ["peaceful"] })
+      await createEntity(secrets.gm, {
+        type: "LOCATION",
+        name: "Quiet Village",
+        tags: ["peaceful"],
+      })
     ).json();
 
     const byType = (
-      await app.inject({ method: "GET", url: "/api/world-content?type=MONSTER", headers: headers(secrets.gm) })
+      await app.inject({
+        method: "GET",
+        url: "/api/world-content?type=MONSTER",
+        headers: headers(secrets.gm),
+      })
     ).json();
     expect(byType.map((r: { id: string }) => r.id)).toContain(monster.id);
     expect(byType.map((r: { id: string }) => r.id)).not.toContain(other.id);
 
     const byTag = (
-      await app.inject({ method: "GET", url: "/api/world-content?tags=dragon", headers: headers(secrets.gm) })
+      await app.inject({
+        method: "GET",
+        url: "/api/world-content?tags=dragon",
+        headers: headers(secrets.gm),
+      })
     ).json();
     expect(byTag.map((r: { id: string }) => r.id)).toContain(monster.id);
 
     const bySearch = (
-      await app.inject({ method: "GET", url: "/api/world-content?q=cinders", headers: headers(secrets.gm) })
+      await app.inject({
+        method: "GET",
+        url: "/api/world-content?q=cinders",
+        headers: headers(secrets.gm),
+      })
     ).json();
     expect(bySearch.map((r: { id: string }) => r.id)).toContain(monster.id);
   });
@@ -227,10 +265,19 @@ describe("world content HTTP: update", () => {
       method: "PATCH",
       url: `/api/world-content/${created.id}`,
       headers: headers(secrets.gm),
-      payload: { actionId: id(), revision: 0, name: "New name", gmOnlyText: "secret" },
+      payload: {
+        actionId: id(),
+        revision: 0,
+        name: "New name",
+        gmOnlyText: "secret",
+      },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json()).toMatchObject({ name: "New name", gmOnlyText: "secret", revision: 1 });
+    expect(updated.json()).toMatchObject({
+      name: "New name",
+      gmOnlyText: "secret",
+      revision: 1,
+    });
   });
 
   it("is idempotent on duplicate actionId for updates", async () => {
@@ -343,7 +390,11 @@ describe("world content HTTP: relations", () => {
       method: "POST",
       url: `/api/world-content/${a.id}/relations`,
       headers: headers(secrets.gm),
-      payload: { actionId: id(), toWorldContentId: a.id, relationType: "MEMBER_OF" },
+      payload: {
+        actionId: id(),
+        toWorldContentId: a.id,
+        relationType: "MEMBER_OF",
+      },
     });
     expect(selfRel.statusCode).toBe(422);
 
@@ -351,7 +402,11 @@ describe("world content HTTP: relations", () => {
       method: "POST",
       url: `/api/world-content/${a.id}/relations`,
       headers: headers(secrets.gm),
-      payload: { actionId: id(), toWorldContentId: id(), relationType: "MEMBER_OF" },
+      payload: {
+        actionId: id(),
+        toWorldContentId: id(),
+        relationType: "MEMBER_OF",
+      },
     });
     expect(missingTarget.statusCode).toBe(404);
 
@@ -359,7 +414,11 @@ describe("world content HTTP: relations", () => {
       method: "POST",
       url: `/api/world-content/${a.id}/relations`,
       headers: headers(secrets.gm),
-      payload: { actionId: id(), toWorldContentId: b.id, relationType: "MEMBER_OF" },
+      payload: {
+        actionId: id(),
+        toWorldContentId: b.id,
+        relationType: "MEMBER_OF",
+      },
     });
     expect(created.statusCode).toBe(201);
     const relation = created.json();
@@ -368,7 +427,11 @@ describe("world content HTTP: relations", () => {
       method: "POST",
       url: `/api/world-content/${a.id}/relations`,
       headers: headers(secrets.gm),
-      payload: { actionId: id(), toWorldContentId: b.id, relationType: "MEMBER_OF" },
+      payload: {
+        actionId: id(),
+        toWorldContentId: b.id,
+        relationType: "MEMBER_OF",
+      },
     });
     expect(duplicateEdge.statusCode).toBe(409);
 
@@ -392,7 +455,9 @@ describe("world content HTTP: relations", () => {
 
 describe("world content HTTP: GET relations (UIX-245 stage 4)", () => {
   it("404s the whole request when the subject entity itself isn't visible to the caller", async () => {
-    const draft = (await createEntity(secrets.gm, { name: "Hidden Subject" })).json();
+    const draft = (
+      await createEntity(secrets.gm, { name: "Hidden Subject" })
+    ).json();
     const res = await app.inject({
       method: "GET",
       url: `/api/world-content/${draft.id}/relations`,
@@ -404,7 +469,9 @@ describe("world content HTTP: GET relations (UIX-245 stage 4)", () => {
   it("shows a GM every edge in both directions regardless of the other entity's lifecycle", async () => {
     const hub = (await createEntity(secrets.gm, { name: "Hub" })).json();
     await publish(hub.id, 0);
-    const draftTarget = (await createEntity(secrets.gm, { name: "Draft Target" })).json();
+    const draftTarget = (
+      await createEntity(secrets.gm, { name: "Draft Target" })
+    ).json();
     const publishedTarget = (
       await createEntity(secrets.gm, { name: "Published Target" })
     ).json();
@@ -418,7 +485,11 @@ describe("world content HTTP: GET relations (UIX-245 stage 4)", () => {
       method: "POST",
       url: `/api/world-content/${hub.id}/relations`,
       headers: headers(secrets.gm),
-      payload: { actionId: id(), toWorldContentId: draftTarget.id, relationType: "GUARDS" },
+      payload: {
+        actionId: id(),
+        toWorldContentId: draftTarget.id,
+        relationType: "GUARDS",
+      },
     });
     await app.inject({
       method: "POST",
@@ -434,7 +505,11 @@ describe("world content HTTP: GET relations (UIX-245 stage 4)", () => {
       method: "POST",
       url: `/api/world-content/${incomingSourceRow.id}/relations`,
       headers: headers(secrets.gm),
-      payload: { actionId: id(), toWorldContentId: hub.id, relationType: "MEMBER_OF" },
+      payload: {
+        actionId: id(),
+        toWorldContentId: hub.id,
+        relationType: "MEMBER_OF",
+      },
     });
 
     const gmRes = await app.inject({
@@ -445,18 +520,31 @@ describe("world content HTTP: GET relations (UIX-245 stage 4)", () => {
     expect(gmRes.statusCode).toBe(200);
     const gmEdges = gmRes.json();
     expect(gmEdges).toHaveLength(3);
-    const gmEntityIds = gmEdges.map((edge: { entity: { id: string } }) => edge.entity.id);
+    const gmEntityIds = gmEdges.map(
+      (edge: { entity: { id: string } }) => edge.entity.id,
+    );
     expect(gmEntityIds).toEqual(
-      expect.arrayContaining([draftTarget.id, publishedTargetRow.id, incomingSourceRow.id]),
+      expect.arrayContaining([
+        draftTarget.id,
+        publishedTargetRow.id,
+        incomingSourceRow.id,
+      ]),
     );
     const outgoingToDraft = gmEdges.find(
       (edge: { entity: { id: string } }) => edge.entity.id === draftTarget.id,
     );
-    expect(outgoingToDraft).toMatchObject({ direction: "OUTGOING", relationType: "GUARDS" });
+    expect(outgoingToDraft).toMatchObject({
+      direction: "OUTGOING",
+      relationType: "GUARDS",
+    });
     const incoming = gmEdges.find(
-      (edge: { entity: { id: string } }) => edge.entity.id === incomingSourceRow.id,
+      (edge: { entity: { id: string } }) =>
+        edge.entity.id === incomingSourceRow.id,
     );
-    expect(incoming).toMatchObject({ direction: "INCOMING", relationType: "MEMBER_OF" });
+    expect(incoming).toMatchObject({
+      direction: "INCOMING",
+      relationType: "MEMBER_OF",
+    });
 
     // A player on the same hub never learns the DRAFT target exists, but
     // sees both PUBLISHED edges in the correct direction.
@@ -478,7 +566,12 @@ describe("world content HTTP: GET relations (UIX-245 stage 4)", () => {
     // Player-safe entity ref never carries lifecycle or extra fields.
     for (const edge of playerEdges) {
       expect(edge.entity).not.toHaveProperty("lifecycle");
-      expect(Object.keys(edge.entity).sort()).toEqual(["id", "name", "slug", "type"]);
+      expect(Object.keys(edge.entity).sort()).toEqual([
+        "id",
+        "name",
+        "slug",
+        "type",
+      ]);
     }
   });
 
@@ -497,7 +590,9 @@ describe("world content HTTP: GET relations (UIX-245 stage 4)", () => {
 
 describe("world content HTTP: GET media (UIX-245 stage 4)", () => {
   it("404s when the parent entity isn't visible to the caller", async () => {
-    const draft = (await createEntity(secrets.gm, { name: "Hidden Parent" })).json();
+    const draft = (
+      await createEntity(secrets.gm, { name: "Hidden Parent" })
+    ).json();
     const res = await app.inject({
       method: "GET",
       url: `/api/world-content/${draft.id}/media`,
@@ -507,7 +602,9 @@ describe("world content HTTP: GET media (UIX-245 stage 4)", () => {
   });
 
   it("returns the ordered gallery for GM and (once published) player callers alike", async () => {
-    const entity = (await createEntity(secrets.gm, { name: "Gallery Owner" })).json();
+    const entity = (
+      await createEntity(secrets.gm, { name: "Gallery Owner" })
+    ).json();
     const assetOne = id();
     const assetTwo = id();
     await app.inject({
@@ -582,7 +679,10 @@ describe("world content HTTP: media", () => {
       payload: { actionId: id(), caption: "Updated caption", ordering: 3 },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json()).toMatchObject({ caption: "Updated caption", ordering: 3 });
+    expect(updated.json()).toMatchObject({
+      caption: "Updated caption",
+      ordering: 3,
+    });
 
     const removed = await app.inject({
       method: "DELETE",
