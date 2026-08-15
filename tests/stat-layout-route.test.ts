@@ -136,23 +136,74 @@ describe("правка раскладки характеристик", () => {
     });
   });
 
-  it("отвергает удаление строки", async () => {
+  it("удаляет строку, на которую никто не ссылается", async () => {
     const next = layout();
-    const removed = next[0]!.rows.shift()!;
+    const removed = next[0]!.rows.find((row) => row.key === "luck")!;
+    next[0]!.rows = next[0]!.rows.filter((row) => row.key !== removed.key);
+
+    expect((await patch(secrets.gm, { layout: next })).statusCode).toBe(200);
+    const stored = await storedLayout();
+    expect(stored[0]!.rows.map((row) => row.key)).not.toContain("luck");
+  });
+
+  it("отказывается удалять строку, на которую ссылается навык", async () => {
+    // Стартовый персонаж носит навык «Удар ближним оружием» с формулой
+    // `1d20 + strength`. Удалить силу — значит получить «стат не найден» в
+    // момент броска на игре.
+    await db.insert(schema.characters).values({
+      id: crypto.randomUUID(),
+      campaignId: ids.campaign,
+      name: "Ллойд",
+      skills: [
+        { key: "sword", name: "Меч", rank: 0, formula: "1d20 + strength" },
+      ],
+    });
+    const next = layout();
+    next[0]!.rows = next[0]!.rows.filter((row) => row.key !== "strength");
 
     const response = await patch(secrets.gm, { layout: next });
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({
-      reason: "STAT_ROW_REMOVED",
-      key: removed.key,
+      error: "STAT_ROW_REFERENCED",
+      key: "strength",
+      references: [{ kind: "SKILL", name: "Меч", owner: "Ллойд" }],
     });
-    // И ничего не записалось: кампания осталась на прежней ревизии.
+    // И ничего не записалось.
     expect(await storedLayout()).toEqual([]);
   });
 
-  it("отвергает удаление у кампании, которая раскладку ни разу не правила", async () => {
+  it("считает ссылкой и модификатор способности, а не только формулу", async () => {
+    await db.insert(schema.catalogEntries).values({
+      campaignId: ids.campaign,
+      kind: "ABILITY",
+      name: "Лучезарный",
+      data: {
+        rollActions: [
+          {
+            id: "hit",
+            kind: "HIT",
+            label: "Удар",
+            dice: "1d20",
+            order: 0,
+            modifiers: [{ type: "CHARACTERISTIC", key: "charisma" }],
+          },
+        ],
+      },
+    });
+    const next = layout();
+    next[0]!.rows = next[0]!.rows.filter((row) => row.key !== "charisma");
+
+    const response = await patch(secrets.gm, { layout: next });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().references).toEqual([
+      { kind: "CATALOG_ENTRY", name: "Лучезарный" },
+    ]);
+  });
+
+  it("ищет ссылки и у кампании, которая раскладку ни разу не правила", async () => {
     // Ловушка: у такой кампании в базе пусто, а видит она стартовую раскладку.
-    // Сравнив присланное с пустым, сервер пропустил бы удаление чего угодно.
+    // Сравнив присланное с пустым, сервер решил бы, что удалять нечего, и
+    // пропустил бы удаление чего угодно без единой проверки.
     const [campaign] = await db
       .select()
       .from(schema.campaigns)
@@ -160,11 +211,23 @@ describe("правка раскладки характеристик", () => {
       .limit(1);
     expect(campaign!.statLayout).toEqual([]);
 
+    await db.insert(schema.characters).values({
+      id: crypto.randomUUID(),
+      campaignId: ids.campaign,
+      name: "Ллойд",
+      skills: [
+        { key: "sword", name: "Меч", rank: 0, formula: "1d20 + strength" },
+      ],
+    });
+
     const response = await patch(secrets.gm, {
       layout: [{ id: "characteristics", label: "Характеристики", rows: [] }],
     });
     expect(response.statusCode).toBe(409);
-    expect(response.json().reason).toBe("STAT_ROW_REMOVED");
+    expect(response.json()).toMatchObject({
+      error: "STAT_ROW_REFERENCED",
+      key: "strength",
+    });
   });
 
   it("отвергает смену источника у существующей строки", async () => {
@@ -178,7 +241,7 @@ describe("правка раскладки характеристик", () => {
     const response = await patch(secrets.gm, { layout: next });
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({
-      reason: "STAT_SOURCE_CHANGED",
+      error: "STAT_SOURCE_CHANGED",
       key: "magicPower",
     });
   });

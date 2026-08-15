@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "../test-support/render";
 import { StatLayoutCard } from "./StatLayoutCard";
 import { statKeyFromLabel, uniqueStatKey } from "../stat-keys";
+import { ApiError } from "../api";
 
 /**
  * UIX-424, шаг 5. `@gravity-ui/uikit` тянет CSS, который трансформ этого репо
@@ -135,6 +136,7 @@ const renderCard = (
     onRoll: vi.fn(),
     onRenameRow: vi.fn(async () => {}),
     onAddRow: vi.fn(async () => {}),
+    onDeleteRow: vi.fn(async () => {}),
     ...overrides,
   };
   renderComponent(<StatLayoutCard {...props} />);
@@ -202,6 +204,89 @@ describe("карточка группы характеристик", () => {
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(props.onAddRow).toHaveBeenCalledWith("Внимательность");
+  });
+
+  it("удаляет строку по подтверждению", async () => {
+    const props = renderCard();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить «Ловкость»" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+
+    expect(props.onDeleteRow).toHaveBeenCalledWith("agility");
+  });
+
+  it("показывает, что именно держит строку, вместо голого отказа", async () => {
+    // Мастеру нужно имя того, что предстоит починить: «удалить нельзя» без
+    // списка оставляет его гадать, где искать ссылку.
+    renderCard({
+      onDeleteRow: vi.fn(async () => {
+        throw new ApiError(
+          409,
+          "STAT_ROW_REFERENCED",
+          "Отказ",
+          undefined,
+          undefined,
+          {
+            key: "agility",
+            references: [{ kind: "SKILL", name: "Меч", owner: "Ллойд" }],
+          },
+        );
+      }),
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить «Ловкость»" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+
+    expect(await screen.findByText(/Навык: Меч — Ллойд/)).toBeInTheDocument();
+  });
+
+  it("не выдаёт обычную ошибку за ссылку на строку", async () => {
+    // Сеть отвалилась — это не «строку кто-то держит». Подать одно как другое
+    // значило бы отправить мастера искать несуществующую ссылку.
+    renderCard({
+      onDeleteRow: vi.fn(async () => {
+        throw new ApiError(500, "REQUEST_FAILED", "Сервер недоступен");
+      }),
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить «Ловкость»" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+
+    expect(await screen.findByText(/Сервер недоступен/)).toBeInTheDocument();
+    expect(screen.queryByText(/ссылаются броски/)).not.toBeInTheDocument();
+  });
+
+  it("не показывает прошлый отказ на следующей строке", async () => {
+    // Иначе мастер увидит ссылки от «Ловкости», открыв удаление «Силы», и
+    // решит, что держат обе.
+    renderCard({
+      onDeleteRow: vi.fn(async () => {
+        throw new ApiError(
+          409,
+          "STAT_ROW_REFERENCED",
+          "Отказ",
+          undefined,
+          undefined,
+          {
+            references: [{ kind: "SKILL", name: "Меч" }],
+          },
+        );
+      }),
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить «Ловкость»" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    expect(await screen.findByText(/Навык: Меч/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить «Сила»" }),
+    );
+    expect(screen.queryByText(/Навык: Меч/)).not.toBeInTheDocument();
   });
 
   it("показывает отказ вместо того, чтобы закрыть окно", async () => {

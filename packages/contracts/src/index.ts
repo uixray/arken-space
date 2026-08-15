@@ -442,6 +442,26 @@ export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
 export const STAT_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
+/**
+ * UIX-424 — ссылается ли формула на ключ характеристики.
+ *
+ * Живёт в контракте, потому что спрашивают об этом с обеих сторон: клиент —
+ * чтобы предупредить мастера до удаления, сервер — чтобы удаление не принять.
+ * Две копии этого правила разошлись бы ровно тогда, когда это дороже всего:
+ * клиент показал бы «ссылок нет», а сервер отказал.
+ *
+ * Совпадение по границе слова, а не по вхождению подстроки: иначе `sila`
+ * считалась бы ссылкой в формуле `1d20 + silaVoli`, и мастер не смог бы удалить
+ * характеристику из-за связи, которой нет.
+ */
+export function formulaReferencesStatKey(
+  formula: string | undefined,
+  key: string,
+): boolean {
+  if (!key || !formula) return false;
+  return new RegExp(`(^|[^a-zA-Z0-9_])${key}([^a-zA-Z0-9_]|$)`).test(formula);
+}
+
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
 export const rollActionKindSchema = z.enum(["HIT", "DAMAGE", "CUSTOM"]);
 export const modifierSourceSchema = z.discriminatedUnion("type", [

@@ -821,6 +821,20 @@ export function CharacterPanel({
     );
   };
 
+  /**
+   * Значения удалённой строки в `characters.stats` не стираются: раскладка их
+   * больше не показывает, но если на ключ ссылалась формула, мастеру нужно
+   * видеть, что там было, когда он будет её чинить. Отказ при наличии ссылок
+   * приходит с сервера вместе со списком — см. `StatLayoutCard`.
+   */
+  const deleteStatRow = (key: string) =>
+    saveLayout(
+      layout.map((group) => ({
+        ...group,
+        rows: group.rows.filter((row) => row.key !== key),
+      })),
+    );
+
   const changeStatValue = (target: CharacterDto, key: string, value: number) =>
     void runCharacterMutation(() =>
       onPatch(target.id, {
@@ -1183,6 +1197,7 @@ export function CharacterPanel({
           onRoll={(formula, label) => void submitCharacterRoll(formula, label)}
           onRenameRow={renameStatRow}
           onAddRow={(label) => addStatRow("characteristics", label)}
+          onDeleteRow={deleteStatRow}
         />
         <StatLayoutCard
           title="Боевые характеристики"
@@ -1197,6 +1212,7 @@ export function CharacterPanel({
           onRoll={(formula, label) => void submitCharacterRoll(formula, label)}
           onRenameRow={renameStatRow}
           onAddRow={(label) => addStatRow("combat", label)}
+          onDeleteRow={deleteStatRow}
         />
         <div className="character-card character-card--skills">
           <h3 className="character-card__header">Навыки</h3>

@@ -17,6 +17,19 @@ export class ApiError extends Error {
     message: string,
     public requestId?: string,
     public actionId?: string,
+    /**
+     * Тело отказа как его прислал сервер.
+     *
+     * Нужно там, где отказ несёт данные, а не только повод: UIX-424 отвечает на
+     * попытку удалить характеристику списком навыков и способностей, которые
+     * на неё ссылаются, и без этого поля список пришлось бы собирать на клиенте
+     * второй раз — то есть завести вторую копию правила «что считается
+     * ссылкой».
+     *
+     * Не логируется и не отправляется в телеметрию: туда идут только код,
+     * статус и идентификаторы запроса (см. `rememberApiFailure` ниже).
+     */
+    public details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -124,6 +137,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       message,
       requestId,
       actionId,
+      data ?? undefined,
     );
     rememberApiFailure({
       at: new Date().toISOString(),

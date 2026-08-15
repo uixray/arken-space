@@ -114,7 +114,11 @@ import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot, resolveStatLayout } from "./snapshot.js";
 import { characterDto, normalizeCharacterWallet } from "./character-dto.js";
-import { rejectDestructiveLayoutChange } from "./stat-layout.js";
+import {
+  rejectDestructiveLayoutChange,
+  removedStatKeys,
+  type StatReferenceSources,
+} from "./stat-layout.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
@@ -361,6 +365,53 @@ async function findAction(db: Database, campaignId: string, actionId: string) {
     )
     .limit(1);
   return event ?? null;
+}
+
+/**
+ * UIX-424, шаг 6 — всё в кампании, что может сослаться на характеристику.
+ *
+ * Архивные персонажи включены намеренно: их навыки никуда не делись, и
+ * характеристика, удалённая «потому что она только у архивного», сломает бросок
+ * ровно в тот момент, когда персонажа вернут.
+ */
+async function collectStatReferenceSources(
+  db: Database,
+  campaignId: string,
+): Promise<StatReferenceSources> {
+  const characterRows = await db
+    .select()
+    .from(characters)
+    .where(eq(characters.campaignId, campaignId));
+  const entryRows = characterRows.length
+    ? await db
+        .select()
+        .from(characterCatalogEntries)
+        .where(
+          inArray(
+            characterCatalogEntries.characterId,
+            characterRows.map((character) => character.id),
+          ),
+        )
+    : [];
+  const catalogRows = await db
+    .select()
+    .from(catalogEntries)
+    .where(eq(catalogEntries.campaignId, campaignId));
+
+  return {
+    characters: characterRows.map((character) => ({
+      name: character.name,
+      skills: character.skills,
+      spells: character.spells,
+      entries: entryRows
+        .filter((entry) => entry.characterId === character.id)
+        .map((entry) => ({ name: entry.name, data: entry.data })),
+    })),
+    catalogEntries: catalogRows.map((entry) => ({
+      name: entry.name,
+      data: entry.data,
+    })),
+  };
 }
 
 function sceneDto(
@@ -6604,9 +6655,16 @@ export function registerRoutes(
     // Сравнение с **разрешённой** раскладкой, а не с сохранённой: у кампании,
     // которая раскладку ни разу не правила, в базе пусто, а видит она
     // стартовую. Сравнив с пустым, сервер пропустил бы удаление любой строки.
+    const resolved = resolveStatLayout(current.statLayout);
     const rejection = rejectDestructiveLayoutChange(
-      resolveStatLayout(current.statLayout),
+      resolved,
       body.layout,
+      // Ссылки ищутся только когда что-то удаляют: обычная правка раскладки —
+      // добавление и переименование, и тянуть ради неё всех персонажей с их
+      // записями значило бы платить за редкий случай на каждом нажатии.
+      removedStatKeys(resolved, body.layout).length > 0
+        ? await collectStatReferenceSources(db, auth.campaignId)
+        : { characters: [], catalogEntries: [] },
     );
     if (rejection) return reply.code(409).send(rejection);
     const updatedLayout = await db.transaction(async (tx) => {
