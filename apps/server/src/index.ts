@@ -10,6 +10,7 @@ import type {
 } from "@arken/contracts";
 import { createDatabase } from "@arken/db";
 import { env } from "./env.js";
+import { countQuery, SNAPSHOT_METRICS_ENABLED } from "./snapshot-metrics.js";
 import { registerRealtime } from "./realtime.js";
 import { registerRoutes } from "./routes.js";
 import { ensureSeed } from "./seed.js";
@@ -42,7 +43,11 @@ app.addHook("onRequest", async (request, reply) => {
     return reply.code(403).send({ error: "ORIGIN_FORBIDDEN" });
 });
 
-const { client, db } = createDatabase(env.DATABASE_URL);
+const { client, db } = createDatabase(
+  env.DATABASE_URL,
+  // UIX-408/409, этап 0. При выключенной оснастке хук не передаётся вовсе.
+  SNAPSHOT_METRICS_ENABLED ? countQuery : undefined,
+);
 await ensureSeed(db);
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {

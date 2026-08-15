@@ -312,3 +312,123 @@ describe("direct realtime token authorization", () => {
     );
   });
 });
+
+/**
+ * UIX-408/409, этап 1. Эти тесты пишутся **до** оптимизации рассылки и обязаны
+ * быть зелёными сразу: тест, написанный после, — это тест, подогнанный под
+ * поведение, которое он должен был проверять.
+ *
+ * Прикрывают они ровно ту дыру, из-за которой формулировка «строить снапшот
+ * один раз на роль» опасна: у двух игроков одной роли снапшоты различаются
+ * четырнадцатью полями верхнего уровня, а единственная перекрёстная проверка
+ * живёт в мультиплеерном прогоне под Docker — то есть любая реализация «одного
+ * снапшота на роль» прошла бы весь быстрый набор зелёной.
+ */
+const snapshotFor = (
+  db: ReturnType<typeof drizzle<typeof schema>>,
+  membershipId: string,
+  role: "GM" | "PLAYER",
+) =>
+  buildSnapshot(db as never, {
+    membershipId,
+    campaignId: ids.campaign,
+    role,
+    displayName: role,
+  });
+
+describe("снапшоты двух игроков не смешиваются", () => {
+  it("не отдаёт игроку ничего, принадлежащего другому игроку", async () => {
+    const db = drizzle(database, { schema });
+    const mine = await snapshotFor(db, ids.player, "PLAYER");
+    const theirs = await snapshotFor(db, ids.otherPlayer, "PLAYER");
+
+    expect(mine.me.id).toBe(ids.player);
+    expect(theirs.me.id).toBe(ids.otherPlayer);
+
+    // Персонаж чужого игрока не приезжает ни строкой, ни идентификатором:
+    // в его заметках лежит «secret notes», и это ровно то, что проверяет
+    // мультиплеерный прогон — только здесь оно проверяется за секунды.
+    expect(mine.characters.map((character) => character.id)).toEqual([
+      ids.playerCharacter,
+    ]);
+    expect(JSON.stringify(mine)).not.toContain("secret notes");
+    expect(JSON.stringify(mine)).not.toContain(ids.otherCharacter);
+
+    // И симметрично: правка, «случайно» отдающая всё всем, обязана уронить обе
+    // стороны, а не одну.
+    expect(theirs.characters.map((character) => character.id)).toEqual([
+      ids.otherCharacter,
+    ]);
+    expect(JSON.stringify(theirs)).not.toContain("player notes");
+    expect(JSON.stringify(theirs)).not.toContain(ids.playerCharacter);
+  });
+
+  it("схлопывает списки участников каждому под себя", async () => {
+    const db = drizzle(database, { schema });
+    const mine = await snapshotFor(db, ids.player, "PLAYER");
+    const theirs = await snapshotFor(db, ids.otherPlayer, "PLAYER");
+
+    // `members` игроку — только он сам, а `directChatContacts` — «все, кроме
+    // меня». У двух игроков одной роли эти списки разные, и общий снапшот
+    // выдал бы каждому чужой.
+    expect(mine.members.map((member) => member.id)).toEqual([ids.player]);
+    expect(theirs.members.map((member) => member.id)).toEqual([
+      ids.otherPlayer,
+    ]);
+    expect(
+      mine.directChatContacts.map((contact) => contact.membershipId),
+    ).not.toContain(ids.player);
+    expect(
+      theirs.directChatContacts.map((contact) => contact.membershipId),
+    ).not.toContain(ids.otherPlayer);
+  });
+
+  it("не отдаёт чужое приватное сообщение мастеру", async () => {
+    const db = drizzle(database, { schema });
+    const mine = await snapshotFor(db, ids.player, "PLAYER");
+    const theirs = await snapshotFor(db, ids.otherPlayer, "PLAYER");
+
+    // «own secret» написал первый игрок в режиме «только мастеру». Второй
+    // игрок не должен видеть его никогда.
+    expect(JSON.stringify(mine)).toContain("own secret");
+    expect(JSON.stringify(theirs)).not.toContain("own secret");
+  });
+});
+
+describe("туман и рисунки в снапшоте", () => {
+  const activeFog = "00000000-0000-4000-8000-000000000101";
+  const closedFog = "00000000-0000-4000-8000-000000000102";
+
+  beforeEach(async () => {
+    await database.exec(`
+      delete from fog_reveals;
+      insert into fog_reveals (id, scene_id, x, y, width, height, geometry, bbox, sequence) values
+        ('${activeFog}', '${ids.activeScene}', 0, 0, 10, 10,
+         '{"type":"RECT","x":0,"y":0,"width":10,"height":10}',
+         '{"x":0,"y":0,"width":10,"height":10}', 1),
+        ('${closedFog}', '${ids.closedScene}', 0, 0, 10, 10,
+         '{"type":"RECT","x":0,"y":0,"width":10,"height":10}',
+         '{"x":0,"y":0,"width":10,"height":10}', 2);
+    `);
+  });
+
+  it("игроку приезжает туман только активной сцены", async () => {
+    // Покрытия у тумана в снапшоте не было вовсе, а сужение выборки — ровно то,
+    // что делает следующий этап. Без этого теста регрессию поймал бы только
+    // Docker-прогон.
+    const db = drizzle(database, { schema });
+    const snapshot = await snapshotFor(db, ids.player, "PLAYER");
+    expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([activeFog]);
+  });
+
+  it("мастеру сейчас приезжает туман всех сцен", async () => {
+    // Фиксируется **текущее** поведение, а не желаемое: сужение до
+    // «активная плюс просматриваемая» — следующий этап, и этот тест обязан
+    // поменяться вместе с ним осознанно, а не молча.
+    const db = drizzle(database, { schema });
+    const snapshot = await snapshotFor(db, ids.gm, "GM");
+    expect(snapshot.fogReveals.map((fog) => fog.id).sort()).toEqual(
+      [activeFog, closedFog].sort(),
+    );
+  });
+});

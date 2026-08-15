@@ -114,6 +114,15 @@ import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot, resolveStatLayout } from "./snapshot.js";
 import {
+  largestFields,
+  measureSnapshot,
+  readQueryCount,
+  resetQueryCount,
+  SNAPSHOT_METRICS_ENABLED,
+  sumByField,
+  type BroadcastMeasurement,
+} from "./snapshot-metrics.js";
+import {
   characterDto,
   normalizeCharacterResources,
   normalizeCharacterWallet,
@@ -194,12 +203,56 @@ async function broadcastSnapshots(
   campaignId: string,
 ) {
   const sockets = await io.in(campaignRoom(campaignId)).fetchSockets();
+  if (!SNAPSHOT_METRICS_ENABLED) {
+    await Promise.all(
+      sockets.map(async (socket) => {
+        const auth = socket.data.auth;
+        if (auth?.campaignId === campaignId) {
+          socket.emit("game:snapshot", await buildSnapshot(db, auth));
+        }
+      }),
+    );
+    return;
+  }
+
+  /**
+   * UIX-408/409, этап 0. Меряется **вся рассылка**, а не одна сборка: пул к
+   * PostgreSQL — десять соединений, а семь сборок по полтора десятка
+   * параллельных запросов дают около сотни, конкурирующих за эти десять.
+   * Нелинейно растёт очередь, и видно её только здесь.
+   */
+  resetQueryCount();
+  const startedAt = performance.now();
+  const perSocket: BroadcastMeasurement["perSocket"] = [];
+  const fieldReports: Record<string, number>[] = [];
   await Promise.all(
     sockets.map(async (socket) => {
       const auth = socket.data.auth;
-      if (auth?.campaignId === campaignId) {
-        socket.emit("game:snapshot", await buildSnapshot(db, auth));
-      }
+      if (auth?.campaignId !== campaignId) return;
+      const socketStartedAt = performance.now();
+      const snapshot = await buildSnapshot(db, auth);
+      const ms = performance.now() - socketStartedAt;
+      const { bytes, byField } = measureSnapshot(snapshot);
+      perSocket.push({ role: auth.role, bytes, ms });
+      fieldReports.push(byField);
+      socket.emit("game:snapshot", snapshot);
+    }),
+  );
+  const measurement: BroadcastMeasurement = {
+    campaignId,
+    sockets: perSocket.length,
+    queries: readQueryCount(),
+    totalBytes: perSocket.reduce((sum, item) => sum + item.bytes, 0),
+    totalMs: performance.now() - startedAt,
+    perSocket,
+    bytesByField: sumByField(fieldReports),
+  };
+  // Числа, а не игровые данные: количество запросов, байты и миллисекунды.
+  console.info(
+    "[snapshot-metrics]",
+    JSON.stringify({
+      ...measurement,
+      largest: largestFields(measurement.bytesByField),
     }),
   );
 }
