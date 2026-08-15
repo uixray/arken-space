@@ -18,7 +18,10 @@
 // Пути относительные: пакеты воркспейса связаны внутри `apps/*` и `packages/*`,
 // а `scripts/` в их зависимостях не значится.
 import { createDatabase } from "../packages/db/src/index.js";
-import { buildSnapshot } from "../apps/server/src/snapshot.js";
+import {
+  buildSnapshot,
+  loadCampaignReadSet,
+} from "../apps/server/src/snapshot.js";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -65,11 +68,23 @@ try {
 
   queries = 0;
   const startedAt = performance.now();
+  /**
+   * UIX-409: набор кампанийных чтений строится один раз на рассылку — ровно
+   * так, как это делает `broadcastSnapshots`. Раньше скрипт звал
+   * `buildSnapshot` без набора, то есть мерил путь, которого в рассылке уже
+   * нет, и показывал прежние 239 запросов независимо от правки.
+   */
+  const readSet = await loadCampaignReadSet(db as never, campaign.id);
   const perSocket: { role: string; bytes: number; ms: number }[] = [];
   const fieldTotals: Record<string, number> = {};
   for (const auth of audience) {
     const socketStartedAt = performance.now();
-    const snapshot = await buildSnapshot(db as never, auth as never);
+    const snapshot = await buildSnapshot(
+      db as never,
+      auth as never,
+      [],
+      readSet,
+    );
     const ms = performance.now() - socketStartedAt;
     const bytes = bytesOf(snapshot);
     perSocket.push({ role: auth.role, bytes, ms });
