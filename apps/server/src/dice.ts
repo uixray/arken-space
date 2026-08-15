@@ -1,4 +1,20 @@
+import { randomInt as cryptoRandomInt } from "node:crypto";
 import type { DiceResult, DiceTerm } from "@arken/contracts";
+
+/**
+ * Генератор по умолчанию.
+ *
+ * Раньше здесь стоял `Math.floor(Math.random() * max)`. Боевые маршруты
+ * передают `randomInt` из `node:crypto` явно, так что на игре это не
+ * использовалось, — но третий вызов, забывший аргумент, молча уехал бы на
+ * слабый генератор, и ни один тест этого бы не заметил. Дефолт должен быть
+ * тем же, что и явный выбор.
+ *
+ * Файл живёт только на сервере (в браузерный бандл не попадает), поэтому
+ * `node:crypto` здесь допустим.
+ */
+const defaultRandomInt = (maxExclusive: number) =>
+  cryptoRandomInt(maxExclusive);
 
 const termPattern =
   /^(?:(\d{0,3})d(\d{1,4})(kh1|kl1)?|([a-zA-Z_][a-zA-Z0-9_]*)|(\d+))$/;
@@ -44,8 +60,7 @@ function decorateSemanticOutcome(result: DiceResult): DiceResult {
 export function rollFormula(
   formula: string,
   stats: Record<string, number>,
-  randomInt: (maxExclusive: number) => number = (max) =>
-    Math.floor(Math.random() * max),
+  randomInt: (maxExclusive: number) => number = defaultRandomInt,
   label?: string,
 ): DiceResult {
   const compact = formula.replace(/\s+/g, "");
@@ -124,8 +139,7 @@ export function rollFormulaWithMode(
   formula: string,
   stats: Record<string, number>,
   rollMode: RollMode,
-  randomInt: (maxExclusive: number) => number = (max) =>
-    Math.floor(Math.random() * max),
+  randomInt: (maxExclusive: number) => number = defaultRandomInt,
   label?: string,
 ): DiceResult {
   const first = rollFormula(formula, stats, randomInt, label);
