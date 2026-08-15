@@ -55,6 +55,7 @@ export function buildGameSnapshot(
       name: "Test Campaign",
       day: 1,
       battleActive: false,
+      initiative: [],
       battleCounter: 0,
       // Реалистичное значение, а не пустой массив: фикстура, у которой нет ни
       // одной строки раскладки, не поймает ошибку в коде, который её читает.

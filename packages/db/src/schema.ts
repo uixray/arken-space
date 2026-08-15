@@ -267,6 +267,26 @@ export const campaigns = pgTable("campaigns", {
     .default([]),
   battleActive: boolean("battle_active").notNull().default(false),
   battleCounter: integer("battle_counter").notNull().default(0),
+  /**
+   * UIX-431: очередь ходов боя. Порядок массива и есть порядок ходов.
+   *
+   * Живёт у кампании, а не у сцены: бой — состояние кампании (`battleActive`),
+   * и участник может стоять на любой сцене или не стоять нигде.
+   *
+   * Переживает перезагрузку намеренно: мастер тратит на расстановку живое время
+   * посреди игры, и потерять её от случайного F5 — худший из возможных отказов.
+   */
+  initiative: jsonb("initiative")
+    .$type<
+      Array<{
+        id: string;
+        tokenId: string | null;
+        name: string | null;
+        initiative: number | null;
+      }>
+    >()
+    .notNull()
+    .default([]),
   revision: integer("revision").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

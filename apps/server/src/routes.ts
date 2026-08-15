@@ -57,6 +57,7 @@ import {
   characterCountersCommandSchema,
   rechargeEntryCommandSchema,
   renameCampaignSchema,
+  updateInitiativeSchema,
   updateStatLayoutSchema,
   deleteTokenSchema,
   gmLoginSchema,
@@ -6651,6 +6652,24 @@ export function registerRoutes(
                   ? false
                   : current.battleActive,
             battleCounter: nextBattle,
+            /**
+             * UIX-431: новый бой обнуляет броски, но сохраняет состав.
+             *
+             * Те же противники часто дерутся снова, и собирать очередь заново
+             * каждый раз — работа руками посреди игры. А вот старые числа,
+             * оставшись, выглядели бы как уже сделанные броски: мастер повёл бы
+             * бой по прошлой инициативе, не заметив подмены.
+             *
+             * `END_BATTLE` не трогает ничего: после боя видно, кто в каком
+             * порядке ходил, и случайное нажатие не стирает расстановку.
+             */
+            initiative:
+              body.command === "START_BATTLE"
+                ? current.initiative.map((participant) => ({
+                    ...participant,
+                    initiative: null,
+                  }))
+                : current.initiative,
             revision: current.revision + 1,
             updatedAt: new Date(),
           })
@@ -6947,6 +6966,95 @@ export function registerRoutes(
       return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return updatedLayout;
+  });
+
+  /**
+   * UIX-431 — очередь ходов правится целиком и только мастером.
+   *
+   * Список приходит с клиента, поэтому каждая ссылка на токен проверяется здесь:
+   * рамка выделения на карте отбирает токены по правам на клиенте, но это
+   * удобство, а не защита. Токен чужой кампании в очереди дал бы мастеру строку
+   * с именем из другой игры.
+   */
+  app.patch("/api/campaign/initiative", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = updateInitiativeSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) {
+      const [replayed] = await db
+        .select()
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      return replayed
+        ? reply.code(200).send(replayed)
+        : reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    }
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    const referenced = body.participants
+      .map((participant) => participant.tokenId)
+      .filter((tokenId): tokenId is string => Boolean(tokenId));
+    if (referenced.length > 0) {
+      const known = await db
+        .select({ id: tokens.id })
+        .from(tokens)
+        .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+        .where(
+          and(
+            eq(scenes.campaignId, auth.campaignId),
+            inArray(tokens.id, referenced),
+          ),
+        );
+      const knownIds = new Set(known.map((row) => row.id));
+      const foreign = referenced.filter((tokenId) => !knownIds.has(tokenId));
+      if (foreign.length > 0)
+        return reply
+          .code(400)
+          .send({ error: "TOKEN_NOT_FOUND", tokenIds: foreign });
+    }
+    const updated = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(campaigns)
+        .set({
+          initiative: body.participants,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.initiative.updated",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: next.revision,
+        payload: { participants: body.participants.length },
+      });
+      return next;
+    });
+    if (!updated) return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
   });
 
   app.patch("/api/characters/:id/counters", async (request, reply) => {

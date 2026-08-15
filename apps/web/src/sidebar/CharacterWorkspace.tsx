@@ -1168,7 +1168,7 @@ export function CharacterPanel({
               : "вне боя"}
           </p>
           <Button
-            title="Полный реген выносливости и маны всем персонажам, +1 день"
+            title="Реген выносливости и маны всем персонажам, +1 день"
             onClick={() =>
               onCampaignClock("LONG_REST", snapshot.campaign.revision)
             }

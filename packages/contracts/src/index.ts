@@ -674,6 +674,83 @@ export const updateStatLayoutSchema = z.object({
   layout: statLayoutSchema,
 });
 
+/**
+ * UIX-431 — порядок ходов в бою.
+ *
+ * Участник — строка ростера, а не токен. Причина в требовании задачи: часть
+ * бросков делается физическими кубами за столом, и мастеру нужно вписать в
+ * очередь «Волк №3», которого на карте нет вовсе. Привязка к токену поэтому
+ * необязательна.
+ *
+ * Имя устроено как у определения токена (UIX-400): `null` значит «зовусь как
+ * мой токен», и переименование доходит до панели само. Строка без токена обязана
+ * иметь собственное имя — иначе в очереди появится участник, о котором нечего
+ * сказать.
+ *
+ * Порядок задаётся порядком массива, без поля `order`. Отдельный индекс пришлось
+ * бы держать плотным и уникальным при каждой перестановке, и рассинхрон массива с
+ * индексом проявился бы как «строка прыгнула сама».
+ */
+export const initiativeParticipantSchema = z
+  .object({
+    id: z.string().uuid(),
+    tokenId: z.string().uuid().nullable().default(null),
+    name: z.string().trim().min(1).max(60).nullable().default(null),
+    /**
+     * Результат броска — своего или физического, панель их не различает.
+     * `null` — «ещё не бросал»: это не то же самое, что ноль, и в сортировке
+     * такие строки уходят вниз, а не считаются провалом.
+     */
+    initiative: z.number().int().min(-99).max(999).nullable().default(null),
+  })
+  .refine((participant) => participant.name !== null || participant.tokenId, {
+    message: "участник без токена обязан иметь имя",
+    path: ["name"],
+  });
+
+export const initiativeOrderSchema = z
+  .array(initiativeParticipantSchema)
+  .max(60)
+  .superRefine((participants, context) => {
+    const seenIds = new Set<string>();
+    const seenTokens = new Set<string>();
+    for (const [index, participant] of participants.entries()) {
+      if (seenIds.has(participant.id))
+        context.addIssue({
+          code: "custom",
+          message: "участник встречается в очереди дважды",
+          path: [index, "id"],
+        });
+      seenIds.add(participant.id);
+      // Один токен — одна строка: иначе рамка выделения, применённая дважды,
+      // молча удвоила бы половину очереди.
+      if (participant.tokenId) {
+        if (seenTokens.has(participant.tokenId))
+          context.addIssue({
+            code: "custom",
+            message: "этот токен уже введён в бой",
+            path: [index, "tokenId"],
+          });
+        seenTokens.add(participant.tokenId);
+      }
+    }
+  });
+
+export type InitiativeParticipant = z.infer<typeof initiativeParticipantSchema>;
+export type InitiativeOrder = z.infer<typeof initiativeOrderSchema>;
+
+/**
+ * Очередь правится целиком и под ревизией кампании — по тем же причинам, что и
+ * раскладка характеристик выше: она общая на кампанию, и две одновременные
+ * правки обязаны разойтись конфликтом, а не слиться в порядок, которого никто
+ * не задумывал.
+ */
+export const updateInitiativeSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  participants: initiativeOrderSchema,
+});
+
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });
 export const inviteClaimSchema = z.object({
   token: z.string().min(32).max(512),
@@ -2259,6 +2336,22 @@ export interface AudioTrackDto {
   updatedAt: string;
 }
 
+/**
+ * UIX-431: строка очереди в том виде, в каком её показывают.
+ *
+ * `name` уже разрешено — от токена или собственное, как у определений токенов в
+ * UIX-400. `ownName` отдаётся рядом по той же причине, что и там: редактор
+ * обязан отличать «зовусь как токен» от намеренной копии, иначе первое же
+ * сохранение молча превратит одно в другое.
+ */
+export interface InitiativeParticipantDto {
+  id: string;
+  tokenId: string | null;
+  name: string;
+  ownName: string | null;
+  initiative: number | null;
+}
+
 export interface GameSnapshot {
   campaign: {
     id: string;
@@ -2268,6 +2361,16 @@ export interface GameSnapshot {
     battleCounter: number;
     /** UIX-424: раскладка характеристик кампании (см. `statLayoutSchema`). */
     statLayout: StatLayout;
+    /**
+     * UIX-431: очередь ходов в порядке ходов.
+     *
+     * Игроку приходят только строки, чей токен он и так видит: строка со
+     * скрытым токеном не отправляется вовсе, без заглушки «???». Заглушка
+     * выдала бы численность засады — ровно та утечка, которую закрыл UIX-449.
+     * Плата за это — у игрока список короче, чем у мастера, и номера ходов не
+     * совпадают; очередь ведёт мастер, панель информационная.
+     */
+    initiative: InitiativeParticipantDto[];
     revision: number;
   };
   me: MembershipDto;

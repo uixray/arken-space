@@ -49,6 +49,7 @@ import { buildWorldMapsSnapshot } from "./world-maps.js";
 import { characterDto } from "./character-dto.js";
 import { projectChatMessages } from "./chat-history.js";
 import { resolveTokenName } from "./token-name.js";
+import { projectInitiative } from "./initiative.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
 
@@ -606,6 +607,22 @@ export async function buildSnapshot(
     visiblePlayerRequestIds,
   });
 
+  /**
+   * UIX-431: очередь ходов опирается на уже посчитанный набор видимых токенов —
+   * тот же, что отдаётся в `tokens`. Своей проверки видимости у панели нет
+   * намеренно: разойдясь с этой, она либо выдала бы засаду, либо потеряла
+   * участника, стоящего на виду.
+   */
+  const visibleTokenNames = new Map(
+    visibleTokens.map(({ token, definition }) => [
+      token.id,
+      resolveTokenName({
+        name: definition.name,
+        characterName: characterNameById.get(definition.characterId ?? ""),
+      }),
+    ]),
+  );
+
   return {
     campaign: {
       id: campaign.id,
@@ -614,6 +631,10 @@ export async function buildSnapshot(
       battleActive: campaign.battleActive,
       battleCounter: campaign.battleCounter,
       statLayout: resolveStatLayout(campaign.statLayout),
+      initiative: projectInitiative(campaign.initiative ?? [], {
+        visibleTokenNames,
+        role: auth.role,
+      }),
       revision: campaign.revision,
     },
     me: {
