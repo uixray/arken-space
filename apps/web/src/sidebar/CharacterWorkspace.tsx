@@ -1020,7 +1020,7 @@ export function CharacterPanel({
       setCountersPending((count) => Math.max(0, count - 1));
     }
   };
-  const runRest = async (rest: "SHORT" | "LONG" | "CATCH_BREATH") => {
+  const runRest = async (rest: "SHORT" | "LONG") => {
     setCountersPending((count) => count + 1);
     setCountersError("");
     try {
@@ -1539,16 +1539,9 @@ export function CharacterPanel({
           );
         })}
         <div className="inline-fields character-rest-controls">
-          {/* UIX-425: подпись обещала +25% от максимума, а система
-           * восстанавливает на величину регена из карточки. Обещание в кнопке
-           * — такая же часть механики, как и код за ней. */}
-          <Button
-            disabled={!editable || countersPending > 0}
-            title="Половина регена выносливости, округление вниз"
-            onClick={() => void runRest("CATCH_BREATH")}
-          >
-            Перевести дух
-          </Button>
+          {/* UIX-425: «Перевести дух» убрано — это был тот же короткий отдых.
+           * Подпись «Короткий отдых (+25%)» тоже обещала механику, которой
+           * больше нет: система восстанавливает на величину регена. */}
           <Button
             disabled={!editable || countersPending > 0}
             title="Половина регена выносливости и маны, округление вниз"

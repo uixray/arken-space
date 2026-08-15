@@ -1776,7 +1776,12 @@ export const characterCountersCommandSchema = z
         }),
       )
       .optional(),
-    rest: z.enum(["SHORT", "LONG", "CATCH_BREATH"]).optional(),
+    /**
+     * UIX-425: «перевести дух» убрано — это был тот же короткий отдых, только
+     * применённый к одной выносливости. Два названия для одного правила
+     * заставляли мастера выбирать там, где выбора нет.
+     */
+    rest: z.enum(["SHORT", "LONG"]).optional(),
   })
   .refine((value) => Boolean(value.wallet || value.resources || value.rest), {
     message: "At least one counter mutation is required",

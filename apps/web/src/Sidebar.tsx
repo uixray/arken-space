@@ -101,7 +101,7 @@ export type Props = {
     patch: {
       wallet?: CharacterDto["wallet"];
       resources?: CharacterDto["resources"];
-      rest?: "SHORT" | "LONG" | "CATCH_BREATH";
+      rest?: "SHORT" | "LONG";
     },
     intent?: {
       walletDelta?: {

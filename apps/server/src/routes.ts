@@ -425,16 +425,12 @@ function formatResourceChanges(before: Resources, after: Resources) {
  */
 function applyCharacterRest(
   resources: Resources,
-  rest: "SHORT" | "LONG" | "CATCH_BREATH",
+  rest: "SHORT" | "LONG",
   stats: Record<string, number>,
 ): Resources {
   return Object.fromEntries(
     Object.entries(resources).map(([key, resource]) => {
-      const recoverable = resource.recoverable !== false;
-      // «Перевести дух» касается только выносливости — это передышка, а не сон.
-      const targeted =
-        recoverable && (rest !== "CATCH_BREATH" || key === "physicalPower");
-      if (!targeted) return [key, resource];
+      if (resource.recoverable === false) return [key, resource];
 
       const regenStat = RESOURCE_REGEN_STAT[key];
       const regen = regenStat ? (stats[regenStat] ?? 0) : 0;

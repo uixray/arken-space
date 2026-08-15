@@ -30,7 +30,7 @@ const ids = {
 };
 const secret = "g".repeat(40);
 
-const restTo = async (rest: "SHORT" | "LONG" | "CATCH_BREATH") => {
+const restTo = async (rest: "SHORT" | "LONG") => {
   const [before] = await db
     .select()
     .from(schema.characters)
@@ -167,8 +167,10 @@ describe("отдых по регену", () => {
     expect(resources.blessing!.current).toBe(0);
   });
 
-  it("«перевести дух» касается только выносливости", async () => {
-    // Передышка, а не сон: мана от неё не восстанавливается.
+  it("короткий отдых восстанавливает оба ресурса", async () => {
+    // «Перевести дух» убрано: это был тот же короткий отдых, применённый к
+    // одной выносливости. Два названия для одного правила заставляли мастера
+    // выбирать там, где выбора нет.
     await setUp(
       {
         physicalPower: { current: 0, maximum: 20 },
@@ -176,8 +178,8 @@ describe("отдых по регену", () => {
       },
       { enduranceRegen: 6, manaRegen: 6 },
     );
-    const { resources } = await restTo("CATCH_BREATH");
+    const { resources } = await restTo("SHORT");
     expect(resources.physicalPower!.current).toBe(3);
-    expect(resources.magicPower!.current).toBe(0);
+    expect(resources.magicPower!.current).toBe(3);
   });
 });
