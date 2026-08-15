@@ -20,7 +20,11 @@ import {
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "../chat-composer";
-import { statLabelsFromLayout, statRowsFromLayout } from "../stat-keys";
+import {
+  statLabelsFromLayout,
+  statResourceRowsFromLayout,
+  statRowsFromLayout,
+} from "../stat-keys";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
@@ -64,7 +68,9 @@ import type { ChatActions } from "../use-chat-actions";
 import { useFollowScroll } from "../ui/useFollowScroll";
 import { decideComposerKeydown } from "../composer-keyboard-intent";
 import { DiceTrayPanel } from "./DiceTrayPanel";
+import { ApiError } from "../api";
 import { QuickRollPanel } from "./QuickRollPanel";
+import { ResourceCounters } from "./ResourceCounters";
 
 /**
  * UIX-388: shared tooltip/label text for the composer's send icon so
@@ -196,6 +202,7 @@ export function ActivityPanel({
   focusedMessageId,
   onMessageFocused,
   onOpenPlayerRequestCreate,
+  onUpdateCounters,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -205,6 +212,8 @@ export function ActivityPanel({
   focusedMessageId: string | null;
   onMessageFocused: () => void;
   onOpenPlayerRequestCreate: () => void;
+  /** UIX-424, шаг 8: счётчики выносливости и маны правят те же `resources`. */
+  onUpdateCounters: Props["onUpdateCounters"];
 }) {
   const [composer, setComposer] = useState("");
   const [composerError, setComposerError] = useState("");
@@ -335,6 +344,37 @@ export function ActivityPanel({
       ),
     [activityFilters, snapshot.messages, snapshot.chatThreads, storyPosts],
   );
+  const [resourcePending, setResourcePending] = useState(false);
+  /**
+   * UIX-424, шаг 8. Править ресурсы может тот, кто управляет персонажем, —
+   * тратит их он, а не мастер. У мастера доступ есть всегда, он ведёт NPC.
+   */
+  const canSpendResources = Boolean(
+    rollCharacter &&
+    (snapshot.me.role === "GM" ||
+      rollCharacter.ownerMembershipId === snapshot.me.id ||
+      rollCharacter.controllerMembershipIds.includes(snapshot.me.id)),
+  );
+  const spendResource = (key: string, next: number) => {
+    if (!rollCharacter) return;
+    const resource = rollCharacter.resources[key] ?? { current: 0 };
+    setResourcePending(true);
+    setComposerError("");
+    void onUpdateCounters(rollCharacter.id, rollCharacter.revision, {
+      resources: {
+        ...rollCharacter.resources,
+        [key]: { ...resource, current: next },
+      },
+    })
+      .catch((reason) =>
+        setComposerError(
+          reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+            ? "Ресурсы уже изменены в другой сессии. Повторите действие."
+            : "Не удалось изменить очки. Проверьте соединение.",
+        ),
+      )
+      .finally(() => setResourcePending(false));
+  };
   const submitQuickRoll = async (
     formula: string,
     label: string,
@@ -451,6 +491,15 @@ export function ActivityPanel({
           onVisibilityChange={setRollVisibility}
           onRoll={onRoll}
         />
+        {rollCharacter && (
+          <ResourceCounters
+            rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
+            resources={rollCharacter.resources}
+            editable={canSpendResources}
+            pending={resourcePending}
+            onSpend={spendResource}
+          />
+        )}
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}

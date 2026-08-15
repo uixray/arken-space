@@ -3,6 +3,7 @@ import {
   statKeyFromLabel,
   moveStatRow,
   statLabelsFromLayout,
+  statResourceRowsFromLayout,
   statRowsOfGroup,
   uniqueStatKey,
 } from "../stat-keys";
@@ -762,6 +763,7 @@ export function CharacterPanel({
     "characteristics",
   );
   const combatRows = statRowsOfGroup(snapshot.campaign.statLayout, "combat");
+  const resourceRows = statResourceRowsFromLayout(snapshot.campaign.statLayout);
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
@@ -1479,16 +1481,16 @@ export function CharacterPanel({
       </label>
       <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
       <div className="character-power-controls">
-        {(["physicalPower", "magicPower"] as const).map((key) => {
+        {/* UIX-424, шаг 8: подписи ресурсов — из раскладки кампании. Здесь были
+         * выписаны «Физическая сила» и «Магическая сила» — имена, от которых
+         * мастер отказался ещё на этапе решений, но карточка о них не знала.
+         * Ключи остались прежними: переименование — это подписи. */}
+        {resourceRows.map(({ key, label }) => {
           const resource = resourcesDraft[key] ?? { current: 0, maximum: 0 };
           const maximum = resource.maximum ?? resource.current;
           return (
             <fieldset className="resource-card" key={key} disabled={!editable}>
-              <legend>
-                {key === "physicalPower"
-                  ? "Физическая сила"
-                  : "Магическая сила"}
-              </legend>
+              <legend>{label}</legend>
               <label>
                 Текущее
                 <FormInput

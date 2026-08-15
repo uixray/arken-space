@@ -1112,6 +1112,38 @@ code {
   flex: 0 0 2.25rem;
   border-left: 1px solid var(--line);
 }
+/* UIX-424, шаг 8: счётчики выносливости и маны в панели бросков — там, где
+   раньше стояли снятые кнопки. Тратятся они каждый ход, поэтому строка
+   компактная и целиком помещается в узкую боковую панель. */
+.resource-counters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 var(--space-md) var(--space-xs);
+}
+.resource-counters__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px auto 28px;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.resource-counters__label {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resource-counters__value {
+  min-width: 3.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+}
+.resource-counters__maximum {
+  color: var(--faint);
+}
 .stat-field__add {
   width: 100%;
   min-height: 28px;

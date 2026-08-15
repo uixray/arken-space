@@ -379,6 +379,7 @@ export function Sidebar(props: Props) {
             onOpenPlayerRequestCreate={
               playerRequestActions.onOpenPlayerRequestCreate
             }
+            onUpdateCounters={props.onUpdateCounters}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel

@@ -143,6 +143,28 @@ export function statRowsFromLayout(
   );
 }
 
+/**
+ * Строки-ресурсы раскладки: выносливость и мана.
+ *
+ * UIX-424, шаг 8. Подписи ресурсов тоже принадлежат раскладке, а не коду: до
+ * этого шага карточка звала их «Физическая сила» и «Магическая сила» — именами,
+ * от которых мастер отказался ещё на этапе решений. Ключи при этом остаются
+ * прежними (`physicalPower`, `magicPower`): переименование — это подписи, а
+ * менять ключи значило бы мигрировать и записи ресурсов, и все `cost.type` в
+ * способностях ради имени, которого никто не видит.
+ */
+export function statResourceRowsFromLayout(
+  layout: readonly {
+    rows: readonly { key: string; label: string; source?: string }[];
+  }[],
+): { key: string; label: string }[] {
+  return layout.flatMap((group) =>
+    group.rows
+      .filter((row) => row.source === "RESOURCE")
+      .map(({ key, label }) => ({ key, label })),
+  );
+}
+
 export function statRowsOfGroup(
   layout: readonly {
     id: string;
