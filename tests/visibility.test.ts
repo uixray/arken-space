@@ -7,6 +7,7 @@ import * as schema from "../packages/db/src/schema.js";
 import { editableToken } from "../apps/server/src/realtime.js";
 import {
   buildSnapshot,
+  loadCampaignReadSet,
   SNAPSHOT_MESSAGES_PER_THREAD,
 } from "../apps/server/src/snapshot.js";
 
@@ -480,5 +481,82 @@ describe("туман и рисунки в снапшоте", () => {
       [ids.closedScene],
     );
     expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([activeFog]);
+  });
+});
+
+/**
+ * UIX-409, замки безопасности. Оптимизация рассылки строит семь снапшотов из
+ * одного набора кампанийных чтений, и цена ошибки здесь несимметрична: неверные
+ * данные заметят и починят, а чужой лист персонажа в чужом браузере можно не
+ * заметить годами.
+ */
+describe("общий набор чтений кампании", () => {
+  it("даёт ту же проекцию, что и чтение на месте", async () => {
+    // Формальное доказательство, что оптимизация ничего не поменяла: для всех
+    // трёх ролей-персон результат совпадает с точностью до времени ответа.
+    const db = drizzle(database, { schema });
+    const readSet = await loadCampaignReadSet(db as never, ids.campaign);
+    for (const [membershipId, role] of [
+      [ids.gm, "GM"],
+      [ids.player, "PLAYER"],
+      [ids.otherPlayer, "PLAYER"],
+    ] as const) {
+      const auth = {
+        membershipId,
+        campaignId: ids.campaign,
+        role,
+        displayName: role,
+      };
+      const alone = await buildSnapshot(db as never, auth);
+      const shared = await buildSnapshot(db as never, auth, [], readSet);
+      for (const key of Object.keys(alone) as (keyof typeof alone)[]) {
+        // `serverTime` — момент ответа, `audio.updatedAt` — метка строки,
+        // которую путь чтения трогает сам (нормализация дедлайнов пишет в БД).
+        // Оба — время, а не проекция; сравнивать их между двумя
+        // последовательными сборками значит сравнивать часы.
+        if (key === "serverTime" || key === "audio") continue;
+        expect({ [key]: shared[key] }, `${role} ${String(key)}`).toEqual({
+          [key]: alone[key],
+        });
+      }
+      expect(
+        { ...shared.audio, updatedAt: "" },
+        `${role} audio без метки времени`,
+      ).toEqual({ ...alone.audio, updatedAt: "" });
+    }
+  });
+
+  it("не даёт применить набор одной кампании к другой", async () => {
+    // Межкампанийное переиспользование не должно происходить молча: набор
+    // помнит свою кампанию, а сверка — единственное, что стоит между ошибкой
+    // вызова и чужими данными в чужом браузере.
+    const db = drizzle(database, { schema });
+    const readSet = await loadCampaignReadSet(db as never, ids.campaign);
+    await expect(
+      buildSnapshot(
+        db as never,
+        {
+          membershipId: ids.gm,
+          campaignId: "00000000-0000-4000-8000-0000000009ff",
+          role: "GM",
+          displayName: "GM",
+        },
+        [],
+        readSet,
+      ),
+    ).rejects.toThrow("CAMPAIGN_READ_SET_MISMATCH");
+  });
+
+  it("не может отфильтровать по членству — этого нет в сигнатуре", async () => {
+    // Замок проверяется типом, а не внимательностью: набор строится по одной
+    // кампании и ничего не знает о том, кому он пойдёт. Тест фиксирует
+    // намерение, чтобы `auth` не добавили в сигнатуру «для удобства».
+    const db = drizzle(database, { schema });
+    const readSet = await loadCampaignReadSet(db as never, ids.campaign);
+    expect(Object.keys(readSet)).not.toContain("auth");
+    expect(Object.keys(readSet)).not.toContain("membershipId");
+    // Персонажи в наборе — все активные: персонализация происходит позже, в
+    // проекции, и это ровно то, что делает набор общим.
+    expect(readSet.characterRows.length).toBeGreaterThan(1);
   });
 });

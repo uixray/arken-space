@@ -86,6 +86,185 @@ export function resolveStatLayout(stored: unknown): StatLayout {
   return statLayoutSchema.parse(starterStatLayout);
 }
 
+/**
+ * UIX-409 — чтения, зависящие только от кампании.
+ *
+ * **Не принимает `auth` намеренно.** Внутри физически нечем отфильтровать по
+ * членству, и это проверяется одной сигнатурой, а не внимательностью: набор,
+ * который нельзя персонализировать, нельзя и персонализировать неправильно.
+ *
+ * Набор помнит свою кампанию — `buildSnapshot` сверяет и падает при
+ * расхождении. Живёт он только внутри одного вызова рассылки: кеша со временем
+ * жизни здесь нет и не будет, у него нет естественной границы инвалидации и
+ * есть все шансы пережить мутацию.
+ */
+export interface CampaignReadSet {
+  campaignId: string;
+  memberRows: Awaited<ReturnType<typeof loadMembers>>;
+  characterRows: Awaited<ReturnType<typeof loadCharacters>>;
+  characterControllerRows: Awaited<ReturnType<typeof loadCharacterControllers>>;
+  sceneRows: Awaited<ReturnType<typeof loadScenes>>;
+  tokenRows: Awaited<ReturnType<typeof loadTokens>>;
+  controllerRows: Awaited<ReturnType<typeof loadTokenControllers>>;
+  definitionRows: Awaited<ReturnType<typeof loadTokenDefinitions>>;
+  catalogRows: Awaited<ReturnType<typeof loadCatalog>>;
+  assignedRows: Awaited<ReturnType<typeof loadAssignedEntries>>;
+  assetRows: Awaited<ReturnType<typeof loadAssets>>;
+  sequenceRows: Awaited<ReturnType<typeof loadSequence>>;
+  /**
+   * UIX-409: нормализация дедлайнов аудио — это **запись** в БД внутри пути
+   * чтения. При рассылке она выполнялась семь раз одновременно; CAS спасал
+   * данные, но шесть из семи попыток проваливали `update` и уходили в лишний
+   * `select`. Одна нормализация на рассылку — и экономия, и снятая гонка, и
+   * совпадающий `updatedAt` во всех семи снапшотах.
+   */
+  audioTracks: Awaited<ReturnType<typeof normalizeAudioTrackDeadlines>>;
+}
+
+const loadMembers = (db: Database, campaignId: string) =>
+  db
+    .select()
+    .from(memberships)
+    .where(eq(memberships.campaignId, campaignId))
+    .orderBy(asc(memberships.createdAt));
+
+const loadCharacters = (db: Database, campaignId: string) =>
+  db
+    .select()
+    .from(characters)
+    .where(
+      and(
+        eq(characters.campaignId, campaignId),
+        eq(characters.lifecycle, "ACTIVE"),
+      ),
+    )
+    .orderBy(asc(characters.createdAt));
+
+const loadCharacterControllers = (db: Database, campaignId: string) =>
+  db
+    .select({ controller: characterControllers })
+    .from(characterControllers)
+    .innerJoin(characters, eq(characterControllers.characterId, characters.id))
+    .where(
+      and(
+        eq(characters.campaignId, campaignId),
+        eq(characters.lifecycle, "ACTIVE"),
+      ),
+    );
+
+const loadScenes = (db: Database, campaignId: string) =>
+  db
+    .select()
+    .from(scenes)
+    .where(eq(scenes.campaignId, campaignId))
+    .orderBy(asc(scenes.createdAt));
+
+const loadTokens = (db: Database, campaignId: string) =>
+  db
+    .select({ token: tokens, definition: tokenDefinitions })
+    .from(tokens)
+    .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+    .innerJoin(tokenDefinitions, eq(tokens.definitionId, tokenDefinitions.id))
+    .where(eq(scenes.campaignId, campaignId));
+
+const loadTokenControllers = (db: Database, campaignId: string) =>
+  db
+    .select()
+    .from(tokenControllers)
+    .innerJoin(
+      tokenDefinitions,
+      eq(tokenControllers.tokenDefinitionId, tokenDefinitions.id),
+    )
+    .where(eq(tokenDefinitions.campaignId, campaignId));
+
+const loadTokenDefinitions = (db: Database, campaignId: string) =>
+  db
+    .select()
+    .from(tokenDefinitions)
+    .where(eq(tokenDefinitions.campaignId, campaignId))
+    .orderBy(asc(tokenDefinitions.createdAt));
+
+const loadCatalog = (db: Database, campaignId: string) =>
+  db
+    .select()
+    .from(catalogEntries)
+    .where(eq(catalogEntries.campaignId, campaignId))
+    .orderBy(asc(catalogEntries.createdAt));
+
+const loadAssignedEntries = (db: Database, campaignId: string) =>
+  db
+    .select({
+      entry: characterCatalogEntries,
+      campaignId: characters.campaignId,
+    })
+    .from(characterCatalogEntries)
+    .innerJoin(
+      characters,
+      eq(characterCatalogEntries.characterId, characters.id),
+    )
+    .where(eq(characters.campaignId, campaignId));
+
+const loadAssets = (db: Database, campaignId: string) =>
+  db
+    .select()
+    .from(assets)
+    .where(eq(assets.campaignId, campaignId))
+    .orderBy(desc(assets.createdAt));
+
+const loadSequence = (db: Database, campaignId: string) =>
+  db
+    .select({ value: max(gameEvents.sequence) })
+    .from(gameEvents)
+    .where(eq(gameEvents.campaignId, campaignId));
+
+export async function loadCampaignReadSet(
+  db: Database,
+  campaignId: string,
+): Promise<CampaignReadSet> {
+  const [
+    memberRows,
+    characterRows,
+    characterControllerRows,
+    sceneRows,
+    tokenRows,
+    controllerRows,
+    definitionRows,
+    catalogRows,
+    assignedRows,
+    assetRows,
+    sequenceRows,
+    audioTracks,
+  ] = await Promise.all([
+    loadMembers(db, campaignId),
+    loadCharacters(db, campaignId),
+    loadCharacterControllers(db, campaignId),
+    loadScenes(db, campaignId),
+    loadTokens(db, campaignId),
+    loadTokenControllers(db, campaignId),
+    loadTokenDefinitions(db, campaignId),
+    loadCatalog(db, campaignId),
+    loadAssignedEntries(db, campaignId),
+    loadAssets(db, campaignId),
+    loadSequence(db, campaignId),
+    normalizeAudioTrackDeadlines(db, campaignId),
+  ]);
+  return {
+    campaignId,
+    memberRows,
+    characterRows,
+    characterControllerRows,
+    sceneRows,
+    tokenRows,
+    controllerRows,
+    definitionRows,
+    catalogRows,
+    assignedRows,
+    assetRows,
+    sequenceRows,
+    audioTracks,
+  };
+}
+
 export async function buildSnapshot(
   db: Database,
   auth: AuthContext,
@@ -99,11 +278,20 @@ export async function buildSnapshot(
    * файлу) работают без правок.
    */
   extraSceneIds: readonly string[] = [],
+  /**
+   * UIX-409 — кампанийные чтения, сделанные один раз на всю рассылку.
+   *
+   * Не передан — снапшот читает сам, как и раньше. Поэтому все шесть прочих
+   * вызовов (bootstrap, диагностика, предпросмотр глазами игрока, проверка
+   * доступа к файлу) работают без единой правки.
+   */
+  readSet?: CampaignReadSet,
 ): Promise<GameSnapshot> {
-  const normalizedAudioTracks = await normalizeAudioTrackDeadlines(
-    db,
-    auth.campaignId,
-  );
+  // Сверка до любой работы: набор чужой кампании обязан упасть здесь, а не
+  // растворить чужие строки в проекции.
+  if (readSet && readSet.campaignId !== auth.campaignId)
+    throw new Error("CAMPAIGN_READ_SET_MISMATCH");
+
   const [campaign] = await db
     .select()
     .from(campaigns)
@@ -134,7 +322,19 @@ export async function buildSnapshot(
   // идентификатор оставляет запрос корректным и результат пустым.
   if (canvasSceneIds.length === 0) canvasSceneIds.push(NO_SCENE);
 
-  const [
+  /**
+   * UIX-409 — кампанийные чтения берутся из общего набора, если его дали.
+   *
+   * Одна рассылка строит семь снапшотов, и около половины запросов в каждом
+   * зависят только от кампании: 239 запросов на рассылку при пуле в десять
+   * соединений — это очередь, а не работа, и время рассылки складывается
+   * именно из неё.
+   *
+   * Туман и рисунки в общий набор **не входят**: после UIX-408 их выборка
+   * зависит от того, какую сцену рассматривает конкретный зритель.
+   */
+  const shared = readSet ?? (await loadCampaignReadSet(db, auth.campaignId));
+  const {
     memberRows,
     characterRows,
     characterControllerRows,
@@ -144,153 +344,63 @@ export async function buildSnapshot(
     definitionRows,
     catalogRows,
     assignedRows,
-    fogRows,
-    drawingRows,
     assetRows,
-    threadRows,
-    cursorRows,
     sequenceRows,
-    playerRequestRows,
-  ] = await Promise.all([
-    db
-      .select()
-      .from(memberships)
-      .where(eq(memberships.campaignId, auth.campaignId))
-      .orderBy(asc(memberships.createdAt)),
-    // UIX-393: archived characters are gameplay-inactive — excluded here so
-    // they disappear from active selection/normal gameplay project-wide
-    // (roster, sheet access, token-definition/scene pickers that read off
-    // this snapshot). A dedicated GM-only endpoint
-    // (`GET /api/characters/archived`) serves the restore UI instead of
-    // widening this broadcast-to-everyone snapshot. A player whose own
-    // character gets archived does not break: `characterByOwner` below is
-    // built from this same filtered set, so `me.characterId` simply becomes
-    // `null` rather than pointing at a row absent from `characters`, and
-    // historical chat messages keep their raw `characterId` untouched (see
-    // the `messages` projection below) — the client falls back gracefully
-    // when a lookup in `snapshot.characters` misses.
-    db
-      .select()
-      .from(characters)
-      .where(
-        and(
-          eq(characters.campaignId, auth.campaignId),
-          eq(characters.lifecycle, "ACTIVE"),
-        ),
-      )
-      .orderBy(asc(characters.createdAt)),
-    db
-      .select({ controller: characterControllers })
-      .from(characterControllers)
-      .innerJoin(
-        characters,
-        eq(characterControllers.characterId, characters.id),
-      )
-      .where(
-        and(
-          eq(characters.campaignId, auth.campaignId),
-          eq(characters.lifecycle, "ACTIVE"),
-        ),
-      ),
-    db
-      .select()
-      .from(scenes)
-      .where(eq(scenes.campaignId, auth.campaignId))
-      .orderBy(asc(scenes.createdAt)),
-    db
-      .select({ token: tokens, definition: tokenDefinitions })
-      .from(tokens)
-      .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
-      .innerJoin(tokenDefinitions, eq(tokens.definitionId, tokenDefinitions.id))
-      .where(eq(scenes.campaignId, auth.campaignId)),
-    db
-      .select()
-      .from(tokenControllers)
-      .innerJoin(
-        tokenDefinitions,
-        eq(tokenControllers.tokenDefinitionId, tokenDefinitions.id),
-      )
-      .where(eq(tokenDefinitions.campaignId, auth.campaignId)),
-    db
-      .select()
-      .from(tokenDefinitions)
-      .where(eq(tokenDefinitions.campaignId, auth.campaignId))
-      .orderBy(asc(tokenDefinitions.createdAt)),
-    db
-      .select()
-      .from(catalogEntries)
-      .where(eq(catalogEntries.campaignId, auth.campaignId))
-      .orderBy(asc(catalogEntries.createdAt)),
-    db
-      .select({
-        entry: characterCatalogEntries,
-        campaignId: characters.campaignId,
-      })
-      .from(characterCatalogEntries)
-      .innerJoin(
-        characters,
-        eq(characterCatalogEntries.characterId, characters.id),
-      )
-      .where(eq(characters.campaignId, auth.campaignId)),
-    db
-      .select({ fog: fogReveals })
-      .from(fogReveals)
-      // `innerJoin` остаётся: у `fog_reveals` нет колонки кампании, и
-      // принадлежность определяется только через сцену. Замена join'а на
-      // отбор по списку id сняла бы единственную проверку арендатора.
-      .innerJoin(scenes, eq(fogReveals.sceneId, scenes.id))
-      .where(
-        and(
-          eq(scenes.campaignId, auth.campaignId),
-          inArray(fogReveals.sceneId, canvasSceneIds),
-        ),
-      )
-      .orderBy(asc(fogReveals.sequence)),
-    db
-      .select({ drawing: drawings })
-      .from(drawings)
-      .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
-      .where(
-        and(
-          eq(scenes.campaignId, auth.campaignId),
-          inArray(drawings.sceneId, canvasSceneIds),
-        ),
-      )
-      .orderBy(asc(drawings.createdAt)),
-    db
-      .select()
-      .from(assets)
-      .where(eq(assets.campaignId, auth.campaignId))
-      .orderBy(desc(assets.createdAt)),
-    db
-      .select()
-      .from(chatThreads)
-      .where(
-        and(
-          eq(chatThreads.campaignId, auth.campaignId),
-          or(
-            eq(chatThreads.type, "STREAM"),
-            eq(chatThreads.participantAMembershipId, auth.membershipId),
-            eq(chatThreads.participantBMembershipId, auth.membershipId),
+    audioTracks: normalizedAudioTracks,
+  } = shared;
+
+  const [fogRows, drawingRows, threadRows, cursorRows, playerRequestRows] =
+    await Promise.all([
+      db
+        .select({ fog: fogReveals })
+        .from(fogReveals)
+        // `innerJoin` остаётся: у `fog_reveals` нет колонки кампании, и
+        // принадлежность определяется только через сцену. Замена join'а на
+        // отбор по списку id сняла бы единственную проверку арендатора.
+        .innerJoin(scenes, eq(fogReveals.sceneId, scenes.id))
+        .where(
+          and(
+            eq(scenes.campaignId, auth.campaignId),
+            inArray(fogReveals.sceneId, canvasSceneIds),
+          ),
+        )
+        .orderBy(asc(fogReveals.sequence)),
+      db
+        .select({ drawing: drawings })
+        .from(drawings)
+        .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
+        .where(
+          and(
+            eq(scenes.campaignId, auth.campaignId),
+            inArray(drawings.sceneId, canvasSceneIds),
+          ),
+        )
+        .orderBy(asc(drawings.createdAt)),
+      db
+        .select()
+        .from(chatThreads)
+        .where(
+          and(
+            eq(chatThreads.campaignId, auth.campaignId),
+            or(
+              eq(chatThreads.type, "STREAM"),
+              eq(chatThreads.participantAMembershipId, auth.membershipId),
+              eq(chatThreads.participantBMembershipId, auth.membershipId),
+            ),
+          ),
+        )
+        .orderBy(asc(chatThreads.stream)),
+      db
+        .select()
+        .from(chatReadCursors)
+        .where(
+          and(
+            eq(chatReadCursors.campaignId, auth.campaignId),
+            eq(chatReadCursors.membershipId, auth.membershipId),
           ),
         ),
-      )
-      .orderBy(asc(chatThreads.stream)),
-    db
-      .select()
-      .from(chatReadCursors)
-      .where(
-        and(
-          eq(chatReadCursors.campaignId, auth.campaignId),
-          eq(chatReadCursors.membershipId, auth.membershipId),
-        ),
-      ),
-    db
-      .select({ value: max(gameEvents.sequence) })
-      .from(gameEvents)
-      .where(eq(gameEvents.campaignId, auth.campaignId)),
-    listVisiblePlayerRequests(db, auth),
-  ]);
+      listVisiblePlayerRequests(db, auth),
+    ]);
 
   const worldMapProjection = await buildWorldMapsSnapshot(db, auth);
   const encounterRows = await listEncounters(db, auth.campaignId);

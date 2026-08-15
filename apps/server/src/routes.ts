@@ -112,7 +112,11 @@ import { createSession, requireAuth } from "./auth.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
-import { buildSnapshot, resolveStatLayout } from "./snapshot.js";
+import {
+  buildSnapshot,
+  loadCampaignReadSet,
+  resolveStatLayout,
+} from "./snapshot.js";
 import { loadThreadHistory } from "./chat-history.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import {
@@ -227,6 +231,17 @@ async function broadcastSnapshots(
   campaignId: string,
 ) {
   const sockets = await io.in(campaignRoom(campaignId)).fetchSockets();
+  /**
+   * UIX-409 — кампанийные чтения делаются один раз на всю рассылку.
+   *
+   * Семь снапшотов читали одно и то же семь раз: 239 запросов при пуле в
+   * десять соединений — это очередь, а не работа. Набор живёт только внутри
+   * этого вызова: кеша со временем жизни нет и не будет.
+   *
+   * Побочно это чинит согласованность: раньше семь снапшотов одной рассылки
+   * строились в семь разных моментов и могли расходиться между собой.
+   */
+  const readSet = await loadCampaignReadSet(db, campaignId);
   if (!SNAPSHOT_METRICS_ENABLED) {
     await Promise.all(
       sockets.map(async (socket) => {
@@ -236,7 +251,7 @@ async function broadcastSnapshots(
           // рассматривает, — иначе он рисовал бы туман поверх якобы пустой.
           socket.emit(
             "game:snapshot",
-            await buildSnapshot(db, auth, viewedScenes(socket.data)),
+            await buildSnapshot(db, auth, viewedScenes(socket.data), readSet),
           );
         }
       }),
@@ -259,7 +274,12 @@ async function broadcastSnapshots(
       const auth = socket.data.auth;
       if (auth?.campaignId !== campaignId) return;
       const socketStartedAt = performance.now();
-      const snapshot = await buildSnapshot(db, auth, viewedScenes(socket.data));
+      const snapshot = await buildSnapshot(
+        db,
+        auth,
+        viewedScenes(socket.data),
+        readSet,
+      );
       const ms = performance.now() - socketStartedAt;
       const { bytes, byField } = measureSnapshot(snapshot);
       perSocket.push({ role: auth.role, bytes, ms });
