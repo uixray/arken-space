@@ -497,6 +497,22 @@ export const modifierSourceSchema = z.discriminatedUnion("type", [
       .max(80),
   }),
 ]);
+/**
+ * Стоимость применения в ресурсах персонажа.
+ *
+ * UIX-424, шаг 9: одна форма на способности каталога и на навыки. Навыкам
+ * стоимость добавляется распространением уже работающего механизма, а не
+ * вторым списанием рядом, — иначе появились бы два разных правила «хватает ли
+ * ресурса», и разошлись бы они в бою.
+ *
+ * Ресурс один, а не оба сразу: так решено мастером. Форма это и выражает —
+ * `type` выбирает один из двух, а не набор.
+ */
+export const resourceCostSchema = z.object({
+  type: z.enum(["physical", "magic"]),
+  amount: z.number().int().positive().max(100000),
+});
+
 export const rollActionSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
   kind: rollActionKindSchema,
@@ -506,12 +522,7 @@ export const rollActionSchema = z.object({
   order: z.number().int().min(0).max(1000),
   advantage: z.boolean().default(false),
   consumeUse: z.boolean().default(false),
-  cost: z
-    .object({
-      type: z.enum(["physical", "magic"]),
-      amount: z.number().int().positive().max(100000),
-    })
-    .optional(),
+  cost: resourceCostSchema.optional(),
 });
 export const rechargePeriodSchema = z.enum(["DAY", "BATTLE", "WEEK"]);
 export const abilityUsesSchema = z
@@ -1019,6 +1030,12 @@ export const characterUpdateSchema = z.object({
         name: z.string(),
         rank: z.number(),
         formula: z.string(),
+        /**
+         * UIX-424, шаг 9. Стоимость хранится у навыка, а не присылается при
+         * броске: цену применения назначает мастер, и приняв её от клиента,
+         * сервер разрешил бы игроку объявить любой навык бесплатным.
+         */
+        cost: resourceCostSchema.optional(),
       }),
     )
     .max(100)

@@ -127,9 +127,13 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const code = data?.error ?? "REQUEST_FAILED";
     const message =
       code === "INSUFFICIENT_CHARACTER_RESOURCE"
-        ? "Недостаточно " +
-          (data?.resource === "magic" ? "магической силы" : "физической силы") +
-          `. Нужно: ${data?.required ?? 0}, доступно: ${data?.available ?? 0}.`
+        ? // UIX-424, шаг 9: «магической силы» и «физической силы» — имена, от
+          // которых мастер отказался. Раскладки кампании здесь нет (это общий
+          // разбор ответов, а не компонент), поэтому подставляются нейтральные
+          // слова: сколько нужно и сколько есть — то, ради чего сообщение и
+          // читают.
+          `Не хватает ${data?.resource === "magic" ? "маны" : "выносливости"}. ` +
+          `Нужно: ${data?.required ?? 0}, доступно: ${data?.available ?? 0}.`
         : (data?.message ?? "Не удалось выполнить запрос");
     const error = new ApiError(
       response.status,

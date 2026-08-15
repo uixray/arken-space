@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formulasReferencingKey,
   moveStatRow,
+  resourceCostLabels,
   statKeyFromLabel,
   statRowsFromLayout,
   uniqueStatKey,
@@ -210,5 +211,47 @@ describe("moveStatRow", () => {
     const original = layout();
     moveStatRow(original, "lovkost", "up");
     expect(keys(original, 0)).toEqual(["sila", "lovkost", "udacha"]);
+  });
+});
+
+describe("resourceCostLabels", () => {
+  const layout = (rows: { key: string; label: string; source: string }[]) => [
+    { id: "combat", rows },
+  ];
+
+  it("берёт имена ресурсов из раскладки, а не из кода", () => {
+    // В форме способности стояли «Physical Power» и «Magic Power»: английские
+    // строки в русском интерфейсе, да ещё и прежние имена ресурсов.
+    expect(
+      resourceCostLabels(
+        layout([
+          { key: "physicalPower", label: "Выносливость", source: "RESOURCE" },
+          { key: "magicPower", label: "Мана", source: "RESOURCE" },
+        ]),
+      ),
+    ).toEqual({ physical: "Выносливость", magic: "Мана" });
+  });
+
+  it("сопоставляет по ключу, а не по порядку строк", () => {
+    // Мастер может переставить строки местами — стоимость обязана остаться на
+    // своём ресурсе, иначе способность начнёт списывать не то.
+    expect(
+      resourceCostLabels(
+        layout([
+          { key: "magicPower", label: "Мана", source: "RESOURCE" },
+          { key: "physicalPower", label: "Выносливость", source: "RESOURCE" },
+        ]),
+      ),
+    ).toEqual({ physical: "Выносливость", magic: "Мана" });
+  });
+
+  it("подставляет имя по умолчанию, когда строки в раскладке нет", () => {
+    // Мастер может убрать строку-ресурс из раскладки, но ключ стоимости
+    // остаётся у уже созданных способностей: пустая подпись в списке была бы
+    // хуже имени по умолчанию.
+    expect(resourceCostLabels(layout([]))).toEqual({
+      physical: "Выносливость",
+      magic: "Мана",
+    });
   });
 });

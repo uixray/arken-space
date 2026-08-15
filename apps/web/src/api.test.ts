@@ -111,7 +111,9 @@ describe("api telemetry and correlation", () => {
     ).catch((error: unknown) => error)) as ApiError;
 
     expect(failure.code).toBe("INSUFFICIENT_CHARACTER_RESOURCE");
-    expect(failure.message).toContain("магической силы");
+    // UIX-424, шаг 9: ресурс называется маной. «Магическая сила» — имя, от
+    // которого мастер отказался ещё на этапе решений.
+    expect(failure.message).toContain("маны");
     expect(failure.message).toContain("Нужно: 4");
     expect(failure.message).toContain("доступно: 1");
   });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   statKeyFromLabel,
   moveStatRow,
+  resourceCostLabels,
   statLabelsFromLayout,
   statResourceRowsFromLayout,
   statRowsOfGroup,
@@ -764,6 +765,7 @@ export function CharacterPanel({
   );
   const combatRows = statRowsOfGroup(snapshot.campaign.statLayout, "combat");
   const resourceRows = statResourceRowsFromLayout(snapshot.campaign.statLayout);
+  const resourceLabels = resourceCostLabels(snapshot.campaign.statLayout);
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
@@ -1418,6 +1420,7 @@ export function CharacterPanel({
       {snapshot.me.role === "GM" && catalogPicker && (
         <CatalogEntryPicker
           statLabels={statLabels}
+          resourceLabels={resourceLabels}
           open
           kind={catalogPicker}
           options={
@@ -1441,6 +1444,7 @@ export function CharacterPanel({
         >
           <CatalogEntryForm
             statLabels={statLabels}
+            resourceLabels={resourceLabels}
             key={entryEditor.id}
             existing={entryEditor}
             onCancel={() => setEntryEditor(null)}

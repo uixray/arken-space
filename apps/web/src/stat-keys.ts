@@ -165,6 +165,31 @@ export function statResourceRowsFromLayout(
   );
 }
 
+/**
+ * Подписи для стоимости применения.
+ *
+ * Ключи стоимости (`physical`, `magic`) принадлежат серверу и не меняются, а
+ * имена — мастеру: он переименовал ресурсы, и форма способности обязана
+ * показывать его слова, а не «Physical Power».
+ *
+ * Строки-ресурсы раскладки идут в порядке объявления, поэтому первая — та, что
+ * соответствует `physicalPower`, вторая — `magicPower`; сопоставление идёт по
+ * ключу, а не по порядку, чтобы перестановка строк ничего не сломала.
+ */
+export function resourceCostLabels(
+  layout: readonly {
+    rows: readonly { key: string; label: string; source?: string }[];
+  }[],
+): { physical: string; magic: string } {
+  const rows = statResourceRowsFromLayout(layout);
+  const labelOf = (key: string, fallback: string) =>
+    rows.find((row) => row.key === key)?.label ?? fallback;
+  return {
+    physical: labelOf("physicalPower", "Выносливость"),
+    magic: labelOf("magicPower", "Мана"),
+  };
+}
+
 export function statRowsOfGroup(
   layout: readonly {
     id: string;

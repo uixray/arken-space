@@ -14,6 +14,22 @@ function normalizeWalletValue(value: unknown) {
   return Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.trunc(value)));
 }
 
+/**
+ * Ресурсы персонажа как запись пулов.
+ *
+ * Колонка — `jsonb`, то есть может оказаться чем угодно: null у старой записи,
+ * не объектом после правки руками. Списание ресурса читает её дважды — при
+ * проверке остатка и при вычитании, — и две разные защиты «на всякий случай»
+ * рано или поздно разошлись бы.
+ */
+export function normalizeCharacterResources(
+  resources: unknown,
+): Record<string, { current: number; maximum?: number }> {
+  return resources && typeof resources === "object"
+    ? (resources as Record<string, { current: number; maximum?: number }>)
+    : {};
+}
+
 export function normalizeCharacterWallet(
   wallet: Partial<CharacterDto["wallet"]> | null | undefined,
 ): CharacterDto["wallet"] {
@@ -71,7 +87,9 @@ export function characterDto(
     })),
     revision: character.revision,
     lifecycle: character.lifecycle,
-    archivedAt: character.archivedAt ? character.archivedAt.toISOString() : null,
+    archivedAt: character.archivedAt
+      ? character.archivedAt.toISOString()
+      : null,
     archivedByMembershipId: character.archivedByMembershipId,
   };
 }

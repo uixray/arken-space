@@ -495,7 +495,14 @@ export const characters = pgTable(
     stats: jsonb("stats").$type<Record<string, number>>().notNull().default({}),
     skills: jsonb("skills")
       .$type<
-        Array<{ key: string; name: string; rank: number; formula: string }>
+        Array<{
+          key: string;
+          name: string;
+          rank: number;
+          formula: string;
+          /** UIX-424, шаг 9: стоимость применения в ресурсах. */
+          cost?: { type: "physical" | "magic"; amount: number };
+        }>
       >()
       .notNull()
       .default([]),

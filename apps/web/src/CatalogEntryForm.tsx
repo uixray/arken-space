@@ -38,6 +38,12 @@ type Props = {
    * и силы магии.
    */
   statLabels: Record<string, string>;
+  /**
+   * UIX-424, шаг 9. Подписи стоимости в ресурсах — из раскладки кампании.
+   * Ключи стоимости свои (`physical`/`magic`) и остаются: их понимает сервер,
+   * когда списывает. Меняются только имена, которые видит мастер.
+   */
+  resourceLabels: { physical: string; magic: string };
   onSubmit: (input: CatalogEntryFormInput) => void | Promise<void>;
   onCancel: () => void;
 };
@@ -99,6 +105,7 @@ function emptyAction(order: number): EditableRollAction {
 export function CatalogEntryForm({
   existing,
   statLabels,
+  resourceLabels,
   onSubmit,
   onCancel,
 }: Props) {
@@ -507,9 +514,14 @@ export function CatalogEntryForm({
                   })
                 }
               >
+                {/* UIX-424, шаг 9: подписи ресурсов — из раскладки кампании.
+                 * Здесь стояли «Physical Power» и «Magic Power»: английские
+                 * строки в русском интерфейсе, да ещё и прежние имена, от
+                 * которых мастер отказался. Ключи стоимости при этом свои
+                 * (`physical`/`magic`) и не меняются — их знает сервер. */}
                 <option value="none">Без стоимости</option>
-                <option value="physical">Physical Power</option>
-                <option value="magic">Magic Power</option>
+                <option value="physical">{resourceLabels.physical}</option>
+                <option value="magic">{resourceLabels.magic}</option>
               </FormSelect>
             </label>
             {action.costType !== "none" && (

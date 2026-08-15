@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { statLabelsFromLayout } from "../stat-keys";
+import { resourceCostLabels, statLabelsFromLayout } from "../stat-keys";
 import { useCampaignActions } from "../campaign-actions-context";
 import type {
   CatalogEntryDto,
@@ -150,6 +150,9 @@ export function SetupPanel(props: Props) {
             onClose={() => setCatalogEditor(null)}
           >
             <CatalogEntryForm
+              resourceLabels={resourceCostLabels(
+                props.snapshot.campaign.statLayout,
+              )}
               statLabels={statLabels}
               key={catalogEditor === "NEW" ? "new" : catalogEditor.id}
               existing={catalogEditor === "NEW" ? undefined : catalogEditor}

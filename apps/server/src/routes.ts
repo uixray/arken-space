@@ -113,7 +113,11 @@ import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 import { buildSnapshot, resolveStatLayout } from "./snapshot.js";
-import { characterDto, normalizeCharacterWallet } from "./character-dto.js";
+import {
+  characterDto,
+  normalizeCharacterResources,
+  normalizeCharacterWallet,
+} from "./character-dto.js";
 import {
   rejectDestructiveLayoutChange,
   removedStatKeys,
@@ -7128,13 +7132,7 @@ export function registerRoutes(
           : cost?.type === "magic"
             ? "magicPower"
             : null;
-      const resources =
-        row.character.resources && typeof row.character.resources === "object"
-          ? (row.character.resources as Record<
-              string,
-              { current: number; maximum?: number }
-            >)
-          : {};
+      const resources = normalizeCharacterResources(row.character.resources);
       const resourceBefore = resourceKey
         ? (resources[resourceKey]?.current ?? 0)
         : null;

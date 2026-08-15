@@ -27,6 +27,7 @@ export function CatalogEntryPicker({
   kind,
   options,
   statLabels,
+  resourceLabels,
   onClose,
   onAssign,
   onCreate,
@@ -35,6 +36,7 @@ export function CatalogEntryPicker({
   kind: "SKILL" | "ABILITY";
   /** UIX-424: подписи характеристик из раскладки, для формы создания. */
   statLabels: Record<string, string>;
+  resourceLabels: { physical: string; magic: string };
   /** Already filtered to this kind and excluding entries already assigned to the character. */
   options: CatalogEntryDto[];
   onClose: () => void;
@@ -136,6 +138,7 @@ export function CatalogEntryPicker({
         </div>
       ) : (
         <CatalogEntryForm
+          resourceLabels={resourceLabels}
           statLabels={statLabels}
           onCancel={() => setMode("SELECT")}
           onSubmit={async (input) => {
