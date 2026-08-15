@@ -1,5 +1,5 @@
 import type { CharacterDto } from "@arken/contracts";
-import { arkenSystem } from "@arken/system";
+import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
 import { formulaBonus } from "../activity-roll-controls";
 
@@ -12,11 +12,18 @@ import { formulaBonus } from "../activity-roll-controls";
  */
 export function QuickRollPanel({
   rollCharacter,
+  rows,
   quickRollPending,
   gmOnly,
   onQuickRoll,
 }: {
   rollCharacter: CharacterDto;
+  /**
+   * UIX-424: строки раскладки **кампании**, а не стартовой. Панель строилась
+   * из `arkenSystem.stats`, и характеристика, добавленная мастером, кнопки не
+   * получала: карточка её показывала, панель — нет.
+   */
+  rows: readonly { key: string; label: string }[];
   quickRollPending: boolean;
   /**
    * Mirrors the dice tray's shared GM-only toggle (see `ActivityPanel`). The
@@ -38,7 +45,7 @@ export function QuickRollPanel({
          * ловкость — это настоящая характеристика раскладки, и кнопка на неё
          * приходит из списка ниже. Оставить обе значило бы дать две кнопки с
          * одной подписью и разными числами. */}
-        {arkenSystem.stats.map((stat) => (
+        {rows.map((stat) => (
           <Button
             key={stat.key}
             disabled={quickRollPending}
@@ -46,7 +53,7 @@ export function QuickRollPanel({
               onQuickRoll(
                 `1d20 + ${stat.key}`,
                 stat.label,
-                rollCharacter.stats[stat.key] ?? stat.defaultValue,
+                rollCharacter.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue,
               )
             }
           >

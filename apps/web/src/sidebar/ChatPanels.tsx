@@ -20,7 +20,7 @@ import {
   getSlashCommandSuggestions,
   parseComposerInput,
 } from "../chat-composer";
-import { statLabelsFromLayout } from "../stat-keys";
+import { statLabelsFromLayout, statRowsFromLayout } from "../stat-keys";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
@@ -442,6 +442,7 @@ export function ActivityPanel({
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}
+            rows={statRowsFromLayout(snapshot.campaign.statLayout)}
             quickRollPending={quickRollPending}
             gmOnly={rollVisibility === "GM_ONLY"}
             onQuickRoll={(formula, label, bonus) =>

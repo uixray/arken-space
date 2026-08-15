@@ -28,3 +28,7 @@ AGENTS.md
 # They are real repositories, not files of this one; without this the release
 # checklist's clean-tree gate fails on them.
 .worktrees/
+
+# Локальный проброс портов для разработки. В прод попасть не должен:
+# build-and-start.sh вызывает `docker compose` без -f, и override подхватится сам.
+docker-compose.override.yml

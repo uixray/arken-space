@@ -134,6 +134,25 @@ export function formulasReferencingKey<T extends { formula?: string }>(
  * Группы неизвестной кампании может не быть вовсе — тогда пусто, а не падение:
  * раскладка приходит из базы и не обязана содержать то, чего ждёт карточка.
  */
+/**
+ * Все числовые строки раскладки, по порядку групп.
+ *
+ * Существует затем же, зачем `statLabelsFromLayout`: панель быстрых бросков
+ * раньше строилась из стартовой раскладки, и добавленная мастером
+ * характеристика кнопки не получала — карточка её показывала, а панель нет.
+ */
+export function statRowsFromLayout(
+  layout: readonly {
+    rows: readonly { key: string; label: string; source?: string }[];
+  }[],
+): { key: string; label: string }[] {
+  return layout.flatMap((group) =>
+    group.rows
+      .filter((row) => row.source !== "RESOURCE")
+      .map(({ key, label }) => ({ key, label })),
+  );
+}
+
 export function statRowsOfGroup(
   layout: readonly {
     id: string;

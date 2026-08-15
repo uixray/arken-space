@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formulasReferencingKey,
   statKeyFromLabel,
+  statRowsFromLayout,
   uniqueStatKey,
 } from "./stat-keys";
 
@@ -94,5 +95,42 @@ describe("formulasReferencingKey", () => {
 
   it("возвращает пусто на пустом ключе, а не всё подряд", () => {
     expect(formulasReferencingKey(skills, "")).toEqual([]);
+  });
+});
+
+describe("statRowsFromLayout", () => {
+  const layout = [
+    {
+      id: "characteristics",
+      rows: [
+        { key: "sila", label: "Сила", source: "STAT" },
+        { key: "udacha", label: "Удача", source: "STAT" },
+      ],
+    },
+    {
+      id: "combat",
+      rows: [
+        { key: "mana", label: "Мана", source: "RESOURCE" },
+        { key: "melee", label: "Ближний бой", source: "STAT" },
+      ],
+    },
+  ];
+
+  it("собирает строки всех групп по порядку", () => {
+    // Панель быстрых бросков строилась из стартовой раскладки, и строка,
+    // добавленная мастером, кнопки не получала: карточка её показывала,
+    // панель — нет.
+    expect(statRowsFromLayout(layout).map((row) => row.key)).toEqual([
+      "sila",
+      "udacha",
+      "melee",
+    ]);
+  });
+
+  it("не даёт кнопку броска на пул ресурса", () => {
+    // У «Маны» нет одного числа: бросок по ней взял бы не то значение.
+    expect(statRowsFromLayout(layout).map((row) => row.key)).not.toContain(
+      "mana",
+    );
   });
 });
