@@ -15,9 +15,9 @@
     "dev": "tsup src/index.ts --format esm --dts --watch"
   },
   "dependencies": {
-    "zod": "latest"
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "tsup": "latest"
+    "tsup": "8.5.1"
   }
 }

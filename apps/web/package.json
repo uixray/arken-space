@@ -13,21 +13,21 @@
     "@arken/system": "workspace:*",
     "@gravity-ui/icons": "2.20.0",
     "@gravity-ui/uikit": "7.43.0",
-    "konva": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "react-konva": "latest",
-    "socket.io-client": "latest",
-    "use-image": "latest"
+    "konva": "10.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-konva": "19.2.5",
+    "socket.io-client": "4.8.3",
+    "use-image": "1.1.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "7.0.0",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.3",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
     "jsdom": "30.0.1",
-    "vite": "latest"
+    "vite": "8.2.1"
   }
 }
