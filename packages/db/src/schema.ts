@@ -920,7 +920,19 @@ export const tokenDefinitions = pgTable(
     defaultAssetId: uuid("default_asset_id").references(() => assets.id, {
       onDelete: "set null",
     }),
-    name: text("name").notNull(),
+    /**
+     * UIX-400: `NULL` значит «зовусь как мой персонаж».
+     *
+     * Это хранимое намерение, а не догадка по совпадению строк: токен,
+     * названный ровно как персонаж, за ним не следует и при переименовании
+     * останется прежним. На боевых данных четыре определения из пяти носят
+     * осознанные короткие имена («Ллойд» у «Ллойда Олпорта»), и безусловная
+     * синхронизация снесла бы их все ради починки одного.
+     *
+     * `token_definitions_name_check` не даёт оставить `NULL` без персонажа:
+     * наследовать было бы не от кого.
+     */
+    name: text("name"),
     defaultWidth: doublePrecision("default_width").notNull().default(64),
     defaultHeight: doublePrecision("default_height").notNull().default(64),
     revision: integer("revision").notNull().default(0),

@@ -7,6 +7,7 @@ import {
   actionJournal,
   assets,
   campaigns,
+  characters,
   gameEvents,
   memberships,
   scenes,
@@ -34,6 +35,7 @@ import type { AuthContext, SessionAuthContext } from "./auth.js";
 import { authFromSessionToken, sessionIsActive } from "./auth.js";
 import { env } from "./env.js";
 import { buildSnapshot } from "./snapshot.js";
+import { resolveTokenName } from "./token-name.js";
 import { cookieValue } from "./security.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import { effectiveAudioPosition, ensureAudioDuration } from "./audio-state.js";
@@ -49,7 +51,9 @@ const gmRoom = (campaignId: string) => `campaign:${campaignId}:gm`;
 const memberRoom = (membershipId: string) => `member:${membershipId}`;
 const sessionRoom = (sessionId: string) => `session:${sessionId}`;
 
-type EditableToken = typeof tokens.$inferSelect & {
+type EditableToken = Omit<typeof tokens.$inferSelect, "name"> & {
+  /** UIX-400: разрешённое имя — своё либо унаследованное от персонажа. */
+  name: string;
   controllerMembershipIds: string[];
   definitionRevision: number;
 };
@@ -107,11 +111,16 @@ export async function editableToken(
       campaignId: scenes.campaignId,
       activeSceneId: campaigns.activeSceneId,
       definition: tokenDefinitions,
+      // UIX-400: имя персонажа нужно здесь же — определение может не иметь
+      // своего, и тогда подпись наследуется. Внешнее соединение, потому что
+      // персонаж необязателен.
+      characterName: characters.name,
     })
     .from(tokens)
     .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
     .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
     .innerJoin(tokenDefinitions, eq(tokens.definitionId, tokenDefinitions.id))
+    .leftJoin(characters, eq(tokenDefinitions.characterId, characters.id))
     .where(eq(tokens.id, tokenId))
     .limit(1);
   if (
@@ -138,7 +147,10 @@ export async function editableToken(
     ...row.token,
     characterId: row.definition.characterId,
     assetId: row.definition.defaultAssetId,
-    name: row.definition.name,
+    name: resolveTokenName({
+      name: row.definition.name,
+      characterName: row.characterName,
+    }),
     controllerMembershipIds,
     definitionRevision: row.definition.revision,
   };

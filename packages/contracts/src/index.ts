@@ -1816,7 +1816,19 @@ export interface TokenDefinitionDto {
   id: string;
   characterId: string | null;
   defaultAssetId: string | null;
+  /**
+   * Имя, которое видит человек: собственное, либо унаследованное от персонажа.
+   * Всегда непустое — разрешением занимается сервер.
+   */
   name: string;
+  /**
+   * UIX-400: собственное имя определения, `null` — «зовусь как мой персонаж».
+   *
+   * Нужно редактору: по одному лишь `name` он не отличит намеренное имя,
+   * совпавшее с персонажем, от следования за ним, и «сохранить» превратило бы
+   * второе в первое.
+   */
+  ownName: string | null;
   defaultWidth: number;
   defaultHeight: number;
   controllerMembershipIds: string[];

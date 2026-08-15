@@ -3008,7 +3008,11 @@ export function registerRoutes(
           sceneId: scene.id,
           characterId: lockedDefinition.characterId,
           assetId: lockedDefinition.defaultAssetId,
-          name: lockedDefinition.name,
+          // UIX-400: `tokens.name` только пишется и никогда не читается —
+          // подпись всегда берётся из определения. Значение здесь остаётся
+          // историческим следом, поэтому пустое имя определения замещается
+          // разрешённым, а не пишется как NULL в notNull-колонку.
+          name: lockedDefinition.name ?? "",
           x,
           y,
           width: lockedDefinition.defaultWidth,

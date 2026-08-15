@@ -48,6 +48,7 @@ import {
 import { buildWorldMapsSnapshot } from "./world-maps.js";
 import { characterDto } from "./character-dto.js";
 import { projectChatMessages } from "./chat-history.js";
+import { resolveTokenName } from "./token-name.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
 
@@ -457,6 +458,11 @@ export async function buildSnapshot(
       .filter((item) => item.ownerMembershipId)
       .map((item) => [item.ownerMembershipId, item.id]),
   );
+  // UIX-400: имена всех персонажей кампании, включая архивных, — определение
+  // токена может ссылаться на архивного, и подпись у него должна остаться.
+  const characterNameById = new Map(
+    characterRows.map((character) => [character.id, character.name]),
+  );
   const memberNameById = new Map(
     memberRows.map((member) => [member.id, member.displayName]),
   );
@@ -683,7 +689,12 @@ export async function buildSnapshot(
         definitionRevision: definition.revision,
         characterId: definition.characterId,
         assetId: definition.defaultAssetId,
-        name: definition.name,
+        // UIX-400: имя разрешается в одном месте — здесь. Собственное, либо
+        // унаследованное от персонажа.
+        name: resolveTokenName({
+          name: definition.name,
+          characterName: characterNameById.get(definition.characterId ?? ""),
+        }),
         width: token.width,
         height: token.height,
         controllerMembershipIds:
@@ -698,7 +709,11 @@ export async function buildSnapshot(
       id: definition.id,
       characterId: definition.characterId,
       defaultAssetId: definition.defaultAssetId,
-      name: definition.name,
+      name: resolveTokenName({
+        name: definition.name,
+        characterName: characterNameById.get(definition.characterId ?? ""),
+      }),
+      ownName: definition.name,
       defaultWidth: definition.defaultWidth,
       defaultHeight: definition.defaultHeight,
       controllerMembershipIds:

@@ -355,7 +355,7 @@ Drizzle schema содержит **51** прикладную таблицу.
 - assets лежат в БД как metadata, а content — на файловой системе;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0036` применяются при старте server-контейнера до запуска
+Миграции `0000`–`0037` применяются при старте server-контейнера до запуска
 Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 
