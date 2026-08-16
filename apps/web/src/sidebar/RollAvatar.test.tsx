@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
-import { renderComponent, screen } from "../test-support/render";
+import { fireEvent, renderComponent, screen } from "../test-support/render";
 import { RollAvatar } from "./RollAvatar";
 import { rollInitials } from "../roll-initials";
 import { createRollAvatarSource } from "../roll-avatar-source";
@@ -91,6 +91,26 @@ describe("аватар броска", () => {
         assetUrl={null}
       />,
     );
+    expect(screen.getByTitle("Шейла Ловкая").textContent).toContain("ШЛ");
+  });
+
+  it("падает на инициалы, если файл портрета не загрузился", () => {
+    renderComponent(
+      <RollAvatar
+        identity={{
+          id: "c1",
+          name: "Шейла Ловкая",
+          portraitAssetId: "missing",
+          tokenAssetId: null,
+        }}
+        fallbackName="Сосед"
+        assetUrl="/api/assets/missing/content"
+      />,
+    );
+
+    fireEvent.error(screen.getByAltText("Шейла Ловкая"));
+
+    expect(screen.queryByRole("img")).toBeNull();
     expect(screen.getByTitle("Шейла Ловкая").textContent).toContain("ШЛ");
   });
 

@@ -18,6 +18,19 @@ export interface InitiativeActions {
     participants: InitiativeParticipantDto[],
     revision: number,
   ) => Promise<void>;
+  /**
+   * UIX-466 — «поставить своей строке значение».
+   *
+   * Отдельно от правки очереди целиком, потому что игрок видит её
+   * отфильтрованной: строк противников у него нет, и отправить полный состав он
+   * не может физически — сервер увидел бы, что участники исчезли. Так и вышло с
+   * первой попыткой дать игроку общий маршрут.
+   */
+  onSetOwnInitiative: (
+    participantId: string,
+    initiative: number | null,
+    revision: number,
+  ) => Promise<void>;
 }
 
 export function useInitiativeActions(dependencies: {
@@ -39,6 +52,18 @@ export function useInitiativeActions(dependencies: {
               name: participant.ownName,
               initiative: participant.initiative,
             })),
+          }),
+        });
+        await load();
+      },
+      onSetOwnInitiative: async (participantId, initiative, revision) => {
+        await api("/api/campaign/initiative/self", {
+          method: "PATCH",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+            participantId,
+            initiative,
           }),
         });
         await load();

@@ -28,13 +28,17 @@ import { WorldEncyclopediaWorkspace } from "./WorldEncyclopediaWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 import {
   CHAT_STREAM_LABEL,
-  CHAT_STREAM_ORDER,
   messagesForStream,
   streamForMessage,
   threadForStream,
   unreadCountForStream,
 } from "./chat-state";
-import { activityTableReadTarget, feedForChatStream } from "./sidebar-feed";
+import {
+  activityTableReadTarget,
+  allowedSidebarFeed,
+  chatFeedOrder,
+  feedForChatStream,
+} from "./sidebar-feed";
 import { CharacterWorkspace } from "./sidebar/CharacterWorkspace";
 import {
   ActivityPanel,
@@ -47,25 +51,21 @@ import { MediaPanel } from "./sidebar/MediaPanel";
 
 type SidebarFeed = "ACTIVITY" | ChatStream;
 
-const CHAT_FEED_ORDER: readonly SidebarFeed[] = [
-  "ACTIVITY",
-  ...CHAT_STREAM_ORDER.filter(
-    (stream) => stream !== "TABLE" && stream !== "ROLLS",
-  ),
-];
-
-function nextChatFeed(current: SidebarFeed, key: string): SidebarFeed | null {
-  const index = CHAT_FEED_ORDER.indexOf(current);
-  if (key === "Home") return CHAT_FEED_ORDER[0] ?? null;
-  if (key === "End") return CHAT_FEED_ORDER.at(-1) ?? null;
-  if (key === "ArrowRight")
-    return CHAT_FEED_ORDER[(index + 1) % CHAT_FEED_ORDER.length] ?? null;
+// UIX-467: порядок больше не модульная константа — он зависит от роли, потому
+// что «Сюжет» у игрока скрыт. Список берётся из `chatFeedOrder`, чтобы стрелки
+// не уводили на вкладку, которой в разметке нет.
+function nextChatFeed(
+  current: SidebarFeed,
+  key: string,
+  isGm: boolean,
+): SidebarFeed | null {
+  const order = chatFeedOrder(isGm);
+  const index = order.indexOf(current);
+  if (key === "Home") return order[0] ?? null;
+  if (key === "End") return order.at(-1) ?? null;
+  if (key === "ArrowRight") return order[(index + 1) % order.length] ?? null;
   if (key === "ArrowLeft")
-    return (
-      CHAT_FEED_ORDER[
-        (index - 1 + CHAT_FEED_ORDER.length) % CHAT_FEED_ORDER.length
-      ] ?? null
-    );
+    return order[(index - 1 + order.length) % order.length] ?? null;
   return null;
 }
 
@@ -99,6 +99,11 @@ export type Props = {
   selectedTokenIds: readonly string[];
   onUpdateInitiative: (
     participants: InitiativeParticipantDto[],
+    revision: number,
+  ) => Promise<void>;
+  onSetOwnInitiative: (
+    participantId: string,
+    initiative: number | null,
     revision: number,
   ) => Promise<void>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
@@ -185,7 +190,12 @@ export function Sidebar(props: Props) {
   const isGm = props.snapshot.me.role === "GM";
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const readSequenceRef = useRef(new Map<string, number>());
-  const [activeFeed, setActiveFeed] = useState<SidebarFeed>("ACTIVITY");
+  const [selectedFeed, setActiveFeed] = useState<SidebarFeed>("ACTIVITY");
+  // UIX-467: «Сюжет» скрыт у игрока, поэтому доступность ленты проверяется на
+  // чтении, а не в каждой из точек, где её выставляют. Переход к сообщению
+  // сюжета и восстановление прежней вкладки одинаково приводят игрока к
+  // «Событиям», и панель не может отрисоваться без своей вкладки.
+  const activeFeed = allowedSidebarFeed(selectedFeed, isGm);
   const [directMode, setDirectMode] = useState(false);
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
     string | null
@@ -305,7 +315,7 @@ export function Sidebar(props: Props) {
         aria-label="Потоки чата"
         role="tablist"
         onKeyDown={(event) => {
-          const nextFeed = nextChatFeed(activeFeed, event.key);
+          const nextFeed = nextChatFeed(activeFeed, event.key, isGm);
           if (!nextFeed) return;
           event.preventDefault();
           setActiveFeed(nextFeed);
@@ -330,36 +340,36 @@ export function Sidebar(props: Props) {
         >
           {"События"}
         </Button>
-        {CHAT_STREAM_ORDER.filter(
-          (stream) => stream !== "TABLE" && stream !== "ROLLS",
-        ).map((stream) => {
-          const unread = unreadCountForStream(props.snapshot, stream);
-          return (
-            <Button
-              key={stream}
-              view="flat"
-              role="tab"
-              id={`chat-tab-${stream.toLowerCase()}`}
-              aria-controls={`chat-panel-${stream.toLowerCase()}`}
-              aria-selected={!directMode && activeFeed === stream}
-              tabIndex={!directMode && activeFeed === stream ? 0 : -1}
-              onClick={() => {
-                setDirectMode(false);
-                setActiveFeed(stream);
-              }}
-            >
-              {CHAT_STREAM_LABEL[stream]}
-              {unread > 0 && (
-                <span
-                  className="chat-unread-badge"
-                  aria-label={`${unread} непрочитанных`}
-                >
-                  {unread}
-                </span>
-              )}
-            </Button>
-          );
-        })}
+        {chatFeedOrder(isGm)
+          .filter((feed): feed is ChatStream => feed !== "ACTIVITY")
+          .map((stream) => {
+            const unread = unreadCountForStream(props.snapshot, stream);
+            return (
+              <Button
+                key={stream}
+                view="flat"
+                role="tab"
+                id={`chat-tab-${stream.toLowerCase()}`}
+                aria-controls={`chat-panel-${stream.toLowerCase()}`}
+                aria-selected={!directMode && activeFeed === stream}
+                tabIndex={!directMode && activeFeed === stream ? 0 : -1}
+                onClick={() => {
+                  setDirectMode(false);
+                  setActiveFeed(stream);
+                }}
+              >
+                {CHAT_STREAM_LABEL[stream]}
+                {unread > 0 && (
+                  <span
+                    className="chat-unread-badge"
+                    aria-label={`${unread} непрочитанных`}
+                  >
+                    {unread}
+                  </span>
+                )}
+              </Button>
+            );
+          })}
         {/* UIX-365: direct-message tab hidden pending a dedicated redesign of the mechanic. */}
       </nav>
       <div className="panel-scroll chat-scroll">
@@ -389,6 +399,7 @@ export function Sidebar(props: Props) {
             onUpdateCounters={props.onUpdateCounters}
             selectedTokenIds={props.selectedTokenIds}
             onUpdateInitiative={props.onUpdateInitiative}
+            onSetOwnInitiative={props.onSetOwnInitiative}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel

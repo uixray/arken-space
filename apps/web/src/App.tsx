@@ -2680,6 +2680,7 @@ export function App() {
             <Sidebar
               selectedTokenIds={selectedTokenIds}
               onUpdateInitiative={initiativeActions.onUpdateInitiative}
+              onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
               snapshot={snapshot}
               requestedCharacterId={requestedCharacterId}
               socket={socket}

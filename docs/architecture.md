@@ -146,23 +146,23 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **81** HTTP-маршрутов в `routes.ts`, плюс отдельные модули маршрутов для
+Всего **82** HTTP-маршрутов в `routes.ts`, плюс отдельные модули маршрутов для
 карт мира и содержимого мира.
 
-| Домен              | Маршруты                                                                                                  |
-| ------------------ | --------------------------------------------------------------------------------------------------------- |
-| Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                         |
-| Membership/access  | rename membership, legacy invite, list/revoke/rotate persistent player access                             |
-| Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll      |
-| Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo |
-| Столкновения       | создание, переходы состояний, применение результатов                                                      |
-| Карты мира         | `world-map-routes.ts` — карты, локации, привязка сцен, положение партии                                   |
-| Содержимое мира    | `world-content-routes.ts` — шаблоны сущностей мира, экземпляры, действия, связи                           |
-| Кампания           | переименование, часы, раскладка характеристик (`/api/campaign/stat-layout`)                               |
-| Общение            | чат (общий, треды, история с пагинацией, вложения, курсоры прочтения), стикеры, кубы, синхронная музыка   |
-| Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                              |
-| Заявки игроков     | создание, редактирование, переходы состояний                                                              |
-| Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`     |
+| Домен              | Маршруты                                                                                                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                                                                                                 |
+| Membership/access  | rename membership, legacy invite, list/revoke/rotate persistent player access                                                                                                     |
+| Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll                                                                              |
+| Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo                                                                         |
+| Столкновения       | создание, переходы состояний, применение результатов                                                                                                                              |
+| Карты мира         | `world-map-routes.ts` — карты, локации, привязка сцен, положение партии                                                                                                           |
+| Содержимое мира    | `world-content-routes.ts` — шаблоны сущностей мира, экземпляры, действия, связи                                                                                                   |
+| Кампания           | переименование, часы, раскладка характеристик (`/api/campaign/stat-layout`), очередь ходов (`/api/campaign/initiative` — мастер, `/api/campaign/initiative/self` — своё значение) |
+| Общение            | чат (общий, треды, история с пагинацией, вложения, курсоры прочтения), стикеры, кубы, синхронная музыка                                                                           |
+| Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                                                                                                      |
+| Заявки игроков     | создание, редактирование, переходы состояний                                                                                                                                      |
+| Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`                                                                             |
 
 Подробные request-схемы являются экспортами `@arken/contracts`. REST response и
 error shapes централизованы не полностью, поэтому при добавлении endpoint нужно

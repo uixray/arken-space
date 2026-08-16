@@ -35,6 +35,7 @@ const ids = {
   token: crypto.randomUUID(),
   hiddenToken: crypto.randomUUID(),
   foreignToken: crypto.randomUUID(),
+  playerCharacter: crypto.randomUUID(),
 };
 const secret = "i".repeat(40);
 
@@ -66,6 +67,47 @@ const campaignRevision = async () => {
     .where(eq(schema.campaigns.id, ids.campaign));
   return row!.revision;
 };
+
+/** Заводит игроку сессию и возвращает его секрет. */
+const givePlayerSession = async () => {
+  const playerSecret = "j".repeat(40);
+  await db.insert(schema.sessions).values({
+    membershipId: ids.player,
+    tokenHash: hashToken(playerSecret),
+    expiresAt: new Date(Date.now() + 60_000),
+  });
+  return playerSecret;
+};
+
+const asPlayer = async (playerSecret: string, participants: unknown[]) =>
+  app.inject({
+    method: "PATCH",
+    url: "/api/campaign/initiative",
+    headers: { cookie: `${env.SESSION_COOKIE_NAME}=${playerSecret}` },
+    payload: {
+      actionId: crypto.randomUUID(),
+      revision: await campaignRevision(),
+      participants,
+    },
+  });
+
+/** Узкая операция: «своей строке поставить значение». */
+const setOwn = async (
+  playerSecret: string,
+  participantId: string,
+  initiative: number | null,
+) =>
+  app.inject({
+    method: "PATCH",
+    url: "/api/campaign/initiative/self",
+    headers: { cookie: `${env.SESSION_COOKIE_NAME}=${playerSecret}` },
+    payload: {
+      actionId: crypto.randomUUID(),
+      revision: await campaignRevision(),
+      participantId,
+      initiative,
+    },
+  });
 
 const storedInitiative = async () => {
   const [row] = await db
@@ -120,8 +162,22 @@ beforeEach(async () => {
     tokenHash: hashToken(secret),
     expiresAt: new Date(Date.now() + 60_000),
   });
+  // UIX-466: за токеном игрока обязан стоять персонаж с владельцем — именно по
+  // этому признаку очередь решает, показывать ли строку игроку.
+  await db.insert(schema.characters).values({
+    id: ids.playerCharacter,
+    campaignId: ids.campaign,
+    name: "Ллойд",
+    ownerMembershipId: ids.player,
+    stats: { initiative: 3 },
+  });
   await db.insert(schema.tokenDefinitions).values([
-    { id: ids.definition, campaignId: ids.campaign, name: "Ллойд" },
+    {
+      id: ids.definition,
+      campaignId: ids.campaign,
+      name: "Ллойд",
+      characterId: ids.playerCharacter,
+    },
     { id: ids.hiddenDefinition, campaignId: ids.campaign, name: "Засада" },
     {
       id: ids.otherDefinition,
@@ -247,24 +303,85 @@ describe("очередь ходов", () => {
     expect(await campaignRevision()).toBe(revision + 1);
   });
 
-  it("не пускает игрока править очередь", async () => {
-    const playerSecret = "j".repeat(40);
-    await db.insert(schema.sessions).values({
-      membershipId: ids.player,
-      tokenHash: hashToken(playerSecret),
-      expiresAt: new Date(Date.now() + 60_000),
-    });
-    const response = await app.inject({
-      method: "PATCH",
-      url: "/api/campaign/initiative",
-      headers: { cookie: `${env.SESSION_COOKIE_NAME}=${playerSecret}` },
-      payload: {
-        actionId: crypto.randomUUID(),
-        revision: await campaignRevision(),
-        participants: [{ id: crypto.randomUUID(), name: "Я хожу первым" }],
-      },
-    });
+  it("не пускает игрока пересобирать состав очереди", async () => {
+    // UIX-466 открыл игроку маршрут, но только ради своего значения. Подмена
+    // состава через тот же PATCH обязана остаться закрытой.
+    const playerSecret = await givePlayerSession();
+    const response = await asPlayer(playerSecret, [
+      { id: crypto.randomUUID(), name: "Я хожу первым" },
+    ]);
     expect(response.statusCode).toBe(403);
+  });
+
+  it("даёт игроку внести свой бросок узкой операцией", async () => {
+    // Прежде броски игроков вносил мастер с их слов — самое частое действие боя
+    // шло через посредника. Операция узкая не для красоты: очередь игрок видит
+    // отфильтрованной, и отправить её целиком физически не может.
+    const mine = crypto.randomUUID();
+    const foe = crypto.randomUUID();
+    await patchInitiative(
+      [
+        { id: mine, tokenId: ids.token, initiative: null },
+        { id: foe, tokenId: ids.hiddenToken, initiative: 20 },
+      ],
+      await campaignRevision(),
+    );
+    const playerSecret = await givePlayerSession();
+    const response = await setOwn(playerSecret, mine, 25);
+    expect(response.statusCode).toBe(200);
+    // 25 больше 20 — заодно видно, что запись пересортировалась.
+    expect(await storedInitiative()).toMatchObject([
+      { id: mine, initiative: 25 },
+      { id: foe, initiative: 20 },
+    ]);
+  });
+
+  it("не даёт игроку править чужую строку", async () => {
+    const mine = crypto.randomUUID();
+    const foe = crypto.randomUUID();
+    await patchInitiative(
+      [
+        { id: mine, tokenId: ids.token, initiative: null },
+        { id: foe, tokenId: ids.hiddenToken, initiative: 20 },
+      ],
+      await campaignRevision(),
+    );
+    const playerSecret = await givePlayerSession();
+    const response = await setOwn(playerSecret, foe, 1);
+    expect(response.statusCode).toBe(403);
+    expect(await storedInitiative()).toMatchObject([
+      { id: foe, initiative: 20 },
+      { id: mine, initiative: null },
+    ]);
+  });
+
+  it("не даёт игроку править строку без токена", async () => {
+    // За «Волком №3» нет персонажа — значит нет и владельца, которому он свой.
+    const wolf = crypto.randomUUID();
+    await patchInitiative(
+      [{ id: wolf, name: "Волк №3", initiative: null }],
+      await campaignRevision(),
+    );
+    const playerSecret = await givePlayerSession();
+    expect((await setOwn(playerSecret, wolf, 30)).statusCode).toBe(403);
+  });
+
+  it("пересортировывает очередь после каждой правки", async () => {
+    // Порядок стал производным от значений: собирать его руками больше нечем,
+    // и «пересортировать» отдельной кнопкой тоже нечего.
+    await patchInitiative(
+      [
+        { id: crypto.randomUUID(), name: "Медленный", initiative: 4 },
+        { id: crypto.randomUUID(), name: "Быстрый", initiative: 21 },
+        { id: crypto.randomUUID(), name: "Не бросал", initiative: null },
+      ],
+      await campaignRevision(),
+    );
+    expect(await storedInitiative()).toMatchObject([
+      { name: "Быстрый" },
+      { name: "Медленный" },
+      { name: "Не бросал" },
+    ]);
   });
 });
 
@@ -303,10 +420,11 @@ describe("очередь и состояние боя", () => {
     );
   });
 
-  it("конец боя сохраняет очередь целиком", async () => {
-    // Кнопка одна и та же на начало и конец: случайное нажатие не должно
-    // уничтожать расстановку, собранную руками. Броски вносятся после начала
-    // боя — как за столом, и как того требует обнуление на старте.
+  it("конец боя очищает очередь", async () => {
+    // UIX-466 отменил прежнее решение — «конец боя сохраняет очередь целиком».
+    // Оно исходило из того, что состав пригодится снова, но на игре между боями
+    // в очереди оставались убитые и ушедшие, и следующий бой начинался с
+    // вычёркивания прошлого. Собрать состав заново рамкой — несколько секунд.
     await startBattle();
     await patchInitiative(
       [
@@ -316,24 +434,15 @@ describe("очередь и состояние боя", () => {
       await campaignRevision(),
     );
     await endBattle();
-    expect(await storedInitiative()).toMatchObject([
-      { initiative: 17 },
-      { initiative: 12 },
-    ]);
+    expect(await storedInitiative()).toEqual([]);
   });
 
   it("начало боя обнуляет броски, но не состав", async () => {
     // Старые числа, пережившие начало боя, выглядели бы как уже сделанные
     // броски — мастер повёл бы новый бой по прошлой инициативе.
-    await startBattle();
-    await patchInitiative(
-      [
-        { id: crypto.randomUUID(), tokenId: ids.token, initiative: 17 },
-        { id: crypto.randomUUID(), name: "Волк №3", initiative: 12 },
-      ],
-      await campaignRevision(),
-    );
-    await endBattle();
+    // Броски из `beforeEach` уже лежат в очереди. Прогонять бой по кругу
+    // больше нельзя: UIX-466 сделал `END_BATTLE` очищающим, и состав после него
+    // просто нечему пережить.
     await startBattle();
     expect(await storedInitiative()).toMatchObject([
       { tokenId: ids.token, initiative: null },
@@ -343,12 +452,12 @@ describe("очередь и состояние боя", () => {
 });
 
 describe("что из очереди приходит игроку", () => {
-  it("строка скрытого токена не доезжает до снапшота игрока", async () => {
-    // Тот же запрет, что у самих токенов в UIX-449: панель не должна выдавать
-    // ни позиции засады, ни её численность. «Засада» скрыта сразу двумя
-    // правилами — GM-слой и туман, — и тест не различает, каким именно: он
-    // закрепляет, что панель берёт готовый набор видимых токенов, а не считает
-    // видимость заново. Само правило разобрано в initiative.test.ts.
+  it("строка противника не доезжает до снапшота игрока", async () => {
+    // UIX-466 сменил правило с «виден токен» на «это персонаж игрока»: NPC не
+    // попадает в очередь игрока независимо от тумана и слоя. Запрет тот же, что
+    // у самих токенов в UIX-449 — панель не должна выдавать ни позиции засады,
+    // ни её численность. Само правило разобрано в initiative.test.ts, здесь
+    // проверяется, что снапшот действительно его применяет.
     await patchInitiative(
       [
         { id: crypto.randomUUID(), tokenId: ids.token, initiative: 17 },

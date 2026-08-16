@@ -4,44 +4,126 @@ import { projectInitiative, resolveParticipantName } from "./initiative.js";
 
 const names = (entries: Array<[string, string]>) => new Map(entries);
 
+/** Собирает контекст проекции, чтобы тесты называли только то, что проверяют. */
+const context = (
+  overrides: Partial<Parameters<typeof projectInitiative>[1]> = {},
+): Parameters<typeof projectInitiative>[1] => ({
+  tokenNames: names([]),
+  playerTokenIds: new Set<string>(),
+  ownTokenIds: new Set<string>(),
+  initiativeBonusByToken: new Map<string, number>(),
+  role: "GM",
+  ...overrides,
+});
+
 describe("что из очереди видит игрок", () => {
   const roster = [
-    { id: "a", tokenId: "видимый", name: null, initiative: 17 },
+    { id: "a", tokenId: "игрок", name: null, initiative: 17 },
     { id: "b", tokenId: "засада", name: null, initiative: 21 },
     { id: "c", tokenId: null, name: "Волк №3", initiative: 12 },
   ];
+  const allNames = names([
+    ["игрок", "Ллойд"],
+    ["засада", "Лучник в кустах"],
+  ]);
 
   it("мастеру отдаёт очередь целиком", () => {
     expect(
-      projectInitiative(roster, {
-        visibleTokenNames: names([
-          ["видимый", "Ллойд"],
-          ["засада", "Лучник в кустах"],
-        ]),
-        role: "GM",
-      }).map((participant) => participant.name),
+      projectInitiative(
+        roster,
+        context({ tokenNames: allNames, role: "GM" }),
+      ).map((participant) => participant.name),
     ).toEqual(["Ллойд", "Лучник в кустах", "Волк №3"]);
   });
 
-  it("игроку не отдаёт ни строки скрытого токена, ни заглушки вместо неё", () => {
+  it("игроку не отдаёт строку противника — ни целиком, ни заглушкой", () => {
     // Заглушка «???» сохранила бы номера ходов, но выдала бы, сколько всего
     // юнитов в бою — то же самое, что раньше утекало координатами (UIX-449).
-    const visible = projectInitiative(roster, {
-      visibleTokenNames: names([["видимый", "Ллойд"]]),
-      role: "PLAYER",
-    });
+    const visible = projectInitiative(
+      roster,
+      context({
+        tokenNames: allNames,
+        playerTokenIds: new Set(["игрок"]),
+        role: "PLAYER",
+      }),
+    );
     expect(visible.map((participant) => participant.name)).toEqual(["Ллойд"]);
     expect(JSON.stringify(visible)).not.toContain("засада");
   });
 
-  it("не показывает игроку участника без токена", () => {
-    // Его нет на карте, показывать нечего — и это тот же случай засады.
-    expect(
-      projectInitiative([roster[2]!], {
-        visibleTokenNames: names([]),
+  it("показывает игроку его строку, даже когда его токен скрыт туманом", () => {
+    // UIX-466 сменил правило с «виден токен» на «это персонаж игрока». Прежнее
+    // зависело от тумана: свой же ход пропадал из очереди, стоило зайти в тень.
+    const visible = projectInitiative(
+      [roster[0]!],
+      context({
+        // Токена нет среди видимых — имя всё равно приходит из общей карты.
+        tokenNames: allNames,
+        playerTokenIds: new Set(["игрок"]),
+        ownTokenIds: new Set(["игрок"]),
         role: "PLAYER",
       }),
+    );
+    expect(visible).toHaveLength(1);
+    expect(visible[0]).toMatchObject({ name: "Ллойд", canEdit: true });
+  });
+
+  it("не показывает игроку NPC, стоящего на виду", () => {
+    // Обратная сторона того же правила: видимость на карте больше не пускает
+    // противника в очередь игрока.
+    expect(
+      projectInitiative(
+        [roster[1]!],
+        context({
+          tokenNames: allNames,
+          playerTokenIds: new Set(["игрок"]),
+          role: "PLAYER",
+        }),
+      ),
     ).toEqual([]);
+  });
+
+  it("не показывает игроку участника без токена", () => {
+    // За ним нет персонажа игрока — показывать нечего.
+    expect(
+      projectInitiative([roster[2]!], context({ role: "PLAYER" })),
+    ).toEqual([]);
+  });
+
+  it("даёт игроку править только свою строку", () => {
+    const [own, other] = projectInitiative(
+      [
+        { id: "a", tokenId: "мой", name: null, initiative: null },
+        { id: "b", tokenId: "чужой", name: null, initiative: null },
+      ],
+      context({
+        tokenNames: names([
+          ["мой", "Ллойд"],
+          ["чужой", "Тэйн"],
+        ]),
+        playerTokenIds: new Set(["мой", "чужой"]),
+        ownTokenIds: new Set(["мой"]),
+        role: "PLAYER",
+      }),
+    );
+    expect(own).toMatchObject({ name: "Ллойд", canEdit: true });
+    expect(other).toMatchObject({ name: "Тэйн", canEdit: false });
+  });
+
+  it("отдаёт бонус к инициативе персонажа", () => {
+    // Мастеру он нужен, чтобы понимать, к чему прибавлять физический бросок.
+    const [withBonus, withoutCharacter] = projectInitiative(
+      [
+        { id: "a", tokenId: "t", name: null, initiative: null },
+        { id: "b", tokenId: null, name: "Волк №3", initiative: null },
+      ],
+      context({
+        tokenNames: names([["t", "Ллойд"]]),
+        initiativeBonusByToken: new Map([["t", 3]]),
+      }),
+    );
+    expect(withBonus).toMatchObject({ initiativeBonus: 3 });
+    expect(withoutCharacter).toMatchObject({ initiativeBonus: null });
   });
 
   it("отдаёт собственное имя отдельным полем", () => {
@@ -52,13 +134,12 @@ describe("что из очереди видит игрок", () => {
         { id: "a", tokenId: "t", name: null, initiative: null },
         { id: "b", tokenId: "t2", name: "Тэйн верхом", initiative: null },
       ],
-      {
-        visibleTokenNames: names([
+      context({
+        tokenNames: names([
           ["t", "Могучий Тэйн"],
           ["t2", "Могучий Тэйн"],
         ]),
-        role: "GM",
-      },
+      }),
     );
     expect(inherits).toMatchObject({ name: "Могучий Тэйн", ownName: null });
     expect(own).toMatchObject({ name: "Тэйн верхом", ownName: "Тэйн верхом" });

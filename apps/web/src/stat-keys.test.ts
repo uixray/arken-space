@@ -3,6 +3,7 @@ import {
   formulasReferencingKey,
   moveStatRow,
   resourceCostLabels,
+  rollableStatRows,
   statKeyFromLabel,
   statRowsFromLayout,
   uniqueStatKey,
@@ -253,5 +254,38 @@ describe("resourceCostLabels", () => {
       physical: "Выносливость",
       magic: "Мана",
     });
+  });
+});
+
+/**
+ * UIX-468. «Реген Маны» получил кнопку броска не по замыслу: UIX-424 сделала
+ * набор производным от раскладки, а раскладка не различает, что бросают, а что
+ * применяют.
+ */
+describe("строки, по которым имеет смысл бросать", () => {
+  const rows = [
+    { key: "agility", label: "Ловкость" },
+    { key: "enduranceRegen", label: "Реген Выносливости" },
+    { key: "manaRegen", label: "Реген Маны" },
+    { key: "luck", label: "Удача" },
+  ];
+
+  it("убирает строки регена из набора кнопок", () => {
+    expect(rollableStatRows(rows).map((row) => row.key)).toEqual([
+      "agility",
+      "luck",
+    ]);
+  });
+
+  it("сохраняет порядок остальных строк", () => {
+    // Порядок кнопок — часть раскладки: мастер расставляет их так, как ему
+    // удобно тянуться на игре.
+    expect(rollableStatRows(rows)[0]?.label).toBe("Ловкость");
+    expect(rollableStatRows(rows).at(-1)?.label).toBe("Удача");
+  });
+
+  it("не трогает набор, в котором регена нет", () => {
+    const plain = [{ key: "luck", label: "Удача" }];
+    expect(rollableStatRows(plain)).toEqual(plain);
   });
 });

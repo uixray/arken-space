@@ -46,49 +46,51 @@ export function DiceTrayPanel({
 
   return (
     <section className="dice-tray-panel" aria-label="Физические кости">
+      {/* UIX-469: кости и режимы разведены по строкам. Всё стояло одной
+          строкой, и кости делили её с тремя значками — `↑`, `↓`, `◆` и `fx`
+          читались как украшение, а не как «преимущество», «помеха», «только
+          мастеру» и «своя формула». Кости — то, что нажимают чаще всего, и они
+          получают строку целиком; остальное подписано словами. */}
       <div className="dice-tray-panel__body">
-        <div className="canvas-roll-row">
+        <div className="canvas-roll-row canvas-roll-dice" aria-label="Кости">
+          {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
+            <button
+              key={sides}
+              type="button"
+              title={`Бросить d${sides} · ${ROLL_MODIFIER_HINT}`}
+              onClick={(event) =>
+                void onRoll(
+                  `1d${sides}`,
+                  `d${sides}`,
+                  visibility,
+                  characterId,
+                  // UIX-456: зажатая клавиша перекрывает переключатель на
+                  // один бросок и не трогает выставленный режим.
+                  rollModeFromEvent(event.nativeEvent, rollMode),
+                )
+              }
+            >
+              d{sides}
+            </button>
+          ))}
+        </div>
+        <div className="canvas-roll-row dice-tray-panel__modes">
           <RollModeControl
             value={rollMode}
             onChange={setRollMode}
             label="Режим броска"
-            iconOnly
           />
-          <div className="canvas-roll-dice" aria-label="Кости">
-            {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
-              <button
-                key={sides}
-                type="button"
-                title={`Бросить d${sides} · ${ROLL_MODIFIER_HINT}`}
-                onClick={(event) =>
-                  void onRoll(
-                    `1d${sides}`,
-                    `d${sides}`,
-                    visibility,
-                    characterId,
-                    // UIX-456: зажатая клавиша перекрывает переключатель на
-                    // один бросок и не трогает выставленный режим.
-                    rollModeFromEvent(event.nativeEvent, rollMode),
-                  )
-                }
-              >
-                d{sides}
-              </button>
-            ))}
-          </div>
           <button
             type="button"
-            className="canvas-roll-custom"
-            aria-label="Своя формула"
-            title="Своя формула"
+            className="dice-tray-panel__action"
+            title="Бросок по своей формуле"
             onClick={() => setCustomRollOpen(true)}
           >
-            <span aria-hidden="true">fx</span>
+            Формула
           </button>
           <button
             type="button"
-            className="canvas-roll-gm-toggle"
-            aria-label="Броски только мастеру"
+            className="dice-tray-panel__action canvas-roll-gm-toggle"
             title="Броски только мастеру (кости и характеристики)"
             aria-pressed={visibility === "GM_ONLY"}
             onClick={() =>
@@ -97,7 +99,7 @@ export function DiceTrayPanel({
               )
             }
           >
-            <span aria-hidden="true">◆</span>
+            Только мастеру
           </button>
         </div>
       </div>

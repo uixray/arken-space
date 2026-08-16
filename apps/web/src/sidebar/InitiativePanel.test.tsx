@@ -70,6 +70,8 @@ const participants: InitiativeParticipantDto[] = [
     name: "Ллойд",
     ownName: null,
     initiative: 12,
+    initiativeBonus: 3,
+    canEdit: true,
   },
   {
     id: "b",
@@ -77,6 +79,8 @@ const participants: InitiativeParticipantDto[] = [
     name: "Тэйн",
     ownName: null,
     initiative: 19,
+    initiativeBonus: null,
+    canEdit: true,
   },
 ];
 
@@ -84,6 +88,7 @@ const renderPanel = (
   overrides: Partial<Parameters<typeof InitiativePanel>[0]> = {},
 ) => {
   const onUpdate = vi.fn();
+  const onSetOwnInitiative = vi.fn();
   renderComponent(
     <InitiativePanel
       participants={participants}
@@ -91,10 +96,11 @@ const renderPanel = (
       pending={false}
       selectedTokenIds={[]}
       onUpdate={onUpdate}
+      onSetOwnInitiative={onSetOwnInitiative}
       {...overrides}
     />,
   );
-  return { onUpdate };
+  return { onUpdate, onSetOwnInitiative };
 };
 
 const order = () =>
@@ -103,20 +109,19 @@ const order = () =>
   );
 
 describe("очередь ходов", () => {
-  it("показывает участников в заданном порядке, а не по броскам", async () => {
-    // Ллойд с 12 стоит выше Тэйна с 19, потому что так расставил мастер.
-    // Автосортировка здесь означала бы, что расстановка руками невозможна.
+  it("показывает участников в том порядке, в каком их прислал сервер", async () => {
+    // UIX-466: порядок больше не собирается здесь и не правится руками — он
+    // производная от значений, и считает её сервер. Панель его только рисует.
     renderPanel();
     expect(order()).toEqual(["Ллойд", "Тэйн"]);
   });
 
-  it("ввод броска не меняет порядок", async () => {
-    // Главное требование задачи: часть бросков идёт физическими кубами, и
-    // внесение результата не должно рушить очередь, собранную руками.
+  it("отправляет введённое значение, не трогая состав", async () => {
+    // Заменяет прежний тест «ввод броска не меняет порядок»: он закреплял
+    // отменённое решение — что расстановка собирается руками. Порядок теперь
+    // пересобирает сервер, поэтому проверяется ровно то, за что отвечает
+    // панель: одно изменённое поле и нетронутые соседи.
     const { onUpdate } = renderPanel();
-    // Число выбрано так, чтобы сортировка **изменила** порядок: 5 против 19.
-    // С 20 расстановка и сортировка совпали бы, и тест пропустил бы
-    // автосортировку — это и показала диверсия.
     const field = screen.getByLabelText("Инициатива «Ллойд»");
     await userEvent.clear(field);
     await userEvent.type(field, "5");
@@ -128,12 +133,20 @@ describe("очередь ходов", () => {
     ]);
   });
 
-  it("пересортировывает только по явному нажатию", async () => {
-    const { onUpdate } = renderPanel();
-    await userEvent.click(screen.getByText("Пересортировать"));
-    expect(
-      onUpdate.mock.calls[0]![0].map((row: { id: string }) => row.id),
-    ).toEqual(["b", "a"]);
+  it("не даёт ручной перестановки вовсе", async () => {
+    // Порядок стал вычисляемым: кнопки, двигающие строку, обещали бы власть
+    // над ним, которой больше нет. И «Пересортировать» тоже — сортировка
+    // происходит сама после каждой правки.
+    renderPanel();
+    expect(screen.queryByLabelText("Переместить «Тэйн» выше")).toBeNull();
+    expect(screen.queryByLabelText("Переместить «Ллойд» ниже")).toBeNull();
+    expect(screen.queryByText("Пересортировать")).toBeNull();
+  });
+
+  it("показывает бонус к инициативе рядом с именем", async () => {
+    // Мастеру он нужен, чтобы понимать, к чему прибавлять физический бросок.
+    renderPanel();
+    expect(screen.getByTitle("Бонус к инициативе: 3")).toBeTruthy();
   });
 
   it("вводит в бой выделенных рамкой и не задваивает уже введённых", async () => {
@@ -164,27 +177,52 @@ describe("очередь ходов", () => {
     });
   });
 
-  it("переставляет строку вверх", async () => {
-    const { onUpdate } = renderPanel();
-    await userEvent.click(screen.getByLabelText("Переместить «Тэйн» выше"));
-    expect(
-      onUpdate.mock.calls[0]![0].map((row: { id: string }) => row.id),
-    ).toEqual(["b", "a"]);
-  });
-
   it("выводит участника из боя", async () => {
     const { onUpdate } = renderPanel();
     await userEvent.click(screen.getByLabelText("Вывести «Ллойд» из боя"));
     expect(onUpdate.mock.calls[0]![0]).toMatchObject([{ id: "b" }]);
   });
 
-  it("игроку не даёт ни одной ручки управления", async () => {
-    // Очередь ведёт мастер. Игроку панель — сводка, и правка ему недоступна не
-    // потому, что кнопки спрятаны, а потому что их нет.
-    renderPanel({ isGm: false });
-    expect(screen.queryByLabelText("Инициатива «Ллойд»")).toBeNull();
-    expect(screen.queryByText("Пересортировать")).toBeNull();
+  it("даёт игроку вносить свой бросок и только свой", async () => {
+    // UIX-466: раньше броски игроков вносил мастер с их слов — самое частое
+    // действие боя шло через посредника. Право приходит с сервера строкой
+    // `canEdit`; чужая строка остаётся текстом.
+    const { onUpdate, onSetOwnInitiative } = renderPanel({
+      isGm: false,
+      participants: [
+        { ...participants[0]!, canEdit: true },
+        { ...participants[1]!, canEdit: false },
+      ],
+    });
+    const field = screen.getByLabelText("Инициатива «Ллойд»");
+    expect(screen.queryByLabelText("Инициатива «Тэйн»")).toBeNull();
+    await userEvent.clear(field);
+    await userEvent.type(field, "8");
+    await userEvent.tab();
+    // Узкой операцией, а не отправкой очереди целиком: у игрока её нет —
+    // строки противников до него не доезжают.
+    expect(onSetOwnInitiative).toHaveBeenCalledWith("a", 8);
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("не даёт игроку ручек ведения боя", async () => {
+    // Вносить своё значение — можно; собирать состав, выводить из боя и
+    // добавлять участников вне карты — по-прежнему только мастеру.
+    renderPanel({
+      isGm: false,
+      participants: [{ ...participants[0]!, canEdit: false }],
+    });
     expect(screen.queryByLabelText("Вывести «Ллойд» из боя")).toBeNull();
-    expect(order()).toEqual(["Ллойд", "Тэйн"]);
+    expect(screen.queryByLabelText("Имя участника без токена")).toBeNull();
+    expect(screen.queryByTitle("Добавить выделенные рамкой токены")).toBeNull();
+    expect(screen.queryByLabelText("Инициатива «Ллойд»")).toBeNull();
+  });
+
+  it("сворачивается целиком", async () => {
+    renderPanel();
+    const panel = document.querySelector("details.initiative-panel");
+    expect(panel).toHaveAttribute("open");
+    await userEvent.click(screen.getByText("Очередь ходов"));
+    expect(panel).not.toHaveAttribute("open");
   });
 });

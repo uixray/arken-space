@@ -1116,16 +1116,51 @@ code {
    раньше стояли снятые кнопки. Тратятся они каждый ход, поэтому строка
    компактная и целиком помещается в узкую боковую панель. */
 .resource-counters {
+  padding: 0 var(--space-md) var(--space-xs);
+}
+/* UIX-468: блок сворачивается — в бою нужен постоянно, вне боя занимает место
+   двумя строками, которые не меняются часами. */
+.resource-counters__summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.resource-counters__summary-values {
+  overflow: hidden;
+  color: var(--faint);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Свёрнутый блок уже показывает значения в самой строке заголовка — повторять
+   их ещё раз незачем. */
+.resource-counters[open]
+  > .resource-counters__summary
+  .resource-counters__summary-values {
+  display: none;
+}
+.resource-counters__list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 0 var(--space-md) var(--space-xs);
+  padding-top: var(--space-xs);
 }
 .resource-counters__item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px auto 28px;
+  grid-template-columns: minmax(0, 1fr) 28px 3.5rem auto 28px auto;
   align-items: center;
   gap: var(--space-xs);
+}
+.resource-counters__input {
+  width: 100%;
+  text-align: center;
+}
+.resource-counters__regen {
+  white-space: nowrap;
 }
 .resource-counters__label {
   overflow: hidden;
@@ -1281,8 +1316,23 @@ code {
   height: 100%;
   min-height: 0;
 }
+/* UIX-467: раскладка не должна зависеть от числа отрисованных детей.
+   Здесь перечислялись строки позиционно — `auto auto minmax(0, 1fr) auto auto`,
+   в расчёте на пять детей. Но `InitiativePanel` появляется только во время боя:
+   с ним все дети съезжали на строку вниз, и гибкая строка доставалась полосе
+   журнала вместо ленты. Строка схлопывалась в ноль, а кнопки «Заявка мастеру» и
+   «Свернуть» вылезали за её пределы и ложились поверх карточек. Колонка flex
+   отдаёт остаток высоты именно ленте, кто бы ещё ни отрисовался рядом. */
 .activity-feed {
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  display: flex;
+  flex-direction: column;
+}
+.activity-feed > * {
+  flex: 0 0 auto;
+}
+.activity-feed > .message-list {
+  flex: 1 1 0;
+  min-height: 0;
 }
 .message-list {
   display: flex;
@@ -1303,6 +1353,9 @@ code {
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-md);
   border-top: 1px solid var(--line);
+  /* UIX-467: собственный фон, чтобы полоса читалась как отдельная строка, а не
+     как просвет между карточками ленты. */
+  background: var(--surface);
 }
 /* UIX-388: groups the collapse toggle with the (player-only) "Заявка
    мастеру" entry point, both wrapping together at narrow sidebar widths
@@ -3947,10 +4000,11 @@ code {
   min-width: 150px;
   flex: 1 1 180px;
 }
-.activity-quick-rolls {
-  max-height: 110px;
-  overflow: auto;
-}
+/* UIX-469: здесь стояли `max-height: 110px` и своя `overflow: auto` — вторая
+   прокрутка внутри уже прокручиваемого `.quick-roll-panel__body`. Из-за неё
+   ручка высоты растила коробку вокруг запертого списка: панель становилась
+   выше, а кнопок было видно ровно столько же. Высоту задаёт панель, прокрутка
+   остаётся одна — у тела. */
 /* UIX-387: plain, non-floating sidebar section (previously a
    `useWorkspaceWindow`-driven draggable/z-indexed window per UIX-363; see
    the layer-order comment near `.dice-tray-panel` below for why that
@@ -3959,21 +4013,45 @@ code {
  * фиксированной ширины, чтобы имена не прыгали по горизонтали при переходе с
  * однозначных позиций на двузначные. */
 .initiative-panel {
-  display: grid;
-  gap: var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--line);
 }
-.initiative-panel h3 {
-  margin: 0;
-  font-size: 0.9rem;
+/* UIX-466: панель сворачивается — между боями список уже ничего не решает, а
+   верх колонки занимает. */
+.initiative-panel__summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.initiative-panel__summary-count {
+  color: var(--faint);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+/* Бонус к инициативе — справа от имени, приглушённее самого имени: читают
+   сначала, кто ходит, и только потом, к чему прибавлять. */
+.initiative-panel__bonus {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 .initiative-panel__list {
   display: grid;
   gap: 2px;
-  margin: 0;
+  margin: var(--space-xs) 0 0;
   padding: 0;
   list-style: none;
+}
+/* Имя забирает остаток строки, чтобы бонус и поле ввода стояли столбиком у
+   правого края, а не плясали по ширине имён. */
+.initiative-panel__name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .initiative-panel__row {
   display: flex;
@@ -4036,6 +4114,51 @@ code {
   margin: 0;
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--line);
+}
+
+/* UIX-467: фильтры ленты под кнопкой с троеточием. Раскрытый список ложится
+   поверх соседей — панель и без него не помещается по высоте, а раздвигать её
+   ради трёх галочек значило бы выталкивать саму ленту, ради которой их и
+   трогают. */
+.activity-filters-menu {
+  position: relative;
+}
+.activity-filters-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+}
+.activity-filters-summary::-webkit-details-marker {
+  display: none;
+}
+.activity-filters-summary__label {
+  font-size: 0.75rem;
+}
+.activity-filters-badge {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 0.68rem;
+  line-height: 16px;
+  text-align: center;
+}
+.activity-filters-menu[open] > .activity-filters {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + var(--space-xs));
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  min-width: max-content;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
 }
 
 .scene-picker {
@@ -4114,28 +4237,33 @@ code {
 .canvas-roll-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
 }
-.roll-mode-control--icons {
+/* UIX-469: вторая строка — режим броска и два действия словами. Отделена от
+   костей отступом, чтобы строка костей читалась как один ряд. */
+.dice-tray-panel__modes {
+  margin-top: 6px;
+}
+.dice-tray-panel__modes .roll-mode-control {
   flex: 0 0 auto;
   margin: 0;
   padding: 0;
   border: 0;
 }
-.roll-mode-control--icons .roll-mode-segments {
-  display: flex;
-  gap: 2px;
+.dice-tray-panel__modes .roll-mode-control legend {
+  /* Подпись группы уже понятна из самих кнопок «Преимущество» и «Помеха»;
+     отдельная строка «Режим броска» съедала бы высоту в узкой панели. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
-.roll-mode-control--icons button,
-.canvas-roll-custom,
-.canvas-roll-gm-toggle {
-  display: inline-grid;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+.dice-tray-panel__action {
   min-height: 28px;
-  padding: 0;
-  place-items: center;
+  padding: 3px 7px;
 }
 .canvas-roll-gm-toggle[aria-pressed="true"] {
   color: var(--accent-contrast);

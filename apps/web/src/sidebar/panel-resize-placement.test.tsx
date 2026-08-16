@@ -79,8 +79,16 @@ describe("ручка изменения высоты", () => {
     expect(document.querySelector(".dice-tray-resize-handle")).toBeNull();
   });
 
-  it("прокручивает содержимое, а не панель целиком", () => {
+  it("держит ручку вне прокручиваемого тела", () => {
     // Иначе ручка уезжает из виду ровно тогда, когда до неё тянутся.
+    //
+    // UIX-469: раньше здесь же проверялось, что тело прокручивает содержимое, —
+    // и этой проверки оказалось мало. Устройство было ровно таким, как
+    // заявлено, а толку от растягивания не было: внутри тела сидел список со
+    // своей `max-height`, и панель росла коробкой вокруг того же скролла.
+    // Наблюдаемое свойство «выше панель — больше видимых кнопок» проверяет
+    // `tests/e2e/quick-roll-panel-resize.spec.ts`: высоты считает движок
+    // вёрстки, которого в jsdom нет.
     renderComponent(
       <QuickRollPanel
         rollCharacter={character}
@@ -95,9 +103,9 @@ describe("ручка изменения высоты", () => {
     const panel = document.querySelector(".quick-roll-panel");
     const body = panel?.querySelector(".quick-roll-panel__body");
     expect(body).toBeTruthy();
-    expect(
-      body?.contains(document.querySelector(".activity-quick-rolls")),
-    ).toBe(true);
+    expect(body?.contains(document.querySelector(".panel-resize-handle"))).toBe(
+      false,
+    );
     expect(
       panel?.lastElementChild?.classList.contains("panel-resize-handle"),
     ).toBe(true);

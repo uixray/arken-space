@@ -649,8 +649,15 @@ export async function buildSnapshot(
    * намеренно: разойдясь с этой, она либо выдала бы засаду, либо потеряла
    * участника, стоящего на виду.
    */
-  const visibleTokenNames = new Map(
-    visibleTokens.map(({ token, definition }) => [
+  /**
+   * UIX-466: очередь опирается не на видимость токена, а на то, чей это
+   * персонаж. Поэтому имена берутся из всех токенов кампании, а не только
+   * видимых: строка игрока обязана остаться подписанной, даже когда он сам
+   * стоит в тумане. Отбор, кого показать, делает `projectInitiative` — здесь
+   * только исходные данные.
+   */
+  const initiativeTokenNames = new Map(
+    tokenRows.map(({ token, definition }) => [
       token.id,
       resolveTokenName({
         name: definition.name,
@@ -658,6 +665,30 @@ export async function buildSnapshot(
       }),
     ]),
   );
+  const characterById = new Map(
+    characterRows.map((character) => [character.id, character]),
+  );
+  const playerTokenIds = new Set<string>();
+  const ownTokenIds = new Set<string>();
+  const initiativeBonusByToken = new Map<string, number>();
+  for (const { token, definition } of tokenRows) {
+    const character = definition.characterId
+      ? characterById.get(definition.characterId)
+      : undefined;
+    if (!character) continue;
+    const bonus = (character.stats as Record<string, number> | null)
+      ?.initiative;
+    if (typeof bonus === "number") initiativeBonusByToken.set(token.id, bonus);
+    // «Персонаж игрока» — тот, у кого есть владелец. NPC мастера владельца не
+    // имеют, и в очередь игроку не попадают.
+    if (!character.ownerMembershipId) continue;
+    playerTokenIds.add(token.id);
+    if (
+      character.ownerMembershipId === auth.membershipId ||
+      controllersByCharacter.get(character.id)?.includes(auth.membershipId)
+    )
+      ownTokenIds.add(token.id);
+  }
 
   return {
     campaign: {
@@ -668,7 +699,10 @@ export async function buildSnapshot(
       battleCounter: campaign.battleCounter,
       statLayout: resolveStatLayout(campaign.statLayout),
       initiative: projectInitiative(campaign.initiative ?? [], {
-        visibleTokenNames,
+        tokenNames: initiativeTokenNames,
+        playerTokenIds,
+        ownTokenIds,
+        initiativeBonusByToken,
         role: auth.role,
       }),
       revision: campaign.revision,

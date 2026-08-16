@@ -1,4 +1,5 @@
 import type { PublicCharacterIdentityDto } from "@arken/contracts";
+import { useState } from "react";
 import { rollInitials } from "../roll-initials";
 
 /**
@@ -24,6 +25,8 @@ export function RollAvatar({
   assetUrl: string | null;
 }) {
   const name = identity?.name ?? fallbackName;
+  const [failedAssetUrl, setFailedAssetUrl] = useState<string | null>(null);
+  const showImage = assetUrl !== null && failedAssetUrl !== assetUrl;
   return (
     <span
       className="roll-avatar"
@@ -31,8 +34,13 @@ export function RollAvatar({
       // у результата броска половину строки.
       title={name}
     >
-      {assetUrl ? (
-        <img src={assetUrl} alt={name} loading="lazy" />
+      {showImage ? (
+        <img
+          src={assetUrl}
+          alt={name}
+          loading="lazy"
+          onError={() => setFailedAssetUrl(assetUrl)}
+        />
       ) : (
         <span aria-hidden="true">{rollInitials(name)}</span>
       )}

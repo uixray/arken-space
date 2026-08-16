@@ -23,11 +23,19 @@ import {
   parseComposerInput,
 } from "../chat-composer";
 import {
+  rollableStatRows,
   statLabelsFromLayout,
   statResourceRowsFromLayout,
   statRowsFromLayout,
 } from "../stat-keys";
 import { InitiativePanel } from "./InitiativePanel";
+import { useDismissibleDetails } from "../ui/dismissible-details";
+import {
+  ACTIVITY_FILTERS,
+  ACTIVITY_FILTER_LABEL,
+  activityFilterSummaryTitle,
+  hiddenActivityStreamCount,
+} from "../activity-filter-menu";
 import type { RollMode } from "../roll-mode";
 import { RollAvatar } from "./RollAvatar";
 import { createRollAvatarSource } from "../roll-avatar-source";
@@ -229,6 +237,7 @@ export function ActivityPanel({
   onUpdateCounters,
   selectedTokenIds,
   onUpdateInitiative,
+  onSetOwnInitiative,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -244,6 +253,11 @@ export function ActivityPanel({
   selectedTokenIds: readonly string[];
   onUpdateInitiative: (
     participants: InitiativeParticipantDto[],
+    revision: number,
+  ) => Promise<void>;
+  onSetOwnInitiative: (
+    participantId: string,
+    initiative: number | null,
     revision: number,
   ) => Promise<void>;
 }) {
@@ -269,8 +283,10 @@ export function ActivityPanel({
       "true",
   );
   const [activityFilters, setActivityFilters] = useState<Set<ActivityFilter>>(
-    () => new Set(["ROLLS", "STORY", "REFERENCE"]),
+    () => new Set(ACTIVITY_FILTERS),
   );
+  const filtersRef = useRef<HTMLDetailsElement>(null);
+  useDismissibleDetails(filtersRef);
   const [quickRollPending, setQuickRollPending] = useState(false);
   // UIX-388 follow-up: removing the composer's «Только мастеру» checkbox took
   // the only private-roll affordance with it, leaving stat and skill rolls
@@ -389,24 +405,31 @@ export function ActivityPanel({
       rollCharacter.ownerMembershipId === snapshot.me.id ||
       rollCharacter.controllerMembershipIds.includes(snapshot.me.id)),
   );
+  /**
+   * UIX-468: возвращает промис, а не `void`. Счётчики показывают нажатие сразу,
+   * до ответа сервера, и по этому промису узнают об отказе — только так
+   * показанное число можно вернуть к серверному, а не оставить враньё на экране.
+   */
   const spendResource = (key: string, next: number) => {
-    if (!rollCharacter) return;
+    if (!rollCharacter) return Promise.resolve();
     const resource = rollCharacter.resources[key] ?? { current: 0 };
     setResourcePending(true);
     setComposerError("");
-    void onUpdateCounters(rollCharacter.id, rollCharacter.revision, {
+    return onUpdateCounters(rollCharacter.id, rollCharacter.revision, {
       resources: {
         ...rollCharacter.resources,
         [key]: { ...resource, current: next },
       },
     })
-      .catch((reason) =>
+      .catch((reason) => {
         setComposerError(
           reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
             ? "Ресурсы уже изменены в другой сессии. Повторите действие."
             : "Не удалось изменить очки. Проверьте соединение.",
-        ),
-      )
+        );
+        // Пробрасывается дальше: счётчики отличают отказ от успеха только так.
+        throw reason;
+      })
       .finally(() => setResourcePending(false));
   };
   const submitQuickRoll = async (
@@ -502,6 +525,14 @@ export function ActivityPanel({
               () => setInitiativePending(false),
             );
           }}
+          onSetOwnInitiative={(participantId, value) => {
+            setInitiativePending(true);
+            void onSetOwnInitiative(
+              participantId,
+              value,
+              snapshot.campaign.revision,
+            ).finally(() => setInitiativePending(false));
+          }}
         />
       )}
       <section className="activity-roll-controls" aria-label="Быстрые броски">
@@ -546,6 +577,7 @@ export function ActivityPanel({
           <ResourceCounters
             rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
             resources={rollCharacter.resources}
+            stats={rollCharacter.stats}
             editable={canSpendResources}
             pending={resourcePending}
             onSpend={spendResource}
@@ -556,7 +588,9 @@ export function ActivityPanel({
             rollCharacter={rollCharacter}
             campaignId={snapshot.campaign.id}
             membershipId={snapshot.me.id}
-            rows={statRowsFromLayout(snapshot.campaign.statLayout)}
+            rows={rollableStatRows(
+              statRowsFromLayout(snapshot.campaign.statLayout),
+            )}
             quickRollPending={quickRollPending}
             gmOnly={rollVisibility === "GM_ONLY"}
             onQuickRoll={(formula, label, bonus, mode) =>
@@ -566,30 +600,43 @@ export function ActivityPanel({
         ) : (
           <p className="muted">Нет доступного персонажа для броска.</p>
         )}
-        <fieldset className="activity-filters">
-          <legend>Показывать</legend>
-          {(["ROLLS", "STORY", "REFERENCE"] as const).map((filter) => (
-            <label className="compact-check" key={filter}>
-              <FormInput
-                type="checkbox"
-                checked={activityFilters.has(filter)}
-                onChange={(event) =>
-                  setActivityFilters((current) => {
-                    const next = new Set(current);
-                    if (event.target.checked) next.add(filter);
-                    else next.delete(filter);
-                    return next;
-                  })
-                }
-              />
-              {filter === "ROLLS"
-                ? "Броски"
-                : filter === "STORY"
-                  ? "Сюжет"
-                  : "Справочные события"}
-            </label>
-          ))}
-        </fieldset>
+        {/* UIX-467: фильтры уехали под троеточие. Состояние по-прежнему живёт
+            в памяти панели — способ хранения задача не меняла. */}
+        <details className="activity-filters-menu" ref={filtersRef}>
+          <summary
+            className="activity-log-toggle activity-filters-summary"
+            aria-label={activityFilterSummaryTitle(activityFilters)}
+            title={activityFilterSummaryTitle(activityFilters)}
+          >
+            <span aria-hidden="true">⋯</span>
+            <span className="activity-filters-summary__label">Показывать</span>
+            {hiddenActivityStreamCount(activityFilters) > 0 && (
+              <span className="activity-filters-badge" aria-hidden="true">
+                {hiddenActivityStreamCount(activityFilters)}
+              </span>
+            )}
+          </summary>
+          <fieldset className="activity-filters">
+            <legend className="visually-hidden">Показывать</legend>
+            {ACTIVITY_FILTERS.map((filter) => (
+              <label className="compact-check" key={filter}>
+                <FormInput
+                  type="checkbox"
+                  checked={activityFilters.has(filter)}
+                  onChange={(event) =>
+                    setActivityFilters((current) => {
+                      const next = new Set(current);
+                      if (event.target.checked) next.add(filter);
+                      else next.delete(filter);
+                      return next;
+                    })
+                  }
+                />
+                {ACTIVITY_FILTER_LABEL[filter]}
+              </label>
+            ))}
+          </fieldset>
+        </details>
       </section>
       <div className="activity-log-toolbar">
         <span className="eyebrow">Журнал</span>

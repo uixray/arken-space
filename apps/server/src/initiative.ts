@@ -1,21 +1,24 @@
 import type { InitiativeParticipantDto } from "@arken/contracts";
 
 /**
- * UIX-431 — что из очереди ходов видит конкретный человек.
+ * UIX-431/466 — что из очереди ходов видит конкретный человек.
  *
- * Правило одно: строка со скрытым токеном игроку не отправляется. Не «серым
- * цветом», не заглушкой «???» — заглушка выдала бы численность засады, а это
- * ровно та утечка, которую закрыл UIX-449 для самих токенов. Присылать
- * координаты нельзя, а присылать счётчик спрятанного — можно только если
- * считать, что игрок не умеет считать строки.
+ * UIX-466 сменил правило с «виден токен» на «это персонаж игрока». Прежнее
+ * зависело от тумана: NPC, стоящий на виду, попадал игроку в очередь, а
+ * отступивший в туман — исчезал из неё посреди боя. Новое правило строже и
+ * устойчивее: игрок видит себя и других игроков, противников — никогда, чем бы
+ * ни кончилась разведка. Численность засады из очереди больше не вычитается
+ * вовсе — это та же утечка, которую UIX-449 закрыл для самих токенов.
+ *
+ * Строка игрока показывается независимо от видимости его токена: свой ход
+ * человек обязан видеть, даже когда сам стоит в тумане.
  *
  * Отсюда следствие, с которым надо жить: у игрока список короче, чем у мастера,
  * и «третий ход» у них означает разное. Панель информационная, очередь ведёт
- * мастер вслух — цена приемлемая, а обратная сделка (показать всех) стоила бы
- * засад.
+ * мастер вслух — цена приемлемая.
  *
  * Участник без токена («Волк №3», брошенный физическим кубом за столом) игрокам
- * не виден по тому же правилу: его нет на карте, значит показывать нечего.
+ * не виден: за ним нет персонажа игрока.
  */
 export function projectInitiative(
   participants: ReadonlyArray<{
@@ -25,23 +28,38 @@ export function projectInitiative(
     initiative: number | null;
   }>,
   context: {
-    /** Имена ровно тех токенов, которые этот человек и так видит. */
-    visibleTokenNames: ReadonlyMap<string, string>;
+    /**
+     * Имена токенов, участвующих в очереди. Мастеру — всех; игроку сюда попадают
+     * и токены игроков, скрытые туманом, иначе своя строка осталась бы безымянной.
+     */
+    tokenNames: ReadonlyMap<string, string>;
+    /** Токены, за которыми стоит персонаж игрока — не мастерский NPC. */
+    playerTokenIds: ReadonlySet<string>;
+    /** Токены персонажей, которыми управляет именно этот человек. */
+    ownTokenIds: ReadonlySet<string>;
+    /** Бонус к инициативе персонажа, стоящего за токеном. */
+    initiativeBonusByToken: ReadonlyMap<string, number>;
     role: "GM" | "PLAYER";
   },
 ): InitiativeParticipantDto[] {
   const projected: InitiativeParticipantDto[] = [];
   for (const participant of participants) {
-    const tokenName = participant.tokenId
-      ? context.visibleTokenNames.get(participant.tokenId)
-      : undefined;
-    if (context.role !== "GM" && tokenName === undefined) continue;
+    const tokenId = participant.tokenId;
+    const isPlayerRow = tokenId ? context.playerTokenIds.has(tokenId) : false;
+    if (context.role !== "GM" && !isPlayerRow) continue;
+    const tokenName = tokenId ? context.tokenNames.get(tokenId) : undefined;
     projected.push({
       id: participant.id,
-      tokenId: participant.tokenId,
+      tokenId,
       name: resolveParticipantName(participant.name, tokenName),
       ownName: participant.name,
       initiative: participant.initiative,
+      initiativeBonus: tokenId
+        ? (context.initiativeBonusByToken.get(tokenId) ?? null)
+        : null,
+      canEdit:
+        context.role === "GM" ||
+        (tokenId ? context.ownTokenIds.has(tokenId) : false),
     });
   }
   return projected;

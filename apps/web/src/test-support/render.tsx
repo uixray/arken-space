@@ -54,5 +54,13 @@ export function renderComponent(
   return rtlRender(ui, options);
 }
 
-export { screen, within, waitFor } from "@testing-library/react";
+// `fireEvent` — для тестов с поддельными таймерами: `userEvent` планирует свои
+// шаги через настоящий `setTimeout` и под `vi.useFakeTimers()` зависает.
+export {
+  screen,
+  within,
+  waitFor,
+  fireEvent,
+  act,
+} from "@testing-library/react";
 export { default as userEvent } from "@testing-library/user-event";

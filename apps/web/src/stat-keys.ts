@@ -1,4 +1,5 @@
 import { formulaReferencesStatKey } from "@arken/contracts";
+import { RESOURCE_REGEN_STAT } from "@arken/system";
 
 /**
  * UIX-424 — превращение русской подписи характеристики в ключ и поиск ссылок на
@@ -141,6 +142,25 @@ export function statRowsFromLayout(
       .filter((row) => row.source !== "RESOURCE")
       .map(({ key, label }) => ({ key, label })),
   );
+}
+
+/**
+ * UIX-468 — строки, по которым имеет смысл бросать кубик.
+ *
+ * Реген задаёт скорость восстановления ресурса; «1d20 + реген маны» за столом
+ * не значит ничего. Кнопка появилась не по замыслу: UIX-424 сделала набор
+ * производным от раскладки кампании, и реген приехал в него наравне с
+ * ловкостью — раскладка не различает, что бросают, а что применяют.
+ *
+ * Список исключений не заводится: он считается от `RESOURCE_REGEN_STAT`, того
+ * же места, откуда реген берёт отдых. Второй список разошёлся бы с первым на
+ * первом же новом ресурсе.
+ */
+export function rollableStatRows<T extends { key: string }>(
+  rows: readonly T[],
+): T[] {
+  const regenKeys = new Set(Object.values(RESOURCE_REGEN_STAT));
+  return rows.filter((row) => !regenKeys.has(row.key));
 }
 
 /**

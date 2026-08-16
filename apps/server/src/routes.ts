@@ -57,6 +57,8 @@ import {
   characterCountersCommandSchema,
   rechargeEntryCommandSchema,
   renameCampaignSchema,
+  setOwnInitiativeSchema,
+  sortByInitiative,
   updateInitiativeSchema,
   updateStatLayoutSchema,
   deleteTokenSchema,
@@ -6660,8 +6662,11 @@ export function registerRoutes(
              * оставшись, выглядели бы как уже сделанные броски: мастер повёл бы
              * бой по прошлой инициативе, не заметив подмены.
              *
-             * `END_BATTLE` не трогает ничего: после боя видно, кто в каком
-             * порядке ходил, и случайное нажатие не стирает расстановку.
+             * UIX-466: `END_BATTLE` теперь очищает очередь целиком. Прежде она
+             * сохранялась — на случай, что состав пригодится снова. На игре это
+             * решение не сработало: между боями в очереди оставались убитые и
+             * ушедшие, и следующий бой начинался с вычёркивания прошлого. Состав
+             * собирается заново — рамкой на карте это несколько секунд.
              */
             initiative:
               body.command === "START_BATTLE"
@@ -6669,7 +6674,9 @@ export function registerRoutes(
                     ...participant,
                     initiative: null,
                   }))
-                : current.initiative,
+                : body.command === "END_BATTLE"
+                  ? []
+                  : current.initiative,
             revision: current.revision + 1,
             updatedAt: new Date(),
           })
@@ -6979,6 +6986,8 @@ export function registerRoutes(
   app.patch("/api/campaign/initiative", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
+    // Состав очереди ведёт мастер. Игрок вносит только своё значение — узкой
+    // операцией `/api/campaign/initiative/self` ниже.
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const body = updateInitiativeSchema.parse(request.body);
@@ -7024,11 +7033,22 @@ export function registerRoutes(
           .code(400)
           .send({ error: "TOKEN_NOT_FOUND", tokenIds: foreign });
     }
+    /**
+     * UIX-466: порядок — производная от введённых значений, а не отдельное
+     * намерение. Раньше его собирали руками, а сортировка была кнопкой; теперь
+     * ручной перестановки нет вовсе, и очередь пересобирается после каждой
+     * правки.
+     *
+     * Сортировка живёт здесь, а не на клиенте: значения вносят и мастер, и
+     * игрок, и порядок обязан получиться один и тот же у всех — независимо от
+     * того, чей клиент прислал правку.
+     */
+    const ordered = sortByInitiative(body.participants);
     const updated = await db.transaction(async (tx) => {
       const [next] = await tx
         .update(campaigns)
         .set({
-          initiative: body.participants,
+          initiative: ordered,
           revision: current.revision + 1,
           updatedAt: new Date(),
         })
@@ -7055,6 +7075,114 @@ export function registerRoutes(
     if (!updated) return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return updated;
+  });
+
+  /**
+   * UIX-466 — «поставить своей строке значение».
+   *
+   * Отдельно от маршрута выше, потому что тот принимает очередь целиком, а
+   * игрок видит её отфильтрованной: строк противников у него нет, и прислать
+   * полный состав он не может физически. Первая попытка дать ему общий маршрут
+   * так и провалилась — сервер видел «участники исчезли» и отвечал отказом.
+   *
+   * Здесь передаётся только намерение, а состав и порядок остаются серверными.
+   * Мастеру этот маршрут тоже открыт: свой персонаж есть и у него.
+   */
+  app.patch("/api/campaign/initiative/self", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const body = setOwnInitiativeSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+
+    const roster = current.initiative ?? [];
+    const target = roster.find((row) => row.id === body.participantId);
+    if (!target)
+      return reply.code(404).send({ error: "PARTICIPANT_NOT_FOUND" });
+
+    /**
+     * Право проверяется по персонажу, стоящему за токеном строки, а не по тому,
+     * что прислал клиент. Мастеру разрешено всё: он ведёт и NPC.
+     */
+    if (auth.role !== "GM") {
+      if (!target.tokenId)
+        return reply.code(403).send({ error: "NOT_YOUR_PARTICIPANT" });
+      const [owned] = await db
+        .select({ id: tokens.id })
+        .from(tokens)
+        .innerJoin(
+          tokenDefinitions,
+          eq(tokens.definitionId, tokenDefinitions.id),
+        )
+        .innerJoin(characters, eq(tokenDefinitions.characterId, characters.id))
+        .leftJoin(
+          characterControllers,
+          eq(characterControllers.characterId, characters.id),
+        )
+        .where(
+          and(
+            eq(tokens.id, target.tokenId),
+            eq(characters.campaignId, auth.campaignId),
+            or(
+              eq(characters.ownerMembershipId, auth.membershipId),
+              eq(characterControllers.membershipId, auth.membershipId),
+            ),
+          ),
+        )
+        .limit(1);
+      if (!owned)
+        return reply.code(403).send({ error: "NOT_YOUR_PARTICIPANT" });
+    }
+
+    const ordered = sortByInitiative(
+      roster.map((row) =>
+        row.id === body.participantId
+          ? { ...row, initiative: body.initiative }
+          : row,
+      ),
+    );
+    const updatedSelf = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(campaigns)
+        .set({
+          initiative: ordered,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.initiative.updated",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: next.revision,
+        payload: { participants: ordered.length },
+      });
+      return next;
+    });
+    if (!updatedSelf)
+      return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updatedSelf;
   });
 
   app.patch("/api/characters/:id/counters", async (request, reply) => {
