@@ -3,10 +3,7 @@ import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
 import { formulaBonus } from "../activity-roll-controls";
 import { usePanelResize } from "../use-panel-resize";
-import {
-  ROLL_MODIFIER_HINT,
-  rollModeFromEvent,
-} from "../roll-modifier-keys";
+import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
 import type { RollMode } from "../roll-mode";
 
 /**

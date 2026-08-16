@@ -93,9 +93,9 @@ describe("аватар броска", () => {
 
 describe("строка броска", () => {
   const order = () =>
-    Array.from(
-      document.querySelector(".roll-result")?.children ?? [],
-    ).map((node) => node.className.split(" ")[0]);
+    Array.from(document.querySelector(".roll-result")?.children ?? []).map(
+      (node) => node.className.split(" ")[0],
+    );
 
   it("ставит аватар слева, а итог справа", () => {
     renderComponent(

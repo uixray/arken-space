@@ -1,10 +1,7 @@
 import { useState } from "react";
 import type { MessageVisibility } from "@arken/contracts";
 import { RollModeControl, type RollMode } from "../RollModeControl";
-import {
-  ROLL_MODIFIER_HINT,
-  rollModeFromEvent,
-} from "../roll-modifier-keys";
+import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 
 /**

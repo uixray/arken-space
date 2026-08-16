@@ -28,12 +28,15 @@ let database: PGlite;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 
 const snapshotFor = (membershipId: string, role: "GM" | "PLAYER") =>
-  buildSnapshot(db as never, {
-    membershipId,
-    campaignId: ids.campaign,
-    role,
-    displayName: role === "GM" ? "Мастер" : "Игрок",
-  } as never);
+  buildSnapshot(
+    db as never,
+    {
+      membershipId,
+      campaignId: ids.campaign,
+      role,
+      displayName: role === "GM" ? "Мастер" : "Игрок",
+    } as never,
+  );
 
 beforeEach(async () => {
   database = new PGlite();

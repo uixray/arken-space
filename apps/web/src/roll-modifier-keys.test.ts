@@ -37,9 +37,9 @@ describe("клавиши преимущества и помехи", () => {
     // Противоречие: молча выбрать одно из двух — значит сделать бросок,
     // которого не заказывали, и заметят это только по результату.
     expect(rollModeFromEvent(keys({ ctrl: true, alt: true }))).toBe("NORMAL");
-    expect(rollModeFromEvent(keys({ ctrl: true, alt: true }), "ADVANTAGE")).toBe(
-      "ADVANTAGE",
-    );
+    expect(
+      rollModeFromEvent(keys({ ctrl: true, alt: true }), "ADVANTAGE"),
+    ).toBe("ADVANTAGE");
   });
 });
 

@@ -65,7 +65,7 @@ export function buildGameSnapshot(
     me,
     members: [me],
     characterIdentities: [],
-  characters: [],
+    characters: [],
     catalogEntries: [],
     scenes: [],
     tokens: [],

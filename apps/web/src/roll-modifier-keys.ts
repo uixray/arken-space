@@ -37,8 +37,7 @@ export function rollModeFromEvent(
  * Подсказкой на кнопке, а не отдельной строкой в интерфейсе: строка занимала бы
  * место на каждом экране ради того, что читают один раз.
  */
-export const ROLL_MODIFIER_HINT =
-  "Ctrl — с преимуществом, Alt — с помехой";
+export const ROLL_MODIFIER_HINT = "Ctrl — с преимуществом, Alt — с помехой";
 
 /** Как назвать режим в тексте физического броска. */
 export function rollModeLabel(mode: RollMode): string | null {

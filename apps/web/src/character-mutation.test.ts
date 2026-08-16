@@ -97,7 +97,7 @@ describe("character mutation reconciliation", () => {
     const stale = {
       ...snapshot,
       characterIdentities: [],
-  characters: [character],
+      characters: [character],
       snapshotVersion: 3,
     };
     const equalSequenceButStaleCharacter = {

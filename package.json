@@ -23,6 +23,7 @@
     "db:migrate": "pnpm --filter @arken/db migrate",
     "db:studio": "pnpm --filter @arken/db studio",
     "lint": "eslint .",
+    "format": "prettier --write . --ignore-unknown",
     "format:check": "prettier --check . --ignore-unknown"
   },
   "devDependencies": {

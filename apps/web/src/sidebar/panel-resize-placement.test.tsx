@@ -95,9 +95,9 @@ describe("ручка изменения высоты", () => {
     const panel = document.querySelector(".quick-roll-panel");
     const body = panel?.querySelector(".quick-roll-panel__body");
     expect(body).toBeTruthy();
-    expect(body?.contains(document.querySelector(".activity-quick-rolls"))).toBe(
-      true,
-    );
+    expect(
+      body?.contains(document.querySelector(".activity-quick-rolls")),
+    ).toBe(true);
     expect(
       panel?.lastElementChild?.classList.contains("panel-resize-handle"),
     ).toBe(true);
