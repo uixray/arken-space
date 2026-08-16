@@ -75,7 +75,7 @@ describe("скрипт выкладки", () => {
   });
 
   it("записывает точку отката до первого изменения", () => {
-    const rollback = script.indexOf("ROLLBACK_REVISION=\"$(printf");
+    const rollback = script.indexOf('ROLLBACK_REVISION="$(printf');
     expect(rollback).toBeGreaterThan(0);
     expect(rollback).toBeLessThan(script.indexOf("backup.sh"));
     expect(rollback).toBeLessThan(script.indexOf("git checkout"));

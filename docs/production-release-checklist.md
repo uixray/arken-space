@@ -24,6 +24,30 @@ The production `.env` must be mode `600`, must not be committed, and must set:
 Restic and S3 credentials belong only in root-owned `/etc/arken-space` files,
 never in the application `.env` or GitHub.
 
+## The scripted path (preferred)
+
+`infra/deploy/release.sh` runs every gate below in order, carrying the snapshot
+id and revision between them as variables instead of retyping them:
+
+```sh
+sh infra/deploy/release.sh <reviewed-40-character-sha>
+```
+
+It stops after the restore rehearsal and prints the exact command to proceed.
+Nothing touches production until the deploy is confirmed explicitly:
+
+```sh
+RELEASE_CONFIRM=deploy-now sh infra/deploy/release.sh <same-sha>
+```
+
+The stop is not a dry run: the backup and the rehearsal are real. Only the
+production-changing steps wait for confirmation. A failure at any gate aborts
+with a non-zero status and repeats the rollback revision recorded before the
+first change.
+
+The manual steps below remain the fallback and the specification of what the
+script does. They are also what to follow when the script itself is suspect.
+
 ## Mandatory pre-deploy gates
 
 1. Confirm DNS resolves to the intended host and the existing certificate covers
