@@ -2281,6 +2281,44 @@ export type DiceFrameReference = {
   frameKey: "critical-failure" | "critical-success";
 };
 
+/**
+ * UIX-457 — откуда бросок берёт рамку.
+ *
+ * Источников четыре, и они не равны: рамка скилла говорит про конкретное
+ * заклинание, рамка школы — про всю ветку, выбор игрока — про него самого.
+ * Порядок задан явно и в одном месте, потому что «какая рамка выиграла»
+ * иначе выясняется только глазами на боевой игре.
+ *
+ * Критическая рамка (`ARKEN_CRITICAL_V1`) в этой цепочке не участвует: она не
+ * оформление, а сообщение о результате броска, и живёт своим полем `frame` в
+ * `DiceResult`. Смешать их значило бы, что выбранная игроком картинка
+ * перекрывает признак крита — то есть перекрывает смысл.
+ */
+export const DICE_FRAME_SOURCES = ["SKILL", "SCHOOL", "PLAYER"] as const;
+export type DiceFrameSource = (typeof DICE_FRAME_SOURCES)[number];
+
+export interface DiceFrameChoice {
+  assetId: string;
+  source: DiceFrameSource;
+}
+
+/**
+ * Первый непустой источник по порядку. `null` — рамки нет вовсе, и это
+ * нормальное состояние: до UIX-457 её не было ни у кого.
+ */
+export function resolveDiceFrame(candidates: {
+  skill?: string | null;
+  school?: string | null;
+  player?: string | null;
+}): DiceFrameChoice | null {
+  if (candidates.skill) return { assetId: candidates.skill, source: "SKILL" };
+  if (candidates.school)
+    return { assetId: candidates.school, source: "SCHOOL" };
+  if (candidates.player)
+    return { assetId: candidates.player, source: "PLAYER" };
+  return null;
+}
+
 export interface DiceResult {
   formula: string;
   resolvedFormula: string;
@@ -2390,6 +2428,15 @@ export interface PublicCharacterIdentityDto {
   id: string;
   name: string;
   portraitAssetId: string | null;
+  /**
+   * UIX-454: миниатюра токена персонажа. Мастер выбрал её как аватар в ленте
+   * бросков: на карте игрока узнают именно по токену, и в ленте он читается
+   * быстрее портрета — портрет там размером с ноготь.
+   *
+   * Портрет остаётся запасным: у персонажа может не быть ни одного токена с
+   * картинкой.
+   */
+  tokenAssetId: string | null;
 }
 
 export interface GameSnapshot {

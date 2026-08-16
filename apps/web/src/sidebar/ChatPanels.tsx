@@ -30,6 +30,7 @@ import {
 import { InitiativePanel } from "./InitiativePanel";
 import type { RollMode } from "../roll-mode";
 import { RollAvatar } from "./RollAvatar";
+import { createRollAvatarSource } from "../roll-avatar-source";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
@@ -42,11 +43,7 @@ import {
   type ActivityStoryPost,
 } from "../activity-feed";
 import { PlayerRequestChatCard } from "../player-request-chat";
-import {
-  CHAT_STREAM_LABEL,
-  messagesForStream,
-  threadForStream,
-} from "../chat-state";
+import { messagesForStream, threadForStream } from "../chat-state";
 import {
   directChatContacts,
   directThreadForPeer,
@@ -251,6 +248,7 @@ export function ActivityPanel({
   ) => Promise<void>;
 }) {
   const [initiativePending, setInitiativePending] = useState(false);
+  const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
   const [composer, setComposer] = useState("");
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
@@ -687,16 +685,10 @@ export function ActivityPanel({
             >
               <header>
                 <strong>{message.displayName}</strong>
-                <span className="activity-stream-label">
-                  {CHAT_STREAM_LABEL[stream]}
-                </span>
-                {message.characterId && (
-                  <span className="message-character">
-                    {snapshot.characters.find(
-                      (character) => character.id === message.characterId,
-                    )?.name ?? "Персонаж"}
-                  </span>
-                )}
+                {/* UIX-467: убраны две плашки. «Броски» повторяла на каждом
+                 * сообщении то, что и так задано фильтром ленты, а имя
+                 * персонажа у чужого броска вырождалось в слово «Персонаж».
+                 * Личность теперь читается по миниатюре токена слева. */}
                 <time>
                   {new Date(occurredAt).toLocaleTimeString([], {
                     hour: "2-digit",
@@ -712,6 +704,12 @@ export function ActivityPanel({
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequestCreate}
+                avatar={
+                  <RollAvatar
+                    {...avatarFor(message.characterId)}
+                    fallbackName={message.displayName}
+                  />
+                }
               />
             </article>
           );
@@ -1168,32 +1166,11 @@ export function ChatPanel({
     [snapshot.messages, snapshot.chatThreads, activeStream],
   );
   const timeline = buildChatTimeline(messages);
+  const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
   const catalogEntryIds = useMemo(
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
   );
-  /**
-   * UIX-454: личность и портрет бросающего. Ищется по `characterIdentities` —
-   * набору, который приходит и игроку тоже; поиск по `characters` работал бы
-   * только для своих, а чужие вырождались бы в заглушку.
-   */
-  const identityById = useMemo(
-    () =>
-      new Map(
-        snapshot.characterIdentities.map((identity) => [identity.id, identity]),
-      ),
-    [snapshot.characterIdentities],
-  );
-  const assetUrlById = useMemo(
-    () => new Map(snapshot.assets.map((asset) => [asset.id, asset.url])),
-    [snapshot.assets],
-  );
-  const identityFor = (characterId: string | null) =>
-    characterId ? (identityById.get(characterId) ?? null) : null;
-  const portraitUrlFor = (characterId: string | null) => {
-    const portraitAssetId = identityFor(characterId)?.portraitAssetId;
-    return portraitAssetId ? (assetUrlById.get(portraitAssetId) ?? null) : null;
-  };
   const latestMessage = messages.at(-1);
   const thread = threadForStream(snapshot, activeStream);
   const threadId = thread?.id;
@@ -1373,9 +1350,8 @@ export function ChatPanel({
                 onOpenPlayerRequests={onOpenPlayerRequests}
                 avatar={
                   <RollAvatar
-                    identity={identityFor(item.message.characterId)}
+                    {...avatarFor(item.message.characterId)}
                     fallbackName={item.message.displayName}
-                    assetUrl={portraitUrlFor(item.message.characterId)}
                   />
                 }
               />

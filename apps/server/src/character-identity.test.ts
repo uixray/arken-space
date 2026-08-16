@@ -146,8 +146,10 @@ describe("публичная личность персонажа", () => {
   });
 
   it("не превращается в карточку чужого персонажа", async () => {
-    // Ровно три поля. Любое четвёртое — уже утечка характеристик, ресурсов
-    // или заметок, которые фильтр `visibleCharacters` держит закрытыми.
+    // Ровно четыре поля: три прежних и миниатюра токена, добавленная по
+    // решению мастера в UIX-467. Любое пятое — уже утечка характеристик,
+    // ресурсов или заметок, которые фильтр `visibleCharacters` держит
+    // закрытыми. Список остаётся точным, а не «содержит хотя бы».
     const snapshot = await snapshotFor(ids.player, "PLAYER");
     const theirs = snapshot.characterIdentities.find(
       (item) => item.id === ids.theirs,
@@ -156,6 +158,7 @@ describe("публичная личность персонажа", () => {
       "id",
       "name",
       "portraitAssetId",
+      "tokenAssetId",
     ]);
     expect(snapshot.characters.some((item) => item.id === ids.theirs)).toBe(
       false,

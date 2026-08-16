@@ -386,6 +386,7 @@ describe("снапшоты двух игроков не смешиваются",
       "id",
       "name",
       "portraitAssetId",
+      "tokenAssetId",
     ]);
     const withoutIdentities = JSON.stringify({
       ...mine,

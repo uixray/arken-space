@@ -4,6 +4,7 @@ import type { GameSnapshot } from "@arken/contracts";
 import { renderComponent, screen } from "../test-support/render";
 import { RollAvatar } from "./RollAvatar";
 import { rollInitials } from "../roll-initials";
+import { createRollAvatarSource } from "../roll-avatar-source";
 import { ChatMessageBody } from "./ChatPanels";
 
 vi.mock("@gravity-ui/uikit", () => ({
@@ -60,7 +61,12 @@ describe("аватар броска", () => {
   it("показывает портрет, когда он есть", () => {
     renderComponent(
       <RollAvatar
-        identity={{ id: "c1", name: "Шейла", portraitAssetId: "a1" }}
+        identity={{
+          id: "c1",
+          name: "Шейла",
+          portraitAssetId: "a1",
+          tokenAssetId: null,
+        }}
         fallbackName="Сосед"
         assetUrl="/api/assets/a1/content"
       />,
@@ -75,7 +81,12 @@ describe("аватар броска", () => {
     // известно и в этом случае, подменять его именем игрока незачем.
     renderComponent(
       <RollAvatar
-        identity={{ id: "c1", name: "Шейла Ловкая", portraitAssetId: null }}
+        identity={{
+          id: "c1",
+          name: "Шейла Ловкая",
+          portraitAssetId: null,
+          tokenAssetId: null,
+        }}
         fallbackName="Сосед"
         assetUrl={null}
       />,
@@ -125,5 +136,75 @@ describe("строка броска", () => {
     expect(screen.getByLabelText("Бонус к броску").textContent).toBe("+3");
     // Итога здесь быть не может: результат выпадает на настоящем кубике.
     expect(screen.queryByLabelText("Итог броска")).toBeNull();
+  });
+});
+
+describe("источник аватара", () => {
+  const snapshot = {
+    characterIdentities: [
+      {
+        id: "c1",
+        name: "Шейла",
+        portraitAssetId: "portrait",
+        tokenAssetId: "token",
+      },
+      {
+        id: "c2",
+        name: "Ллойд",
+        portraitAssetId: "portrait2",
+        tokenAssetId: null,
+      },
+      { id: "c3", name: "Миша", portraitAssetId: null, tokenAssetId: null },
+    ],
+    assets: [
+      { id: "token", url: "/api/assets/token/content" },
+      { id: "portrait", url: "/api/assets/portrait/content" },
+      { id: "portrait2", url: "/api/assets/portrait2/content" },
+    ],
+  } as unknown as GameSnapshot;
+
+  it("предпочитает миниатюру токена портрету", () => {
+    // Решение мастера: на карте персонажа узнают по токену, а портрет в ленте
+    // размером с ноготь.
+    expect(createRollAvatarSource(snapshot)("c1").assetUrl).toBe(
+      "/api/assets/token/content",
+    );
+  });
+
+  it("падает на портрет, когда токена с картинкой нет", () => {
+    expect(createRollAvatarSource(snapshot)("c2").assetUrl).toBe(
+      "/api/assets/portrait2/content",
+    );
+  });
+
+  it("отдаёт личность без картинки, а не пустоту", () => {
+    // Инициалы рисуются от имени персонажа — значит личность нужна и тогда,
+    // когда картинки нет вовсе.
+    const resolved = createRollAvatarSource(snapshot)("c3");
+    expect(resolved.assetUrl).toBeNull();
+    expect(resolved.identity?.name).toBe("Миша");
+  });
+
+  it("не падает на броске без персонажа", () => {
+    expect(createRollAvatarSource(snapshot)(null)).toEqual({
+      identity: null,
+      assetUrl: null,
+    });
+  });
+});
+
+describe("лента бросков", () => {
+  it("подключает аватар в обеих лентах, а не в одной", async () => {
+    /**
+     * Ровно та ошибка, которую поймал мастер: аватар был вписан в `ChatPanel`,
+     * а лента бросков — это `ActivityPanel`. Компонентный тест этого не увидел
+     * бы, поэтому проверяется исходник: обе ленты обязаны передавать `avatar`.
+     */
+    const source = await import("node:fs").then((fs) =>
+      fs.readFileSync("apps/web/src/sidebar/ChatPanels.tsx", "utf8"),
+    );
+    expect(source.split("avatar={").length - 1).toBeGreaterThanOrEqual(2);
+    // И ни одна из них не должна снова заводить свой источник картинок.
+    expect(source).not.toContain("portraitUrlFor");
   });
 });

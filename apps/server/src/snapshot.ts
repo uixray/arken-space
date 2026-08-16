@@ -609,9 +609,17 @@ export async function buildSnapshot(
       id: character.id,
       name: character.name,
       portraitAssetId: character.portraitAssetId,
+      tokenAssetId:
+        definitionRows.find(
+          (definition) =>
+            definition.characterId === character.id &&
+            definition.defaultAssetId,
+        )?.defaultAssetId ?? null,
     }));
-  for (const identity of characterIdentities)
+  for (const identity of characterIdentities) {
     if (identity.portraitAssetId) visibleAssetIds.add(identity.portraitAssetId);
+    if (identity.tokenAssetId) visibleAssetIds.add(identity.tokenAssetId);
+  }
   for (const track of normalizedAudioTracks) {
     if (track.assetId) visibleAssetIds.add(track.assetId);
   }
