@@ -132,4 +132,51 @@ test.describe("лента журнала во время боя", () => {
       await setBattle(page, "END_BATTLE");
     }
   });
+
+  test("поле ввода сообщения остаётся на экране при открытой очереди", async ({
+    page,
+  }) => {
+    /**
+     * Найдено живой проверкой, тестами не ловилось: блок быстрых бросков был
+     * жёстким (`flex: 0 0 auto`), и с открытой очередью боя колонка вылезала за
+     * низ экрана — поле ввода уезжало за край, писать было нечем. Перекрытий при
+     * этом не возникало, поэтому проверка выше молчала.
+     *
+     * Проверяется на низком экране: на высоком места хватает и без сжатия.
+     */
+    const token = process.env.GM_ACCESS_TOKEN;
+    test.skip(
+      !token,
+      "GM_ACCESS_TOKEN is required for the integration environment",
+    );
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(`/gm/${token}`);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page).toHaveURL("/");
+
+    await setBattle(page, "START_BATTLE");
+    try {
+      await expect(page.locator(".initiative-panel")).toBeVisible();
+      const fits = await page.evaluate(() => {
+        const composer = document.querySelector(".chat-compose");
+        const feed = document.querySelector(".activity-feed");
+        if (!composer || !feed) throw new Error("Лента не отрисована");
+        const box = composer.getBoundingClientRect();
+        return {
+          bottom: Math.round(box.bottom),
+          viewport: window.innerHeight,
+          height: Math.round(box.height),
+        };
+      });
+      expect(
+        fits.bottom,
+        `низ поля ввода ${fits.bottom} при высоте окна ${fits.viewport}`,
+      ).toBeLessThanOrEqual(fits.viewport + 1);
+      // Поле не должно «поместиться» схлопнувшись в ничто.
+      expect(fits.height).toBeGreaterThan(20);
+    } finally {
+      await setBattle(page, "END_BATTLE");
+    }
+  });
 });

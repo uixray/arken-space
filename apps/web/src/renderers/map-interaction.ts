@@ -288,6 +288,30 @@ export function mapInteractionReducer(
     case "close-object-menu":
       return { ...state, objectMenu: null };
     case "request-delete":
+      /**
+       * UIX-470: рисунок удаляется сразу, без вопроса.
+       *
+       * Рисуют на карте быстро и много — стрелку, круг, зачёркивание, — и
+       * каждый лишний диалог стоит дороже редкого промаха. Промах при этом не
+       * теряется: `DELETE /api/drawings/:id` пишет в `action_journal`, то есть
+       * `Ctrl+Z` возвращает рисунок. Именно поэтому размен считается честным, а
+       * не «рисуем быстро и терпим потери».
+       *
+       * У токена подтверждение остаётся: он несёт персонажа, права и владельца,
+       * и его удаление — не штрих, а изменение расстановки.
+       */
+      if (action.ref.kind === "drawing")
+        return enqueue(
+          {
+            ...state,
+            objectMenu: null,
+            deleteRequestedFor: null,
+            selectedObject: sameRef(state.selectedObject, action.ref)
+              ? null
+              : state.selectedObject,
+          },
+          { type: "delete-object", ref: action.ref },
+        );
       return {
         ...state,
         selectedObject: action.ref,

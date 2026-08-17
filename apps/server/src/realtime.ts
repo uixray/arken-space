@@ -38,6 +38,7 @@ import { buildSnapshot } from "./snapshot.js";
 import { resolveTokenName } from "./token-name.js";
 import { cookieValue } from "./security.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
+import { normalizeTokenConditions } from "./token-conditions.js";
 import { effectiveAudioPosition, ensureAudioDuration } from "./audio-state.js";
 
 /** UIX-382: hard cap on concurrently active tracks in the mixer. */
@@ -59,7 +60,9 @@ type EditableToken = Omit<typeof tokens.$inferSelect, "name"> & {
 };
 function tokenDto(token: EditableToken): TokenDto {
   const { updatedAt: _updatedAt, ...dto } = token;
-  return dto;
+  // UIX-471: состояния приходят из `jsonb` и разбираются схемой — см.
+  // `normalizeTokenConditions`.
+  return { ...dto, conditions: normalizeTokenConditions(dto.conditions) };
 }
 
 type AudioTrackRow = typeof campaignAudioTracks.$inferSelect;

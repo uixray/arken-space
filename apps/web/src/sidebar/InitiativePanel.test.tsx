@@ -89,6 +89,7 @@ const renderPanel = (
 ) => {
   const onUpdate = vi.fn();
   const onSetOwnInitiative = vi.fn();
+  const onRoll = vi.fn();
   renderComponent(
     <InitiativePanel
       participants={participants}
@@ -97,10 +98,11 @@ const renderPanel = (
       selectedTokenIds={[]}
       onUpdate={onUpdate}
       onSetOwnInitiative={onSetOwnInitiative}
+      onRoll={onRoll}
       {...overrides}
     />,
   );
-  return { onUpdate, onSetOwnInitiative };
+  return { onUpdate, onSetOwnInitiative, onRoll };
 };
 
 const order = () =>
@@ -216,6 +218,39 @@ describe("очередь ходов", () => {
     expect(screen.queryByLabelText("Имя участника без токена")).toBeNull();
     expect(screen.queryByTitle("Добавить выделенные рамкой токены")).toBeNull();
     expect(screen.queryByLabelText("Инициатива «Ллойд»")).toBeNull();
+  });
+
+  it("даёт бросить инициативу прямо из строки", async () => {
+    // UIX-466: кубик и перенос числа руками были двумя действиями там, где
+    // смысл один. Запись результата делает вызывающий — здесь проверяется, что
+    // строка вообще умеет запросить бросок за себя.
+    const { onRoll } = renderPanel();
+    await userEvent.click(
+      screen.getByLabelText("Бросить инициативу за «Ллойд»"),
+    );
+    expect(onRoll).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }));
+  });
+
+  it("даёт игроку бросить за себя, но не за чужого", async () => {
+    renderPanel({
+      isGm: false,
+      participants: [
+        { ...participants[0]!, canEdit: true },
+        { ...participants[1]!, canEdit: false },
+      ],
+    });
+    expect(screen.getByLabelText("Бросить инициативу за «Ллойд»")).toBeTruthy();
+    expect(screen.queryByLabelText("Бросить инициативу за «Тэйн»")).toBeNull();
+  });
+
+  it("не предлагает бросок строке без токена", async () => {
+    // За «Волком №3» нет фигуры на карте — бросать нечем и не за кого.
+    renderPanel({
+      participants: [{ ...participants[0]!, tokenId: null, name: "Волк №3" }],
+    });
+    expect(
+      screen.queryByLabelText("Бросить инициативу за «Волк №3»"),
+    ).toBeNull();
   });
 
   it("сворачивается целиком", async () => {

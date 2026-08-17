@@ -1,8 +1,13 @@
+import { useState } from "react";
 import type { CharacterDto } from "@arken/contracts";
 import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "@gravity-ui/uikit";
 import { formulaBonus } from "../activity-roll-controls";
 import { usePanelResize } from "../use-panel-resize";
+import {
+  readQuickRollsCollapsed,
+  writeQuickRollsCollapsed,
+} from "../quick-rolls-preference";
 import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
 import type { RollMode } from "../roll-mode";
 
@@ -56,15 +61,43 @@ export function QuickRollPanel({
     campaignId,
     membershipId,
   });
+  /**
+   * UIX-475: блок сворачивается.
+   *
+   * Кнопок здесь столько, сколько строк в раскладке кампании плюс навыки
+   * персонажа, — на боевой раскладке это половина колонки, и вне боя она занята
+   * тем, чем не пользуются. Свёрнутый блок отдаёт место ленте.
+   *
+   * Состояние помнится: сворачивают его не на минуту, а на весь стиль игры.
+   */
+  const [collapsed, setCollapsed] = useState(() =>
+    readQuickRollsCollapsed(window.localStorage, membershipId),
+  );
+
   return (
     <section
-      className="quick-roll-panel"
+      className={`quick-roll-panel${collapsed ? " is-collapsed" : ""}`}
       aria-label="Панель быстрых бросков"
-      style={height != null ? { height } : undefined}
+      // Свёрнутому блоку заданная высота не нужна: он занимает свою строку.
+      style={height != null && !collapsed ? { height } : undefined}
     >
+      <button
+        type="button"
+        className="quick-roll-panel__toggle"
+        aria-expanded={!collapsed}
+        title={collapsed ? "Развернуть броски" : "Свернуть броски"}
+        onClick={() => {
+          const next = !collapsed;
+          setCollapsed(next);
+          writeQuickRollsCollapsed(window.localStorage, membershipId, next);
+        }}
+      >
+        <span aria-hidden="true">{collapsed ? "▸" : "▾"}</span>
+        Броски характеристик
+      </button>
       {/* Прокручивается содержимое, а не панель целиком: иначе ручка уезжает
        * из виду ровно тогда, когда до неё хотят дотянуться. */}
-      <div className="quick-roll-panel__body">
+      <div className="quick-roll-panel__body" hidden={collapsed}>
         {gmOnly && (
           <p className="quick-roll-panel__gm-only" role="status">
             <span aria-hidden="true">◆</span> Броски уйдут только мастеру
@@ -112,13 +145,15 @@ export function QuickRollPanel({
           ))}
         </div>
       </div>
-      <button
-        type="button"
-        className="panel-resize-handle"
-        aria-label="Изменить высоту панели быстрых бросков"
-        title="Перетащите, чтобы изменить высоту панели быстрых бросков"
-        {...handleProps}
-      />
+      {!collapsed && (
+        <button
+          type="button"
+          className="panel-resize-handle"
+          aria-label="Изменить высоту панели быстрых бросков"
+          title="Перетащите, чтобы изменить высоту панели быстрых бросков"
+          {...handleProps}
+        />
+      )}
     </section>
   );
 }

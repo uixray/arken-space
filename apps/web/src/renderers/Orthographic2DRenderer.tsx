@@ -54,6 +54,11 @@ import {
   type MapMoveTarget,
 } from "./map-move-queue";
 import { CANVAS_VISUAL_TOKENS as visual } from "./canvas-visual-tokens";
+import {
+  conditionBadgeLayout,
+  conditionsHint,
+  TOKEN_CONDITION_BADGE,
+} from "./token-condition-badges";
 import { persistDrawingDraft, releaseDrawingDraft } from "./drawing-draft";
 import { isDirectTokenDrag } from "./token-drag-event";
 import { mapWorldPointFromDrop } from "../token-placement";
@@ -332,6 +337,20 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [brushPoints, setBrushPoints] = useState<{ x: number; y: number }[]>(
     [],
   );
+  /**
+   * UIX-470: радиус кисти в одном месте.
+   *
+   * Он же уходит на сервер в геометрии, он же рисует след протяжки, он же
+   * рисует контур под курсором. Раньше `?? 40` повторялся трижды, и это ровно
+   * та развилка, из-за которой предпросмотр и результат расходятся: поправив
+   * запасное значение в одном месте, второе не заметишь — а увидит это мастер,
+   * когда открытая область окажется не там, где он целился.
+   */
+  const brushRadius = props.fogBrushRadius ?? 40;
+  /** Позиция курсора на сцене — для контура будущей области кисти. */
+  const [brushHover, setBrushHover] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   // UIX-313: FOG_POLYGON/COVER_POLYGON click-to-add-vertex draft. Cleared
   // (without committing) on Escape, right-click, or a tool switch away from
   // a polygon tool; completed on Enter/double-click once it has >=3 points.
@@ -349,6 +368,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   useEffect(() => {
     if (props.tool !== "FOG_POLYGON" && props.tool !== "COVER_POLYGON")
       cancelPolygonDraft();
+    // UIX-470: та же уборка для контура кисти — уйдя с инструмента, он остался
+    // бы висеть окружностью, к которой уже ничего не привязано.
+    if (props.tool !== "FOG_BRUSH" && props.tool !== "COVER_BRUSH")
+      setBrushHover(null);
   }, [props.tool]);
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
   const drawingPointsRef = useRef<number[]>([]);
@@ -1095,7 +1118,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       geometry: {
         type: "BRUSH",
         points,
-        radius: props.fogBrushRadius ?? 40,
+        radius: brushRadius,
       },
     });
   };
@@ -1230,6 +1253,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const handlePointerMove = (
     event?: Konva.KonvaEventObject<MouseEvent | PointerEvent>,
   ) => {
+    // UIX-470: контур будущей области кисти следует за курсором. Радиус берётся
+    // из того же `brushRadius`, что уходит на сервер, — иначе показанное и
+    // сделанное разойдутся ровно там, где мастер целится.
+    if (isBrushTool && props.role === "GM") setBrushHover(pointerInWorld());
     // UIX-392: touch input is explicitly deferred for cursor presence (see
     // `isTrackableCursorPointerType` doc comment) — only genuine mouse
     // pointer events feed the batcher, so touch-drag/pan gestures on mobile
@@ -1583,11 +1610,29 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           strokeWidth={2 / scale}
         />
       )}
+      {/* UIX-470: контур будущей области под курсором — до нажатия. Радиус
+          кисти задаётся ползунком и на глаз не угадывается: мастер целился,
+          нажимал и только тогда узнавал, сколько открылось. Заливки здесь нет
+          намеренно — она закрыла бы то, по чему целятся. */}
+      {isBrushTool &&
+        props.role === "GM" &&
+        brushHover &&
+        !brushPoints.length && (
+          <Circle
+            x={brushHover.x}
+            y={brushHover.y}
+            radius={brushRadius}
+            stroke={visual.color.editHighlight}
+            strokeWidth={1.5 / scale}
+            dash={[6 / scale, 4 / scale]}
+            listening={false}
+          />
+        )}
       {brushPoints.length === 1 && (
         <Circle
           x={brushPoints[0]!.x}
           y={brushPoints[0]!.y}
-          radius={props.fogBrushRadius ?? 40}
+          radius={brushRadius}
           fill={visual.color.fogDraft}
           opacity={visual.opacity.fogDraft}
           stroke={visual.color.editHighlight}
@@ -1599,7 +1644,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           points={brushPoints.flatMap((point) => [point.x, point.y])}
           stroke={visual.color.fogDraft}
           opacity={visual.opacity.fogDraft}
-          strokeWidth={(props.fogBrushRadius ?? 40) * 2}
+          strokeWidth={brushRadius * 2}
           lineCap="round"
           lineJoin="round"
         />
@@ -1881,6 +1926,45 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             />
           </Group>
         )}
+        {/* UIX-471: состояния — ряд цветных точек над фигурой. Портрет ими не
+            закрывается: по нему узнают, кто это. Названия приходят подписью
+            при наведении, вместе с именем. */}
+        {token.conditions.length > 0 &&
+          (() => {
+            const layout = conditionBadgeLayout(
+              token.conditions.length,
+              token.width,
+            );
+            return (
+              <Group listening={false}>
+                {token.conditions.map((condition, index) => {
+                  const badge = TOKEN_CONDITION_BADGE[condition];
+                  const x = layout.startX + index * (layout.size + layout.gap);
+                  return (
+                    <Group key={condition} x={x} y={layout.y}>
+                      <Circle
+                        x={layout.size / 2}
+                        y={layout.size / 2}
+                        radius={layout.size / 2}
+                        fill={badge.color}
+                        stroke={visual.color.tokenFrameDefault}
+                        strokeWidth={1 / scale}
+                      />
+                      <Text
+                        text={badge.short}
+                        width={layout.size}
+                        height={layout.size}
+                        align="center"
+                        verticalAlign="middle"
+                        fill={visual.color.tokenLabel}
+                        fontSize={layout.size * 0.7}
+                      />
+                    </Group>
+                  );
+                })}
+              </Group>
+            );
+          })()}
         <Text
           x={-16}
           y={token.height + 5}
@@ -1888,6 +1972,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           align="center"
           text={`${token.name}${
             isStackRepresentative ? ` +${tokenStack!.count - 1}` : ""
+          }${
+            // Состояния читаются словами там же, где имя: отдельная всплывающая
+            // подсказка на канвасе жила бы своей жизнью и перекрывала фигуры.
+            token.conditions.length > 0 && hoveredTokenId === token.id
+              ? ` — ${conditionsHint(token.conditions)}`
+              : ""
           }`}
           fill={visual.color.tokenName}
           fontSize={13}
@@ -2185,6 +2275,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         scaleY={scale}
         draggable={false}
         onWheel={handleWheel}
+        // UIX-470: контур кисти не должен зависать на карте, когда курсор ушёл
+        // со сцены — иначе он читается как уже выбранная область.
+        onPointerLeave={() => setBrushHover(null)}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -2879,10 +2972,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           <button onClick={() => setTokenMenu(null)}>Отмена</button>
         </div>
       )}
+      {/* UIX-470: спрашивают теперь только про токен — рисунок удаляется сразу.
+          Прежний текст «Это действие нельзя отменить» был неправдой: удаление
+          пишется в `action_journal`, и Ctrl+Z возвращает объект. Пугать
+          необратимостью там, где её нет, — худший вид подтверждения: человек
+          учится не верить предупреждениям вообще. */}
       <ConfirmDialog
         open={interaction.deleteRequestedFor !== null}
-        title="Удалить объект с карты?"
-        message="Это действие нельзя отменить."
+        title="Убрать токен с карты?"
+        message="Действие можно отменить: Ctrl+Z вернёт токен на место."
         onClose={() => dispatchInteraction({ type: "cancel-delete" })}
         onConfirm={() => dispatchInteraction({ type: "confirm-delete" })}
       />

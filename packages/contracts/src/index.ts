@@ -441,6 +441,57 @@ export type EncounterPreflightResponse = z.infer<
 
 export const actionIdSchema = z.string().uuid();
 export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
+
+/**
+ * UIX-471 — состояния фигуры на карте.
+ *
+ * Набор закрытый. Расширяемый мастером тянет за собой справочник, его редактор
+ * и правило «что делать с состоянием, которое уже висит на фигуре, когда его
+ * удаляют из справочника», — а это отдельная задача, не эта. Добавить пятое
+ * состояние здесь стоит одной миграции; неудачно спроектированный справочник
+ * стоит дороже.
+ *
+ * Хранятся у **размещённой** фигуры, а не у её определения: один персонаж
+ * может стоять на двух сценах и быть отравлен только на одной.
+ */
+export const tokenConditionSchema = z.enum([
+  "POISONED",
+  "UNCONSCIOUS",
+  "RESTRAINED",
+  "PRONE",
+]);
+export type TokenCondition = z.infer<typeof tokenConditionSchema>;
+
+/** Подписи состояний — по ним же строится подсказка при наведении. */
+export const TOKEN_CONDITION_LABEL: Readonly<Record<TokenCondition, string>> = {
+  POISONED: "Отравлен",
+  UNCONSCIOUS: "Без сознания",
+  RESTRAINED: "Обездвижен",
+  PRONE: "Распластан",
+};
+
+/**
+ * Набор состояний, а не одно поле: отравлен и обездвижен одновременно — обычное
+ * дело, и выбор «одного текущего» заставил бы мастера решать, какое из двух
+ * правил сейчас важнее.
+ *
+ * Порядок при записи не сохраняется — он нормализуется по объявлению выше,
+ * иначе две одинаковые по смыслу фигуры отличались бы порядком значков.
+ */
+export const tokenConditionsSchema = z
+  .array(tokenConditionSchema)
+  .max(tokenConditionSchema.options.length)
+  .transform((values) =>
+    tokenConditionSchema.options.filter((condition) =>
+      values.includes(condition),
+    ),
+  );
+
+export const updateTokenConditionsSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  conditions: tokenConditionsSchema,
+});
 export const STAT_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 /**
@@ -2054,6 +2105,8 @@ export interface TokenDto {
   baseColor: string;
   frameColor: string | null;
   layer: z.infer<typeof tokenLayerSchema>;
+  /** UIX-471: состояния этой фигуры на этой сцене. */
+  conditions: TokenCondition[];
   revision: number;
 }
 

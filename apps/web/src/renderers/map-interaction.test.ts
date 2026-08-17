@@ -26,6 +26,7 @@ const drawing: MapObjectRef = {
   revision: 1,
 };
 const validatedToken = createValidatedMapObjectRef(token)!;
+const validatedDrawing = createValidatedMapObjectRef(drawing)!;
 const reduce = (...actions: MapInteractionAction[]) =>
   actions.reduce(mapInteractionReducer, createInitialMapInteractionState());
 
@@ -198,6 +199,28 @@ describe("mapInteractionReducer", () => {
     expect(confirmed.commands).toEqual([
       { id: 1, type: "delete-object", ref: validatedToken },
     ]);
+  });
+
+  it("удаляет рисунок сразу, без подтверждения", () => {
+    // UIX-470: рисуют быстро и много, и диалог на каждый штрих стоит дороже
+    // редкого промаха. Промах при этом не теряется — удаление рисунка пишется
+    // в `action_journal`, и Ctrl+Z его возвращает.
+    const deleted = reduce({
+      type: "request-delete",
+      ref: validatedDrawing,
+    });
+    expect(deleted.deleteRequestedFor).toBeNull();
+    expect(deleted.commands).toEqual([
+      { id: 1, type: "delete-object", ref: validatedDrawing },
+    ]);
+  });
+
+  it("у токена подтверждение остаётся", () => {
+    // Токен несёт персонажа, права и владельца: его удаление — не штрих, а
+    // изменение расстановки.
+    const requested = reduce({ type: "request-delete", ref: validatedToken });
+    expect(requested.deleteRequestedFor).toEqual(validatedToken);
+    expect(requested.commands).toEqual([]);
   });
 
   it("closes only the top layer on each Escape", () => {

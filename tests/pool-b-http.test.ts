@@ -4072,3 +4072,119 @@ describe("Pool B HTTP boundaries", () => {
     expect(revokedPatch.json()).toEqual({ error: "CHARACTER_FORBIDDEN" });
   });
 });
+
+/**
+ * UIX-471 — состояния фигуры: отравлен, без сознания, обездвижен, распластан.
+ *
+ * Проверяется то, чего не видно в юнит-тесте набора: кто вправе их менять и что
+ * скрытая фигура не выдаёт себя даже отказом.
+ */
+describe("состояния токена", () => {
+  const setConditions = (
+    secret: string,
+    conditions: string[],
+    revision = 0,
+    tokenId = ids.token,
+  ) =>
+    app.inject({
+      method: "PATCH",
+      url: `/api/tokens/${tokenId}/conditions`,
+      headers: headers(secret),
+      payload: { actionId: crypto.randomUUID(), revision, conditions },
+    });
+
+  const storedConditions = async (tokenId = ids.token) => {
+    const [row] = await db
+      .select()
+      .from(schema.tokens)
+      .where(eq(schema.tokens.id, tokenId));
+    return row!.conditions;
+  };
+
+  it("мастер выставляет несколько состояний сразу", async () => {
+    const response = await setConditions(secrets.gm, ["PRONE", "POISONED"]);
+    expect(response.statusCode).toBe(200);
+    // Порядок нормализован по объявлению, а не по тому, как их назвали.
+    expect(await storedConditions()).toEqual(["POISONED", "PRONE"]);
+  });
+
+  it("игрок правит состояния своей фигуры", async () => {
+    // Состояния меняются каждый ход: гонять их через мастера значило бы
+    // повторить историю с бросками инициативы, где посредник был узким местом.
+    const response = await setConditions(secrets.player, ["RESTRAINED"]);
+    expect(response.statusCode).toBe(200);
+    expect(await storedConditions()).toEqual(["RESTRAINED"]);
+  });
+
+  it("не пускает игрока из чужой кампании", async () => {
+    const response = await setConditions(secrets.foreignPlayer, ["POISONED"]);
+    expect(response.statusCode).toBe(404);
+    expect(await storedConditions()).toEqual([]);
+  });
+
+  it("не пускает игрока своей кампании к неподконтрольной фигуре", async () => {
+    // Отдельно от проверки выше: там отказ приходит от изоляции кампаний, и
+    // на нём проверка контроля над фигурой не проверяется вовсе — это и
+    // показала диверсия, снявшая её без единого падения.
+    const bystander = crypto.randomUUID();
+    const bystanderSecret = "b".repeat(40);
+    await db.insert(schema.memberships).values({
+      id: bystander,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Сосед",
+    });
+    await db.insert(schema.sessions).values({
+      membershipId: bystander,
+      tokenHash: hashToken(bystanderSecret),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const response = await setConditions(bystanderSecret, ["POISONED"]);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "TOKEN_FORBIDDEN" });
+    expect(await storedConditions()).toEqual([]);
+  });
+
+  it("скрытая фигура не выдаёт себя игроку", async () => {
+    // Тот же запрет, что в UIX-449: отказ «нет такой» вместо «не твоя», иначе
+    // по коду ответа читается наличие фигуры за туманом.
+    await db
+      .update(schema.tokens)
+      .set({ visible: false })
+      .where(eq(schema.tokens.id, ids.token));
+    const response = await setConditions(secrets.player, ["POISONED"]);
+    expect(response.statusCode).toBe(404);
+    expect(await storedConditions()).toEqual([]);
+  });
+
+  it("отвергает неизвестное состояние", async () => {
+    const response = await setConditions(secrets.gm, ["CURSED"]);
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(await storedConditions()).toEqual([]);
+  });
+
+  it("разводит одновременные правки конфликтом", async () => {
+    expect((await setConditions(secrets.gm, ["POISONED"], 0)).statusCode).toBe(
+      200,
+    );
+    const stale = await setConditions(secrets.gm, ["PRONE"], 0);
+    expect(stale.statusCode).toBe(409);
+    expect(await storedConditions()).toEqual(["POISONED"]);
+  });
+
+  it("состояния живут у размещённой фигуры, а не у определения", async () => {
+    // Один персонаж может стоять на двух сценах и быть отравлен только на одной.
+    const secondToken = crypto.randomUUID();
+    await db.insert(schema.tokens).values({
+      id: secondToken,
+      definitionId: ids.definition,
+      sceneId: ids.scene,
+      name: "Hero",
+      x: 300,
+      y: 300,
+    });
+    await setConditions(secrets.gm, ["POISONED"]);
+    expect(await storedConditions()).toEqual(["POISONED"]);
+    expect(await storedConditions(secondToken)).toEqual([]);
+  });
+});

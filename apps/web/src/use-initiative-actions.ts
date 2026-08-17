@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { InitiativeParticipantDto } from "@arken/contracts";
 import { api } from "./api";
+import { initiativeRollFormula, initiativeRollLabel } from "./initiative-roll";
 
 /**
  * UIX-431 — правка очереди ходов.
@@ -30,6 +31,22 @@ export interface InitiativeActions {
     participantId: string,
     initiative: number | null,
     revision: number,
+  ) => Promise<void>;
+  /**
+   * UIX-466 — бросить инициативу за участника и записать результат в его строку.
+   *
+   * Раньше бросок и запись были разными действиями: кубик кидали, а число
+   * переносили в очередь руками. Здесь результат берётся из ответа `/api/dice` и
+   * тем же движением уходит в строку — мастеру общей правкой, игроку узкой.
+   *
+   * Ревизию кампании бросок не двигает (он пишет сообщение, а не кампанию),
+   * поэтому переданная `revision` остаётся годной для записи следом.
+   */
+  onRollInitiative: (
+    participants: readonly InitiativeParticipantDto[],
+    participant: InitiativeParticipantDto,
+    revision: number,
+    isGm: boolean,
   ) => Promise<void>;
 }
 
@@ -66,6 +83,54 @@ export function useInitiativeActions(dependencies: {
             initiative,
           }),
         });
+        await load();
+      },
+      onRollInitiative: async (participants, participant, revision, isGm) => {
+        const rolled = await api<{ dice?: { total?: number } | null }>(
+          "/api/dice",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              formula: initiativeRollFormula(participant.initiativeBonus ?? 0),
+              label: initiativeRollLabel(participant.name),
+              visibility: "PUBLIC",
+              characterId: null,
+              rollMode: "NORMAL",
+            }),
+          },
+        );
+        const total = rolled?.dice?.total;
+        // Бросок уже в ленте: если итога в ответе нет, молчать нельзя, но и
+        // записывать в очередь нечего — строка останется пустой, и её видно.
+        if (typeof total !== "number") {
+          await load();
+          return;
+        }
+        if (isGm)
+          await api("/api/campaign/initiative", {
+            method: "PATCH",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              revision,
+              participants: participants.map((row) => ({
+                id: row.id,
+                tokenId: row.tokenId,
+                name: row.ownName,
+                initiative: row.id === participant.id ? total : row.initiative,
+              })),
+            }),
+          });
+        else
+          await api("/api/campaign/initiative/self", {
+            method: "PATCH",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              revision,
+              participantId: participant.id,
+              initiative: total,
+            }),
+          });
         await load();
       },
     }),

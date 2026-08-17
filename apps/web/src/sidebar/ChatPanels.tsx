@@ -238,6 +238,7 @@ export function ActivityPanel({
   selectedTokenIds,
   onUpdateInitiative,
   onSetOwnInitiative,
+  onRollInitiative,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -259,6 +260,12 @@ export function ActivityPanel({
     participantId: string,
     initiative: number | null,
     revision: number,
+  ) => Promise<void>;
+  onRollInitiative: (
+    participants: readonly InitiativeParticipantDto[],
+    participant: InitiativeParticipantDto,
+    revision: number,
+    isGm: boolean,
   ) => Promise<void>;
 }) {
   const [initiativePending, setInitiativePending] = useState(false);
@@ -531,6 +538,15 @@ export function ActivityPanel({
               participantId,
               value,
               snapshot.campaign.revision,
+            ).finally(() => setInitiativePending(false));
+          }}
+          onRoll={(participant) => {
+            setInitiativePending(true);
+            void onRollInitiative(
+              snapshot.campaign.initiative,
+              participant,
+              snapshot.campaign.revision,
+              snapshot.me.role === "GM",
             ).finally(() => setInitiativePending(false));
           }}
         />

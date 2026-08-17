@@ -93,7 +93,7 @@
  *      `.character-workspace` / `.setup-workspace` (900).
  *   4. Popovers/menus -- dropdown-style menus that must render above
  *      workspace panels and canvas overlays, e.g. `.topbar` and
- *      `.workspace-menu__content` / `.scene-picker__menu`
+ *      `.workspace-nav__menu` / `.scene-picker__menu`
  *      (`--arken-layer-popup`, 1000), `.arken-workspace-window` (1200,
  *      explicitly kept below Gravity's modal dialog layer).
  *   5. Dialogs -- modal dialogs and their backdrops sit above everything
@@ -226,21 +226,70 @@ code {
 }
 .scene-switcher,
 .status-line,
-.workspace-menu {
+/* UIX-472: разделы строкой вместо выпадающего списка. Прежний список стоил
+   двух действий на каждый переход — открыть и выбрать, — хотя разделов немного
+   и почти все помещаются в строку. */
+.workspace-nav {
+  display: flex;
+  /* Ширина — остаток строки, а не размер содержимого (`basis: 0`, не `auto`).
+     Иначе получается замкнутый круг: сколько поместится, решается по ширине,
+     а ширина зависит от того, сколько положили, — и раскладка раскачивается от
+     кадра к кадру. */
+  flex: 1 1 0;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.workspace-nav__item {
+  flex: 0 0 auto;
+  min-height: 28px;
+  white-space: nowrap;
+}
+.workspace-nav__item[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft, var(--surface-3));
+}
+/* Копия строки для измерения: она задаёт естественные ширины подписей, по
+   которым считается вместимость. Из потока и из доступности убрана. */
+.workspace-nav__measure {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  display: flex;
+  gap: 6px;
+  visibility: hidden;
+  pointer-events: none;
+}
+.workspace-nav__measure > span {
+  /* Те же отступы и шрифт, что у настоящей кнопки, иначе измерение врёт. */
+  padding: 0 12px;
+  font-size: inherit;
+  white-space: nowrap;
+}
+.workspace-nav__more {
+  position: relative;
   flex: 0 0 auto;
 }
-.workspace-menu {
-  position: relative;
-}
-.workspace-menu summary {
+.workspace-nav__more summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
   cursor: pointer;
   list-style: none;
+  white-space: nowrap;
 }
-.workspace-menu summary::-webkit-details-marker {
+.workspace-nav__more summary::-webkit-details-marker {
   display: none;
 }
-.workspace-menu__content {
+.workspace-nav__count {
+  color: var(--faint);
+  font-size: 0.72rem;
+}
+.workspace-nav__menu {
   position: absolute;
   z-index: var(--arken-layer-popup, 1000);
   top: calc(100% + 8px);
@@ -252,7 +301,7 @@ code {
   background: var(--surface);
   box-shadow: 0 12px 28px #0008;
 }
-.workspace-menu__content button {
+.workspace-nav__menu button {
   justify-content: flex-start;
   text-align: left;
 }
@@ -1332,6 +1381,16 @@ code {
 }
 .activity-feed > .message-list {
   flex: 1 1 0;
+  min-height: 0;
+}
+/* UIX-469: блок бросков обязан ужиматься, когда колонке не хватает высоты.
+   Жёстким он был по недосмотру — `flex: 0 0 auto` выше распространялся и на
+   него, — и с открытой очередью боя на экране 1440×900 колонка вылезала за
+   низ: поле ввода сообщения уезжало за край, писать было нечем. Внутренняя
+   прокрутка у него уже есть, поэтому сжатие ничего не прячет безвозвратно —
+   она для того и появляется, когда кнопки перестают помещаться. */
+.activity-feed > .activity-roll-controls {
+  flex: 0 1 auto;
   min-height: 0;
 }
 .message-list {
@@ -3611,25 +3670,6 @@ code {
 
 /* UIX-273: compact GM chrome. Native titles are intentionally kept so every
  * icon-only affordance remains discoverable with a mouse and screen reader. */
-.workspace-menu summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.workspace-menu__chevron {
-  display: inline-grid;
-  place-items: center;
-  width: 14px;
-  margin: 0;
-  padding: 0;
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1;
-  transition: transform 120ms ease;
-}
-.workspace-menu[open] .workspace-menu__chevron {
-  transform: rotate(180deg);
-}
 .campaign-name-button {
   display: inline-flex;
   align-items: center;
@@ -3772,17 +3812,105 @@ code {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+/* UIX-470: подпись справа от значка.
+   Значки стояли без подписей, и половину приходилось узнавать наведением:
+   «◐» и «◑» — открыть и закрыть туман, «⬠» и «⬡» — они же полигоном. Пары
+   различаются одной деталью начертания, и с первого взгляда не читаются даже
+   тем, кто пользуется панелью каждую игру. Полное имя остаётся в `aria-label`
+   и подсказке — подпись короткая, потому что рядом уже стоит заголовок блока. */
 .map-toolbar .map-tool,
 .grid-settings .toolbar-detail-trigger,
 .resize-settings .toolbar-detail-trigger {
-  font-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  justify-content: flex-start;
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  text-align: left;
+  white-space: nowrap;
 }
 .map-toolbar .map-tool::before,
 .grid-settings .toolbar-detail-trigger::before,
 .resize-settings .toolbar-detail-trigger::before {
+  flex: 0 0 auto;
+  width: 16px;
   color: currentColor;
   font-size: 16px;
   line-height: 1;
+  text-align: center;
+}
+/* UIX-475: свёрнутая панель — прежний вид из одних значков. Подписи прячутся
+   вместе с заголовками блоков: без подписей заголовок «Туман» над столбцом
+   значков объясняет ровно столько же, сколько сами значки, но занимает строку.
+   Разделители между блоками остаются — они и в свёрнутом виде отделяют туман
+   от меток. */
+.map-toolbar.is-collapsed .map-tool,
+.map-toolbar.is-collapsed .toolbar-detail-trigger {
+  gap: 0;
+  justify-content: center;
+  padding: 4px;
+  font-size: 0;
+}
+.map-toolbar.is-collapsed .toolbar-group__title {
+  display: none;
+}
+/* Кнопка сворачивания прижата к правому краю: она про панель, а не про карту,
+   и не должна попадаться под руку среди инструментов. */
+.map-toolbar__collapse {
+  align-self: flex-end;
+  min-height: 22px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+}
+.map-toolbar__collapse:hover {
+  color: var(--text);
+}
+
+/* UIX-475: свёрнутый блок бросков характеристик. */
+.quick-roll-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  min-height: 24px;
+  padding: 0 var(--space-xs);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: left;
+}
+.quick-roll-panel__toggle:hover {
+  color: var(--text);
+}
+/* Свёрнутый блок не должен держать высоту, отданную ему ручкой: место
+   возвращается ленте, ради которой его и сворачивают. */
+.quick-roll-panel.is-collapsed {
+  height: auto;
+  flex: 0 0 auto;
+}
+
+/* Заголовок блока: панель мастера иначе читается одним списком из
+   шестнадцати кнопок, где туман, метки и настройки идут вперемешку. */
+.toolbar-group__title {
+  padding: 2px 8px 0;
+  color: var(--faint);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.toolbar-group + .toolbar-group {
+  margin-top: var(--space-xs);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--line);
 }
 .map-toolbar .map-tool[data-tool="PAN"]::before {
   content: "\1F590";
@@ -3890,7 +4018,6 @@ code {
   .brand {
     flex-basis: 150px;
   }
-  .workspace-menu summary > span:first-child,
   .music-topbar__title {
     display: none;
   }

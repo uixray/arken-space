@@ -106,6 +106,12 @@ export type Props = {
     initiative: number | null,
     revision: number,
   ) => Promise<void>;
+  onRollInitiative: (
+    participants: readonly InitiativeParticipantDto[],
+    participant: InitiativeParticipantDto,
+    revision: number,
+    isGm: boolean,
+  ) => Promise<void>;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
   onUpdateCounters: (
     characterId: string,
@@ -400,6 +406,7 @@ export function Sidebar(props: Props) {
             selectedTokenIds={props.selectedTokenIds}
             onUpdateInitiative={props.onUpdateInitiative}
             onSetOwnInitiative={props.onSetOwnInitiative}
+            onRollInitiative={props.onRollInitiative}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel

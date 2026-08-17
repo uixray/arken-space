@@ -146,7 +146,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **82** HTTP-маршрутов в `routes.ts`, плюс отдельные модули маршрутов для
+Всего **83** HTTP-маршрутов в `routes.ts`, плюс отдельные модули маршрутов для
 карт мира и содержимого мира.
 
 | Домен              | Маршруты                                                                                                                                                                          |
@@ -154,7 +154,7 @@ multi-campaign provisioning service.
 | Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                                                                                                 |
 | Membership/access  | rename membership, legacy invite, list/revoke/rotate persistent player access                                                                                                     |
 | Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll                                                                              |
-| Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo                                                                         |
+| Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo, состояния фигур (`/api/tokens/:id/conditions`)                         |
 | Столкновения       | создание, переходы состояний, применение результатов                                                                                                                              |
 | Карты мира         | `world-map-routes.ts` — карты, локации, привязка сцен, положение партии                                                                                                           |
 | Содержимое мира    | `world-content-routes.ts` — шаблоны сущностей мира, экземпляры, действия, связи                                                                                                   |
@@ -355,7 +355,7 @@ Drizzle schema содержит **51** прикладную таблицу.
 - assets лежат в БД как metadata, а content — на файловой системе;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0038` применяются при старте server-контейнера до запуска
+Миграции `0000`–`0039` применяются при старте server-контейнера до запуска
 Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 

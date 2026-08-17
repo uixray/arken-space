@@ -1020,6 +1020,14 @@ export const tokens = pgTable(
     locked: boolean("locked").notNull().default(false),
     baseColor: text("base_color").notNull().default("#b5623e"),
     frameColor: text("frame_color"),
+    /**
+     * UIX-471: состояния висят на размещённой фигуре, а не на её определении —
+     * один персонаж на двух сценах может быть отравлен только на одной.
+     */
+    conditions: jsonb("conditions")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     revision: integer("revision").notNull().default(0),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()

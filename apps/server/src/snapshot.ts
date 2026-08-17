@@ -50,6 +50,7 @@ import { characterDto } from "./character-dto.js";
 import { projectChatMessages } from "./chat-history.js";
 import { resolveTokenName } from "./token-name.js";
 import { projectInitiative } from "./initiative.js";
+import { normalizeTokenConditions } from "./token-conditions.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
 
@@ -777,6 +778,8 @@ export async function buildSnapshot(
       const { updatedAt: _updatedAt, ...dto } = token;
       return {
         ...dto,
+        // UIX-471: состояния из `jsonb` — разбираются схемой, а не приводятся.
+        conditions: normalizeTokenConditions(token.conditions),
         definitionId: definition.id,
         definitionRevision: definition.revision,
         characterId: definition.characterId,

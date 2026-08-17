@@ -53,6 +53,12 @@ import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
 import { useInitiativeActions } from "./use-initiative-actions";
+import { WorkspaceNav } from "./WorkspaceNav";
+import {
+  readToolbarCollapsed,
+  writeToolbarCollapsed,
+} from "./toolbar-preference";
+import { workspaceNavItems } from "./workspace-nav";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
 import { usePlayerRequestActions } from "./use-player-request-actions";
@@ -396,6 +402,9 @@ export function App() {
   const [cursorPreference, setCursorPreference] = useState(
     CURSOR_PREFERENCE_DEFAULT,
   );
+  // UIX-475: свёрнута ли панель инструментов до значков. Читается по членству,
+  // как и прочие настройки панели, — после того, как снапшот назовёт участника.
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [previewSnapshot, setPreviewSnapshot] = useState<GameSnapshot | null>(
     null,
   );
@@ -411,10 +420,8 @@ export function App() {
   const [requestedCharacterId, setRequestedCharacterId] = useState<
     string | null
   >(null);
-  const workspaceMenuRef = useRef<HTMLDetailsElement>(null);
   const scenePickerRef = useRef<HTMLDetailsElement>(null);
   const resizeSettingsRef = useRef<HTMLDetailsElement>(null);
-  useDismissibleDetails(workspaceMenuRef);
   useDismissibleDetails(scenePickerRef);
   useDismissibleDetails(resizeSettingsRef);
 
@@ -443,12 +450,12 @@ export function App() {
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
       setWorkspace(nextWorkspace);
-      if (workspaceMenuRef.current) workspaceMenuRef.current.open = false;
-      if (nextWorkspace === null) {
+      // UIX-472: закрывая раздел, возвращаем фокус на его кнопку в строке —
+      // раньше он возвращался на выпадающий список, которого больше нет.
+      if (nextWorkspace === null)
         requestAnimationFrame(() =>
-          workspaceMenuRef.current?.querySelector("summary")?.focus(),
+          document.querySelector<HTMLElement>(".workspace-nav__item")?.focus(),
         );
-      }
     },
     [],
   );
@@ -578,6 +585,9 @@ export function App() {
         snapshot.me.id,
         snapshot.me.role === "GM" ? "GM" : "PLAYER",
       ),
+    );
+    setToolbarCollapsed(
+      readToolbarCollapsed(window.localStorage, snapshot.me.id),
     );
   }, [campaignId, snapshot?.me.id]);
   const updateCursorPreference = useCallback(
@@ -1549,82 +1559,16 @@ export function App() {
               </button>
             )}
           </div>
-          <details ref={workspaceMenuRef} className="workspace-menu">
-            <summary aria-label="Открыть рабочее пространство">
-              <span>Рабочее пространство</span>
-              <span className="workspace-menu__chevron" aria-hidden="true">
-                &#x2304;
-              </span>
-            </summary>
-            <div className="workspace-menu__content">
-              <button
-                type="button"
-                onClick={() => handleWorkspaceChange("characters")}
-              >
-                Персонажи
-              </button>
-              <button
-                type="button"
-                onClick={() => handleWorkspaceChange("tokens")}
-              >
-                Токены
-              </button>
-              {snapshot.me.role === "GM" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleWorkspaceChange("scenes")}
-                  >
-                    Сцены
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleWorkspaceChange("setup")}
-                  >
-                    Подготовка
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleWorkspaceChange("world-encyclopedia")}
-                  >
-                    Энциклопедия мира
-                  </button>
-                </>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => handleWorkspaceChange("world-maps")}
-              >
-                World maps
-              </button>
-              <button
-                type="button"
-                onClick={() => handleWorkspaceChange("world-codex")}
-              >
-                Энциклопедия
-              </button>
-              <button
-                type="button"
-                onClick={() => handleWorkspaceChange("player-requests")}
-              >
-                {snapshot.me.role === "GM" ? "Открытые заявки" : "Мои заявки"}
-              </button>
-              {operatorFeedbackAllowed && (
-                <button
-                  type="button"
-                  onClick={() => handleWorkspaceChange("operator-feedback")}
-                >
-                  Operator feedback
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => handleWorkspaceChange("media")}
-              >
-                Файлы
-              </button>
-            </div>
-          </details>
+          {/* UIX-472: разделы строкой; не поместившиеся — под «Ещё». Состав
+              и расчёт вместимости живут в `workspace-nav.ts`. */}
+          <WorkspaceNav
+            items={workspaceNavItems({
+              isGm: snapshot.me.role === "GM",
+              operatorFeedbackAllowed,
+            })}
+            active={workspace}
+            onSelect={handleWorkspaceChange}
+          />
           <div className="status-line">
             <MusicBar
               audio={snapshot.audio}
@@ -1877,10 +1821,39 @@ export function App() {
             }
           >
             <div
-              className="map-toolbar"
+              className={`map-toolbar${toolbarCollapsed ? " is-collapsed" : ""}`}
               role="toolbar"
               aria-label="Инструменты карты"
             >
+              {/* UIX-475: панель сворачивается до значков. С подписями она
+                  втрое шире и заметно отъедает карту на узком экране; кому
+                  подписи нужны — оставляет развёрнутой. */}
+              <button
+                type="button"
+                className="map-toolbar__collapse"
+                aria-expanded={!toolbarCollapsed}
+                aria-label={
+                  toolbarCollapsed
+                    ? "Показать подписи инструментов"
+                    : "Свернуть панель до значков"
+                }
+                title={
+                  toolbarCollapsed
+                    ? "Показать подписи инструментов"
+                    : "Свернуть панель до значков"
+                }
+                onClick={() => {
+                  const next = !toolbarCollapsed;
+                  setToolbarCollapsed(next);
+                  writeToolbarCollapsed(
+                    window.localStorage,
+                    snapshot.me.id,
+                    next,
+                  );
+                }}
+              >
+                <span aria-hidden="true">{toolbarCollapsed ? "»" : "«"}</span>
+              </button>
               <div className="toolbar-group">
                 <button
                   aria-label="Перемещение"
@@ -1890,10 +1863,15 @@ export function App() {
                   aria-pressed={tool === "PAN"}
                   onClick={() => setTool("PAN")}
                 >
-                  Перемещение
+                  Двигать
                 </button>
                 {!previewSnapshot && snapshot.me.role === "GM" && (
                   <>
+                    {/* UIX-470: панель мастера разбита на блоки. Туман — самый
+                        частый и самый многолюдный набор: шесть кнопок, три
+                        пары «открыть/закрыть». Рядом друг с другом они читаются
+                        как пары, а вперемешку с линейкой и сеткой — нет. */}
+                    <div className="toolbar-group__title">Туман</div>
                     <button
                       aria-label="Открыть туман"
                       title="Открыть выбранную область тумана"
@@ -1902,7 +1880,7 @@ export function App() {
                       aria-pressed={tool === "FOG"}
                       onClick={() => setTool("FOG")}
                     >
-                      Открыть туман
+                      Открыть
                     </button>
                     <button
                       aria-label="Закрыть туман"
@@ -1912,7 +1890,7 @@ export function App() {
                       aria-pressed={tool === "COVER"}
                       onClick={() => setTool("COVER")}
                     >
-                      Закрыть туман
+                      Закрыть
                     </button>
                     <button
                       aria-label="Открыть туман кистью"
@@ -1922,7 +1900,7 @@ export function App() {
                       aria-pressed={tool === "FOG_BRUSH"}
                       onClick={() => setTool("FOG_BRUSH")}
                     >
-                      Кисть тумана
+                      Кисть
                     </button>
                     <button
                       aria-label="Закрыть туман кистью"
@@ -1932,7 +1910,7 @@ export function App() {
                       aria-pressed={tool === "COVER_BRUSH"}
                       onClick={() => setTool("COVER_BRUSH")}
                     >
-                      Кисть покрытия
+                      Кисть закр.
                     </button>
                     {(tool === "FOG_BRUSH" || tool === "COVER_BRUSH") && (
                       <label
@@ -1963,7 +1941,7 @@ export function App() {
                       aria-pressed={tool === "FOG_POLYGON"}
                       onClick={() => setTool("FOG_POLYGON")}
                     >
-                      Полигон тумана
+                      Полигон
                     </button>
                     <button
                       aria-label="Закрыть туман полигоном"
@@ -1973,8 +1951,32 @@ export function App() {
                       aria-pressed={tool === "COVER_POLYGON"}
                       onClick={() => setTool("COVER_POLYGON")}
                     >
-                      Полигон покрытия
+                      Полигон закр.
                     </button>
+                    {/* Второй блок: то, чем показывают и меряют. Две кнопки,
+                        но обе нужны каждый бой, и в общем списке они тонули. */}
+                    <div className="toolbar-group__title">Метки</div>
+                    <button
+                      aria-label="Линейка"
+                      title="Измерить расстояние на карте"
+                      className="map-tool"
+                      data-tool="RULER"
+                      aria-pressed={tool === "RULER"}
+                      onClick={() => setTool("RULER")}
+                    >
+                      Линейка
+                    </button>
+                    <button
+                      aria-label="Пинг"
+                      title="Показать точку группе"
+                      className="map-tool"
+                      data-tool="PING"
+                      aria-pressed={tool === "PING"}
+                      onClick={() => setTool("PING")}
+                    >
+                      Пинг
+                    </button>
+                    <div className="toolbar-group__title">Прочее</div>
                     {/*
                      * UIX-311 Stage 4: real GM "Начать бой" / "Завершить бой"
                      * entry point, replacing the Stage 2/3 temp triggers. Only
@@ -2020,28 +2022,35 @@ export function App() {
                   aria-pressed={tool === "DRAW"}
                   onClick={() => setTool("DRAW")}
                 >
-                  Рисование
+                  Рисовать
                 </button>
-                <button
-                  aria-label="Линейка"
-                  title="Измерить расстояние на карте"
-                  className="map-tool"
-                  data-tool="RULER"
-                  aria-pressed={tool === "RULER"}
-                  onClick={() => setTool("RULER")}
-                >
-                  Линейка
-                </button>
-                <button
-                  aria-label="Пинг"
-                  title="Показать точку группе"
-                  className="map-tool"
-                  data-tool="PING"
-                  aria-pressed={tool === "PING"}
-                  onClick={() => setTool("PING")}
-                >
-                  Пинг
-                </button>
+                {/* UIX-470: линейка и пинг переехали в блок «Метки» выше — у
+                    мастера. Игроку блоков нет: у него всего три инструмента, и
+                    делить их не на что. */}
+                {(previewSnapshot || snapshot.me.role !== "GM") && (
+                  <>
+                    <button
+                      aria-label="Линейка"
+                      title="Измерить расстояние на карте"
+                      className="map-tool"
+                      data-tool="RULER"
+                      aria-pressed={tool === "RULER"}
+                      onClick={() => setTool("RULER")}
+                    >
+                      Линейка
+                    </button>
+                    <button
+                      aria-label="Пинг"
+                      title="Показать точку группе"
+                      className="map-tool"
+                      data-tool="PING"
+                      aria-pressed={tool === "PING"}
+                      onClick={() => setTool("PING")}
+                    >
+                      Пинг
+                    </button>
+                  </>
+                )}
                 <CursorPresenceMenu
                   preference={cursorPreference}
                   role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
@@ -2079,7 +2088,7 @@ export function App() {
                           className="toolbar-detail-trigger"
                           data-tool="RESIZE"
                         >
-                          Размер карты
+                          Размер
                         </summary>
                         <div className="resize-settings-popover">
                           <button
@@ -2681,6 +2690,7 @@ export function App() {
               selectedTokenIds={selectedTokenIds}
               onUpdateInitiative={initiativeActions.onUpdateInitiative}
               onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
+              onRollInitiative={initiativeActions.onRollInitiative}
               snapshot={snapshot}
               requestedCharacterId={requestedCharacterId}
               socket={socket}

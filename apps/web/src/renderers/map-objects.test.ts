@@ -10,6 +10,7 @@ import {
 
 const token = (patch: Partial<TokenDto> = {}): TokenDto => ({
   id: "token",
+  conditions: [],
   definitionId: "definition",
   definitionRevision: 1,
   controllerMembershipIds: ["player"],

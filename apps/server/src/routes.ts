@@ -58,6 +58,7 @@ import {
   rechargeEntryCommandSchema,
   renameCampaignSchema,
   setOwnInitiativeSchema,
+  updateTokenConditionsSchema,
   sortByInitiative,
   updateInitiativeSchema,
   updateStatLayoutSchema,
@@ -3213,6 +3214,97 @@ export function registerRoutes(
           frameColor: row.token.frameColor,
         },
         after: { baseColor: saved.baseColor, frameColor: saved.frameColor },
+        beforeRevision: row.token.revision,
+        afterRevision: saved.revision,
+        currentRevision: saved.revision,
+      });
+      return saved;
+    });
+    if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updated;
+  });
+
+  /**
+   * UIX-471 — состояния фигуры: отравлен, без сознания, обездвижен, распластан.
+   *
+   * Правит мастер, а также тот, кто ведёт эту фигуру: состояния меняются каждый
+   * ход, и гонять их через мастера значило бы повторить историю с бросками
+   * инициативы, где посредник был самым частым узким местом (UIX-466).
+   *
+   * Набор нормализуется схемой: порядок значков не должен зависеть от порядка
+   * нажатий, а повторы — множить одну и ту же иконку.
+   */
+  app.patch("/api/tokens/:id/conditions", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = updateTokenConditionsSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
+    const [row] = await db
+      .select({ token: tokens, definitionId: tokens.definitionId })
+      .from(tokens)
+      .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+      .where(and(eq(tokens.id, id), eq(scenes.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
+    if (auth.role !== "GM") {
+      /**
+       * Игроку — только своя фигура, и только та, что он и так видит. Скрытая
+       * или лежащая на слое мастера не должна выдавать себя даже отказом,
+       * отличным от «нет такой»: это тот же запрет, что в UIX-449.
+       */
+      if (!row.token.visible || row.token.layer === "GM")
+        return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
+      const [controlled] = await db
+        .select({ membershipId: tokenControllers.membershipId })
+        .from(tokenControllers)
+        .where(
+          and(
+            eq(tokenControllers.tokenDefinitionId, row.definitionId),
+            eq(tokenControllers.membershipId, auth.membershipId),
+          ),
+        )
+        .limit(1);
+      if (!controlled)
+        return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
+    }
+    if (row.token.revision !== body.revision)
+      return reply.code(409).send({ error: "STALE_REVISION" });
+    const updated = await db.transaction(async (tx) => {
+      await invalidateRedoBranch(tx, auth, row.token.sceneId);
+      const [saved] = await tx
+        .update(tokens)
+        .set({
+          conditions: body.conditions,
+          revision: row.token.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
+        .returning();
+      if (!saved) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "TOKEN_CONDITIONS_UPDATED",
+        entityType: "TOKEN",
+        entityId: id,
+        entityRevision: saved.revision,
+        payload: { conditions: saved.conditions },
+      });
+      await tx.insert(actionJournal).values({
+        campaignId: auth.campaignId,
+        sceneId: saved.sceneId,
+        actorMembershipId: auth.membershipId,
+        actionId: body.actionId,
+        scope: saved.layer === "GM" ? "GM" : "PUBLIC",
+        type: "TOKEN_CONDITIONS",
+        targetType: "TOKEN",
+        targetId: id,
+        before: { conditions: row.token.conditions },
+        after: { conditions: saved.conditions },
         beforeRevision: row.token.revision,
         afterRevision: saved.revision,
         currentRevision: saved.revision,

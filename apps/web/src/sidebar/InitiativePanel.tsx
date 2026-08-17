@@ -133,19 +133,22 @@ export function InitiativePanel({
                 {participant.initiative ?? "—"}
               </span>
             )}
-            {isGm && (
-              <div className="initiative-panel__actions">
-                {onRoll && participant.tokenId && (
-                  <Button
-                    view="flat"
-                    disabled={pending}
-                    onClick={() => onRoll(participant)}
-                    title="Бросить инициативу"
-                    aria-label={`Бросить инициативу за «${participant.name}»`}
-                  >
-                    <span aria-hidden="true">🎲</span>
-                  </Button>
-                )}
+            <div className="initiative-panel__actions">
+              {/* Бросок доступен по тому же праву, что и ввод значения: игрок
+                  бросает за себя, мастер — за любого. Кубик и перенос числа
+                  руками были двумя действиями там, где смысл один. */}
+              {onRoll && participant.tokenId && participant.canEdit && (
+                <Button
+                  view="flat"
+                  disabled={pending}
+                  onClick={() => onRoll(participant)}
+                  title="Бросить инициативу и записать в строку"
+                  aria-label={`Бросить инициативу за «${participant.name}»`}
+                >
+                  <span aria-hidden="true">🎲</span>
+                </Button>
+              )}
+              {isGm && (
                 <Button
                   view="flat"
                   disabled={pending}
@@ -159,8 +162,8 @@ export function InitiativePanel({
                 >
                   <span aria-hidden="true">×</span>
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </li>
         ))}
       </ol>
