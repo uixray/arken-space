@@ -1,5 +1,32 @@
 import type { RollMode } from "./roll-mode";
 
+export interface RollModifierShortcut {
+  /** Key label shown in tooltips and the shortcut guide. */
+  readonly key: "Ctrl" | "Alt";
+  /** One-roll override selected while the key is held. */
+  readonly mode: Exclude<RollMode, "NORMAL">;
+  /** Reusable phrase for both the compact hint and guide action. */
+  readonly effect: string;
+}
+
+const ADVANTAGE_SHORTCUT = {
+  key: "Ctrl",
+  mode: "ADVANTAGE",
+  effect: "с преимуществом",
+} as const satisfies RollModifierShortcut;
+
+const DISADVANTAGE_SHORTCUT = {
+  key: "Alt",
+  mode: "DISADVANTAGE",
+  effect: "с помехой",
+} as const satisfies RollModifierShortcut;
+
+/** Single display source for the roll buttons and both shortcut guides. */
+export const ROLL_MODIFIER_SHORTCUTS: readonly RollModifierShortcut[] = [
+  ADVANTAGE_SHORTCUT,
+  DISADVANTAGE_SHORTCUT,
+];
+
 /**
  * UIX-456 — преимущество и помеха зажатой клавишей.
  *
@@ -26,8 +53,8 @@ export function rollModeFromEvent(
   const advantage = event.ctrlKey || event.metaKey;
   const disadvantage = event.altKey;
   if (advantage && disadvantage) return fallback;
-  if (advantage) return "ADVANTAGE";
-  if (disadvantage) return "DISADVANTAGE";
+  if (advantage) return ADVANTAGE_SHORTCUT.mode;
+  if (disadvantage) return DISADVANTAGE_SHORTCUT.mode;
   return fallback;
 }
 
@@ -37,7 +64,9 @@ export function rollModeFromEvent(
  * Подсказкой на кнопке, а не отдельной строкой в интерфейсе: строка занимала бы
  * место на каждом экране ради того, что читают один раз.
  */
-export const ROLL_MODIFIER_HINT = "Ctrl — с преимуществом, Alt — с помехой";
+export const ROLL_MODIFIER_HINT = ROLL_MODIFIER_SHORTCUTS.map(
+  ({ key, effect }) => `${key} — ${effect}`,
+).join(", ");
 
 /** Как назвать режим в тексте физического броска. */
 export function rollModeLabel(mode: RollMode): string | null {

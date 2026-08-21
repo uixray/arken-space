@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { rollModeFromEvent, rollModeLabel } from "./roll-modifier-keys";
+import {
+  ROLL_MODIFIER_HINT,
+  ROLL_MODIFIER_SHORTCUTS,
+  rollModeFromEvent,
+  rollModeLabel,
+} from "./roll-modifier-keys";
 import { physicalRollMessage } from "./activity-roll-controls";
 
 const keys = (held: Partial<Record<"ctrl" | "meta" | "alt", boolean>>) => ({
@@ -9,6 +14,14 @@ const keys = (held: Partial<Record<"ctrl" | "meta" | "alt", boolean>>) => ({
 });
 
 describe("клавиши преимущества и помехи", () => {
+  it("строит подсказку из структурированного списка", () => {
+    expect(ROLL_MODIFIER_HINT).toBe(
+      ROLL_MODIFIER_SHORTCUTS.map(
+        ({ key, effect }) => `${key} — ${effect}`,
+      ).join(", "),
+    );
+  });
+
   it("Ctrl даёт преимущество, Alt — помеху", () => {
     expect(rollModeFromEvent(keys({ ctrl: true }))).toBe("ADVANTAGE");
     expect(rollModeFromEvent(keys({ alt: true }))).toBe("DISADVANTAGE");

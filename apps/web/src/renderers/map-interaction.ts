@@ -1,33 +1,15 @@
 import { RULER_MAX_POINTS, type Role } from "@arken/contracts";
+import {
+  MAP_TOOL_SHORTCUTS,
+  type MapTool as MapToolId,
+} from "./map-tool-shortcuts";
 
-export type MapTool =
-  | "PAN"
-  | "FOG"
-  | "COVER"
-  | "DRAW"
-  | "RULER"
-  | "PING"
-  /**
-   * UIX-311: GM drags a rectangle to pick the camera-focus hint for a
-   * SCENE_REGION encounter. Same pointerdown/move/up draft-rect pattern as
-   * FOG/COVER, GM-only.
-   */
-  | "SCENE_REGION"
-  /**
-   * UIX-313: continuous round-brush fog stroke, sampled locally into a
-   * draft on pointer move and committed as a single BRUSH geometry POST on
-   * pointer-up (same local-draft-then-commit pattern as FOG/COVER).
-   * GM-only.
-   */
-  | "FOG_BRUSH"
-  | "COVER_BRUSH"
-  /**
-   * UIX-313: click-to-add-vertex polygon fog tool, completed with
-   * Enter/double-click (>=3 points) or cancelled with Escape/right-click.
-   * GM-only.
-   */
-  | "FOG_POLYGON"
-  | "COVER_POLYGON";
+/**
+ * UIX-311/313: selectable map tools include the shortcut-backed drawing/fog
+ * tools and the GM-only SCENE_REGION drag mode. The type lives beside the
+ * shortcut manifest so the manifest never has to import this runtime module.
+ */
+export type MapTool = MapToolId;
 
 export type Point = Readonly<{ x: number; y: number }>;
 
@@ -351,16 +333,21 @@ export function mapInteractionReducer(
 }
 
 /**
- * Exported so the landing-page guide can be checked for completeness, not
- * only for correctness: a tool that gains a shortcut and is never documented
- * is as much a defect as one documented wrongly.
+ * UIX-463: список клавиш переехал в `map-tool-shortcuts.ts` — оттуда его берут
+ * и разбор нажатия, и подсказки на кнопках панели, и шпаргалка. Здесь остался
+ * только разбор.
+ *
+ * Экспорт сохранён: по нему шпаргалка проверяется на полноту, а не только на
+ * правильность — инструмент, получивший клавишу и нигде не описанный, такой же
+ * дефект, как описанный неверно.
  */
-export const TOOL_SHORTCUTS: Readonly<Record<string, MapTool>> = {
-  v: "PAN",
-  d: "DRAW",
-  r: "RULER",
-  p: "PING",
-};
+export const TOOL_SHORTCUTS: Readonly<Record<string, MapTool>> =
+  Object.fromEntries(
+    MAP_TOOL_SHORTCUTS.filter((entry) => !entry.gmOnly).map((entry) => [
+      entry.key,
+      entry.tool,
+    ]),
+  );
 
 /** Resolves only renderer-scoped tool shortcuts and applies the GM permission gate. */
 export function resolveMapToolShortcut(
@@ -370,20 +357,12 @@ export function resolveMapToolShortcut(
 ): MapTool | null {
   if (key.length !== 1) return null;
   const normalized = key.toLowerCase();
-  if (normalized === "g") {
-    if (role !== "GM") return null;
-    return shiftKey ? "COVER" : "FOG";
-  }
-  if (normalized === "b") {
-    if (role !== "GM") return null;
-    return shiftKey ? "COVER_BRUSH" : "FOG_BRUSH";
-  }
-  if (normalized === "l") {
-    if (role !== "GM") return null;
-    return shiftKey ? "COVER_POLYGON" : "FOG_POLYGON";
-  }
-  if (shiftKey) return null;
-  return TOOL_SHORTCUTS[normalized] ?? null;
+  const entry = MAP_TOOL_SHORTCUTS.find((item) => item.key === normalized);
+  if (!entry) return null;
+  // Мастерский инструмент игроку не открывается ни с Shift, ни без него.
+  if (entry.gmOnly && role !== "GM") return null;
+  if (shiftKey) return entry.shiftTool ?? null;
+  return entry.tool;
 }
 
 export type TokenResizeDraft = {

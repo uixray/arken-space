@@ -9,12 +9,15 @@
  * command actually exists in `chat-composer.ts`.
  *
  * Sources, so a future edit knows where to look:
- *   - map tools and keys — `renderers/map-interaction.ts` (TOOL_SHORTCUTS,
- *     resolveMapToolShortcut) and `Orthographic2DRenderer.tsx`
- *     (handleMapKeyDown);
+ *   - map tools and keys — `renderers/map-tool-shortcuts.ts` and
+ *     `Orthographic2DRenderer.tsx` (handleMapKeyDown);
+ *   - roll modifiers — `roll-modifier-keys.ts`;
  *   - composer keys — `composer-keyboard-intent.ts`;
  *   - slash commands — `chat-composer.ts`.
  */
+
+import { MAP_TOOL_SHORTCUTS } from "./renderers/map-tool-shortcuts";
+import { ROLL_MODIFIER_SHORTCUTS } from "./roll-modifier-keys";
 
 export interface GuideShortcut {
   /** Rendered as key caps; each entry is one key or one combination. */
@@ -35,15 +38,37 @@ export interface GuideSection {
  * Ctrl, Alt or Cmd — which is why none of these collide with browser
  * shortcuts, and why clicking the map first is part of the instruction.
  */
+const mapToolGuideShortcuts = MAP_TOOL_SHORTCUTS.flatMap((shortcut) => {
+  const base: GuideShortcut = {
+    keys: [shortcut.key.toUpperCase()],
+    action: shortcut.action,
+    gmOnly: shortcut.gmOnly,
+  };
+  const shifted: GuideShortcut[] = shortcut.shiftTool
+    ? [
+        {
+          keys: ["Shift", shortcut.key.toUpperCase()],
+          action: shortcut.shiftAction,
+          gmOnly: shortcut.gmOnly,
+        },
+      ]
+    : [];
+  return [base, ...shifted];
+});
+
+const rollModifierGuideShortcuts: GuideShortcut[] = ROLL_MODIFIER_SHORTCUTS.map(
+  ({ key, effect }) => ({
+    keys: [key],
+    action: `Бросок ${effect}`,
+  }),
+);
+
 export const canvasSections: GuideSection[] = [
   {
     title: "Инструменты",
     hint: "Нажмите клавишу — инструмент выбран. Esc всегда возвращает к перемещению.",
     shortcuts: [
-      { keys: ["V"], action: "Перемещение и выделение" },
-      { keys: ["D"], action: "Рисование" },
-      { keys: ["R"], action: "Линейка — измерить расстояние" },
-      { keys: ["P"], action: "Пинг — показать точку остальным" },
+      ...mapToolGuideShortcuts.filter((shortcut) => !shortcut.gmOnly),
       { keys: ["O"], action: "Список объектов на сцене" },
       { keys: ["Esc"], action: "Отменить действие, снять выделение" },
     ],
@@ -59,14 +84,7 @@ export const canvasSections: GuideSection[] = [
   {
     title: "Туман войны",
     hint: "Только мастер. С Shift тот же инструмент закрывает туман обратно.",
-    shortcuts: [
-      { keys: ["G"], action: "Открыть прямоугольник", gmOnly: true },
-      { keys: ["Shift", "G"], action: "Закрыть прямоугольник", gmOnly: true },
-      { keys: ["B"], action: "Открыть кистью", gmOnly: true },
-      { keys: ["Shift", "B"], action: "Закрыть кистью", gmOnly: true },
-      { keys: ["L"], action: "Открыть многоугольником", gmOnly: true },
-      { keys: ["Shift", "L"], action: "Закрыть многоугольником", gmOnly: true },
-    ],
+    shortcuts: [...mapToolGuideShortcuts.filter((shortcut) => shortcut.gmOnly)],
   },
   {
     title: "Камера",
@@ -87,6 +105,11 @@ export const canvasSections: GuideSection[] = [
       { keys: ["Enter"], action: "Открыть действия выделенного" },
       { keys: ["Delete"], action: "Удалить выделенное" },
     ],
+  },
+  {
+    title: "Модификаторы броска",
+    hint: "Удерживайте клавишу, нажимая кнопку броска. Переключатель режима при этом не меняется.",
+    shortcuts: rollModifierGuideShortcuts,
   },
 ];
 
@@ -147,3 +170,27 @@ export const guideFeatures: GuideFeature[] = [
     text: "Мастер включает трек — он играет у всех синхронно. Громкость каждый настраивает у себя.",
   },
 ];
+
+/**
+ * UIX-462 — что из шпаргалки показывать этому человеку.
+ *
+ * Игроку не показываются мастерские клавиши: список, где половина строк не
+ * работает, хуже отсутствующего — человек пробует, ничего не происходит, и он
+ * перестаёт верить остальным строкам. Ровно тот довод, по которому шпаргалка
+ * вообще держится данными, а не текстом.
+ *
+ * Секция, из которой после отбора ничего не осталось, не показывается: пустой
+ * заголовок сообщает только о том, что тут что-то скрыли.
+ */
+export function guideSectionsForRole(
+  sections: readonly GuideSection[],
+  isGm: boolean,
+): GuideSection[] {
+  if (isGm) return sections.map((section) => ({ ...section }));
+  return sections
+    .map((section) => ({
+      ...section,
+      shortcuts: section.shortcuts.filter((shortcut) => !shortcut.gmOnly),
+    }))
+    .filter((section) => section.shortcuts.length > 0);
+}

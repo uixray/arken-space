@@ -75,6 +75,7 @@ import {
   CURSOR_INACTIVITY_MS,
 } from "./cursor-broadcast";
 import { cursorColorForMembership } from "./cursor-color";
+import { mapViewportAriaKeyShortcuts } from "./map-tool-shortcuts";
 
 function shouldCancelCanvasEdit(
   event: Pick<KeyboardEvent, "key" | "isComposing" | "target">,
@@ -2063,7 +2064,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       tabIndex={0}
       role="region"
       aria-label="Интерактивная карта сцены"
-      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 F O V D R P G Shift+G B Shift+B L Shift+L Enter Delete Escape"
+      aria-keyshortcuts={mapViewportAriaKeyShortcuts(props.role)}
       onPointerDownCapture={(event) => {
         if (
           props.tool !== "DRAW" ||

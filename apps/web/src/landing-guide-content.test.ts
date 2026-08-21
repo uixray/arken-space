@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  resolveMapToolShortcut,
-  TOOL_SHORTCUTS,
-} from "./renderers/map-interaction";
+import { resolveMapToolShortcut } from "./renderers/map-interaction";
+import { MAP_TOOL_SHORTCUTS } from "./renderers/map-tool-shortcuts";
 import { getSlashCommandSuggestions } from "./chat-composer";
 import { decideComposerKeydown } from "./composer-keyboard-intent";
 import {
@@ -12,6 +10,10 @@ import {
 } from "./landing-guide-content";
 import { statLabelsFromLayout } from "./stat-keys";
 import { starterStatLayout } from "@arken/system";
+import {
+  ROLL_MODIFIER_HINT,
+  ROLL_MODIFIER_SHORTCUTS,
+} from "./roll-modifier-keys";
 
 /**
  * A guide that promises a shortcut the app does not have is worse than no
@@ -78,9 +80,9 @@ describe("the landing guide describes shortcuts that exist", () => {
         .map((shortcut) => shortcut.keys.at(-1)!.toLowerCase()),
     );
 
-    const missing = Object.keys(TOOL_SHORTCUTS).filter(
-      (key) => !documented.has(key.toLowerCase()),
-    );
+    const missing = MAP_TOOL_SHORTCUTS.filter(
+      (shortcut) => !documented.has(shortcut.key),
+    ).map((shortcut) => shortcut.key);
     expect(
       missing,
       "these tools have a shortcut the guide never mentions",
@@ -94,6 +96,23 @@ describe("the landing guide describes shortcuts that exist", () => {
       expect(resolveMapToolShortcut(key, shift, "PLAYER")).toBeNull();
       expect(resolveMapToolShortcut(key, shift, "GM")).not.toBeNull();
     }
+  });
+
+  it("describes the same roll modifiers as button tooltips", () => {
+    const promised = new Map(
+      shortcutsFor("Модификаторы броска").map((shortcut) => [
+        shortcut.keys.join("+"),
+        shortcut.action,
+      ]),
+    );
+
+    for (const { key, effect } of ROLL_MODIFIER_SHORTCUTS)
+      expect(promised.get(key)).toBe(`Бросок ${effect}`);
+    expect(ROLL_MODIFIER_HINT).toBe(
+      ROLL_MODIFIER_SHORTCUTS.map(
+        ({ key, effect }) => `${key} — ${effect}`,
+      ).join(", "),
+    );
   });
 });
 

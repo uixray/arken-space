@@ -54,6 +54,8 @@ import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
 import { useInitiativeActions } from "./use-initiative-actions";
 import { WorkspaceNav } from "./WorkspaceNav";
+import { shortcutLabel } from "./renderers/map-tool-shortcuts";
+import { ShortcutsDialog } from "./ShortcutsDialog";
 import {
   readToolbarCollapsed,
   writeToolbarCollapsed,
@@ -413,6 +415,7 @@ export function App() {
   const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
   const [campaignRenameOpen, setCampaignRenameOpen] = useState(false);
   const [playerHandoffOpen, setPlayerHandoffOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [playerHandoffPending, setPlayerHandoffPending] = useState(false);
   const [playerHandoffError, setPlayerHandoffError] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceDestination | null>(null);
@@ -1619,6 +1622,11 @@ export function App() {
                   v{snapshot.snapshotVersion} ·{" "}
                   {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
                 </span>
+                {/* UIX-462: шпаргалка рядом с выходом — сюда лезут, когда ищут
+                    «что-то про программу, а не про игру». */}
+                <button onClick={() => setShortcutsOpen(true)}>
+                  Клавиши и команды
+                </button>
                 {!previewSnapshot && (
                   <FeedbackReporter
                     buildVersion={snapshot.buildVersion}
@@ -1777,6 +1785,11 @@ export function App() {
             ) : null}
           </div>
         </ArkenDialog>
+        <ShortcutsDialog
+          open={shortcutsOpen}
+          isGm={viewSnapshot.me.role === "GM"}
+          onClose={() => setShortcutsOpen(false)}
+        />
         <EncounterConfirmDialog
           draft={encounterDraft}
           snapshot={viewSnapshot}
@@ -1857,7 +1870,7 @@ export function App() {
               <div className="toolbar-group">
                 <button
                   aria-label="Перемещение"
-                  title="Перемещение по карте (средняя кнопка мыши)"
+                  title={`Перемещение по карте (средняя кнопка мыши) · ${shortcutLabel("PAN")}`}
                   className="map-tool"
                   data-tool="PAN"
                   aria-pressed={tool === "PAN"}
@@ -1874,7 +1887,7 @@ export function App() {
                     <div className="toolbar-group__title">Туман</div>
                     <button
                       aria-label="Открыть туман"
-                      title="Открыть выбранную область тумана"
+                      title={`Открыть выбранную область тумана · ${shortcutLabel("FOG")}`}
                       className="map-tool"
                       data-tool="FOG"
                       aria-pressed={tool === "FOG"}
@@ -1884,7 +1897,7 @@ export function App() {
                     </button>
                     <button
                       aria-label="Закрыть туман"
-                      title="Закрыть выбранную область туманом"
+                      title={`Закрыть выбранную область туманом · ${shortcutLabel("COVER")}`}
                       className="map-tool"
                       data-tool="COVER"
                       aria-pressed={tool === "COVER"}
@@ -1894,7 +1907,7 @@ export function App() {
                     </button>
                     <button
                       aria-label="Открыть туман кистью"
-                      title="Открыть туман круглой кистью (клик или протяжка)"
+                      title={`Открыть туман круглой кистью (клик или протяжка) · ${shortcutLabel("FOG_BRUSH")}`}
                       className="map-tool"
                       data-tool="FOG_BRUSH"
                       aria-pressed={tool === "FOG_BRUSH"}
@@ -1904,7 +1917,7 @@ export function App() {
                     </button>
                     <button
                       aria-label="Закрыть туман кистью"
-                      title="Закрыть область круглой кистью тумана"
+                      title={`Закрыть область круглой кистью тумана · ${shortcutLabel("COVER_BRUSH")}`}
                       className="map-tool"
                       data-tool="COVER_BRUSH"
                       aria-pressed={tool === "COVER_BRUSH"}
@@ -1935,7 +1948,7 @@ export function App() {
                     )}
                     <button
                       aria-label="Открыть туман полигоном"
-                      title="Открыть туман многоугольником (клик — вершина, Enter/двойной клик — завершить, Esc — отмена)"
+                      title={`Открыть туман многоугольником (клик — вершина, Enter/двойной клик — завершить, Esc — отмена) · ${shortcutLabel("FOG_POLYGON")}`}
                       className="map-tool"
                       data-tool="FOG_POLYGON"
                       aria-pressed={tool === "FOG_POLYGON"}
@@ -1945,7 +1958,7 @@ export function App() {
                     </button>
                     <button
                       aria-label="Закрыть туман полигоном"
-                      title="Закрыть область многоугольником тумана (клик — вершина, Enter/двойной клик — завершить, Esc — отмена)"
+                      title={`Закрыть область многоугольником тумана (клик — вершина, Enter/двойной клик — завершить, Esc — отмена) · ${shortcutLabel("COVER_POLYGON")}`}
                       className="map-tool"
                       data-tool="COVER_POLYGON"
                       aria-pressed={tool === "COVER_POLYGON"}
@@ -1958,7 +1971,7 @@ export function App() {
                     <div className="toolbar-group__title">Метки</div>
                     <button
                       aria-label="Линейка"
-                      title="Измерить расстояние на карте"
+                      title={`Измерить расстояние на карте · ${shortcutLabel("RULER")}`}
                       className="map-tool"
                       data-tool="RULER"
                       aria-pressed={tool === "RULER"}
@@ -1968,7 +1981,7 @@ export function App() {
                     </button>
                     <button
                       aria-label="Пинг"
-                      title="Показать точку группе"
+                      title={`Показать точку группе · ${shortcutLabel("PING")}`}
                       className="map-tool"
                       data-tool="PING"
                       aria-pressed={tool === "PING"}
@@ -2016,7 +2029,7 @@ export function App() {
                 )}
                 <button
                   aria-label="Рисование"
-                  title="Нарисовать линию на карте"
+                  title={`Нарисовать линию на карте · ${shortcutLabel("DRAW")}`}
                   className="map-tool"
                   data-tool="DRAW"
                   aria-pressed={tool === "DRAW"}
@@ -2031,7 +2044,7 @@ export function App() {
                   <>
                     <button
                       aria-label="Линейка"
-                      title="Измерить расстояние на карте"
+                      title={`Измерить расстояние на карте · ${shortcutLabel("RULER")}`}
                       className="map-tool"
                       data-tool="RULER"
                       aria-pressed={tool === "RULER"}
@@ -2041,7 +2054,7 @@ export function App() {
                     </button>
                     <button
                       aria-label="Пинг"
-                      title="Показать точку группе"
+                      title={`Показать точку группе · ${shortcutLabel("PING")}`}
                       className="map-tool"
                       data-tool="PING"
                       aria-pressed={tool === "PING"}
