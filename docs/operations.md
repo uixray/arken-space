@@ -10,11 +10,32 @@ Current production host paths:
 
 ## Deploy and migrate
 
-1. Set production values from `.env.example`; never use the development GM or PostgreSQL secrets.
-2. Build and start with `docker compose up -d --build`.
-3. The server container runs all pending PostgreSQL migrations before starting Fastify.
-4. Check `https://arken-khar.space/healthz`. A healthy response includes database, build and schema versions.
-5. Log in and compare `/api/diagnostics` with the expected release.
+Routine releases use the fail-closed
+[`infra/deploy/release.sh`](../infra/deploy/release.sh) path described in the
+[production release checklist](./production-release-checklist.md), not a direct
+`docker compose up`:
+
+1. On the reviewed clean revision, pass the repository code gate and both
+   browser projects. `release.sh` does not run format, lint, typecheck, build,
+   Vitest, Playwright or multiplayer tests.
+2. On the production host run
+   `sh infra/deploy/release.sh <reviewed-40-character-sha>`. It performs host
+   preflight, records the rollback revision, checks restic, creates a fresh
+   backup, checks out the exact revision and rehearses that snapshot. Without
+   confirmation it stops before changing production.
+3. After explicit release approval run
+   `RELEASE_CONFIRM=deploy-now sh infra/deploy/release.sh <same-sha>`. The
+   confirmed invocation builds/starts the stack, runs all journaled pending
+   PostgreSQL migrations before Fastify, and verifies health, authenticated
+   diagnostics and the WebSocket upgrade.
+4. Manually verify GM/player browser flows, one image upload, one audio upload
+   and persistence across `docker compose restart postgres server web`. These
+   post-deploy checks are not automated by `release.sh`.
+
+`infra/deploy/build-and-start.sh` is the bounded fallback for a first deployment
+or when `release.sh` itself is under investigation. It requires the exact
+revision, exact fresh backup snapshot and restore-rehearsal evidence variables;
+bare `docker compose up -d --build` is not a routine release procedure.
 
 Do not change the database schema unless a current restic snapshot exists.
 

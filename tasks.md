@@ -1,5 +1,11 @@
 # Delivery tasks
 
+> **Исторический снимок от 2026-07-14.** Этот checklist больше не является
+> источником текущих статусов. Не отмечайте здесь выполненные задачи вручную:
+> актуальные status, priority, dependencies и acceptance criteria находятся в
+> [Linear](https://linear.app/uixraydesign/project/arken-space-004b59486dc4).
+> Файл сохранён как запись исходного foundation-плана.
+
 Status as of 2026-07-14: the deployed foundation, remote backup, clean restore, disk expansion, host reboot recovery and automated GM + 6 security/recovery gates work. The shortened human rehearsal is accepted only for the foundation. Full product acceptance is deferred to UIX-217 after the approved backlog is implemented.
 
 ## Planning artifacts

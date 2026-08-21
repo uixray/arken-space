@@ -1,5 +1,10 @@
 # arken-space delivery roadmap
 
+> **Historical foundation snapshot.** This sequence was approved on
+> 2026-07-14 and is preserved as planning rationale, not as the current
+> backlog. Live status, dependencies and acceptance criteria are maintained in
+> [Linear](https://linear.app/uixraydesign/project/arken-space-004b59486dc4).
+
 Status: approved on 2026-07-14.
 
 Arken Space remains a private desktop-first VTT for one GM and five to six players using a custom system. Work is ordered by data integrity, authorization and recovery risk rather than by visible feature count.

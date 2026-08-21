@@ -24,10 +24,35 @@ The production `.env` must be mode `600`, must not be committed, and must set:
 Restic and S3 credentials belong only in root-owned `/etc/arken-space` files,
 never in the application `.env` or GitHub.
 
-## The scripted path (preferred)
+## Code quality gate (outside `release.sh`)
 
-`infra/deploy/release.sh` runs every gate below in order, carrying the snapshot
-id and revision between them as variables instead of retyping them:
+Run this on the exact reviewed revision before using the production-host script:
+
+```sh
+corepack pnpm format:check
+corepack pnpm lint
+corepack pnpm typecheck
+corepack pnpm build
+corepack pnpm test
+corepack pnpm test:e2e
+corepack pnpm test:multiplayer
+```
+
+`pnpm typecheck` includes `tests/e2e/tsconfig.json`; Playwright remains at
+`workers: 1` because the specs share one campaign/database. Preserve the exit
+code of each command. In particular, do not pipe Playwright into a trailing
+`grep`: without `pipefail` a failed browser run can look green. `format:check`
+is the read-only gate; running the writing `pnpm format` is not equivalent
+evidence.
+
+## The scripted host path (preferred)
+
+`infra/deploy/release.sh` automates the host-side safety and deployment gates:
+nginx/certificate/disk preflight, rollback identity, restic check, fresh backup,
+exact-snapshot restore rehearsal, exact checkout, build/start, health,
+authenticated smoke and WebSocket upgrade. It does **not** run the code quality
+gate above, upload media, restart the stack to prove persistence, or perform the
+human GM/player browser rehearsal.
 
 ```sh
 sh infra/deploy/release.sh <reviewed-40-character-sha>
@@ -45,8 +70,10 @@ production-changing steps wait for confirmation. A failure at any gate aborts
 with a non-zero status and repeats the rollback revision recorded before the
 first change.
 
-The manual steps below remain the fallback and the specification of what the
-script does. They are also what to follow when the script itself is suspect.
+The manual host steps below remain the fallback and the specification of the
+host-side part only. They are also what to follow when the script itself is
+suspect. Post-deploy browser/media/persistence checks remain manual in either
+path.
 
 ## Mandatory pre-deploy gates
 
@@ -83,7 +110,10 @@ export EXPECTED_SCHEMA_VERSION=2
 sh infra/deploy/build-and-start.sh
 ```
 
-The server applies migrations `0000` through `0008` before accepting traffic.
+The server applies every pending migration recorded in
+`packages/db/drizzle/meta/_journal.json` before accepting traffic; do not copy a
+numeric migration range into this runbook because that range changes with the
+schema.
 After startup, require all services healthy and verify:
 
 ```sh
@@ -92,8 +122,10 @@ sh infra/deploy/smoke-auth.sh
 ```
 
 The health and authenticated diagnostics responses must report the exact release
-revision and schema `2`. Verify WebSocket connection, one image upload, one audio
-upload, and persistence across `docker compose restart postgres server web`.
+revision and schema `2`. The script verifies the WebSocket upgrade; an operator
+must still verify one image upload, one audio upload, persistence across
+`docker compose restart postgres server web`, and GM/player smoke flows. Record
+these results separately: a zero exit from `release.sh` does not prove them.
 
 ## Rollback
 

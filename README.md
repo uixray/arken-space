@@ -66,10 +66,11 @@ All implementation, generated code and commits for arken-space must stay inside 
 ## Project tracking
 
 - [Linear project](https://linear.app/uixraydesign/project/arken-space-004b59486dc4)
-- [Публичная дорожная карта на 20.07–16.08.2026](./ROADMAP.md)
+- [Текущее проверенное состояние](./docs/current-state.md)
+- [Архивная публичная дорожная карта на 20.07–16.08.2026](./ROADMAP.md)
 - [Публичная доска задач](https://github.com/users/uixray/projects/1)
-- See [tasks.md](./tasks.md) for the delivery issues.
-- See [docs/roadmap.md](./docs/roadmap.md) for the production-first sequence leading to the first real game.
+- Linear is the source of truth for issue status and acceptance criteria.
+- [tasks.md](./tasks.md) and [docs/roadmap.md](./docs/roadmap.md) are preserved historical foundation snapshots, not active trackers.
 - See [docs/operations.md](./docs/operations.md) for deployment, backup, restore and incident checks.
 - See [docs/yandex-object-storage-backup-2026-07-13.md](./docs/yandex-object-storage-backup-2026-07-13.md) for the private bucket, IAM, secret handling and current cost setup.
 - See [docs/server-audit-2026-07-12.md](./docs/server-audit-2026-07-12.md) for the current host capacity and deployment blockers.

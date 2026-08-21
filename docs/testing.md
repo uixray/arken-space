@@ -14,6 +14,33 @@
 | Full-stack / multiplayer | `pnpm test:multiplayer` (отдельный Docker-раннер)                                       | вне Vitest                           | PostgreSQL 17 + server + web + nginx, GM + 6 контекстов, reconnect, приватность между ролями. Обязателен при изменениях realtime/visibility/auth/canvas persistence/reconnect/Docker/nginx/migrations.                                                                                         |
 | Browser QA               | вручную, `pnpm dev` / Playwright (`pnpm test:e2e`)                                      | реальный браузер                     | Всё, что требует настоящего Canvas/Konva рендеринга, drag-and-drop с pointer capture, визуальную проверку fog/сцены.                                                                                                                                                                           |
 
+## Контур Playwright e2e
+
+- `pnpm typecheck` включает отдельный `tsc -p tests/e2e/tsconfig.json`.
+  Playwright-фикстуры обязаны соответствовать текущим contracts до запуска
+  браузера; иначе приложение может упасть в error boundary, а тест покажет лишь
+  вторичное «элемент не найден».
+- `playwright.config.ts` намеренно задаёт `workers: 1`. Все обычные e2e делят
+  одну кампанию в одной БД, поэтому параллельные спеки способны менять состояние
+  друг у друга. Увеличивать число workers можно только вместе с изоляцией
+  campaign/database на worker.
+- Config использует `reuseExistingServer: true`: Playwright поднимет Vite сам,
+  если порт свободен, или переиспользует уже работающий frontend. Перед прогоном
+  убедитесь, что переиспользуемый Vite запущен из проверяемой ревизии и что API
+  на `http://localhost:4100/healthz` отвечает.
+- Полный release-кандидат проверяется в обоих проектах командой
+  `pnpm test:e2e`. Для быстрой диагностики допустим прямой запуск
+  `corepack pnpm exec playwright test --project=chromium --retries=0`, но он не
+  заменяет полный gate. Если Firefox binary отсутствует, установите его через
+  `corepack pnpm exec playwright install firefox` и повторите прогон.
+
+Не ставьте `grep`, `Select-String` или иной фильтр последней командой после
+Playwright: без `pipefail` pipeline вернёт exit code фильтра и может скрыть
+падение тестов. Сначала сохраните/проверьте код возврата Playwright, а вывод
+фильтруйте отдельно. То же различие важно для форматирования:
+`pnpm format:check` ничего не меняет и падает при drift, а `pnpm format`
+перезаписывает всё подходящее дерево и требует предварительной проверки scope.
+
 ## DOM-окружение для component-тестов
 
 Корневой `vitest.config.ts` держит `environment: "node"` по умолчанию —

@@ -25,16 +25,46 @@ package manager.
 
 ## Первый локальный запуск
 
-Из корня репозитория:
+`docker-compose.yml` рассчитан на production-сеть: PostgreSQL в нём **не
+публикует порт на host**. Кроме того, pnpm-скрипты читают `process.env` и **не
+загружают `.env` автоматически**. Docker Compose использует `.env` только для
+подстановки своих переменных — это не передаёт их `db:migrate` или `dev`.
 
-```sh
-cp .env.example .env
-pnpm install --frozen-lockfile
-pnpm build
-pnpm dev:db
-pnpm db:migrate
-pnpm dev
+Из корня репозитория сначала создайте локальный override (он gitignored) и
+выберите свободный host-port, например `5433`:
+
+```yaml
+# docker-compose.override.yml
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5433:5432"
 ```
+
+PowerShell-последовательность для текущего простого формата `.env.example`:
+
+```powershell
+Copy-Item .env.example .env
+Get-Content .env | ForEach-Object {
+  if ($_ -match '^(?!#)([^=]+)=(.*)$') {
+    [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+  }
+}
+$env:DATABASE_URL = 'postgres://arken:arken@localhost:5433/arken'
+
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+corepack pnpm dev:db
+corepack pnpm db:migrate
+corepack pnpm dev
+```
+
+Для POSIX shell загрузите те же переменные через
+`set -a; . ./.env; set +a`, затем переопределите `DATABASE_URL` на host-port из
+override перед `pnpm db:migrate` и `pnpm dev`. Если выбраны другие локальные
+credentials или порт, измените URL согласованно. `POSTGRES_PASSWORD` применяется
+только при первой инициализации volume; правка `.env` не меняет пароль уже
+созданной БД.
 
 `pnpm build` после свежего клона важен: workspace-пакеты `@arken/contracts`,
 `@arken/db` и `@arken/system` экспортируют файлы из `dist`. Без первой сборки
@@ -75,24 +105,25 @@ Vite проксирует `/api`, `/healthz` и `/socket.io` с `5173` на serv
 
 ## Команды проекта
 
-| Команда                              | Назначение                                                   |
-| ------------------------------------ | ------------------------------------------------------------ |
-| `pnpm dev`                           | server + web в watch mode                                    |
-| `pnpm dev:db`                        | поднять только PostgreSQL через Compose                      |
-| `pnpm db:migrate`                    | применить migrations `packages/db/drizzle`                   |
-| `pnpm db:generate`                   | сгенерировать новую Drizzle migration после изменения schema |
-| `pnpm db:studio`                     | открыть Drizzle Studio                                       |
-| `pnpm build`                         | последовательно собрать все workspace packages/apps          |
-| `pnpm typecheck`                     | strict TypeScript без emit                                   |
-| `pnpm lint`                          | ESLint для всего монорепозитория                             |
-| `pnpm format:check`                  | проверить Prettier без изменения файлов                      |
-| `pnpm test`                          | Vitest unit/integration suite                                |
-| `pnpm test:watch`                    | Vitest watch mode                                            |
-| `pnpm test:e2e`                      | Playwright UI suite, в основном с mocked API                 |
-| `pnpm test:multiplayer`              | isolated Docker story: GM + 6 игроков                        |
-| `pnpm restore:rehearse`              | guarded restore в отдельный Compose project                  |
-| `pnpm gameplay:reset:safe`           | destructive operator workflow с несколькими gates            |
-| `pnpm incident:bundle -- --since 2h` | bounded/redacted diagnostic bundle                           |
+| Команда                              | Назначение                                                    |
+| ------------------------------------ | ------------------------------------------------------------- |
+| `pnpm dev`                           | server + web в watch mode                                     |
+| `pnpm dev:db`                        | поднять только PostgreSQL через Compose                       |
+| `pnpm db:migrate`                    | применить migrations `packages/db/drizzle`                    |
+| `pnpm db:generate`                   | сгенерировать новую Drizzle migration после изменения schema  |
+| `pnpm db:studio`                     | открыть Drizzle Studio                                        |
+| `pnpm build`                         | последовательно собрать все workspace packages/apps           |
+| `pnpm typecheck`                     | strict TypeScript без emit, включая `tests/e2e/tsconfig.json` |
+| `pnpm lint`                          | ESLint для всего монорепозитория                              |
+| `pnpm format`                        | применить Prettier ко всему дереву; сначала проверить scope   |
+| `pnpm format:check`                  | проверить Prettier без изменения файлов                       |
+| `pnpm test`                          | Vitest unit/integration suite                                 |
+| `pnpm test:watch`                    | Vitest watch mode                                             |
+| `pnpm test:e2e`                      | Playwright UI suite, в основном с mocked API                  |
+| `pnpm test:multiplayer`              | isolated Docker story: GM + 6 игроков                         |
+| `pnpm restore:rehearse`              | guarded restore в отдельный Compose project                   |
+| `pnpm gameplay:reset:safe`           | destructive operator workflow с несколькими gates             |
+| `pnpm incident:bundle -- --since 2h` | bounded/redacted diagnostic bundle                            |
 
 `build`, deploy и Docker build не запускают автоматически lint, typecheck и
 tests. Выполняйте quality gate явно.
@@ -115,6 +146,18 @@ pnpm test
 ```sh
 pnpm test:e2e
 ```
+
+Обычные Playwright e2e намеренно выполняются с `workers: 1`: спеки делят одну
+кампанию в одной БД. Не увеличивайте параллельность без изоляции состояния на
+worker. `pnpm typecheck` отдельно компилирует `tests/e2e/tsconfig.json`, поэтому
+расхождение Playwright-фикстуры с `GameSnapshot` должно быть исправлено до
+browser-прогона.
+
+Сохраняйте код возврата именно Playwright. Не ставьте `grep`, `Select-String`
+или другой фильтр последней командой pipeline без `pipefail`/явной передачи
+exit code: тогда красный прогон может выглядеть успешным. `pnpm format:check`
+также является самостоятельным read-only gate с ненулевым кодом при drift;
+`pnpm format` — отдельная записывающая команда, а не доказательство gate.
 
 Если менялись realtime, visibility, auth/access, canvas persistence, reconnect,
 Docker/nginx или migrations:
@@ -145,7 +188,10 @@ row locking, sequences, triggers и concurrency. Критические DB/realt
 
 ## Environment
 
-Стартуйте с `.env.example`. `.env` нельзя коммитить.
+Стартуйте с `.env.example`. `.env` нельзя коммитить. Помните: приложение и
+migration runner не загружают этот файл; перед локальным запуском переменные
+должны находиться в environment текущего процесса. Docker Compose загружает
+`.env` для собственной интерполяции, но это другой механизм.
 
 | Группа         | Переменные                                                                  | Комментарий                                            |
 | -------------- | --------------------------------------------------------------------------- | ------------------------------------------------------ |
@@ -382,8 +428,9 @@ pnpm db:migrate
 pnpm --filter @arken/server dev
 ```
 
-Типовые причины: PostgreSQL ещё не healthy, `.env` отсутствует, занят порт 4100
-или `DATABASE_URL` не совпадает с Compose credentials.
+Типовые причины: PostgreSQL ещё не healthy, его порт не опубликован локальным
+override, переменные из `.env` не экспортированы в процесс, занят порт 4100 или
+`DATABASE_URL` не совпадает с host-port/Compose credentials.
 
 ### Web загружается, API/Socket.IO недоступны
 
