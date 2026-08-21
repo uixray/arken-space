@@ -61,6 +61,10 @@ implementation, test, runner и documentation commits. Локальная фик
   fog/token layers получила недостающий browser acceptance: открытая половина
   чужого токена видна, закрытая перекрыта туманом, контролируемый токен остаётся
   видимым, GM-вид не сужается.
+- **UIX-468** — resource counters используют семантические `DELTA`/`SET`,
+  сериализацию по персонажу и rebase от актуальной головы очереди; быстрые
+  клики не теряются при закрытии панели, не переносятся между персонажами и не
+  перезаписывают параллельное изменение другого ресурса.
 
 Три untracked-файла `docs/stickers/prompts/ST-*.md` относятся к отдельной
 творческой работе. Они не входят в этот пул и не должны попадать в технические
@@ -100,6 +104,14 @@ provenance, task mapping и ownership пока не подтверждены.
 - focused fog/visibility Vitest — **2 files / 23 tests PASS**;
 - targeted Canvas QA Chromium + Firefox — **2/2 PASS**, без retries;
 - E2E TypeScript, scoped ESLint, scoped Prettier и `git diff --check` — PASS.
+
+Для closure UIX-468 отдельно подтверждено:
+
+- focused final Vitest — **2 files / 34 tests PASS**;
+- full Vitest — **168 files / 1222 tests PASS**;
+- targeted resource-counter QA Chromium + Firefox — **2/2 PASS**, без retries;
+- `pnpm typecheck`, `pnpm lint`, production build, scoped Prettier и
+  `git diff --check` — PASS.
 
 Live `tests/e2e/activity-feed-layout.spec.ts` остаётся environment gate: без
 подтверждённого локального GM credential его нельзя считать пройденным.
