@@ -153,6 +153,26 @@ function move(
   });
 }
 
+const WHOLE_ACTIVE_SCENE = {
+  x: -4096,
+  y: -4096,
+  width: 16384,
+  height: 16384,
+};
+
+async function appendWholeSceneFog(operation: "REVEAL" | "COVER") {
+  const geometry = JSON.stringify({ type: "RECT", ...WHOLE_ACTIVE_SCENE });
+  const bbox = JSON.stringify(WHOLE_ACTIVE_SCENE);
+  await database.exec(`
+    insert into fog_reveals
+      (scene_id, x, y, width, height, operation, shape, geometry, bbox)
+    values
+      ('${ids.scene}', ${WHOLE_ACTIVE_SCENE.x}, ${WHOLE_ACTIVE_SCENE.y},
+       ${WHOLE_ACTIVE_SCENE.width}, ${WHOLE_ACTIVE_SCENE.height}, '${operation}',
+       'RECT', '${geometry}'::jsonb, '${bbox}'::jsonb);
+  `);
+}
+
 function setAudio(
   socket: typeof gmClient,
   assetId: string | null,
@@ -281,6 +301,10 @@ beforeEach(async () => {
       ('${ids.otherPlayer}', '${hashToken(otherSessionToken)}', now() + interval '1 day'),
       ('${ids.gm}', '${hashToken(gmSessionToken)}', now() + interval '1 day');
   `);
+  // Realtime tests historically model an open tabletop. Keep that explicit so
+  // campaign-broadcast expectations do not accidentally rely on bypassing the
+  // canonical default fog (no reveal means fully covered).
+  await appendWholeSceneFog("REVEAL");
   for (const [index, player] of extraPlayers.entries()) {
     await database.exec(`
       insert into memberships (id, campaign_id, role, display_name)
@@ -544,6 +568,158 @@ describe("durable realtime token commands", () => {
       leakedPreview: false,
       leakedCommit: false,
     });
+  });
+
+  it("keeps a covered token out of foreign player rooms and replay ACKs", async () => {
+    await appendWholeSceneFog("COVER");
+
+    let foreignPreview = false;
+    let foreignCommit = false;
+    otherClient.on("token:moving", (movement) => {
+      if (movement.tokenId === ids.token) foreignPreview = true;
+    });
+    otherClient.on("token:moved", (event) => {
+      if (event.data.id === ids.token) foreignCommit = true;
+    });
+
+    const controllerPreview = new Promise<
+      Parameters<ServerToClientEvents["token:moving"]>[0]
+    >((resolve) => client.once("token:moving", resolve));
+    gmClient.emit("token:moving", {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.token,
+      x: 64,
+      y: 64,
+      z: 0,
+      levelId: null,
+      revision: 0,
+    });
+    await expect(controllerPreview).resolves.toMatchObject({
+      tokenId: ids.token,
+      x: 64,
+      y: 64,
+    });
+
+    const actionId = crypto.randomUUID();
+    const controllerCommit = new Promise<
+      Parameters<ServerToClientEvents["token:moved"]>[0]
+    >((resolve) => client.once("token:moved", resolve));
+    const gmAck = await move(gmClient, {
+      actionId,
+      tokenId: ids.token,
+      revision: 0,
+      x: 64,
+      y: 64,
+    });
+    expect(gmAck).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { id: ids.token, x: 64, y: 64, revision: 1 },
+    });
+    await expect(controllerCommit).resolves.toMatchObject({
+      actionId,
+      data: { id: ids.token, x: 64, y: 64, revision: 1 },
+    });
+
+    // An unrelated player can know/replay the public action id, but must not
+    // turn the idempotency ACK into a token projection oracle.
+    const foreignReplay = await move(otherClient, {
+      actionId,
+      tokenId: ids.token,
+      revision: 0,
+      x: 64,
+      y: 64,
+    });
+    expect(foreignReplay).toMatchObject({
+      ok: true,
+      status: "DUPLICATE",
+      sequence: gmAck.sequence,
+    });
+    expect(foreignReplay).not.toHaveProperty("data");
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect({ foreignPreview, foreignCommit }).toEqual({
+      foreignPreview: false,
+      foreignCommit: false,
+    });
+  });
+
+  it("keeps an owned token movable through cover, reveal and cover", async () => {
+    await appendWholeSceneFog("COVER");
+
+    let foreignCommits = 0;
+    otherClient.on("token:moved", (event) => {
+      if (event.data.id === ids.token) foreignCommits++;
+    });
+
+    const gmPreview = new Promise<
+      Parameters<ServerToClientEvents["token:moving"]>[0]
+    >((resolve) => gmClient.once("token:moving", resolve));
+    client.emit("token:moving", {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.token,
+      x: 64,
+      y: 64,
+      z: 0,
+      levelId: null,
+      revision: 0,
+    });
+    await expect(gmPreview).resolves.toMatchObject({
+      tokenId: ids.token,
+      x: 64,
+      y: 64,
+    });
+
+    const covered = await move(client, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      x: 64,
+      y: 64,
+    });
+    expect(covered).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { id: ids.token, x: 64, y: 64, revision: 1 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(foreignCommits).toBe(0);
+
+    await appendWholeSceneFog("REVEAL");
+    const revealedBroadcast = new Promise<
+      Parameters<ServerToClientEvents["token:moved"]>[0]
+    >((resolve) => otherClient.once("token:moved", resolve));
+    const revealedActionId = crypto.randomUUID();
+    const revealed = await move(client, {
+      actionId: revealedActionId,
+      revision: 1,
+      x: 128,
+      y: 128,
+    });
+    expect(revealed).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { id: ids.token, x: 128, y: 128, revision: 2 },
+    });
+    await expect(revealedBroadcast).resolves.toMatchObject({
+      actionId: revealedActionId,
+      data: { id: ids.token, x: 128, y: 128, revision: 2 },
+    });
+    expect(foreignCommits).toBe(1);
+
+    await appendWholeSceneFog("COVER");
+    const coveredAgain = await move(client, {
+      actionId: crypto.randomUUID(),
+      revision: 2,
+      x: 192,
+      y: 192,
+    });
+    expect(coveredAgain).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { id: ids.token, x: 192, y: 192, revision: 3 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(foreignCommits).toBe(1);
   });
 
   it("rejects durable and ephemeral movement of another player's token", async () => {
@@ -1614,5 +1790,214 @@ describe("cursor presence (UIX-392)", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     client.emit("cursor:gone");
     await expect(gone).resolves.toEqual({ membershipId: ids.player });
+  });
+});
+
+/**
+ * UIX-491 — изображение токена пропадает при перетаскивании.
+ *
+ * Из очереди отчётов «Сообщить», написали дважды за один вечер: «стоило мне
+ * подвигать этот токен и картинка исчезает и становится обычным токеном с
+ * названием».
+ *
+ * Причина — два источника одного поля. Снапшот отдаёт `assetId` из
+ * **определения** (`definition.defaultAssetId`, живое значение), а рассылка
+ * после перетаскивания собирает DTO из строки таблицы `tokens`, где `asset_id`
+ * записан один раз при размещении и с тех пор не менялся. Пока они совпадают,
+ * разницы не видно; стоит назначить картинку уже размещённому токену — и первое
+ * же движение возвращает всем пустое значение.
+ *
+ * Через `/api/canvas/bulk` этого не видно: там ответ не пересобирает токен.
+ * Поэтому проверка идёт именно по сокету — тем путём, которым таскают мышью.
+ */
+describe("UIX-491 — картинка переживает перетаскивание", () => {
+  const assetId = "11111111-2222-3333-4444-555555555555";
+  const refreshedAssetId = "11111111-2222-3333-4444-666666666666";
+  const characterId = "11111111-2222-4333-8444-777777777777";
+
+  beforeEach(async () => {
+    await database.exec(`
+      insert into characters (id, campaign_id, owner_membership_id, name)
+      values ('${characterId}', '${ids.campaign}', '${ids.player}', 'Персонаж UIX-491');
+      insert into assets (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes)
+      values
+        ('${assetId}', '${ids.campaign}', '${ids.gm}', 'TOKEN', 'Портрет', 'uix491-key', 'image/webp', 10),
+        ('${refreshedAssetId}', '${ids.campaign}', '${ids.gm}', 'TOKEN', 'Новый портрет', 'uix491-new-key', 'image/webp', 10)
+      on conflict (id) do nothing;
+      update token_definitions set
+        character_id = '${characterId}',
+        default_asset_id = '${assetId}',
+        name = null,
+        revision = 7
+      where id = (select definition_id from tokens where id = '${ids.token}');
+    `);
+  });
+
+  it("рассылает другому клиенту всю проекцию определения, а не снимок размещения", async () => {
+    const placement = await database.query<{ asset_id: string | null }>(
+      `select asset_id from tokens where id = '${ids.token}'`,
+    );
+    // Условие бага: у размещения своего изображения нет, у определения — есть.
+    expect(placement.rows[0]?.asset_id).toBeNull();
+
+    const broadcast = new Promise<
+      Parameters<ServerToClientEvents["token:moved"]>[0]
+    >((resolve) => otherClient.once("token:moved", resolve));
+    const ack = await move(client, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      x: 64,
+      y: 64,
+    });
+    expect(ack.ok).toBe(true);
+    expect(ack.ok && ack.data).toMatchObject({
+      assetId,
+      characterId,
+      name: "Персонаж UIX-491",
+      definitionRevision: 7,
+    });
+    await expect(broadcast).resolves.toMatchObject({
+      data: {
+        assetId,
+        characterId,
+        name: "Персонаж UIX-491",
+        definitionRevision: 7,
+      },
+    });
+  });
+
+  it("перечитывает определение после commit движения", async () => {
+    // Триггер воспроизводит важный порядок без таймеров: первое чтение move
+    // видит assetId/revision 7, изменение placement обновляет definition, и
+    // только post-commit projection может вернуть assetId/revision 8.
+    await database.exec(`
+      create function uix491_refresh_definition() returns trigger as $$
+      begin
+        update token_definitions
+        set default_asset_id = '${refreshedAssetId}', revision = 8
+        where id = new.definition_id;
+        return new;
+      end;
+      $$ language plpgsql;
+      create trigger uix491_refresh_definition_after_move
+      after update on tokens
+      for each row when (old.revision is distinct from new.revision)
+      execute function uix491_refresh_definition();
+    `);
+
+    const broadcast = new Promise<
+      Parameters<ServerToClientEvents["token:moved"]>[0]
+    >((resolve) => otherClient.once("token:moved", resolve));
+    const ack = await move(client, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      x: 96,
+      y: 96,
+    });
+
+    expect(ack).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: {
+        assetId: refreshedAssetId,
+        definitionRevision: 8,
+      },
+    });
+    await expect(broadcast).resolves.toMatchObject({
+      data: {
+        assetId: refreshedAssetId,
+        definitionRevision: 8,
+      },
+    });
+  });
+
+  it("не подменяет sequence первого движения координатами более позднего", async () => {
+    await database.exec(`
+      create function uix491_followup_move() returns trigger as $$
+      begin
+        if new.revision = 1 then
+          update tokens
+          set x = 320, y = 384, revision = 2, updated_at = now()
+          where id = new.id;
+        end if;
+        return new;
+      end;
+      $$ language plpgsql;
+      create trigger uix491_followup_move_after_move
+      after update on tokens
+      for each row when (old.revision is distinct from new.revision)
+      execute function uix491_followup_move();
+    `);
+
+    const broadcast = new Promise<
+      Parameters<ServerToClientEvents["token:moved"]>[0]
+    >((resolve) => otherClient.once("token:moved", resolve));
+    const ack = await move(client, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      x: 96,
+      y: 96,
+    });
+
+    expect(ack).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { x: 96, y: 96, revision: 1, assetId },
+    });
+    await expect(broadcast).resolves.toMatchObject({
+      data: { x: 96, y: 96, revision: 1, assetId },
+    });
+    const latest = await database.query<{
+      x: number;
+      y: number;
+      revision: number;
+    }>(`select x, y, revision from tokens where id = '${ids.token}'`);
+    expect(latest.rows[0]).toMatchObject({ x: 320, y: 384, revision: 2 });
+  });
+
+  it("не возвращает игроку DTO после отзыва доступа во время commit", async () => {
+    await appendWholeSceneFog("COVER");
+    await database.exec(`
+      create function uix491_revoke_player_access() returns trigger as $$
+      begin
+        if new.revision = 1 then
+          delete from token_controllers where token_definition_id = new.definition_id;
+        end if;
+        return new;
+      end;
+      $$ language plpgsql;
+      create trigger uix491_revoke_player_access_after_move
+      after update on tokens
+      for each row when (old.revision is distinct from new.revision)
+      execute function uix491_revoke_player_access();
+    `);
+
+    let playerReceived = false;
+    let otherPlayerReceived = false;
+    client.on("token:moved", () => {
+      playerReceived = true;
+    });
+    otherClient.on("token:moved", () => {
+      otherPlayerReceived = true;
+    });
+    const gmBroadcast = new Promise<
+      Parameters<ServerToClientEvents["token:moved"]>[0]
+    >((resolve) => gmClient.once("token:moved", resolve));
+
+    const ack = await move(client, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      x: 128,
+      y: 128,
+    });
+
+    expect(ack).toMatchObject({ ok: true, status: "ACCEPTED" });
+    expect(ack).not.toHaveProperty("data");
+    await expect(gmBroadcast).resolves.toMatchObject({
+      data: { x: 128, y: 128, revision: 1, assetId },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(playerReceived).toBe(false);
+    expect(otherPlayerReceived).toBe(false);
   });
 });

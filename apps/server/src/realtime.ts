@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { Server } from "socket.io";
-import { and, asc, count, eq, max } from "drizzle-orm";
+import { and, asc, count, eq, inArray, max } from "drizzle-orm";
 import { z } from "zod";
 import {
   campaignAudioTracks,
@@ -8,6 +8,7 @@ import {
   assets,
   campaigns,
   characters,
+  fogReveals,
   gameEvents,
   memberships,
   scenes,
@@ -27,6 +28,7 @@ import {
   audioStateUpdateSchema,
   audioTrackCommandSchema,
   cursorMoveSchema,
+  fogHiddenTokenIds,
   moveTokenSchema,
   rulerPolylineDistance,
   rulerUpdateSchema,
@@ -103,9 +105,16 @@ function envelope<T>(
   return { sequence, actionId, data, emittedAt: new Date().toISOString() };
 }
 
-export async function editableToken(
+/**
+ * Current campaign-scoped token projection, independent of mutation rights.
+ *
+ * Definition-owned fields can change without touching the placement row. Keep
+ * this projection reusable so a successful mutation can re-read the canonical
+ * definition after commit instead of publishing the pre-transaction snapshot.
+ */
+async function projectedToken(
   db: Database,
-  auth: AuthContext,
+  campaignId: string,
   tokenId: string,
 ) {
   const [row] = await db
@@ -128,8 +137,8 @@ export async function editableToken(
     .limit(1);
   if (
     !row ||
-    row.campaignId !== auth.campaignId ||
-    row.definition.campaignId !== auth.campaignId
+    row.campaignId !== campaignId ||
+    row.definition.campaignId !== campaignId
   )
     return null;
   const controllers = await db
@@ -137,42 +146,135 @@ export async function editableToken(
     .from(tokenControllers)
     .where(eq(tokenControllers.tokenDefinitionId, row.definition.id));
   const controllerMembershipIds = controllers.map((item) => item.membershipId);
-  if (
-    auth.role !== "GM" &&
-    (!controllerMembershipIds.includes(auth.membershipId) ||
-      row.token.locked ||
-      !row.token.visible ||
-      row.token.layer === "GM" ||
-      row.token.sceneId !== row.activeSceneId)
-  )
-    return null;
   return {
-    ...row.token,
-    characterId: row.definition.characterId,
-    assetId: row.definition.defaultAssetId,
-    name: resolveTokenName({
-      name: row.definition.name,
-      characterName: row.characterName,
-    }),
-    controllerMembershipIds,
-    definitionRevision: row.definition.revision,
+    token: {
+      ...row.token,
+      characterId: row.definition.characterId,
+      assetId: row.definition.defaultAssetId,
+      name: resolveTokenName({
+        name: row.definition.name,
+        characterName: row.characterName,
+      }),
+      controllerMembershipIds,
+      definitionRevision: row.definition.revision,
+    } satisfies EditableToken,
+    activeSceneId: row.activeSceneId,
   };
 }
 
-async function tokenAudienceRoom(
+function canEditProjectedToken(
+  auth: AuthContext,
+  projection: Awaited<ReturnType<typeof projectedToken>>,
+) {
+  if (!projection) return false;
+  const { token, activeSceneId } = projection;
+  return (
+    auth.role === "GM" ||
+    (token.controllerMembershipIds.includes(auth.membershipId) &&
+      !token.locked &&
+      token.visible &&
+      token.layer !== "GM" &&
+      token.sceneId === activeSceneId)
+  );
+}
+
+function tokenIsCampaignVisible(
+  token: EditableToken,
+  activeSceneId: string | null,
+) {
+  return (
+    token.visible && token.layer !== "GM" && token.sceneId === activeSceneId
+  );
+}
+
+type FogRowsByScene = Map<string, (typeof fogReveals.$inferSelect)[]>;
+
+/**
+ * Fog is ordered event state: later COVER/REVEAL operations override earlier
+ * ones. Read only the token scenes and preserve that canonical sequence.
+ */
+async function fogRowsForTokens(
+  db: Database,
+  tokenRows: readonly EditableToken[],
+): Promise<FogRowsByScene> {
+  const sceneIds = [...new Set(tokenRows.map((token) => token.sceneId))];
+  const byScene: FogRowsByScene = new Map();
+  if (sceneIds.length === 0) return byScene;
+  const rows = await db
+    .select()
+    .from(fogReveals)
+    .where(inArray(fogReveals.sceneId, sceneIds))
+    .orderBy(asc(fogReveals.sequence));
+  for (const row of rows) {
+    const sceneRows = byScene.get(row.sceneId) ?? [];
+    sceneRows.push(row);
+    byScene.set(row.sceneId, sceneRows);
+  }
+  return byScene;
+}
+
+function tokensAreFogVisibleTo(
+  tokenRows: readonly EditableToken[],
+  fogByScene: FogRowsByScene,
+  viewer: { role: "GM" | "PLAYER"; membershipId: string },
+) {
+  return tokenRows.every(
+    (token) =>
+      !fogHiddenTokenIds(
+        [token],
+        fogByScene.get(token.sceneId) ?? [],
+        viewer,
+      ).has(token.id),
+  );
+}
+
+type TokenDelivery = {
+  rooms: string[];
+  fogByScene: FogRowsByScene;
+};
+
+/**
+ * Mirror the snapshot's UIX-449 visibility for realtime projections.
+ *
+ * A fully covered token cannot use the campaign room because control is
+ * membership-specific: its current controllers still see it, other players
+ * do not. The impossible non-UUID viewer below asks the shared canonical rule
+ * whether a player who controls none of the token rows can see all of them.
+ */
+async function tokenDelivery(
   db: Database,
   campaignId: string,
-  token: EditableToken,
+  tokenRows: readonly EditableToken[],
+  activeSceneId: string | null,
+  controllerMembershipIds: readonly string[],
+): Promise<TokenDelivery> {
+  if (!tokenRows.every((token) => tokenIsCampaignVisible(token, activeSceneId)))
+    return { rooms: [gmRoom(campaignId)], fogByScene: new Map() };
+
+  const fogByScene = await fogRowsForTokens(db, tokenRows);
+  const campaignVisible = tokensAreFogVisibleTo(tokenRows, fogByScene, {
+    role: "PLAYER",
+    membershipId: "__campaign-fog-viewer__",
+  });
+  if (campaignVisible) return { rooms: [campaignRoom(campaignId)], fogByScene };
+
+  return {
+    rooms: [
+      gmRoom(campaignId),
+      ...new Set(controllerMembershipIds.map(memberRoom)),
+    ],
+    fogByScene,
+  };
+}
+
+export async function editableToken(
+  db: Database,
+  auth: AuthContext,
+  tokenId: string,
 ) {
-  if (!token.visible || token.layer === "GM") return gmRoom(campaignId);
-  const [campaign] = await db
-    .select({ activeSceneId: campaigns.activeSceneId })
-    .from(campaigns)
-    .where(eq(campaigns.id, campaignId))
-    .limit(1);
-  return campaign?.activeSceneId === token.sceneId
-    ? campaignRoom(campaignId)
-    : gmRoom(campaignId);
+  const projection = await projectedToken(db, auth.campaignId, tokenId);
+  if (!projection) return null;
+  return canEditProjectedToken(auth, projection) ? projection.token : null;
 }
 
 async function emitPresence(
@@ -320,10 +422,29 @@ export function registerRealtime(
     socket.on("token:moving", async (input) => {
       const parsed = moveTokenSchema.safeParse(input);
       if (!parsed.success) return;
-      const token = await editableToken(db, auth, parsed.data.tokenId);
-      if (!token) return;
-      const audience = await tokenAudienceRoom(db, auth.campaignId, token);
-      socket.to(audience).emit("token:moving", parsed.data);
+      const projection = await projectedToken(
+        db,
+        auth.campaignId,
+        parsed.data.tokenId,
+      );
+      if (!canEditProjectedToken(auth, projection) || !projection) return;
+      const previewToken = {
+        ...projection.token,
+        x: parsed.data.x,
+        y: parsed.data.y,
+        z: parsed.data.z,
+        levelId: parsed.data.levelId,
+      } satisfies EditableToken;
+      // Check both current and preview coordinates. Either side being covered
+      // makes a campaign-wide preview an information leak.
+      const delivery = await tokenDelivery(
+        db,
+        auth.campaignId,
+        [projection.token, previewToken],
+        projection.activeSceneId,
+        projection.token.controllerMembershipIds,
+      );
+      socket.to(delivery.rooms).emit("token:moving", parsed.data);
     });
 
     socket.on("token:moved", async (input, ack) => {
@@ -456,17 +577,47 @@ export function registerRealtime(
           ...(latest ? { data: tokenDto(latest) } : {}),
         });
       }
-      const dto = tokenDto({
+      /**
+       * UIX-491: definition-owned fields are re-read after commit, but the
+       * placement must remain the exact row committed by this event. A later
+       * concurrent move must not be relabelled with this event's sequence.
+       */
+      const committedProjection = await projectedToken(
+        db,
+        auth.campaignId,
+        command.tokenId,
+      );
+      // The placement was just updated in this handler, so absence here means
+      // a concurrent delete won. Do not emit stale placement data that could
+      // resurrect the deleted token on another client.
+      if (!committedProjection) {
+        return ack?.({
+          ok: false,
+          status: "CONFLICT",
+          reason: "CONCURRENT_UPDATE",
+        });
+      }
+      const latestToken = committedProjection.token;
+      const movedToken = {
         ...result.updated,
-        controllerMembershipIds: current.controllerMembershipIds,
-        definitionRevision: current.definitionRevision,
-      });
-      const audience = await tokenAudienceRoom(db, auth.campaignId, {
-        ...result.updated,
-        controllerMembershipIds: current.controllerMembershipIds,
-        definitionRevision: current.definitionRevision,
-      });
-      io.to(audience).emit(
+        characterId: latestToken.characterId,
+        assetId: latestToken.assetId,
+        name: latestToken.name,
+        controllerMembershipIds: latestToken.controllerMembershipIds,
+        definitionRevision: latestToken.definitionRevision,
+      } satisfies EditableToken;
+      const dto = tokenDto(movedToken);
+      // Never widen an older event after a concurrent visibility/scene change:
+      // campaign broadcast is allowed only when both the event placement and
+      // the latest canonical placement are currently campaign-visible.
+      const delivery = await tokenDelivery(
+        db,
+        auth.campaignId,
+        [movedToken, latestToken],
+        committedProjection.activeSceneId,
+        latestToken.controllerMembershipIds,
+      );
+      io.to(delivery.rooms).emit(
         "token:moved",
         envelope(result.event.sequence, command.actionId, dto),
       );
@@ -484,7 +635,14 @@ export function registerRealtime(
         ok: true,
         status: "ACCEPTED",
         sequence: result.event.sequence,
-        data: dto,
+        ...(canEditProjectedToken(auth, committedProjection) &&
+        tokensAreFogVisibleTo(
+          [movedToken, latestToken],
+          delivery.fogByScene,
+          auth,
+        )
+          ? { data: dto }
+          : {}),
       });
     });
 

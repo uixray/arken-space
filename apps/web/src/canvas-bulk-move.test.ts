@@ -52,6 +52,27 @@ describe("applyBulkMoveResult", () => {
     expect(tokens[0]).toEqual({ id: "a", x: 20, y: 0, revision: 3 });
   });
 
+  it("preserves definition-owned token presentation fields", () => {
+    // UIX-491: bulk MOVE updates only placement coordinates/revision. Rebuilding
+    // a partial token here would erase the image just assigned to its
+    // definition and reproduce the player report after the first drag.
+    const richToken = {
+      ...token("a", 1, 2, 4),
+      assetId: "asset-portrait",
+      characterId: "character-1",
+      name: "Персонаж",
+      definitionRevision: 9,
+    };
+    const [moved] = applyBulkMoveResult([richToken], { a: 5 }, { x: 3, y: 4 });
+
+    expect(moved).toEqual({
+      ...richToken,
+      x: 4,
+      y: 6,
+      revision: 5,
+    });
+  });
+
   it("returns the same array when nothing it holds was moved", () => {
     // Keeps an unrelated bulk move from re-rendering this collection.
     const tokens = [token("a", 1, 1, 1)];
