@@ -32,6 +32,7 @@ import {
   moveTokenSchema,
   rulerPolylineDistance,
   rulerUpdateSchema,
+  sceneViewSchema,
 } from "@arken/contracts";
 import type { AuthContext, SessionAuthContext } from "./auth.js";
 import { authFromSessionToken, sessionIsActive } from "./auth.js";
@@ -305,7 +306,13 @@ export function registerRealtime(
   io: RealtimeServer,
   db: Database,
   log: FastifyBaseLogger,
+  runtime: {
+    sessionIsActive?: typeof sessionIsActive;
+    buildSnapshot?: typeof buildSnapshot;
+  } = {},
 ) {
+  const checkSessionActive = runtime.sessionIsActive ?? sessionIsActive;
+  const createSnapshot = runtime.buildSnapshot ?? buildSnapshot;
   const presenceGraceMs = 750;
   const pendingPresence = new Map<string, ReturnType<typeof setTimeout>>();
   const presenceKey = (campaignId: string, membershipId: string) =>
@@ -328,17 +335,10 @@ export function registerRealtime(
 
   io.on("connection", async (socket) => {
     const auth = socket.data.auth;
-    // Join the session room before any other async setup. Logout can then
-    // target this socket even while the rest of the connection is pending.
-    await socket.join(sessionRoom(auth.sessionId));
-    if (!(await sessionIsActive(db, auth.sessionId)) || !socket.connected) {
-      socket.disconnect(true);
-      return;
-    }
     // Room-based disconnects handle normal logout. This guard also rejects an
     // event that was queued while connection setup raced with session removal.
     socket.use((_event, next) => {
-      void sessionIsActive(db, auth.sessionId).then(
+      void checkSessionActive(db, auth.sessionId).then(
         (active) => {
           if (!active) {
             socket.disconnect(true);
@@ -350,31 +350,50 @@ export function registerRealtime(
         (error) => next(error as Error),
       );
     });
-    const pending = pendingPresence.get(
-      presenceKey(auth.campaignId, auth.membershipId),
-    );
-    if (pending) {
-      clearTimeout(pending);
-      pendingPresence.delete(presenceKey(auth.campaignId, auth.membershipId));
-    }
-    await socket.join(campaignRoom(auth.campaignId));
-    await socket.join(memberRoom(auth.membershipId));
-    if (auth.role === "GM") await socket.join(gmRoom(auth.campaignId));
-    const snapshot = await buildSnapshot(db, auth);
-    if (!(await sessionIsActive(db, auth.sessionId)) || !socket.connected) {
-      socket.disconnect(true);
-      return;
-    }
-    socket.emit("game:snapshot", snapshot);
-    await emitPresence(io, db, auth.campaignId);
-    log.info(
-      {
-        membershipId: auth.membershipId,
-        campaignId: auth.campaignId,
-        socketId: socket.id,
-      },
-      "realtime.connected",
-    );
+
+    /**
+     * `connect` is observable by the browser before this async connection
+     * setup has finished. Register the view/resync listeners synchronously so
+     * the client's reconnect handshake cannot disappear in that window, then
+     * hold the work until the authenticated rooms and initial snapshot are
+     * ready.
+     */
+    let resolveConnectionReady!: (ready: boolean) => void;
+    const connectionReady = new Promise<boolean>((resolve) => {
+      resolveConnectionReady = resolve;
+    });
+    let connectionReadySettled = false;
+    const settleConnectionReady = (ready: boolean) => {
+      if (connectionReadySettled) return;
+      connectionReadySettled = true;
+      resolveConnectionReady(ready);
+    };
+    type SceneViewIngress = {
+      intent: number;
+      data: z.infer<typeof sceneViewSchema>;
+    };
+    const sceneViewIngressByPayload = new WeakMap<object, SceneViewIngress>();
+    let latestSceneViewIntent = 0;
+    /**
+     * Socket.IO invokes catch-all ingress listeners synchronously in packet
+     * order, before its async `socket.use` chain. Assign the intent here so
+     * two session checks resolving out of order cannot reverse the user's
+     * scene selection.
+     */
+    socket.prependAny((event, payload) => {
+      if (event !== "scene:view" || auth.role !== "GM") return;
+      const parsed = sceneViewSchema.safeParse(payload);
+      if (!parsed.success) return;
+      const intent = ++latestSceneViewIntent;
+      sceneViewIngressByPayload.set(payload as object, {
+        intent,
+        data: parsed.data,
+      });
+    });
+    const viewedSceneId = () =>
+      auth.role === "GM" ? (socket.data.viewedSceneId ?? null) : null;
+    const viewedCanvasSceneIds = (sceneId = viewedSceneId()) =>
+      sceneId ? [sceneId] : [];
 
     /**
      * UIX-408 — мастер сообщает, какую сцену рассматривает.
@@ -383,12 +402,25 @@ export function registerRealtime(
      * рассматриваемой сцены меняет то, что ему нужно (туман и рисунки другой
      * сцены), и это осознанное действие одного человека, а не повод для
      * рассылки всем.
+     *
+     * Счётчик намерений проверяется после каждого `await`. Иначе медленная
+     * проверка/сборка первой сцены может завершиться после второй и вернуть
+     * браузер к уже не выбранному канвасу.
      */
-    socket.on("scene:view", async (view) => {
+    const handleSceneView = async (
+      view: z.infer<typeof sceneViewSchema>,
+    ) => {
       // Игроку видима ровно активная сцена; принимать от него «смотрю другую»
       // значило бы дать способ запросить туман закрытой сцены.
       if (auth.role !== "GM") return;
-      const sceneId = typeof view?.sceneId === "string" ? view.sceneId : null;
+      const ingress = sceneViewIngressByPayload.get(view);
+      sceneViewIngressByPayload.delete(view);
+      if (!ingress) return;
+      const { intent, data } = ingress;
+      if (!(await connectionReady) || !socket.connected) return;
+      if (intent !== latestSceneViewIntent) return;
+
+      const { sceneId } = data;
       if (sceneId) {
         const [scene] = await db
           .select({ id: scenes.id })
@@ -397,16 +429,70 @@ export function registerRealtime(
             and(eq(scenes.id, sceneId), eq(scenes.campaignId, auth.campaignId)),
           )
           .limit(1);
-        // Сцена чужой кампании — молча игнорируем: отвечать «такой нет» значит
-        // подтверждать, что она где-то есть.
+        if (intent !== latestSceneViewIntent || !socket.connected) return;
+        // Чужая и несуществующая сцены имеют один исход — полную тишину.
+        // Подтверждать различие значило бы дать oracle существования UUID.
         if (!scene) return;
       }
+
+      const previousSceneId = viewedSceneId();
       socket.data.viewedSceneId = sceneId;
-      socket.emit("game:snapshot", await buildSnapshot(db, auth));
+      let snapshot: Awaited<ReturnType<typeof buildSnapshot>>;
+      try {
+        snapshot = await createSnapshot(
+          db,
+          auth,
+          viewedCanvasSceneIds(sceneId),
+        );
+      } catch (error) {
+        // The optimistic socket state is authoritative input for resync. A
+        // failed snapshot must not leave it pointing at a canvas the client
+        // never received. Never roll a newer intent back from an older catch.
+        if (
+          intent === latestSceneViewIntent &&
+          viewedSceneId() === sceneId
+        )
+          socket.data.viewedSceneId = previousSceneId;
+        throw error;
+      }
+      if (
+        intent !== latestSceneViewIntent ||
+        viewedSceneId() !== sceneId ||
+        !socket.connected
+      )
+        return;
+      socket.emit("game:snapshot", snapshot);
+    };
+    socket.on("scene:view", (view) => {
+      void handleSceneView(view).catch((error) =>
+        log.warn(
+          {
+            errorKind: error instanceof Error ? error.name : typeof error,
+            membershipId: auth.membershipId,
+            campaignId: auth.campaignId,
+          },
+          "realtime.scene_view_failed",
+        ),
+      );
     });
 
-    socket.on("game:resync", async (knownSequence) => {
-      const snapshot = await buildSnapshot(db, auth);
+    const handleGameResync = async (knownSequence?: number) => {
+      if (!(await connectionReady) || !socket.connected) return;
+      const intent = latestSceneViewIntent;
+      const sceneId = viewedSceneId();
+      const snapshot = await createSnapshot(
+        db,
+        auth,
+        viewedCanvasSceneIds(sceneId),
+      );
+      // A newer scene:view emits its own authoritative snapshot. Letting this
+      // older resync land afterwards would restore the previous canvas.
+      if (
+        intent !== latestSceneViewIntent ||
+        viewedSceneId() !== sceneId ||
+        !socket.connected
+      )
+        return;
       log.info(
         {
           membershipId: auth.membershipId,
@@ -417,7 +503,79 @@ export function registerRealtime(
         "realtime.resync",
       );
       socket.emit("game:snapshot", snapshot);
+    };
+    socket.on("game:resync", (knownSequence) => {
+      void handleGameResync(knownSequence).catch((error) =>
+        log.warn(
+          {
+            errorKind: error instanceof Error ? error.name : typeof error,
+            membershipId: auth.membershipId,
+            campaignId: auth.campaignId,
+          },
+          "realtime.resync_failed",
+        ),
+      );
     });
+
+    try {
+      // Join the session room before any async database setup. Logout can then
+      // target this socket even while the rest of the connection is pending.
+      await socket.join(sessionRoom(auth.sessionId));
+      if (!(await checkSessionActive(db, auth.sessionId)) || !socket.connected)
+        throw new Error("AUTH_REQUIRED");
+      await socket.join(campaignRoom(auth.campaignId));
+      await socket.join(memberRoom(auth.membershipId));
+      if (auth.role === "GM") await socket.join(gmRoom(auth.campaignId));
+      // On a fresh transport viewedSceneId is unset, preserving the historical
+      // active-scene initial snapshot. A reconnect intent captured by the early
+      // listener runs after this gate and follows with its requested canvas.
+      const snapshot = await createSnapshot(db, auth, viewedCanvasSceneIds());
+      if (!(await checkSessionActive(db, auth.sessionId)) || !socket.connected)
+        throw new Error("AUTH_REQUIRED");
+      socket.emit("game:snapshot", snapshot);
+      // Only a fully initialized replacement socket may cancel the old
+      // transport's offline transition. A failed reconnect must leave that
+      // timer intact so the membership eventually becomes offline.
+      const pendingKey = presenceKey(
+        auth.campaignId,
+        auth.membershipId,
+      );
+      const pending = pendingPresence.get(pendingKey);
+      if (pending) {
+        clearTimeout(pending);
+        pendingPresence.delete(pendingKey);
+      }
+      settleConnectionReady(true);
+    } catch (error) {
+      settleConnectionReady(false);
+      log.warn(
+        {
+          error,
+          membershipId: auth.membershipId,
+          campaignId: auth.campaignId,
+          socketId: socket.id,
+        },
+        "realtime.connection_setup_failed",
+      );
+      socket.disconnect(true);
+      return;
+    }
+    // Presence is ancillary to command handling. Never let a failed matrix
+    // refresh abort registration of the authoritative mutation listeners.
+    void emitPresence(io, db, auth.campaignId).catch((error) =>
+      log.warn(
+        { error, campaignId: auth.campaignId },
+        "realtime.presence_emit_failed",
+      ),
+    );
+    log.info(
+      {
+        membershipId: auth.membershipId,
+        campaignId: auth.campaignId,
+        socketId: socket.id,
+      },
+      "realtime.connected",
+    );
 
     socket.on("token:moving", async (input) => {
       const parsed = moveTokenSchema.safeParse(input);

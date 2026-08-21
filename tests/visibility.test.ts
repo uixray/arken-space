@@ -430,9 +430,12 @@ describe("снапшоты двух игроков не смешиваются",
 describe("туман и рисунки в снапшоте", () => {
   const activeFog = "00000000-0000-4000-8000-000000000101";
   const closedFog = "00000000-0000-4000-8000-000000000102";
+  const activeDrawing = "00000000-0000-4000-8000-000000000201";
+  const closedDrawing = "00000000-0000-4000-8000-000000000202";
 
   beforeEach(async () => {
     await database.exec(`
+      delete from drawings;
       delete from fog_reveals;
       insert into fog_reveals (id, scene_id, x, y, width, height, geometry, bbox, sequence) values
         ('${activeFog}', '${ids.activeScene}', 0, 0, 10, 10,
@@ -441,16 +444,22 @@ describe("туман и рисунки в снапшоте", () => {
         ('${closedFog}', '${ids.closedScene}', 0, 0, 10, 10,
          '{"type":"RECT","x":0,"y":0,"width":10,"height":10}',
          '{"x":0,"y":0,"width":10,"height":10}', 2);
+      insert into drawings (id, scene_id, author_membership_id, points) values
+        ('${activeDrawing}', '${ids.activeScene}', '${ids.gm}', '[0,0,10,10]'),
+        ('${closedDrawing}', '${ids.closedScene}', '${ids.gm}', '[20,20,30,30]');
     `);
   });
 
-  it("игроку приезжает туман только активной сцены", async () => {
+  it("игроку приезжают туман и рисунки только активной сцены", async () => {
     // Покрытия у тумана в снапшоте не было вовсе, а сужение выборки — ровно то,
     // что делает следующий этап. Без этого теста регрессию поймал бы только
     // Docker-прогон.
     const db = drizzle(database, { schema });
     const snapshot = await snapshotFor(db, ids.player, "PLAYER");
     expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([activeFog]);
+    expect(snapshot.drawings.map((drawing) => drawing.id)).toEqual([
+      activeDrawing,
+    ]);
   });
 
   it("мастеру без просматриваемой сцены — тоже только активная", async () => {
@@ -460,6 +469,9 @@ describe("туман и рисунки в снапшоте", () => {
     const db = drizzle(database, { schema });
     const snapshot = await snapshotFor(db, ids.gm, "GM");
     expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([activeFog]);
+    expect(snapshot.drawings.map((drawing) => drawing.id)).toEqual([
+      activeDrawing,
+    ]);
   });
 
   it("мастеру с просматриваемой сценой — обе", async () => {
@@ -480,9 +492,12 @@ describe("туман и рисунки в снапшоте", () => {
     expect(snapshot.fogReveals.map((fog) => fog.id).sort()).toEqual(
       [activeFog, closedFog].sort(),
     );
+    expect(snapshot.drawings.map((drawing) => drawing.id).sort()).toEqual(
+      [activeDrawing, closedDrawing].sort(),
+    );
   });
 
-  it("не отдаёт игроку туман сцены, которую он якобы рассматривает", async () => {
+  it("не отдаёт игроку канвас сцены, которую он якобы рассматривает", async () => {
     // Список дополнительных сцен приходит с сокета, и принять его от игрока
     // значило бы дать способ запросить туман закрытой сцены.
     //
@@ -503,6 +518,9 @@ describe("туман и рисунки в снапшоте", () => {
       [ids.closedScene],
     );
     expect(snapshot.fogReveals.map((fog) => fog.id)).toEqual([activeFog]);
+    expect(snapshot.drawings.map((drawing) => drawing.id)).toEqual([
+      activeDrawing,
+    ]);
   });
 });
 

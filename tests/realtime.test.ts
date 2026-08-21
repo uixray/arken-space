@@ -15,6 +15,8 @@ import type {
 } from "../packages/contracts/src/index.js";
 import * as schema from "../packages/db/src/schema.js";
 import { registerRealtime } from "../apps/server/src/realtime.js";
+import { sessionIsActive as realSessionIsActive } from "../apps/server/src/auth.js";
+import { buildSnapshot as realBuildSnapshot } from "../apps/server/src/snapshot.js";
 import { hashToken } from "../apps/server/src/security.js";
 
 const ids = {
@@ -24,6 +26,7 @@ const ids = {
   otherPlayer: "10000000-0000-4000-8000-000000000006",
   scene: "10000000-0000-4000-8000-000000000004",
   inactiveScene: "10000000-0000-4000-8000-000000000018",
+  inactiveScene2: "10000000-0000-4000-8000-000000000019",
   token: "10000000-0000-4000-8000-000000000005",
   otherToken: "10000000-0000-4000-8000-000000000007",
   extraOwnedToken: "10000000-0000-4000-8000-000000000008",
@@ -35,6 +38,7 @@ const ids = {
   foreignAudioAsset: "20000000-0000-4000-8000-000000000004",
   foreignCampaign: "20000000-0000-4000-8000-000000000005",
   foreignGm: "20000000-0000-4000-8000-000000000006",
+  foreignScene: "20000000-0000-4000-8000-000000000008",
 };
 
 const sessionToken = "realtime-test-session-token";
@@ -73,6 +77,9 @@ let client: Socket<ServerToClientEvents, ClientToServerEvents>;
 let otherClient: Socket<ServerToClientEvents, ClientToServerEvents>;
 let gmClient: Socket<ServerToClientEvents, ClientToServerEvents>;
 let extraClients: Array<Socket<ServerToClientEvents, ClientToServerEvents>>;
+let sessionCheckOverride: typeof realSessionIsActive | undefined;
+let snapshotOverride: typeof realBuildSnapshot | undefined;
+let realtimeWarnings: Array<{ details: unknown; message?: string }>;
 
 async function migrate(database: PGlite) {
   const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
@@ -116,7 +123,7 @@ function waitForPresence(
   );
 }
 
-function newPlayerClient(token = sessionToken) {
+function newPlayerClient(token = sessionToken, autoConnect = true) {
   const address = httpServer.address();
   if (!address || typeof address === "string")
     throw new Error("TEST_SERVER_ADDRESS");
@@ -125,8 +132,77 @@ function newPlayerClient(token = sessionToken) {
     {
       transports: ["websocket"],
       extraHeaders: { Cookie: `arken_session=${token}` },
+      autoConnect,
     },
   );
+}
+
+type SnapshotPayload = Parameters<ServerToClientEvents["game:snapshot"]>[0];
+
+function waitForSnapshot(
+  socket: typeof client,
+  predicate: (snapshot: SnapshotPayload) => boolean = () => true,
+  timeoutMs = 5_000,
+) {
+  return new Promise<SnapshotPayload>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off("game:snapshot", listener);
+      reject(new Error("SNAPSHOT_TIMEOUT"));
+    }, timeoutMs);
+    const listener: ServerToClientEvents["game:snapshot"] = (snapshot) => {
+      if (!predicate(snapshot)) return;
+      clearTimeout(timeout);
+      socket.off("game:snapshot", listener);
+      resolve(snapshot);
+    };
+    socket.on("game:snapshot", listener);
+  });
+}
+
+function emitRawSceneView(socket: typeof client, view: unknown) {
+  (
+    socket as unknown as {
+      emit(event: "scene:view", payload: unknown): void;
+    }
+  ).emit("scene:view", view);
+}
+
+async function settleSnapshots(socket: typeof client) {
+  const snapshot = waitForSnapshot(socket);
+  socket.emit("game:resync", 0);
+  await snapshot;
+  // If the promise observed a still-pending connection snapshot, give the
+  // explicit resync time to arrive before a silence assertion starts.
+  await new Promise((resolve) => setTimeout(resolve, 40));
+}
+
+async function expectSceneViewSilence(
+  socket: typeof client,
+  view: unknown,
+  waitMs = 100,
+) {
+  let snapshots = 0;
+  let errors = 0;
+  const onSnapshot = () => snapshots++;
+  const onError = () => errors++;
+  socket.on("game:snapshot", onSnapshot);
+  socket.on("server:error", onError);
+  emitRawSceneView(socket, view);
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  socket.off("game:snapshot", onSnapshot);
+  socket.off("server:error", onError);
+  expect({ snapshots, errors }).toEqual({ snapshots: 0, errors: 0 });
+  expect(socket.connected).toBe(true);
+}
+
+async function waitForRealtimeWarning(message: string, timeoutMs = 1_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const warning = realtimeWarnings.find((item) => item.message === message);
+    if (warning) return warning;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`REALTIME_WARNING_TIMEOUT:${message}`);
 }
 
 function move(
@@ -279,6 +355,9 @@ function audioTrackCommand(
 }
 
 beforeEach(async () => {
+  sessionCheckOverride = undefined;
+  snapshotOverride = undefined;
+  realtimeWarnings = [];
   database = new PGlite();
   await migrate(database);
   await database.exec(`
@@ -322,7 +401,20 @@ beforeEach(async () => {
   registerRealtime(
     ioServer,
     db as never,
-    { info() {}, warn() {}, error() {}, debug() {} } as never,
+    {
+      info() {},
+      warn(details: unknown, message?: string) {
+        realtimeWarnings.push({ details, message });
+      },
+      error() {},
+      debug() {},
+    } as never,
+    {
+      sessionIsActive: (...args) =>
+        (sessionCheckOverride ?? realSessionIsActive)(...args),
+      buildSnapshot: (...args) =>
+        (snapshotOverride ?? realBuildSnapshot)(...args),
+    },
   );
   await new Promise<void>((resolve) =>
     httpServer.listen(0, "127.0.0.1", resolve),
@@ -348,11 +440,15 @@ beforeEach(async () => {
       extraHeaders: { Cookie: `arken_session=${player.session}` },
     }),
   );
+  const initialSnapshots = [client, otherClient, gmClient, ...extraClients].map(
+    (socket) => waitForSnapshot(socket),
+  );
   await Promise.all([
     waitForConnection(client),
     waitForConnection(otherClient),
     waitForConnection(gmClient),
     ...extraClients.map(waitForConnection),
+    ...initialSnapshots,
   ]);
 });
 
@@ -366,6 +462,293 @@ afterEach(async () => {
     httpServer.close((error) => (error ? reject(error) : resolve())),
   ).catch(() => undefined);
   await database.close();
+});
+
+describe("scene:view lifecycle", () => {
+  const activeDrawing = "30000000-0000-4000-8000-000000000001";
+  const inactiveDrawing = "30000000-0000-4000-8000-000000000002";
+  const secondInactiveDrawing = "30000000-0000-4000-8000-000000000003";
+  const inactiveFog = "30000000-0000-4000-8000-000000000004";
+  const secondInactiveFog = "30000000-0000-4000-8000-000000000005";
+
+  beforeEach(async () => {
+    await database.exec(`
+      insert into drawings (id, scene_id, author_membership_id, points) values
+        ('${activeDrawing}', '${ids.scene}', '${ids.gm}', '[0,0,10,10]'),
+        ('${inactiveDrawing}', '${ids.inactiveScene}', '${ids.gm}', '[20,20,30,30]');
+      insert into fog_reveals
+        (id, scene_id, x, y, width, height, geometry, bbox)
+      values
+        ('${inactiveFog}', '${ids.inactiveScene}', 0, 0, 10, 10,
+         '{"type":"RECT","x":0,"y":0,"width":10,"height":10}',
+         '{"x":0,"y":0,"width":10,"height":10}');
+    `);
+  });
+
+  it("keeps the initial active canvas, then restores the GM view on resync and reconnect", async () => {
+    const freshGm = newPlayerClient(gmSessionToken, false);
+    try {
+      const initialSnapshot = waitForSnapshot(freshGm);
+      const connected = waitForConnection(freshGm);
+      freshGm.connect();
+      await connected;
+
+      const initial = await initialSnapshot;
+      expect(initial.drawings.map((drawing) => drawing.id)).toContain(
+        activeDrawing,
+      );
+      expect(initial.drawings.map((drawing) => drawing.id)).not.toContain(
+        inactiveDrawing,
+      );
+      expect(initial.fogReveals.map((fog) => fog.id)).not.toContain(
+        inactiveFog,
+      );
+
+      const viewedSnapshot = waitForSnapshot(freshGm, (snapshot) =>
+        snapshot.drawings.some((drawing) => drawing.id === inactiveDrawing),
+      );
+      freshGm.emit("scene:view", { sceneId: ids.inactiveScene });
+      const viewed = await viewedSnapshot;
+      expect(viewed.drawings.map((drawing) => drawing.id)).toEqual(
+        expect.arrayContaining([activeDrawing, inactiveDrawing]),
+      );
+      expect(viewed.fogReveals.map((fog) => fog.id)).toContain(inactiveFog);
+
+      const resyncedSnapshot = waitForSnapshot(freshGm, (snapshot) =>
+        snapshot.drawings.some((drawing) => drawing.id === inactiveDrawing),
+      );
+      freshGm.emit("game:resync", viewed.snapshotVersion);
+      const resynced = await resyncedSnapshot;
+      expect(resynced.fogReveals.map((fog) => fog.id)).toContain(inactiveFog);
+
+      // This is the same lifecycle used by App.tsx: one current-view emit on
+      // every Socket.IO connect, including a transport reconnect where the
+      // server-side socket data starts empty again.
+      const restoreView = () =>
+        freshGm.emit("scene:view", { sceneId: ids.inactiveScene });
+      freshGm.on("connect", restoreView);
+      freshGm.disconnect();
+      const reconnected = waitForConnection(freshGm);
+      const restoredSnapshot = waitForSnapshot(freshGm, (snapshot) =>
+        snapshot.drawings.some((drawing) => drawing.id === inactiveDrawing),
+      );
+      freshGm.connect();
+      await reconnected;
+      const restored = await restoredSnapshot;
+      expect(restored.fogReveals.map((fog) => fog.id)).toContain(inactiveFog);
+      freshGm.off("connect", restoreView);
+    } finally {
+      freshGm.disconnect();
+    }
+  });
+
+  it("rejects malformed, foreign and player view requests without an existence oracle", async () => {
+    await database.exec(`
+      insert into campaigns (id, name)
+      values ('${ids.foreignCampaign}', 'Foreign scene campaign');
+      insert into scenes (id, campaign_id, name, grid)
+      values ('${ids.foreignScene}', '${ids.foreignCampaign}', 'Foreign',
+        '{"enabled":true,"size":64,"offsetX":0,"offsetY":0,"color":"#fff","opacity":0.2}');
+    `);
+    await Promise.all([settleSnapshots(gmClient), settleSnapshots(client)]);
+
+    await expectSceneViewSilence(gmClient, { sceneId: "not-a-uuid" });
+    await expectSceneViewSilence(gmClient, {
+      sceneId: ids.inactiveScene,
+      extra: true,
+    });
+    // An existing foreign UUID and an unknown UUID deliberately have exactly
+    // the same wire outcome: no snapshot, error, acknowledgement or disconnect.
+    await expectSceneViewSilence(gmClient, { sceneId: ids.foreignScene });
+    await expectSceneViewSilence(gmClient, {
+      sceneId: "90000000-0000-4000-8000-000000000099",
+    });
+    await expectSceneViewSilence(client, { sceneId: ids.inactiveScene });
+
+    const gmResync = waitForSnapshot(gmClient);
+    gmClient.emit("game:resync", 0);
+    const gmSnapshot = await gmResync;
+    expect(gmSnapshot.drawings.map((drawing) => drawing.id)).not.toContain(
+      inactiveDrawing,
+    );
+  });
+
+  it("catches post-setup snapshot failures and keeps the last delivered view authoritative", async () => {
+    await settleSnapshots(gmClient);
+    let emittedSnapshots = 0;
+    const countSnapshot = () => emittedSnapshots++;
+    gmClient.on("game:snapshot", countSnapshot);
+
+    const rejectNextSnapshot = () => {
+      let observeAttempt!: () => void;
+      const attempted = new Promise<void>((resolve) => {
+        observeAttempt = resolve;
+      });
+      snapshotOverride = async () => {
+        observeAttempt();
+        throw new Error(`private scene ${ids.inactiveScene}`);
+      };
+      return attempted;
+    };
+
+    const sceneAttempted = rejectNextSnapshot();
+    gmClient.emit("scene:view", { sceneId: ids.inactiveScene });
+    await sceneAttempted;
+    const sceneWarning = await waitForRealtimeWarning(
+      "realtime.scene_view_failed",
+    );
+    snapshotOverride = undefined;
+    expect(emittedSnapshots).toBe(0);
+    expect(JSON.stringify(sceneWarning.details)).not.toContain(
+      ids.inactiveScene,
+    );
+    expect(gmClient.connected).toBe(true);
+
+    // The failed view was rolled back to the broadcast scene. A healthy
+    // resync must not inherit its inactive canvas.
+    gmClient.off("game:snapshot", countSnapshot);
+    const rolledBackSnapshot = waitForSnapshot(gmClient);
+    gmClient.emit("game:resync", 0);
+    const rolledBack = await rolledBackSnapshot;
+    expect(rolledBack.drawings.map((drawing) => drawing.id)).not.toContain(
+      inactiveDrawing,
+    );
+
+    const viewedSnapshot = waitForSnapshot(gmClient, (snapshot) =>
+      snapshot.drawings.some((drawing) => drawing.id === inactiveDrawing),
+    );
+    gmClient.emit("scene:view", { sceneId: ids.inactiveScene });
+    await viewedSnapshot;
+
+    realtimeWarnings = [];
+    emittedSnapshots = 0;
+    gmClient.on("game:snapshot", countSnapshot);
+    const resyncAttempted = rejectNextSnapshot();
+    gmClient.emit("game:resync", 0);
+    await resyncAttempted;
+    const resyncWarning = await waitForRealtimeWarning(
+      "realtime.resync_failed",
+    );
+    snapshotOverride = undefined;
+    gmClient.off("game:snapshot", countSnapshot);
+    expect(emittedSnapshots).toBe(0);
+    expect(JSON.stringify(resyncWarning.details)).not.toContain(
+      ids.inactiveScene,
+    );
+    expect(gmClient.connected).toBe(true);
+
+    // Resync failure does not mutate viewedSceneId: the next healthy resync
+    // still carries the previously delivered inactive canvas.
+    const recoveredSnapshot = waitForSnapshot(gmClient, (snapshot) =>
+      snapshot.drawings.some((drawing) => drawing.id === inactiveDrawing),
+    );
+    gmClient.emit("game:resync", 0);
+    await recoveredSnapshot;
+  });
+
+  it("uses the last rapid scene:view intent and never emits the stale canvas", async () => {
+    await database.exec(`
+      insert into scenes (id, campaign_id, name, grid)
+      values ('${ids.inactiveScene2}', '${ids.campaign}', 'Second GM draft',
+        '{"enabled":true,"size":64,"offsetX":0,"offsetY":0,"color":"#fff","opacity":0.2}');
+      insert into drawings (id, scene_id, author_membership_id, points)
+      values ('${secondInactiveDrawing}', '${ids.inactiveScene2}', '${ids.gm}', '[40,40,50,50]');
+      insert into fog_reveals
+        (id, scene_id, x, y, width, height, geometry, bbox)
+      values
+        ('${secondInactiveFog}', '${ids.inactiveScene2}', 0, 0, 10, 10,
+         '{"type":"RECT","x":0,"y":0,"width":10,"height":10}',
+         '{"x":0,"y":0,"width":10,"height":10}');
+    `);
+    await settleSnapshots(gmClient);
+
+    let releaseFirstSessionCheck!: () => void;
+    const firstSessionCheck = new Promise<void>((resolve) => {
+      releaseFirstSessionCheck = resolve;
+    });
+    let observeSecondSessionCheck!: () => void;
+    const secondSessionCheck = new Promise<void>((resolve) => {
+      observeSecondSessionCheck = resolve;
+    });
+    let sessionChecks = 0;
+    sessionCheckOverride = async (...args) => {
+      const order = ++sessionChecks;
+      if (order === 1) await firstSessionCheck;
+      if (order === 2) observeSecondSessionCheck();
+      return realSessionIsActive(...args);
+    };
+
+    const observed: SnapshotPayload[] = [];
+    const record: ServerToClientEvents["game:snapshot"] = (snapshot) =>
+      observed.push(snapshot);
+    gmClient.on("game:snapshot", record);
+    const finalSnapshot = waitForSnapshot(gmClient, (snapshot) =>
+      snapshot.drawings.some((drawing) => drawing.id === secondInactiveDrawing),
+    );
+    gmClient.emit("scene:view", { sceneId: ids.inactiveScene });
+    gmClient.emit("scene:view", { sceneId: ids.inactiveScene2 });
+
+    let final: SnapshotPayload;
+    try {
+      // The first packet is now blocked inside async session middleware while
+      // the later packet completes. Intent order must still follow ingress,
+      // not middleware completion order.
+      await secondSessionCheck;
+      final = await finalSnapshot;
+    } finally {
+      releaseFirstSessionCheck();
+      sessionCheckOverride = undefined;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    gmClient.off("game:snapshot", record);
+    expect(final.drawings.map((drawing) => drawing.id)).toContain(
+      secondInactiveDrawing,
+    );
+    expect(final.fogReveals.map((fog) => fog.id)).toContain(secondInactiveFog);
+    expect(final.drawings.map((drawing) => drawing.id)).not.toContain(
+      inactiveDrawing,
+    );
+    expect(
+      observed.some((snapshot) =>
+        snapshot.drawings.some((drawing) => drawing.id === inactiveDrawing),
+      ),
+    ).toBe(false);
+  });
+
+  it("fails closed and releases queued scene intents when connection setup rejects", async () => {
+    await settleSnapshots(gmClient);
+    gmClient.disconnect();
+
+    let snapshotAttempts = 0;
+    snapshotOverride = async () => {
+      snapshotAttempts++;
+      throw new Error("TEST_INITIAL_SNAPSHOT_FAILURE");
+    };
+    let snapshots = 0;
+    const onSnapshot = () => snapshots++;
+    gmClient.on("game:snapshot", onSnapshot);
+    const disconnected = new Promise<string>((resolve) =>
+      gmClient.once("disconnect", resolve),
+    );
+    const connected = waitForConnection(gmClient);
+    gmClient.once("connect", () =>
+      gmClient.emit("scene:view", { sceneId: ids.inactiveScene }),
+    );
+
+    try {
+      gmClient.connect();
+      await connected;
+      await disconnected;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } finally {
+      snapshotOverride = undefined;
+      gmClient.off("game:snapshot", onSnapshot);
+    }
+
+    expect(snapshotAttempts).toBe(1);
+    expect(snapshots).toBe(0);
+    expect(gmClient.connected).toBe(false);
+  });
 });
 
 describe("GM presence", () => {

@@ -126,6 +126,35 @@ type WorkspaceDestination =
   | "world-encyclopedia"
   | "world-codex";
 
+type SceneViewEmission = {
+  socket: GameSocket;
+  connectionId: string | null;
+  sceneId: string | null;
+};
+
+/**
+ * A socket can already be connected by the time React commits it to state.
+ * Both the Socket.IO connect callback and the viewed-scene effect therefore
+ * use this gate: exactly one of them emits a given value on a transport, while
+ * a new socket id (or an explicit reset on disconnect) restores it again.
+ */
+function emitSceneViewIfNeeded(
+  socket: GameSocket,
+  lastEmission: { current: SceneViewEmission | null },
+  sceneId: string | null,
+) {
+  const connectionId = socket.id ?? null;
+  const previous = lastEmission.current;
+  if (
+    previous?.socket === socket &&
+    previous.connectionId === connectionId &&
+    previous.sceneId === sceneId
+  )
+    return;
+  lastEmission.current = { socket, connectionId, sceneId };
+  socket.emit("scene:view", { sceneId });
+}
+
 function CanvasHistoryControls({
   sceneId,
   disabled,
@@ -377,6 +406,11 @@ export function App() {
   // A GM may inspect and prepare another scene without moving the players.
   // The server-side `active` flag remains the broadcast scene.
   const [viewedSceneId, setViewedSceneId] = useState<string | null>(null);
+  // Socket.IO keeps the same client object across transport reconnects, so an
+  // effect depending on `socket` alone does not rerun. The connect handler
+  // reads this ref to restore the current GM canvas on every new transport.
+  const viewedSceneIdRef = useLatestRef(viewedSceneId);
+  const lastSceneViewEmissionRef = useRef<SceneViewEmission | null>(null);
   const [recentlyPublishedSceneId, setRecentlyPublishedSceneId] = useState<
     string | null
   >(null);
@@ -731,8 +765,17 @@ export function App() {
     if (!campaignId || authRequired) return;
     const next = createGameSocket();
     setSocket(next);
-    next.on("connect", () => setConnection("ONLINE"));
+    next.on("connect", () => {
+      setConnection("ONLINE");
+      emitSceneViewIfNeeded(
+        next,
+        lastSceneViewEmissionRef,
+        viewedSceneIdRef.current,
+      );
+    });
     next.on("disconnect", (reason) => {
+      if (lastSceneViewEmissionRef.current?.socket === next)
+        lastSceneViewEmissionRef.current = null;
       setConnection("RECONNECTING");
       reportClientEvent({
         level: "warn",
@@ -915,10 +958,18 @@ export function App() {
     next.on("server:error", (problem) => setError(problem.message));
     return () => {
       next.disconnect();
+      if (lastSceneViewEmissionRef.current?.socket === next)
+        lastSceneViewEmissionRef.current = null;
       setSocket(null);
       setCursors([]);
     };
-  }, [authRequired, campaignId, loadStoryPosts, ownMembershipIdRef]);
+  }, [
+    authRequired,
+    campaignId,
+    loadStoryPosts,
+    ownMembershipIdRef,
+    viewedSceneIdRef,
+  ]);
 
   /*
    * UIX-398 step A0. These four back 45 call sites between them and used to
@@ -1317,7 +1368,11 @@ export function App() {
    * осознанное действие мастера.
    */
   useEffect(() => {
-    socket?.emit("scene:view", { sceneId: viewedSceneId });
+    // Do not buffer this event while offline: the connect handler above emits
+    // the latest value once per transport and avoids replaying an obsolete
+    // intermediate selection after a reconnect.
+    if (socket?.connected)
+      emitSceneViewIfNeeded(socket, lastSceneViewEmissionRef, viewedSceneId);
   }, [socket, viewedSceneId]);
 
   const activeSceneRef = useLatestRef(activeSceneValue);

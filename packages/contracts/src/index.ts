@@ -941,6 +941,18 @@ export const activateSceneSchema = z.object({
   sceneId: z.string().uuid(),
 });
 
+/**
+ * UIX-408: ephemeral GM canvas selection sent over Socket.IO.
+ *
+ * This is deliberately strict even though the event has no acknowledgement:
+ * accepting an object with a misspelled or injected field would turn malformed
+ * input into a valid scene request at the privacy boundary. `null` means the
+ * GM returned to the campaign's broadcast scene.
+ */
+export const sceneViewSchema = z
+  .object({ sceneId: z.string().uuid().nullable() })
+  .strict();
+
 export const createTokenSchema = z.object({
   actionId: actionIdSchema,
   definitionId: z.string().uuid().optional(),
@@ -2706,7 +2718,7 @@ export interface ClientToServerEvents {
    * `null` — вернулся к транслируемой сцене. Событие игроку бессмысленно: у
    * него видима ровно активная сцена, и сервер его от игрока не принимает.
    */
-  "scene:view": (view: { sceneId: string | null }) => void;
+  "scene:view": (view: z.infer<typeof sceneViewSchema>) => void;
   "game:resync": (knownSequence?: number) => void;
 }
 
