@@ -34,11 +34,13 @@ import {
   unreadCountForStream,
 } from "./chat-state";
 import {
-  activityTableReadTarget,
+  activityReadTargets,
   allowedSidebarFeed,
   chatFeedOrder,
   feedForChatStream,
 } from "./sidebar-feed";
+import { ACTIVITY_FILTERS } from "./activity-filter-menu";
+import type { ActivityFilter } from "./activity-roll-controls";
 import { CharacterWorkspace } from "./sidebar/CharacterWorkspace";
 import {
   ActivityPanel,
@@ -197,6 +199,9 @@ export function Sidebar(props: Props) {
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const readSequenceRef = useRef(new Map<string, number>());
   const [selectedFeed, setActiveFeed] = useState<SidebarFeed>("ACTIVITY");
+  const [activityFilters, setActivityFilters] = useState<Set<ActivityFilter>>(
+    () => new Set(ACTIVITY_FILTERS),
+  );
   // UIX-467: «Сюжет» скрыт у игрока, поэтому доступность ленты проверяется на
   // чтении, а не в каждой из точек, где её выставляют. Переход к сообщению
   // сюжета и восстановление прежней вкладки одинаково приводят игрока к
@@ -255,15 +260,19 @@ export function Sidebar(props: Props) {
   ]);
   useEffect(() => {
     if (directMode || activeFeed !== "ACTIVITY") return;
-    const target = activityTableReadTarget(props.snapshot);
-    if (!target) return;
-    if ((readSequenceRef.current.get(target.threadId) ?? 0) >= target.sequence)
-      return;
-    readSequenceRef.current.set(target.threadId, target.sequence);
-    void onMarkChatRead(target.threadId, target.sequence).catch(() => {
-      readSequenceRef.current.delete(target.threadId);
-    });
-  }, [activeFeed, directMode, onMarkChatRead, props.snapshot]);
+    for (const target of activityReadTargets(props.snapshot, activityFilters)) {
+      if (
+        (readSequenceRef.current.get(target.threadId) ?? 0) >= target.sequence
+      )
+        continue;
+      readSequenceRef.current.set(target.threadId, target.sequence);
+      void onMarkChatRead(target.threadId, target.sequence).catch(() => {
+        // A newer request may already own the ref when an older one fails.
+        if (readSequenceRef.current.get(target.threadId) === target.sequence)
+          readSequenceRef.current.delete(target.threadId);
+      });
+    }
+  }, [activeFeed, activityFilters, directMode, onMarkChatRead, props.snapshot]);
   useEffect(() => {
     if (!requestedChatMessageId) return;
     const requestedStream = streamForMessage(
@@ -394,6 +403,8 @@ export function Sidebar(props: Props) {
           <ActivityPanel
             snapshot={props.snapshot}
             storyPosts={props.storyPosts}
+            activityFilters={activityFilters}
+            onActivityFiltersChange={setActivityFilters}
             onChat={chatActions.onChat}
             onSticker={chatActions.onSticker}
             onRoll={props.onRoll}

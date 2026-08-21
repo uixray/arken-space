@@ -228,6 +228,8 @@ export function ChatMessageBody({
 export function ActivityPanel({
   snapshot,
   storyPosts,
+  activityFilters,
+  onActivityFiltersChange,
   onChat,
   onSticker,
   onRoll,
@@ -242,6 +244,8 @@ export function ActivityPanel({
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
+  activityFilters: ReadonlySet<ActivityFilter>;
+  onActivityFiltersChange: (filters: Set<ActivityFilter>) => void;
   onChat: ChatActions["onChat"];
   onSticker: ChatActions["onSticker"];
   onRoll: Props["onRoll"];
@@ -288,9 +292,6 @@ export function ActivityPanel({
     () =>
       window.localStorage.getItem(physicalDiceStorageKey(snapshot.me.id)) ===
       "true",
-  );
-  const [activityFilters, setActivityFilters] = useState<Set<ActivityFilter>>(
-    () => new Set(ACTIVITY_FILTERS),
   );
   const filtersRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(filtersRef);
@@ -639,14 +640,12 @@ export function ActivityPanel({
                 <FormInput
                   type="checkbox"
                   checked={activityFilters.has(filter)}
-                  onChange={(event) =>
-                    setActivityFilters((current) => {
-                      const next = new Set(current);
-                      if (event.target.checked) next.add(filter);
-                      else next.delete(filter);
-                      return next;
-                    })
-                  }
+                  onChange={(event) => {
+                    const next = new Set(activityFilters);
+                    if (event.target.checked) next.add(filter);
+                    else next.delete(filter);
+                    onActivityFiltersChange(next);
+                  }}
                 />
                 {ACTIVITY_FILTER_LABEL[filter]}
               </label>

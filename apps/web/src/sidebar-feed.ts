@@ -1,4 +1,5 @@
 import type { ChatStream, GameSnapshot } from "@arken/contracts";
+import type { ActivityFilter } from "./activity-roll-controls";
 import {
   CHAT_STREAM_ORDER,
   messagesForStream,
@@ -45,17 +46,42 @@ export function allowedSidebarFeed(
   return chatFeedOrder(isGm).includes(feed) ? feed : "ACTIVITY";
 }
 
-export function activityTableReadTarget(snapshot: GameSnapshot): {
+export interface ActivityReadTarget {
   threadId: string;
   sequence: number;
-} | null {
-  const thread = threadForStream(snapshot, "TABLE");
-  const latest = messagesForStream(
-    snapshot.messages,
-    "TABLE",
-    snapshot.chatThreads,
-  ).at(-1);
-  return thread && latest
-    ? { threadId: thread.id, sequence: latest.sequence }
-    : null;
+}
+
+const ACTIVITY_FILTER_BY_STREAM: Record<ChatStream, ActivityFilter> = {
+  TABLE: "REFERENCE",
+  STORY: "STORY",
+  ROLLS: "ROLLS",
+};
+
+const ALL_ACTIVITY_FILTERS: ReadonlySet<ActivityFilter> = new Set([
+  "REFERENCE",
+  "STORY",
+  "ROLLS",
+]);
+
+/**
+ * UIX-274/467: «События» renders every public stream in one timeline, so
+ * viewing it must reconcile every stream cursor. The old TABLE-only target
+ * left STORY (and ROLLS) visibly read while their unread state stayed stale.
+ */
+export function activityReadTargets(
+  snapshot: GameSnapshot,
+  enabledFilters: ReadonlySet<ActivityFilter> = ALL_ACTIVITY_FILTERS,
+): ActivityReadTarget[] {
+  return CHAT_STREAM_ORDER.flatMap((stream) => {
+    if (!enabledFilters.has(ACTIVITY_FILTER_BY_STREAM[stream])) return [];
+    const thread = threadForStream(snapshot, stream);
+    const latest = messagesForStream(
+      snapshot.messages,
+      stream,
+      snapshot.chatThreads,
+    ).at(-1);
+    return thread && latest
+      ? [{ threadId: thread.id, sequence: latest.sequence }]
+      : [];
+  });
 }
