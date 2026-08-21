@@ -2294,7 +2294,7 @@ test("wallet refreshes and safely reapplies a delta after a stale revision", asy
   await expect(goldRow.locator('input[type="number"]')).toHaveValue("11");
 });
 
-test("player fog keeps covered foreign tokens hidden while owned tokens remain visible", async ({
+test("player fog clips partial foreign tokens while controlled tokens remain visible", async ({
   page,
 }) => {
   const playerSnapshot = structuredClone(snapshot);
@@ -2312,8 +2312,8 @@ test("player fog keeps covered foreign tokens hidden while owned tokens remain v
       id: "45f46186-2ebc-4cf8-bce7-870097305a6b",
       ownerMembershipId: playerId,
       controllerMembershipIds: [playerId],
-      name: "Owned token",
-      x: 256,
+      name: "Controlled token",
+      x: 128,
       y: 128,
     },
     {
@@ -2321,18 +2321,45 @@ test("player fog keeps covered foreign tokens hidden while owned tokens remain v
       id: "55f46186-2ebc-4cf8-bce7-870097305a6b",
       ownerMembershipId: "a53f4618-2ebc-4cf8-bce7-870097305a6b",
       controllerMembershipIds: ["a53f4618-2ebc-4cf8-bce7-870097305a6b"],
+      name: "Partially revealed foreign token",
+      x: 256,
+      y: 128,
+    },
+    {
+      ...snapshot.tokens[0]!,
+      id: "65f46186-2ebc-4cf8-bce7-870097305a6b",
+      ownerMembershipId: "a53f4618-2ebc-4cf8-bce7-870097305a6b",
+      controllerMembershipIds: ["a53f4618-2ebc-4cf8-bce7-870097305a6b"],
       name: "Covered foreign token",
       x: 384,
       y: 128,
     },
   ];
-  playerSnapshot.fogReveals = [];
+  playerSnapshot.fogReveals = [
+    {
+      ...snapshot.fogReveals[0]!,
+      id: "75f46186-2ebc-4cf8-bce7-870097305a6b",
+      x: 256,
+      y: 128,
+      width: 32,
+      height: 64,
+    },
+    {
+      ...snapshot.fogReveals[0]!,
+      id: "85f46186-2ebc-4cf8-bce7-870097305a6b",
+      x: 640,
+      y: 128,
+      width: 32,
+      height: 64,
+    },
+  ];
+  let servedSnapshot = playerSnapshot;
 
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(playerSnapshot),
+      body: JSON.stringify(servedSnapshot),
     }),
   );
   await page.goto("/");
@@ -2340,24 +2367,33 @@ test("player fog keeps covered foreign tokens hidden while owned tokens remain v
   const map = page.locator(".map-viewport");
   const mapBox = await map.boundingBox();
   expect(mapBox).not.toBeNull();
-  const captureCell = (x: number) =>
+  const captureRegion = (x: number, width: number) =>
     page.screenshot({
       animations: "disabled",
-      clip: { x: mapBox!.x + x, y: mapBox!.y + 128, width: 64, height: 64 },
+      clip: { x: mapBox!.x + x, y: mapBox!.y + 128, width, height: 64 },
     });
-  const ownedCell = await captureCell(256);
-  const coveredCell = await captureCell(384);
-  // The empty probe is two grid cells away, so it has the same grid phase as
-  // the covered token. Opaque fog must make those captures identical, while a
-  // controlled token remains rendered for its player even without a reveal.
-  const emptyCell = await captureCell(512);
-  expect(ownedCell.equals(emptyCell)).toBe(false);
+  const controlledCell = await captureRegion(128, 64);
+  const revealedHalf = await captureRegion(256, 32);
+  const coveredHalf = await captureRegion(288, 32);
+  const coveredCell = await captureRegion(384, 64);
+  // The probes retain the same grid phase and fog state as the corresponding
+  // token halves. The revealed half must differ from empty revealed map, while
+  // the covered half must be pixel-identical to empty opaque fog. Together
+  // these comparisons prove that the partial token is rendered below fog.
+  const emptyRevealedHalf = await captureRegion(640, 32);
+  const emptyLeftPhase = await captureRegion(512, 32);
+  const emptyRightPhase = await captureRegion(544, 32);
+  const emptyCell = await captureRegion(512, 64);
+  expect(emptyRevealedHalf.equals(emptyLeftPhase)).toBe(false);
+  expect(revealedHalf.equals(emptyRevealedHalf)).toBe(false);
+  expect(coveredHalf.equals(emptyRightPhase)).toBe(true);
+  expect(controlledCell.equals(emptyCell)).toBe(false);
   expect(coveredCell.equals(emptyCell)).toBe(true);
 
   await map.getByRole("button", { name: "Объекты карты" }).click();
   const objectList = page.getByRole("region", { name: "Объекты карты" });
   await expect(
-    objectList.getByRole("button", { name: "Owned token", exact: true }),
+    objectList.getByRole("button", { name: "Controlled token", exact: true }),
   ).toBeVisible();
   await expect(
     objectList.getByRole("button", {
@@ -2365,6 +2401,37 @@ test("player fog keeps covered foreign tokens hidden while owned tokens remain v
       exact: true,
     }),
   ).toHaveCount(0);
+
+  // GM visibility stays unchanged: a token hidden from the player remains
+  // visible to the GM. Reuse the same fixture to isolate the role boundary.
+  servedSnapshot = {
+    ...playerSnapshot,
+    me: snapshot.me,
+    members: [snapshot.me],
+  };
+  await page.reload();
+  const gmMap = page.locator(".map-viewport");
+  const gmMapBox = await gmMap.boundingBox();
+  expect(gmMapBox).not.toBeNull();
+  const gmCoveredCell = await page.screenshot({
+    animations: "disabled",
+    clip: {
+      x: gmMapBox!.x + 384,
+      y: gmMapBox!.y + 128,
+      width: 64,
+      height: 64,
+    },
+  });
+  const gmEmptyCell = await page.screenshot({
+    animations: "disabled",
+    clip: {
+      x: gmMapBox!.x + 512,
+      y: gmMapBox!.y + 128,
+      width: 64,
+      height: 64,
+    },
+  });
+  expect(gmCoveredCell.equals(gmEmptyCell)).toBe(false);
 });
 
 test("map keyboard command core is scoped, observable, and accessible", async ({
