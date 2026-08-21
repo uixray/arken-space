@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -407,6 +408,48 @@ export function App() {
   // UIX-475: свёрнута ли панель инструментов до значков. Читается по членству,
   // как и прочие настройки панели, — после того, как снапшот назовёт участника.
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  /**
+   * UIX-470/475: палитра рисования встаёт правее панели инструментов.
+   *
+   * Раньше её отступ был вписан числом под панель из одних значков. Подписи
+   * сделали панель втрое шире, и палитра уехала под неё — незаметно для тестов,
+   * потому что видимой она осталась. Ширину теперь сообщает сама панель: она
+   * меняется и от подписей, и от сворачивания, и от длины слов, так что любая
+   * константа здесь снова разойдётся с разметкой.
+   */
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  // Ширину панели держим в переменной на её родителе: палитра — соседний
+  // абсолютный блок в другом компоненте, и общего потока, который расставил бы
+  // их сам, между ними нет.
+  useLayoutEffect(() => {
+    const toolbar = toolbarRef.current;
+    const host = toolbar?.parentElement;
+    if (!toolbar || !host) return;
+    const publish = () => {
+      host.style.setProperty(
+        "--map-toolbar-width",
+        `${Math.round(toolbar.getBoundingClientRect().width)}px`,
+      );
+    };
+    publish();
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(publish);
+      observer.observe(toolbar);
+      return () => {
+        observer.disconnect();
+        host.style.removeProperty("--map-toolbar-width");
+      };
+    }
+
+    // Старые WebView не знают ResizeObserver. Там ширина всё равно меняется
+    // прежде всего при ресайзе окна; начальное значение уже опубликовано выше.
+    window.addEventListener("resize", publish);
+    return () => {
+      window.removeEventListener("resize", publish);
+      host.style.removeProperty("--map-toolbar-width");
+    };
+  }, [toolbarCollapsed, snapshot?.me.role]);
+
   const [previewSnapshot, setPreviewSnapshot] = useState<GameSnapshot | null>(
     null,
   );
@@ -1834,6 +1877,7 @@ export function App() {
             }
           >
             <div
+              ref={toolbarRef}
               className={`map-toolbar${toolbarCollapsed ? " is-collapsed" : ""}`}
               role="toolbar"
               aria-label="Инструменты карты"

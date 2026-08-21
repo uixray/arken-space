@@ -76,6 +76,7 @@ import {
 } from "./cursor-broadcast";
 import { cursorColorForMembership } from "./cursor-color";
 import { mapViewportAriaKeyShortcuts } from "./map-tool-shortcuts";
+import { resolveMapEscapeIntent } from "./map-escape";
 
 function shouldCancelCanvasEdit(
   event: Pick<KeyboardEvent, "key" | "isComposing" | "target">,
@@ -194,6 +195,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     props;
   const containerRef = useRef<HTMLDivElement>(null);
   const objectListRef = useRef<HTMLDivElement>(null);
+  const objectListTriggerRef = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [interaction, dispatchInteraction] = useReducer(
     mapInteractionReducer,
@@ -930,7 +932,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     )
       return;
     const step = 48;
-    if (event.key === "Escape") {
+    const escapeIntent = resolveMapEscapeIntent({
+      key: event.key,
+      objectListOpen: interaction.objectListOpen,
+    });
+    if (escapeIntent === "close-object-list") {
+      // The list is the top-most map layer. Let the reducer close only that
+      // layer; clearing the renderer's parallel selection arrays here would
+      // make the first Escape skip straight through to the selected object.
+      dispatchInteraction({ type: "escape" });
+    } else if (escapeIntent === "clear-map-state") {
       dispatchInteraction({ type: "escape" });
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
@@ -2118,9 +2129,23 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       onContextMenu={(event) => event.preventDefault()}
     >
       <button
+        ref={objectListTriggerRef}
         type="button"
         className="map-object-list-trigger"
+        aria-expanded={interaction.objectListOpen}
         onClick={() => dispatchInteraction({ type: "open-object-list" })}
+        onKeyDown={(event) => {
+          if (
+            resolveMapEscapeIntent({
+              key: event.key,
+              objectListOpen: interaction.objectListOpen,
+            }) !== "close-object-list"
+          )
+            return;
+          dispatchInteraction({ type: "close-object-list" });
+          event.preventDefault();
+          event.stopPropagation();
+        }}
       >
         Объекты карты
       </button>
@@ -2131,6 +2156,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           role="region"
           aria-label={"Объекты карты"}
           onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            if (
+              resolveMapEscapeIntent({
+                key: event.key,
+                objectListOpen: true,
+              }) !== "close-object-list"
+            )
+              return;
+            dispatchInteraction({ type: "close-object-list" });
+            event.preventDefault();
+            event.stopPropagation();
+            objectListTriggerRef.current?.focus();
+          }}
         >
           <ul className="map-object-list">
             {selectableObjects.tokens.map((token) => {

@@ -596,6 +596,8 @@ code {
   position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+  container-name: map-shell;
+  container-type: inline-size;
   min-width: 0;
   min-height: 0;
   background: #11110f;
@@ -789,9 +791,12 @@ code {
   position: absolute;
   z-index: 25;
   top: 8px;
-  left: 56px;
+  /* UIX-470: правее панели инструментов. Ширину панель сообщает сама —
+     с подписями она втрое шире, чем была при жёстких 56px. */
+  left: calc(8px + var(--map-toolbar-width, 48px) + 8px);
   width: max-content;
-  max-width: calc(100% - 16px);
+  max-width: calc(100% - var(--map-toolbar-width, 48px) - 32px);
+  overflow-x: auto;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -799,6 +804,17 @@ code {
   box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
   color: var(--muted);
   pointer-events: auto;
+}
+
+/* Если справа от развёрнутой панели уже не остаётся рабочей ширины, палитра
+   переезжает вниз карты. Container query смотрит именно на карту, а не на всё
+   окно (часть ширины может занимать изменяемый сайдбар). */
+@container map-shell (max-width: 440px) {
+  .drawing-color-panel {
+    inset: auto 8px 8px auto;
+    width: min(240px, calc(100% - 16px));
+    max-width: calc(100% - 16px);
+  }
 }
 .drawing-color-controls {
   display: grid;
