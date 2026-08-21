@@ -345,6 +345,178 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
   await expect(page.locator(".account-menu__content .g-button")).toHaveCount(1);
 });
 
+test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
+  page,
+}) => {
+  let activeSnapshot = structuredClone(snapshot);
+  activeSnapshot.scenes = [];
+  activeSnapshot.tokens = [];
+  activeSnapshot.fogReveals = [];
+  activeSnapshot.encounters = [];
+
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(activeSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.setViewportSize({ width: 1343, height: 945 });
+  await page.goto("/");
+
+  const toolbar = page.getByRole("toolbar", { name: "Инструменты карты" });
+  const tool = (id: string) => toolbar.locator(`[data-tool="${id}"]`);
+  const pseudoContent = (control: Locator) =>
+    control.evaluate((element) =>
+      getComputedStyle(element, "::before").content.replace(
+        /^(?:"(.*)"|'(.*)')$/,
+        "$1$2",
+      ),
+    );
+
+  await expect(toolbar).toBeVisible();
+  await expect(toolbar).not.toHaveClass(/is-collapsed/);
+
+  const labelledTools = [
+    ["FOG_BRUSH", "Открыть туман кистью", "Кисть"],
+    ["COVER_BRUSH", "Закрыть туман кистью", "Кисть закр."],
+    ["FOG_POLYGON", "Открыть туман полигоном", "Полигон"],
+    ["COVER_POLYGON", "Закрыть туман полигоном", "Полигон закр."],
+  ] as const;
+  for (const [id, accessibleName, visibleLabel] of labelledTools) {
+    const control = tool(id);
+    await expect(control).toHaveAttribute("aria-label", accessibleName);
+    await expect(control).toHaveAttribute("title", /\S/);
+    await expect(control).toHaveText(visibleLabel);
+    expect(
+      Number.parseFloat(
+        await control.evaluate((item) => getComputedStyle(item).fontSize),
+      ),
+    ).toBeGreaterThan(0);
+  }
+
+  const distinctGlyphs = await Promise.all(
+    labelledTools.map(([id]) => pseudoContent(tool(id))),
+  );
+  expect(distinctGlyphs.every((glyph) => glyph.trim().length > 0)).toBe(true);
+  expect(new Set(distinctGlyphs).size).toBe(distinctGlyphs.length);
+
+  const encounterStart = tool("ENCOUNTER_START");
+  await expect(encounterStart).toHaveAttribute("aria-label", "Начать бой");
+  await expect(encounterStart).toHaveAttribute(
+    "title",
+    "Начать бой из области сцены или связанной локации",
+  );
+  await expect(encounterStart).toBeDisabled();
+
+  await tool("COVER").focus();
+  await page.keyboard.press("Tab");
+  const openBrush = tool("FOG_BRUSH");
+  await expect(openBrush).toBeFocused();
+  expect(
+    await openBrush.evaluate((element) => element.matches(":focus-visible")),
+  ).toBe(true);
+  const focusRing = await openBrush.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { style: style.outlineStyle, width: style.outlineWidth };
+  });
+  expect(focusRing.style).not.toBe("none");
+  expect(Number.parseFloat(focusRing.width)).toBeGreaterThan(0);
+  await page.keyboard.press("Enter");
+  await expect(openBrush).toHaveAttribute("aria-pressed", "true");
+  await expect(tool("COVER_BRUSH")).toHaveAttribute("aria-pressed", "false");
+
+  // Native disabled controls must not become the keyboard stop between Ping
+  // and Draw when no scene exists.
+  await tool("PING").focus();
+  await page.keyboard.press("Tab");
+  await expect(tool("DRAW")).toBeFocused();
+
+  // UIX-470 keeps labels in the expanded toolbar. UIX-475 only hides them
+  // after the explicit collapse action, while the accessible names remain.
+  await tool("PAN").click();
+  const collapse = toolbar.locator(".map-toolbar__collapse");
+  await expect(collapse).toHaveAttribute(
+    "aria-label",
+    "Свернуть панель до значков",
+  );
+  const expandedWidth = (await toolbar.boundingBox())!.width;
+  await collapse.click();
+  await expect(toolbar).toHaveClass(/is-collapsed/);
+  await expect(collapse).toHaveAttribute("aria-expanded", "false");
+  await expect(collapse).toHaveAttribute(
+    "aria-label",
+    "Показать подписи инструментов",
+  );
+  await expect(collapse).toHaveAttribute(
+    "title",
+    "Показать подписи инструментов",
+  );
+  expect((await toolbar.boundingBox())!.width).toBeLessThan(expandedWidth);
+  await expect(toolbar.locator(".toolbar-group__title").first()).toBeHidden();
+  for (const [id, accessibleName] of labelledTools) {
+    const control = tool(id);
+    await expect(control).toHaveCSS("font-size", "0px");
+    await expect(control).toHaveAttribute("aria-label", accessibleName);
+    expect((await pseudoContent(control)).trim().length).toBeGreaterThan(0);
+  }
+
+  activeSnapshot = structuredClone(snapshot);
+  activeSnapshot.encounters = [];
+  await page.reload();
+
+  const enabledStart = page
+    .getByRole("toolbar", { name: "Инструменты карты" })
+    .locator('[data-tool="ENCOUNTER_START"]');
+  await expect(enabledStart).toBeEnabled();
+  const startGlyph = await pseudoContent(enabledStart);
+  await enabledStart.click();
+  await expect(page.getByRole("dialog", { name: "Начать бой" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Начать бой" })).toBeHidden();
+
+  const now = "2026-08-21T08:00:00.000Z";
+  activeSnapshot.encounters = [
+    {
+      id: "f1dfa5a7-f608-4f2d-a3d4-e7bdd70b3641",
+      campaignId: snapshot.campaign.id,
+      sequence: 1,
+      status: "ACTIVE",
+      mode: "SCENE_REGION",
+      sourceSceneId: snapshot.scenes[0]!.id,
+      targetSceneId: snapshot.scenes[0]!.id,
+      focusRegion: { x: 64, y: 64, width: 256, height: 192 },
+      locationId: null,
+      sourceSceneRevision: snapshot.scenes[0]!.revision ?? 0,
+      initiatorMembershipId: snapshot.me.id,
+      revision: 0,
+      startedAt: now,
+      endedAt: null,
+      endedByMembershipId: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+  await page.reload();
+
+  const activeToolbar = page.getByRole("toolbar", {
+    name: "Инструменты карты",
+  });
+  await expect(
+    activeToolbar.locator('[data-tool="ENCOUNTER_START"]'),
+  ).toHaveCount(0);
+  const encounterEnd = activeToolbar.locator('[data-tool="ENCOUNTER_END"]');
+  await expect(encounterEnd).toBeEnabled();
+  await expect(encounterEnd).toHaveAttribute("aria-label", "Завершить бой");
+  await expect(encounterEnd).toHaveAttribute("title", "Завершить текущий бой");
+  const endGlyph = await pseudoContent(encounterEnd);
+  expect(endGlyph.trim().length).toBeGreaterThan(0);
+  expect(endGlyph).not.toBe(startGlyph);
+});
+
 test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
   page,
 }) => {
