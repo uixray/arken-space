@@ -64,6 +64,42 @@ export function physicalDiceStorageKey(membershipId: string): string {
  * collapsed to a compact height. */
 export const ROLL_LOG_COLLAPSED_ENTRY_COUNT = 8;
 
+export function rollLogHistoryActionLabel(collapsed: boolean): string {
+  return collapsed ? "Показать больше" : "Показать меньше";
+}
+
+export interface RollLogHistoryPresentation {
+  actionLabel: string;
+  showControl: boolean;
+  truncatedLabel: string | null;
+  visibleEntryCount: number;
+}
+
+/**
+ * UIX-467: one pure description of the history disclosure state keeps the
+ * rendered count, explanatory copy and button label in sync. The timeline
+ * contains date dividers as well as events, so this deliberately operates on
+ * its final entry count rather than on raw chat-message totals.
+ */
+export function rollLogHistoryPresentation(
+  totalEntryCount: number,
+  collapsed: boolean,
+): RollLogHistoryPresentation {
+  const visibleEntryCount = collapsed
+    ? Math.min(totalEntryCount, ROLL_LOG_COLLAPSED_ENTRY_COUNT)
+    : totalEntryCount;
+  const isTruncated = visibleEntryCount < totalEntryCount;
+
+  return {
+    actionLabel: rollLogHistoryActionLabel(collapsed),
+    showControl: totalEntryCount > ROLL_LOG_COLLAPSED_ENTRY_COUNT,
+    truncatedLabel: isTruncated
+      ? `Показаны последние ${visibleEntryCount} из ${totalEntryCount}.`
+      : null,
+    visibleEntryCount,
+  };
+}
+
 export function rollLogCollapsedStorageKey(membershipId: string): string {
   return `arken:roll-log-collapsed:${membershipId}`;
 }

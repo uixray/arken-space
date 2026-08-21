@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * UIX-467: полоса «Журнал» с кнопками «Заявка мастеру» и «Свернуть» ложилась
- * поверх карточек ленты.
+ * UIX-467: старая полоса «Журнал» с дублирующей кнопкой заявки и неоднозначным
+ * «Свернуть» ложилась поверх карточек ленты. Теперь фильтр живёт рядом с
+ * заголовком журнала, а явное действие истории — в отдельной строке над лентой.
  *
  * Тест живёт в e2e, а не в jsdom, потому что дефект был чисто раскладочный:
  * `.activity-feed` перечисляла строки грида позиционно, а `InitiativePanel`
@@ -16,6 +17,18 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 const SIDEBAR_WIDTHS = [280, 360, 600] as const;
+
+async function signInAsGm(page: Page) {
+  const token = process.env.GM_ACCESS_TOKEN;
+  test.skip(
+    !token,
+    "GM_ACCESS_TOKEN is required for the integration environment",
+  );
+
+  await page.goto(`/gm/${token}`);
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page).toHaveURL("/");
+}
 
 /**
  * Переводит бой в нужное состояние.
@@ -97,15 +110,7 @@ test.describe("лента журнала во время боя", () => {
   test("полоса журнала не перекрывает карточки ни при какой ширине панели", async ({
     page,
   }) => {
-    const token = process.env.GM_ACCESS_TOKEN;
-    test.skip(
-      !token,
-      "GM_ACCESS_TOKEN is required for the integration environment",
-    );
-
-    await page.goto(`/gm/${token}`);
-    await page.getByRole("button", { name: "Войти" }).click();
-    await expect(page).toHaveURL("/");
+    await signInAsGm(page);
 
     // `setBattle` сам бросает исключение, если бой не удалось перевести в
     // нужное состояние, — проверять здесь код ответа больше нечего.
@@ -144,16 +149,8 @@ test.describe("лента журнала во время боя", () => {
      *
      * Проверяется на низком экране: на высоком места хватает и без сжатия.
      */
-    const token = process.env.GM_ACCESS_TOKEN;
-    test.skip(
-      !token,
-      "GM_ACCESS_TOKEN is required for the integration environment",
-    );
-
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto(`/gm/${token}`);
-    await page.getByRole("button", { name: "Войти" }).click();
-    await expect(page).toHaveURL("/");
+    await signInAsGm(page);
 
     await setBattle(page, "START_BATTLE");
     try {

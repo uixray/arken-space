@@ -1385,9 +1385,9 @@ code {
    Здесь перечислялись строки позиционно — `auto auto minmax(0, 1fr) auto auto`,
    в расчёте на пять детей. Но `InitiativePanel` появляется только во время боя:
    с ним все дети съезжали на строку вниз, и гибкая строка доставалась полосе
-   журнала вместо ленты. Строка схлопывалась в ноль, а кнопки «Заявка мастеру» и
-   «Свернуть» вылезали за её пределы и ложились поверх карточек. Колонка flex
-   отдаёт остаток высоты именно ленте, кто бы ещё ни отрисовался рядом. */
+   журнала вместо ленты. Строка схлопывалась в ноль, и её элементы ложились
+   поверх карточек. Колонка flex отдаёт остаток высоты именно ленте, а фильтр
+   и явное действие истории остаются в обычном потоке панели. */
 .activity-feed {
   display: flex;
   flex-direction: column;
@@ -1432,15 +1432,6 @@ code {
      как просвет между карточками ленты. */
   background: var(--surface);
 }
-/* UIX-388: groups the collapse toggle with the (player-only) "Заявка
-   мастеру" entry point, both wrapping together at narrow sidebar widths
-   instead of the eyebrow label getting squeezed. */
-.activity-log-toolbar__actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-}
 .activity-log-toggle {
   min-height: 26px;
   padding: 0 var(--space-sm);
@@ -1452,9 +1443,15 @@ code {
 .activity-log-toggle:hover {
   color: var(--text);
 }
-.activity-request-open {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+.activity-log-history-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .activity-log-truncated-note {
   margin: 0;
@@ -4302,6 +4299,10 @@ code {
   min-width: max-content;
   background: var(--surface);
   box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+.activity-log-toolbar .activity-filters-menu[open] > .activity-filters {
+  right: 0;
+  left: auto;
 }
 
 .scene-picker {

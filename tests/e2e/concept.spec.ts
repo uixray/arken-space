@@ -982,18 +982,88 @@ test("activity quick rolls reserve space above the scrollable event history", as
   await page.goto("/");
 
   const controls = page.locator("#chat-panel-activity .activity-roll-controls");
+  const toolbar = page.locator("#chat-panel-activity .activity-log-toolbar");
+  const historyControl = page.locator(
+    "#chat-panel-activity .activity-log-history-control",
+  );
   const history = page.locator("#chat-panel-activity .message-list");
   await expect(controls).toBeVisible();
+  await expect(toolbar.getByText("Журнал", { exact: true })).toBeVisible();
   await expect(history).toBeVisible();
+  await expect(
+    page
+      .locator("#chat-panel-activity")
+      .getByRole("button", { name: /Заявка мастеру/i }),
+  ).toHaveCount(0);
 
-  const controlsBox = await controls.boundingBox();
-  const historyBox = await history.boundingBox();
-  expect(controlsBox).not.toBeNull();
-  expect(historyBox).not.toBeNull();
-  expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(
-    historyBox!.y + 1,
+  const filterSummary = toolbar.locator(".activity-filters-summary");
+  await expect(filterSummary).toHaveAccessibleName(
+    "Показывать: включены все потоки",
   );
-  expect(historyBox!.height).toBeGreaterThan(0);
+  await filterSummary.click();
+  await expect(
+    page
+      .locator("#chat-panel-activity")
+      .getByRole("group", { name: "Показывать" }),
+  ).toBeVisible();
+  await filterSummary.click();
+
+  const historyAction = historyControl.getByRole("button", {
+    name: "Показать меньше",
+  });
+  await expect(historyAction).toBeVisible();
+  await expect(historyAction).toHaveAttribute(
+    "aria-controls",
+    "activity-message-list",
+  );
+  await historyAction.click();
+  await expect(
+    historyControl.getByRole("button", { name: "Показать больше" }),
+  ).toBeVisible();
+  await expect(
+    historyControl.locator(".activity-log-truncated-note"),
+  ).toHaveText(/Показаны последние 8 из \d+\./);
+
+  const workbench = page.locator(".workbench");
+  const sidebar = page.locator(".sidebar");
+  for (const width of [280, 360, 600]) {
+    await workbench.evaluate((element, sidebarWidth) => {
+      (element as HTMLElement).style.setProperty(
+        "--sidebar-width",
+        `${sidebarWidth}px`,
+      );
+    }, width);
+    await expect
+      .poll(() =>
+        sidebar.evaluate((element) =>
+          Math.round(element.getBoundingClientRect().width),
+        ),
+      )
+      .toBe(width);
+
+    const controlsBox = await controls.boundingBox();
+    const toolbarBox = await toolbar.boundingBox();
+    const historyBox = await history.boundingBox();
+    const historyControlBox = await historyControl.boundingBox();
+    expect(controlsBox).not.toBeNull();
+    expect(toolbarBox).not.toBeNull();
+    expect(historyBox).not.toBeNull();
+    expect(historyControlBox).not.toBeNull();
+    expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(
+      toolbarBox!.y + 1,
+    );
+    expect(toolbarBox!.y + toolbarBox!.height).toBeLessThanOrEqual(
+      historyControlBox!.y + 1,
+    );
+    expect(
+      historyControlBox!.y + historyControlBox!.height,
+    ).toBeLessThanOrEqual(historyBox!.y + 1);
+    expect(historyBox!.height).toBeGreaterThan(0);
+    expect(historyControlBox!.x).toBeGreaterThanOrEqual(historyBox!.x - 1);
+    expect(historyControlBox!.x + historyControlBox!.width).toBeLessThanOrEqual(
+      historyBox!.x + historyBox!.width + 1,
+    );
+  }
 });
 
 test("chat marks only unambiguous kept natural d20 criticals", async ({
@@ -2699,6 +2769,8 @@ test("UIX-498 PLAYER keeps Story and ROLLS in Activity without private tabs", as
   await activity.press("ArrowRight");
   await expect(activity).toBeFocused();
   await expect(activity).toHaveAttribute("aria-selected", "true");
+  await openWorkspaceSection(page, "Мои заявки");
+  await expect(page.getByRole("dialog", { name: "Мои заявки" })).toBeVisible();
 });
 
 test("UIX-274 activity read state reconciles and stays read after reload", async ({

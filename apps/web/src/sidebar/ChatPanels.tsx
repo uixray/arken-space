@@ -69,7 +69,7 @@ import {
   physicalRollBonus,
   physicalRollChatRequest,
   readRollLogCollapsed,
-  ROLL_LOG_COLLAPSED_ENTRY_COUNT,
+  rollLogHistoryPresentation,
   writeRollLogCollapsed,
   type ActivityFilter,
 } from "../activity-roll-controls";
@@ -481,9 +481,14 @@ export function ActivityPanel({
     () => buildActivityTimeline(activityEvents),
     [activityEvents],
   );
-  const visibleTimeline = rollLogCollapsed
-    ? timeline.slice(-ROLL_LOG_COLLAPSED_ENTRY_COUNT)
-    : timeline;
+  const historyPresentation = rollLogHistoryPresentation(
+    timeline.length,
+    rollLogCollapsed,
+  );
+  const visibleTimeline =
+    historyPresentation.visibleEntryCount < timeline.length
+      ? timeline.slice(-historyPresentation.visibleEntryCount)
+      : timeline;
   const catalogEntryIds = useMemo(
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
@@ -617,8 +622,11 @@ export function ActivityPanel({
         ) : (
           <p className="muted">Нет доступного персонажа для броска.</p>
         )}
-        {/* UIX-467: фильтры уехали под троеточие. Состояние по-прежнему живёт
-            в памяти панели — способ хранения задача не меняла. */}
+      </section>
+      <div className="activity-log-toolbar">
+        <span className="eyebrow">Журнал</span>
+        {/* Фильтр относится к самому журналу, поэтому находится напротив его
+            заголовка, а не среди быстрых бросков. */}
         <details className="activity-filters-menu" ref={filtersRef}>
           <summary
             className="activity-log-toggle activity-filters-summary"
@@ -652,53 +660,34 @@ export function ActivityPanel({
             ))}
           </fieldset>
         </details>
-      </section>
-      <div className="activity-log-toolbar">
-        <span className="eyebrow">Журнал</span>
-        <div className="activity-log-toolbar__actions">
-          {snapshot.me.role === "PLAYER" && (
-            // UIX-388: player-request creation used to sit inside the
-            // composer's primary send row, competing visually with
-            // Send/GM-only. `PlayerRequestsWorkspace` already owns the full
-            // create form (title/body/horizon/audience/character), so this
-            // is just a discoverable entry point into that existing
-            // workspace, placed with the panel's other secondary controls
-            // instead of next to the message-send action.
-            <button
-              type="button"
-              className="activity-log-toggle activity-request-open"
-              onClick={onOpenPlayerRequestCreate}
-              title="Подать заявку мастеру"
-            >
-              Заявка мастеру
-            </button>
-          )}
-          {timeline.length > ROLL_LOG_COLLAPSED_ENTRY_COUNT && (
-            <button
-              type="button"
-              className="activity-log-toggle"
-              aria-expanded={!rollLogCollapsed}
-              aria-controls="activity-message-list"
-              title={
-                rollLogCollapsed
-                  ? "Показать всю ленту событий"
-                  : "Показать только последние записи"
-              }
-              onClick={() => {
-                const next = !rollLogCollapsed;
-                setRollLogCollapsed(next);
-                writeRollLogCollapsed(
-                  window.localStorage,
-                  snapshot.me.id,
-                  next,
-                );
-              }}
-            >
-              {rollLogCollapsed ? "Развернуть" : "Свернуть"}
-            </button>
-          )}
-        </div>
       </div>
+      {historyPresentation.showControl && (
+        <div className="activity-log-history-control">
+          {historyPresentation.truncatedLabel && (
+            <span className="activity-log-truncated-note">
+              {historyPresentation.truncatedLabel}
+            </span>
+          )}
+          <button
+            type="button"
+            className="activity-log-toggle"
+            aria-expanded={!rollLogCollapsed}
+            aria-controls="activity-message-list"
+            title={
+              rollLogCollapsed
+                ? "Показать всю ленту событий"
+                : "Показать только последние записи"
+            }
+            onClick={() => {
+              const next = !rollLogCollapsed;
+              setRollLogCollapsed(next);
+              writeRollLogCollapsed(window.localStorage, snapshot.me.id, next);
+            }}
+          >
+            {historyPresentation.actionLabel}
+          </button>
+        </div>
+      )}
       <div
         className="message-list"
         id="activity-message-list"
@@ -711,11 +700,6 @@ export function ActivityPanel({
             {
               "В ленте событий пока нет сообщений, сюжетных публикаций или бросков."
             }
-          </p>
-        )}
-        {rollLogCollapsed && visibleTimeline.length < timeline.length && (
-          <p className="activity-log-truncated-note">
-            {`Показаны последние ${visibleTimeline.length} из ${timeline.length}. `}
           </p>
         )}
         {visibleTimeline.map((item) => {

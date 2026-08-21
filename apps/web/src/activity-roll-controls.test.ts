@@ -7,6 +7,7 @@ import {
   physicalRollMessage,
   readRollLogCollapsed,
   rollLogCollapsedStorageKey,
+  rollLogHistoryPresentation,
   writeRollLogCollapsed,
 } from "./activity-roll-controls";
 import type { ActivityEvent } from "./activity-feed";
@@ -113,5 +114,32 @@ describe("activity roll controls", () => {
       "arken:roll-log-collapsed:member",
       "true",
     );
+  });
+
+  it("describes a collapsed history without hiding how much was truncated", () => {
+    expect(rollLogHistoryPresentation(14, true)).toEqual({
+      actionLabel: "Показать больше",
+      showControl: true,
+      truncatedLabel: "Показаны последние 8 из 14.",
+      visibleEntryCount: 8,
+    });
+  });
+
+  it("describes an expanded history with the opposite explicit action", () => {
+    expect(rollLogHistoryPresentation(14, false)).toEqual({
+      actionLabel: "Показать меньше",
+      showControl: true,
+      truncatedLabel: null,
+      visibleEntryCount: 14,
+    });
+  });
+
+  it("does not offer a history action when every entry already fits", () => {
+    expect(rollLogHistoryPresentation(8, true)).toEqual({
+      actionLabel: "Показать больше",
+      showControl: false,
+      truncatedLabel: null,
+      visibleEntryCount: 8,
+    });
   });
 });
