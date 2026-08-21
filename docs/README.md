@@ -22,6 +22,7 @@
 | [deployment.md](./deployment.md)                                     | Как выглядит production-развёртывание                            | Перед первым деплоем                 |
 | [production-release-checklist.md](./production-release-checklist.md) | **Обязательные гейты релиза**                                    | Каждый деплой, без исключений        |
 | [brief.md](./brief.md)                                               | Продуктовые границы: что делаем и чего намеренно не делаем       | При споре о scope                    |
+| [claude-handoff-2026-08-21.md](./claude-handoff-2026-08-21.md)       | Точка паузы и self-contained prompt для продолжения в Claude     | При передаче текущего рабочего пула  |
 
 ## Планы и решения, на которые ссылается код
 

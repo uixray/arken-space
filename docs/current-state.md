@@ -38,6 +38,12 @@ implementation, test, runner и documentation commits. Локальная фик
 
 - **UIX-491** — сохранить актуальные метаданные и изображение токена после
   socket-перемещения, не раскрывая через realtime закрытые туманом токены;
+- **UIX-408** — GM viewed-scene lifecycle: wire-order intents, reconnect/resync,
+  fail-closed setup и fog/drawings только нужного canvas;
+- **UIX-450** — авторизованная пагинация истории до SQL limit/latest/unread,
+  DIRECT loader и committed-authority guard клиента;
+- **UIX-409** — честный process-window runtime counter и fail-closed isolated
+  measurement script без доступа к production;
 - **UIX-462 / UIX-463** — внутриигровая шпаргалка и единый manifest клавиш для
   resolver, подсказок и руководства;
 - **UIX-470 / UIX-475 follow-up** — палитра рисования размещается относительно
@@ -112,6 +118,20 @@ provenance, task mapping и ownership пока не подтверждены.
 - targeted resource-counter QA Chromium + Firefox — **2/2 PASS**, без retries;
 - `pnpm typecheck`, `pnpm lint`, production build, scoped Prettier и
   `git diff --check` — PASS.
+
+Для локальной реализации UIX-408/UIX-409/UIX-450 отдельно подтверждено:
+
+- realtime + visibility — **2 files / 64 tests PASS**;
+- authorized chat history — **5 files / 29 tests PASS**;
+- snapshot metrics — **1 file / 7 tests PASS**;
+- applicable contracts/server/web typechecks и contracts build — PASS;
+- standalone TypeScript check и fail-closed smoke measurement script — PASS;
+- точный scope и незакрытые gates зафиксированы в
+  [uix-408-uix-409-uix-450-checkpoint-2026-08-21.md](./uix-408-uix-409-uix-450-checkpoint-2026-08-21.md).
+
+Эти focused gates не заменяют ещё не выполненные на данной серии full
+Vitest/build, Chromium+Firefox, Docker multiplayer и before/after measurement
+на одной изолированной копии дампа. UIX-408/409/450 остаются In Progress.
 
 Live `tests/e2e/activity-feed-layout.spec.ts` остаётся environment gate: без
 подтверждённого локального GM credential его нельзя считать пройденным.
