@@ -57,6 +57,10 @@ implementation, test, runner и documentation commits. Локальная фик
 - **UIX-492** — личная громкость отделена от playback lifecycle, gain
   применяется до первого `play()`, а slider не перезапускает и не перематывает
   общий трек.
+- **UIX-399 / UIX-426** — существующая реализация частичной видимости и порядка
+  fog/token layers получила недостающий browser acceptance: открытая половина
+  чужого токена видна, закрытая перекрыта туманом, контролируемый токен остаётся
+  видимым, GM-вид не сужается.
 
 Три untracked-файла `docs/stickers/prompts/ST-*.md` относятся к отдельной
 творческой работе. Они не входят в этот пул и не должны попадать в технические
@@ -90,6 +94,12 @@ provenance, task mapping и ownership пока не подтверждены.
 - targeted fixture QA Firefox — **3/3 PASS**;
 - `pnpm typecheck`, `pnpm lint`, production build, scoped Prettier и
   `git diff --check` — PASS.
+
+Для closure UIX-399/UIX-426 отдельно подтверждено:
+
+- focused fog/visibility Vitest — **2 files / 23 tests PASS**;
+- targeted Canvas QA Chromium + Firefox — **2/2 PASS**, без retries;
+- E2E TypeScript, scoped ESLint, scoped Prettier и `git diff --check` — PASS.
 
 Live `tests/e2e/activity-feed-layout.spec.ts` остаётся environment gate: без
 подтверждённого локального GM credential его нельзя считать пройденным.
