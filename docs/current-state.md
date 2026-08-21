@@ -12,10 +12,9 @@ checkpoint-файлы в `docs/` объясняют историю решени�
 - Локальная ветка: `main`.
 - Проверенный remote baseline `origin/main`:
   `42c7ccc61863f6728977d2381b9f8997f059e95c`.
-- Поверх baseline локально зафиксирована непушенная серия технического
-  пула: implementation/test commits от `0a5d344` до `80905c9`, за ними
-  следуют документационные commits. Точный tip и ahead-count нужно
-  брать из `git rev-parse HEAD` и `git status`, а не из самоссылочного docs-файла.
+- Поверх baseline локально зафиксированы непушенные технические,
+  verification- и documentation-пулы. Точный tip и ahead-count нужно брать из
+  `git rev-parse HEAD` и `git status`, а не из самоссылочного docs-файла.
 - Production `/healthz` 20.08.2026 вернул `buildVersion: 0.3.2`,
   `buildRevision: 42c7ccc61863f6728977d2381b9f8997f059e95c`, `database: ok`.
 - В production в рамках текущего пула ничего не развёртывалось.
@@ -52,14 +51,23 @@ implementation, test, runner и documentation commits. Локальная фик
 - ремонт typed E2E-фикстур и селекторов после изменений навигации;
 - Docker E2E hygiene: версия Playwright синхронизирована с package lock, а
   локальные worktree/workspace/sticker-материалы исключены из build context.
+- **UIX-467** — фильтр расположен у заголовка журнала, раскрытие истории вынесено
+  в отдельную доступную строку над лентой, дублирующая «Заявка мастеру» удалена,
+  а «Мои заявки» сохранены в общей навигации;
+- **UIX-492** — личная громкость отделена от playback lifecycle, gain
+  применяется до первого `play()`, а slider не перезапускает и не перематывает
+  общий трек.
 
 Три untracked-файла `docs/stickers/prompts/ST-*.md` относятся к отдельной
 творческой работе. Они не входят в этот пул и не должны попадать в технические
 коммиты без отдельной privacy/provenance-проверки.
 
+Untracked `apps/web/src/assets/game-pause-rest.webp` также исключён: его
+provenance, task mapping и ownership пока не подтверждены.
+
 ## Проверка связанного пула
 
-Перед фиксацией серии на том же содержимом было подтверждено:
+Для технической серии до UIX-467/UIX-492 было подтверждено:
 
 - `pnpm typecheck` — PASS, включая `tests/e2e/tsconfig.json`;
 - `pnpm lint` — PASS с тремя существующими warnings, без errors;
@@ -73,6 +81,18 @@ implementation, test, runner и documentation commits. Локальная фик
   **2/2 PASS**; `playwrightExitCode: 0`, `cleanupExitCode: 0`, containers/volumes
   leftovers отсутствуют;
 - технический scoped Prettier и `git diff --check` — PASS.
+
+Для UIX-467/UIX-492 на финальном содержимом отдельно подтверждено:
+
+- focused Vitest — **4 files / 30 tests PASS**;
+- full Vitest — **167 files / 1201 tests PASS**;
+- targeted fixture QA Chromium — **3/3 PASS**;
+- targeted fixture QA Firefox — **3/3 PASS**;
+- `pnpm typecheck`, `pnpm lint`, production build, scoped Prettier и
+  `git diff --check` — PASS.
+
+Live `tests/e2e/activity-feed-layout.spec.ts` остаётся environment gate: без
+подтверждённого локального GM credential его нельзя считать пройденным.
 
 Из десяти browser skips восемь требуют действующего локального GM credential.
 Текущий `.env` содержит placeholder-like значение, а seed не заменяет уже
