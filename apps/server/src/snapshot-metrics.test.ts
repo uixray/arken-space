@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  countQuery,
   largestFields,
   measureSnapshot,
+  queryCountSince,
+  readQueryCount,
   sumByField,
 } from "./snapshot-metrics.js";
 
@@ -49,5 +53,38 @@ describe("измерение снапшота", () => {
     // Оснастка не должна ронять рассылку: измерение существует ради удобства,
     // а игра — ради игры.
     expect(() => measureSnapshot({ ok: 1, gone: undefined })).not.toThrow();
+  });
+
+  it("ведёт независимые монотонные process-window оценки", () => {
+    const firstWindow = readQueryCount();
+    countQuery();
+    const secondWindow = readQueryCount();
+    countQuery();
+    expect(queryCountSince(firstWindow)).toBe(2);
+    expect(queryCountSince(secondWindow)).toBe(1);
+  });
+
+  it("открывает окно broadcast до общего read set и не платит за пустую комнату", () => {
+    const source = readFileSync(
+      new URL("./routes.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf("async function broadcastSnapshots(");
+    const end = source.indexOf("\nfunction errorMessage", start);
+    const body = source.slice(start, end);
+    const emptyRoomGuard = body.indexOf("targetSockets.length === 0");
+    const windowStart = body.indexOf("queryCountAtStart = readQueryCount()");
+    const sharedRead = body.indexOf(
+      "await loadCampaignReadSet(db, campaignId)",
+    );
+    const parallelProjection = body.indexOf("await Promise.all(");
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(emptyRoomGuard).toBeGreaterThanOrEqual(0);
+    expect(emptyRoomGuard).toBeLessThan(windowStart);
+    expect(windowStart).toBeLessThan(sharedRead);
+    expect(parallelProjection).toBeGreaterThan(sharedRead);
+    expect(body).not.toContain("resetQueryCount()");
   });
 });

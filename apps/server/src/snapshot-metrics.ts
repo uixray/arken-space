@@ -25,18 +25,27 @@ export function countQuery() {
   queryCount += 1;
 }
 
-export function resetQueryCount() {
-  queryCount = 0;
-}
-
 export function readQueryCount() {
   return queryCount;
+}
+
+/**
+ * Возвращает прирост монотонного process-wide счётчика.
+ *
+ * Это честная оценка окна, а не scoped trace: параллельная работа процесса
+ * может увеличить результат, но уже не способна обнулить или испортить чужой
+ * замер. Авторитетные acceptance-числа снимаются отдельным изолированным
+ * процессом через `scripts/measure-broadcast.ts`.
+ */
+export function queryCountSince(start: number) {
+  return Math.max(0, queryCount - start);
 }
 
 export interface BroadcastMeasurement {
   campaignId: string;
   sockets: number;
   queries: number;
+  queryCountScope: "PROCESS_WINDOW_ESTIMATE";
   totalBytes: number;
   totalMs: number;
   /** По одному замеру на сокет: роль, размер и время сборки. */

@@ -126,8 +126,8 @@ import { listVisiblePlayerRequests } from "./player-requests.js";
 import {
   largestFields,
   measureSnapshot,
+  queryCountSince,
   readQueryCount,
-  resetQueryCount,
   SNAPSHOT_METRICS_ENABLED,
   sumByField,
   type BroadcastMeasurement,
@@ -235,6 +235,23 @@ async function broadcastSnapshots(
   campaignId: string,
 ) {
   const sockets = await io.in(campaignRoom(campaignId)).fetchSockets();
+  const targetSockets = sockets.filter(
+    (socket) => socket.data.auth?.campaignId === campaignId,
+  );
+  // Пустая комната не должна платить за общий read set только ради отчёта.
+  if (targetSockets.length === 0) return;
+
+  // Счётчик и таймер стартуют до общего чтения: иначе отчёт скрывал как раз
+  // ту часть работы, ради которой UIX-409 и вводила CampaignReadSet.
+  let startedAt = 0;
+  let queryCountAtStart = 0;
+  if (SNAPSHOT_METRICS_ENABLED) {
+    // Глобальный счётчик намеренно не сбрасывается: параллельная рассылка не
+    // должна обнулять чужое окно. Delta остаётся process-window estimate;
+    // точное acceptance-число даёт только изолированный measurement process.
+    queryCountAtStart = readQueryCount();
+    startedAt = performance.now();
+  }
   /**
    * UIX-409 — кампанийные чтения делаются один раз на всю рассылку.
    *
@@ -248,7 +265,7 @@ async function broadcastSnapshots(
   const readSet = await loadCampaignReadSet(db, campaignId);
   if (!SNAPSHOT_METRICS_ENABLED) {
     await Promise.all(
-      sockets.map(async (socket) => {
+      targetSockets.map(async (socket) => {
         const auth = socket.data.auth;
         if (auth?.campaignId === campaignId) {
           // UIX-408: мастеру приходит канвас и той сцены, которую он
@@ -269,12 +286,10 @@ async function broadcastSnapshots(
    * параллельных запросов дают около сотни, конкурирующих за эти десять.
    * Нелинейно растёт очередь, и видно её только здесь.
    */
-  resetQueryCount();
-  const startedAt = performance.now();
   const perSocket: BroadcastMeasurement["perSocket"] = [];
   const fieldReports: Record<string, number>[] = [];
   await Promise.all(
-    sockets.map(async (socket) => {
+    targetSockets.map(async (socket) => {
       const auth = socket.data.auth;
       if (auth?.campaignId !== campaignId) return;
       const socketStartedAt = performance.now();
@@ -294,7 +309,8 @@ async function broadcastSnapshots(
   const measurement: BroadcastMeasurement = {
     campaignId,
     sockets: perSocket.length,
-    queries: readQueryCount(),
+    queries: queryCountSince(queryCountAtStart),
+    queryCountScope: "PROCESS_WINDOW_ESTIMATE",
     totalBytes: perSocket.reduce((sum, item) => sum + item.bytes, 0),
     totalMs: performance.now() - startedAt,
     perSocket,
