@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
 
 const ids = {
@@ -20,7 +21,16 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
   } as const;
 
   return {
-    campaign: { id: ids.campaign, name: "Тестовая кампания" },
+    campaign: {
+      id: ids.campaign,
+      name: "Тестовая кампания",
+      day: 1,
+      battleActive: false,
+      battleCounter: 0,
+      statLayout: [],
+      initiative: [],
+      revision: 0,
+    },
     me,
     members: [me],
     characters: [],
@@ -30,6 +40,7 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
         name: "Руины",
         projection: "ORTHOGRAPHIC_2D",
         mapAssetId: null,
+        backgroundFrame: { x: 0, y: 0, width: 1600, height: 1000 },
         width: 1600,
         height: 1000,
         grid: {
@@ -46,6 +57,8 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
     tokens: [],
     fogReveals: [],
     messages: [],
+    characterIdentities: [],
+    audioTracks: [],
     chatThreads: [],
     chatThreadStates: [],
     assets: [
@@ -55,7 +68,8 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
         kind: "MAP",
         url: "/map-background.png",
         mimeType: "image/png",
-        bytes: 128,
+        sizeBytes: 128,
+        durationSeconds: null,
         width: 1600,
         height: 900,
         createdAt: "2026-07-23T00:00:00.000Z",
@@ -131,9 +145,9 @@ async function mockWorldMapApi(page: Page, state: GameSnapshot) {
         id: ids.location,
         mapId: ids.map,
         name: String(body?.name),
-        kind: "SETTLEMENT",
+        kind: "SETTLEMENT" as const,
         summary: String(body?.summary ?? ""),
-        visibility: "PUBLIC",
+        visibility: "PUBLIC" as const,
         x: 0.4,
         y: 0.6,
         revision: 0,
@@ -168,8 +182,7 @@ async function mockWorldMapApi(page: Page, state: GameSnapshot) {
 }
 
 async function openWorldMaps(page: Page) {
-  await page.locator(".workspace-menu summary").click();
-  await page.getByRole("button", { name: "World maps" }).click();
+  await openWorkspaceSection(page, "Карты мира");
   return page.getByRole("dialog", { name: "Карты мира" });
 }
 
@@ -230,7 +243,7 @@ test("UIX-243: GM creates, completes and publishes a world map", async ({
   ).toBeVisible();
 });
 
-test("UIX-243: PLAYER sees only authorized published map and workspace stays responsive", async ({
+test("UIX-243: PLAYER cannot enter the GM-only world-map workspace from navigation", async ({
   page,
 }) => {
   const state = snapshotFor("PLAYER");
@@ -270,26 +283,11 @@ test("UIX-243: PLAYER sees only authorized published map and workspace stays res
   await mockWorldMapApi(page, state);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  const workspace = await openWorldMaps(page);
 
-  await expect(workspace.locator(".world-map-toolbar select")).toHaveValue(
-    ids.map,
-  );
   await expect(
-    workspace.getByRole("heading", { name: "Сторожевая башня" }),
-  ).toBeVisible();
-  await expect(
-    workspace.getByRole("button", { name: "Добавить локацию" }),
+    page.getByRole("button", { name: "Карты мира", exact: true }),
   ).toHaveCount(0);
-  await expect(
-    workspace.getByRole("button", { name: "Поставить группу здесь" }),
-  ).toHaveCount(0);
-  await expect(workspace).toHaveJSProperty(
-    "scrollWidth",
-    await workspace.evaluate((node) => node.clientWidth),
-  );
-
-  await workspace.press("Escape");
-  await expect(workspace).toBeHidden();
-  await expect(page.locator(".workspace-menu summary")).toBeFocused();
+  await expect(page.getByRole("dialog", { name: "Карты мира" })).toHaveCount(0);
+  await expect(page.getByText("Сторожевая башня")).toHaveCount(0);
+  await expect(page.getByText("Открытая карта")).toHaveCount(0);
 });

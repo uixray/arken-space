@@ -1,5 +1,6 @@
 ﻿import { expect, test, type Page } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
+import { openWorkspaceSection } from "./workspace-nav-helper";
 
 const ids = {
   campaign: "11111111-1111-4111-8111-111111111111",
@@ -63,6 +64,8 @@ function snapshotFor(
       day: 1,
       battleActive: false,
       battleCounter: 0,
+      statLayout: [],
+      initiative: [],
       revision: 0,
     },
     me: {
@@ -84,7 +87,11 @@ function snapshotFor(
         id: ids.character,
         name: "Aster",
         ownerMembershipId: ids.membership,
+        controllerMembershipIds: [],
         portraitAssetId: null,
+        lifecycle: "ACTIVE" as const,
+        archivedAt: null,
+        archivedByMembershipId: null,
         stats,
         skills: [],
         spells: [],
@@ -104,9 +111,9 @@ function snapshotFor(
         name: "Scene",
         projection: "ORTHOGRAPHIC_2D",
         mapAssetId: null,
+        backgroundFrame: { x: 0, y: 0, width: 1600, height: 1000 },
         width: 1600,
         height: 1000,
-        backgroundFrame: { x: 0, y: 0, width: 1600, height: 1000 },
         grid: {
           enabled: true,
           size: 64,
@@ -122,6 +129,8 @@ function snapshotFor(
     tokenDefinitions: [],
     fogReveals: [],
     messages: messages as GameSnapshot["messages"],
+    characterIdentities: [],
+    audioTracks: [],
     chatThreads: [
       {
         id: ids.tableThread,
@@ -281,8 +290,7 @@ async function mockApp(page: Page, getSnapshot: () => GameSnapshot) {
 }
 
 async function openCharacterWorkspace(page: Page) {
-  await page.locator(".workspace-menu summary").click();
-  await page.locator(".workspace-menu__content > button").first().click();
+  await openWorkspaceSection(page, "Персонажи");
   await expect(page.locator(".character-action-card")).toBeVisible();
 }
 
@@ -320,8 +328,8 @@ test("an owner executes an active ability once and its decremented card survives
   await expect.poll(() => postCount).toBe(1);
   await expect(page.locator(".character-action-card__uses")).toHaveText("1/2");
 
-  await page.locator(".character-workspace__header > button").click();
-  await page.locator("#chat-tab-rolls").click();
+  await page.getByRole("button", { name: "Закрыть персонажей" }).click();
+  await page.locator("#chat-tab-activity").click();
   const card = page
     .locator(".skill-chat-card")
     .filter({ hasText: "Arcane Shot" });
@@ -332,12 +340,11 @@ test("an owner executes an active ability once and its decremented card survives
   );
 
   await page.reload();
-  await page.locator("#chat-tab-rolls").click();
+  await page.locator("#chat-tab-activity").click();
   await expect(
     page.locator(".skill-chat-card").filter({ hasText: "Arcane Shot" }),
   ).toHaveCount(1);
-  await page.locator(".workspace-menu summary").click();
-  await page.locator(".workspace-menu__content > button").first().click();
+  await openWorkspaceSection(page, "Персонажи");
   await expect(page.locator(".character-action-card__uses")).toHaveText("1/2");
 });
 
@@ -376,8 +383,8 @@ test("sharing is passive and a deleted-source card remains keyboard-safe at 960p
   await expect.poll(() => postCount).toBe(1);
   await expect(page.locator(".character-action-card__uses")).toHaveText("2/2");
 
-  await page.locator(".character-workspace__header > button").click();
-  await page.locator("#chat-tab-rolls").click();
+  await page.getByRole("button", { name: "Закрыть персонажей" }).click();
+  await page.locator("#chat-tab-activity").click();
   const card = page
     .locator(".skill-chat-card")
     .filter({ hasText: "Quiet Veil" });

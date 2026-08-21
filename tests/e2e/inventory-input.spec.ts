@@ -1,8 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
 
 const snapshot = {
-  campaign: { id: "campaign-input", name: "Input diagnostics" },
+  campaign: {
+    id: "campaign-input",
+    name: "Input diagnostics",
+    day: 1,
+    battleActive: false,
+    battleCounter: 0,
+    statLayout: [],
+    initiative: [],
+    revision: 0,
+  },
   me: { id: "gm-input", role: "GM", displayName: "GM", characterId: null },
   members: [
     { id: "gm-input", role: "GM", displayName: "GM", characterId: null },
@@ -14,6 +24,9 @@ const snapshot = {
       ownerMembershipId: null,
       controllerMembershipIds: [],
       portraitAssetId: null,
+      lifecycle: "ACTIVE" as const,
+      archivedAt: null,
+      archivedByMembershipId: null,
       stats: {
         might: 1,
         agility: 1,
@@ -40,6 +53,7 @@ const snapshot = {
       name: "Input scene",
       projection: "ORTHOGRAPHIC_2D",
       mapAssetId: null,
+      backgroundFrame: { x: 0, y: 0, width: 1200, height: 800 },
       width: 1200,
       height: 800,
       grid: {
@@ -69,6 +83,9 @@ const snapshot = {
     revision: 0,
     updatedAt: "2026-08-01T00:00:00.000Z",
   },
+  characterIdentities: [],
+  chatThreadStates: [],
+  audioTracks: [],
   snapshotVersion: 1,
   schemaVersion: 2,
   buildVersion: "test",
@@ -77,12 +94,10 @@ const snapshot = {
 } as GameSnapshot;
 
 async function openInventory(page: Page) {
-  await page.locator(".workspace-menu summary").click();
-  await page
-    .getByRole("button", {
-      name: "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
-    })
-    .click();
+  await openWorkspaceSection(
+    page,
+    "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
+  );
   const workspace = page.locator(".character-workspace");
   const inventory = workspace.getByLabel(
     /\u0418\u043d\u0432\u0435\u043d\u0442\u0430\u0440\u044c \(/,

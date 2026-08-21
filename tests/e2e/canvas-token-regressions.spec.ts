@@ -15,6 +15,8 @@ const snapshot = {
     day: 1,
     battleActive: false,
     battleCounter: 0,
+    statLayout: [],
+    initiative: [],
     revision: 0,
   },
   me: {
@@ -32,9 +34,9 @@ const snapshot = {
       name: "Regression scene",
       projection: "ORTHOGRAPHIC_2D",
       mapAssetId: null,
+      backgroundFrame: { x: 0, y: 0, width: 1600, height: 1000 },
       width: 1600,
       height: 1000,
-      backgroundFrame: { x: 0, y: 0, width: 1600, height: 1000 },
       grid: {
         enabled: true,
         size: 64,
@@ -66,6 +68,10 @@ const snapshot = {
       rotation: 0,
       visible: true,
       locked: false,
+      baseColor: "#8899aa",
+      frameColor: null,
+      layer: "PLAYER" as const,
+      conditions: [],
       revision: 0,
     },
   ],
@@ -98,6 +104,8 @@ const snapshot = {
     revision: 0,
     updatedAt: "2026-08-02T00:00:00.000Z",
   },
+  characterIdentities: [],
+  audioTracks: [],
   snapshotVersion: 0,
   schemaVersion: 2,
   buildVersion: "test",
@@ -230,7 +238,7 @@ test("cold token resize sends one canonical proportional PATCH without rebootstr
   );
 });
 
-test("cold token resize conflict reloads and exposes only safe correlation data", async ({
+test("cold token resize conflict keeps socket authority and exposes only safe correlation data", async ({
   page,
 }) => {
   const safeRequestId = "resize-conflict-request-01";
@@ -298,7 +306,8 @@ test("cold token resize conflict reloads and exposes only safe correlation data"
   expect(visibleText).not.toContain(`/api/tokens/${tokenId}/size`);
   expect(visibleText).not.toContain(JSON.stringify(resizeRequests[0].body));
   expect(visibleText).not.toContain(unsafeData);
-  await expect.poll(() => bootstrapRequests).toBe(coldBootstrapRequests + 1);
+  await page.waitForTimeout(100);
+  expect(bootstrapRequests).toBe(coldBootstrapRequests);
 });
 
 test("GM stack semantics follow authoritative movement and deletion", async ({
@@ -413,7 +422,7 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
     })
     .click();
   const dialog = page.getByRole("dialog", {
-    name: "\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043e\u0431\u044a\u0435\u043a\u0442 \u0441 \u043a\u0430\u0440\u0442\u044b?",
+    name: "\u0423\u0431\u0440\u0430\u0442\u044c \u0442\u043e\u043a\u0435\u043d \u0441 \u043a\u0430\u0440\u0442\u044b?",
   });
   await dialog
     .getByRole("button", {
@@ -538,6 +547,13 @@ test("Escape leaves DRAW for PAN and clears the selected map object", async ({
   await expect(selectedToken).toHaveAttribute("aria-pressed", "true");
 
   await map.focus();
+  // Первый Escape закрывает верхний слой (список объектов), не теряя выбор.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("region", { name: "Объекты карты" })).toHaveCount(
+    0,
+  );
+
+  // Только следующий Escape очищает map selection и возвращает PAN.
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Перемещение" }),

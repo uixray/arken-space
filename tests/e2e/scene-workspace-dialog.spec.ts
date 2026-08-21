@@ -1,8 +1,18 @@
 import { expect, test } from "@playwright/test";
+import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
 
 const snapshot: GameSnapshot = {
-  campaign: { id: "campaign-1", name: "Проверка сцен" },
+  campaign: {
+    id: "campaign-1",
+    name: "Проверка сцен",
+    day: 1,
+    battleActive: false,
+    battleCounter: 0,
+    statLayout: [],
+    initiative: [],
+    revision: 0,
+  },
   me: {
     id: "gm-1",
     role: "GM",
@@ -19,6 +29,7 @@ const snapshot: GameSnapshot = {
       name: "Длинный переход через забытые руины",
       projection: "ORTHOGRAPHIC_2D",
       mapAssetId: null,
+      backgroundFrame: { x: 0, y: 0, width: 1600, height: 1000 },
       width: 1600,
       height: 1000,
       grid: {
@@ -47,6 +58,10 @@ const snapshot: GameSnapshot = {
     revision: 0,
     updatedAt: new Date().toISOString(),
   },
+  characterIdentities: [],
+  chatThreadStates: [],
+  audioTracks: [],
+  chatThreads: [],
   snapshotVersion: 0,
   schemaVersion: 2,
   buildVersion: "test",
@@ -66,6 +81,7 @@ const tokenSnapshot: GameSnapshot = {
       name: longTokenName,
       defaultWidth: 64,
       defaultHeight: 64,
+      ownName: null,
       controllerMembershipIds: [],
       revision: 1,
     },
@@ -94,8 +110,7 @@ test("scene editor stays above the workspace and restores its interaction", asyn
   await mockBootstrap(page, snapshot);
   await page.goto("/");
 
-  await page.locator(".workspace-menu summary").click();
-  await page.getByRole("button", { name: "Сцены" }).click();
+  await openWorkspaceSection(page, "Сцены");
 
   const manager = page.getByRole("dialog", { name: "Сцены" });
   await expect(manager).toBeVisible();
@@ -141,8 +156,7 @@ test("long token names remain inside a palette card", async ({ page }) => {
   await mockBootstrap(page, tokenSnapshot);
   await page.goto("/");
 
-  await page.locator(".workspace-menu summary").click();
-  await page.getByRole("button", { name: "Токены" }).click();
+  await openWorkspaceSection(page, "Токены");
   const tokens = page.getByRole("dialog", { name: "Токены" });
   const card = tokens
     .locator(".palette-card")
@@ -167,8 +181,7 @@ test("a desktop workspace window drags by its labelled header handle and resets 
   await mockBootstrap(page, snapshot);
   await page.goto("/");
 
-  await page.locator(".workspace-menu summary").click();
-  await page.getByRole("button", { name: "Токены" }).click();
+  await openWorkspaceSection(page, "Токены");
   const workspace = page.getByRole("dialog", { name: "Токены" });
   const handle = workspace.getByRole("group", {
     name: "Перетащить окно: Токены",

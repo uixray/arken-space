@@ -39,6 +39,8 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
       day: 1,
       battleActive: false,
       battleCounter: 0,
+      statLayout: [],
+      initiative: [],
       revision: 0,
     },
     me: {
@@ -63,6 +65,8 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
     tokenDefinitions: [],
     fogReveals: [],
     messages: [],
+    characterIdentities: [],
+    audioTracks: [],
     chatThreads: [
       {
         id: ids.tableThread,
@@ -339,7 +343,7 @@ test("GM drafts, publishes, corrects and archives a story post through refreshed
   await expect(post).toHaveAttribute("data-story-lifecycle", "PUBLISHED");
 });
 
-test("player sees only safe published story cards in a read-only channel", async ({
+test("player sees only safe published story cards in the unified activity feed", async ({
   page,
 }) => {
   const published = adminPost("PUBLISHED", "A public chronicle entry.", 2);
@@ -350,13 +354,17 @@ test("player sees only safe published story cards in a read-only channel", async
   );
 
   await page.goto("/");
-  await openStory(page);
+  await expect(page.locator("#chat-tab-story")).toHaveCount(0);
+  await expect(page.locator("#chat-tab-activity")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(page.locator(".story-post")).toHaveCount(1);
   await expect(page.locator(".story-post")).toContainText(
     "A public chronicle entry.",
   );
   await expect(page.getByText("GM-only preparation note")).toHaveCount(0);
-  await expect(page.locator(".story-channel__read-only")).toBeVisible();
+  await expect(page.locator(".story-channel")).toHaveCount(0);
   await expect(page.locator(".story-composer")).toHaveCount(0);
   await expect(page.locator(".story-post__actions")).toHaveCount(0);
 });

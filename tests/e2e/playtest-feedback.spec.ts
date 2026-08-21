@@ -2,7 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
 
 const baseSnapshot: GameSnapshot = {
-  campaign: { id: "campaign-1", name: "Первая экспедиция" },
+  campaign: {
+    id: "campaign-1",
+    name: "Первая экспедиция",
+    day: 1,
+    battleActive: false,
+    battleCounter: 0,
+    statLayout: [],
+    initiative: [],
+    revision: 0,
+  },
   me: {
     id: "membership-gm",
     role: "GM",
@@ -24,6 +33,7 @@ const baseSnapshot: GameSnapshot = {
       name: "Первая сцена",
       projection: "ORTHOGRAPHIC_2D",
       mapAssetId: null,
+      backgroundFrame: { x: 0, y: 0, width: 1600, height: 1000 },
       width: 1600,
       height: 1000,
       grid: {
@@ -52,6 +62,10 @@ const baseSnapshot: GameSnapshot = {
     revision: 0,
     updatedAt: new Date().toISOString(),
   },
+  characterIdentities: [],
+  chatThreadStates: [],
+  audioTracks: [],
+  chatThreads: [],
   snapshotVersion: 0,
   schemaVersion: 2,
   buildVersion: "test",
@@ -389,7 +403,7 @@ test("drawing color picker controls the next drawing", async ({ page }) => {
   });
 
   await page.goto("/");
-  await page.locator(".map-toolbar button", { hasText: "Рисование" }).click();
+  await page.getByRole("button", { name: "Рисование", exact: true }).click();
 
   const color = page.getByLabel("Цвет рисунка");
   await expect(color).toBeVisible();
@@ -404,11 +418,31 @@ test("drawing color picker controls the next drawing", async ({ page }) => {
   await color.fill("#123456");
 
   const viewport = page.locator(".map-viewport");
-  await viewport.hover({ position: { x: 250, y: 220 } });
-  const box = await viewport.boundingBox();
-  expect(box).not.toBeNull();
+  const gesture = await viewport.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    const candidates = [
+      [0.65, 0.55],
+      [0.55, 0.7],
+      [0.75, 0.4],
+    ] as const;
+    for (const [xRatio, yRatio] of candidates) {
+      const start = {
+        x: box.left + box.width * xRatio,
+        y: box.top + box.height * yRatio,
+      };
+      const end = { x: start.x + 60, y: start.y + 60 };
+      if (
+        document.elementFromPoint(start.x, start.y) instanceof
+          HTMLCanvasElement &&
+        document.elementFromPoint(end.x, end.y) instanceof HTMLCanvasElement
+      )
+        return { start, end };
+    }
+    throw new Error("No unobstructed drawing surface is visible");
+  });
+  await page.mouse.move(gesture.start.x, gesture.start.y);
   await page.mouse.down();
-  await page.mouse.move(box!.x + 310, box!.y + 280, { steps: 4 });
+  await page.mouse.move(gesture.end.x, gesture.end.y, { steps: 4 });
   // Releasing over the sidebar (outside the Stage, but inside the document)
   // must still finish this gesture exactly once.
   const sidebarBox = await page.locator(".sidebar").boundingBox();

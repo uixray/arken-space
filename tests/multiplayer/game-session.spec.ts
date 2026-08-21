@@ -18,6 +18,7 @@ import type {
   ServerToClientEvents,
   TokenDto,
 } from "../../packages/contracts/src/index.js";
+import { openWorkspaceSection } from "../e2e/workspace-nav-helper.js";
 
 const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:14180";
 const gmToken = "multiplayer-master-token-1234567890";
@@ -503,10 +504,7 @@ test("GM and six isolated players recover authoritative state without security l
     // Product gate: players only see their controlled definitions in the
     // palette, can place one through the browser UI, and never receive the GM
     // preparation/presence surface.
-    await pages[0]!.locator(".workspace-menu summary").click();
-    await pages[0]!
-      .getByRole("button", { name: "Токены", exact: true })
-      .click();
+    await openWorkspaceSection(pages[0]!, "Токены");
     await expect(pages[0]!.locator(".token-palette")).toBeVisible();
     await expect(pages[0]!.locator(".palette-card")).toHaveCount(1);
     await expect(pages[0]!.locator(".palette-card__title")).toHaveText(
@@ -539,18 +537,13 @@ test("GM and six isolated players recover authoritative state without security l
           ).length,
       )
       .toBe(placementsBefore + 1);
-    await pages[0]!.locator(".workspace-menu summary").click();
-    await pages[0]!
-      .getByRole("button", { name: "Персонажи", exact: true })
-      .click();
+    await openWorkspaceSection(pages[0]!, "Персонажи");
     await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(1);
     await expect(pages[0]!.locator(".character-sheet-card")).toHaveCount(1);
     await pages[0]!.getByRole("button", { name: "Закрыть персонажей" }).click();
-    await pages[0]!.locator(".workspace-menu summary").click();
     await expect(
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
     ).toHaveCount(0);
-    await pages[0]!.locator(".workspace-menu summary").click();
     // Local audio consent is deliberately per-browser and must survive a
     // reload without changing shared playback state.
     const playerMusic = pages[0]!.getByRole("region", { name: "Музыка" });
@@ -571,10 +564,7 @@ test("GM and six isolated players recover authoritative state without security l
     for (let index = 0; index < 5; index += 1)
       connections.push(await connectSocket(players[index]));
 
-    await gmPage.locator(".workspace-menu summary").click();
-    await gmPage
-      .getByRole("button", { name: "Подготовка", exact: true })
-      .click();
+    await openWorkspaceSection(gmPage, "Подготовка");
     const setupDialog = gmPage.getByRole("dialog", { name: "Подготовка" });
     await expect(
       setupDialog.getByRole("button", { name: "● Player 1", exact: true }),
@@ -678,9 +668,9 @@ test("GM and six isolated players recover authoritative state without security l
           "; player=" +
           playerOneSnapshot.tokens.map((token) => token.name).join(","),
       );
-    // Bootstrap carries authoritative token state; the canvas renderer applies
-    // fog visibility while always keeping a player's controlled tokens visible.
-    expect(playerOneSnapshot.tokens.map((token) => token.id)).toContain(
+    // UIX-449: a player snapshot must not disclose a foreign token covered by
+    // fog. The player's own controlled token remains available above.
+    expect(playerOneSnapshot.tokens.map((token) => token.id)).not.toContain(
       coveredForeignToken.id,
     );
 
@@ -766,10 +756,7 @@ test("GM and six isolated players recover authoritative state without security l
     for (const result of [foreignMove, enemyMove, hiddenMove])
       expect(result).toMatchObject({ ok: false, status: "FORBIDDEN" });
 
-    await pages[0]!.locator(".workspace-menu summary").click();
-    await pages[0]!
-      .getByRole("button", { name: "Токены", exact: true })
-      .click();
+    await openWorkspaceSection(pages[0]!, "Токены");
     const publicMarkers = Array.from({ length: 6 }, (_, index) =>
       index % 2 === 0
         ? runTag + "-public-chat-" + (index + 1)
@@ -838,7 +825,7 @@ test("GM and six isolated players recover authoritative state without security l
     });
     await expect(pages[0]!.locator(".chat-compose textarea")).toBeVisible();
     await expect(
-      pages[0]!.getByRole("button", { name: "Отправить", exact: true }),
+      pages[0]!.getByRole("button", { name: /^Отправить\./ }),
     ).toBeVisible();
 
     for (let index = 0; index < players.length; index += 1) {
@@ -1280,7 +1267,6 @@ test("a shared browser handoff revokes player A before player B uses their own i
     ).toBeVisible();
 
     const playerBSnapshot = await bootstrap(sharedBrowser);
-    const playerBSerializedSnapshot = JSON.stringify(playerBSnapshot);
     expect(playerBSnapshot.me).toMatchObject({
       displayName: playerBName,
       role: "PLAYER",
@@ -1292,8 +1278,25 @@ test("a shared browser handoff revokes player A before player B uses their own i
     expect(playerBSnapshot.characters).toMatchObject([
       { id: playerBCharacter.id, notes: playerBPrivateNote },
     ]);
-    expect(playerBSerializedSnapshot).not.toContain(playerAPrivateNote);
-    expect(playerBSerializedSnapshot).not.toContain(playerACharacter.id);
+    const playerAIdentity = playerBSnapshot.characterIdentities.find(
+      (identity) => identity.id === playerACharacter.id,
+    );
+    // Campaign character identities are intentionally public for roll/card
+    // attribution. Handoff privacy is about the full character projection and
+    // its notes/resources, not hiding that the character exists at the table.
+    expect(Object.keys(playerAIdentity ?? {}).sort()).toEqual([
+      "id",
+      "name",
+      "portraitAssetId",
+      "tokenAssetId",
+    ]);
+    expect(playerAIdentity).toEqual({
+      id: playerACharacter.id,
+      name: playerAName,
+      portraitAssetId: null,
+      tokenAssetId: null,
+    });
+    expect(JSON.stringify(playerBSnapshot)).not.toContain(playerAPrivateNote);
 
     const playerBAction = await sharedBrowser.request.post(
       baseUrl + "/api/chat",

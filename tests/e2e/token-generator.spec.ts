@@ -1,10 +1,17 @@
 ﻿import { expect, test } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
+import { openWorkspaceSection } from "./workspace-nav-helper";
 
 const snapshot: GameSnapshot = {
   campaign: {
     id: "b4c34840-cb11-4a07-884d-680ae85c48db",
     name: "РџРµСЂРІР°СЏ СЌРєСЃРїРµРґРёС†РёСЏ",
+    day: 1,
+    battleActive: false,
+    battleCounter: 0,
+    statLayout: [],
+    initiative: [],
+    revision: 0,
   },
   me: {
     id: "d21b4bb6-ae66-47b9-b719-610e0440044c",
@@ -25,7 +32,11 @@ const snapshot: GameSnapshot = {
       id: "62668dba-d385-434a-a76c-b9e2f8e84de9",
       name: "РљР°СЂС‚РѕРіСЂР°С„",
       ownerMembershipId: null,
+      controllerMembershipIds: [],
       portraitAssetId: null,
+      lifecycle: "ACTIVE" as const,
+      archivedAt: null,
+      archivedByMembershipId: null,
       stats: {
         might: 2,
         agility: 3,
@@ -59,6 +70,7 @@ const snapshot: GameSnapshot = {
       name: "Р’РЅРµС€РЅРёР№ РґРІРѕСЂ",
       projection: "ORTHOGRAPHIC_2D",
       mapAssetId: null,
+      backgroundFrame: { x: 0, y: 0, width: 1600, height: 1000 },
       width: 1600,
       height: 1000,
       grid: {
@@ -75,6 +87,12 @@ const snapshot: GameSnapshot = {
   tokens: [
     {
       id: "35f46186-2ebc-4cf8-bce7-870097305a6b",
+      definitionId: "45f46186-2ebc-4cf8-bce7-870097305a6b",
+      definitionRevision: 0,
+      baseColor: "#8899aa",
+      frameColor: null,
+      layer: "PLAYER" as const,
+      conditions: [],
       sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
       characterId: "62668dba-d385-434a-a76c-b9e2f8e84de9",
       ownerMembershipId: null,
@@ -180,6 +198,8 @@ const snapshot: GameSnapshot = {
     revision: 0,
     updatedAt: new Date().toISOString(),
   },
+  characterIdentities: [],
+  audioTracks: [],
   snapshotVersion: 0,
   schemaVersion: 2,
   buildVersion: "test",
@@ -277,8 +297,7 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
   });
 
   await page.goto("/");
-  await page.locator(".workspace-menu summary").click();
-  await page.locator(".workspace-menu button").nth(1).click();
+  await openWorkspaceSection(page, "Токены");
   await page.locator(".token-palette > button").click();
   const editor = page.locator(".g-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
@@ -325,8 +344,7 @@ test("UIX-255 player palette does not expose GM token generator controls", async
 }) => {
   await mockBootstrap(page, "PLAYER");
   await page.goto("/");
-  await page.locator(".workspace-menu summary").click();
-  await page.locator(".workspace-menu button").nth(1).click();
+  await openWorkspaceSection(page, "Токены");
   await expect(page.locator(".token-image-generator")).toHaveCount(0);
   await expect(page.locator(".token-palette > button")).toHaveCount(0);
 });
@@ -348,8 +366,7 @@ test("UIX-272 empty character select opens above token editor with guidance and 
   );
 
   await page.goto("/");
-  await page.locator(".workspace-menu summary").click();
-  await page.locator(".workspace-menu button").nth(1).click();
+  await openWorkspaceSection(page, "Токены");
   await page.locator(".token-palette > button").click();
 
   const editor = page.locator(".g-modal").last();
