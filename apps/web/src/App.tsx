@@ -68,7 +68,13 @@ import { usePlayerRequestActions } from "./use-player-request-actions";
 import { useAssetActions } from "./use-asset-actions";
 import { CampaignActionsContext } from "./campaign-actions-context";
 import type { MapTool } from "./renderers/map-interaction";
-import { normalizeWallet } from "./wallet";
+import {
+  buildCharacterCounterPatch,
+  isCharacterCounterPatchNoop,
+  shouldRetryCharacterCounterConflict,
+  type CharacterCounterMutationIntent,
+  type CharacterCounterPatch,
+} from "./character-counter-mutation";
 import type { RollMode } from "./RollModeControl";
 import {
   applyCharacterMutationToSnapshot,
@@ -1161,40 +1167,21 @@ export function App() {
   const updateCharacterCounters = (
     characterId: string,
     requestedRevision: number,
-    patch: {
-      wallet?: import("@arken/contracts").CharacterDto["wallet"];
-      resources?: import("@arken/contracts").CharacterDto["resources"];
-      rest?: "SHORT" | "LONG";
-    },
-    intent?: {
-      walletDelta?: {
-        key: keyof import("@arken/contracts").CharacterDto["wallet"];
-        delta: number;
-      };
-    },
+    patch: CharacterCounterPatch,
+    intent?: CharacterCounterMutationIntent,
   ) => {
     const previous =
       characterMutationQueuesRef.current.get(characterId) ??
       Promise.resolve(
-        snapshot?.characters.find((character) => character.id === characterId),
+        snapshotRef.current?.characters.find(
+          (character) => character.id === characterId,
+        ),
       );
     const operation = previous.then(async (queuedCharacter) => {
       let canonical = queuedCharacter;
       const submit = async (base: import("@arken/contracts").CharacterDto) => {
-        const baseWallet = normalizeWallet(base.wallet);
-        const nextPatch = intent?.walletDelta
-          ? {
-              wallet: {
-                ...baseWallet,
-                [intent.walletDelta.key]: Math.max(
-                  0,
-                  baseWallet[intent.walletDelta.key] + intent.walletDelta.delta,
-                ),
-              },
-            }
-          : patch.wallet
-            ? { ...patch, wallet: normalizeWallet(patch.wallet) }
-            : patch;
+        const nextPatch = buildCharacterCounterPatch(base, patch, intent);
+        if (isCharacterCounterPatchNoop(base, nextPatch)) return base;
         const response = await api<unknown>(
           `/api/characters/${characterId}/counters`,
           {
@@ -1250,7 +1237,15 @@ export function App() {
         const freshCharacter = refreshed.characters.find(
           (character) => character.id === characterId,
         );
-        if (!freshCharacter || !intent?.walletDelta) throw reason;
+        if (!freshCharacter) throw reason;
+        const freshPatch = buildCharacterCounterPatch(
+          freshCharacter,
+          patch,
+          intent,
+        );
+        if (isCharacterCounterPatchNoop(freshCharacter, freshPatch))
+          return freshCharacter;
+        if (!shouldRetryCharacterCounterConflict(intent, patch)) throw reason;
         const updated = await submit(freshCharacter);
         setSnapshot((current) =>
           applyCharacterMutationToSnapshot(current, updated),

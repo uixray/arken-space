@@ -1007,9 +1007,17 @@ export function CharacterPanel({
     setCountersPending((count) => count + 1);
     setCountersError("");
     try {
-      await onUpdateCounters(character.id, character.revision, {
-        resources: next,
-      });
+      await onUpdateCounters(
+        character.id,
+        character.revision,
+        { resources: next },
+        {
+          resourceMapPatch: {
+            base: character.resources,
+            desired: next,
+          },
+        },
+      );
     } catch (reason) {
       setCountersError(
         reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"

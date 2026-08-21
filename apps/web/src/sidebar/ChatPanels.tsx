@@ -82,6 +82,7 @@ import { ApiError } from "../api";
 import { useThreadHistory } from "../use-thread-history";
 import { QuickRollPanel } from "./QuickRollPanel";
 import { ResourceCounters } from "./ResourceCounters";
+import type { ResourceCounterIntent } from "../resource-counter-intent";
 
 /**
  * UIX-388: shared tooltip/label text for the composer's send icon so
@@ -402,7 +403,6 @@ export function ActivityPanel({
       ),
     [activityFilters, snapshot.messages, snapshot.chatThreads, storyPosts],
   );
-  const [resourcePending, setResourcePending] = useState(false);
   /**
    * UIX-424, шаг 8. Править ресурсы может тот, кто управляет персонажем, —
    * тратит их он, а не мастер. У мастера доступ есть всегда, он ведёт NPC.
@@ -418,27 +418,26 @@ export function ActivityPanel({
    * до ответа сервера, и по этому промису узнают об отказе — только так
    * показанное число можно вернуть к серверному, а не оставить враньё на экране.
    */
-  const spendResource = (key: string, next: number) => {
-    if (!rollCharacter) return Promise.resolve();
-    const resource = rollCharacter.resources[key] ?? { current: 0 };
-    setResourcePending(true);
+  const spendResource = (
+    characterId: string,
+    revision: number,
+    intent: ResourceCounterIntent,
+  ) => {
     setComposerError("");
-    return onUpdateCounters(rollCharacter.id, rollCharacter.revision, {
-      resources: {
-        ...rollCharacter.resources,
-        [key]: { ...resource, current: next },
-      },
-    })
-      .catch((reason) => {
-        setComposerError(
-          reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
-            ? "Ресурсы уже изменены в другой сессии. Повторите действие."
-            : "Не удалось изменить очки. Проверьте соединение.",
-        );
-        // Пробрасывается дальше: счётчики отличают отказ от успеха только так.
-        throw reason;
-      })
-      .finally(() => setResourcePending(false));
+    return onUpdateCounters(
+      characterId,
+      revision,
+      {},
+      { resource: intent },
+    ).catch((reason) => {
+      setComposerError(
+        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+          ? "Ресурсы уже изменены в другой сессии. Повторите действие."
+          : "Не удалось изменить очки. Проверьте соединение.",
+      );
+      // Пробрасывается дальше: счётчики отличают отказ от успеха только так.
+      throw reason;
+    });
   };
   const submitQuickRoll = async (
     formula: string,
@@ -595,16 +594,6 @@ export function ActivityPanel({
           onVisibilityChange={setRollVisibility}
           onRoll={onRoll}
         />
-        {rollCharacter && (
-          <ResourceCounters
-            rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
-            resources={rollCharacter.resources}
-            stats={rollCharacter.stats}
-            editable={canSpendResources}
-            pending={resourcePending}
-            onSpend={spendResource}
-          />
-        )}
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}
@@ -623,6 +612,18 @@ export function ActivityPanel({
           <p className="muted">Нет доступного персонажа для броска.</p>
         )}
       </section>
+      {rollCharacter && (
+        <ResourceCounters
+          scopeKey={rollCharacter.id}
+          rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
+          resources={rollCharacter.resources}
+          stats={rollCharacter.stats}
+          editable={canSpendResources}
+          onSpend={(intent) =>
+            spendResource(rollCharacter.id, rollCharacter.revision, intent)
+          }
+        />
+      )}
       <div className="activity-log-toolbar">
         <span className="eyebrow">Журнал</span>
         {/* Фильтр относится к самому журналу, поэтому находится напротив его

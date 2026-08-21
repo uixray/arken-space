@@ -50,6 +50,7 @@ import {
 import { PalettePanel } from "./sidebar/TokenPalette";
 import { SetupPanel } from "./sidebar/SetupPanel";
 import { MediaPanel } from "./sidebar/MediaPanel";
+import type { CharacterCounterMutationIntent } from "./character-counter-mutation";
 
 type SidebarFeed = "ACTIVITY" | ChatStream;
 
@@ -123,12 +124,7 @@ export type Props = {
       resources?: CharacterDto["resources"];
       rest?: "SHORT" | "LONG";
     },
-    intent?: {
-      walletDelta?: {
-        key: keyof CharacterDto["wallet"];
-        delta: number;
-      };
-    },
+    intent?: CharacterCounterMutationIntent,
   ) => Promise<void>;
   onCampaignClock: (
     command: "ADVANCE_DAY" | "LONG_REST" | "START_BATTLE" | "END_BATTLE",

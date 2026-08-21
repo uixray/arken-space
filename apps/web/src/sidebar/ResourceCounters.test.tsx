@@ -9,6 +9,7 @@ import {
 } from "../test-support/render";
 import { ResourceCounters } from "./ResourceCounters";
 import { RESOURCE_ADJUST_DELAY_MS } from "../resource-regen";
+import type { ResourceCounterIntent } from "../resource-counter-intent";
 
 vi.mock("@gravity-ui/uikit", () => ({
   Button: ({
@@ -56,10 +57,21 @@ const rows = [
 /** Реген берётся из `RESOURCE_REGEN_STAT`: physicalPower → enduranceRegen. */
 const stats = { enduranceRegen: 3, manaRegen: 2 };
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 const renderCounters = (
   overrides: Partial<Parameters<typeof ResourceCounters>[0]> = {},
 ) => {
   const props = {
+    scopeKey: "character-a",
     rows,
     resources: {
       physicalPower: { current: 4, maximum: 10 },
@@ -67,7 +79,6 @@ const renderCounters = (
     },
     stats,
     editable: true,
-    pending: false,
     onSpend: vi.fn(() => Promise.resolve()),
     ...overrides,
   };
@@ -125,7 +136,229 @@ describe("счётчики ресурсов", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(props.onSpend).toHaveBeenCalledTimes(1);
-    expect(props.onSpend).toHaveBeenCalledWith("physicalPower", 1);
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: -3,
+    });
+  });
+
+  it("отправляет фактическую дельту после обрезки по нижней границе", async () => {
+    const props = renderCounters({
+      rows: [rows[0]!],
+      resources: { physicalPower: { current: 1, maximum: 10 } },
+    });
+    const spend = screen.getByRole("button", {
+      name: "Потратить одно очко: Выносливость",
+    });
+    act(() => {
+      spend.click();
+      spend.click();
+      spend.click();
+    });
+
+    expect(enduranceInput()).toHaveValue(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: -1,
+    });
+  });
+
+  it("отправляет фактическую дельту после обрезки по верхней границе", async () => {
+    const props = renderCounters({
+      rows: [rows[0]!],
+      resources: { physicalPower: { current: 9, maximum: 10 } },
+    });
+    const restore = screen.getByRole("button", {
+      name: "Вернуть одно очко: Выносливость",
+    });
+    act(() => {
+      restore.click();
+      restore.click();
+      restore.click();
+    });
+
+    expect(enduranceInput()).toHaveValue(10);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: 1,
+    });
+  });
+
+  it("завершение старого запроса не снимает новый draft и таймер", async () => {
+    const first = deferred();
+    const second = deferred();
+    const onSpend = vi
+      .fn<(intent: ResourceCounterIntent) => Promise<void>>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    renderCounters({ onSpend });
+    const spend = screen.getByRole("button", {
+      name: "Потратить одно очко: Выносливость",
+    });
+
+    fireEvent.click(spend);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    expect(onSpend).toHaveBeenCalledTimes(1);
+    expect(spend).toBeEnabled();
+
+    fireEvent.click(spend);
+    expect(enduranceInput()).toHaveValue(2);
+    await act(async () => {
+      first.resolve();
+      await first.promise;
+    });
+    expect(enduranceInput()).toHaveValue(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    expect(onSpend).toHaveBeenNthCalledWith(2, {
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: -1,
+    });
+    second.resolve();
+  });
+
+  it("сохраняет таймер в области исходного персонажа при переключении", async () => {
+    const request = deferred();
+    const onSpendA = vi.fn(() => request.promise);
+    const onSpendB = vi.fn(() => Promise.resolve());
+    const common = {
+      rows: [rows[0]!],
+      stats,
+      editable: true,
+    };
+    const { rerender } = renderComponent(
+      <ResourceCounters
+        {...common}
+        scopeKey="character-a"
+        resources={{ physicalPower: { current: 4, maximum: 10 } }}
+        onSpend={onSpendA}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Потратить одно очко: Выносливость",
+      }),
+    );
+    expect(enduranceInput()).toHaveValue(3);
+
+    // Персонаж B не видит draft A, но переключение не размонтирует компонент
+    // и не отменяет уже принятое для A действие.
+    rerender(
+      <ResourceCounters
+        {...common}
+        scopeKey="character-b"
+        resources={{ physicalPower: { current: 7, maximum: 10 } }}
+        onSpend={onSpendB}
+      />,
+    );
+    expect(enduranceInput()).toHaveValue(7);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    expect(onSpendA).toHaveBeenCalledTimes(1);
+    expect(onSpendA).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: -1,
+    });
+    expect(onSpendB).not.toHaveBeenCalled();
+    expect(enduranceInput()).toHaveValue(7);
+
+    // Пока запрос A не завершился, возврат к A показывает его optimistic draft.
+    rerender(
+      <ResourceCounters
+        {...common}
+        scopeKey="character-a"
+        resources={{ physicalPower: { current: 4, maximum: 10 } }}
+        onSpend={onSpendA}
+      />,
+    );
+    expect(enduranceInput()).toHaveValue(3);
+    await act(async () => {
+      request.resolve();
+      await request.promise;
+    });
+    expect(enduranceInput()).toHaveValue(4);
+  });
+
+  it("отправляет накопленный DELTA при размонтировании панели", async () => {
+    const onSpend = vi.fn();
+    const { unmount } = renderComponent(
+      <ResourceCounters
+        scopeKey="character-a"
+        rows={[rows[0]!]}
+        resources={{ physicalPower: { current: 4, maximum: 10 } }}
+        stats={stats}
+        editable
+        onSpend={onSpend}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Потратить одно очко: Выносливость",
+      }),
+    );
+
+    unmount();
+    expect(onSpend).toHaveBeenCalledTimes(1);
+    expect(onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: -1,
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    expect(onSpend).toHaveBeenCalledTimes(1);
+  });
+
+  it("не восстанавливает завершившийся старый draft после отмены новой серии", async () => {
+    const first = deferred();
+    const onSpend = vi.fn(() => first.promise);
+    renderCounters({ onSpend });
+    const spend = screen.getByRole("button", {
+      name: "Потратить одно очко: Выносливость",
+    });
+    const restore = screen.getByRole("button", {
+      name: "Вернуть одно очко: Выносливость",
+    });
+
+    fireEvent.click(spend);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    fireEvent.click(spend);
+    expect(enduranceInput()).toHaveValue(2);
+
+    await act(async () => {
+      first.resolve();
+      await first.promise;
+    });
+    fireEvent.click(restore);
+
+    // Новые -1/+1 взаимно отменились. Generation первого запроса уже завершён,
+    // поэтому его optimistic 3 нельзя вернуть навсегда поверх canonical props.
+    expect(enduranceInput()).toHaveValue(4);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    expect(onSpend).toHaveBeenCalledTimes(1);
   });
 
   it("возвращает серверное значение, когда сервер отказал", async () => {
@@ -156,7 +389,11 @@ describe("счётчики ресурсов", () => {
       screen.getByRole("button", { name: "Восстановить 3: Выносливость" }),
     );
     expect(props.onSpend).toHaveBeenCalledTimes(1);
-    expect(props.onSpend).toHaveBeenCalledWith("physicalPower", 7);
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: 3,
+    });
   });
 
   it("не восстанавливает сверх максимума", async () => {
@@ -167,7 +404,47 @@ describe("счётчики ресурсов", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Восстановить 3: Выносливость" }),
     );
-    expect(props.onSpend).toHaveBeenCalledWith("physicalPower", 10);
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: 1,
+    });
+  });
+
+  it("восстанавливает ману её собственной величиной регена", () => {
+    const props = renderCounters();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Восстановить 2: Мана" }),
+    );
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "magicPower",
+      kind: "DELTA",
+      delta: 2,
+    });
+  });
+
+  it("объединяет ещё не отправленную трату с немедленным регеном", async () => {
+    const props = renderCounters();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Потратить одно очко: Выносливость",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Восстановить 3: Выносливость" }),
+    );
+
+    expect(enduranceInput()).toHaveValue(6);
+    expect(props.onSpend).toHaveBeenCalledTimes(1);
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "DELTA",
+      delta: 2,
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
+    });
+    expect(props.onSpend).toHaveBeenCalledTimes(1);
   });
 
   it("не предлагает восстановление ресурсу без строки регена", () => {
@@ -182,12 +459,61 @@ describe("счётчики ресурсов", () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["нулевой", 0],
+    ["отрицательный", -2],
+  ])("не предлагает %s реген", (_label, enduranceRegen) => {
+    renderCounters({
+      rows: [rows[0]!],
+      stats: { enduranceRegen },
+    });
+    expect(
+      screen.queryByRole("button", { name: /Восстановить/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("принимает значение, введённое числом", async () => {
     const props = renderCounters();
     const input = enduranceInput();
     fireEvent.change(input, { target: { value: "8" } });
+    fireEvent.blur(input);
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "SET",
+      value: 8,
+    });
+  });
+
+  it("после Enter следующий blur не повторяет SET", () => {
+    const props = renderCounters();
+    const input = enduranceInput();
+    fireEvent.change(input, { target: { value: "8" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(props.onSpend).toHaveBeenCalledWith("physicalPower", 8);
+    fireEvent.blur(input);
+    expect(props.onSpend).toHaveBeenCalledTimes(1);
+  });
+
+  it("не отправляет неизменённое значение при blur", () => {
+    const props = renderCounters();
+    fireEvent.blur(enduranceInput());
+    expect(props.onSpend).not.toHaveBeenCalled();
+  });
+
+  it("держит быстрый ручной ввод optimistic и откатывает после отказа", async () => {
+    const request = deferred();
+    const onSpend = vi.fn(() => request.promise);
+    renderCounters({ onSpend });
+    const input = enduranceInput();
+
+    fireEvent.change(input, { target: { value: "8" } });
+    fireEvent.blur(input);
+    expect(enduranceInput()).toHaveValue(8);
+
+    await act(async () => {
+      request.reject(new Error("CHARACTER_CONFLICT"));
+      await request.promise.catch(() => undefined);
+    });
+    expect(enduranceInput()).toHaveValue(4);
   });
 
   it("обрезает введённое число по границам ресурса", async () => {
@@ -195,7 +521,11 @@ describe("счётчики ресурсов", () => {
     const input = enduranceInput();
     fireEvent.change(input, { target: { value: "99" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(props.onSpend).toHaveBeenCalledWith("physicalPower", 10);
+    expect(props.onSpend).toHaveBeenCalledWith({
+      key: "physicalPower",
+      kind: "SET",
+      value: 10,
+    });
   });
 
   it("не даёт уйти ниже нуля и выше максимума", () => {
@@ -231,11 +561,11 @@ describe("счётчики ресурсов", () => {
     // мусором.
     const { container } = renderComponent(
       <ResourceCounters
+        scopeKey="character-a"
         rows={[]}
         resources={{}}
         stats={{}}
         editable
-        pending={false}
         onSpend={vi.fn()}
       />,
     );

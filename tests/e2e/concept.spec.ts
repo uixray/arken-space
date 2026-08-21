@@ -2084,6 +2084,207 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   );
 });
 
+test("UIX-468 resource counters batch, rebase and roll back conflicts", async ({
+  page,
+}) => {
+  const playerSnapshot = structuredClone(snapshot);
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: playerSnapshot.characters[0]!.id,
+  };
+  playerSnapshot.members = [playerSnapshot.me];
+  const character = playerSnapshot.characters[0]!;
+  character.ownerMembershipId = playerSnapshot.me.id;
+  character.controllerMembershipIds = [playerSnapshot.me.id];
+  character.resources = {
+    physicalPower: { current: 8, maximum: 10, recoverable: true },
+    magicPower: { current: 2, maximum: 10, recoverable: true },
+  };
+  character.stats.enduranceRegen = 3;
+  character.stats.manaRegen = 4;
+
+  type CounterPayload = {
+    resources: (typeof character)["resources"];
+    revision: number;
+  };
+  const counterRequests: Array<CounterPayload & { method: string }> = [];
+  const rollRequests: string[] = [];
+  let bootstrapRequests = 0;
+  let rejectNextSet = false;
+  let conflictResponses = 0;
+  let releaseFirstResponse!: () => void;
+  const firstResponseGate = new Promise<void>((resolve) => {
+    releaseFirstResponse = resolve;
+  });
+
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (
+      pathname === "/api/dice" ||
+      (pathname === "/api/chat" && request.method() === "POST")
+    ) {
+      rollRequests.push(pathname);
+    }
+  });
+  await page.route("**/api/bootstrap", (route) => {
+    bootstrapRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    });
+  });
+  await page.route("**/api/characters/*/counters", async (route) => {
+    const payload = route.request().postDataJSON() as CounterPayload;
+    counterRequests.push({ ...payload, method: route.request().method() });
+
+    if (counterRequests.length === 1) await firstResponseGate;
+    if (rejectNextSet) {
+      rejectNextSet = false;
+      conflictResponses += 1;
+      character.resources = {
+        physicalPower: { current: 9, maximum: 10, recoverable: true },
+        magicPower: { current: 7, maximum: 10, recoverable: true },
+      };
+      character.revision = payload.revision + 1;
+      return route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "CHARACTER_CONFLICT",
+          revision: character.revision,
+        }),
+      });
+    }
+
+    character.resources = structuredClone(payload.resources);
+    character.revision = payload.revision + 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(character),
+    });
+  });
+
+  await page.goto("/");
+  const activityPanel = page.locator("#chat-panel-activity");
+  const quickRolls = activityPanel.locator('[aria-label="Быстрые броски"]');
+  const counters = activityPanel.locator("details.resource-counters");
+  await expect(quickRolls).toBeVisible();
+  await expect(counters).toBeVisible();
+  await expect(quickRolls.locator(".resource-counters")).toHaveCount(0);
+  expect(
+    await quickRolls.evaluate((element) =>
+      element.nextElementSibling?.matches("details.resource-counters"),
+    ),
+  ).toBe(true);
+  await expect(
+    quickRolls.getByRole("button", {
+      name: "Реген Выносливости",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    quickRolls.getByRole("button", { name: "Реген Маны", exact: true }),
+  ).toHaveCount(0);
+
+  const physical = counters
+    .locator(".resource-counters__item")
+    .filter({ hasText: "Выносливость" });
+  const mana = counters
+    .locator(".resource-counters__item")
+    .filter({ hasText: "Мана" });
+  const physicalInput = counters.getByRole("spinbutton", {
+    name: "Очки: Выносливость",
+  });
+  const manaInput = counters.getByRole("spinbutton", { name: "Очки: Мана" });
+  const spendPhysical = physical.getByRole("button", {
+    name: "Потратить одно очко: Выносливость",
+  });
+
+  await spendPhysical.evaluate((button) => {
+    for (let index = 0; index < 3; index += 1)
+      (button as HTMLButtonElement).click();
+  });
+  await expect(physicalInput).toHaveValue("5");
+  await expect.poll(() => counterRequests.length).toBe(1);
+  expect(counterRequests[0]).toMatchObject({
+    method: "PATCH",
+    revision: 1,
+    resources: {
+      physicalPower: { current: 5 },
+      magicPower: { current: 2 },
+    },
+  });
+
+  await mana.getByRole("button", { name: "Восстановить 4: Мана" }).click();
+  await expect(manaInput).toHaveValue("6");
+  expect(counterRequests).toHaveLength(1);
+  releaseFirstResponse();
+
+  await expect.poll(() => counterRequests.length).toBe(2);
+  expect(counterRequests[1]).toMatchObject({
+    method: "PATCH",
+    revision: 2,
+    resources: {
+      physicalPower: { current: 5 },
+      magicPower: { current: 6 },
+    },
+  });
+  await expect(physicalInput).toHaveValue("5");
+  await expect(manaInput).toHaveValue("6");
+
+  await physicalInput.fill("7");
+  await physicalInput.press("Enter");
+  const summary = counters.locator("summary");
+  await summary.click();
+  await expect(counters).not.toHaveAttribute("open", "");
+  await expect(counters.getByLabel("Очки ресурсов")).toBeHidden();
+  await expect.poll(() => counterRequests.length).toBe(3);
+  await page.waitForTimeout(700);
+  expect(counterRequests).toHaveLength(3);
+  expect(counterRequests[2]).toMatchObject({
+    method: "PATCH",
+    revision: 3,
+    resources: {
+      physicalPower: { current: 7 },
+      magicPower: { current: 6 },
+    },
+  });
+
+  await summary.click();
+  await expect(counters).toHaveAttribute("open", "");
+  await expect(counters.getByLabel("Очки ресурсов")).toBeVisible();
+
+  const bootstrapsBeforeConflict = bootstrapRequests;
+  rejectNextSet = true;
+  await manaInput.fill("1");
+  await manaInput.press("Enter");
+  await expect.poll(() => conflictResponses).toBe(1);
+  await expect
+    .poll(() => bootstrapRequests)
+    .toBeGreaterThan(bootstrapsBeforeConflict);
+  await expect(physicalInput).toHaveValue("9");
+  await expect(manaInput).toHaveValue("7");
+  await expect(
+    activityPanel
+      .getByRole("alert")
+      .filter({ hasText: "Ресурсы уже изменены" }),
+  ).toBeVisible();
+  expect(counterRequests).toHaveLength(4);
+  expect(counterRequests[3]).toMatchObject({
+    method: "PATCH",
+    revision: 4,
+    resources: {
+      physicalPower: { current: 7 },
+      magicPower: { current: 1 },
+    },
+  });
+  expect(rollRequests).toEqual([]);
+});
+
 test("structured resources persist and short rest uses the authoritative counter route", async ({
   page,
 }) => {
