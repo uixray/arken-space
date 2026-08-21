@@ -1,6 +1,7 @@
 .git
 .gitignore
 .agent
+.agenttmp
 .agents
 .antigravity
 .anythingllm
@@ -9,6 +10,9 @@
 .cursor
 .gemini
 .kimi
+.workspace
+.worktrees
+.tmp_*
 node_modules
 **/node_modules
 **/dist
@@ -17,5 +21,6 @@ playwright-report
 test-results
 media
 backups
+docs/stickers
 .env
 *.log
