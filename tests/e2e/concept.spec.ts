@@ -664,8 +664,17 @@ test("scene refresh races do not revoke local music consent", async ({
 
   await page.addInitScript(() => {
     localStorage.setItem("arken.audio.enabled", "true");
-    HTMLMediaElement.prototype.play = () =>
-      Promise.reject(new DOMException("interrupted", "AbortError"));
+    localStorage.setItem("arken.audio.volume", "0.5");
+    const probe = { playVolumes: [] as number[] };
+    (
+      window as typeof window & {
+        __arkenMusicProbe: typeof probe;
+      }
+    ).__arkenMusicProbe = probe;
+    HTMLMediaElement.prototype.play = function () {
+      probe.playVolumes.push(this.volume);
+      return Promise.reject(new DOMException("interrupted", "AbortError"));
+    };
   });
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
@@ -682,10 +691,66 @@ test("scene refresh races do not revoke local music consent", async ({
   );
 
   await page.goto("/");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __arkenMusicProbe: { playVolumes: number[] };
+            }
+          ).__arkenMusicProbe.playVolumes.length,
+      ),
+    )
+    .toBeGreaterThan(0);
+  const initialPlayVolumes = await page.evaluate(
+    () =>
+      (
+        window as typeof window & {
+          __arkenMusicProbe: { playVolumes: number[] };
+        }
+      ).__arkenMusicProbe.playVolumes,
+  );
+  expect(
+    initialPlayVolumes.every((gain) => Math.abs(gain - 0.25) < 0.001),
+  ).toBe(true);
   await page.locator(".music-volume-control summary").click();
-  await expect(
-    page.getByRole("slider", { name: "Личная громкость" }),
-  ).toBeVisible();
+  const volumeSlider = page.getByRole("slider", { name: "Личная громкость" });
+  await expect(volumeSlider).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator(".music-volume-popover").evaluate((popover) => {
+        const bounds = popover.getBoundingClientRect();
+        const target = document.elementFromPoint(
+          bounds.left + bounds.width / 2,
+          bounds.top + bounds.height / 2,
+        );
+        return target !== null && popover.contains(target);
+      }),
+    )
+    .toBe(true);
+  const playCountBeforeVolumeChange = initialPlayVolumes.length;
+  await volumeSlider.fill("0.05");
+  await expect
+    .poll(() =>
+      page
+        .locator("audio")
+        .first()
+        .evaluate((audio) => (audio as HTMLAudioElement).volume),
+    )
+    .toBeCloseTo(0.0025);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __arkenMusicProbe: { playVolumes: number[] };
+            }
+          ).__arkenMusicProbe.playVolumes.length,
+      ),
+    )
+    .toBe(playCountBeforeVolumeChange);
   await selectViewedScene(page, "Музыкальная сцена");
   await page
     .getByRole("button", {
@@ -697,6 +762,14 @@ test("scene refresh races do not revoke local music consent", async ({
   await expect(
     page.getByRole("slider", { name: "Личная громкость" }),
   ).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .locator("audio")
+        .first()
+        .evaluate((audio) => (audio as HTMLAudioElement).volume),
+    )
+    .toBeCloseTo(0.0025);
   await expect
     .poll(() =>
       page.evaluate(() => localStorage.getItem("arken.audio.enabled")),

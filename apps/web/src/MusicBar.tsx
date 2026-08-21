@@ -6,6 +6,7 @@ import { ArkenDialog } from "./ui/ArkenDialog";
 import { EmptyState, ErrorState } from "./ui/EntityState";
 import { notify } from "./ui/notifications";
 import { isAudioConsentError } from "./audio-playback";
+import { volumeSliderToGain } from "./audio-volume";
 import { resolvePlaybackAction } from "./music-playback";
 
 const ENABLED_KEY = "arken.audio.enabled";
@@ -40,7 +41,9 @@ export function MusicBar({
     () => localStorage.getItem(ENABLED_KEY) === "true",
   );
   const [volume, setVolume] = useState(() => {
-    const saved = Number(localStorage.getItem(VOLUME_KEY));
+    const stored = localStorage.getItem(VOLUME_KEY);
+    if (stored === null) return 0.5;
+    const saved = Number(stored);
     return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 0.5;
   });
   const [duration, setDuration] = useState(0);
@@ -62,9 +65,12 @@ export function MusicBar({
     [pendingUrl],
   );
   useEffect(() => {
+    localStorage.setItem(VOLUME_KEY, String(volume));
+    if (element.current) element.current.volume = volumeSliderToGain(volume);
+  }, [volume]);
+  useEffect(() => {
     const player = element.current;
     if (!player) return;
-    player.volume = volume;
     player.loop = audio.loop;
     const elapsed =
       audio.playing && audio.startedAt
@@ -93,15 +99,11 @@ export function MusicBar({
         });
       });
     else if (action === "pause") player.pause();
-  }, [audio, current, enabled, volume]);
+  }, [audio, current, enabled]);
   useEffect(
     () => localStorage.setItem(ENABLED_KEY, String(enabled)),
     [enabled],
   );
-  useEffect(() => {
-    localStorage.setItem(VOLUME_KEY, String(volume));
-    if (element.current) element.current.volume = volume;
-  }, [volume]);
 
   const sendCommand = (
     command:

@@ -1,6 +1,145 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { createElement } from "react";
+import type { AssetDto, AudioStateDto } from "@arken/contracts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isAudioConsentError } from "./audio-playback";
+import { volumeSliderToGain } from "./audio-volume";
 import { resolvePlaybackAction } from "./music-playback";
+import type { GameSocket } from "./realtime";
+import { fireEvent, renderComponent, screen } from "./test-support/render";
+
+vi.mock("@gravity-ui/uikit", () => ({
+  Button: () => null,
+  Checkbox: () => null,
+  Loader: () => null,
+}));
+vi.mock("./ui/ArkenDialog", () => ({ ArkenDialog: () => null }));
+vi.mock("./ui/notifications", () => ({ notify: vi.fn() }));
+
+const { MusicBar } = await import("./MusicBar");
+
+const audioAsset: AssetDto = {
+  id: "audio-under-test",
+  kind: "AUDIO",
+  name: "Quiet track",
+  mimeType: "audio/mpeg",
+  sizeBytes: 1024,
+  width: null,
+  height: null,
+  durationSeconds: 120,
+  url: "/quiet-track.mp3",
+  createdAt: new Date(0).toISOString(),
+};
+const playingAudio: AudioStateDto = {
+  assetId: audioAsset.id,
+  playing: true,
+  positionSeconds: 0,
+  loop: false,
+  startedAt: null,
+  revision: 1,
+  updatedAt: new Date(0).toISOString(),
+};
+
+beforeEach(() => localStorage.clear());
+afterEach(() => vi.restoreAllMocks());
+
+describe("personal music volume", () => {
+  it("keeps the first slider step quiet instead of jumping to 5% gain", () => {
+    expect(volumeSliderToGain(0)).toBe(0);
+    expect(volumeSliderToGain(0.05)).toBeCloseTo(0.0025);
+  });
+
+  it("preserves the endpoints and clamps corrupted stored values", () => {
+    expect(volumeSliderToGain(1)).toBe(1);
+    expect(volumeSliderToGain(-1)).toBe(0);
+    expect(volumeSliderToGain(2)).toBe(1);
+  });
+
+  it("applies stored personal gain before the initial play call", () => {
+    localStorage.setItem("arken.audio.enabled", "true");
+    localStorage.setItem("arken.audio.volume", "0.05");
+    const gainsAtPlay: number[] = [];
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementation(function (this: HTMLMediaElement) {
+        gainsAtPlay.push(this.volume);
+        return Promise.resolve();
+      });
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+
+    renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(gainsAtPlay).toHaveLength(1);
+    expect(gainsAtPlay[0]).toBeCloseTo(0.0025);
+  });
+
+  it("uses the midpoint when no personal volume has been saved", () => {
+    localStorage.setItem("arken.audio.enabled", "true");
+    const gainsAtPlay: number[] = [];
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      gainsAtPlay.push(this.volume);
+      return Promise.resolve();
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+
+    renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+
+    expect(
+      screen.getByRole("slider", { name: "Личная громкость" }),
+    ).toHaveValue("0.5");
+    expect(gainsAtPlay[0]).toBeCloseTo(0.25);
+  });
+
+  it("updates gain without reconciling playback or shared state again", () => {
+    localStorage.setItem("arken.audio.enabled", "true");
+    localStorage.setItem("arken.audio.volume", "0.05");
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const emit = vi.fn();
+    const { container } = renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: { emit } as unknown as GameSocket,
+        onUpload: vi.fn(),
+      }),
+    );
+    const audio = container.querySelector("audio");
+    expect(audio).not.toBeNull();
+    audio!.currentTime = 17;
+
+    fireEvent.change(screen.getByRole("slider", { name: "Личная громкость" }), {
+      target: { value: "0.5" },
+    });
+
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(audio!.currentTime).toBe(17);
+    expect(audio!.volume).toBe(0.25);
+    expect(emit).not.toHaveBeenCalled();
+  });
+});
 
 describe("music playback recovery", () => {
   it("treats browser consent failures as actionable", () => {

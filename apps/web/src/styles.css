@@ -239,7 +239,15 @@ code {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+.scene-switcher,
+.workspace-nav {
   overflow: hidden;
+}
+.status-line {
+  /* The music details menu extends below the top bar. Clipping this flex item
+     made the volume popover open invisibly. */
+  overflow: visible;
 }
 .workspace-nav__item {
   flex: 0 0 auto;
