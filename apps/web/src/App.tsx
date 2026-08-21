@@ -1392,7 +1392,10 @@ export function App() {
    */
   const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
   const initiativeActions = useInitiativeActions({ load });
-  const chatHistoryActions = useChatHistoryActions({ setSnapshot });
+  const chatHistoryActions = useChatHistoryActions({
+    setSnapshot,
+    snapshotRef,
+  });
   const openPlayerRequests = useCallback(
     () => handleWorkspaceChange("player-requests"),
     [handleWorkspaceChange],

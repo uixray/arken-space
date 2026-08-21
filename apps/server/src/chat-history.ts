@@ -1,4 +1,14 @@
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import {
   chatAttachments,
   chatAttachmentUploads,
@@ -23,6 +33,43 @@ type MessageRow = typeof chatMessages.$inferSelect;
 type ThreadRow = typeof chatThreads.$inferSelect;
 
 /**
+ * Полная серверная видимость строки чата — до `limit`, `count` и курсора.
+ *
+ * `chatVisibilityFilter` закрывает PUBLIC/GM_ONLY, но у двух видов сообщений
+ * есть дополнительная, более узкая аудитория:
+ *
+ * - у отправленного стикера навсегда заморожен список получателей;
+ * - карточка заявки видна только там, где видна сама заявка.
+ *
+ * Эти условия нельзя оставлять одной постпроекции: тогда невидимые новые
+ * строки занимают страницу, занижают снапшот и искажают latest/unread. При
+ * пустом наборе заявок используется `IS NULL`, а не `IN ()`.
+ */
+export function fullChatVisibilityFilter(
+  auth: AuthContext,
+  visiblePlayerRequestIds: ReadonlySet<string>,
+): SQL {
+  const playerRequestFilter =
+    visiblePlayerRequestIds.size > 0
+      ? or(
+          isNull(chatMessages.playerRequestId),
+          inArray(chatMessages.playerRequestId, [...visiblePlayerRequestIds]),
+        )
+      : isNull(chatMessages.playerRequestId);
+
+  return and(
+    chatVisibilityFilter(auth),
+    or(
+      isNull(chatMessages.stickerViewerMembershipIds),
+      sql`${chatMessages.stickerViewerMembershipIds} @> ${JSON.stringify([
+        auth.membershipId,
+      ])}::jsonb`,
+    ),
+    playerRequestFilter,
+  )!;
+}
+
+/**
  * UIX-450 — превращение строк сообщений в DTO.
  *
  * Вынесено из `snapshot.ts` затем, чтобы маршрут истории отдавал **ровно то
@@ -32,8 +79,8 @@ type ThreadRow = typeof chatThreads.$inferSelect;
  * вложения человеку показывать. Вторая копия этого набора рано или поздно
  * разошлась бы с первой, и разошлась бы в сторону «показали лишнее».
  *
- * Фильтр `chatVisibilityFilter` остаётся на вызывающем: он часть SQL-запроса,
- * а не постобработки, и в снапшоте с маршрутом запросы разные.
+ * Вызывающий сначала применяет `fullChatVisibilityFilter` в SQL; проверки
+ * ниже остаются второй линией защиты для любого будущего вызова проекции.
  */
 export async function projectChatMessages(
   db: Database,
@@ -209,7 +256,7 @@ export async function loadThreadHistory(
       and(
         eq(chatMessages.campaignId, auth.campaignId),
         eq(chatMessages.threadId, thread.id),
-        chatVisibilityFilter(auth),
+        fullChatVisibilityFilter(auth, input.visiblePlayerRequestIds),
         ...(input.before === undefined
           ? []
           : [lt(chatMessages.sequence, input.before)]),

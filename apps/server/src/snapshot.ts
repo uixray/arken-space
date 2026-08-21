@@ -40,14 +40,13 @@ import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import { env } from "./env.js";
 import { normalizeLegacyEntryData } from "./entry-data.js";
 import { normalizeAudioTrackDeadlines } from "./audio-state.js";
-import {
-  chatVisibilityFilter,
-  canAccessStream,
-  unknownPlayerDisplayName,
-} from "./chat.js";
+import { canAccessStream, unknownPlayerDisplayName } from "./chat.js";
 import { buildWorldMapsSnapshot } from "./world-maps.js";
 import { characterDto } from "./character-dto.js";
-import { projectChatMessages } from "./chat-history.js";
+import {
+  fullChatVisibilityFilter,
+  projectChatMessages,
+} from "./chat-history.js";
 import { resolveTokenName } from "./token-name.js";
 import { projectInitiative } from "./initiative.js";
 import { normalizeTokenConditions } from "./token-conditions.js";
@@ -416,6 +415,9 @@ export async function buildSnapshot(
   const cursorByThread = new Map(
     cursorRows.map((cursor) => [cursor.threadId, cursor.lastReadSequence]),
   );
+  const visiblePlayerRequestIds = new Set(
+    playerRequestRows.map((request) => request.id),
+  );
   const messageGroups = await Promise.all(
     visibleThreadRows.map((thread) =>
       db
@@ -425,15 +427,12 @@ export async function buildSnapshot(
           and(
             eq(chatMessages.campaignId, auth.campaignId),
             eq(chatMessages.threadId, thread.id),
-            chatVisibilityFilter(auth),
+            fullChatVisibilityFilter(auth, visiblePlayerRequestIds),
           ),
         )
         .orderBy(desc(chatMessages.sequence))
         .limit(SNAPSHOT_MESSAGES_PER_THREAD),
     ),
-  );
-  const visiblePlayerRequestIds = new Set(
-    playerRequestRows.map((request) => request.id),
   );
   const messageRows = visibleThreadRows.flatMap((thread, index) =>
     (messageGroups[index] ?? []).map((message) => ({ message, thread })),
@@ -449,7 +448,7 @@ export async function buildSnapshot(
             eq(chatMessages.threadId, thread.id),
             gt(chatMessages.sequence, cursorByThread.get(thread.id) ?? 0),
             ne(chatMessages.membershipId, auth.membershipId),
-            chatVisibilityFilter(auth),
+            fullChatVisibilityFilter(auth, visiblePlayerRequestIds),
           ),
         ),
     ),

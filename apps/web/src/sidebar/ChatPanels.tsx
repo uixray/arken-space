@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -7,6 +8,8 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type RefObject,
+  type UIEvent as ReactUIEvent,
 } from "react";
 import type {
   ChatAttachmentMetadata,
@@ -79,7 +82,10 @@ import { useFollowScroll } from "../ui/useFollowScroll";
 import { decideComposerKeydown } from "../composer-keyboard-intent";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 import { ApiError } from "../api";
-import { useThreadHistory } from "../use-thread-history";
+import {
+  shouldLoadOlderAfterScroll,
+  useThreadHistory,
+} from "../use-thread-history";
 import { QuickRollPanel } from "./QuickRollPanel";
 import { ResourceCounters } from "./ResourceCounters";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
@@ -105,6 +111,55 @@ const SEND_TOOLTIP =
  * всплывающей подсказке кнопки отправки — `SEND_TOOLTIP` выше, слово в слово.
  */
 const SEND_HINT = "Enter — всем · Ctrl+Enter — только мастеру";
+
+function useHistoryScrollHandler(input: {
+  resetKey: unknown;
+  listRef: RefObject<HTMLDivElement | null>;
+  onFollowScroll: (event: ReactUIEvent<HTMLDivElement>) => void;
+  hasMore: boolean;
+  pending: boolean;
+  loadOlder: () => Promise<void>;
+}) {
+  const { resetKey, listRef, onFollowScroll, hasMore, pending, loadOlder } =
+    input;
+  const previousScrollTopRef = useRef<number | null>(null);
+  useEffect(() => {
+    previousScrollTopRef.current = null;
+  }, [resetKey]);
+
+  return useCallback(
+    (event: ReactUIEvent<HTMLDivElement>) => {
+      onFollowScroll(event);
+      const list = event.currentTarget;
+      const previousScrollTop = previousScrollTopRef.current;
+      previousScrollTopRef.current = list.scrollTop;
+      if (
+        !shouldLoadOlderAfterScroll({
+          previousScrollTop,
+          scrollTop: list.scrollTop,
+          hasMore,
+          pending,
+        })
+      )
+        return;
+
+      const scrollHeightBefore = list.scrollHeight;
+      const scrollTopBefore = list.scrollTop;
+      void loadOlder().then(() => {
+        requestAnimationFrame(() => {
+          if (listRef.current !== list) return;
+          const addedHeight = Math.max(
+            0,
+            list.scrollHeight - scrollHeightBefore,
+          );
+          list.scrollTop = scrollTopBefore + addedHeight;
+          previousScrollTopRef.current = list.scrollTop;
+        });
+      });
+    },
+    [hasMore, listRef, loadOlder, onFollowScroll, pending],
+  );
+}
 
 export function ChatMessageBody({
   message,
@@ -901,12 +956,26 @@ export function DirectChatPanel({
   const messages = activeThread
     ? messagesForDirectThread(snapshot, activeThread.id)
     : [];
+  const {
+    hasMore: historyHasMore,
+    pending: historyPending,
+    error: historyError,
+    loadOlder,
+  } = useThreadHistory(snapshot, activeThread?.id, messages);
   const latestMessage = messages.at(-1);
   const latestSequence = latestMessage?.sequence;
   const { listRef, newItemCount, scrollToBottom, onScroll } = useFollowScroll(
     latestMessage?.id,
     activeThread?.id,
   );
+  const handleHistoryScroll = useHistoryScrollHandler({
+    resetKey: activeThread?.id,
+    listRef,
+    onFollowScroll: onScroll,
+    hasMore: historyHasMore,
+    pending: historyPending,
+    loadOlder,
+  });
 
   useEffect(() => {
     attachmentPreviewUrlRef.current = attachmentPreviewUrl;
@@ -1066,8 +1135,23 @@ export function DirectChatPanel({
         className="message-list"
         aria-live="polite"
         ref={listRef}
-        onScroll={onScroll}
+        onScroll={handleHistoryScroll}
       >
+        {activeThread && historyHasMore && (
+          <button
+            type="button"
+            className="chat-load-more"
+            disabled={historyPending}
+            onClick={() => void loadOlder()}
+          >
+            {historyPending ? "Загружаю…" : "Показать более ранние"}
+          </button>
+        )}
+        {historyError && (
+          <p className="chat-empty" role="alert">
+            {historyError}
+          </p>
+        )}
         {!activeThread && (
           <p className="chat-empty">
             Выберите получателя, чтобы начать личный диалог.
@@ -1226,11 +1310,19 @@ export function ChatPanel({
     pending: historyPending,
     error: historyError,
     loadOlder,
-  } = useThreadHistory(messages);
+  } = useThreadHistory(snapshot, threadId, messages);
   const latestMessageId = latestMessage?.id;
   const latestSequence = latestMessage?.sequence;
   const { listRef, isAtBottom, newItemCount, scrollToBottom, onScroll } =
     useFollowScroll(latestMessageId, activeStream);
+  const handleHistoryScroll = useHistoryScrollHandler({
+    resetKey: threadId,
+    listRef,
+    onFollowScroll: onScroll,
+    hasMore: historyHasMore,
+    pending: historyPending,
+    loadOlder,
+  });
   const canCompose =
     activeStream === "TABLE" ||
     (activeStream === "STORY" && snapshot.me.role === "GM");
@@ -1337,18 +1429,16 @@ export function ChatPanel({
         className="message-list"
         aria-live="polite"
         ref={listRef}
-        onScroll={onScroll}
+        onScroll={handleHistoryScroll}
       >
-        {/* UIX-450: кнопка вверху списка, а не автоподгрузка по прокрутке.
-         * Автоподгрузка в ленте, куда постоянно приходит новое, дёргает
-         * позицию прокрутки под рукой у читающего; здесь человек сам решает,
-         * когда уйти в прошлое. */}
+        {/* UIX-450: прокрутка вверх загружает страницу автоматически, а кнопка
+         * остаётся доступным fallback для клавиатуры и коротких списков. */}
         {threadId && historyHasMore && (
           <button
             type="button"
             className="chat-load-more"
             disabled={historyPending}
-            onClick={() => void loadOlder(threadId)}
+            onClick={() => void loadOlder()}
           >
             {historyPending ? "Загружаю…" : "Показать более ранние"}
           </button>

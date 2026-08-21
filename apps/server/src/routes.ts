@@ -121,7 +121,7 @@ import {
   loadCampaignReadSet,
   resolveStatLayout,
 } from "./snapshot.js";
-import { loadThreadHistory } from "./chat-history.js";
+import { fullChatVisibilityFilter, loadThreadHistory } from "./chat-history.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import {
   largestFields,
@@ -6537,6 +6537,7 @@ export function registerRoutes(
       .where(eq(memberships.campaignId, auth.campaignId));
     const visibleRequests = await listVisiblePlayerRequests(db, auth);
 
+    reply.header("Cache-Control", "private, no-store");
     return loadThreadHistory(db, auth, {
       threadId: params.threadId,
       before: query.before,
@@ -6651,6 +6652,9 @@ export function registerRoutes(
         .code(code === "CHAT_THREAD_NOT_FOUND" ? 404 : 403)
         .send({ error: code });
     }
+    const visiblePlayerRequestIds = new Set(
+      (await listVisiblePlayerRequests(db, auth)).map((item) => item.id),
+    );
     const [latest] = await db
       .select({ sequence: chatMessages.sequence })
       .from(chatMessages)
@@ -6658,7 +6662,7 @@ export function registerRoutes(
         and(
           eq(chatMessages.campaignId, auth.campaignId),
           eq(chatMessages.threadId, thread.id),
-          chatVisibilityFilter(auth),
+          fullChatVisibilityFilter(auth, visiblePlayerRequestIds),
         ),
       )
       .orderBy(desc(chatMessages.sequence))

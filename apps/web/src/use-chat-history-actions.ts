@@ -1,4 +1,9 @@
-import { useMemo } from "react";
+import {
+  useMemo,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import type { ChatMessageDto, GameSnapshot } from "@arken/contracts";
 import { api } from "./api";
 import { mergeChatHistory } from "./chat-state";
@@ -17,19 +22,43 @@ export interface ChatHistoryActions {
   onLoadThreadHistory: (
     threadId: string,
     before?: number,
-  ) => Promise<{ loaded: number; hasMore: boolean }>;
+  ) => Promise<{
+    loaded: number;
+    hasMore: boolean;
+    /** The guarded updater was queued; committed message IDs are final proof. */
+    accepted: boolean;
+    messageIds: string[];
+  }>;
 }
 
 export function useChatHistoryActions(dependencies: {
   /** Stable — `useState`'s setter. */
-  setSnapshot: (
-    update: (current: GameSnapshot | null) => GameSnapshot | null,
-  ) => void;
+  setSnapshot: Dispatch<SetStateAction<GameSnapshot | null>>;
+  /** Latest committed authority; a history page may never cross its boundary. */
+  snapshotRef: MutableRefObject<GameSnapshot | null>;
 }): ChatHistoryActions {
-  const { setSnapshot } = dependencies;
+  const { setSnapshot, snapshotRef } = dependencies;
   return useMemo<ChatHistoryActions>(
     () => ({
       onLoadThreadHistory: async (threadId, before) => {
+        // Capture the exact authoritative object, identity and thread before
+        // the request leaves. A hand-off, logout/login or full snapshot may
+        // replace it while HTTP is in flight; that old page must then become
+        // inert rather than enter the new user's global messages/activity.
+        const capturedSnapshot = snapshotRef.current;
+        const capturedThread = capturedSnapshot?.chatThreads.find(
+          (thread) => thread.id === threadId,
+        );
+        if (!capturedSnapshot || !capturedThread)
+          return {
+            loaded: 0,
+            hasMore: true,
+            accepted: false,
+            messageIds: [],
+          };
+        const capturedCampaignId = capturedSnapshot.campaign.id;
+        const capturedMembershipId = capturedSnapshot.me.id;
+
         const page = await api<{
           messages: ChatMessageDto[];
           hasMore: boolean;
@@ -37,12 +66,49 @@ export function useChatHistoryActions(dependencies: {
           `/api/chat/threads/${threadId}/messages?limit=50` +
             (before === undefined ? "" : `&before=${before}`),
         );
-        setSnapshot((current) =>
-          current ? mergeChatHistory(current, page.messages) : current,
+        const authorityAfterRequest = snapshotRef.current;
+        if (
+          authorityAfterRequest !== capturedSnapshot ||
+          authorityAfterRequest.campaign.id !== capturedCampaignId ||
+          authorityAfterRequest.me.id !== capturedMembershipId ||
+          !authorityAfterRequest.chatThreads.some(
+            (thread) => thread === capturedThread && thread.id === threadId,
+          )
+        )
+          return {
+            loaded: 0,
+            hasMore: page.hasMore,
+            accepted: false,
+            messageIds: page.messages.map((message) => message.id),
+          };
+
+        const mergedSnapshot = mergeChatHistory(
+          capturedSnapshot,
+          page.messages,
         );
-        return { loaded: page.messages.length, hasMore: page.hasMore };
+        setSnapshot((current) => {
+          if (
+            current !== capturedSnapshot ||
+            snapshotRef.current !== capturedSnapshot ||
+            current.campaign.id !== capturedCampaignId ||
+            current.me.id !== capturedMembershipId ||
+            !current.chatThreads.some(
+              (thread) => thread === capturedThread && thread.id === threadId,
+            )
+          )
+            return current;
+          // Even an empty/duplicate page needs a commit boundary: the hook
+          // only trusts `hasMore` after it observes the queued guarded update.
+          return mergedSnapshot === current ? { ...current } : mergedSnapshot;
+        });
+        return {
+          loaded: page.messages.length,
+          hasMore: page.hasMore,
+          accepted: true,
+          messageIds: page.messages.map((message) => message.id),
+        };
       },
     }),
-    [setSnapshot],
+    [setSnapshot, snapshotRef],
   );
 }

@@ -103,7 +103,12 @@ function renderTablePanel() {
       value={
         {
           chatHistory: {
-            onLoadThreadHistory: async () => ({ loaded: 0, hasMore: false }),
+            onLoadThreadHistory: async () => ({
+              loaded: 0,
+              hasMore: false,
+              accepted: true,
+              messageIds: [],
+            }),
           },
         } as never
       }
