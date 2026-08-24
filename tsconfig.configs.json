@@ -1,0 +1,29 @@
+{
+  /*
+   * UIX-519: корневые конфигурационные файлы не входили ни в один tsconfig.
+   *
+   * `tests/e2e/tsconfig.json` имеет `include: ["."]` и покрывает только свой
+   * каталог, а рабочие пакеты — свои. Корень оставался слепой зоной, и это
+   * не теория: в `playwright.multiplayer.config.ts` свойство `actionTimeout`
+   * стояло на верхнем уровне `defineConfig` вместо `use`, где его читает
+   * Playwright. TypeScript отверг бы лишнее свойство в объектном литерале,
+   * но файл никто не проверял — и неработающий таймаут несколько прогонов
+   * маскировал настоящую причину падения multiplayer gate.
+   *
+   * `eslint.config.js` сюда не входит намеренно: это JavaScript, и включение
+   * его потребовало бы `allowJs` с проверкой без аннотаций, что дало бы
+   * видимость покрытия вместо покрытия. Он остаётся вне проверки типов
+   * осознанно.
+   */
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "types": ["node"]
+  },
+  "include": [
+    "playwright.config.ts",
+    "playwright.multiplayer.config.ts",
+    "vitest.config.ts"
+  ]
+}

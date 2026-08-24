@@ -11,7 +11,7 @@
     "dev": "concurrently -n server,web -c red,blue \"pnpm --filter @arken/server dev\" \"pnpm --filter @arken/web dev\"",
     "dev:db": "docker compose up -d postgres",
     "build": "pnpm -r --workspace-concurrency=1 build",
-    "typecheck": "pnpm -r --workspace-concurrency=1 typecheck && tsc -p tests/e2e/tsconfig.json",
+    "typecheck": "pnpm -r --workspace-concurrency=1 typecheck && tsc -p tests/e2e/tsconfig.json && tsc -p tsconfig.configs.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
