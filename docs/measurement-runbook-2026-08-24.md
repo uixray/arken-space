@@ -1,9 +1,8 @@
-# Измерения UIX-408 / UIX-409 / UIX-450 — рунбук и состояние на 24.08.2026
+# Измерения UIX-408 / UIX-409 / UIX-450 — рунбук и результат
 
-Единственный незакрытый blocker трёх Urgent-задач — числа «после» на той же
-копии данных, на которой снята базовая линия. Этот файл фиксирует, что уже
-подготовлено и какие шаги остались, чтобы следующий заход не начинался с
-разведки.
+**Замер выполнен 24.08.2026.** Числа ниже. Рунбук сохранён, потому что
+измерение придётся повторять при следующих изменениях рассылки, а половина
+шагов неочевидна.
 
 ## Зачем это нужно
 
@@ -26,6 +25,43 @@ Acceptance требует сравнимых до/после:
 | Снапшот ГМ                              | 692.9 КБ |
 
 Состав: `messages` 1 726 КБ (67%), `fogReveals` 443 КБ, `drawings` 230 КБ.
+
+## Результат (24.08.2026, ревизия `8ec37be`)
+
+Снято на восстановленной копии того же дампа, 1 GM + 6 PLAYER, 5 прогонов:
+
+| Метрика              | До       | После             | Изменение  |
+| -------------------- | -------- | ----------------- | ---------- |
+| **Байт на рассылку** | 2 580 КБ | **868.2 КБ**      | **−66.3%** |
+| Запросов на рассылку | 239      | 167               | −30.1%     |
+| Время рассылки       | 872 мс   | 239 мс            | −72.6%     |
+| Снапшот ГМ           | 692.9 КБ | 292.5 КБ          | −57.8%     |
+| Снапшот PLAYER       | ~315 КБ  | 95.7 КБ (медиана) | −69.6%     |
+
+Состав по полям:
+
+| Поле         | До               | После            | Изменение |
+| ------------ | ---------------- | ---------------- | --------- |
+| `messages`   | 1 726 КБ (67.0%) | 178.8 КБ (20.7%) | −89.6%    |
+| `fogReveals` | 443 КБ (17.2%)   | 372.6 КБ (43.1%) | −15.9%    |
+| `drawings`   | 230 КБ (8.9%)    | 119.2 КБ (13.8%) | −48.2%    |
+
+Требование UIX-450 «не меньше чем вдвое» выполнено: падение в 2.97 раза.
+
+`fogReveals` стал крупнейшей статьёй, упав всего на 16%. Это согласуется с
+поправкой из плана (§2.2): игрокам туман чужих сцен не уезжал и раньше — отсев
+стоял в DTO, — поэтому сужение выборки дало экономию в основном мастеру.
+
+### Что в этих числах надёжно, а что нет
+
+- **Байты и количество запросов** детерминированы и сопоставимы напрямую.
+- **Время** сравнивать осторожно: базовая линия могла сниматься на другом
+  железе, поэтому «в 3.6 раза быстрее» — не точная величина.
+- **Схема БД отличается от исходной.** Дамп 15.08 не содержит колонки
+  `tokens.conditions`, добавленной более поздней миграцией, и текущий код на
+  нём падает. Пришлось применить миграции к копии: «после» измерено на
+  **данных** 15.08, но на **схеме** текущей ревизии. Иначе никак — старую схему
+  новый код не читает.
 
 ## Что уже подготовлено на сервере
 
@@ -99,15 +135,37 @@ sudo docker exec arken-measure-db psql -U arken -d arken -tAc "select c.id, c.ac
 sudo docker exec arken-measure-db psql -U arken -d arken -tAc "select id from scenes where campaign_id='<CAMPAIGN_ID>' and id is distinct from '<ACTIVE_SCENE_ID>' limit 1;"
 ```
 
-Клон вне production и измерение. Сборка не нужна: скрипт импортирует
-`packages/db/src` и `apps/server/src` напрямую и запускается через `tsx`:
+Клон вне production:
 
 ```sh
-mkdir -p ~/measure && cd ~/measure && git clone --depth 50 https://github.com/uixray/arken-space.git repo && cd repo && git checkout dfe39b1 && corepack pnpm install --frozen-lockfile
+mkdir -p ~/measure && cd ~/measure && git clone --depth 50 https://github.com/uixray/arken-space.git repo && cd repo && git checkout <REVISION> && corepack pnpm install --frozen-lockfile
 ```
 
+**Сборка нужна.** Скрипт действительно импортирует `scripts/` и `apps/server/src`
+напрямую, но `snapshot.ts` тянет `@arken/system`, а workspace-пакеты
+экспортируются из `dist`. Без сборки — `ERR_MODULE_NOT_FOUND`.
+
+Вложенные скрипты вызывают `pnpm` по имени, а corepack его в PATH не кладёт, из
+за чего `pnpm build` падает с `sh: 1: pnpm: not found`. Локальный shim решает
+это, ничего не меняя в системе и не требуя sudo:
+
 ```sh
-cd ~/measure/repo && ARKEN_MEASURE_CONFIRM=isolated-copy ARKEN_MEASURE_CAMPAIGN_ID='<CAMPAIGN_ID>' ARKEN_MEASURE_GM_VIEWED_SCENE_ID='<VIEWED_SCENE_ID>' ARKEN_MEASURE_RUNS=5 DATABASE_URL='postgres://arken:measure-only-local@127.0.0.1:5544/arken' corepack pnpm exec tsx scripts/measure-broadcast.ts
+mkdir -p ~/measure/bin && printf '#!/bin/sh
+exec corepack pnpm "$@"
+' > ~/measure/bin/pnpm && chmod +x ~/measure/bin/pnpm && cd ~/measure/repo && PATH="$HOME/measure/bin:$PATH" corepack pnpm build
+```
+
+**Миграции обязательны.** Дамп несёт схему на дату снимка; текущий код ожидает
+более новые колонки и падает на `column ... does not exist`:
+
+```sh
+cd ~/measure/repo && DATABASE_URL=postgres://arken:measure-only-local@127.0.0.1:5544/arken PATH="$HOME/measure/bin:$PATH" corepack pnpm db:migrate
+```
+
+Замер:
+
+```sh
+cd ~/measure/repo && ARKEN_MEASURE_CONFIRM=isolated-copy ARKEN_MEASURE_CAMPAIGN_ID='<CAMPAIGN_ID>' ARKEN_MEASURE_GM_VIEWED_SCENE_ID='<VIEWED_SCENE_ID>' ARKEN_MEASURE_RUNS=5 DATABASE_URL='postgres://arken:measure-only-local@127.0.0.1:5544/arken' PATH="$HOME/measure/bin:$PATH" corepack pnpm exec tsx scripts/measure-broadcast.ts
 ```
 
 Убрать за собой:
@@ -123,6 +181,18 @@ sudo docker rm -f arken-measure-db && rm -rf /tmp/arken-measure ~/measure
 сопоставимы, но расхождение в единицы процентов может объясняться методикой, а
 не кодом. Если это окажется важно, «до» можно переснять на ревизии `7e441a4` в
 отдельном клоне на той же копии базы.
+
+## Параметры, использованные 24.08
+
+Из восстановленной копии, для воспроизведения:
+
+- кампания `f5bbc188-550a-4dee-ae04-e17f7a2b8e5e`;
+- активная сцена `05282e64-6692-437f-a3d6-4b1eff8115cc`;
+- неактивная сцена для ГМ `39b5db45-3918-456e-a580-9e1c7fc012ef`;
+- состав: 1 GM + 6 PLAYER, 6 сцен — совпадает с базовой линией.
+
+После замера копия удалена: контейнер снят, `/tmp/arken-measure` и `~/measure`
+стёрты, production-контейнеры не перезапускались.
 
 ## Что мешало закрыть 24.08
 
