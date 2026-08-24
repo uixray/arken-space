@@ -6,9 +6,6 @@ export default defineConfig({
   // browser activity, a network outage and backend restart. Docker Desktop on
   // Windows can exceed six minutes even when every bounded assertion passes.
   timeout: 600_000,
-  // A stale selector must fail quickly instead of consuming the entire
-  // end-to-end story timeout and masking the actual failing interaction.
-  actionTimeout: 30_000,
   retries: 0,
   workers: 1,
   outputDir: "test-results/artifacts",
@@ -20,6 +17,11 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:14180",
     trace: "retain-on-failure",
+    // A stale selector must fail quickly instead of consuming the entire
+    // end-to-end story timeout and masking the actual failing interaction.
+    // `actionTimeout` belongs to `PlaywrightTestOptions`, so it only takes
+    // effect inside `use`; at the top level it was silently ignored.
+    actionTimeout: 30_000,
   },
   projects: [
     {
