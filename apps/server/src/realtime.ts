@@ -407,9 +407,7 @@ export function registerRealtime(
      * проверка/сборка первой сцены может завершиться после второй и вернуть
      * браузер к уже не выбранному канвасу.
      */
-    const handleSceneView = async (
-      view: z.infer<typeof sceneViewSchema>,
-    ) => {
+    const handleSceneView = async (view: z.infer<typeof sceneViewSchema>) => {
       // Игроку видима ровно активная сцена; принимать от него «смотрю другую»
       // значило бы дать способ запросить туман закрытой сцены.
       if (auth.role !== "GM") return;
@@ -448,10 +446,7 @@ export function registerRealtime(
         // The optimistic socket state is authoritative input for resync. A
         // failed snapshot must not leave it pointing at a canvas the client
         // never received. Never roll a newer intent back from an older catch.
-        if (
-          intent === latestSceneViewIntent &&
-          viewedSceneId() === sceneId
-        )
+        if (intent === latestSceneViewIntent && viewedSceneId() === sceneId)
           socket.data.viewedSceneId = previousSceneId;
         throw error;
       }
@@ -536,10 +531,7 @@ export function registerRealtime(
       // Only a fully initialized replacement socket may cancel the old
       // transport's offline transition. A failed reconnect must leave that
       // timer intact so the membership eventually becomes offline.
-      const pendingKey = presenceKey(
-        auth.campaignId,
-        auth.membershipId,
-      );
+      const pendingKey = presenceKey(auth.campaignId, auth.membershipId);
       const pending = pendingPresence.get(pendingKey);
       if (pending) {
         clearTimeout(pending);
