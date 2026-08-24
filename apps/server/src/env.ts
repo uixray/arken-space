@@ -46,4 +46,24 @@ export const env = z
       .max(1000)
       .default(120),
   })
+  /*
+   * UIX-519 follow-up: дефолты выше существуют ради разработки и тестов —
+   * интеграционные наборы импортируют этот модуль, а он разбирает
+   * `process.env` прямо на импорте, поэтому обязательными их сделать нельзя.
+   *
+   * Но в production молчаливый дефолт опаснее отсутствия значения: сервер
+   * поднимется на чужой базе или с общеизвестным токеном мастера вместо того,
+   * чтобы честно не стартовать. Отсутствие переменной там — ошибка
+   * конфигурации, а не повод угадывать.
+   */
+  .superRefine((value, ctx) => {
+    if (value.NODE_ENV !== "production") return;
+    for (const key of ["DATABASE_URL", "GM_ACCESS_TOKEN"] as const)
+      if (!process.env[key]?.trim())
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} обязателен в production: значение по умолчанию там не применяется`,
+        });
+  })
   .parse(process.env);
