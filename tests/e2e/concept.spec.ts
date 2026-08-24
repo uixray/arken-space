@@ -931,6 +931,13 @@ test("scene refresh races do not revoke local music consent", async ({
     })
     .click();
 
+  // UIX-517: selecting a scene and publishing it are pointer events outside
+  // the volume popover, which now dismisses it like every other `details`
+  // popover in the app. What this test guards is that the scene refresh does
+  // not revoke consent or reset personal gain -- not that the popover stays
+  // pinned open over the sidebar -- so the control is reopened before the
+  // slider is inspected again.
+  await page.locator(".music-volume-control summary").click();
   await expect(
     page.getByRole("slider", { name: "Личная громкость" }),
   ).toBeVisible();
