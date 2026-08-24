@@ -2034,6 +2034,13 @@ code {
   color: #f0bbb4;
   font-size: 0.82rem;
 }
+/* UIX-491: подтверждение успеха рядом с полем. Класс уже использовался в
+   `WorldContentWorkspace`, но правила у него не было — текст сливался с
+   окружением и сообщение об успехе было легко не заметить. */
+.field-notice {
+  color: #bcd8b4;
+  font-size: 0.82rem;
+}
 .inline-fields,
 .copy-field,
 .upload-row {
