@@ -8,6 +8,7 @@ import { notify } from "./ui/notifications";
 import { isAudioConsentError } from "./audio-playback";
 import { volumeSliderToGain } from "./audio-volume";
 import { resolvePlaybackAction } from "./music-playback";
+import { useDismissibleDetails } from "./ui/dismissible-details";
 
 const ENABLED_KEY = "arken.audio.enabled";
 const VOLUME_KEY = "arken.audio.volume";
@@ -36,6 +37,12 @@ export function MusicBar({
   onUpload: (file: File, kind: "AUDIO") => Promise<AssetDto>;
 }) {
   const element = useRef<HTMLAudioElement>(null);
+  // Both topbar popovers are absolutely positioned over the sidebar, so an
+  // open one swallows clicks meant for the chat tabs underneath it. Every
+  // other `details` popover in the app already dismisses on outside pointer
+  // and Escape; these two were the only ones left behind.
+  const volumeRef = useRef<HTMLDetailsElement>(null);
+  const overflowRef = useRef<HTMLDetailsElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [enabled, setEnabled] = useState(
     () => localStorage.getItem(ENABLED_KEY) === "true",
@@ -104,6 +111,9 @@ export function MusicBar({
     () => localStorage.setItem(ENABLED_KEY, String(enabled)),
     [enabled],
   );
+
+  useDismissibleDetails(volumeRef);
+  useDismissibleDetails(overflowRef);
 
   const sendCommand = (
     command:
@@ -178,7 +188,7 @@ export function MusicBar({
         >
           <span aria-hidden="true">{audio.playing ? "⏸" : "▶"}</span>
         </button>
-        <details className="music-volume-control">
+        <details className="music-volume-control" ref={volumeRef}>
           <summary aria-label="Громкость" title="Громкость">
             <span aria-hidden="true">&#x1f50a;</span>
           </summary>
@@ -207,7 +217,7 @@ export function MusicBar({
           </div>
         </details>
         {role === "GM" ? (
-          <details className="music-overflow">
+          <details className="music-overflow" ref={overflowRef}>
             <summary aria-label="Меню музыки" title="Меню музыки">
               <span aria-hidden="true">&#x22ef;</span>
             </summary>

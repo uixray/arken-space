@@ -188,3 +188,70 @@ describe("resolvePlaybackAction (UIX-380 regression)", () => {
     }
   });
 });
+
+describe("topbar popovers dismiss like every other details popover", () => {
+  // Regression: both topbar popovers are `position: absolute; z-index: 40`
+  // and hang down over the sidebar. While one stayed open it swallowed the
+  // pointer events aimed at the chat tabs underneath, which is exactly how
+  // the GM + 6 multiplayer gate hung on `#chat-tab-activity`.
+  const renderBar = (role: "GM" | "PLAYER") =>
+    renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role,
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+  // jsdom does not implement the native summary-click toggle, so the open
+  // state is set directly; the dismissal path under test is the same.
+  const openPopover = (selector: string) => {
+    const details = document.querySelector<HTMLDetailsElement>(selector);
+    expect(details).not.toBeNull();
+    details!.open = true;
+    return details!;
+  };
+
+  it("closes the volume popover on an outside pointer so chat tabs stay clickable", () => {
+    renderBar("PLAYER");
+    const volume = openPopover("details.music-volume-control");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+
+    fireEvent.pointerDown(outside);
+
+    expect(volume.open).toBe(false);
+  });
+
+  it("closes the volume popover on Escape", () => {
+    renderBar("PLAYER");
+    const volume = openPopover("details.music-volume-control");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(volume.open).toBe(false);
+  });
+
+  it("keeps the volume popover open while the pointer stays inside it", () => {
+    renderBar("PLAYER");
+    const volume = openPopover("details.music-volume-control");
+
+    fireEvent.pointerDown(
+      volume.querySelector("input") ?? volume.querySelector("summary")!,
+    );
+
+    expect(volume.open).toBe(true);
+  });
+
+  it("closes the GM music menu on an outside pointer", () => {
+    renderBar("GM");
+    const overflow = openPopover("details.music-overflow");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+
+    fireEvent.pointerDown(outside);
+
+    expect(overflow.open).toBe(false);
+  });
+});
