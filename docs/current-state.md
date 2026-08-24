@@ -5,7 +5,7 @@
 acceptance criteria**, Git — источник фактической реализации, а датированные
 checkpoint-файлы в `docs/` объясняют историю решений.
 
-Последняя проверка: **21 августа 2026 года**.
+Последняя проверка: **21 августа 2026 года** (вечерний пул UIX-517 / UIX-518).
 
 ## Идентичность ревизий
 
@@ -129,23 +129,54 @@ provenance, task mapping и ownership пока не подтверждены.
 - точный scope и незакрытые gates зафиксированы в
   [uix-408-uix-409-uix-450-checkpoint-2026-08-21.md](./uix-408-uix-409-uix-450-checkpoint-2026-08-21.md).
 
-Эти focused gates не заменяют ещё не выполненные на данной серии full
-Vitest/build, Chromium+Firefox, Docker multiplayer и before/after measurement
-на одной изолированной копии дампа. UIX-408/409/450 остаются In Progress.
+### Broad gates на тройке UIX-408/409/450 — выполнены 21.08.2026
 
-Live `tests/e2e/activity-feed-layout.spec.ts` остаётся environment gate: без
-подтверждённого локального GM credential его нельзя считать пройденным.
+Focused gates выше дополнены полным прогоном на итоговом содержимом:
 
-Из десяти browser skips восемь требуют действующего локального GM credential.
-Текущий `.env` содержит placeholder-like значение, а seed не заменяет уже
-существующий hash; этот live-token gate нельзя честно пройти без поддерживаемой
-rotation с известным текущим credential либо отдельного подтверждения на reset.
-Ещё два skip — явные `fixme` для UIX-422 (compact session shell) и UIX-365
+- полный Vitest — **171 файл / 1251 тест PASS**;
+- `pnpm typecheck`, `pnpm lint` (0 errors, 3 прежних warning) и production
+  build — PASS;
+- изолированный Docker multiplayer (GM + 6) — **2 passed**, включая шаги
+  `backend-restart-marker` и `backend-restart`; `playwrightExitCode: 0`,
+  `cleanupExitCode: 0`, без leftovers, оба `production-health` шага `skipped`;
+- целевой browser QA Chromium + Firefox — **22 passed**, включая
+  `story-channel.spec.ts:372` (пагинация истории UIX-450).
+
+Multiplayer gate до этого был красным **не из-за тройки**: он падал так же на
+`7e441a4`, базе перед пулом. Причина — UIX-517, разобран в
+[uix-517-uix-518-checkpoint-2026-08-21.md](./uix-517-uix-518-checkpoint-2026-08-21.md).
+
+UIX-408/409/450 остаются In Progress: не выполнено before/after measurement на
+одной изолированной копии дампа. Копии `arken-20260815T065736Z` локально нет,
+скрипт не запускался, значения не выдумывались.
+
+### Live-token gate снят
+
+Локальный том `arken-space_postgres-data` был от 24.07.2026 и пересоздан с
+согласия владельца. На свежей базе seed применил GM-токен из `.env`, и восемь
+ранее скипавшихся тестов начали реально выполняться. В частности,
+`tests/e2e/activity-feed-layout.spec.ts` больше не environment gate — он
+**проходит** в Chromium и Firefox.
+
+Остаются два skip — явные `fixme` для UIX-422 (compact session shell) и UIX-365
 (Direct UI redesign).
 
-Глобальный `pnpm format:check` намеренно остаётся красным только на трёх
-исключённых `docs/stickers/prompts/ST-*.md`; эти приватные творческие файлы не
-редактировались. Человеческий recurring-session rehearsal GM + 6 и production
+Два теста устарели незамеченными, пока скипались, и починены в `8493d10`:
+`game-night.spec.ts` держал неоднозначный `getByText("Подготовка")`, ставший
+недоступным после UIX-472.
+
+### Полный browser gate нестабилен
+
+Два полных прогона подряд на неизменном дереве дали **разные** наборы падений,
+а все упавшие проходят изолированно. Причина — общая кампания и общая база на
+все e2e; вынесено в UIX-518. Целевые прогоны по затронутым областям остаются
+достоверными, полный прогон — пока нет.
+
+Глобальный `pnpm format:check` красный только на трёх исключённых untracked
+`docs/stickers/prompts/ST-*.md`; эти приватные творческие файлы не
+редактировались и в репозиторий не попадают, поэтому CI-шаг `format:check`
+на них не падает. Два tracked-файла из `a1070bd` (`apps/server/src/realtime.ts`,
+`tests/realtime.test.ts`) форматирование нарушали и исправлены в `8a55844`. Человеческий recurring-session rehearsal GM + 6 и production
 release gate остаются открытыми.
 
 ## Известные границы
