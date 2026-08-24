@@ -1,15 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./campaign-fixture";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 
 test("master can exchange the access link for a browser session", async ({
   page,
+  gmToken,
 }) => {
-  const token = process.env.GM_ACCESS_TOKEN;
-  test.skip(
-    !token,
-    "GM_ACCESS_TOKEN is required for the integration environment",
-  );
-  await page.goto(`/gm/${token}`);
+  await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page.getByText("arken-space").first()).toBeVisible();
   // UIX-472 moved the workspace sections into a row that hides the overflow

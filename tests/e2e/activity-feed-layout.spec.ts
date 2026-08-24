@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./campaign-fixture";
 
 /**
  * UIX-467: старая полоса «Журнал» с дублирующей кнопкой заявки и неоднозначным
@@ -18,13 +19,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const SIDEBAR_WIDTHS = [280, 360, 600] as const;
 
-async function signInAsGm(page: Page) {
-  const token = process.env.GM_ACCESS_TOKEN;
-  test.skip(
-    !token,
-    "GM_ACCESS_TOKEN is required for the integration environment",
-  );
-
+async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
@@ -109,8 +104,9 @@ async function worstOverlap(page: Page) {
 test.describe("лента журнала во время боя", () => {
   test("полоса журнала не перекрывает карточки ни при какой ширине панели", async ({
     page,
+    gmToken,
   }) => {
-    await signInAsGm(page);
+    await signInAsGm(page, gmToken);
 
     // `setBattle` сам бросает исключение, если бой не удалось перевести в
     // нужное состояние, — проверять здесь код ответа больше нечего.
@@ -140,6 +136,7 @@ test.describe("лента журнала во время боя", () => {
 
   test("поле ввода сообщения остаётся на экране при открытой очереди", async ({
     page,
+    gmToken,
   }) => {
     /**
      * Найдено живой проверкой, тестами не ловилось: блок быстрых бросков был
@@ -150,7 +147,7 @@ test.describe("лента журнала во время боя", () => {
      * Проверяется на низком экране: на высоком места хватает и без сжатия.
      */
     await page.setViewportSize({ width: 1280, height: 720 });
-    await signInAsGm(page);
+    await signInAsGm(page, gmToken);
 
     await setBattle(page, "START_BATTLE");
     try {

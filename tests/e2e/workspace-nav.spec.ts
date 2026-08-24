@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./campaign-fixture";
 
 /**
  * UIX-472 — разделы строкой, не поместившиеся под «Ещё».
@@ -31,14 +32,9 @@ async function navState(page: Page) {
 
 test("разделы не переполняют строку ни при какой ширине окна", async ({
   page,
+  gmToken,
 }) => {
-  const token = process.env.GM_ACCESS_TOKEN;
-  test.skip(
-    !token,
-    "GM_ACCESS_TOKEN is required for the integration environment",
-  );
-
-  await page.goto(`/gm/${token}`);
+  await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.locator(".workspace-nav")).toBeVisible();
@@ -69,17 +65,11 @@ test("разделы не переполняют строку ни при как
   }
 });
 
-test("игроку не показываются мастерские разделы", async ({ page }) => {
-  const token = process.env.GM_ACCESS_TOKEN;
-  test.skip(
-    !token,
-    "GM_ACCESS_TOKEN is required for the integration environment",
-  );
-
+test("игроку не показываются мастерские разделы", async ({ page, gmToken }) => {
   // Проверяется на мастере: у него разделы есть, и это доказывает, что тест
   // смотрит в нужное место. Отсутствие у игрока закреплено юнит-тестом
   // `workspaceNavItems` — там же, где принято само решение.
-  await page.goto(`/gm/${token}`);
+  await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.locator(".workspace-nav")).toBeVisible();
