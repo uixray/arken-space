@@ -3031,11 +3031,26 @@ test("selected token keyboard moves serialize delayed responses with ack revisio
     deltaY: number;
     targets: Array<{ targetId: string; revision: number }>;
   }> = [];
+  /*
+   * Первый ответ держится до явного сигнала теста, а не таймером.
+   *
+   * Раньше здесь стоял `setTimeout(150)`, и тест молча полагался на то, что
+   * три нажатия успеют пройти внутри этого окна. В Firefox под нагрузкой они
+   * не успевали: первый запрос завершался раньше, накопление не происходило, и
+   * вместо двух запросов приходило три. Тест флакал именно так, дважды.
+   *
+   * Окно ожидания нельзя расширить «на всякий случай» — это вернуло бы ту же
+   * гонку, только реже. Поэтому ответ висит ровно до того момента, когда
+   * остальные нажатия уже сделаны.
+   */
+  let releaseFirstResponse = () => {};
+  const firstResponseHeld = new Promise<void>((resolve) => {
+    releaseFirstResponse = resolve;
+  });
   await page.route("**/api/canvas/bulk", async (route) => {
     const body = route.request().postDataJSON();
     requests.push(body);
-    if (requests.length === 1)
-      await new Promise((resolve) => setTimeout(resolve, 150));
+    if (requests.length === 1) await firstResponseHeld;
     const revision = body.targets[0].revision + 1;
     await route.fulfill({
       status: 200,
@@ -3070,8 +3085,12 @@ test("selected token keyboard moves serialize delayed responses with ack revisio
   await expect(objects).toBeHidden();
   await map.focus();
   await page.keyboard.press("ArrowRight");
+  // Первое перемещение обязано уйти на сервер до остальных нажатий: именно оно
+  // и остаётся в полёте, пока копятся следующие.
+  await expect.poll(() => requests.length).toBe(1);
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Shift+ArrowDown");
+  releaseFirstResponse();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]!.targets[0]!.revision).toBe(
     requests[0]!.targets[0]!.revision + 1,
