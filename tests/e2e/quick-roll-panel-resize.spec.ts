@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./campaign-fixture";
 
 /**
  * UIX-469 — растягивание панели быстрых бросков обязано показывать больше кнопок.
@@ -58,14 +59,9 @@ async function setPanelHeight(page: Page, height: number) {
 
 test("выше панель — больше видимых кнопок быстрых бросков", async ({
   page,
+  gmToken,
 }) => {
-  const token = process.env.GM_ACCESS_TOKEN;
-  test.skip(
-    !token,
-    "GM_ACCESS_TOKEN is required for the integration environment",
-  );
-
-  await page.goto(`/gm/${token}`);
+  await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.locator(".quick-roll-panel")).toBeVisible();
@@ -91,14 +87,9 @@ test("выше панель — больше видимых кнопок быс�
 
 test("прокрутка появляется только когда кнопки не помещаются", async ({
   page,
+  gmToken,
 }) => {
-  const token = process.env.GM_ACCESS_TOKEN;
-  test.skip(
-    !token,
-    "GM_ACCESS_TOKEN is required for the integration environment",
-  );
-
-  await page.goto(`/gm/${token}`);
+  await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.locator(".quick-roll-panel")).toBeVisible();

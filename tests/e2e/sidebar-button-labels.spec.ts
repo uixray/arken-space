@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./campaign-fixture";
 
 /**
  * UIX-467: у каждой кнопки боковой панели должно быть доступное имя.
@@ -12,14 +12,11 @@ import { expect, test } from "@playwright/test";
  * `title` не читает ни один экранный диктор, и кнопка с одним лишь `title`
  * остаётся безымянной.
  */
-test("каждая кнопка боковой панели называет себя", async ({ page }) => {
-  const token = process.env.GM_ACCESS_TOKEN;
-  test.skip(
-    !token,
-    "GM_ACCESS_TOKEN is required for the integration environment",
-  );
-
-  await page.goto(`/gm/${token}`);
+test("каждая кнопка боковой панели называет себя", async ({
+  page,
+  gmToken,
+}) => {
+  await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.locator("aside.sidebar")).toBeVisible();

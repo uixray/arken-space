@@ -217,7 +217,26 @@ export function PalettePanel(props: Props) {
   );
 }
 
-function TokenImageAssignment({
+/**
+ * UIX-491, вторая половина жалобы: «я не смог загрузить и назначить картинку на
+ * токен, но при этом она назначилась».
+ *
+ * Форма сообщала только об ошибке. При успехе она молча очищала поле файла —
+ * и это выглядело неотличимо от «ничего не произошло»: игрок видит ту же
+ * форму, что и до нажатия, а результат виден лишь на самом токене, до которого
+ * ещё надо доскроллить. Человек решил, что загрузка не удалась, и написал об
+ * этом в «Сообщить».
+ *
+ * Поэтому успех теперь называется вслух и живёт до следующего действия: таймер
+ * тут только добавил бы гонку в тесте и шанс, что подтверждение исчезнет
+ * раньше, чем его прочитают. `role="status"` — чтобы это услышал и экранный
+ * диктор, иначе для него ничего и не изменилось.
+ *
+ * Экспортируется ради компонентного теста: показывается этот блок только
+ * игроку (у мастера на его месте «Настроить»), и добираться до него через всю
+ * палитру значило бы проверять не то.
+ */
+export function TokenImageAssignment({
   definition,
   onUpload,
   onPatch,
@@ -229,16 +248,19 @@ function TokenImageAssignment({
   const [file, setFile] = useState<File>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const assign = async () => {
     if (!file || saving) return;
     setSaving(true);
     setError("");
+    setNotice("");
     try {
       const asset = await onUpload(file, "TOKEN");
       await onPatch(definition.id, definition.revision, {
         defaultAssetId: asset.id,
       });
       setFile(undefined);
+      setNotice(`Изображение назначено токену «${definition.name}».`);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -257,7 +279,11 @@ function TokenImageAssignment({
         accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
         hint="PNG, JPEG или WebP"
         disabled={saving}
-        onUpdate={setFile}
+        onUpdate={(next) => {
+          // Выбран другой файл — прежнее подтверждение относится уже не к нему.
+          setNotice("");
+          setFile(next);
+        }}
       />
       <Button
         view="action"
@@ -267,7 +293,16 @@ function TokenImageAssignment({
       >
         Загрузить и назначить
       </Button>
-      {error && <div className="field-error">{error}</div>}
+      {error && (
+        <div className="field-error" role="alert">
+          {error}
+        </div>
+      )}
+      {notice && (
+        <p className="field-notice" role="status">
+          {notice}
+        </p>
+      )}
     </div>
   );
 }
