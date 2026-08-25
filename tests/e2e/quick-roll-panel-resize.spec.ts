@@ -49,6 +49,51 @@ async function visibleButtons(page: Page) {
   });
 }
 
+/**
+ * Высота, при которой кнопки заведомо помещаются целиком.
+ *
+ * Раньше здесь стояло 420 пикселей — число, подобранное на одной машине. Оно
+ * оказалось граничным: в CI при той же высоте помещалось 12 кнопок из 13, и
+ * тест падал в обоих браузерах, хотя проверяемое свойство не нарушено. Высота
+ * строки зависит от шрифтов машины, а число кнопок — от навыков персонажа;
+ * ни то, ни другое тест не выбирает.
+ *
+ * Поэтому высота измеряется: панели даётся заведомо избыточный размер, у
+ * последней кнопки берётся нижняя граница, к ней добавляются отступ тела и
+ * та часть панели, которая телом не является. Проверяемое намерение — «высоты
+ * с запасом хватает на все кнопки» — сохраняется, а зависимость от конкретной
+ * машины уходит.
+ */
+async function heightThatFitsAllButtons(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const panel = document.querySelector<HTMLElement>(".quick-roll-panel");
+    const body = panel?.querySelector<HTMLElement>(".quick-roll-panel__body");
+    if (!panel || !body)
+      throw new Error("Панель быстрых бросков не отрисована");
+
+    const previous = panel.style.height;
+    panel.style.height = `${window.innerHeight * 3}px`;
+
+    const buttons = [...body.querySelectorAll("button")];
+    const last = buttons.at(-1);
+    if (!last) throw new Error("В панели нет кнопок быстрых бросков");
+
+    const bodyBox = body.getBoundingClientRect();
+    const paddingBottom =
+      Number.parseFloat(getComputedStyle(body).paddingBottom) || 0;
+    const content = last.getBoundingClientRect().bottom - bodyBox.top;
+    // Всё, что панель занимает помимо тела: заголовок, ручка, рамки.
+    const chrome = panel.getBoundingClientRect().height - bodyBox.height;
+
+    panel.style.height = previous;
+    /* Восемь пикселей сверху — не подобранное число, а защита от округления:
+       дробные высоты строк дают остаток в доли пикселя, и панель ровно по
+       содержимому иногда заводит прокрутку на пустом месте. Исход проверки
+       этот запас не решает — его решает измерение выше. */
+    return Math.ceil(content + paddingBottom + chrome) + 8;
+  });
+}
+
 async function setPanelHeight(page: Page, height: number) {
   await page.evaluate((next) => {
     const panel = document.querySelector<HTMLElement>(".quick-roll-panel");
@@ -70,10 +115,11 @@ test("выше панель — больше видимых кнопок быс�
   const short = await visibleButtons(page);
   await setPanelHeight(page, 260);
   const medium = await visibleButtons(page);
-  await setPanelHeight(page, 420);
+  const roomy = await heightThatFitsAllButtons(page);
+  await setPanelHeight(page, roomy);
   const tall = await visibleButtons(page);
 
-  const seen = `120px → ${short.fits}, 260px → ${medium.fits}, 420px → ${tall.fits} из ${tall.total}`;
+  const seen = `120px → ${short.fits}, 260px → ${medium.fits}, ${roomy}px → ${tall.fits} из ${tall.total}`;
 
   // Сама суть задачи: растягивание должно окупаться кнопками, а не пустой
   // коробкой вокруг того же скролла.
@@ -100,7 +146,7 @@ test("прокрутка появляется только когда кнопк
   expect(short.scrolls, "кнопки не помещаются — прокрутка нужна").toBe(true);
 
   // Высоты хватает на все кнопки: полоса прокрутки при этом лишняя.
-  await setPanelHeight(page, 420);
+  await setPanelHeight(page, await heightThatFitsAllButtons(page));
   const tall = await visibleButtons(page);
   expect(tall.fits).toBe(tall.total);
   expect(tall.scrolls, "всё помещается — прокрутки быть не должно").toBe(false);
