@@ -1,4 +1,8 @@
-import { test as base } from "@playwright/test";
+import { test as base, type ConsoleMessage } from "@playwright/test";
+import {
+  formatReactConsoleMessage,
+  isReactDefect,
+} from "./react-console-format";
 
 /**
  * UIX-521: консольные ошибки React роняют тест, а не живут незамеченными.
@@ -24,26 +28,46 @@ import { test as base } from "@playwright/test";
  * контекст или вкладку, за них не отвечает: подписаться на них отсюда нечем,
  * и молчаливое «проверено» было бы хуже явного пробела.
  */
-const REACT_DEFECTS = [
-  "Cannot update a component",
-  "Maximum update depth exceeded",
-] as const;
-
 export const test = base.extend<{ reactConsoleGuard: void }>({
   /* Аргумент назван `provide`, а не `use`, как в документации Playwright:
      `react-hooks/rules-of-hooks` принимает вызов `use(...)` за React-хук вне
      компонента и роняет `pnpm lint`. Имя параметра Playwright безразлично. */
   reactConsoleGuard: [
     async ({ page }, provide) => {
-      const defects: string[] = [];
+      /* Сообщения копятся объектами, а текст собирается на разборе: аргументы
+         консоли читаются асинхронно, а обработчик синхронный. Разбор успевает
+         до закрытия страницы — фикстура зависит от `page`, значит гасится
+         раньше него. */
+      const suspects: ConsoleMessage[] = [];
       page.on("console", (message) => {
-        if (message.type() !== "error") return;
-        const text = message.text();
-        if (REACT_DEFECTS.some((pattern) => text.includes(pattern)))
-          defects.push(text);
+        if (message.type() === "error" && isReactDefect(message.text()))
+          suspects.push(message);
       });
 
       await provide();
+
+      const defects: string[] = [];
+      for (const message of suspects) {
+        const [format, ...args] = message.args();
+        if (!format) {
+          defects.push(message.text());
+          continue;
+        }
+        try {
+          defects.push(
+            formatReactConsoleMessage(
+              String(await format.jsonValue()),
+              await Promise.all(
+                args.map(async (arg) => String(await arg.jsonValue())),
+              ),
+            ),
+          );
+        } catch {
+          // Страница уже закрыта или значение не сериализуется: сырой текст
+          // менее удобен, но это лучше, чем потерять сообщение о дефекте.
+          defects.push(message.text());
+        }
+      }
 
       if (defects.length > 0) {
         throw new Error(
