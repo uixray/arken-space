@@ -40,3 +40,6 @@ docker-compose.override.yml
 # творческие черновики. Файлы остаются на диске, из репозитория исключены.
 apps/web/src/assets/game-pause-rest.webp
 docs/stickers/
+
+*storybook.log
+storybook-static
