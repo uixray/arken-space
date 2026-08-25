@@ -1,4 +1,5 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { type Locator } from "@playwright/test";
+import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { starterStatLayout } from "@arken/system";
 import {

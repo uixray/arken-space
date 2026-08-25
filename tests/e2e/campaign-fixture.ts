@@ -1,4 +1,4 @@
-import { test as base } from "@playwright/test";
+import { test as base } from "./react-console-guard";
 import { randomUUID } from "node:crypto";
 import { createDatabase } from "../../packages/db/src/index.js";
 import { createCampaignWithGmAccess } from "../../apps/server/src/seed.js";
