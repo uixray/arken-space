@@ -1,5 +1,9 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./campaign-fixture";
+import {
+  heightThatFitsAllButtons,
+  visibleButtons,
+} from "./quick-roll-panel-metrics";
 
 /**
  * UIX-469 — растягивание панели быстрых бросков обязано показывать больше кнопок.
@@ -24,30 +28,6 @@ import { expect, test } from "./campaign-fixture";
  * по-прежнему лежат внутри тела. Сравнение рамок этого не замечает — на нём
  * первая версия теста прошла даже с возвращённой ошибкой.
  */
-async function visibleButtons(page: Page) {
-  return page.evaluate(() => {
-    const panel = document.querySelector(".quick-roll-panel");
-    const body = panel?.querySelector(".quick-roll-panel__body");
-    if (!panel || !body)
-      throw new Error("Панель быстрых бросков не отрисована");
-    const buttons = [...body.querySelectorAll("button")];
-    const fits = buttons.filter((button) => {
-      const rect = button.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return false;
-      const hit = document.elementFromPoint(
-        rect.left + rect.width / 2,
-        rect.top + rect.height / 2,
-      );
-      return hit === button || button.contains(hit);
-    }).length;
-    // Прокрутка ищется по всей панели: она может завестись и у вложенного
-    // списка, а не только у тела — именно так и выглядела ошибка.
-    const scrolls = [body, ...body.querySelectorAll("*")].some(
-      (element) => element.scrollHeight > element.clientHeight + 1,
-    );
-    return { fits, total: buttons.length, scrolls };
-  });
-}
 
 /**
  * Высота, при которой кнопки заведомо помещаются целиком.
@@ -64,35 +44,6 @@ async function visibleButtons(page: Page) {
  * с запасом хватает на все кнопки» — сохраняется, а зависимость от конкретной
  * машины уходит.
  */
-async function heightThatFitsAllButtons(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const panel = document.querySelector<HTMLElement>(".quick-roll-panel");
-    const body = panel?.querySelector<HTMLElement>(".quick-roll-panel__body");
-    if (!panel || !body)
-      throw new Error("Панель быстрых бросков не отрисована");
-
-    const previous = panel.style.height;
-    panel.style.height = `${window.innerHeight * 3}px`;
-
-    const buttons = [...body.querySelectorAll("button")];
-    const last = buttons.at(-1);
-    if (!last) throw new Error("В панели нет кнопок быстрых бросков");
-
-    const bodyBox = body.getBoundingClientRect();
-    const paddingBottom =
-      Number.parseFloat(getComputedStyle(body).paddingBottom) || 0;
-    const content = last.getBoundingClientRect().bottom - bodyBox.top;
-    // Всё, что панель занимает помимо тела: заголовок, ручка, рамки.
-    const chrome = panel.getBoundingClientRect().height - bodyBox.height;
-
-    panel.style.height = previous;
-    /* Восемь пикселей сверху — не подобранное число, а защита от округления:
-       дробные высоты строк дают остаток в доли пикселя, и панель ровно по
-       содержимому иногда заводит прокрутку на пустом месте. Исход проверки
-       этот запас не решает — его решает измерение выше. */
-    return Math.ceil(content + paddingBottom + chrome) + 8;
-  });
-}
 
 async function setPanelHeight(page: Page, height: number) {
   await page.evaluate((next) => {
@@ -106,6 +57,21 @@ test("выше панель — больше видимых кнопок быс�
   page,
   gmToken,
 }) => {
+  /*
+   * Окно с запасом по высоте — обязательное условие, а не удобство.
+   *
+   * Видимость считается попаданием точки, то есть тем, что человек
+   * действительно видит на экране. Растянутая панель растёт вниз, и в окне по
+   * умолчанию её нижняя часть уходит за край: кнопки перестают быть видны не
+   * потому, что не поместились в панель, а потому, что не поместился сам
+   * экран. Именно на этом падал CI — там панель уже, строк больше, и нужная
+   * высота не влезала в 720px.
+   *
+   * Измерено: при высоте панели 536px и окне 620px видно 10 кнопок из 13, при
+   * том же 536px и окне 1400px — все 13. Панель в обоих случаях достигает
+   * запрошенной высоты, разница только в окне.
+   */
+  await page.setViewportSize({ width: 1280, height: 1400 });
   await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
@@ -119,7 +85,12 @@ test("выше панель — больше видимых кнопок быс�
   await setPanelHeight(page, roomy);
   const tall = await visibleButtons(page);
 
-  const seen = `120px → ${short.fits}, 260px → ${medium.fits}, ${roomy}px → ${tall.fits} из ${tall.total}`;
+  const seen =
+    `120px → ${short.fits}, 260px → ${medium.fits}, ${roomy}px → ` +
+    `${tall.fits} из ${tall.total}` +
+    ` | панель ${tall.panelHeight}px из запрошенных ${roomy}px` +
+    ` | шрифт ${tall.font}` +
+    (tall.hidden.length > 0 ? `\nне видно: ${tall.hidden.join("; ")}` : "");
 
   // Сама суть задачи: растягивание должно окупаться кнопками, а не пустой
   // коробкой вокруг того же скролла.
@@ -135,6 +106,21 @@ test("прокрутка появляется только когда кнопк
   page,
   gmToken,
 }) => {
+  /*
+   * Окно с запасом по высоте — обязательное условие, а не удобство.
+   *
+   * Видимость считается попаданием точки, то есть тем, что человек
+   * действительно видит на экране. Растянутая панель растёт вниз, и в окне по
+   * умолчанию её нижняя часть уходит за край: кнопки перестают быть видны не
+   * потому, что не поместились в панель, а потому, что не поместился сам
+   * экран. Именно на этом падал CI — там панель уже, строк больше, и нужная
+   * высота не влезала в 720px.
+   *
+   * Измерено: при высоте панели 536px и окне 620px видно 10 кнопок из 13, при
+   * том же 536px и окне 1400px — все 13. Панель в обоих случаях достигает
+   * запрошенной высоты, разница только в окне.
+   */
+  await page.setViewportSize({ width: 1280, height: 1400 });
   await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
@@ -148,6 +134,9 @@ test("прокрутка появляется только когда кнопк
   // Высоты хватает на все кнопки: полоса прокрутки при этом лишняя.
   await setPanelHeight(page, await heightThatFitsAllButtons(page));
   const tall = await visibleButtons(page);
-  expect(tall.fits).toBe(tall.total);
+  expect(
+    tall.fits,
+    `панель ${tall.panelHeight}px, шрифт ${tall.font}; ${tall.hidden.join("; ")}`,
+  ).toBe(tall.total);
   expect(tall.scrolls, "всё помещается — прокрутки быть не должно").toBe(false);
 });
