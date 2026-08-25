@@ -1,0 +1,78 @@
+/**
+ * Do not edit directly, this file was auto-generated.
+ */
+
+:root {
+  --palette-ink-100: #e8e4da;
+  --palette-ink-200: #aaa598;
+  --palette-ink-300: #777267;
+  --palette-ink-400: #696356;
+  --palette-ink-500: #47443b;
+  --palette-ink-600: #34322c;
+  --palette-ink-700: #292824;
+  --palette-ink-800: #20201d;
+  --palette-ink-900: #181816;
+  --palette-clay-400: #d57d55;
+  --palette-clay-500: #c46f49;
+  --palette-signal-danger: #da6b61;
+  --palette-signal-success: #7ba77a;
+  --palette-card-stats: #4d8fd6;
+  --palette-card-combat: #d68a4d;
+  --palette-card-skills: #6fae6a;
+  --palette-card-abilities: #a67ad4;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-pill: 999px; /** Полностью скруглённые элементы: счётчики, теги. */
+  --size-control-height: 32px; /** Высота кнопок и полей. Ниже опускаться нельзя: это же и минимальная область попадания указателем. */
+  --size-topbar-height: 44px;
+  --size-app-min-width: 960px; /** Ниже этой ширины раскладка стола не поддерживается — мобильная версия отложена до UIX-422. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+  --font-family-sans:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; /** Интерфейсный шрифт. Системный: своих начертаний проект не грузит. */
+  --font-family-mono:
+    ui-monospace, SFMono-Regular, Consolas, monospace; /** Формулы бросков, идентификаторы, технические значения. */
+  --font-size-caption: 10px; /** Служебные подписи: время сообщения, единицы, счётчики. Нижняя граница читаемости — мельче не опускаться. */
+  --font-size-label: 11px; /** Подписи контролов и заголовки колонок. */
+  --font-size-body: 12px; /** Основной текст: сообщения чата, описания, значения характеристик. */
+  --font-size-heading-sm: 14px; /** Заголовки панелей и карточек. Раньше был 11.48px и не отличался от основного текста. */
+  --font-size-heading-md: 18px; /** Заголовки диалогов и рабочих пространств. */
+  --font-size-heading-lg: 24px; /** Результат броска и другие числа, которые должны читаться с одного взгляда. */
+  --color-canvas: var(
+    --palette-ink-900
+  ); /** Фон приложения, самый дальний план. */
+  --color-surface: var(--palette-ink-800);
+  --color-surface-raised: var(
+    --palette-ink-700
+  ); /** Панели и карточки поверх основного фона. */
+  --color-surface-hover: var(--palette-ink-600);
+  --color-surface-active: var(--palette-ink-600);
+  --color-border: var(--palette-ink-500);
+  --color-border-hover: var(--palette-ink-400);
+  --color-text: var(--palette-ink-100);
+  --color-text-muted: var(
+    --palette-ink-200
+  ); /** Второстепенный текст: подписи, метаданные. */
+  --color-text-faint: var(
+    --palette-ink-300
+  ); /** Едва различимый текст. Не использовать для того, что нужно прочитать. */
+  --color-accent: var(--palette-clay-500);
+  --color-accent-hover: var(--palette-clay-400);
+  --color-accent-active: var(--palette-clay-400);
+  --color-danger: var(--palette-signal-danger);
+  --color-success: var(--palette-signal-success);
+  --color-focus: var(
+    --palette-clay-500
+  ); /** Кольцо фокуса. Обязано быть видимым при работе с клавиатуры. */
+  --color-focus-strong: var(--palette-clay-400);
+  --color-card-stats: var(--palette-card-stats);
+  --color-card-combat: var(--palette-card-combat);
+  --color-card-skills: var(--palette-card-skills);
+  --color-card-abilities: var(--palette-card-abilities);
+}

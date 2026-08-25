@@ -105,7 +105,8 @@ const meta: Meta = {
 };
 export default meta;
 
-export const Цвет: StoryObj = {
+export const Colors: StoryObj = {
+  name: "Цвет",
   render: () => (
     <div>
       {COLOR_TOKENS.map((token) => (
@@ -127,7 +128,8 @@ export const Цвет: StoryObj = {
   ),
 };
 
-export const Типографика: StoryObj = {
+export const Typography: StoryObj = {
+  name: "Типографика",
   render: () => (
     <div>
       {TYPE_TOKENS.map((token) => (
@@ -145,7 +147,8 @@ export const Типографика: StoryObj = {
   ),
 };
 
-export const Отступы: StoryObj = {
+export const Spacing: StoryObj = {
+  name: "Отступы",
   render: () => (
     <div>
       {SPACE_TOKENS.map((token) => (
@@ -168,7 +171,8 @@ export const Отступы: StoryObj = {
   ),
 };
 
-export const Скругления: StoryObj = {
+export const Radii: StoryObj = {
+  name: "Скругления",
   render: () => (
     <div>
       {RADIUS_TOKENS.map((token) => (

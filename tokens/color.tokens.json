@@ -1,0 +1,175 @@
+{
+  "palette": {
+    "$description": "Палитра Аркспейса. Значения перенесены из styles.css без изменения: этот шаг переводит источник истины в DTCG, а не перекрашивает продукт. Примитивы. Не использовать в компонентах напрямую — только через семантический слой ниже.",
+    "ink": {
+      "900": {
+        "$type": "color",
+        "$value": "#181816"
+      },
+      "800": {
+        "$type": "color",
+        "$value": "#20201d"
+      },
+      "700": {
+        "$type": "color",
+        "$value": "#292824"
+      },
+      "600": {
+        "$type": "color",
+        "$value": "#34322c"
+      },
+      "500": {
+        "$type": "color",
+        "$value": "#47443b"
+      },
+      "400": {
+        "$type": "color",
+        "$value": "#696356"
+      },
+      "300": {
+        "$type": "color",
+        "$value": "#777267"
+      },
+      "200": {
+        "$type": "color",
+        "$value": "#aaa598"
+      },
+      "100": {
+        "$type": "color",
+        "$value": "#e8e4da"
+      }
+    },
+    "clay": {
+      "$description": "Акцент. Тёплый кирпичный — опорный цвет Аркен-Хара.",
+      "500": {
+        "$type": "color",
+        "$value": "#c46f49"
+      },
+      "400": {
+        "$type": "color",
+        "$value": "#d57d55"
+      }
+    },
+    "signal": {
+      "danger": {
+        "$type": "color",
+        "$value": "#da6b61"
+      },
+      "success": {
+        "$type": "color",
+        "$value": "#7ba77a"
+      }
+    },
+    "card": {
+      "$description": "Цвета разделов карточки персонажа. Смысл несут вместе с подписью, а не вместо неё.",
+      "stats": {
+        "$type": "color",
+        "$value": "#4d8fd6"
+      },
+      "combat": {
+        "$type": "color",
+        "$value": "#d68a4d"
+      },
+      "skills": {
+        "$type": "color",
+        "$value": "#6fae6a"
+      },
+      "abilities": {
+        "$type": "color",
+        "$value": "#a67ad4"
+      }
+    }
+  },
+  "color": {
+    "$description": "Семантический слой: компоненты обращаются только сюда. Имена говорят о назначении, а не о цвете.",
+    "canvas": {
+      "$type": "color",
+      "$value": "{palette.ink.900}",
+      "$description": "Фон приложения, самый дальний план."
+    },
+    "surface": {
+      "$type": "color",
+      "$value": "{palette.ink.800}"
+    },
+    "surface-raised": {
+      "$type": "color",
+      "$value": "{palette.ink.700}",
+      "$description": "Панели и карточки поверх основного фона."
+    },
+    "surface-hover": {
+      "$type": "color",
+      "$value": "{palette.ink.600}"
+    },
+    "surface-active": {
+      "$type": "color",
+      "$value": "{palette.ink.600}"
+    },
+    "border": {
+      "$type": "color",
+      "$value": "{palette.ink.500}"
+    },
+    "border-hover": {
+      "$type": "color",
+      "$value": "{palette.ink.400}"
+    },
+    "text": {
+      "$type": "color",
+      "$value": "{palette.ink.100}"
+    },
+    "text-muted": {
+      "$type": "color",
+      "$value": "{palette.ink.200}",
+      "$description": "Второстепенный текст: подписи, метаданные."
+    },
+    "text-faint": {
+      "$type": "color",
+      "$value": "{palette.ink.300}",
+      "$description": "Едва различимый текст. Не использовать для того, что нужно прочитать."
+    },
+    "accent": {
+      "$type": "color",
+      "$value": "{palette.clay.500}"
+    },
+    "accent-hover": {
+      "$type": "color",
+      "$value": "{palette.clay.400}"
+    },
+    "accent-active": {
+      "$type": "color",
+      "$value": "{palette.clay.400}"
+    },
+    "danger": {
+      "$type": "color",
+      "$value": "{palette.signal.danger}"
+    },
+    "success": {
+      "$type": "color",
+      "$value": "{palette.signal.success}"
+    },
+    "focus": {
+      "$type": "color",
+      "$value": "{palette.clay.500}",
+      "$description": "Кольцо фокуса. Обязано быть видимым при работе с клавиатуры."
+    },
+    "focus-strong": {
+      "$type": "color",
+      "$value": "{palette.clay.400}"
+    },
+    "card-stats": {
+      "$type": "color",
+      "$value": "{palette.card.stats}"
+    },
+    "card-combat": {
+      "$type": "color",
+      "$value": "{palette.card.combat}"
+    },
+    "card-skills": {
+      "$type": "color",
+      "$value": "{palette.card.skills}"
+    },
+    "card-abilities": {
+      "$type": "color",
+      "$value": "{palette.card.abilities}"
+    }
+  }
+}
