@@ -1,0 +1,121 @@
+name: e2e
+
+# UIX-522: browser-прогон снят с машины владельца.
+#
+# `checks.yml` намеренно оставил Playwright за бортом («их место в CI —
+# отдельное решение, а не довесок к первому же workflow»). Пока его не было,
+# принять задачу с UI-изменениями без локального компьютера было нельзя:
+# Chromium + Firefox идут около двадцати минут.
+#
+# Мультиплеерный gate (`pnpm test:multiplayer`) сюда по-прежнему не входит: он
+# поднимает свой Docker Compose и требует отдельного решения.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    # Локально полный прогон Chromium + Firefox занимает около 18 минут.
+    # Запас взят на более медленный раннер и установку браузеров.
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: arken
+          POSTGRES_USER: arken
+          POSTGRES_PASSWORD: arken
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arken -d arken"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # Проект не использует dotenv и не читает `.env` сам: переменные обязаны
+      # приходить из окружения, иначе `apps/server/src/env.ts` не соберётся.
+      DATABASE_URL: postgres://arken:arken@localhost:5432/arken
+      WEB_ORIGIN: http://localhost:5173
+      PUBLIC_URL: http://localhost:5173
+      MEDIA_ROOT: ./media
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Та же причина, что и в checks.yml: workspace-пакеты экспортируются из
+      # `dist`, и без сборки сервер не стартует.
+      - run: pnpm build
+
+      # GM-токен генерируется на прогон. Это не про секретность — база здесь
+      # одноразовая, — а про то, что seed записывает hash только в пустую базу.
+      # Локально именно из-за этого восемь тестов месяцами молча скипались на
+      # давно созданном томе, и часть из них успела устареть незамеченной.
+      - name: Generate GM access token
+        run: echo "GM_ACCESS_TOKEN=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - run: pnpm db:migrate
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium firefox
+
+      # Playwright поднимает только web (`webServer` в playwright.config.ts);
+      # API-сервер нужно завести самим. Он же применяет seed, то есть создаёт
+      # кампанию и записывает hash токена.
+      #
+      # Запускается собранный `dist`, а не `dev`: watch-режим в CI только
+      # мешает, а сборка к этому шагу уже готова.
+      - name: Start API server
+        run: |
+          mkdir -p media
+          nohup node apps/server/dist/index.js > /tmp/server.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:4100/healthz > /dev/null; then
+              echo "server ready"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "server did not become healthy"
+          tail -40 /tmp/server.log
+          exit 1
+
+      - run: pnpm test:e2e
+
+      # Без трасс разбирать падение в CI нечем: локально его может не быть.
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload server log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: /tmp/server.log
+          retention-days: 7
+          if-no-files-found: ignore
