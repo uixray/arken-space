@@ -1,117 +1,939 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="design">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="description" content="Черновая персональная страница Андрей в Аркен-Харе." />
+    <meta name="theme-color" content="#171411" />
     <title>Андрей — Arken-Khar</title>
-    <style>
-      :root {
-        color-scheme: dark;
-        --bg: #100b08;
-        --bg-glow: #2a1a10;
-        --card: #1a130e;
-        --border: #3a2a1c;
-        --ember: #d97b3f;
-        --ember-bright: #f0a05c;
-        --text: #e8dcc8;
-        --text-dim: #a8977e;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      html,
-      body {
-        margin: 0;
-        min-height: 100%;
-      }
-      body {
-        font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-        background: radial-gradient(
-          circle at 50% 0%,
-          var(--bg-glow) 0%,
-          var(--bg) 55%
-        );
-        color: var(--text);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-      }
-      .card {
-        width: 100%;
-        max-width: 420px;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 40px 32px;
-        text-align: center;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-      }
-      .sigil {
-        width: 56px;
-        height: 56px;
-        margin: 0 auto 20px;
-        border-radius: 50%;
-        background: radial-gradient(
-          circle,
-          var(--ember-bright),
-          var(--ember) 70%
-        );
-        box-shadow: 0 0 24px rgba(217, 123, 63, 0.55);
-      }
-      .brand {
-        font-size: 13px;
-        letter-spacing: 0.28em;
-        text-transform: uppercase;
-        color: var(--text-dim);
-        margin: 0 0 6px;
-      }
-      h1 {
-        font-size: 32px;
-        margin: 0 0 8px;
-        font-weight: 500;
-        color: var(--ember-bright);
-      }
-      p.tagline {
-        color: var(--text-dim);
-        font-size: 15px;
-        margin: 0 0 32px;
-      }
-      a.enter {
-        display: inline-block;
-        width: 100%;
-        padding: 14px 20px;
-        border-radius: 8px;
-        background: linear-gradient(180deg, var(--ember-bright), var(--ember));
-        color: #1a0f06;
-        font-weight: 600;
-        text-decoration: none;
-        font-family: inherit;
-        letter-spacing: 0.02em;
-        transition:
-          transform 0.15s ease,
-          box-shadow 0.15s ease;
-      }
-      a.enter:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 8px 24px rgba(217, 123, 63, 0.35);
-      }
-      .foot {
-        margin-top: 24px;
-        font-size: 12px;
-        color: var(--text-dim);
-        opacity: 0.7;
-      }
-    </style>
+    <style>:root {
+  color-scheme: dark;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+  --space-3xl: 3rem;
+  --space-4xl: 4rem;
+  --space-5xl: 6rem;
+  --bg: oklch(0.16 0.012 62);
+  --surface: oklch(0.205 0.014 62);
+  --surface-raised: oklch(0.25 0.018 62);
+  --ink: oklch(0.92 0.025 82);
+  --muted: oklch(0.69 0.025 72);
+  --line: oklch(0.38 0.025 62);
+  --accent: oklch(0.7 0.14 45);
+  --accent-ink: oklch(0.18 0.04 45);
+  --display: "Forum", "Palatino Linotype", Georgia, serif;
+  --body: "Onest", "Trebuchet MS", sans-serif;
+  --detail: "Onest", "Trebuchet MS", sans-serif;
+  --radius: 0;
+  --pattern-opacity: 0.08;
+}
+
+html[data-theme="design"] {
+  --bg: oklch(0.94 0.025 78);
+  --surface: oklch(0.98 0.012 78);
+  --surface-raised: oklch(0.89 0.035 76);
+  --ink: oklch(0.23 0.035 28);
+  --muted: oklch(0.48 0.045 35);
+  --line: oklch(0.7 0.045 44);
+  --accent: oklch(0.61 0.19 35);
+  --accent-ink: oklch(0.97 0.015 55);
+  --radius: 1.5rem;
+}
+
+html[data-theme="knight"] {
+  --bg: oklch(0.89 0.035 84);
+  --surface: oklch(0.94 0.032 84);
+  --surface-raised: oklch(0.82 0.045 80);
+  --ink: oklch(0.27 0.035 60);
+  --muted: oklch(0.48 0.04 65);
+  --line: oklch(0.6 0.055 72);
+  --accent: oklch(0.49 0.13 34);
+  --accent-ink: oklch(0.95 0.025 82);
+  --radius: 0.15rem;
+}
+
+html[data-theme="cosmos"] {
+  --bg: oklch(0.12 0.035 276);
+  --surface: oklch(0.18 0.04 280);
+  --surface-raised: oklch(0.23 0.055 292);
+  --ink: oklch(0.9 0.045 242);
+  --muted: oklch(0.65 0.07 246);
+  --line: oklch(0.36 0.09 284);
+  --accent: oklch(0.72 0.14 32);
+  --accent-ink: oklch(0.14 0.035 276);
+  --radius: 50rem;
+}
+
+html[data-theme="dragon"] {
+  --bg: oklch(0.16 0.045 22);
+  --surface: oklch(0.21 0.055 24);
+  --surface-raised: oklch(0.27 0.07 30);
+  --ink: oklch(0.91 0.045 76);
+  --muted: oklch(0.68 0.065 65);
+  --line: oklch(0.39 0.085 31);
+  --accent: oklch(0.72 0.13 72);
+  --accent-ink: oklch(0.18 0.045 27);
+  --radius: 0.45rem;
+}
+
+html[data-theme="blueprint"] {
+  --bg: oklch(0.28 0.075 239);
+  --surface: oklch(0.32 0.08 239);
+  --surface-raised: oklch(0.37 0.085 239);
+  --ink: oklch(0.94 0.035 215);
+  --muted: oklch(0.77 0.045 213);
+  --line: oklch(0.62 0.07 220);
+  --accent: oklch(0.84 0.14 95);
+  --accent-ink: oklch(0.25 0.075 239);
+  --display: "Onest", "Trebuchet MS", sans-serif;
+  --radius: 0;
+}
+
+html[data-theme="apocalypse"] {
+  --bg: oklch(0.17 0.025 96);
+  --surface: oklch(0.22 0.034 96);
+  --surface-raised: oklch(0.27 0.043 91);
+  --ink: oklch(0.9 0.04 92);
+  --muted: oklch(0.68 0.05 91);
+  --line: oklch(0.4 0.06 93);
+  --accent: oklch(0.73 0.14 98);
+  --accent-ink: oklch(0.2 0.045 96);
+  --display: "Onest", "Trebuchet MS", sans-serif;
+  --radius: 0.25rem;
+}
+
+html[data-theme="studio"] {
+  --bg: oklch(0.15 0.028 30);
+  --surface: oklch(0.2 0.035 30);
+  --surface-raised: oklch(0.25 0.04 31);
+  --ink: oklch(0.92 0.035 70);
+  --muted: oklch(0.68 0.05 57);
+  --line: oklch(0.39 0.07 34);
+  --accent: oklch(0.68 0.16 38);
+  --accent-ink: oklch(0.17 0.04 31);
+  --radius: 0.75rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+  min-width: 18rem;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  line-height: 1.65;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--pattern-opacity);
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 2rem 2rem;
+  mask-image: linear-gradient(to bottom, black, transparent 75%);
+}
+
+html[data-theme="cosmos"] body::before {
+  background-image: radial-gradient(
+    circle,
+    var(--ink) 0 1px,
+    transparent 1.5px
+  );
+  background-size: 3.4rem 3.4rem;
+  opacity: 0.18;
+}
+
+html[data-theme="dragon"] body::before {
+  background-image: radial-gradient(
+    ellipse at top,
+    transparent 45%,
+    var(--line) 46% 49%,
+    transparent 50%
+  );
+  background-size: 5rem 3.5rem;
+}
+
+button,
+a {
+  font: inherit;
+}
+a {
+  color: inherit;
+}
+button {
+  color: inherit;
+}
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 20;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  transform: translateY(-150%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.site-head,
+main,
+footer {
+  width: min(100% - 2rem, 76rem);
+  margin-inline: auto;
+}
+.site-head {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding-block: var(--space-xl);
+  border-bottom: 1px solid var(--line);
+}
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  text-decoration: none;
+  font-weight: 700;
+}
+.wordmark__mark {
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.72rem;
+  letter-spacing: -0.06em;
+}
+.draft-mark,
+.eyebrow,
+.chapter__number,
+.artifact__index {
+  font-family: var(--detail);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.draft-mark {
+  color: var(--muted);
+}
+
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+  gap: clamp(3rem, 8vw, 8rem);
+  align-items: center;
+  min-height: min(48rem, 82vh);
+  padding-block: clamp(4rem, 10vw, 8rem);
+}
+.hero__copy {
+  position: relative;
+  z-index: 2;
+}
+.eyebrow {
+  margin: 0 0 var(--space-lg);
+  color: var(--accent);
+}
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+h1,
+h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+h1 {
+  max-width: 9ch;
+  margin-bottom: var(--space-md);
+  font-size: clamp(4.5rem, 12vw, 10rem);
+}
+h2 {
+  margin-bottom: var(--space-xl);
+  font-size: clamp(2.6rem, 6vw, 5.2rem);
+}
+h3 {
+  margin-bottom: var(--space-sm);
+  font-size: 1.25rem;
+}
+.role {
+  margin-bottom: var(--space-2xl);
+  color: var(--accent);
+  font-family: var(--detail);
+  font-weight: 600;
+}
+.intro {
+  max-width: 44rem;
+  margin-bottom: var(--space-xl);
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  color: var(--muted);
+}
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-2xl);
+}
+.facts span {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 99rem;
+  font-family: var(--detail);
+  font-size: 0.75rem;
+}
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+.button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0.75rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: 700;
+}
+.button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.button--quiet:hover {
+  background: var(--surface);
+}
+
+.sigil {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 26rem;
+}
+.sigil::before,
+.sigil::after,
+.sigil__core {
+  content: "";
+  position: absolute;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transform: rotate(-8deg);
+}
+.sigil::before {
+  width: min(27rem, 80vw);
+  aspect-ratio: 1;
+}
+.sigil::after {
+  width: min(20rem, 62vw);
+  aspect-ratio: 1;
+  transform: rotate(14deg);
+}
+.sigil__core {
+  display: grid;
+  place-items: center;
+  width: min(12rem, 42vw);
+  aspect-ratio: 1;
+  background: var(--surface-raised);
+  z-index: 1;
+  transform: rotate(4deg);
+}
+.sigil__core span {
+  width: 36%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.sigil p {
+  position: absolute;
+  z-index: 2;
+  bottom: 1rem;
+  margin: 0;
+  font-family: var(--detail);
+  color: var(--muted);
+}
+html[data-theme="cosmos"] .sigil::before,
+html[data-theme="cosmos"] .sigil::after,
+html[data-theme="cosmos"] .sigil__core {
+  border-radius: 50%;
+}
+html[data-theme="knight"] .sigil__core {
+  clip-path: polygon(50% 0, 94% 19%, 82% 78%, 50% 100%, 18% 78%, 6% 19%);
+}
+html[data-theme="dragon"] .sigil__core {
+  clip-path: polygon(
+    50% 0,
+    62% 33%,
+    100% 40%,
+    69% 60%,
+    78% 100%,
+    50% 72%,
+    22% 100%,
+    31% 60%,
+    0 40%,
+    38% 33%
+  );
+}
+
+.signal {
+  margin: 0;
+  padding: clamp(2rem, 6vw, 5rem) 0;
+  border-block: 1px solid var(--line);
+}
+.signal p {
+  max-width: 25ch;
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(2rem, 5vw, 4.25rem);
+  line-height: 1.08;
+}
+.signal p::before {
+  content: "“";
+  color: var(--accent);
+}
+
+.feature,
+.chronicle,
+.collection {
+  padding-block: clamp(5rem, 12vw, 10rem);
+}
+.feature {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(20rem, 1.15fr);
+  gap: clamp(3rem, 8vw, 8rem);
+  align-items: center;
+}
+.feature__copy > p:not(.eyebrow),
+.section-head > p:not(.eyebrow) {
+  max-width: 44rem;
+  color: var(--muted);
+}
+.text-action {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 700;
+}
+.feature__stage {
+  position: relative;
+  display: grid;
+  place-content: end start;
+  min-height: 30rem;
+  overflow: hidden;
+  padding: var(--space-2xl);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition:
+    background 250ms ease,
+    transform 250ms ease;
+}
+.feature__stage.is-active {
+  background: var(--surface-raised);
+  transform: rotate(-1deg);
+}
+.feature__stage p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.feature__stage strong {
+  max-width: 20ch;
+  font-family: var(--display);
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.05;
+}
+.stage-grid {
+  position: absolute;
+  inset: 0;
+}
+.stage-grid i {
+  position: absolute;
+  width: clamp(3rem, 9vw, 7rem);
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: transform 350ms ease;
+}
+.stage-grid i:nth-child(1) {
+  top: 14%;
+  left: 12%;
+}
+.stage-grid i:nth-child(2) {
+  top: 24%;
+  right: 17%;
+}
+.stage-grid i:nth-child(3) {
+  top: 49%;
+  left: 42%;
+}
+.stage-grid i:nth-child(4) {
+  bottom: 14%;
+  left: 16%;
+}
+.stage-grid i:nth-child(5) {
+  bottom: 19%;
+  right: 10%;
+}
+.is-active .stage-grid i:nth-child(odd) {
+  transform: translate(1rem, -0.5rem) rotate(12deg);
+  background: color-mix(in oklch, var(--accent) 28%, transparent);
+}
+.is-active .stage-grid i:nth-child(even) {
+  transform: translate(-1rem, 0.7rem) rotate(-8deg);
+}
+
+.chronicle {
+  border-top: 1px solid var(--line);
+}
+.section-head {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.5fr) minmax(0, 1fr);
+  gap: var(--space-2xl);
+  align-items: end;
+  margin-bottom: var(--space-3xl);
+}
+.section-head .eyebrow {
+  align-self: start;
+}
+.section-head h2 {
+  margin: 0;
+}
+.section-head > p:last-child {
+  grid-column: 2;
+}
+.chapter-list {
+  border-top: 1px solid var(--line);
+}
+.chapter {
+  display: grid;
+  grid-template-columns: 5rem minmax(10rem, 0.55fr) minmax(0, 1fr);
+  gap: var(--space-xl);
+  padding-block: var(--space-2xl);
+  border-bottom: 1px solid var(--line);
+}
+.chapter__number {
+  color: var(--accent);
+}
+.chapter p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.collection,
+.gallery,
+.archive {
+  border-top: 1px solid var(--line);
+}
+.gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-md);
+}
+.gallery figure {
+  margin: 0;
+  grid-column: span 2;
+}
+.gallery figure:first-child,
+.gallery figure:last-child {
+  grid-column: span 3;
+}
+.gallery img {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  filter: sepia(0.16);
+}
+.gallery figcaption {
+  padding-top: var(--space-sm);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.archive__chapters {
+  border-top: 1px solid var(--line);
+}
+.archive details {
+  border-bottom: 1px solid var(--line);
+}
+.archive summary {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: var(--space-lg);
+  padding: var(--space-lg) 0;
+  cursor: pointer;
+}
+.archive summary span {
+  color: var(--accent);
+}
+.archive__entries {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-lg);
+  padding: 0 0 var(--space-xl) 7rem;
+}
+.archive__entries article {
+  padding: var(--space-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.archive__entries h3 {
+  margin-top: 0;
+}
+.archive__entries p {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+.artifact-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+.artifact {
+  position: relative;
+  min-height: 18rem;
+  padding: var(--space-xl);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease;
+}
+.artifact::after {
+  content: "";
+  position: absolute;
+  width: 8rem;
+  aspect-ratio: 1;
+  right: -2rem;
+  bottom: -2rem;
+  border-radius: 50%;
+  background: var(--artifact);
+  opacity: 0.68;
+  transition: transform 220ms ease;
+}
+.artifact:hover {
+  transform: translateY(-0.35rem);
+}
+.artifact.is-selected {
+  border-color: var(--accent);
+  transform: translateY(-0.6rem) rotate(-1deg);
+}
+.artifact.is-selected::after {
+  transform: scale(1.35);
+}
+.artifact__index,
+.artifact__title,
+.artifact__text {
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+.artifact__index {
+  margin-bottom: 5rem;
+  color: var(--muted);
+}
+.artifact__title {
+  margin-bottom: var(--space-sm);
+  font-family: var(--display);
+  font-size: 2rem;
+  line-height: 1;
+}
+.artifact__text {
+  max-width: 22ch;
+  color: var(--muted);
+}
+.selection-status {
+  min-height: 1.6em;
+  margin: var(--space-lg) 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-xl);
+  padding-block: var(--space-2xl);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+footer p {
+  margin: 0;
+}
+
+.ambient i {
+  position: fixed;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(5rem);
+  opacity: 0.08;
+  background: var(--accent);
+}
+.ambient i:nth-child(1) {
+  width: 28rem;
+  height: 28rem;
+  top: -12rem;
+  right: -8rem;
+}
+.ambient i:nth-child(2) {
+  width: 20rem;
+  height: 20rem;
+  top: 45%;
+  left: -10rem;
+}
+.ambient i:nth-child(3) {
+  width: 24rem;
+  height: 24rem;
+  bottom: -12rem;
+  right: 20%;
+}
+
+@media (max-width: 760px) {
+  .site-head,
+  main,
+  footer {
+    width: min(100% - 1.5rem, 76rem);
+  }
+  .draft-mark {
+    display: none;
+  }
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    gap: var(--space-2xl);
+  }
+  .sigil {
+    min-height: 21rem;
+    order: -1;
+  }
+  .feature {
+    grid-template-columns: 1fr;
+  }
+  .feature__stage {
+    min-height: 22rem;
+  }
+  .section-head {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+  }
+  .section-head > p:last-child {
+    grid-column: auto;
+  }
+  .gallery__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .gallery figure,
+  .gallery figure:first-child,
+  .gallery figure:last-child {
+    grid-column: auto;
+  }
+  .archive summary {
+    grid-template-columns: 1fr;
+    gap: var(--space-xs);
+  }
+  .archive__entries {
+    grid-template-columns: 1fr;
+    padding-left: 0;
+  }
+  .chapter {
+    grid-template-columns: 3rem 1fr;
+  }
+  .chapter p {
+    grid-column: 2;
+  }
+  .artifact-list {
+    grid-template-columns: 1fr;
+  }
+  .artifact {
+    min-height: 14rem;
+  }
+  footer {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
   </head>
   <body>
-    <main class="card">
-      <div class="sigil" aria-hidden="true"></div>
-      <p class="brand">Arken-Khar</p>
-      <h1>Андрей</h1>
-      <p class="tagline">Личная страница игрока</p>
-      <a class="enter" href="https://arken-khar.space">Войти в игру</a>
-      <p class="foot">arken-khar.space</p>
+    <a class="skip-link" href="#content">К содержанию</a>
+    <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
+    <header class="site-head">
+      <a class="wordmark" href="https://arken-khar.space" aria-label="Arken-Khar, главная">
+        <span class="wordmark__mark" aria-hidden="true">AK</span>
+        <span>Arken-Khar</span>
+      </a>
+      <span class="draft-mark">Черновик · noindex</span>
+    </header>
+
+    <main id="content">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero__copy">
+          <p class="eyebrow">Личная лаборатория</p>
+          <h1 id="page-title">Андрей</h1>
+          <p class="role">Дизайнер · хронист визуальных систем</p>
+          <p class="intro">Цвет, композиция и типографика здесь работают не как декор, а как способ собирать мир в понятную систему.</p>
+          <div class="facts" aria-label="Темы страницы">
+            <span>Дизайн</span><span>Цвет</span><span>Композиция</span>
+          </div>
+          <div class="hero__actions">
+            <a class="button button--primary" href="https://arken-khar.space">Войти в игру</a>
+            <a class="button button--quiet" href="#story">Смотреть страницу</a>
+          </div>
+        </div>
+        <div class="sigil" aria-hidden="true">
+          <div class="sigil__core"><span></span></div>
+          <p>@uixray</p>
+        </div>
+      </section>
+
+      <blockquote class="signal"><p>Сначала смысл. Потом форма.</p></blockquote>
+
+      <section class="feature" id="story" aria-labelledby="feature-title">
+        <div class="feature__copy">
+          <p class="eyebrow">Главный инструмент</p>
+          <h2 id="feature-title">Композиционный стол</h2>
+          <p>Черновая интерактивная зона для палитр, сеток, заметок и визуальных экспериментов Аркен-Хара.</p>
+          <button class="text-action" type="button" data-feature-toggle aria-expanded="false">
+            Разложить элементы <span aria-hidden="true">↗</span>
+          </button>
+        </div>
+        <div class="feature__stage" data-feature-stage aria-live="polite">
+          <div class="stage-grid" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <p>Интерактивный прототип</p>
+          <strong>Материалы появятся после согласования</strong>
+        </div>
+      </section>
+
+      <section class="chronicle" aria-labelledby="chronicle-title">
+        <div class="section-head">
+          <p class="eyebrow">Структура истории</p>
+          <h2 id="chronicle-title">Три главы</h2>
+        </div>
+        <div class="chapter-list">
+        <article class="chapter">
+          <span class="chapter__number">01</span>
+          <h3>Цвет</h3>
+          <p>Палитры персонажей, сцен и настроений.</p>
+        </article>
+        <article class="chapter">
+          <span class="chapter__number">02</span>
+          <h3>Композиция</h3>
+          <p>Ритм, масштаб и управление вниманием.</p>
+        </article>
+        <article class="chapter">
+          <span class="chapter__number">03</span>
+          <h3>Система</h3>
+          <p>Как отдельные решения становятся общим языком.</p>
+        </article></div>
+      </section>
+
+      <section class="collection" aria-labelledby="collection-title">
+        <div class="section-head">
+          <p class="eyebrow">Персональная коллекция</p>
+          <h2 id="collection-title">На рабочем столе</h2>
+          <p>Нажмите на карточку, чтобы отметить выбранный объект.</p>
+        </div>
+        <div class="artifact-list">
+        <button class="artifact" type="button" data-reveal="0" style="--artifact: #C9482D">
+          <span class="artifact__index">01</span>
+          <span class="artifact__title">Палитра</span>
+          <span class="artifact__text">Набор цветовых наблюдений</span>
+        </button>
+        <button class="artifact" type="button" data-reveal="1" style="--artifact: #E0A431">
+          <span class="artifact__index">02</span>
+          <span class="artifact__title">Сетка</span>
+          <span class="artifact__text">Композиционные схемы</span>
+        </button>
+        <button class="artifact" type="button" data-reveal="2" style="--artifact: #397E70">
+          <span class="artifact__index">03</span>
+          <span class="artifact__title">Архив</span>
+          <span class="artifact__text">Воспоминания и локальные идеи</span>
+        </button></div>
+        <p class="selection-status" data-selection-status aria-live="polite">Ничего не выбрано</p>
+      </section>
+
     </main>
+
+    <footer>
+      <p>Персональная страница в общей системе Аркен-Хара.</p>
+      <a href="https://arken-khar.space">arken-khar.space</a>
+    </footer>
+    <script>const featureButton = document.querySelector("[data-feature-toggle]");
+const featureStage = document.querySelector("[data-feature-stage]");
+
+featureButton?.addEventListener("click", () => {
+  const active = featureButton.getAttribute("aria-expanded") === "true";
+  featureButton.setAttribute("aria-expanded", String(!active));
+  featureStage?.classList.toggle("is-active", !active);
+});
+
+const artifacts = [...document.querySelectorAll("[data-reveal]")];
+const selectionStatus = document.querySelector("[data-selection-status]");
+
+for (const artifact of artifacts) {
+  artifact.addEventListener("click", () => {
+    for (const item of artifacts) item.classList.remove("is-selected");
+    artifact.classList.add("is-selected");
+    selectionStatus.textContent = `Выбрано: ${artifact.querySelector(".artifact__title")?.textContent ?? "объект"}`;
+  });
+}
+</script>
   </body>
 </html>
