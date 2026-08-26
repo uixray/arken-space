@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortByInitiative } from "@arken/contracts";
+import { orderInitiative, sortByInitiative } from "@arken/contracts";
 import { projectInitiative, resolveParticipantName } from "./initiative.js";
 
 const names = (entries: Array<[string, string]>) => new Map(entries);
@@ -34,6 +34,44 @@ describe("что из очереди видит игрок", () => {
         context({ tokenNames: allNames, role: "GM" }),
       ).map((participant) => participant.name),
     ).toEqual(["Ллойд", "Лучник в кустах", "Волк №3"]);
+  });
+
+  it("довозит закрепление до клиента — и мастеру, и игроку", () => {
+    // Без этого поля панель не нарисует булавку, кнопки станут необъяснимыми, а
+    // отправленная обратно очередь молча потеряет расстановку: клиент шлёт
+    // состав целиком, и чего в нём нет, того больше нет и в базе.
+    const pinnedRoster = roster.map((row) =>
+      row.id === "a" ? { ...row, pinned: true } : row,
+    );
+    const forGm = projectInitiative(
+      pinnedRoster,
+      context({ tokenNames: allNames, role: "GM" }),
+    );
+    expect(forGm.map((participant) => participant.pinned)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+
+    const forPlayer = projectInitiative(
+      pinnedRoster,
+      context({
+        tokenNames: allNames,
+        playerTokenIds: new Set(["игрок"]),
+        role: "PLAYER",
+      }),
+    );
+    expect(forPlayer.map((participant) => participant.pinned)).toEqual([true]);
+  });
+
+  it("считает очередь без поля незакреплённой, а не ломается о неё", () => {
+    // Очереди, сохранённые до этой правки, лежат в JSONB без `pinned`. Отказ
+    // на них означал бы сломанную панель посреди боя у тех, кто уже играл.
+    expect(
+      projectInitiative(roster, context({ tokenNames: allNames })).map(
+        (participant) => participant.pinned,
+      ),
+    ).toEqual([false, false, false]);
   });
 
   it("игроку не отдаёт строку противника — ни целиком, ни заглушкой", () => {
@@ -197,5 +235,98 @@ describe("пересортировка по броскам", () => {
         { id: "третий", initiative: 15 },
       ]).map((participant) => participant.id),
     ).toEqual(["первый", "второй", "третий"]);
+  });
+});
+
+describe("порядок с закреплёнными строками", () => {
+  const ids = (
+    participants: ReadonlyArray<{
+      id: string;
+      initiative: number | null;
+      pinned?: boolean;
+    }>,
+  ) => orderInitiative(participants).map((participant) => participant.id);
+
+  it("держит закреплённую строку на её месте, остальных сортирует вокруг", () => {
+    // «Волк» стоит вторым не потому, что так вышло по броскам, а потому что
+    // мастер его туда поставил. Остальные обязаны разложиться по оставшимся
+    // местам — а не сдвинуть его, освобождая себе позицию.
+    expect(
+      ids([
+        { id: "мал", initiative: 3 },
+        { id: "волк", initiative: 1, pinned: true },
+        { id: "велик", initiative: 20 },
+      ]),
+    ).toEqual(["велик", "волк", "мал"]);
+  });
+
+  it("не двигает закреплённого при чужом большом броске", () => {
+    // Ровно то, ради чего закрепление и заведено: расстановка обязана пережить
+    // следующую правку, иначе это не перестановка, а мигание.
+    const before = [
+      { id: "первый", initiative: 5, pinned: true },
+      { id: "второй", initiative: 4 },
+    ];
+    expect(ids(before)).toEqual(["первый", "второй"]);
+    expect(
+      ids(
+        before.map((row) =>
+          row.id === "второй" ? { ...row, initiative: 99 } : row,
+        ),
+      ),
+    ).toEqual(["первый", "второй"]);
+  });
+
+  it("возвращает открепившуюся строку под общее правило", () => {
+    // Открепление обязано что-то менять — иначе кнопка обманывает.
+    expect(
+      ids([
+        { id: "низкий", initiative: 2, pinned: false },
+        { id: "высокий", initiative: 30 },
+      ]),
+    ).toEqual(["высокий", "низкий"]);
+  });
+
+  it("оставляет очередь как есть, когда закреплены все", () => {
+    expect(
+      ids([
+        { id: "б", initiative: 1, pinned: true },
+        { id: "а", initiative: 50, pinned: true },
+      ]),
+    ).toEqual(["б", "а"]);
+  });
+
+  it("ведёт себя как обычная сортировка, когда не закреплён никто", () => {
+    // Старое поведение — частный случай нового, и это проверяется, а не
+    // предполагается: очереди без единого закрепления составляют большинство.
+    const roster = [
+      { id: "a", initiative: 7 },
+      { id: "b", initiative: 19 },
+      { id: "c", initiative: null },
+    ];
+    expect(ids(roster)).toEqual(
+      sortByInitiative(roster).map((participant) => participant.id),
+    );
+  });
+
+  it("не теряет и не задваивает участников", () => {
+    // Раскладка по свободным местам — ровно то место, где легко потерять
+    // строку и не заметить: список останется правдоподобным.
+    const roster = [
+      { id: "a", initiative: 1, pinned: true },
+      { id: "b", initiative: 2 },
+      { id: "c", initiative: 3, pinned: true },
+      { id: "d", initiative: 4 },
+      { id: "e", initiative: null },
+    ];
+    const ordered = orderInitiative(roster);
+    expect(ordered).toHaveLength(roster.length);
+    expect([...ordered].map((row) => row.id).sort()).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+    ]);
   });
 });

@@ -283,6 +283,12 @@ export const campaigns = pgTable("campaigns", {
         tokenId: string | null;
         name: string | null;
         initiative: number | null;
+        /**
+         * UIX-466: строка закреплена мастером и сортировкой не двигается.
+         * Необязательное — очереди, сохранённые до этой правки, поля не имеют,
+         * и миграция им не нужна: его отсутствие и означает «не закреплена».
+         */
+        pinned?: boolean;
       }>
     >()
     .notNull()

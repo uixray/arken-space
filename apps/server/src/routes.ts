@@ -62,7 +62,7 @@ import {
   tokensInBattleZone,
   type BattleZone,
   updateTokenConditionsSchema,
-  sortByInitiative,
+  orderInitiative,
   updateInitiativeSchema,
   updateStatLayoutSchema,
   deleteTokenSchema,
@@ -7228,14 +7228,18 @@ export function registerRoutes(
     /**
      * UIX-466: порядок — производная от введённых значений, а не отдельное
      * намерение. Раньше его собирали руками, а сортировка была кнопкой; теперь
-     * ручной перестановки нет вовсе, и очередь пересобирается после каждой
-     * правки.
+     * очередь пересобирается после каждой правки.
+     *
+     * Исключение — строки, закреплённые мастером (`pinned`): они держат своё
+     * место, остальные сортируются вокруг них. Закрепление приезжает в составе
+     * очереди, поэтому отдельной операции «переставить» нет — есть присланный
+     * порядок, который сервер обязан воспроизвести ровно там, где его закрепили.
      *
      * Сортировка живёт здесь, а не на клиенте: значения вносят и мастер, и
      * игрок, и порядок обязан получиться один и тот же у всех — независимо от
      * того, чей клиент прислал правку.
      */
-    const ordered = sortByInitiative(body.participants);
+    const ordered = orderInitiative(body.participants);
     const updated = await db.transaction(async (tx) => {
       const [next] = await tx
         .update(campaigns)
@@ -7336,7 +7340,7 @@ export function registerRoutes(
         return reply.code(403).send({ error: "NOT_YOUR_PARTICIPANT" });
     }
 
-    const ordered = sortByInitiative(
+    const ordered = orderInitiative(
       roster.map((row) =>
         row.id === body.participantId
           ? { ...row, initiative: body.initiative }
