@@ -2104,6 +2104,12 @@ export function App() {
                       }
                       className="map-tool"
                       data-tool="BATTLE_ZONE"
+                      // Без активной сцены обводить нечего: зона привязана к
+                      // ней и в другой карте означала бы совсем другое место.
+                      // Заодно кнопка перестаёт быть лишней остановкой Tab
+                      // между «Пингом» и «Рисованием» — это закреплено тестом
+                      // доступности панели (concept.spec.ts:435).
+                      disabled={!activeScene}
                       aria-pressed={tool === "BATTLE_ZONE"}
                       onClick={() => {
                         if (viewSnapshot.campaign.battleZone) {
