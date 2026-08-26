@@ -293,6 +293,25 @@ export const campaigns = pgTable("campaigns", {
     >()
     .notNull()
     .default([]),
+  /**
+   * UIX-466 п. 3-4 — зона боя: прямоугольник на сцене, из которого собирается
+   * состав очереди.
+   *
+   * Отдельная колонка, а не поле внутри `initiative`: зона переживает бой, а
+   * очередь — нет, `END_BATTLE` очищает её целиком. Лежи зона внутри, мастер
+   * обводил бы поле заново после каждого боя на той же карте.
+   *
+   * Сцена хранится вместе с координатами: без неё это прямоугольник «где-то», и
+   * после смены активной сцены в бой попали бы те, кто просто стоит на тех же
+   * координатах другой карты.
+   */
+  battleZone: jsonb("battle_zone").$type<{
+    sceneId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(),
   revision: integer("revision").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

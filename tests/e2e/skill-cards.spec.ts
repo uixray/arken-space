@@ -66,6 +66,7 @@ function snapshotFor(
       battleCounter: 0,
       statLayout: [],
       initiative: [],
+      battleZone: null,
       revision: 0,
     },
     me: {

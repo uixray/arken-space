@@ -493,3 +493,162 @@ describe("что из очереди приходит игроку", () => {
     expect(gmSnapshot.campaign.initiative).toHaveLength(2);
   });
 });
+
+/**
+ * UIX-466 п. 3-4 — зона боя.
+ *
+ * Здесь проверяется то, чего не видит юнит-тест геометрии: зона переживает
+ * перезагрузку и конец боя, игроку не уезжает вовсе, а состав по ней собирается
+ * из настоящих токенов настоящей сцены.
+ */
+describe("зона боя", () => {
+  /** Накрывает Ллойда (100,100) и не достаёт до Засады (400,400). */
+  const zone = { sceneId: ids.scene, x: 50, y: 50, width: 250, height: 250 };
+
+  const putZone = async (value: unknown, cookieSecret = secret) =>
+    app.inject({
+      method: "PUT",
+      url: "/api/campaign/battle-zone",
+      headers: { cookie: `${env.SESSION_COOKIE_NAME}=${cookieSecret}` },
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: await campaignRevision(),
+        zone: value,
+      },
+    });
+
+  const fromZone = async (cookieSecret = secret) =>
+    app.inject({
+      method: "POST",
+      url: "/api/campaign/initiative/from-zone",
+      headers: { cookie: `${env.SESSION_COOKIE_NAME}=${cookieSecret}` },
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: await campaignRevision(),
+      },
+    });
+
+  const clock = async (command: "START_BATTLE" | "END_BATTLE") =>
+    app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: { cookie: `${env.SESSION_COOKIE_NAME}=${secret}` },
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: await campaignRevision(),
+        command,
+      },
+    });
+
+  const storedZone = async () => {
+    const [row] = await db
+      .select()
+      .from(schema.campaigns)
+      .where(eq(schema.campaigns.id, ids.campaign));
+    return row!.battleZone;
+  };
+
+  it("сохраняется и уезжает мастеру, но не игроку", async () => {
+    expect((await putZone(zone)).statusCode).toBe(200);
+    expect(await storedZone()).toMatchObject(zone);
+
+    const gmSnapshot = await buildSnapshot(
+      db as never,
+      {
+        membershipId: ids.gm,
+        campaignId: ids.campaign,
+        role: "GM",
+        displayName: "Мастер",
+      } as never,
+    );
+    expect(gmSnapshot.campaign.battleZone).toMatchObject(zone);
+
+    // Игроку зона сказала бы, где мастер собирается драться, ещё до начала боя
+    // — и очертила бы место засады там, где тумана нет.
+    const playerSnapshot = await buildSnapshot(
+      db as never,
+      {
+        membershipId: ids.player,
+        campaignId: ids.campaign,
+        role: "PLAYER",
+        displayName: "Игрок",
+      } as never,
+    );
+    expect(playerSnapshot.campaign.battleZone).toBeNull();
+    expect(JSON.stringify(playerSnapshot.campaign)).not.toContain('"x":50');
+  });
+
+  it("не даёт игроку обвести поле боя", async () => {
+    // Зоной задаётся, кто вообще участвует в бою: это ручка мастера.
+    const playerSecret = await givePlayerSession();
+    expect((await putZone(zone, playerSecret)).statusCode).toBe(403);
+    expect(await storedZone()).toBeNull();
+  });
+
+  it("не принимает сцену чужой кампании", async () => {
+    // Иначе зона указывала бы на чужую карту, а состав по ней молча не
+    // находил бы никого.
+    expect(
+      (await putZone({ ...zone, sceneId: ids.otherScene })).statusCode,
+    ).toBe(404);
+  });
+
+  it("снимается и не мешает начать бой без неё", async () => {
+    await putZone(zone);
+    expect((await putZone(null)).statusCode).toBe(200);
+    expect(await storedZone()).toBeNull();
+    // Отказ начинать бой без обведённого поля сделал бы бой невозможным до
+    // того, как мастер вспомнит про рамку.
+    expect((await clock("START_BATTLE")).statusCode).toBe(200);
+  });
+
+  it("начало боя собирает состав по зоне", async () => {
+    await putZone(zone);
+    expect((await clock("START_BATTLE")).statusCode).toBe(200);
+    const roster = await storedInitiative();
+    expect(roster.map((row) => row.tokenId)).toEqual([ids.token]);
+    // Засада стоит за пределами рамки — в бой не попадает, хотя видна мастеру.
+    expect(roster.map((row) => row.tokenId)).not.toContain(ids.hiddenToken);
+  });
+
+  it("конец боя стирает состав, но оставляет рамку", async () => {
+    await putZone(zone);
+    await clock("START_BATTLE");
+    expect((await clock("END_BATTLE")).statusCode).toBe(200);
+    expect(await storedInitiative()).toEqual([]);
+    // На той же карте следующий бой начинается с уже обведённым полем: обводить
+    // заново после каждой стычки — работа руками посреди игры.
+    expect(await storedZone()).toMatchObject(zone);
+  });
+
+  it("пополняет состав по зоне, не задваивая и не теряя брошенное", async () => {
+    await putZone(zone);
+    await patchInitiative(
+      [{ id: crypto.randomUUID(), name: "Волк №3", initiative: 12 }],
+      await campaignRevision(),
+    );
+    expect((await fromZone()).statusCode).toBe(200);
+    const roster = await storedInitiative();
+    expect(roster.map((row) => row.tokenId)).toEqual([null, ids.token]);
+    // Участник вне карты переживает пополнение вместе со своим броском.
+    expect(roster[0]).toMatchObject({ name: "Волк №3", initiative: 12 });
+
+    // Повторное нажатие — обычное действие: мастер подвинул фигуры и нажал ещё.
+    expect((await fromZone()).statusCode).toBe(200);
+    expect(await storedInitiative()).toHaveLength(2);
+  });
+
+  it("отказывает в пополнении, пока поле не обведено", async () => {
+    // Пустой ответ выглядел бы как «в зоне никого» — мастер начал бы бой без
+    // противников, не поняв, что рамки нет.
+    const response = await fromZone();
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: "BATTLE_ZONE_NOT_SET" });
+  });
+
+  it("не даёт игроку пополнять состав", async () => {
+    const playerSecret = await givePlayerSession();
+    await putZone(zone);
+    expect((await fromZone(playerSecret)).statusCode).toBe(403);
+  });
+});
