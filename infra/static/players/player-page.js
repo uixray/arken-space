@@ -20,6 +20,18 @@ for (const artifact of artifacts) {
   });
 }
 
+const galleryTrack = document.querySelector("[data-gallery-track]");
+document
+  .querySelector("[data-gallery-prev]")
+  ?.addEventListener("click", () =>
+    galleryTrack?.scrollBy({ left: -380, behavior: "smooth" }),
+  );
+document
+  .querySelector("[data-gallery-next]")
+  ?.addEventListener("click", () =>
+    galleryTrack?.scrollBy({ left: 380, behavior: "smooth" }),
+  );
+
 const runner = document.querySelector("[data-runner-stage]");
 const runnerHero = document.querySelector("[data-runner-hero]");
 const runnerStart = document.querySelector("[data-runner-start]");

@@ -619,13 +619,17 @@ html[data-theme="knight"] .chapter:nth-child(3) h3 {
   border-top: 1px solid var(--line);
 }
 .gallery__grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  display: flex;
   gap: var(--space-md);
+  overflow-x: auto;
+  padding: 1.5rem 1rem 2.5rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-color: var(--accent) transparent;
 }
 .gallery figure {
   margin: 0;
-  grid-column: span 2;
+  flex: 0 0 min(24rem, 78vw);
+  scroll-snap-align: center;
   padding: 0.75rem 0.75rem 2.6rem;
   background: #f8f0dc;
   box-shadow: 0.35rem 0.55rem 1.2rem oklch(0.25 0.04 60 / 0.2);
@@ -636,7 +640,7 @@ html[data-theme="knight"] .chapter:nth-child(3) h3 {
 }
 .gallery figure:first-child,
 .gallery figure:last-child {
-  grid-column: span 3;
+  flex-basis: min(24rem, 78vw);
 }
 .gallery img {
   width: 100%;
@@ -652,6 +656,117 @@ html[data-theme="knight"] .chapter:nth-child(3) h3 {
   font-size: 0.8rem;
   color: #443528;
   font-family: "Segoe Print", "Comic Sans MS", cursive;
+}
+.gallery__controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.gallery__controls button {
+  width: 3rem;
+  aspect-ratio: 1;
+  border: 2px solid var(--ink);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 1.25rem;
+}
+.gallery__controls button:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.combat-tree {
+  display: grid;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+.combat-tree > section {
+  border: 2px solid var(--ink);
+  background: #f5ead1;
+  box-shadow: 0.4rem 0.45rem 0 var(--line);
+}
+.combat-tree > section:nth-child(even) {
+  transform: rotate(-0.3deg);
+}
+.combat-tree header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 2px solid var(--ink);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.combat-tree header span {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.7rem;
+}
+.combat-tree details {
+  border-bottom: 1px dashed var(--line);
+}
+.combat-tree details:last-child {
+  border: 0;
+}
+.combat-tree summary {
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+  font-weight: 800;
+}
+.combat-tree details p {
+  margin: 0;
+  padding: 0 1rem 1rem;
+  color: #5e4939;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.source-library {
+  padding-block: clamp(5rem, 12vw, 10rem);
+  border-top: 1px solid var(--line);
+}
+.source-library__list > details {
+  margin-bottom: var(--space-lg);
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+.source-library__list > details > summary {
+  display: grid;
+  grid-template-columns: 9rem 1fr auto;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  cursor: pointer;
+  background: #edd08a;
+}
+.source-library__list > details > summary::after {
+  content: "+ Читать";
+  justify-self: end;
+  color: var(--accent);
+  font-weight: 800;
+}
+.source-library__list > details[open] > summary::after {
+  content: "− Свернуть";
+}
+.source-library__list > details > section {
+  padding: var(--space-xl);
+  border-top: 1px solid var(--line);
+}
+.source-library__list section > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+.source-library__list article {
+  padding: var(--space-lg);
+  border: 1px solid var(--line);
+  background: #f8f0dc;
+}
+.source-library__list h4 {
+  margin: 0 0 var(--space-sm);
+  font-size: 1rem;
+}
+.source-library__list p {
+  margin: 0;
+  color: var(--muted);
 }
 .archive__chapters {
   border-top: 1px solid var(--line);
@@ -823,12 +938,17 @@ html[data-theme="knight"] .chapter:nth-child(3) h3 {
 .runner__obstacle {
   position: absolute;
   z-index: 2;
-  right: -4rem;
+  left: 0;
   bottom: 14%;
   width: 2.3rem;
   height: 5.2rem;
-  background: var(--accent);
+  background: repeating-linear-gradient(
+    135deg,
+    #532820 0 0.55rem,
+    #dca943 0.55rem 1.1rem
+  );
   border: 2px solid var(--ink);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 .runner__message {
   position: absolute;
@@ -926,8 +1046,23 @@ footer p {
   .section-head > p:last-child {
     grid-column: auto;
   }
-  .gallery__grid {
-    grid-template-columns: 1fr 1fr;
+  .gallery figure,
+  .gallery figure:first-child,
+  .gallery figure:last-child {
+    flex-basis: 82vw;
+  }
+  .combat-tree {
+    margin-top: var(--space-lg);
+  }
+  .source-library__list > details > summary {
+    grid-template-columns: 1fr;
+    gap: var(--space-xs);
+  }
+  .source-library__list > details > summary::after {
+    justify-self: start;
+  }
+  .source-library__list section > div {
+    grid-template-columns: 1fr;
   }
   h1 {
     font-size: clamp(3.8rem, 20vw, 6rem);
@@ -947,11 +1082,6 @@ footer p {
   }
   .archive summary::after {
     justify-self: start;
-  }
-  .gallery figure,
-  .gallery figure:first-child,
-  .gallery figure:last-child {
-    grid-column: auto;
   }
   .archive summary {
     grid-template-columns: 1fr;

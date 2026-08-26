@@ -7,6 +7,16 @@ import { players } from "./player-pages.data.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const css = await readFile(join(here, "player-page.css"), "utf8");
 const js = await readFile(join(here, "player-page.js"), "utf8");
+const irakliDocuments = await Promise.all(
+  [
+    ["Магия Жизни", "irakli-life-magic.txt"],
+    ["Велторианский Клинок", "irakli-veltorian-blade.txt"],
+    ["Иерархия гильдии Келлзериас", "irakli-kellzerias-guild.txt"],
+  ].map(async ([title, file]) => [
+    title,
+    await readFile(join(here, "source-docs", file), "utf8"),
+  ]),
+);
 
 const escape = (value) =>
   value
@@ -15,7 +25,31 @@ const escape = (value) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 
+function parseDocument([title, raw]) {
+  const sections = [];
+  let current = { title: "Основные положения", entries: [] };
+  for (const sourceLine of raw.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+    const line = sourceLine.trim();
+    if (!line || line === title) continue;
+    if (line.endsWith(":")) {
+      if (current.entries.length) sections.push(current);
+      current = { title: line.slice(0, -1), entries: [] };
+      continue;
+    }
+    const divider = line.indexOf(" - ");
+    current.entries.push(
+      divider > 0
+        ? [line.slice(0, divider), line.slice(divider + 3)]
+        : ["Заметка", line],
+    );
+  }
+  if (current.entries.length) sections.push(current);
+  return { title, sections };
+}
+
 function render(player) {
+  const documents =
+    player.slug === "irakly123" ? irakliDocuments.map(parseDocument) : [];
   const chapters = player.chapters
     .map(
       ([number, title, text]) => `
@@ -42,7 +76,8 @@ function render(player) {
   const gallery = player.gallery
     ? `<section class="gallery" aria-labelledby="gallery-title">
         <div class="section-head"><p class="eyebrow">Личный архив</p><h2 id="gallery-title">Ираклий в кадре</h2><p>Фотографии героя и его рыцарских образов.</p></div>
-        <div class="gallery__grid">${player.gallery.map(([src, alt]) => `<figure><img src="assets/${escape(src)}" alt="${escape(alt)}" loading="lazy" /><figcaption>${escape(alt)}</figcaption></figure>`).join("")}</div>
+        <div class="gallery__controls"><button type="button" data-gallery-prev aria-label="Предыдущее фото">←</button><button type="button" data-gallery-next aria-label="Следующее фото">→</button></div>
+        <div class="gallery__grid" data-gallery-track>${player.gallery.map(([src, alt]) => `<figure><img src="assets/${escape(src)}" alt="${escape(alt)}" loading="lazy" /><figcaption>${escape(alt)}</figcaption></figure>`).join("")}</div>
       </section>`
     : "";
 
@@ -67,6 +102,14 @@ function render(player) {
         <div class="section-head"><p class="eyebrow">Персональная коллекция</p><h2 id="collection-title">${escape(player.collectionTitle)}</h2><p>Нажмите на карточку, чтобы отметить выбранный объект.</p></div>
         <div class="artifact-list">${collection}</div><p class="selection-status" data-selection-status aria-live="polite">Ничего не выбрано</p>
       </section>`;
+
+  const combatStyle = documents.length
+    ? `<div class="combat-tree">${documents[1].sections.map((section, level) => `<section><header><span>Уровень ${level + 1}</span><strong>${escape(section.title)}</strong></header><div>${section.entries.map(([name, text], index) => `<details ${index === 0 ? "open" : ""}><summary>${escape(name)}</summary><p>${escape(text)}</p></details>`).join("")}</div></section>`).join("")}</div>`
+    : `<div class="feature__stage" data-feature-stage aria-live="polite"><div class="stage-grid" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><p>Интерактивный прототип</p><strong>Материалы появятся после согласования</strong></div>`;
+
+  const documentArchive = documents.length
+    ? `<section class="source-library" aria-labelledby="source-library-title"><div class="section-head"><p class="eyebrow">Полные авторские тексты</p><h2 id="source-library-title">Материалы Ираклия</h2><p>Три документа перенесены полностью, без сокращения формулировок.</p></div><div class="source-library__list">${documents.map((document, index) => `<details ${index === 0 ? "open" : ""}><summary><span>Документ 0${index + 1}</span><strong>${escape(document.title)}</strong></summary>${document.sections.map((section) => `<section><h3>${escape(section.title)}</h3><div>${section.entries.map(([name, text]) => `<article><h4>${escape(name)}</h4><p>${escape(text)}</p></article>`).join("")}</div></section>`).join("")}</details>`).join("")}</div></section>`
+    : "";
 
   return `<!doctype html>
 <html lang="ru" data-theme="${player.theme}">
@@ -115,15 +158,9 @@ function render(player) {
           <p class="eyebrow">${escape(player.feature.kicker)}</p>
           <h2 id="feature-title">${escape(player.feature.title)}</h2>
           <p>${escape(player.feature.text)}</p>
-          <button class="text-action" type="button" data-feature-toggle aria-expanded="false">
-            ${escape(player.feature.label)} <span aria-hidden="true">↗</span>
-          </button>
+          ${documents.length ? `<a class="text-action" href="#source-library-title">Открыть полный документ <span aria-hidden="true">↓</span></a>` : `<button class="text-action" type="button" data-feature-toggle aria-expanded="false">${escape(player.feature.label)} <span aria-hidden="true">↗</span></button>`}
         </div>
-        <div class="feature__stage" data-feature-stage aria-live="polite">
-          <div class="stage-grid" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-          <p>Интерактивный прототип</p>
-          <strong>Материалы появятся после согласования</strong>
-        </div>
+        ${combatStyle}
       </section>
 
       <section class="chronicle" aria-labelledby="chronicle-title">
@@ -135,7 +172,7 @@ function render(player) {
       </section>
 
       ${collectionSection}
-${gallery}${archive}
+${gallery}${documentArchive}${archive}
     </main>
 
     <footer>
