@@ -796,6 +796,68 @@ export type InitiativeOrder = z.infer<typeof initiativeOrderSchema>;
  * правки обязаны разойтись конфликтом, а не слиться в порядок, которого никто
  * не задумывал.
  */
+/**
+ * UIX-466 п. 3-4 — зона боя: прямоугольник на сцене, из которого собирается
+ * состав очереди.
+ *
+ * Сцена хранится вместе с координатами намеренно. Зона без неё была бы
+ * прямоугольником «где-то», и после смены активной сцены мастер собрал бы в бой
+ * тех, кто просто стоит на тех же координатах другой карты.
+ *
+ * Координаты — мировые, те же, в которых лежат токены; масштаб и положение
+ * камеры на состав не влияют.
+ */
+export const battleZoneSchema = z
+  .object({
+    sceneId: z.string().uuid(),
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  })
+  .strict();
+export type BattleZone = z.infer<typeof battleZoneSchema>;
+
+/** Зона задаётся целиком или снимается — правки «подвинуть на пиксель» нет. */
+export const setBattleZoneSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  zone: battleZoneSchema.nullable(),
+});
+
+/**
+ * Кто из токенов попадает в зону боя.
+ *
+ * **Пересечение, а не полное вхождение.** Фигура, задетая краем зоны, в бою
+ * участвует: мастер обводит поле боя примерно, и требовать, чтобы гигант влез в
+ * рамку целиком, значило бы заставлять обводить карту целиком.
+ *
+ * Неравенства строгие — ровно как в рамке выделения на канвасе
+ * (`Orthographic2DRenderer`). Касание ребром не попадание: иначе зона,
+ * приложенная вплотную к строю, втягивала бы соседнюю шеренгу.
+ *
+ * Токены других сцен отсеиваются здесь, а не у вызывающего: это первое, что
+ * забудут сделать, и цена — противники с прошлой карты в очереди.
+ */
+export function tokensInBattleZone<
+  T extends {
+    sceneId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  },
+>(tokens: readonly T[], zone: BattleZone): T[] {
+  return tokens.filter(
+    (token) =>
+      token.sceneId === zone.sceneId &&
+      token.x < zone.x + zone.width &&
+      token.x + token.width > zone.x &&
+      token.y < zone.y + zone.height &&
+      token.y + token.height > zone.y,
+  );
+}
+
 export const updateInitiativeSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -2558,6 +2620,11 @@ export interface GameSnapshot {
      * совпадают; очередь ведёт мастер, панель информационная.
      */
     initiative: InitiativeParticipantDto[];
+    /**
+     * UIX-466: зона боя. Только у мастера — игроку она выдала бы, где мастер
+     * собирается драться, ещё до начала боя.
+     */
+    battleZone: BattleZone | null;
     revision: number;
   };
   me: MembershipDto;

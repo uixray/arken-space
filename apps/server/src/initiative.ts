@@ -83,3 +83,37 @@ export function resolveParticipantName(
   if (inherited) return inherited;
   return "Без имени";
 }
+
+/**
+ * UIX-466 п. 3 — состав очереди по зоне боя.
+ *
+ * **Пополняет, а не пересобирает.** Уже введённые участники остаются со своими
+ * бросками и закреплением: снимок по зоне — это «добавь тех, кто внутри», а не
+ * «замени всех». Иначе повторное нажатие стирало бы внесённые числа, а вышедший
+ * из зоны терял бы строку вместе с ходом.
+ *
+ * Участник без токена («Волк №3» за столом) переживает пополнение по той же
+ * причине: на карте его нет вовсе, и любой пересчёт по геометрии его бы потерял.
+ *
+ * Один токен — одна строка: повторный вызов не задваивает состав. Это то же
+ * правило, что стоит в `initiativeOrderSchema`, и здесь оно соблюдается заранее,
+ * а не ловится отказом схемы уже после сборки.
+ */
+export function recruitFromZone<
+  P extends { tokenId: string | null },
+  T extends { id: string },
+>(
+  existing: readonly P[],
+  inZone: readonly T[],
+  makeParticipant: (tokenId: string) => P,
+): P[] {
+  const already = new Set(
+    existing
+      .map((participant) => participant.tokenId)
+      .filter((tokenId): tokenId is string => Boolean(tokenId)),
+  );
+  const added = inZone
+    .filter((token) => !already.has(token.id))
+    .map((token) => makeParticipant(token.id));
+  return [...existing, ...added];
+}

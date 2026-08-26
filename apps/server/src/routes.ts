@@ -1,4 +1,4 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import {
@@ -58,6 +58,9 @@ import {
   rechargeEntryCommandSchema,
   renameCampaignSchema,
   setOwnInitiativeSchema,
+  setBattleZoneSchema,
+  tokensInBattleZone,
+  type BattleZone,
   updateTokenConditionsSchema,
   sortByInitiative,
   updateInitiativeSchema,
@@ -147,6 +150,7 @@ import { registerStoryRoutes } from "./story.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
+import { recruitFromZone } from "./initiative.js";
 import { registerEncounterRoutes } from "./encounters.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
 import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
@@ -216,6 +220,57 @@ const sessionRoom = (id: string) => `session:${id}`;
  * которой в снапшоте нет.
  */
 /** Рассматриваемая сцена сокета, если она есть, — в виде списка для снапшота. */
+/**
+ * UIX-466 п. 3 — кто из стоящих на карте попадает в зону боя.
+ *
+ * Сцена зоны перепроверяется здесь, а не только при её установке: между тем и
+ * другим мастер мог удалить сцену. Молчаливый пустой набор был бы хуже отказа —
+ * мастер решил бы, что в зоне никого, и начал бы бой без противников.
+ *
+ * Возвращает `null`, если сцены зоны в этой кампании больше нет.
+ */
+async function recruitFromBattleZone(
+  db: Database,
+  campaignId: string,
+  zone: BattleZone,
+  existing: readonly {
+    id: string;
+    tokenId: string | null;
+    name: string | null;
+    initiative: number | null;
+  }[],
+) {
+  const [scene] = await db
+    .select({ id: scenes.id })
+    .from(scenes)
+    .where(and(eq(scenes.id, zone.sceneId), eq(scenes.campaignId, campaignId)))
+    .limit(1);
+  if (!scene) return null;
+  const placed = await db
+    .select({
+      id: tokens.id,
+      sceneId: tokens.sceneId,
+      x: tokens.x,
+      y: tokens.y,
+      width: tokens.width,
+      height: tokens.height,
+    })
+    .from(tokens)
+    .where(eq(tokens.sceneId, zone.sceneId));
+  return recruitFromZone(
+    existing,
+    tokensInBattleZone(placed, zone),
+    (tokenId) => ({
+      id: randomUUID(),
+      tokenId,
+      // Имя наследуется от токена, а не копируется: переименование дойдёт до
+      // очереди само (UIX-400).
+      name: null,
+      initiative: null,
+    }),
+  );
+}
+
 function viewedScenes(data: { viewedSceneId?: string | null }): string[] {
   return data.viewedSceneId ? [data.viewedSceneId] : [];
 }
@@ -6751,6 +6806,30 @@ export function registerRoutes(
     const nextDay = current.day + (advancesDay ? 1 : 0);
     const nextBattle =
       current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
+    /**
+     * UIX-466 п. 3 — начало боя собирает состав по зоне.
+     *
+     * Снимок, а не живой состав: вошедший в рамку позже не появляется в очереди
+     * сам, вышедший из неё не исчезает. Живой пересчёт означал бы, что случайно
+     * задетая мышью фигура меняет порядок ходов посреди хода. Подтянуть
+     * опоздавших мастер может отдельным действием.
+     *
+     * Зона не задана — начало боя работает как раньше: состав собирается рамкой
+     * выделения. Отказывать здесь нельзя, иначе бой стал бы невозможен, пока
+     * поле не обведено.
+     */
+    const recruited =
+      body.command === "START_BATTLE" && current.battleZone
+        ? await recruitFromBattleZone(
+            db,
+            auth.campaignId,
+            current.battleZone,
+            current.initiative.map((participant) => ({
+              ...participant,
+              initiative: null,
+            })),
+          )
+        : null;
     const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
     let result;
     try {
@@ -6782,10 +6861,11 @@ export function registerRoutes(
              */
             initiative:
               body.command === "START_BATTLE"
-                ? current.initiative.map((participant) => ({
+                ? (recruited ??
+                  current.initiative.map((participant) => ({
                     ...participant,
                     initiative: null,
-                  }))
+                  })))
                 : body.command === "END_BATTLE"
                   ? []
                   : current.initiative,
@@ -7295,6 +7375,162 @@ export function registerRoutes(
       return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return updatedSelf;
+  });
+
+  /**
+   * UIX-466 п. 4 — мастер обводит поле боя.
+   *
+   * Зона живёт отдельно от очереди и переживает бой: `END_BATTLE` очищает
+   * состав, но не рамку. На той же карте следующий бой начинается с уже
+   * обведённым полем.
+   *
+   * Сцена в теле не принимается на веру — она обязана существовать и
+   * принадлежать этой кампании, иначе зона указывала бы на чужую карту, а
+   * пополнение состава по ней молча не находило бы никого.
+   */
+  app.put("/api/campaign/battle-zone", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    // Поле боя обводит мастер. Игроку эта ручка не нужна и опасна: зоной
+    // задаётся, кто вообще участвует в бою.
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = setBattleZoneSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    if (body.zone) {
+      const [scene] = await db
+        .select({ id: scenes.id })
+        .from(scenes)
+        .where(
+          and(
+            eq(scenes.id, body.zone.sceneId),
+            eq(scenes.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    }
+    const updatedZone = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(campaigns)
+        .set({
+          battleZone: body.zone,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.battle_zone.updated",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: next.revision,
+        payload: { cleared: body.zone === null },
+      });
+      return next;
+    });
+    if (!updatedZone)
+      return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updatedZone;
+  });
+
+  /**
+   * UIX-466 п. 3 — пополнить очередь теми, кто сейчас в зоне.
+   *
+   * **Добавляет, но не выбрасывает.** Вышедший из зоны остаётся в бою: он мог
+   * отступить, а не выйти из боя, и стирать его строку вместе с уже внесённым
+   * броском значило бы наказывать за отступление. Убирает участников мастер
+   * сам — крестиком в строке.
+   *
+   * Отдельная операция, а не пересчёт на каждое движение токена: живой состав
+   * означал бы, что случайно задетая мышью фигура меняет очередь посреди хода.
+   */
+  app.post("/api/campaign/initiative/from-zone", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = revisionCommandSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    if (!current.battleZone)
+      return reply.code(409).send({ error: "BATTLE_ZONE_NOT_SET" });
+    const roster = await recruitFromBattleZone(
+      db,
+      auth.campaignId,
+      current.battleZone,
+      current.initiative,
+    );
+    // Сцена зоны исчезла между её установкой и этим вызовом. Пустой состав
+    // выглядел бы как «в зоне никого», и мастер начал бы бой без противников.
+    if (!roster)
+      return reply.code(409).send({ error: "BATTLE_ZONE_SCENE_MISSING" });
+    const updatedRoster = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(campaigns)
+        .set({
+          initiative: roster,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.initiative.updated",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: next.revision,
+        payload: {
+          participants: roster.length,
+          added: roster.length - current.initiative.length,
+        },
+      });
+      return next;
+    });
+    if (!updatedRoster)
+      return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updatedRoster;
   });
 
   app.patch("/api/characters/:id/counters", async (request, reply) => {

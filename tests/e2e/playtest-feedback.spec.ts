@@ -10,6 +10,7 @@ const baseSnapshot: GameSnapshot = {
     battleCounter: 0,
     statLayout: [],
     initiative: [],
+    battleZone: null,
     revision: 0,
   },
   me: {

@@ -705,6 +705,14 @@ export async function buildSnapshot(
         initiativeBonusByToken,
         role: auth.role,
       }),
+      /**
+       * UIX-466 п. 4: зона боя — инструмент мастера, и уезжает только ему.
+       *
+       * Игроку она сказала бы, где мастер собирается драться, ещё до начала
+       * боя, и заодно очертила бы место засады на карте, где тумана нет. Это та
+       * же утечка намерения, что UIX-449 закрыл для позиций.
+       */
+      battleZone: auth.role === "GM" ? (campaign.battleZone ?? null) : null,
       revision: campaign.revision,
     },
     me: {
