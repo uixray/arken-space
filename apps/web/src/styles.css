@@ -4193,6 +4193,15 @@ code {
   display: flex;
   gap: 2px;
 }
+/* UIX-466: у игрока булавка — подпись, а не кнопка. Выравнивается по ряду
+   кнопок мастера, чтобы строки в обеих ролях читались одинаково. */
+.initiative-panel__pinned {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-xs);
+  opacity: 0.7;
+  cursor: default;
+}
 .initiative-panel__controls,
 .initiative-panel__add-row {
   display: flex;

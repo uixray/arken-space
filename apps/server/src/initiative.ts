@@ -26,6 +26,8 @@ export function projectInitiative(
     tokenId: string | null;
     name: string | null;
     initiative: number | null;
+    /** Очереди, сохранённые до UIX-466 п. 9, поля не имеют — это не закрепление. */
+    pinned?: boolean;
   }>,
   context: {
     /**
@@ -60,6 +62,7 @@ export function projectInitiative(
       canEdit:
         context.role === "GM" ||
         (tokenId ? context.ownTokenIds.has(tokenId) : false),
+      pinned: participant.pinned ?? false,
     });
   }
   return projected;
