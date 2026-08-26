@@ -12,6 +12,7 @@ const snapshot = {
     battleCounter: 0,
     statLayout: [],
     initiative: [],
+    battleZone: null,
     revision: 0,
   },
   me: { id: "gm-input", role: "GM", displayName: "GM", characterId: null },

@@ -1,0 +1,74 @@
+{
+  "font": {
+    "family": {
+      "sans": {
+        "$type": "fontFamily",
+        "$value": [
+          "system-ui",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "sans-serif"
+        ],
+        "$description": "Интерфейсный шрифт. Системный: своих начертаний проект не грузит."
+      },
+      "mono": {
+        "$type": "fontFamily",
+        "$value": ["ui-monospace", "SFMono-Regular", "Consolas", "monospace"],
+        "$description": "Формулы бросков, идентификаторы, технические значения."
+      }
+    },
+    "size": {
+      "$description": "Шкала пересобрана 25.08.2026. До этого четыре токена — label, body-sm, body, heading-sm — укладывались в 1.4 пикселя (10.08, 10.5, 11.2, 11.48), то есть на экране не различались вовсе. Иерархия существовала только в именах. Новая шкала задана в пикселях: rem здесь ничего не давал, потому что корневой размер и так прибит к 14px, а явные пиксели проверяемы глазом.",
+      "caption": {
+        "$type": "dimension",
+        "$value": {
+          "value": 10,
+          "unit": "px"
+        },
+        "$description": "Служебные подписи: время сообщения, единицы, счётчики. Нижняя граница читаемости — мельче не опускаться."
+      },
+      "label": {
+        "$type": "dimension",
+        "$value": {
+          "value": 11,
+          "unit": "px"
+        },
+        "$description": "Подписи контролов и заголовки колонок."
+      },
+      "body": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        },
+        "$description": "Основной текст: сообщения чата, описания, значения характеристик."
+      },
+      "heading-sm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 14,
+          "unit": "px"
+        },
+        "$description": "Заголовки панелей и карточек. Раньше был 11.48px и не отличался от основного текста."
+      },
+      "heading-md": {
+        "$type": "dimension",
+        "$value": {
+          "value": 18,
+          "unit": "px"
+        },
+        "$description": "Заголовки диалогов и рабочих пространств."
+      },
+      "heading-lg": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        },
+        "$description": "Результат броска и другие числа, которые должны читаться с одного взгляда."
+      }
+    },
+    "$description": "Типографика Аркспейса. DTCG Format Module 2025.10."
+  }
+}

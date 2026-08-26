@@ -32,3 +32,14 @@ AGENTS.md
 # Локальный проброс портов для разработки. В прод попасть не должен:
 # build-and-start.sh вызывает `docker compose` без -f, и override подхватится сам.
 docker-compose.override.yml
+
+# Личные материалы, лежащие внутри чекаута, но не входящие в продукт.
+# Держать их untracked было нельзя: release identity gate требует пустого
+# `git status --porcelain --untracked-files=normal`, и они его роняли.
+# `game-pause-rest.webp` ни разу не упоминается в коде; `docs/stickers/` —
+# творческие черновики. Файлы остаются на диске, из репозитория исключены.
+apps/web/src/assets/game-pause-rest.webp
+docs/stickers/
+
+*storybook.log
+storybook-static

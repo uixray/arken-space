@@ -281,6 +281,13 @@
       "when": 1786907771285,
       "tag": "0039_good_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787712230372,
+      "tag": "0040_curly_firebrand",
+      "breakpoints": true
     }
   ]
 }

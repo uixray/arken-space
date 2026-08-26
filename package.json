@@ -24,7 +24,9 @@
     "db:studio": "pnpm --filter @arken/db studio",
     "lint": "eslint .",
     "format": "prettier --write . --ignore-unknown",
-    "format:check": "prettier --check . --ignore-unknown"
+    "format:check": "prettier --check . --ignore-unknown",
+    "tokens:build": "style-dictionary build --config style-dictionary.config.js",
+    "tokens:check": "style-dictionary build --config style-dictionary.config.js && git diff --exit-code apps/web/src/design-system/tokens.generated.css"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4",
@@ -38,10 +40,12 @@
     "eslint": "10.8.1",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.3",
+    "eslint-plugin-storybook": "^10.5.10",
     "fastify": "5.12.0",
     "prettier": "3.9.6",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
+    "style-dictionary": "^5.5.2",
     "tsx": "4.23.11",
     "typescript": "5.9.3",
     "typescript-eslint": "8.66.0",

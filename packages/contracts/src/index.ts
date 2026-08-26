@@ -753,6 +753,20 @@ export const initiativeParticipantSchema = z
      * такие строки уходят вниз, а не считаются провалом.
      */
     initiative: z.number().int().min(-99).max(999).nullable().default(null),
+    /**
+     * UIX-466: строка, поставленную на место руками, держит своё место.
+     *
+     * Порядок по умолчанию вычисляется из значений, но мастеру нужно уметь
+     * сказать «эти двое ходят так, и точка» — например когда ничью решили за
+     * столом или когда чей-то бонус в систему не внесён. Закрепление держится
+     * за строкой, а не за индексом: иначе оно съезжало бы на соседа при первом
+     * же выводе кого-нибудь из боя.
+     *
+     * `.default(false)` не косметика: очереди, сохранённые до этой правки,
+     * лежат в JSONB без поля, и без значения по умолчанию первый же разбор
+     * такой очереди упал бы посреди боя.
+     */
+    pinned: z.boolean().default(false),
   })
   .refine((participant) => participant.name !== null || participant.tokenId, {
     message: "участник без токена обязан иметь имя",
@@ -796,6 +810,68 @@ export type InitiativeOrder = z.infer<typeof initiativeOrderSchema>;
  * правки обязаны разойтись конфликтом, а не слиться в порядок, которого никто
  * не задумывал.
  */
+/**
+ * UIX-466 п. 3-4 — зона боя: прямоугольник на сцене, из которого собирается
+ * состав очереди.
+ *
+ * Сцена хранится вместе с координатами намеренно. Зона без неё была бы
+ * прямоугольником «где-то», и после смены активной сцены мастер собрал бы в бой
+ * тех, кто просто стоит на тех же координатах другой карты.
+ *
+ * Координаты — мировые, те же, в которых лежат токены; масштаб и положение
+ * камеры на состав не влияют.
+ */
+export const battleZoneSchema = z
+  .object({
+    sceneId: z.string().uuid(),
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  })
+  .strict();
+export type BattleZone = z.infer<typeof battleZoneSchema>;
+
+/** Зона задаётся целиком или снимается — правки «подвинуть на пиксель» нет. */
+export const setBattleZoneSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  zone: battleZoneSchema.nullable(),
+});
+
+/**
+ * Кто из токенов попадает в зону боя.
+ *
+ * **Пересечение, а не полное вхождение.** Фигура, задетая краем зоны, в бою
+ * участвует: мастер обводит поле боя примерно, и требовать, чтобы гигант влез в
+ * рамку целиком, значило бы заставлять обводить карту целиком.
+ *
+ * Неравенства строгие — ровно как в рамке выделения на канвасе
+ * (`Orthographic2DRenderer`). Касание ребром не попадание: иначе зона,
+ * приложенная вплотную к строю, втягивала бы соседнюю шеренгу.
+ *
+ * Токены других сцен отсеиваются здесь, а не у вызывающего: это первое, что
+ * забудут сделать, и цена — противники с прошлой карты в очереди.
+ */
+export function tokensInBattleZone<
+  T extends {
+    sceneId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  },
+>(tokens: readonly T[], zone: BattleZone): T[] {
+  return tokens.filter(
+    (token) =>
+      token.sceneId === zone.sceneId &&
+      token.x < zone.x + zone.width &&
+      token.x + token.width > zone.x &&
+      token.y < zone.y + zone.height &&
+      token.y + token.height > zone.y,
+  );
+}
+
 export const updateInitiativeSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -824,11 +900,13 @@ export const setOwnInitiativeSchema = z.object({
 /**
  * Порядок по броскам — по убыванию, «ещё не бросал» уходит вниз.
  *
- * Используется только кнопкой «пересортировать»: ввод числа порядок не меняет.
- * Это главное требование задачи — часть бросков идёт физическими кубами, и
- * автосортировка на каждый ввод рушила бы расстановку, которую мастер собрал
- * руками. Сортировка устойчива: равные броски сохраняют взаимный порядок,
- * поэтому решённая мастером ничья не перетасовывается сама.
+ * Сортировка устойчива: равные броски сохраняют взаимный порядок, поэтому
+ * решённая мастером ничья не перетасовывается сама.
+ *
+ * Отдельной кнопки «пересортировать» больше нет — очередь пересобирается после
+ * каждой правки, и делает это сервер (UIX-466). Прямо эту функцию зовут только
+ * там, где закреплённых строк заведомо нет; во всех остальных местах —
+ * `orderInitiative`, которая её и использует.
  */
 export function sortByInitiative<T extends { initiative: number | null }>(
   participants: readonly T[],
@@ -845,6 +923,39 @@ export function sortByInitiative<T extends { initiative: number | null }>(
       return left.index - right.index;
     })
     .map(({ participant }) => participant);
+}
+
+/**
+ * Порядок очереди с учётом строк, поставленных на место руками (UIX-466, п. 9).
+ *
+ * Правило одно и его видно из подписи: **закреплённая строка остаётся на своём
+ * месте, все остальные сортируются по броскам и занимают оставшиеся.** Поэтому
+ * перестановка переживает и новый бросок, и ввод чужого значения — иначе она не
+ * была бы перестановкой, а была бы миганием.
+ *
+ * Место закреплённой строки берётся из её позиции во входном массиве. Так и
+ * задумано: очередь хранится уже упорядоченной, а клиент, двигая строку, шлёт
+ * массив с новым положением — то есть «куда поставили, там и держится», без
+ * второго поля с индексом, которое пришлось бы чинить при каждом выводе из боя.
+ *
+ * Чего функция намеренно НЕ делает: не решает, какие строки закреплять. Обмен
+ * местами закрепляет обе участвовавшие строки, и это решение принимает панель —
+ * закрепить одну значило бы отпустить вторую в общий пул, откуда её унесло бы
+ * сортировкой совсем не туда, где её только что оставили руками.
+ */
+export function orderInitiative<
+  T extends { initiative: number | null; pinned?: boolean },
+>(participants: readonly T[]): T[] {
+  const held = new Map<number, T>();
+  const loose: T[] = [];
+  participants.forEach((participant, index) => {
+    if (participant.pinned) held.set(index, participant);
+    else loose.push(participant);
+  });
+  if (held.size === 0) return sortByInitiative(participants);
+  const sorted = sortByInitiative(loose);
+  let next = 0;
+  return participants.map((_, index) => held.get(index) ?? sorted[next++]!);
 }
 
 export const gmLoginSchema = z.object({ token: z.string().min(32).max(512) });
@@ -2514,6 +2625,12 @@ export interface InitiativeParticipantDto {
    * ввода.
    */
   canEdit: boolean;
+  /**
+   * UIX-466: строка стоит на месте, назначенном мастером, и сортировка её не
+   * трогает. Игроку поле приезжает тоже — оно объясняет, почему чей-то ход не
+   * поднялся после большого броска, а без объяснения это выглядит как ошибка.
+   */
+  pinned: boolean;
 }
 
 /**
@@ -2558,6 +2675,11 @@ export interface GameSnapshot {
      * совпадают; очередь ведёт мастер, панель информационная.
      */
     initiative: InitiativeParticipantDto[];
+    /**
+     * UIX-466: зона боя. Только у мастера — игроку она выдала бы, где мастер
+     * собирается драться, ещё до начала боя.
+     */
+    battleZone: BattleZone | null;
     revision: number;
   };
   me: MembershipDto;

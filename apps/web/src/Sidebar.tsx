@@ -115,6 +115,8 @@ export type Props = {
     revision: number,
     isGm: boolean,
   ) => Promise<void>;
+  /** UIX-466 п. 3: подтянуть в очередь тех, кто в зоне боя; отсутствует, когда зона не задана. */
+  onRecruitFromBattleZone?: () => void;
   onPreviewPlayer: (membershipId: string) => Promise<void>;
   onUpdateCounters: (
     characterId: string,
@@ -414,6 +416,7 @@ export function Sidebar(props: Props) {
             onUpdateInitiative={props.onUpdateInitiative}
             onSetOwnInitiative={props.onSetOwnInitiative}
             onRollInitiative={props.onRollInitiative}
+            onRecruitFromBattleZone={props.onRecruitFromBattleZone}
           />
         ) : activeFeed === "STORY" ? (
           <StoryChannel

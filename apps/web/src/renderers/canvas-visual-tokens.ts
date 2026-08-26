@@ -12,6 +12,7 @@ type CanvasVisualTokens = {
     fogCover: CanvasColor;
     fogDraft: CanvasColor;
     encounterRegionDraft: CanvasColor;
+    battleZone: CanvasColor;
     mapBackdrop: CanvasColor;
     edit: CanvasColor;
     editHighlight: CanvasColor;
@@ -42,6 +43,11 @@ export const CANVAS_VISUAL_TOKENS = {
     // UIX-311: SCENE_REGION camera-focus draft rectangle. Distinct hue from
     // fogDraft so the GM can tell the two rectangle-drag tools apart.
     encounterRegionDraft: "#7ee0ff",
+    // UIX-466: сохранённая зона боя. Своя, тёплая, чтобы не путалась ни с
+    // голубым черновиком области стычки, ни с выделением того же оттенка:
+    // зона живёт на карте постоянно, и спутать её с активным выделением
+    // означало бы принять её за что-то, что сейчас тянут.
+    battleZone: "#e08a5f",
     mapBackdrop: "#282824",
     edit: "#f0c75e",
     editHighlight: "#f2dfaa",

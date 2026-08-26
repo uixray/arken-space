@@ -1,58 +1,15 @@
 :root {
-  /* Design foundation: keep shared values here so visual edits do not require
-   * hunting through component selectors. The short variables below remain as
-   * compatibility aliases for the existing application styles. */
+  /* Токены приходят из `design-system/tokens.generated.css`, который собран из
+   * `tokens/*.tokens.json` командой `pnpm tokens:build`. Здесь остаются только
+   * две вещи: базовый размер документа и короткие псевдонимы, которыми
+   * пользуется существующий код.
+   *
+   * Псевдонимы — слой совместимости, а не вторая система: они ссылаются на те
+   * же семантические токены. Замер 25.08.2026 показал, что код обращается
+   * почти исключительно к ним (`var(--line)` 106 раз против двух обращений к
+   * `var(--color-*)`), поэтому убирать их одним диффом нельзя. */
   color-scheme: dark;
-  --font-sans:
-    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-size-root: 14px;
-  --font-size-caption: 0.68rem;
-  --font-size-label: 0.72rem;
-  --font-size-body-sm: 0.75rem;
-  --font-size-body: 0.8rem;
-  --font-size-heading-sm: 0.82rem;
-  --font-size-heading-md: 1.25rem;
-  --font-size-heading-lg: 1.5rem;
-
-  --color-canvas: #181816;
-  --color-surface: #20201d;
-  --color-surface-raised: #292824;
-  --color-surface-hover: #34322c;
-  --color-surface-active: #34322c;
-  --color-border: #47443b;
-  --color-border-hover: #696356;
-  --color-text: #e8e4da;
-  --color-text-muted: #aaa598;
-  --color-text-faint: #777267;
-  --color-accent: #c46f49;
-  --color-accent-hover: #d57d55;
-  --color-accent-active: #d57d55;
-  --color-danger: #da6b61;
-  --color-success: #7ba77a;
-  --color-focus: var(--color-accent);
-  --color-focus-strong: var(--color-accent-hover);
-
-  /* Character sheet category cards (UIX-374): one accent border per block. */
-  --color-card-stats: #4d8fd6;
-  --color-card-combat: #d68a4d;
-  --color-card-skills: #6fae6a;
-  --color-card-abilities: #a67ad4;
-
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 12px;
-  --space-lg: 16px;
-  --space-xl: 24px;
-  --space-2xl: 32px;
-
-  --control-height: 32px;
-  --topbar-height: 44px;
-  --app-min-width: 960px;
-  --radius-sm: 3px;
-  --radius-md: 6px;
-  --focus-ring-width: 2px;
-  --focus-ring-offset: 1px;
 
   /* Existing component vocabulary. Do not remove until selectors have been
    * migrated deliberately; aliases keep this foundation non-breaking. */
@@ -70,7 +27,7 @@
   --danger: var(--color-danger);
   --ok: var(--color-success);
 
-  font-family: var(--font-sans);
+  font-family: var(--font-family-sans);
   font-size: var(--font-size-root);
   color: var(--color-text);
   background: var(--color-canvas);
@@ -114,7 +71,7 @@ body,
   overflow: hidden;
 }
 body {
-  min-width: var(--app-min-width);
+  min-width: var(--size-app-min-width);
 }
 button,
 input,
@@ -132,7 +89,7 @@ textarea {
   border-radius: var(--radius-sm);
 }
 button {
-  min-height: var(--control-height);
+  min-height: var(--size-control-height);
   padding: 5px 10px;
   cursor: pointer;
 }
@@ -193,13 +150,13 @@ h3 {
   color: var(--muted);
 }
 code {
-  font-family: var(--font-mono);
+  font-family: var(--font-family-mono);
   color: #d9c68d;
 }
 
 .app-shell {
   display: grid;
-  grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+  grid-template-rows: var(--size-topbar-height) minmax(0, 1fr);
   height: 100%;
   background: var(--bg);
 }
@@ -3791,7 +3748,7 @@ code {
   white-space: nowrap;
 }
 .account-menu__build {
-  font: 0.72rem var(--font-mono);
+  font: 0.72rem var(--font-family-mono);
 }
 .music-topbar {
   gap: 5px;
@@ -3969,6 +3926,12 @@ code {
 }
 .map-toolbar .map-tool[data-tool="COVER_POLYGON"]::before {
   content: "\2B21";
+}
+/* UIX-466: зона боя. Скрещённые мечи — единственный глиф на панели, говорящий
+   о бое, а не о геометрии: остальные инструменты рисуют, этот назначает, кто
+   дерётся. */
+.map-toolbar .map-tool[data-tool="BATTLE_ZONE"]::before {
+  content: "\2694";
 }
 .map-toolbar .map-tool[data-tool="ENCOUNTER_START"]::before {
   content: "\2694";
@@ -4235,6 +4198,15 @@ code {
 .initiative-panel__actions {
   display: flex;
   gap: 2px;
+}
+/* UIX-466: у игрока булавка — подпись, а не кнопка. Выравнивается по ряду
+   кнопок мастера, чтобы строки в обеих ролях читались одинаково. */
+.initiative-panel__pinned {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-xs);
+  opacity: 0.7;
+  cursor: default;
 }
 .initiative-panel__controls,
 .initiative-panel__add-row {
@@ -4527,7 +4499,7 @@ code {
 .sidebar-restore-button {
   position: fixed;
   z-index: 950;
-  top: calc(var(--topbar-height) + var(--space-md));
+  top: calc(var(--size-topbar-height) + var(--space-md));
   right: 0;
   width: 36px;
   min-width: 36px;
