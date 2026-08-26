@@ -11,8 +11,14 @@ import { initiativeRollFormula, initiativeRollLabel } from "./initiative-roll";
  * конфликтом, а не слиться в порядок, которого никто не задумывал.
  *
  * На сервер едет только то, что там хранится: собственное имя (а не показанное),
- * ссылка на токен и бросок. Отправив показанное имя, панель молча превратила бы
- * наследование в копию — тот же урок, что в UIX-400.
+ * ссылка на токен, бросок и закрепление. Отправив показанное имя, панель молча
+ * превратила бы наследование в копию — тот же урок, что в UIX-400.
+ *
+ * Список полей собирается вручную, и это осознанная цена: `canEdit` и
+ * `initiativeBonus` — вычисленные сервером, обратно им ехать нечего. Но плата
+ * за ручной список — забытое поле, и один раз она уже была уплачена: `pinned`
+ * из UIX-466 п. 9 не попал сюда, и закрепление гибло по дороге к серверу при
+ * каждой правке очереди. Тест ниже держит именно это.
  */
 export interface InitiativeActions {
   onUpdateInitiative: (
@@ -93,6 +99,7 @@ export function useInitiativeActions(dependencies: {
               tokenId: participant.tokenId,
               name: participant.ownName,
               initiative: participant.initiative,
+              pinned: participant.pinned,
             })),
           }),
         });
@@ -143,6 +150,7 @@ export function useInitiativeActions(dependencies: {
                 tokenId: row.tokenId,
                 name: row.ownName,
                 initiative: row.id === participant.id ? total : row.initiative,
+                pinned: row.pinned,
               })),
             }),
           });
