@@ -3927,6 +3927,12 @@ code {
 .map-toolbar .map-tool[data-tool="COVER_POLYGON"]::before {
   content: "\2B21";
 }
+/* UIX-466: зона боя. Скрещённые мечи — единственный глиф на панели, говорящий
+   о бое, а не о геометрии: остальные инструменты рисуют, этот назначает, кто
+   дерётся. */
+.map-toolbar .map-tool[data-tool="BATTLE_ZONE"]::before {
+  content: "\2694";
+}
 .map-toolbar .map-tool[data-tool="ENCOUNTER_START"]::before {
   content: "\2694";
 }

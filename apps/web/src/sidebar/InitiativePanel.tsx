@@ -43,6 +43,7 @@ export function InitiativePanel({
   onUpdate,
   onSetOwnInitiative,
   onRoll,
+  onRecruitFromZone,
 }: {
   participants: readonly InitiativeParticipantDto[];
   isGm: boolean;
@@ -57,6 +58,11 @@ export function InitiativePanel({
    */
   onSetOwnInitiative: (participantId: string, value: number | null) => void;
   onRoll?: (participant: InitiativeParticipantDto) => void;
+  /**
+   * UIX-466 п. 3 — подтянуть тех, кто сейчас в зоне боя. `undefined`, когда
+   * зона не задана: кнопка, которая всегда отвечает отказом, хуже отсутствующей.
+   */
+  onRecruitFromZone?: () => void;
 }) {
   const [newName, setNewName] = useState("");
 
@@ -120,7 +126,7 @@ export function InitiativePanel({
       {participants.length === 0 && (
         <p className="muted">
           {isGm
-            ? "Выделите рамкой тех, кто вступает в бой, и нажмите «Ввести в бой»."
+            ? "Обведите зону боя на карте или выделите рамкой тех, кто вступает в бой."
             : "Мастер ещё не собрал очередь."}
         </p>
       )}
@@ -269,6 +275,18 @@ export function InitiativePanel({
           >
             Ввести в бой{addable.length > 0 ? ` · ${addable.length}` : ""}
           </Button>
+          {/* UIX-466 п. 3: пополнение по зоне — рядом с ручным вводом, потому
+              что это тот же вопрос «кто в бою», решённый рамкой на карте
+              вместо выделения. Показывается только когда зона задана. */}
+          {onRecruitFromZone && (
+            <Button
+              disabled={pending}
+              onClick={onRecruitFromZone}
+              title="Добавить всех, кто сейчас в зоне боя; уже введённых не тронет"
+            >
+              Обновить по зоне
+            </Button>
+          )}
           {/* Участник без токена — тот, кого на карте нет: «Волк №3», брошенный
            * физическим кубом за столом. */}
           <div className="initiative-panel__add-row">

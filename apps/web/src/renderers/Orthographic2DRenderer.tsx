@@ -75,7 +75,10 @@ import {
   CURSOR_INACTIVITY_MS,
 } from "./cursor-broadcast";
 import { cursorColorForMembership } from "./cursor-color";
-import { mapViewportAriaKeyShortcuts } from "./map-tool-shortcuts";
+import {
+  mapViewportAriaKeyShortcuts,
+  regionCommitTarget,
+} from "./map-tool-shortcuts";
 import { resolveMapEscapeIntent } from "./map-escape";
 
 function shouldCancelCanvasEdit(
@@ -1166,14 +1169,25 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     await props.onFogCreate({ geometry: { type: "POLYGON", points } });
   };
 
+  /**
+   * UIX-466 п. 4: зона боя тянется тем же драгом, что и область стычки.
+   *
+   * Инструменты разные только тем, куда уходит готовый прямоугольник, поэтому
+   * обработчики здесь общие. Второй набор состояний и второй набор проверок
+   * разошлись бы с первым на первой же правке — а разойтись им негде, если
+   * кода один.
+   */
+  const isRegionTool =
+    props.tool === "SCENE_REGION" || props.tool === "BATTLE_ZONE";
+
   const handleRegionDown = () => {
-    if (props.tool !== "SCENE_REGION" || props.role !== "GM") return;
+    if (!isRegionTool || props.role !== "GM") return;
     const point = pointerInWorld();
     if (point) setRegionStart(clampToWorld(point));
   };
 
   const handleRegionMove = () => {
-    if (!regionStart || props.tool !== "SCENE_REGION") return;
+    if (!regionStart || !isRegionTool) return;
     const point = pointerInWorld();
     if (!point) return;
     const bounded = clampToWorld(point);
@@ -1186,8 +1200,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
 
   const handleRegionUp = () => {
-    if (regionDraft && regionDraft.width >= 8 && regionDraft.height >= 8)
-      props.onEncounterRegionSelect?.(regionDraft);
+    // Порог в 8 единиц отсекает случайный клик: рамка в один пиксель не отберёт
+    // никого, но выглядела бы как заданная зона.
+    if (regionDraft && regionDraft.width >= 8 && regionDraft.height >= 8) {
+      const target = regionCommitTarget(props.tool);
+      if (target === "BATTLE_ZONE") props.onBattleZoneSelect?.(regionDraft);
+      else if (target === "ENCOUNTER")
+        props.onEncounterRegionSelect?.(regionDraft);
+    }
     setRegionStart(null);
     setRegionDraft(null);
   };
@@ -2722,6 +2742,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               stroke={visual.color.selection}
               strokeWidth={1 / scale}
               dash={[6 / scale, 4 / scale]}
+            />
+          </Layer>
+        )}
+
+        {/* UIX-466: сохранённая зона боя. Рисуется до черновика, чтобы
+            свежая рамка была поверх старой, пока мастер обводит поле заново.
+            Игроку сюда ничего не приезжает — сервер не кладёт зону в его
+            проекцию. */}
+        {props.battleZone && (
+          <Layer listening={false}>
+            <Rect
+              x={props.battleZone.x}
+              y={props.battleZone.y}
+              width={props.battleZone.width}
+              height={props.battleZone.height}
+              stroke={visual.color.battleZone}
+              strokeWidth={2 / scale}
+              dash={[10 / scale, 6 / scale]}
             />
           </Layer>
         )}
