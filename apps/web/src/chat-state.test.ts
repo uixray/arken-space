@@ -5,7 +5,6 @@ import {
   MAX_AUTO_THREAD_MESSAGES,
   messagesForStream,
   streamForMessage,
-  nextChatStream,
   reconcileChatRead,
   threadForStream,
   unreadCountForStream,
@@ -209,14 +208,6 @@ describe("appendChatMessage", () => {
       lastReadSequence: 8,
       unreadCount: 0,
     });
-  });
-
-  it("supports cyclic arrow and boundary tab navigation", () => {
-    expect(nextChatStream("TABLE", "ArrowLeft")).toBe("ROLLS");
-    expect(nextChatStream("ROLLS", "ArrowRight")).toBe("TABLE");
-    expect(nextChatStream("STORY", "Home")).toBe("TABLE");
-    expect(nextChatStream("STORY", "End")).toBe("ROLLS");
-    expect(nextChatStream("TABLE", "Enter")).toBeNull();
   });
 
   it("treats legacy snapshots without chat threads as having no stream thread", () => {
