@@ -291,6 +291,10 @@ export async function openStoredFile(
 ) {
   const path = storedPath(storageKey);
   const info = await stat(path);
+  // UIX-474: `stat` на каталоге проходит, а чтение падает уже в потоке — то
+  // есть после отданных заголовков, когда ответ не переиграть. Проверка здесь
+  // превращает эту аварию в честный отказ до первого байта.
+  if (!info.isFile()) throw new Error("NOT_A_FILE");
   if (!range)
     return {
       stream: createReadStream(path),

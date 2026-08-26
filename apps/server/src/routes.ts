@@ -8540,7 +8540,26 @@ export function registerRoutes(
     } catch (error) {
       if (errorMessage(error) === "INVALID_RANGE")
         return reply.code(416).send({ error: "INVALID_RANGE" });
-      return reply.code(404).send({ error: "ASSET_CONTENT_NOT_FOUND" });
+      // UIX-474: строка в `assets` есть, файла по ней нет. Клиенту это по-
+      // прежнему 404 — показать нечего, — но в журнале сервера случай обязан
+      // быть отличим от «такого ассета нет». Именно из-за неразличимости
+      // вопрос «битая запись или потерянный файл» пришлось разбирать в
+      // браузере: снаружи оба ответа выглядели одинаково.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        request.log.warn(
+          { assetId: asset.id, storageKey: asset.storageKey },
+          "asset.content_missing",
+        );
+        return reply.code(404).send({ error: "ASSET_CONTENT_NOT_FOUND" });
+      }
+      // Отказ прав, каталог вместо файла, сбой диска — это не «нет файла».
+      // Раньше всё это превращалось в 404, и авария хранилища выглядела
+      // потерянным ассетом: чинили бы не то.
+      request.log.error(
+        { assetId: asset.id, storageKey: asset.storageKey, error },
+        "asset.content_unreadable",
+      );
+      return reply.code(500).send({ error: "ASSET_CONTENT_UNREADABLE" });
     }
   });
 }
