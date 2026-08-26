@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RULER_MAX_POINTS } from "@arken/contracts";
+import { regionCommitTarget } from "./map-tool-shortcuts";
 import {
   appendRulerWaypoint,
   canMoveMapToken,
@@ -330,5 +331,22 @@ describe("ruler draft (UIX-381 multi-segment waypoints)", () => {
     expect(rulerDraftPoints(draft).length).toBeLessThanOrEqual(
       RULER_MAX_POINTS,
     );
+  });
+});
+
+describe("куда уходит обведённый прямоугольник", () => {
+  it("зона боя — в сохранение зоны, область стычки — в начало боя", () => {
+    // Оба инструмента тянут одну и ту же рамку. Перепутать адресата значит
+    // открыть мастеру диалог «Начать бой» там, где он сохранял поле, — и это
+    // не ломает ни типы, ни один тест, кроме этого.
+    expect(regionCommitTarget("BATTLE_ZONE")).toBe("BATTLE_ZONE");
+    expect(regionCommitTarget("SCENE_REGION")).toBe("ENCOUNTER");
+  });
+
+  it("остальные инструменты рамку не коммитят вовсе", () => {
+    // Линейка и кисть тумана тоже тянутся мышью; отправить их прямоугольник
+    // в зону боя значило бы собрать очередь по случайному взмаху.
+    for (const tool of ["PAN", "DRAW", "RULER", "FOG", "FOG_BRUSH"] as const)
+      expect(regionCommitTarget(tool)).toBeNull();
   });
 });

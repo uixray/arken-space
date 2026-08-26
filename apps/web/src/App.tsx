@@ -2087,6 +2087,42 @@ export function App() {
                       Пинг
                     </button>
                     <div className="toolbar-group__title">Прочее</div>
+                    {/* UIX-466 п. 4: зона боя. Стоит рядом с «Начать бой»,
+                        потому что отвечает на тот же вопрос — кто дерётся, —
+                        только заранее и на карте. Кнопка тумблерная: повторное
+                        нажатие снимает зону, иначе убрать её было бы нечем. */}
+                    <button
+                      aria-label={
+                        viewSnapshot.campaign.battleZone
+                          ? "Снять зону боя"
+                          : "Обвести зону боя"
+                      }
+                      title={
+                        viewSnapshot.campaign.battleZone
+                          ? `Снять зону боя · ${shortcutLabel("BATTLE_ZONE")}`
+                          : `Обвести поле боя: из него собирается очередь ходов · ${shortcutLabel("BATTLE_ZONE")}`
+                      }
+                      className="map-tool"
+                      data-tool="BATTLE_ZONE"
+                      aria-pressed={tool === "BATTLE_ZONE"}
+                      onClick={() => {
+                        if (viewSnapshot.campaign.battleZone) {
+                          setTool("PAN");
+                          void run(() =>
+                            initiativeActions.onSetBattleZone(
+                              null,
+                              viewSnapshot.campaign.revision,
+                            ),
+                          );
+                          return;
+                        }
+                        setTool("BATTLE_ZONE");
+                      }}
+                    >
+                      {viewSnapshot.campaign.battleZone
+                        ? "Снять зону"
+                        : "Зона боя"}
+                    </button>
                     {/*
                      * UIX-311 Stage 4: real GM "Начать бой" / "Завершить бой"
                      * entry point, replacing the Stage 2/3 temp triggers. Only
@@ -2367,6 +2403,26 @@ export function App() {
                       targetSceneName: activeScene.name,
                       focusRegion: rect,
                     });
+                  }}
+                  battleZone={
+                    // Зона относится к конкретной сцене; на чужой её рисовать
+                    // нельзя — прямоугольник тех же координат означал бы там
+                    // совсем другое место.
+                    viewSnapshot.campaign.battleZone?.sceneId === activeScene.id
+                      ? viewSnapshot.campaign.battleZone
+                      : null
+                  }
+                  onBattleZoneSelect={(rect) => {
+                    // Обвели — сохранили. Подтверждения нет намеренно: в отличие
+                    // от начала боя зона ничего не запускает, а перерисовать её
+                    // дешевле, чем подтверждать каждую попытку.
+                    setTool("PAN");
+                    void run(() =>
+                      initiativeActions.onSetBattleZone(
+                        { sceneId: activeScene.id, ...rect },
+                        viewSnapshot.campaign.revision,
+                      ),
+                    );
                   }}
                   canvasEditMode={canvasEditMode}
                   onCanvasEditCancel={() => setCanvasEditMode(null)}
@@ -2801,6 +2857,18 @@ export function App() {
               onUpdateInitiative={initiativeActions.onUpdateInitiative}
               onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
               onRollInitiative={initiativeActions.onRollInitiative}
+              onRecruitFromBattleZone={
+                // Кнопка появляется, только когда зона задана на этой же сцене:
+                // ручка, всегда отвечающая отказом, хуже отсутствующей.
+                viewSnapshot.campaign.battleZone
+                  ? () =>
+                      void run(() =>
+                        initiativeActions.onRecruitFromBattleZone(
+                          viewSnapshot.campaign.revision,
+                        ),
+                      )
+                  : undefined
+              }
               snapshot={snapshot}
               requestedCharacterId={requestedCharacterId}
               socket={socket}

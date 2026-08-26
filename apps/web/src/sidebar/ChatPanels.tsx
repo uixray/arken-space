@@ -297,6 +297,7 @@ export function ActivityPanel({
   onUpdateInitiative,
   onSetOwnInitiative,
   onRollInitiative,
+  onRecruitFromBattleZone,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -327,6 +328,8 @@ export function ActivityPanel({
     revision: number,
     isGm: boolean,
   ) => Promise<void>;
+  /** UIX-466 п. 3: подтянуть в очередь тех, кто в зоне боя. */
+  onRecruitFromBattleZone?: () => void;
 }) {
   const [initiativePending, setInitiativePending] = useState(false);
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
@@ -609,6 +612,7 @@ export function ActivityPanel({
               snapshot.me.role === "GM",
             ).finally(() => setInitiativePending(false));
           }}
+          onRecruitFromZone={onRecruitFromBattleZone}
         />
       )}
       <section className="activity-roll-controls" aria-label="Быстрые броски">

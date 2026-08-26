@@ -190,6 +190,26 @@ describe("очередь ходов", () => {
     ).toBeTruthy();
   });
 
+  it("не предлагает пополнение по зоне, пока она не задана", async () => {
+    // Кнопка, которая всегда отвечает отказом, хуже отсутствующей: мастер
+    // нажал бы её, получил «зона не задана» и не понял, чего от него хотят.
+    renderPanel();
+    expect(screen.queryByText("Обновить по зоне")).toBeNull();
+  });
+
+  it("пополняет состав по зоне, когда она есть", async () => {
+    const onRecruitFromZone = vi.fn();
+    renderPanel({ onRecruitFromZone });
+    await userEvent.click(screen.getByText("Обновить по зоне"));
+    expect(onRecruitFromZone).toHaveBeenCalledTimes(1);
+  });
+
+  it("не предлагает пополнение по зоне игроку", async () => {
+    // Состав ведёт мастер: у игрока нет ни зоны, ни права её применять.
+    renderPanel({ onRecruitFromZone: vi.fn(), isGm: false });
+    expect(screen.queryByText("Обновить по зоне")).toBeNull();
+  });
+
   it("не показывает булавку у незакреплённой строки", async () => {
     renderPanel();
     expect(screen.queryByLabelText("Открепить «Ллойд»")).toBeNull();

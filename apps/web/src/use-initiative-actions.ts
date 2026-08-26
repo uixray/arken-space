@@ -48,6 +48,31 @@ export interface InitiativeActions {
     revision: number,
     isGm: boolean,
   ) => Promise<void>;
+  /**
+   * UIX-466 п. 4 — сохранить обведённую зону боя или снять её.
+   *
+   * Зона едет целиком: правки «подвинуть на пиксель» нет, мастер обводит поле
+   * заново. `null` снимает зону — без этого её нельзя было бы убрать, не
+   * рисуя вырожденный прямоугольник где-нибудь в углу.
+   */
+  onSetBattleZone: (
+    zone: {
+      sceneId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    } | null,
+    revision: number,
+  ) => Promise<void>;
+  /**
+   * UIX-466 п. 3 — подтянуть в очередь тех, кто сейчас в зоне.
+   *
+   * Отдельное действие, а не пересчёт на каждое движение токена: живой состав
+   * означал бы, что случайно задетая мышью фигура меняет очередь посреди хода.
+   * Пополняет, не выбрасывая: вышедший из зоны мог отступить, а не выйти из боя.
+   */
+  onRecruitFromBattleZone: (revision: number) => Promise<void>;
 }
 
 export function useInitiativeActions(dependencies: {
@@ -131,6 +156,24 @@ export function useInitiativeActions(dependencies: {
               initiative: total,
             }),
           });
+        await load();
+      },
+      onSetBattleZone: async (zone, revision) => {
+        await api("/api/campaign/battle-zone", {
+          method: "PUT",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+            zone,
+          }),
+        });
+        await load();
+      },
+      onRecruitFromBattleZone: async (revision) => {
+        await api("/api/campaign/initiative/from-zone", {
+          method: "POST",
+          body: JSON.stringify({ actionId: crypto.randomUUID(), revision }),
+        });
         await load();
       },
     }),

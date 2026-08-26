@@ -37,9 +37,12 @@ describe("landing guide", () => {
 
     expect(screen.getByText("Туман войны")).toBeInTheDocument();
     expect(screen.getByText("Перемещение и выделение")).toBeInTheDocument();
-    // The fog tools are the GM-only ones; a player reading this page should be
-    // told so rather than wondering why the key does nothing for them.
-    expect(screen.getAllByText("только мастер")).toHaveLength(6);
+    // UIX-466: мастерские инструменты — это шесть туманных плюс зона боя.
+    // Раньше «мастерский» и «туманный» совпадали, и раздел собирался по роли;
+    // теперь у боя свой раздел, а бейдж по-прежнему висит на всех семи: игрок,
+    // читающий эту страницу, должен понимать, почему клавиша ему не отвечает.
+    expect(screen.getByText("Бой")).toBeInTheDocument();
+    expect(screen.getAllByText("только мастер")).toHaveLength(7);
     expect(screen.getByText("/d20")).toBeInTheDocument();
   });
 
