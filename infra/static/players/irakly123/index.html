@@ -55,6 +55,7 @@ html[data-theme="knight"] {
   --accent: oklch(0.49 0.13 34);
   --accent-ink: oklch(0.95 0.025 82);
   --radius: 0.15rem;
+  --pattern-opacity: 0.24;
 }
 
 html[data-theme="cosmos"] {
@@ -274,6 +275,7 @@ h2 {
   font-weight: 400;
   letter-spacing: -0.03em;
   line-height: 0.98;
+  overflow-wrap: break-word;
 }
 h1 {
   max-width: 9ch;
@@ -385,6 +387,41 @@ h3 {
   font-family: var(--detail);
   color: var(--muted);
 }
+.hero-photo {
+  position: relative;
+  width: min(100%, 28rem);
+  margin: 0 auto;
+  padding: 1rem 1rem 3.6rem;
+  background: #f8f0dc;
+  box-shadow: 0 1.5rem 3rem oklch(0.25 0.04 60 / 0.22);
+  transform: rotate(2.2deg);
+}
+.hero-photo::before {
+  content: "";
+  position: absolute;
+  width: 7rem;
+  height: 2rem;
+  top: -0.7rem;
+  left: 50%;
+  background: oklch(0.88 0.08 88 / 0.78);
+  transform: translateX(-50%) rotate(-3deg);
+}
+.hero-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  object-position: 50% 28%;
+  filter: sepia(0.13) contrast(1.04);
+}
+.hero-photo figcaption {
+  position: absolute;
+  inset-inline: 1rem;
+  bottom: 1rem;
+  color: #443528;
+  font-family: "Segoe Print", "Comic Sans MS", cursive;
+  text-align: center;
+}
 html[data-theme="cosmos"] .sigil::before,
 html[data-theme="cosmos"] .sigil::after,
 html[data-theme="cosmos"] .sigil__core {
@@ -392,6 +429,14 @@ html[data-theme="cosmos"] .sigil__core {
 }
 html[data-theme="knight"] .sigil__core {
   clip-path: polygon(50% 0, 94% 19%, 82% 78%, 50% 100%, 18% 78%, 6% 19%);
+}
+html[data-theme="knight"] h1 {
+  max-width: none;
+  white-space: nowrap;
+  font-size: clamp(4.5rem, 9vw, 8rem);
+}
+html[data-theme="knight"] .feature h2 {
+  font-size: clamp(2.5rem, 4vw, 3rem);
 }
 html[data-theme="dragon"] .sigil__core {
   clip-path: polygon(
@@ -436,19 +481,25 @@ html[data-theme="dragon"] .sigil__core {
   gap: clamp(3rem, 8vw, 8rem);
   align-items: center;
 }
+.feature__copy {
+  min-width: 0;
+}
 .feature__copy > p:not(.eyebrow),
 .section-head > p:not(.eyebrow) {
   max-width: 44rem;
   color: var(--muted);
 }
 .text-action {
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid currentColor;
-  background: none;
-  color: var(--accent);
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
   cursor: pointer;
   font-weight: 700;
+}
+.text-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0.3rem 0.3rem 0 var(--line);
 }
 .feature__stage {
   position: relative;
@@ -551,6 +602,18 @@ html[data-theme="dragon"] .sigil__core {
   padding-block: var(--space-2xl);
   border-bottom: 1px solid var(--line);
 }
+html[data-theme="knight"] .chapter:nth-child(2) h3,
+html[data-theme="knight"] .chapter:nth-child(3) h3 {
+  width: fit-content;
+  padding: 0.35rem 0.7rem;
+  background: #f2cc65;
+  box-shadow: 0.2rem 0.3rem 0.7rem oklch(0.3 0.04 60 / 0.15);
+  transform: rotate(-1.5deg);
+}
+html[data-theme="knight"] .chapter:nth-child(3) h3 {
+  background: #b8dca7;
+  transform: rotate(1.2deg);
+}
 .chapter__number {
   color: var(--accent);
 }
@@ -572,6 +635,13 @@ html[data-theme="dragon"] .sigil__core {
 .gallery figure {
   margin: 0;
   grid-column: span 2;
+  padding: 0.75rem 0.75rem 2.6rem;
+  background: #f8f0dc;
+  box-shadow: 0.35rem 0.55rem 1.2rem oklch(0.25 0.04 60 / 0.2);
+  transform: rotate(-1.5deg);
+}
+.gallery figure:nth-child(even) {
+  transform: rotate(1.8deg);
 }
 .gallery figure:first-child,
 .gallery figure:last-child {
@@ -581,14 +651,16 @@ html[data-theme="dragon"] .sigil__core {
   width: 100%;
   aspect-ratio: 4 / 5;
   object-fit: cover;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
+  border-radius: 0;
+  border: 0;
   filter: sepia(0.16);
 }
 .gallery figcaption {
   padding-top: var(--space-sm);
   color: var(--muted);
   font-size: 0.8rem;
+  color: #443528;
+  font-family: "Segoe Print", "Comic Sans MS", cursive;
 }
 .archive__chapters {
   border-top: 1px solid var(--line);
@@ -602,6 +674,17 @@ html[data-theme="dragon"] .sigil__core {
   gap: var(--space-lg);
   padding: var(--space-lg) 0;
   cursor: pointer;
+  list-style: none;
+  background: color-mix(in oklch, var(--surface) 75%, transparent);
+}
+.archive summary::after {
+  content: "+ Открыть";
+  justify-self: end;
+  color: var(--accent);
+  font-weight: 700;
+}
+.archive details[open] summary::after {
+  content: "− Свернуть";
 }
 .archive summary span {
   color: var(--accent);
@@ -673,6 +756,16 @@ html[data-theme="dragon"] .sigil__core {
   z-index: 1;
   display: block;
 }
+.artifact__control {
+  position: absolute;
+  z-index: 2;
+  left: var(--space-xl);
+  bottom: var(--space-xl);
+  padding: 0.3rem 0.6rem;
+  border: 1px solid currentColor;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
 .artifact__index {
   margin-bottom: 5rem;
   color: var(--muted);
@@ -692,6 +785,83 @@ html[data-theme="dragon"] .sigil__core {
   margin: var(--space-lg) 0 0;
   color: var(--muted);
   font-size: 0.8rem;
+}
+.runner__hud {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+  font-family: var(--detail);
+}
+.runner__stage {
+  position: relative;
+  height: min(25rem, 58vw);
+  min-height: 18rem;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  background: linear-gradient(#d8e5d2 0 67%, #b9a879 67%);
+  box-shadow: 0.5rem 0.6rem 0 var(--line);
+}
+.runner__stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.25;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 2rem 2rem;
+}
+.runner__ground {
+  position: absolute;
+  inset: auto 0 14% 0;
+  height: 3px;
+  background: var(--ink);
+}
+.runner__hero {
+  position: absolute;
+  z-index: 3;
+  left: 12%;
+  bottom: 14%;
+  width: clamp(4rem, 9vw, 6rem);
+  aspect-ratio: 1;
+  border: 0.28rem solid #f8f0dc;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0.4rem 0.8rem #0004;
+}
+.runner__obstacle {
+  position: absolute;
+  z-index: 2;
+  right: -4rem;
+  bottom: 14%;
+  width: 2.3rem;
+  height: 5.2rem;
+  background: var(--accent);
+  border: 2px solid var(--ink);
+}
+.runner__message {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: oklch(0.95 0.03 84 / 0.78);
+}
+.runner__message strong {
+  font-family: var(--display);
+  font-size: clamp(2rem, 6vw, 4rem);
+}
+.runner__message span {
+  color: var(--muted);
+}
+.runner__message[hidden] {
+  display: none;
+}
+.runner__button {
+  margin-top: var(--space-lg);
+  min-width: 12rem;
+  cursor: pointer;
 }
 
 footer {
@@ -768,6 +938,25 @@ footer p {
   .gallery__grid {
     grid-template-columns: 1fr 1fr;
   }
+  h1 {
+    font-size: clamp(3.8rem, 20vw, 6rem);
+  }
+  html[data-theme="knight"] h1 {
+    white-space: normal;
+    font-size: clamp(3.8rem, 19vw, 5.5rem);
+  }
+  .feature h2 {
+    font-size: clamp(2.5rem, 13vw, 4rem);
+  }
+  .chapter {
+    grid-template-columns: 3rem 1fr;
+  }
+  .chapter p {
+    grid-column: 2;
+  }
+  .archive summary::after {
+    justify-self: start;
+  }
   .gallery figure,
   .gallery figure:first-child,
   .gallery figure:last-child {
@@ -827,7 +1016,7 @@ footer p {
         <div class="hero__copy">
           <p class="eyebrow">Полевой архив</p>
           <h1 id="page-title">Ираклий</h1>
-          <p class="role">Рыцарь · автор боевых веток</p>
+          <p class="role">Прародитель Тристонии · рыцарь · автор боевых веток</p>
           <p class="intro">Клинки, схемы и заметки с полей — история бойца, который сначала проверяет идею на бумаге, а затем в бою.</p>
           <div class="facts" aria-label="Темы страницы">
             <span>Рыцари</span><span>Мечники</span><span>Сочи</span>
@@ -837,10 +1026,7 @@ footer p {
             <a class="button button--quiet" href="#story">Смотреть страницу</a>
           </div>
         </div>
-        <div class="sigil" aria-hidden="true">
-          <div class="sigil__core"><span></span></div>
-          <p>@IRAKLY123</p>
-        </div>
+        <figure class="hero-photo"><img src="assets/irakli-knight-river.png" alt="Ираклий в доспехах у горной реки" /><figcaption>@IRAKLY123 · прародитель Тристонии</figcaption></figure>
       </section>
 
       <blockquote class="signal"><p>Сталь помнит каждое решение.</p></blockquote>
@@ -884,36 +1070,21 @@ footer p {
         </article></div>
       </section>
 
-      <section class="collection" aria-labelledby="collection-title">
-        <div class="section-head">
-          <p class="eyebrow">Персональная коллекция</p>
-          <h2 id="collection-title">Записки оружейника</h2>
-          <p>Нажмите на карточку, чтобы отметить выбранный объект.</p>
+      <section class="collection runner" aria-labelledby="collection-title">
+        <div class="section-head"><p class="eyebrow">Записки оружейника</p><h2 id="collection-title">Рыцарский рывок</h2><p>Пробегите как можно дальше. Прыжок: пробел, ↑ или кнопка.</p></div>
+        <div class="runner__hud"><span>Счёт: <strong data-runner-score>0</strong></span><span>Рекорд: <strong data-runner-best>0</strong></span></div>
+        <div class="runner__stage" data-runner-stage tabindex="0" aria-label="Мини-игра Рыцарский рывок">
+          <div class="runner__ground"></div><img class="runner__hero" data-runner-hero src="assets/irakli-token.webp" alt="Игровой токен Ираклия" />
+          <div class="runner__message" data-runner-message><strong>Рыцарский рывок</strong><span>Нажмите «Начать забег»</span></div>
         </div>
-        <div class="artifact-list">
-        <button class="artifact" type="button" data-reveal="0" style="--artifact: #9A3B2D">
-          <span class="artifact__index">01</span>
-          <span class="artifact__title">Натиск</span>
-          <span class="artifact__text">Атака с разбега</span>
-        </button>
-        <button class="artifact" type="button" data-reveal="1" style="--artifact: #44545A">
-          <span class="artifact__index">02</span>
-          <span class="artifact__title">Терпеливая стойка</span>
-          <span class="artifact__text">Ответ на давление</span>
-        </button>
-        <button class="artifact" type="button" data-reveal="2" style="--artifact: #B98535">
-          <span class="artifact__index">03</span>
-          <span class="artifact__title">Боевой клич</span>
-          <span class="artifact__text">Собрать волю</span>
-        </button></div>
-        <p class="selection-status" data-selection-status aria-live="polite">Ничего не выбрано</p>
+        <button class="button button--primary runner__button" type="button" data-runner-start>Начать забег</button>
       </section>
 <section class="gallery" aria-labelledby="gallery-title">
         <div class="section-head"><p class="eyebrow">Личный архив</p><h2 id="gallery-title">Ираклий в кадре</h2><p>Фотографии героя и его рыцарских образов.</p></div>
         <div class="gallery__grid"><figure><img src="assets/irakli-knight-river.png" alt="Ираклий в доспехах у горной реки" loading="lazy" /><figcaption>Ираклий в доспехах у горной реки</figcaption></figure><figure><img src="assets/irakli-coin.png" alt="Ираклий показывает находку" loading="lazy" /><figcaption>Ираклий показывает находку</figcaption></figure><figure><img src="assets/irakli-knight-winter.png" alt="Зимний выход в полном доспехе" loading="lazy" /><figcaption>Зимний выход в полном доспехе</figcaption></figure><figure><img src="assets/irakli-character.png" alt="Образ персонажа из личного архива" loading="lazy" /><figcaption>Образ персонажа из личного архива</figcaption></figure><figure><img src="assets/irakli-knight-rose.png" alt="Рыцарская сцена с розой" loading="lazy" /><figcaption>Рыцарская сцена с розой</figcaption></figure></div>
       </section><section class="archive" aria-labelledby="archive-title">
         <div class="section-head"><p class="eyebrow">Авторские материалы</p><h2 id="archive-title">Дневники разработчика Аркен-Хара</h2><p>Материалы Ираклия, ранее опубликованные отдельной страницей: первоэлементы мира, характеристики, навыки и игровые правила. Авторский черновик, а не финальная редакция системы.</p></div>
-        <div class="archive__chapters"><details open><summary><span>Глава I</span><strong>Фундаментальные элементы мира</strong></summary><div class="archive__entries"><article><h3>Материя</h3><p>Физическое воплощение мира: природа, биология, рельеф и действующие в мире законы.</p></article><article><h3>Дух</h3><p>Сакральное воплощение: душа, интуиция, воля и связь с божественным.</p></article><article><h3>Разум</h3><p>Сила между духом и материей: познание, осмысление и магические практики.</p></article><article><h3>Душа и предрасположенности</h3><p>При рождении персонаж получает склонности, которые направляют развитие, но не заменяют выбор игрока.</p></article><article><h3>Особые исключения</h3><p>В рабочем черновике драконы относятся к Материи, а демоны — к Разуму.</p></article></div></details><details ><summary><span>Глава II</span><strong>Основные характеристики</strong></summary><div class="archive__entries"><article><h3>Правило</h3><p>Базовое значение характеристики — 10 и даёт модификатор +0; обычный человеческий предел — 20.</p></article><article><h3>Тело</h3><p>Сила, Ловкость и Выносливость описывают физические возможности героя.</p></article><article><h3>Разум</h3><p>Смекалка, Интеллект и Восприятие отвечают за анализ, знания и внимание.</p></article><article><h3>Дух</h3><p>Харизма, Сила воли и Интуиция определяют влияние, стойкость и внутреннее чутьё.</p></article></div></details><details ><summary><span>Глава III</span><strong>Навыки и умения</strong></summary><div class="archive__entries"><article><h3>Проверка навыка</h3><p>Бонус обученного навыка прибавляется к связанной характеристике при проверке.</p></article><article><h3>Предел мастерства</h3><p>Обычный предел навыка — +10; выйти за него позволяют магические или божественные источники.</p></article><article><h3>Примеры</h3><p>Верховая езда, убеждение, эмпатия, анализ, знания, самообладание и владение оружием.</p></article><article><h3>Верховая езда</h3><p>Пример проверки: d20 + Ловкость + значение навыка верховой езды.</p></article></div></details></div>
+        <div class="archive__chapters"><details open><summary><span>Глава I</span><strong>Фундаментальные элементы мира</strong></summary><div class="archive__entries"><article><h3>Материя</h3><p>Физическое воплощение мира. Выражается в физических законах природы, биологических процессах в телах, лесах, океанах, пустынях и прочих местах, по которым можно перемещаться.</p></article><article><h3>Дух</h3><p>Сакральное воплощение мира. Его нельзя познать разумом или физическим восприятием, но можно ощутить эмоционально и интуитивно. К Духу относятся душа, интуиция, сила воли, всё божественное и сами боги.</p></article><article><h3>Разум</h3><p>Сила, упорядочивающая вселенную и поддерживающая баланс между Духом и Материей. Благодаря Разуму мироздание меняется и совершенствуется; от него существует магия, способная менять реальность, а также способность мыслить и анализировать.</p></article><article><h3>Душа и предрасположенности</h3><p>Каждое живое существо имеет душу. При рождении она получает предрасположенность к одному из фундаментальных элементов. Это влияет на рост и развитие, но не ограничивает существо: свобода воли позволяет самостоятельно выбирать путь.</p></article><article><h3>Драконы</h3><p>Из-за первозданной природы обладают фиксированной предрасположенностью к Материи.</p></article><article><h3>Демоны</h3><p>По решению верховных мастеров имеют врождённую предрасположенность к Разуму.</p></article></div></details><details ><summary><span>Глава II</span><strong>Основные характеристики</strong></summary><div class="archive__entries"><article><h3>Правило бонуса</h3><p>Базовое значение характеристики 10 даёт +0. Каждая единица выше даёт +1 к проверке: например, 14 даёт +4. Значения ниже 10 дают штраф: например, 8 даёт −2.</p></article><article><h3>Человеческий предел</h3><p>Максимальный лимит характеристик — 20. Обычных тренировок недостаточно, чтобы его превысить: нужны легендарные усилия, магия или божественное благословение.</p></article><article><h3>Сила</h3><p>Перенос тяжестей, сила физических ударов и мышечный объём.</p></article><article><h3>Ловкость</h3><p>Грация, рефлексы, тонкая моторика и общая скорость передвижения.</p></article><article><h3>Выносливость</h3><p>Перенос боли, перегрузок и неблагоприятной среды, продолжительность физических действий.</p></article><article><h3>Сообразительность</h3><p>Быстрое решение вопросов, импровизация и мгновенная реакция на опасности.</p></article><article><h3>Интеллект</h3><p>Память, логическое мышление, анализ данных и глубокое академическое понимание.</p></article><article><h3>Восприятие</h3><p>Способность замечать скрытые детали, звуки и изменения окружения всеми органами чувств.</p></article><article><h3>Харизма</h3><p>Общение, красноречие, переговоры и личное обаяние.</p></article><article><h3>Сила воли</h3><p>Хладнокровие, контроль эмоций, сопротивление ментальному удару и способность не сдаваться.</p></article><article><h3>Интуиция</h3><p>Бессознательное понимание мира на духовном уровне и верные решения на основе чутья.</p></article></div></details><details ><summary><span>Глава III</span><strong>Навыки и умения</strong></summary><div class="archive__entries"><article><h3>Законы изучения</h3><p>В Аркен-Харе нет жёстко заданного списка умений. У каждого героя формируется уникальный набор навыков по предыстории и жизненному опыту. При проверке бонус навыка суммируется со связанной характеристикой.</p></article><article><h3>Предел мастерства</h3><p>Навык нельзя развить выше +10 обычными способами. Преодолеть предел позволяют только магические, божественные и иные сверхъестественные воздействия.</p></article><article><h3>Верховая езда · Ловкость</h3><p>Управление ездовым животным при быстром или экстремальном перемещении. Проверка: d20 + модификатор Ловкости + бонус навыка, вплоть до +10.</p></article><article><h3>Убеждение · Харизма</h3><p>Умение аргументировать, договариваться и склонять собеседника к нужному решению.</p></article><article><h3>Эмпатия · Восприятие / Интуиция</h3><p>Считывание эмоционального состояния, намерений и невысказанных реакций другого существа.</p></article><article><h3>Анализ · Интеллект / Сообразительность</h3><p>Разбор данных, поиск закономерностей и быстрое построение рабочих выводов.</p></article><article><h3>Знания · Интеллект / Сообразительность</h3><p>Накопленная учёность и способность применить сведения в конкретной ситуации.</p></article><article><h3>Самообладание · Сила воли</h3><p>Сохранение контроля над собой под давлением, страхом и эмоциональной нагрузкой.</p></article><article><h3>Владение оружием · Сила / Ловкость</h3><p>Практический навык обращения с выбранным оружием и выполнения боевых приёмов.</p></article></div></details></div>
       </section>
     </main>
 
@@ -936,8 +1107,112 @@ const selectionStatus = document.querySelector("[data-selection-status]");
 for (const artifact of artifacts) {
   artifact.addEventListener("click", () => {
     for (const item of artifacts) item.classList.remove("is-selected");
+    for (const item of artifacts) item.setAttribute("aria-pressed", "false");
     artifact.classList.add("is-selected");
+    artifact.setAttribute("aria-pressed", "true");
     selectionStatus.textContent = `Выбрано: ${artifact.querySelector(".artifact__title")?.textContent ?? "объект"}`;
+  });
+}
+
+const runner = document.querySelector("[data-runner-stage]");
+const runnerHero = document.querySelector("[data-runner-hero]");
+const runnerStart = document.querySelector("[data-runner-start]");
+const runnerMessage = document.querySelector("[data-runner-message]");
+const runnerScore = document.querySelector("[data-runner-score]");
+const runnerBest = document.querySelector("[data-runner-best]");
+
+if (runner && runnerHero && runnerStart) {
+  let running = false,
+    jumping = false,
+    velocity = 0,
+    height = 0,
+    score = 0,
+    last = 0,
+    spawnAt = 0;
+  let obstacles = [];
+  let best = Number(localStorage.getItem("irakli-runner-best") || 0);
+  runnerBest.textContent = String(best);
+  const jump = () => {
+    if (running && !jumping) {
+      jumping = true;
+      velocity = 760;
+    }
+  };
+  const finish = () => {
+    running = false;
+    runnerMessage.hidden = false;
+    runnerMessage.querySelector("strong").textContent = "Доспех звенит";
+    runnerMessage.querySelector("span").textContent =
+      `Счёт: ${Math.floor(score)}. Попробуйте ещё раз.`;
+    runnerStart.textContent = "Ещё один забег";
+    best = Math.max(best, Math.floor(score));
+    localStorage.setItem("irakli-runner-best", String(best));
+    runnerBest.textContent = String(best);
+  };
+  const frame = (now) => {
+    if (!running) return;
+    const dt = Math.min((now - last) / 1000, 0.034);
+    last = now;
+    score += dt * 10;
+    runnerScore.textContent = String(Math.floor(score));
+    velocity -= 1850 * dt;
+    height = Math.max(0, height + velocity * dt);
+    if (!height) {
+      jumping = false;
+      velocity = 0;
+    }
+    runnerHero.style.transform = `translateY(${-height}px)`;
+    spawnAt -= dt;
+    if (spawnAt <= 0) {
+      const node = document.createElement("i");
+      node.className = "runner__obstacle";
+      runner.append(node);
+      obstacles.push({ node, x: runner.clientWidth + 40 });
+      spawnAt = 1.15 + Math.random() * 1.1;
+    }
+    const heroX = runner.clientWidth * 0.12,
+      heroW = runnerHero.offsetWidth;
+    for (const item of obstacles) {
+      item.x -= (260 + Math.min(score * 2, 180)) * dt;
+      item.node.style.transform = `translateX(${item.x}px)`;
+      if (
+        item.x < heroX + heroW &&
+        item.x + item.node.offsetWidth > heroX &&
+        height < item.node.offsetHeight * 0.78
+      )
+        return finish();
+    }
+    obstacles = obstacles.filter((item) => {
+      if (item.x < -80) {
+        item.node.remove();
+        return false;
+      }
+      return true;
+    });
+    requestAnimationFrame(frame);
+  };
+  const start = () => {
+    obstacles.forEach((item) => item.node.remove());
+    obstacles = [];
+    score = 0;
+    height = 0;
+    velocity = 0;
+    jumping = false;
+    running = true;
+    spawnAt = 1.2;
+    runnerMessage.hidden = true;
+    runnerStart.textContent = "Прыжок";
+    runner.focus();
+    last = performance.now();
+    requestAnimationFrame(frame);
+  };
+  runnerStart.addEventListener("click", () => (running ? jump() : start()));
+  runner.addEventListener("pointerdown", jump);
+  window.addEventListener("keydown", (event) => {
+    if (event.code === "Space" || event.code === "ArrowUp") {
+      event.preventDefault();
+      running ? jump() : start();
+    }
   });
 }
 </script>

@@ -30,10 +30,11 @@ function render(player) {
   const collection = player.collection
     .map(
       ([title, text, color], index) => `
-        <button class="artifact" type="button" data-reveal="${index}" style="--artifact: ${color}">
+        <button class="artifact" type="button" data-reveal="${index}" style="--artifact: ${color}" aria-pressed="false">
           <span class="artifact__index">0${index + 1}</span>
           <span class="artifact__title">${escape(title)}</span>
           <span class="artifact__text">${escape(text)}</span>
+          <span class="artifact__control">Выбрать</span>
         </button>`,
     )
     .join("");
@@ -51,6 +52,21 @@ function render(player) {
         <div class="archive__chapters">${player.archive.chapters.map(([label, title, entries], index) => `<details ${index === 0 ? "open" : ""}><summary><span>${escape(label)}</span><strong>${escape(title)}</strong></summary><div class="archive__entries">${entries.map(([entryTitle, text]) => `<article><h3>${escape(entryTitle)}</h3><p>${escape(text)}</p></article>`).join("")}</div></details>`).join("")}</div>
       </section>`
     : "";
+
+  const collectionSection = player.runnerGame
+    ? `<section class="collection runner" aria-labelledby="collection-title">
+        <div class="section-head"><p class="eyebrow">Записки оружейника</p><h2 id="collection-title">Рыцарский рывок</h2><p>Пробегите как можно дальше. Прыжок: пробел, ↑ или кнопка.</p></div>
+        <div class="runner__hud"><span>Счёт: <strong data-runner-score>0</strong></span><span>Рекорд: <strong data-runner-best>0</strong></span></div>
+        <div class="runner__stage" data-runner-stage tabindex="0" aria-label="Мини-игра Рыцарский рывок">
+          <div class="runner__ground"></div><img class="runner__hero" data-runner-hero src="assets/irakli-token.webp" alt="Игровой токен Ираклия" />
+          <div class="runner__message" data-runner-message><strong>Рыцарский рывок</strong><span>Нажмите «Начать забег»</span></div>
+        </div>
+        <button class="button button--primary runner__button" type="button" data-runner-start>Начать забег</button>
+      </section>`
+    : `<section class="collection" aria-labelledby="collection-title">
+        <div class="section-head"><p class="eyebrow">Персональная коллекция</p><h2 id="collection-title">${escape(player.collectionTitle)}</h2><p>Нажмите на карточку, чтобы отметить выбранный объект.</p></div>
+        <div class="artifact-list">${collection}</div><p class="selection-status" data-selection-status aria-live="polite">Ничего не выбрано</p>
+      </section>`;
 
   return `<!doctype html>
 <html lang="ru" data-theme="${player.theme}">
@@ -89,10 +105,7 @@ function render(player) {
             <a class="button button--quiet" href="#story">Смотреть страницу</a>
           </div>
         </div>
-        <div class="sigil" aria-hidden="true">
-          <div class="sigil__core"><span></span></div>
-          <p>${escape(player.handle)}</p>
-        </div>
+        ${player.heroImage ? `<figure class="hero-photo"><img src="assets/${escape(player.heroImage[0])}" alt="${escape(player.heroImage[1])}" /><figcaption>${escape(player.handle)} · прародитель Тристонии</figcaption></figure>` : `<div class="sigil" aria-hidden="true"><div class="sigil__core"><span></span></div><p>${escape(player.handle)}</p></div>`}
       </section>
 
       <blockquote class="signal"><p>${escape(player.signal)}</p></blockquote>
@@ -121,15 +134,7 @@ function render(player) {
         <div class="chapter-list">${chapters}</div>
       </section>
 
-      <section class="collection" aria-labelledby="collection-title">
-        <div class="section-head">
-          <p class="eyebrow">Персональная коллекция</p>
-          <h2 id="collection-title">${escape(player.collectionTitle)}</h2>
-          <p>Нажмите на карточку, чтобы отметить выбранный объект.</p>
-        </div>
-        <div class="artifact-list">${collection}</div>
-        <p class="selection-status" data-selection-status aria-live="polite">Ничего не выбрано</p>
-      </section>
+      ${collectionSection}
 ${gallery}${archive}
     </main>
 
