@@ -71,7 +71,7 @@ import {
 import { resolveResizeHandleDataAttributes } from "./resize-handle";
 import {
   CursorMoveBatcher,
-  isTrackableCursorPointerType,
+  shouldBroadcastCursor,
   CURSOR_INACTIVITY_MS,
 } from "./cursor-broadcast";
 import { cursorColorForMembership } from "./cursor-color";
@@ -1300,10 +1300,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         ? (event.evt as PointerEvent).pointerType
         : undefined;
     if (
-      props.cursorSendEnabled &&
-      props.socket &&
-      pointerType !== undefined &&
-      isTrackableCursorPointerType(pointerType)
+      shouldBroadcastCursor({
+        sendEnabled: props.cursorSendEnabled,
+        hasSocket: Boolean(props.socket),
+        pointerType,
+      })
     ) {
       const worldPoint = pointerInWorld();
       if (worldPoint) {

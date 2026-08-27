@@ -5,6 +5,7 @@ import {
   cursorTransitionDurationMs,
   isCursorStale,
   isTrackableCursorPointerType,
+  shouldBroadcastCursor,
   type FrameScheduler,
 } from "./cursor-broadcast";
 
@@ -105,5 +106,49 @@ describe("CursorMoveBatcher", () => {
     expect(pendingCount()).toBe(0);
     flushFrame();
     expect(onFlush).not.toHaveBeenCalled();
+  });
+});
+
+describe("отправлять ли позицию курсора", () => {
+  const mouseMove = {
+    sendEnabled: true,
+    hasSocket: true,
+    pointerType: "mouse",
+  };
+
+  it("молчит при выключенном курсоре, даже когда мышь ходит по карте", () => {
+    // Главное требование UIX-403: выключенный курсор не рисуется не потому,
+    // что его прячут, а потому, что позиция вообще не покидает машину.
+    // Отрисовка тут ни при чём — проверка стоит до отправки.
+    expect(shouldBroadcastCursor({ ...mouseMove, sendEnabled: false })).toBe(
+      false,
+    );
+  });
+
+  it("отправляет, когда курсор включён и мышь настоящая", () => {
+    expect(shouldBroadcastCursor(mouseMove)).toBe(true);
+  });
+
+  it("молчит без сокета, а не падает", () => {
+    // Игра переживает потерю связи; присутствие курсора — первое, что должно
+    // замолчать, а не первое, что сломается.
+    expect(shouldBroadcastCursor({ ...mouseMove, hasSocket: false })).toBe(
+      false,
+    );
+  });
+
+  it("не считает касание и перо курсором", () => {
+    // Иначе каждый жест панорамирования на планшете превращался бы в поток
+    // рассылки — а курсора там нет вовсе.
+    for (const pointerType of ["touch", "pen"])
+      expect(shouldBroadcastCursor({ ...mouseMove, pointerType })).toBe(false);
+  });
+
+  it("молчит, когда движение пришло не от события указателя", () => {
+    // Внутренние вызовы (перетаскивание за пределами сцены) типа не знают.
+    // Догадка здесь означала бы рассылку позиции, которой человек не делал.
+    expect(
+      shouldBroadcastCursor({ ...mouseMove, pointerType: undefined }),
+    ).toBe(false);
   });
 });
