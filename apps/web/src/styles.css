@@ -1569,7 +1569,13 @@ code {
 }
 /* UIX-388: room for sticker + slash + send icon buttons stacked in the
    bottom-right corner of the textarea (see .chat-composer-actions below). */
-.chat-composer-input textarea {
+/* UIX-419: селектор обязан быть специфичнее, чем `.g-text-area_size_m
+   .g-text-area__control` из uikit — иначе отступ не применяется вовсе. Так и
+   было: место под значки не резервировалось, и на любой ширине панели текст
+   уходил под кнопку отправки. Правило выглядело работающим, потому что
+   `.chat-composer-input textarea` читается как более точное, а весит меньше
+   двух классов uikit. */
+.chat-composer-input textarea.g-text-area__control {
   padding-right: 108px;
 }
 .chat-composer-actions {
