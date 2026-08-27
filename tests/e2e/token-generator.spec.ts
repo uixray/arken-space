@@ -1,4 +1,4 @@
-﻿import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 

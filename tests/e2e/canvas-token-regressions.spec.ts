@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 
 const sceneId = "7376b502-02f8-4cd6-9c55-3816d70d44dc";
