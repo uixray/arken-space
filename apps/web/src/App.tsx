@@ -508,8 +508,23 @@ export function App() {
   >(null);
   const scenePickerRef = useRef<HTMLDetailsElement>(null);
   const resizeSettingsRef = useRef<HTMLDetailsElement>(null);
+  /**
+   * UIX-531: меню сеанса, «Ещё» на панели карты и лоток токенов — последние
+   * поповеры без общего закрытия.
+   *
+   * Меню сеанса объявлено в одном CSS-правиле с поповерами музыки
+   * (`styles.css:3719`): та же шапка, тот же z-index, то же свешивание поверх
+   * правого сайдбара. UIX-517 починила соседей по правилу, а его пропустила —
+   * открытое меню перехватывало клики по вкладкам чата ровно так же.
+   */
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
+  const toolbarOverflowRef = useRef<HTMLDetailsElement>(null);
+  const tokenTrayRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(scenePickerRef);
   useDismissibleDetails(resizeSettingsRef);
+  useDismissibleDetails(accountMenuRef);
+  useDismissibleDetails(toolbarOverflowRef);
+  useDismissibleDetails(tokenTrayRef);
 
   useEffect(() => {
     if (!snapshot) {
@@ -1676,7 +1691,7 @@ export function App() {
               socket={socket}
               onUpload={(file) => assetActions.uploadAsset(file, "AUDIO")}
             />
-            <details className="account-menu">
+            <details className="account-menu" ref={accountMenuRef}>
               <summary aria-label="Меню сеанса" title="Меню сеанса">
                 <span aria-hidden="true">&#x2630;</span>
               </summary>
@@ -2289,7 +2304,7 @@ export function App() {
                 </div>
               )}
               {!previewSnapshot && (
-                <details className="toolbar-overflow">
+                <details className="toolbar-overflow" ref={toolbarOverflowRef}>
                   <summary
                     aria-label="Дополнительные инструменты"
                     title="Дополнительные инструменты карты"
@@ -2783,7 +2798,7 @@ export function App() {
               </div>
             )}
             {!previewSnapshot && (
-              <details className="token-tray">
+              <details className="token-tray" ref={tokenTrayRef}>
                 <summary>
                   Токены · {snapshot.tokenDefinitions?.length ?? 0}
                 </summary>
