@@ -18,6 +18,7 @@ import {
 export function FormInput({
   size: _size,
   value,
+  children,
   defaultValue,
   type,
   checked,
@@ -27,7 +28,13 @@ export function FormInput({
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & { size?: number }) {
   if (type === "checkbox")
     return (
+      /* UIX-532: подпись отдаётся самому флажку, а не обёртке вокруг него.
+         Раньше вызывающий код заворачивал этот `Checkbox` в собственный
+         `<label>`, а uikit рисует свой внутри — вложенные `<label>` не
+         связываются, и поле оставалось без имени. Заодно возвращается клик по
+         подписи: он снова переключает флажок. */
       <Checkbox
+        className={props.className}
         checked={checked}
         defaultChecked={defaultChecked}
         disabled={props.disabled}
@@ -39,7 +46,9 @@ export function FormInput({
             currentTarget: { checked: next, value: next ? "on" : "" },
           } as ChangeEvent<HTMLInputElement>)
         }
-      />
+      >
+        {children}
+      </Checkbox>
     );
   if (type === "file")
     return <input {...props} type="file" onChange={onChange} />;
