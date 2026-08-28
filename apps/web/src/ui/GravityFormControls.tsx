@@ -5,6 +5,7 @@ import {
   type InputHTMLAttributes,
   type ReactElement,
   type ReactNode,
+  type Ref,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
@@ -24,7 +25,15 @@ export function FormInput({
   defaultChecked,
   onChange,
   ...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & { size?: number }) {
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
+  size?: number;
+  /**
+   * UIX-532: ref на сам контрол. Нужен, чтобы донести до поля чужую правку, не
+   * пересоздавая его (см. `remote-field-value.ts`); собственный ref у обёртки
+   * указывал бы на разметку uikit, а не на поле.
+   */
+  controlRef?: Ref<HTMLInputElement>;
+}) {
   if (type === "checkbox")
     return (
       <Checkbox
@@ -64,7 +73,9 @@ export function FormTextArea({
   value,
   defaultValue,
   ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  controlRef?: Ref<HTMLTextAreaElement>;
+}) {
   return (
     <TextArea
       {...props}
