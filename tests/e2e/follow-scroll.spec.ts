@@ -146,3 +146,45 @@ test("ушедшего вверх читателя подгрузка не ут�
   // человек читает старое, а лента выдёргивает его подгрузившейся картинкой.
   expect(await distanceToBottom(page)).toBeGreaterThan(400);
 });
+
+/**
+ * UIX-401 — слежение возвращается, когда читатель сам вернулся к дну.
+ *
+ * Отчёт с игры 09.08: «стоит один раз проскроллить ленту, автопрокрутка
+ * отключается навсегда». Починка приехала попутно в UIX-450 (`e62a1a4`) вместе
+ * с тестом в jsdom, но в задаче это не отметили, и она осталась в бэклоге.
+ * Здесь то же поведение проверяется на живом стенде: в jsdom нет раскладки, а
+ * условие приёмки — про допуск у нижнего края, который без раскладки не
+ * существует.
+ */
+test("слежение возвращается, когда читатель сам вернулся к низу", async ({
+  page,
+  gmToken,
+}) => {
+  await signInAsGm(page, gmToken);
+  await expect(page.locator("canvas").first()).toBeVisible();
+  await seedLog(page, 40);
+  await page.reload();
+  await page.locator(LIST).waitFor();
+  await expect
+    .poll(() => distanceToBottom(page))
+    .toBeLessThanOrEqual(AT_BOTTOM_TOLERANCE);
+
+  await page.locator(LIST).evaluate((list) => list.scrollTo({ top: 0 }));
+  const awayFromBottom = await distanceToBottom(page);
+  expect(awayFromBottom).toBeGreaterThan(400);
+
+  // Новая запись не должна дёргать ленту под рукой у читающего.
+  await seedLog(page, 1);
+  await page.waitForTimeout(600);
+  expect(await distanceToBottom(page)).toBeGreaterThan(400);
+
+  // Читатель вернулся к дну сам — слежение обязано возобновиться.
+  await page
+    .locator(LIST)
+    .evaluate((list) => list.scrollTo({ top: list.scrollHeight }));
+  await seedLog(page, 1);
+  await expect
+    .poll(() => distanceToBottom(page))
+    .toBeLessThanOrEqual(AT_BOTTOM_TOLERANCE);
+});
