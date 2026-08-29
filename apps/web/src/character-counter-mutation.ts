@@ -1,7 +1,7 @@
 import type { CharacterDto } from "@arken/contracts";
 import type { ResourceCounterIntent } from "./resource-counter-intent";
 import { clampResourceValue } from "./resource-regen";
-import { normalizeWallet } from "./wallet";
+import { applyWalletDelta, normalizeWallet, type WalletDelta } from "./wallet";
 
 export type CharacterCounterPatch = {
   wallet?: CharacterDto["wallet"];
@@ -10,10 +10,7 @@ export type CharacterCounterPatch = {
 };
 
 export type CharacterCounterMutationIntent = {
-  walletDelta?: {
-    key: keyof CharacterDto["wallet"];
-    delta: number;
-  };
+  walletDelta?: WalletDelta;
   resource?: ResourceCounterIntent;
   resourceMapPatch?: {
     /** Resources visible when the editor started this save. */
@@ -162,14 +159,7 @@ export function buildCharacterCounterPatch(
   const nextPatch: CharacterCounterPatch = { ...patch };
 
   if (intent?.walletDelta) {
-    const wallet = normalizeWallet(base.wallet);
-    nextPatch.wallet = {
-      ...wallet,
-      [intent.walletDelta.key]: Math.max(
-        0,
-        wallet[intent.walletDelta.key] + intent.walletDelta.delta,
-      ),
-    };
+    nextPatch.wallet = applyWalletDelta(base.wallet, intent.walletDelta);
   } else if (patch.wallet) {
     nextPatch.wallet = normalizeWallet(patch.wallet);
   }

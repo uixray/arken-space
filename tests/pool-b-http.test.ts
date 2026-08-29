@@ -2101,6 +2101,75 @@ describe("Pool B HTTP boundaries", () => {
     ]);
   });
 
+  it("records one audit and event for one aggregated wallet mutation", async () => {
+    await database.exec(
+      `update characters set wallet = '{"gold":0,"silver":0,"copper":0,"sp":0}'::jsonb where id = '${ids.character}'`,
+    );
+    const actionId = crypto.randomUUID();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId,
+        revision: 0,
+        wallet: { gold: 0, silver: 0, copper: 0, sp: 25 },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      revision: 1,
+      wallet: { gold: 0, silver: 0, copper: 0, sp: 25 },
+    });
+
+    const messages = await db
+      .select({
+        body: schema.chatMessages.body,
+        systemData: schema.chatMessages.systemData,
+      })
+      .from(schema.chatMessages)
+      .where(
+        and(
+          eq(schema.chatMessages.campaignId, ids.campaign),
+          eq(schema.chatMessages.characterId, ids.character),
+          eq(schema.chatMessages.kind, "SYSTEM"),
+        ),
+      );
+    const walletAudits = messages.filter(
+      (message) =>
+        (message.systemData as { type?: string } | null)?.type ===
+        "WALLET_AUDIT",
+    );
+    expect(walletAudits).toHaveLength(1);
+    expect(walletAudits[0]).toMatchObject({
+      body: expect.stringContaining("СП 0 → 25"),
+      systemData: {
+        type: "WALLET_AUDIT",
+        before: { gold: 0, silver: 0, copper: 0, sp: 0 },
+        after: { gold: 0, silver: 0, copper: 0, sp: 25 },
+        operationCount: 1,
+      },
+    });
+
+    const events = await db
+      .select({
+        actionId: schema.gameEvents.actionId,
+        entityRevision: schema.gameEvents.entityRevision,
+        payload: schema.gameEvents.payload,
+      })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actionId,
+      entityRevision: 1,
+      payload: {
+        wallet: { gold: 0, silver: 0, copper: 0, sp: 25 },
+      },
+    });
+  });
+
   it("coalesces a rapid wallet burst without dropping authoritative events", async () => {
     await database.exec(
       `update characters set wallet = '{"gold":0,"silver":0,"copper":0,"sp":0}'::jsonb where id = '${ids.character}'`,
