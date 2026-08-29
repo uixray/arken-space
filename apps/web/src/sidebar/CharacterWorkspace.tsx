@@ -17,6 +17,7 @@ import { ApiError, formatApiError } from "../api";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 import { ArkenDialog } from "../ui/ArkenDialog";
 import { isEditableEventTarget } from "../input-diagnostics";
+import { useRemoteFieldValue } from "../ui/remote-field-value";
 import { ImageUploadField } from "../ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
 import { AssetPicker } from "../ui/AssetPicker";
@@ -922,6 +923,12 @@ export function CharacterPanel({
     character &&
     (snapshot.me.role === "GM" ||
       character.ownerMembershipId === snapshot.me.id);
+  // Хук обязан стоять до раннего выхода ниже: порядок вызовов не должен
+  // зависеть от того, назначен ли персонаж. Пустая строка безопасна — без
+  // персонажа поле не отрисовано, и класть значение некуда.
+  const inventoryRef = useRemoteFieldValue<HTMLTextAreaElement>(
+    character?.inventory.join("\n") ?? "",
+  );
   if (!character)
     return (
       <Empty
@@ -1243,7 +1250,6 @@ export function CharacterPanel({
           modifier="stats"
           rows={characteristicRows}
           values={character.stats}
-          valuesRevisionKey={`${character.id}-${character.revision}`}
           editable={Boolean(editable)}
           rollPending={rollPending}
           canEditLayout={snapshot.me.role === "GM"}
@@ -1259,7 +1265,6 @@ export function CharacterPanel({
           modifier="combat"
           rows={combatRows}
           values={character.stats}
-          valuesRevisionKey={`${character.id}-${character.revision}`}
           editable={Boolean(editable)}
           rollPending={rollPending}
           canEditLayout={snapshot.me.role === "GM"}
@@ -1472,10 +1477,13 @@ export function CharacterPanel({
         </ArkenDialog>
       )}
       <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
+      {/* UIX-532: ревизии в `key` здесь больше нет — она пересоздавала поле и
+          роняла фокус посреди набора (UIX-325). Чужая правка доносится до
+          живого элемента, кроме поля, в котором сейчас печатают. */}
       <label className="field">
         Инвентарь (один предмет на строку)
         <FormTextArea
-          key={`${character.id}:${character.revision}`}
+          controlRef={inventoryRef}
           defaultValue={character.inventory.join("\n")}
           disabled={!editable}
           rows={5}

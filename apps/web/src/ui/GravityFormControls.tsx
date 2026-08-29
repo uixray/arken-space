@@ -5,6 +5,7 @@ import {
   type InputHTMLAttributes,
   type ReactElement,
   type ReactNode,
+  type Ref,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
@@ -18,16 +19,31 @@ import {
 export function FormInput({
   size: _size,
   value,
+  children,
   defaultValue,
   type,
   checked,
   defaultChecked,
   onChange,
   ...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & { size?: number }) {
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
+  size?: number;
+  /**
+   * UIX-532: ref на сам контрол. Нужен, чтобы донести до поля чужую правку, не
+   * пересоздавая его (см. `remote-field-value.ts`); собственный ref у обёртки
+   * указывал бы на разметку uikit, а не на поле.
+   */
+  controlRef?: Ref<HTMLInputElement>;
+}) {
   if (type === "checkbox")
     return (
+      /* UIX-532: подпись отдаётся самому флажку, а не обёртке вокруг него.
+         Раньше вызывающий код заворачивал этот `Checkbox` в собственный
+         `<label>`, а uikit рисует свой внутри — вложенные `<label>` не
+         связываются, и поле оставалось без имени. Заодно возвращается клик по
+         подписи: он снова переключает флажок. */
       <Checkbox
+        className={props.className}
         checked={checked}
         defaultChecked={defaultChecked}
         disabled={props.disabled}
@@ -39,7 +55,9 @@ export function FormInput({
             currentTarget: { checked: next, value: next ? "on" : "" },
           } as ChangeEvent<HTMLInputElement>)
         }
-      />
+      >
+        {children}
+      </Checkbox>
     );
   if (type === "file")
     return <input {...props} type="file" onChange={onChange} />;
@@ -64,7 +82,9 @@ export function FormTextArea({
   value,
   defaultValue,
   ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  controlRef?: Ref<HTMLTextAreaElement>;
+}) {
   return (
     <TextArea
       {...props}

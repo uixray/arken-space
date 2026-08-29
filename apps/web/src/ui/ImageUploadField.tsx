@@ -47,8 +47,12 @@ export function ImageUploadField({
           {value ? "Заменить" : "Выбрать файл"}
         </Button>
       </div>
+      {/* UIX-532: поле выбора файла спрятано визуально, но существует для
+          программ чтения с экрана и обязано называть себя. Заголовок рядом
+          его не подписывает: он не `<label>` и ни на что не ссылается. */}
       <input
         id={inputId}
+        aria-label={label}
         className="arken-visually-hidden"
         type="file"
         accept={accept}

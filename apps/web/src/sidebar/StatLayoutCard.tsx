@@ -3,6 +3,7 @@ import { Button } from "@gravity-ui/uikit";
 import { STAT_VALUE_RANGE } from "@arken/system";
 import { ApiError, formatApiError } from "../api";
 import { FormInput } from "../ui/GravityFormControls";
+import { useRemoteFieldValue } from "../ui/remote-field-value";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 import { ArkenDialog } from "../ui/ArkenDialog";
 
@@ -37,6 +38,37 @@ function refusalOf(
 }
 
 /**
+ * UIX-532 — значение характеристики, переживающее чужую правку.
+ *
+ * Поле неуправляемое: правка уходит на `blur`, а пришедшее извне значение
+ * доносится до живого элемента. Отдельным компонентом, потому что строк в
+ * карточке десяток и они добавляются и удаляются — хук на каждую строку прямо
+ * в цикле нарушил бы порядок вызовов при первом же удалении.
+ */
+function StatValueField({
+  value,
+  editable,
+  onCommit,
+}: {
+  value: number;
+  editable: boolean;
+  onCommit: (value: number) => void;
+}) {
+  const controlRef = useRemoteFieldValue<HTMLInputElement>(String(value));
+  return (
+    <FormInput
+      controlRef={controlRef}
+      type="number"
+      defaultValue={value}
+      disabled={!editable}
+      min={STAT_VALUE_RANGE.min}
+      max={STAT_VALUE_RANGE.max}
+      onBlur={(event) => onCommit(Number(event.target.value))}
+    />
+  );
+}
+
+/**
  * UIX-424, шаг 5 — одна группа раскладки в карточке персонажа.
  *
  * Обе группы («Характеристики» и «Боевые характеристики») рисуются этим
@@ -53,7 +85,6 @@ export function StatLayoutCard({
   modifier,
   rows,
   values,
-  valuesRevisionKey,
   editable,
   rollPending,
   canEditLayout,
@@ -68,12 +99,6 @@ export function StatLayoutCard({
   modifier: string;
   rows: readonly { key: string; label: string }[];
   values: Record<string, number>;
-  /**
-   * Меняется при каждой ревизии персонажа и пересоздаёт поля ввода. Поля
-   * неуправляемые (правка отправляется на `blur`), поэтому без этого чужая
-   * правка не отобразилась бы у того, кто уже открыл карточку.
-   */
-  valuesRevisionKey: string;
   editable: boolean;
   rollPending: boolean;
   canEditLayout: boolean;
@@ -137,16 +162,10 @@ export function StatLayoutCard({
         {rows.map((row, index) => (
           <label key={row.key} className="stat-field">
             <span>{row.label}</span>
-            <FormInput
-              key={`${valuesRevisionKey}-${row.key}`}
-              type="number"
-              defaultValue={values[row.key] ?? STAT_VALUE_RANGE.defaultValue}
-              disabled={!editable}
-              min={STAT_VALUE_RANGE.min}
-              max={STAT_VALUE_RANGE.max}
-              onBlur={(event) =>
-                onChangeValue(row.key, Number(event.target.value))
-              }
+            <StatValueField
+              value={values[row.key] ?? STAT_VALUE_RANGE.defaultValue}
+              editable={editable}
+              onCommit={(value: number) => onChangeValue(row.key, value)}
             />
             {/* Кнопки в одной полосе, а не одна под другой: строк в карточке
              * десяток, и второй ряд на каждой удвоил бы её высоту. */}
