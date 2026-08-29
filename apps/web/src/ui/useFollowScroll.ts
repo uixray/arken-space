@@ -66,6 +66,62 @@ export function useFollowScroll(
     });
   }, [resetKey]);
 
+  /**
+   * UIX-493: закрепление у дна обязано переживать содержимое, которое
+   * дорастает уже после закрепления.
+   *
+   * Прыжок вниз при монтировании происходит через один кадр
+   * `requestAnimationFrame`, то есть до того, как разложатся аватары, стикеры
+   * и вложения: `scrollHeight` на этот момент меньше настоящего, и «низ»
+   * оказывается выше последних записей. Замер на живом стенде: содержимое,
+   * выросшее на 512 px после закрепления, оставляло ленту ровно на эти 512 px
+   * выше дна, и вернуть её могло только следующее сообщение — которого при
+   * входе в игру никто не ждёт. Снаружи это и выглядит как «бегунок всегда в
+   * начале».
+   *
+   * Поэтому размер, а не только приход записи: пока читающий у дна
+   * (`followRef.current`), любое изменение высоты списка или его карточек
+   * возвращает прокрутку к концу. Стоит человеку уйти вверх — наблюдатель
+   * молчит, иначе подгрузившаяся картинка выдёргивала бы его из чтения.
+   *
+   * Карточки наблюдаются поимённо, а не через `subtree`: `ResizeObserver`
+   * сообщает о размере только тех элементов, на которые подписан, а высоту
+   * картинки внутри карточки видно по самой карточке. Состав списка меняется,
+   * поэтому подписка обновляется по `MutationObserver`.
+   *
+   * `scrollTo` размеров не меняет, так что обратной связи здесь нет: подписка
+   * не может разбудить сама себя.
+   */
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || typeof ResizeObserver === "undefined") return;
+    const pinToBottom = () => {
+      if (followRef.current) list.scrollTo({ top: list.scrollHeight });
+    };
+    const sizes = new ResizeObserver(pinToBottom);
+    sizes.observe(list);
+    const watched = new Set<Element>();
+    const syncChildren = () => {
+      for (const child of watched)
+        if (child.parentNode !== list) {
+          watched.delete(child);
+          sizes.unobserve(child);
+        }
+      for (const child of list.children)
+        if (!watched.has(child)) {
+          watched.add(child);
+          sizes.observe(child);
+        }
+    };
+    syncChildren();
+    const children = new MutationObserver(syncChildren);
+    children.observe(list, { childList: true });
+    return () => {
+      sizes.disconnect();
+      children.disconnect();
+    };
+  }, []);
+
   useEffect(() => {
     const list = listRef.current;
     if (!list || latestItemKey === null || latestItemKey === undefined) return;
