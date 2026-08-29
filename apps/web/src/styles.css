@@ -1097,8 +1097,14 @@ code {
    * them collide with the numeric input. The label now gets the flexible
    * share of the row and wraps; the input column only needs to fit a
    * 3-character value ("-20" through "20"), so it stays a small fixed
-   * track. */
-  grid-template-columns: minmax(0, 1fr) 3.75rem;
+   * track.
+   *
+   * UIX-489: ширина колонки поднята с 3.75rem. Замер показал, что в неё не
+   * помещалось не только «-20», но и «20»: на значение оставалось 23 px при
+   * нужных 38, и обрезалось всё, что длиннее одной цифры. Колонка считается от
+   * самого длинного допустимого значения (диапазон характеристики — от -20 до
+   * 20), а не от «на глаз кажется, что хватит». */
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
   align-items: center;
   border: 1px solid var(--line);
   background: var(--surface-2);
@@ -1117,11 +1123,28 @@ code {
    * otherwise fight the fixed 3.75rem grid track above. */
   width: 100%;
 }
-.stat-field input {
+/* UIX-489: селектор с классом контрола, а не просто `input`.
+
+   `.stat-field input` — это (0,1,1), а собственное правило uikit
+   `.g-text-input_size_m .g-text-input__control` — (0,2,0), и оно выигрывало.
+   Замер показал цену: вместо задуманных 1.15rem/700 значение рисовалось
+   13px/400, а разделительная черта между подписью и значением не рисовалась
+   вовсе (`border-left` оставался нулевым). То есть блок ниже был написан, но
+   почти целиком не применялся — из него доезжало только выравнивание, которого
+   uikit не трогает. */
+.stat-field input.g-text-input__control {
   min-width: 0;
+  /* Стиль рамки задан явно: uikit объявляет контролу `border: none`, а `none`
+     — это стиль. Одной ширины мало, при стиле `none` она считается нулевой, и
+     разделительная черта не рисовалась даже после победы в специфичности. */
+  border-style: solid;
   border-width: 0 0 0 1px;
   border-color: var(--line);
   border-radius: 0;
+  /* Отступы uikit съедали 16 px из 39 доступных — больше трети поля. Значение
+     здесь выровнено по центру и ни к чему не прижимается, так что отступы ему
+     не нужны вовсе. */
+  padding-inline: 2px;
   background: transparent;
   font-size: 1.15rem;
   font-weight: 700;
