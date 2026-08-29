@@ -4876,3 +4876,23 @@ code {
     gap: 4px;
   }
 }
+
+/* UIX-532: ссылка перехода к карте. Видна только под фокусом — она нужна тому,
+   кто идёт табом, и не должна занимать место у всех остальных. Прятать её
+   через `display: none` нельзя: спрятанное так не получает фокус вовсе, то
+   есть ссылка перестала бы существовать ровно для тех, ради кого сделана. */
+.skip-link {
+  position: absolute;
+  top: var(--space-xs);
+  left: var(--space-xs);
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-weight: 700;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+}

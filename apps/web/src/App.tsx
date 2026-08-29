@@ -1520,9 +1520,23 @@ export function App() {
     activeTokens.reduce((max, token) => Math.max(max, token.revision), 0),
   ].join(":");
 
+  const workspaceHidden =
+    workspace === "characters" ||
+    workspace === "setup" ||
+    workspace === "world-maps";
+
   return (
     <CampaignActionsContext.Provider value={campaignActions}>
       <div className="app-shell">
+        {/* UIX-532: без этой ссылки путь с клавиатуры к карте проходит через
+            всю верхнюю панель. Прячется, пока рабочая область открыта поверх
+            карты: там карта помечена `aria-hidden`, и уводить фокус в
+            скрытое — хуже, чем не предлагать переход вовсе. */}
+        {!workspaceHidden && (
+          <a className="skip-link" href="#main-content">
+            Перейти к карте
+          </a>
+        )}
         <header className="topbar">
           <div className="brand">
             <strong>arken-space</strong>
@@ -1931,18 +1945,12 @@ export function App() {
             </button>
           )}
           <main
-            className={`map-shell${
-              workspace === "characters" ||
-              workspace === "setup" ||
-              workspace === "world-maps"
-                ? " is-workspace-hidden"
-                : ""
-            }`}
-            aria-hidden={
-              workspace === "characters" ||
-              workspace === "setup" ||
-              workspace === "world-maps"
-            }
+            id="main-content"
+            // UIX-532: цель ссылки «к карте». `-1` даёт фокус по переходу, но
+            // не добавляет карту в обход табом — она и так первая за панелью.
+            tabIndex={-1}
+            className={`map-shell${workspaceHidden ? " is-workspace-hidden" : ""}`}
+            aria-hidden={workspaceHidden}
           >
             <div
               ref={toolbarRef}
