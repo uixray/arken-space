@@ -631,21 +631,24 @@ export function ActivityPanel({
               ))}
             </FormSelect>
           )}
-          <label className="compact-check">
-            <FormInput
-              type="checkbox"
-              checked={physicalDice}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setPhysicalDice(enabled);
-                window.localStorage.setItem(
-                  physicalDiceStorageKey(snapshot.me.id),
-                  String(enabled),
-                );
-              }}
-            />
+          {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
+              подписывала — uikit рисует свой `<label>` внутри, а вложенные не
+              связываются: программа чтения с экрана называла поле «флажок». */}
+          <FormInput
+            className="compact-check"
+            type="checkbox"
+            checked={physicalDice}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              setPhysicalDice(enabled);
+              window.localStorage.setItem(
+                physicalDiceStorageKey(snapshot.me.id),
+                String(enabled),
+              );
+            }}
+          >
             Физические кубы
-          </label>
+          </FormInput>
         </div>
         <DiceTrayPanel
           characterId={snapshot.me.characterId}
@@ -704,19 +707,20 @@ export function ActivityPanel({
           <fieldset className="activity-filters">
             <legend className="visually-hidden">Показывать</legend>
             {ACTIVITY_FILTERS.map((filter) => (
-              <label className="compact-check" key={filter}>
-                <FormInput
-                  type="checkbox"
-                  checked={activityFilters.has(filter)}
-                  onChange={(event) => {
-                    const next = new Set(activityFilters);
-                    if (event.target.checked) next.add(filter);
-                    else next.delete(filter);
-                    onActivityFiltersChange(next);
-                  }}
-                />
+              <FormInput
+                className="compact-check"
+                key={filter}
+                type="checkbox"
+                checked={activityFilters.has(filter)}
+                onChange={(event) => {
+                  const next = new Set(activityFilters);
+                  if (event.target.checked) next.add(filter);
+                  else next.delete(filter);
+                  onActivityFiltersChange(next);
+                }}
+              >
                 {ACTIVITY_FILTER_LABEL[filter]}
-              </label>
+              </FormInput>
             ))}
           </fieldset>
         </details>
@@ -748,9 +752,17 @@ export function ActivityPanel({
           </button>
         </div>
       )}
+      {/* UIX-532: лента прокручивается, значит должна доставаться и с
+          клавиатуры. Без `tabIndex` до неё нельзя добраться табом, и человек
+          без мыши не может пролистать журнал вовсе — прокрутка есть, а
+          управлять ею нечем. `role="log"` называет то, что здесь уже
+          происходит: список, в конец которого дописываются записи. */}
       <div
         className="message-list"
         id="activity-message-list"
+        role="log"
+        tabIndex={0}
+        aria-label="Лента событий"
         aria-live="polite"
         ref={listRef}
         onScroll={onScroll}

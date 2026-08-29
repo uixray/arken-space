@@ -21,6 +21,12 @@
   --line-strong: var(--color-border-hover);
   --text: var(--color-text);
   --muted: var(--color-text-muted);
+  /* UIX-532: `--faint` (ink.300) даёт 3.41 к поверхности — ниже требуемых
+     4.5 для обычного текста. Токен и сам говорит о себе «не использовать для
+     того, что нужно прочитать», но использовался ровно для этого: названия
+     вкладок, заголовки групп инструментов, максимум ресурса. Всё это уехало на
+     `--muted` (6.65). Оставлен объявленным: у него есть законная роль в
+     нечитаемом декоре, а удаление токена — решение владельца палитры. */
   --faint: var(--color-text-faint);
   --accent: var(--color-accent);
   --accent-hover: var(--color-accent-hover);
@@ -251,7 +257,7 @@ code {
   display: none;
 }
 .workspace-nav__count {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.72rem;
 }
 .workspace-nav__menu {
@@ -1028,7 +1034,7 @@ code {
   box-shadow: inset 0 -2px var(--accent);
 }
 .tabs span {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.75rem;
 }
 .panel-scroll {
@@ -1053,14 +1059,14 @@ code {
 .eyebrow {
   display: block;
   margin-bottom: var(--space-xs);
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 .revision {
-  color: var(--faint);
+  color: var(--muted);
   font:
     0.72rem ui-monospace,
     monospace;
@@ -1161,7 +1167,7 @@ code {
 }
 .resource-counters__summary-values {
   overflow: hidden;
-  color: var(--faint);
+  color: var(--muted);
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1207,7 +1213,7 @@ code {
   text-align: center;
 }
 .resource-counters__maximum {
-  color: var(--faint);
+  color: var(--muted);
 }
 .stat-field__add {
   width: 100%;
@@ -1420,7 +1426,7 @@ code {
 }
 .activity-log-truncated-note {
   margin: 0;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.72rem;
 }
 .chat-date-divider {
@@ -1625,7 +1631,7 @@ code {
 }
 .composer-hint {
   margin: 4px 0 0;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.7rem;
 }
 /* UIX-388: with the Send button + GM-only checkbox column gone, the
@@ -2122,7 +2128,7 @@ code {
   min-width: 0;
 }
 .music-state span {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.68rem;
   text-transform: uppercase;
 }
@@ -3892,7 +3898,7 @@ code {
    шестнадцати кнопок, где туман, метки и настройки идут вперемешку. */
 .toolbar-group__title {
   padding: 2px 8px 0;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -4151,7 +4157,7 @@ code {
   font-weight: 700;
 }
 .initiative-panel__summary-count {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.78rem;
   font-weight: 400;
 }
