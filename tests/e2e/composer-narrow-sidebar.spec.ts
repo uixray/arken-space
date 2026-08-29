@@ -131,6 +131,11 @@ test("способ отправить только мастеру виден и 
    * перекрытий такую потерю бы не заметила — она стала бы только чище.
    */
   await signInAsGm(page, gmToken);
+  // Ожидание обязательно: `signInAsGm` возвращается по смене адреса, а панель
+  // к этому моменту может быть ещё не отрисована. Без него тест ловил гонку —
+  // и поймал её в CI, упав на «Боковая панель не найдена». Соседний тест выше
+  // ждал случайно, потому что сначала обращался к композеру.
+  await expect(page.locator("aside.sidebar")).toBeVisible();
   await page.evaluate((width) => {
     const sidebar = document.querySelector<HTMLElement>("aside.sidebar");
     if (!sidebar) throw new Error("Боковая панель не найдена");
