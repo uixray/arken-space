@@ -257,18 +257,18 @@ describe("queued character counter mutations", () => {
     ).toBe(false);
     expect(
       shouldRetryCharacterCounterConflict({
-        walletDelta: { key: "gold", delta: 1 },
+        walletDelta: { gold: 1 },
       }),
     ).toBe(true);
     expect(
       shouldRetryCharacterCounterConflict({
-        walletDelta: { key: "gold", delta: 1 },
+        walletDelta: { gold: 1 },
         resource: { key: "physicalPower", kind: "SET", value: 3 },
       }),
     ).toBe(false);
     expect(
       shouldRetryCharacterCounterConflict(
-        { walletDelta: { key: "gold", delta: 1 } },
+        { walletDelta: { gold: 1 } },
         { rest: "SHORT" },
       ),
     ).toBe(false);
@@ -288,7 +288,7 @@ describe("queued character counter mutations", () => {
       buildCharacterCounterPatch(
         character,
         { rest: "SHORT" },
-        { walletDelta: { key: "silver", delta: -10 } },
+        { walletDelta: { silver: -10 } },
       ),
     ).toEqual({
       rest: "SHORT",
@@ -300,6 +300,18 @@ describe("queued character counter mutations", () => {
       }),
     ).toEqual({
       wallet: { gold: 8, silver: 0, copper: 0, sp: 0 },
+    });
+  });
+
+  it("rebases one wallet batch across denominations", () => {
+    expect(
+      buildCharacterCounterPatch(
+        character,
+        { wallet: { gold: 99, silver: 99, copper: 99, sp: 99 } },
+        { walletDelta: { gold: 3, silver: -2, sp: 1 } },
+      ),
+    ).toEqual({
+      wallet: { gold: 5, silver: 1, copper: 4, sp: 6 },
     });
   });
 });

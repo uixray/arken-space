@@ -7,6 +7,7 @@ import {
   selectViewedScene,
   viewedScenePicker,
 } from "./workspace-nav-helper";
+import { WALLET_ADJUST_DELAY_MS } from "../../apps/web/src/wallet";
 
 const snapshot: GameSnapshot = {
   campaign: {
@@ -2200,7 +2201,7 @@ test("character card submits normal, advantage and disadvantage rolls for GM and
   });
 });
 
-test("wallet queues rapid mutations and ignores unchanged blur", async ({
+test("wallet batches rapid mutations and ignores unchanged blur", async ({
   page,
 }) => {
   const playerSnapshot = structuredClone(snapshot);
@@ -2222,6 +2223,7 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   const submittedGold: number[] = [];
   const submittedSp: number[] = [];
   const submittedRevisions: number[] = [];
+  let rejectNextCounter = false;
   let releaseFirstResponse!: () => void;
   const firstResponseGate = new Promise<void>((resolve) => {
     releaseFirstResponse = resolve;
@@ -2243,6 +2245,15 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
     submittedGold.push(payload.wallet.gold);
     submittedSp.push(payload.wallet.sp);
     submittedRevisions.push(payload.revision);
+    if (rejectNextCounter) {
+      rejectNextCounter = false;
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "COUNTER_WRITE_FAILED" }),
+      });
+      return;
+    }
     if (submittedGold.length === 1) await firstResponseGate;
     playerSnapshot.characters[0]!.wallet = payload.wallet;
     playerSnapshot.characters[0]!.revision += 1;
@@ -2262,6 +2273,9 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
       body: JSON.stringify(response),
     });
   });
+  await page.clock.install({
+    time: new Date("2026-08-29T12:00:00.000Z"),
+  });
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const goldRow = page
@@ -2273,30 +2287,90 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   await page.locator(".character-workspace__header h2").click();
   expect(submittedGold).toEqual([]);
 
+  await page.clock.pauseAt(new Date("2026-08-29T12:01:00.000Z"));
+
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
-  await expect.poll(() => submittedGold).toEqual([1]);
-  await expect(input).toHaveValue("3");
-  releaseFirstResponse();
-  await input.focus();
-  await page.locator(".character-workspace__header h2").click();
-  await expect.poll(() => submittedGold).toEqual([1, 2, 3]);
-  expect(submittedRevisions).toEqual([1, 2, 3]);
   await expect(input).toHaveValue("3");
 
-  await input.fill("5");
+  // The regression boundary: until the interaction pause ends, not even the
+  // first queued PATCH may reach the server.
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS - 1);
+  expect(submittedGold).toEqual([]);
+  await page.clock.runFor(1);
+  await expect.poll(() => submittedGold).toEqual([3]);
+
+  // A second batch remains optimistic while App serializes it behind the
+  // deliberately delayed first response.
   await goldRow.locator("button").last().click();
-  await expect.poll(() => submittedGold).toEqual([1, 2, 3, 6]);
-  await expect(input).toHaveValue("6");
+  await goldRow.locator("button").last().click();
+  await expect(input).toHaveValue("5");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
+  expect(submittedGold).toEqual([3]);
+
+  // An absolute input made while the batches are still queued must be kept as
+  // a compensating SET, even when it equals the older rendered snapshot.
+  await input.fill("0");
+  await page.locator(".character-workspace__header h2").click();
+  await expect(input).toHaveValue("0");
+  expect(submittedGold).toEqual([3]);
+  releaseFirstResponse();
+  await expect.poll(() => submittedGold).toEqual([3, 5, 0]);
+  expect(submittedRevisions).toEqual([1, 2, 3]);
+  await expect(input).toHaveValue("0");
+
+  // An unfinished manual value plus a click is one absolute target, not a
+  // retryable delta applied twice after a conflict.
+  await input.fill("0");
+  await goldRow.locator("button").last().click();
+  await expect(input).toHaveValue("1");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
+  await expect.poll(() => submittedGold).toEqual([3, 5, 0, 1]);
+
+  // Manual typing absorbs an active optimistic batch without letting the
+  // released pending reservation restore the older canonical snapshot.
+  await goldRow.locator("button").last().click();
+  await expect(input).toHaveValue("2");
+  await input.fill("9");
+  expect(submittedGold).toEqual([3, 5, 0, 1]);
+  await page.locator(".character-workspace__header h2").click();
+  await expect.poll(() => submittedGold).toEqual([3, 5, 0, 1, 9]);
+  await expect(input).toHaveValue("9");
+
+  // A relative series that returns to its base is a no-op.
+  await goldRow.locator("button").last().click();
+  await goldRow.locator("button").first().click();
+  await expect(input).toHaveValue("9");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
+  expect(submittedGold).toEqual([3, 5, 0, 1, 9]);
 
   const spRow = page
     .locator(".character-workspace .inline-fields")
     .filter({ hasText: /^sp/ });
-  for (let index = 0; index < 12; index += 1)
+  const spRequestsBefore = submittedSp.length;
+  for (let index = 0; index < 25; index += 1)
     await spRow.locator("button").last().click();
-  await expect.poll(() => submittedSp.at(-1)).toBe(12);
-  await expect(spRow.locator('input[type="number"]')).toHaveValue("12");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS - 1);
+  expect(submittedSp.slice(spRequestsBefore)).toEqual([]);
+  await page.clock.runFor(1);
+  await expect.poll(() => submittedSp.at(-1)).toBe(25);
+  expect(submittedSp.slice(spRequestsBefore)).toEqual([25]);
+  await expect(spRow.locator('input[type="number"]')).toHaveValue("25");
+
+  // A final server refusal restores the latest canonical wallet instead of
+  // leaving the optimistic click visible as if it had been accepted.
+  rejectNextCounter = true;
+  await goldRow.locator("button").last().click();
+  await expect(input).toHaveValue("10");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
+  await expect.poll(() => submittedGold.at(-1)).toBe(10);
+  await expect(input).toHaveValue("9");
+  await expect(
+    page
+      .locator(".character-workspace")
+      .getByText(/Не удалось сохранить кошелёк/),
+  ).toBeVisible();
   await expect(page.getByText("Интерфейс временно остановлен")).toHaveCount(0);
   expect(renderErrors.filter((error) => error.name === "TypeError")).toEqual(
     [],

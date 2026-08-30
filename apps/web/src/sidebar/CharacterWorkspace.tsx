@@ -41,8 +41,13 @@ import { selectableCatalogEntries } from "./catalog-entry-selection";
 import {
   changeWalletValue,
   EMPTY_WALLET,
+  mergeWalletDelta,
   normalizeWallet,
   normalizeWalletValue,
+  WALLET_ADJUST_DELAY_MS,
+  walletDeltaIsEmpty,
+  type Wallet,
+  type WalletDelta,
 } from "../wallet";
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
@@ -51,6 +56,15 @@ import { Empty } from "./MediaPanel";
 // lives in its own module (./RollButton) so CatalogEntryPicker can import it
 // without a circular dependency on this file.
 export { RollButton } from "./RollButton";
+
+type WalletBatch = {
+  /** null means that a preceding manual input made this an absolute SET. */
+  delta: WalletDelta | null;
+  wallet: Wallet;
+  baseWallet: Wallet;
+  flush: () => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 
 export function CharacterWorkspace({
   onClose,
@@ -898,19 +912,37 @@ export function CharacterPanel({
   );
   const walletDraftRef = useRef(walletDraft);
   const walletInputDirtyRef = useRef(false);
+  const walletBatchRef = useRef<WalletBatch | undefined>(undefined);
+  const walletMountedRef = useRef(true);
   const [resourcesDraft, setResourcesDraft] = useState<
     CharacterDto["resources"]
   >(() => ({ ...(character?.resources ?? {}) }));
   const [newResourceName, setNewResourceName] = useState("");
   useEffect(() => {
     if (character && countersPending === 0) {
-      const nextWallet = normalizeWallet(character.wallet);
-      walletDraftRef.current = nextWallet;
-      walletInputDirtyRef.current = false;
-      setWalletDraft(nextWallet);
+      // A manual value can start by absorbing an unsent +/- batch. That
+      // releases the batch reservation, but must not let this sync effect
+      // overwrite the still-focused absolute draft with the old snapshot.
+      if (!walletInputDirtyRef.current) {
+        const nextWallet = normalizeWallet(character.wallet);
+        walletDraftRef.current = nextWallet;
+        setWalletDraft(nextWallet);
+      }
       setResourcesDraft({ ...character.resources });
     }
   }, [character, countersPending]);
+  useEffect(() => {
+    walletMountedRef.current = true;
+    return () => {
+      // A visible click is already an accepted decision. Closing the sheet
+      // before the pause expires flushes it into App's stable character queue.
+      walletMountedRef.current = false;
+      const batch = walletBatchRef.current;
+      if (!batch) return;
+      clearTimeout(batch.timer);
+      batch.flush();
+    };
+  }, []);
   const editable =
     character &&
     (snapshot.me.role === "GM" ||
@@ -977,11 +1009,54 @@ export function CharacterPanel({
     character.entries,
     "ABILITY",
   );
+  const submitWallet = async (
+    nextWallet: CharacterDto["wallet"],
+    intent: Parameters<typeof onUpdateCounters>[3],
+    pendingReserved: boolean,
+    conflictMessage: string,
+    failureMessage: string,
+  ) => {
+    if (!pendingReserved && walletMountedRef.current)
+      setCountersPending((current) => current + 1);
+    if (walletMountedRef.current) setCountersError("");
+    try {
+      await onUpdateCounters(
+        character.id,
+        character.revision,
+        { wallet: normalizeWallet(nextWallet) },
+        intent,
+      );
+    } catch (reason) {
+      if (!walletMountedRef.current) return;
+      setCountersError(
+        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+          ? conflictMessage
+          : failureMessage,
+      );
+    } finally {
+      if (walletMountedRef.current)
+        setCountersPending((current) => Math.max(0, current - 1));
+    }
+  };
+
+  const cancelWalletBatch = (restoreBase: boolean) => {
+    const batch = walletBatchRef.current;
+    if (!batch) return;
+    clearTimeout(batch.timer);
+    walletBatchRef.current = undefined;
+    if (restoreBase) {
+      walletDraftRef.current = batch.baseWallet;
+      setWalletDraft(batch.baseWallet);
+    }
+    setCountersPending((current) => Math.max(0, current - 1));
+  };
+
   const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
     nextWallet = normalizeWallet(nextWallet);
     if (!walletInputDirtyRef.current) return;
     const canonicalWallet = normalizeWallet(character.wallet);
     if (
+      countersPending === 0 &&
       (Object.keys(nextWallet) as Array<keyof CharacterDto["wallet"]>).every(
         (key) => nextWallet[key] === canonicalWallet[key],
       )
@@ -992,21 +1067,13 @@ export function CharacterPanel({
     walletInputDirtyRef.current = false;
     walletDraftRef.current = nextWallet;
     setWalletDraft(nextWallet);
-    setCountersPending((current) => current + 1);
-    setCountersError("");
-    try {
-      await onUpdateCounters(character.id, character.revision, {
-        wallet: nextWallet,
-      });
-    } catch (reason) {
-      setCountersError(
-        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
-          ? "Кошелёк уже изменён в другой сессии. Значения обновлены — повторите действие."
-          : "Не удалось сохранить кошелёк. Проверьте соединение и повторите действие.",
-      );
-    } finally {
-      setCountersPending((current) => Math.max(0, current - 1));
-    }
+    await submitWallet(
+      nextWallet,
+      undefined,
+      false,
+      "Кошелёк уже изменён в другой сессии. Значения обновлены — повторите действие.",
+      "Не удалось сохранить кошелёк. Проверьте соединение и повторите действие.",
+    );
   };
   const saveResources = async (next: CharacterDto["resources"]) => {
     setResourcesDraft(next);
@@ -1058,26 +1125,42 @@ export function CharacterPanel({
     if (appliedDelta === 0) return;
     walletDraftRef.current = next;
     setWalletDraft(next);
-    setCountersPending((count) => count + 1);
     setCountersError("");
-    const intent = walletInputDirtyRef.current
-      ? undefined
-      : { walletDelta: { key, delta: appliedDelta } };
+
+    const running = walletBatchRef.current;
+    if (running) clearTimeout(running.timer);
+    const absolute = walletInputDirtyRef.current || running?.delta === null;
+    const combinedDelta = absolute
+      ? null
+      : mergeWalletDelta(running?.delta ?? {}, key, appliedDelta);
     walletInputDirtyRef.current = false;
-    void onUpdateCounters(
-      character.id,
-      character.revision,
-      { wallet: next },
-      intent,
-    )
-      .catch((reason) => {
-        setCountersError(
-          reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
-            ? "Кошелёк изменён в другой сессии. Данные обновлены; повторите изменение, если оно всё ещё нужно."
-            : "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите действие.",
-        );
-      })
-      .finally(() => setCountersPending((count) => Math.max(0, count - 1)));
+
+    if (combinedDelta && walletDeltaIsEmpty(combinedDelta)) {
+      // A relative +/- series that returns to its starting wallet is no action.
+      cancelWalletBatch(true);
+      return;
+    }
+
+    if (!running) setCountersPending((count) => count + 1);
+    const flush = () => {
+      if (walletBatchRef.current !== batch) return;
+      walletBatchRef.current = undefined;
+      void submitWallet(
+        batch.wallet,
+        batch.delta ? { walletDelta: batch.delta } : undefined,
+        true,
+        "Кошелёк изменён в другой сессии. Данные обновлены; повторите изменение, если оно всё ещё нужно.",
+        "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите действие.",
+      );
+    };
+    const batch: WalletBatch = {
+      delta: combinedDelta,
+      wallet: next,
+      baseWallet: running?.baseWallet ?? current,
+      flush,
+      timer: setTimeout(flush, WALLET_ADJUST_DELAY_MS),
+    };
+    walletBatchRef.current = batch;
   };
   return (
     <section className="panel-section">
@@ -1734,6 +1817,9 @@ export function CharacterPanel({
               value={walletDraft[key]}
               disabled={!editable}
               onChange={(event) => {
+                // Manual input chooses an absolute target. It absorbs any
+                // visible but unsent +/- batch instead of applying it twice.
+                cancelWalletBatch(false);
                 const next = {
                   ...walletDraftRef.current,
                   [key]: normalizeWalletValue(event.target.value),
