@@ -39,7 +39,8 @@ export const mages = [
 export const missions = [
   {
     id: "runaway",
-    district: "Медный рынок",
+    district: "Норбиан",
+    map: { x: 23, y: 25 },
     title: "Сбежавший фамильяр",
     summary: "Огненная химера пугает торговцев, но пока никого не ранила.",
     requirements: { control: 5, empathy: 4, mobility: 3 },
@@ -68,7 +69,8 @@ export const missions = [
   },
   {
     id: "bridge",
-    district: "Северные ворота",
+    district: "Сайдрис",
+    map: { x: 17, y: 44 },
     title: "Мост теряет форму",
     summary: "Каменные пролёты размягчаются прямо под караваном.",
     requirements: { power: 6, control: 5, lore: 3 },
@@ -97,7 +99,8 @@ export const missions = [
   },
   {
     id: "echo",
-    district: "Архивная башня",
+    district: "Хельдрис",
+    map: { x: 55, y: 43 },
     title: "Эхо чужих воспоминаний",
     summary: "Читатели повторяют фразы людей, которых никогда не встречали.",
     requirements: { lore: 7, control: 4, empathy: 4 },
@@ -126,7 +129,8 @@ export const missions = [
   },
   {
     id: "storm",
-    district: "Плавучий квартал",
+    district: "Диларн",
+    map: { x: 64, y: 69 },
     title: "Гроза идёт снизу",
     summary: "Молнии бьют из каналов вверх и поднимают дома в воздух.",
     requirements: { power: 8, mobility: 6, control: 5 },
@@ -155,7 +159,8 @@ export const missions = [
   },
   {
     id: "crown",
-    district: "Сердце Тристонии",
+    district: "Триумн",
+    map: { x: 84, y: 34 },
     title: "Корона без владельца",
     summary:
       "Над ратушей возникает древняя корона и выбирает нового правителя.",

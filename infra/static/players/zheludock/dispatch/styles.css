@@ -60,6 +60,30 @@ a {
   color: var(--ink);
   text-decoration: none;
 }
+.player {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: fit-content;
+}
+.player img {
+  width: 2.8rem;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--signal);
+  border-radius: 50%;
+}
+.player span {
+  display: grid;
+  font-weight: 800;
+}
+.player small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
 .topbar > div {
   display: flex;
   flex-wrap: wrap;
@@ -98,9 +122,10 @@ a {
   border: 1px solid var(--line);
   background-color: oklch(0.27 0.05 211);
   background-image:
-    linear-gradient(oklch(0.55 0.07 208/0.18) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.55 0.07 208/0.18) 1px, transparent 1px);
-  background-size: 2rem 2rem;
+    linear-gradient(oklch(0.1 0.03 220 / 0.28), oklch(0.1 0.03 220 / 0.28)),
+    url("./assets/world-map.webp");
+  background-position: center;
+  background-size: cover;
 }
 .map::before,
 .map::after {
@@ -109,6 +134,11 @@ a {
   border: 2px solid oklch(0.7 0.08 209/0.22);
   border-radius: 48% 52% 42% 58%;
   transform: rotate(-13deg);
+}
+.map::before,
+.map::after,
+.map__rings {
+  display: none;
 }
 .map::before {
   width: 68%;
@@ -529,6 +559,9 @@ a {
     min-height: 2.75rem;
     display: inline-flex;
     align-items: center;
+  }
+  .player small {
+    display: none;
   }
   .topbar > button {
     padding: 0 0.75rem;

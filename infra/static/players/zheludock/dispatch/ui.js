@@ -45,7 +45,7 @@ function renderMarkers() {
   $("[data-markers]").innerHTML = missions
     .map(
       (mission, index) =>
-        `<button class="marker ${index === state.missionIndex ? "is-current" : ""} ${index < state.missionIndex ? "is-done" : ""}" style="--x:${18 + ((index * 17) % 72)}%;--y:${22 + ((index * 29) % 58)}%" ${index !== state.missionIndex ? "disabled" : ""}><span>${index + 1}</span><strong>${mission.district}</strong></button>`,
+        `<button class="marker ${index === state.missionIndex ? "is-current" : ""} ${index < state.missionIndex ? "is-done" : ""}" style="--x:${mission.map.x}%;--y:${mission.map.y}%" ${index !== state.missionIndex ? "disabled" : ""}><span>${index + 1}</span><strong>${mission.district}</strong></button>`,
     )
     .join("");
 }
