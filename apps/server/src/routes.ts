@@ -2989,12 +2989,36 @@ export function registerRoutes(
     if (priorAction) {
       if (priorAction.entityType === "token" && priorAction.entityId) {
         const [priorPlacement] = await db
-          .select()
+          .select({ token: tokens })
           .from(tokens)
-          .where(eq(tokens.id, priorAction.entityId))
+          .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+          .innerJoin(
+            tokenDefinitions,
+            eq(tokens.definitionId, tokenDefinitions.id),
+          )
+          .where(
+            and(
+              eq(tokens.id, priorAction.entityId),
+              eq(tokens.definitionId, id),
+              eq(scenes.campaignId, auth.campaignId),
+              eq(tokenDefinitions.campaignId, auth.campaignId),
+            ),
+          )
           .limit(1);
-        if (priorPlacement) return reply.code(200).send(priorPlacement);
+        if (priorPlacement) return reply.code(200).send(priorPlacement.token);
       }
+      const [definition] = await db
+        .select({ id: tokenDefinitions.id })
+        .from(tokenDefinitions)
+        .where(
+          and(
+            eq(tokenDefinitions.id, id),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!definition)
+        return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
       return reply.code(200).send({ duplicate: true });
     }
     const [campaign] = await db
