@@ -91,10 +91,11 @@
   PASS**; backend restart, resource-leak check, удаление containers/volumes/images
   и production health before/after — PASS. Production build revision до и после
   не изменился; deploy не выполнялся.
-- **Открытый gate:** предварительный Docker build включал рабочее дерево, но
-  health identity закономерно показывал ещё baseline `a48de5d`. После локального
-  commit нужен повтор `test:multiplayer`, чтобы доказательство ссылалось на
-  точный commit SHA.
-- **Следующее действие:** создать явный локальный commit без push, повторить
-  identity-attested multiplayer и дописать финальный результат отдельным
-  docs-only commit.
+- **Identity-attested multiplayer:** основной код зафиксирован commit
+  `85a910402961510b347f337b0ef1831ca9985599`; повторный isolated health вернул
+  именно этот build revision. GM + 6 и shared-browser handoff снова прошли 2/2,
+  backend restart, cleanup и resource-leak check — PASS, exit code 0. Production
+  revision до/после осталась `42c7ccc`; deploy не выполнялся.
+- **Оставшиеся gates:** локальных issue-level гейтов нет. Push, PR, merge и
+  production deploy остаются только решением владельца; UI E2E не запускался,
+  потому что UI-поток не менялся.
