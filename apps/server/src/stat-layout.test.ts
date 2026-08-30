@@ -6,6 +6,7 @@ import {
   type StatReferenceSources,
 } from "./stat-layout.js";
 import { statLayoutSchema } from "@arken/contracts";
+import { resolveStatLayout } from "./snapshot.js";
 
 /**
  * UIX-424, шаг 6. Проверка ссылок — единственное, что стоит между мастером и
@@ -182,5 +183,199 @@ describe("что раскладке позволено", () => {
         empty,
       ),
     ).toEqual({ error: "STAT_SOURCE_CHANGED", key: "mana" });
+  });
+
+  it("не позволяет удалить обязательную системную строку регена", () => {
+    expect(
+      rejectDestructiveLayoutChange(
+        layout(["enduranceRegen", "manaRegen"]),
+        layout(["manaRegen"]),
+        empty,
+      ),
+    ).toEqual({
+      error: "SYSTEM_STAT_ROW_REQUIRED",
+      key: "enduranceRegen",
+    });
+  });
+
+  it("не позволяет вынести системную строку из combat или сменить её источник", () => {
+    const current = statLayoutSchema.parse([
+      {
+        id: "combat",
+        label: "Бой",
+        rows: [
+          {
+            key: "enduranceRegen",
+            label: "Реген выносливости",
+            source: "STAT",
+          },
+          { key: "manaRegen", label: "Реген маны", source: "STAT" },
+        ],
+      },
+    ]);
+    const wrongGroup = statLayoutSchema.parse([
+      {
+        id: "characteristics",
+        label: "Характеристики",
+        rows: [
+          {
+            key: "enduranceRegen",
+            label: "Реген выносливости",
+            source: "STAT",
+          },
+        ],
+      },
+      {
+        id: "combat",
+        label: "Бой",
+        rows: [{ key: "manaRegen", label: "Реген маны", source: "STAT" }],
+      },
+    ]);
+    const wrongSource = statLayoutSchema.parse([
+      {
+        id: "combat",
+        label: "Бой",
+        rows: [
+          {
+            key: "enduranceRegen",
+            label: "Реген выносливости",
+            source: "RESOURCE",
+          },
+          { key: "manaRegen", label: "Реген маны", source: "STAT" },
+        ],
+      },
+    ]);
+
+    expect(rejectDestructiveLayoutChange(current, wrongGroup, empty)).toEqual({
+      error: "SYSTEM_STAT_ROW_REQUIRED",
+      key: "enduranceRegen",
+    });
+    expect(rejectDestructiveLayoutChange(current, wrongSource, empty)).toEqual({
+      error: "SYSTEM_STAT_ROW_REQUIRED",
+      key: "enduranceRegen",
+    });
+  });
+});
+
+describe("нормализация системных строк регена", () => {
+  it("возвращает недостающие строки в combat, не заменяя пользовательскую раскладку", () => {
+    const legacy = statLayoutSchema.parse([
+      {
+        id: "characteristics",
+        label: "Мои характеристики",
+        rows: [
+          { key: "customFocus", label: "Фокус", source: "STAT" },
+          {
+            key: "enduranceRegeneration",
+            label: "Реген Выносливости",
+            source: "STAT",
+          },
+        ],
+      },
+    ]);
+
+    expect(resolveStatLayout(legacy)).toEqual([
+      {
+        id: "characteristics",
+        label: "Мои характеристики",
+        rows: [
+          { key: "customFocus", label: "Фокус", source: "STAT" },
+          {
+            key: "enduranceRegeneration",
+            label: "Реген Выносливости",
+            source: "STAT",
+          },
+        ],
+      },
+      {
+        id: "combat",
+        label: "Боевые характеристики",
+        rows: [
+          {
+            key: "enduranceRegen",
+            label: "Реген Выносливости",
+            source: "STAT",
+          },
+          { key: "manaRegen", label: "Реген Маны", source: "STAT" },
+        ],
+      },
+    ]);
+  });
+
+  it("исправляет группу и source, сохраняя подписи, строки и порядок пользователя", () => {
+    const legacy = statLayoutSchema.parse([
+      {
+        id: "characteristics",
+        label: "Мои характеристики",
+        rows: [
+          { key: "customFocus", label: "Фокус", source: "STAT" },
+          {
+            key: "enduranceRegen",
+            label: "Мой реген",
+            source: "RESOURCE",
+          },
+        ],
+      },
+      {
+        id: "combat",
+        label: "Мой бой",
+        rows: [
+          { key: "customArmor", label: "Броня", source: "STAT" },
+          { key: "manaRegen", label: "Моя мана", source: "RESOURCE" },
+        ],
+      },
+    ]);
+
+    const normalized = resolveStatLayout(legacy);
+    expect(normalized).toEqual([
+      {
+        id: "characteristics",
+        label: "Мои характеристики",
+        rows: [{ key: "customFocus", label: "Фокус", source: "STAT" }],
+      },
+      {
+        id: "combat",
+        label: "Мой бой",
+        rows: [
+          { key: "customArmor", label: "Броня", source: "STAT" },
+          { key: "manaRegen", label: "Моя мана", source: "STAT" },
+          { key: "enduranceRegen", label: "Мой реген", source: "STAT" },
+        ],
+      },
+    ]);
+    expect(resolveStatLayout(normalized)).toEqual(normalized);
+  });
+
+  it("оставляет валидной legacy-группу с прежним максимумом пользовательских строк", () => {
+    const legacy = statLayoutSchema.parse([
+      {
+        id: "combat",
+        label: "Мой бой",
+        rows: Array.from({ length: 60 }, (_, index) => ({
+          key: `customStat${index}`,
+          label: `Пользовательская строка ${index}`,
+          source: "STAT" as const,
+        })),
+      },
+    ]);
+
+    const normalized = resolveStatLayout(legacy);
+    expect(normalized[0]?.rows).toHaveLength(62);
+    expect(statLayoutSchema.safeParse(normalized).success).toBe(true);
+    expect(resolveStatLayout(normalized)).toEqual(normalized);
+  });
+
+  it("не превращает два системных места в дополнительные пользовательские", () => {
+    const rows = Array.from({ length: 61 }, (_, index) => ({
+      key: `customLimit${index}`,
+      label: `Пользовательская строка ${index}`,
+      source: "STAT" as const,
+    }));
+
+    for (const id of ["combat", "characteristics"] as const)
+      expect(
+        statLayoutSchema.safeParse([{ id, label: "Группа", rows }]).success,
+        id,
+      ).toBe(false);
   });
 });

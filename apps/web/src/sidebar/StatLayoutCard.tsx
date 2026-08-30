@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@gravity-ui/uikit";
-import { STAT_VALUE_RANGE } from "@arken/system";
+import { isSystemRegenStatKey, STAT_VALUE_RANGE } from "@arken/system";
 import { ApiError, formatApiError } from "../api";
 import { FormInput } from "../ui/GravityFormControls";
 import { useRemoteFieldValue } from "../ui/remote-field-value";
@@ -221,12 +221,21 @@ export function StatLayoutCard({
                   <Button
                     view="flat"
                     className="stat-field__rename"
+                    disabled={isSystemRegenStatKey(row.key)}
                     onClick={(event) => {
                       event.preventDefault();
                       askToDelete(row);
                     }}
-                    aria-label={`Удалить «${row.label}»`}
-                    title="Удалить строку"
+                    aria-label={
+                      isSystemRegenStatKey(row.key)
+                        ? `Нельзя удалить «${row.label}»: установите значение 0, чтобы отключить восстановление`
+                        : `Удалить «${row.label}»`
+                    }
+                    title={
+                      isSystemRegenStatKey(row.key)
+                        ? "Системную строку нельзя удалить. Чтобы отключить восстановление, установите значение 0."
+                        : "Удалить строку"
+                    }
                   >
                     <span aria-hidden="true">×</span>
                   </Button>

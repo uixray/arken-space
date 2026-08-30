@@ -667,11 +667,43 @@ export const statRowSchema = z.object({
   source: statRowSourceSchema.default("STAT"),
 });
 
-export const statGroupSchema = z.object({
-  id: z.enum(["characteristics", "combat", "skills", "talents"]),
-  label: z.string().trim().min(1).max(60),
-  rows: z.array(statRowSchema).max(60),
-});
+const STAT_GROUP_USER_ROW_LIMIT = 60;
+// Это только резерв ёмкости, а не список обязательных строк: partial-layout
+// без регена должна остаться валидной для read-time repair. Тест `60 + 2`
+// намеренно связывает эти ключи с RESOURCE_REGEN_STAT и упадёт при их drift.
+const reservedCombatStatKeys = new Set(["enduranceRegen", "manaRegen"]);
+
+export const statGroupSchema = z
+  .object({
+    id: z.enum(["characteristics", "combat", "skills", "talents"]),
+    label: z.string().trim().min(1).max(60),
+    /**
+     * До UIX-516 редактор разрешал до 60 пользовательских строк. Физический
+     * предел 62 оставляет место read-time repair, а refinement ниже не даёт
+     * использовать системный резерв как две дополнительные custom-строки.
+     */
+    rows: z.array(statRowSchema).max(62),
+  })
+  .superRefine((group, context) => {
+    const reservedRows =
+      group.id === "combat"
+        ? new Set(
+            group.rows
+              .filter(
+                (row) =>
+                  row.source === "STAT" && reservedCombatStatKeys.has(row.key),
+              )
+              .map((row) => row.key),
+          ).size
+        : 0;
+    if (group.rows.length <= STAT_GROUP_USER_ROW_LIMIT + reservedRows) return;
+    context.addIssue({
+      code: "custom",
+      path: ["rows"],
+      message:
+        "Группа допускает не более 60 пользовательских строк; ещё два места зарезервированы системным регеном",
+    });
+  });
 
 export const statLayoutSchema = z
   .array(statGroupSchema)

@@ -234,6 +234,35 @@ describe("карточка группы характеристик", () => {
     expect(props.onDeleteRow).toHaveBeenCalledWith("agility");
   });
 
+  it("объясняет нулём отключение системного регена, не запрещая обычное удаление", async () => {
+    const props = renderCard({
+      rows: [
+        { key: "enduranceRegen", label: "Восстановление сил" },
+        { key: "agility", label: "Ловкость" },
+      ],
+      values: { enduranceRegen: 3, agility: 2 },
+    });
+
+    // Системность определяется точным ключом, а не подписью: мастер вправе
+    // переименовать реген, но не должен потерять способ отключить его через 0.
+    const protectedDelete = screen.getByRole("button", {
+      name: "Нельзя удалить «Восстановление сил»: установите значение 0, чтобы отключить восстановление",
+    });
+    expect(protectedDelete).toBeDisabled();
+    expect(protectedDelete).toHaveAttribute(
+      "title",
+      "Системную строку нельзя удалить. Чтобы отключить восстановление, установите значение 0.",
+    );
+
+    const ordinaryDelete = screen.getByRole("button", {
+      name: "Удалить «Ловкость»",
+    });
+    expect(ordinaryDelete).toBeEnabled();
+    await userEvent.click(ordinaryDelete);
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    expect(props.onDeleteRow).toHaveBeenCalledWith("agility");
+  });
+
   it("показывает, что именно держит строку, вместо голого отказа", async () => {
     // Мастеру нужно имя того, что предстоит починить: «удалить нельзя» без
     // списка оставляет его гадать, где искать ссылку.

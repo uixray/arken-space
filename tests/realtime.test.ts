@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import { readdir, readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { eq } from "drizzle-orm";
 import { Server } from "socket.io";
 import { io as createClient, type Socket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -11,6 +12,7 @@ import type {
   ClientToServerEvents,
   CommandAck,
   ServerToClientEvents,
+  StatLayout,
   TokenDto,
 } from "../packages/contracts/src/index.js";
 import * as schema from "../packages/db/src/schema.js";
@@ -462,6 +464,99 @@ afterEach(async () => {
     httpServer.close((error) => (error ? reject(error) : resolve())),
   ).catch(() => undefined);
   await database.close();
+});
+
+describe("stat layout projection", () => {
+  it("repairs legacy regen rows exactly once for GM and player on connect and resync", async () => {
+    const legacyLayout: StatLayout = [
+      {
+        id: "characteristics",
+        label: "Свои характеристики",
+        rows: [{ key: "customLuck", label: "Фарт", source: "STAT" }],
+      },
+    ];
+    const characterId = "30000000-0000-4000-8000-000000000006";
+    const db = drizzle(database, { schema });
+    await db
+      .update(schema.campaigns)
+      .set({ statLayout: legacyLayout })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    await db.insert(schema.characters).values({
+      id: characterId,
+      campaignId: ids.campaign,
+      ownerMembershipId: ids.player,
+      name: "Ллойд",
+      stats: { customLuck: 5, enduranceRegen: 7, manaRegen: 4 },
+    });
+
+    const assertRepaired = (snapshot: SnapshotPayload) => {
+      const regenRows = snapshot.campaign.statLayout
+        .flatMap((group) =>
+          group.rows.map((row) => ({ groupId: group.id, ...row })),
+        )
+        .filter(
+          (row) => row.key === "enduranceRegen" || row.key === "manaRegen",
+        );
+      expect(regenRows).toEqual([
+        {
+          groupId: "combat",
+          key: "enduranceRegen",
+          label: "Реген Выносливости",
+          source: "STAT",
+        },
+        {
+          groupId: "combat",
+          key: "manaRegen",
+          label: "Реген Маны",
+          source: "STAT",
+        },
+      ]);
+      expect(snapshot.campaign.statLayout[0]).toEqual(legacyLayout[0]);
+      expect(
+        snapshot.characters.find((character) => character.id === characterId)
+          ?.stats,
+      ).toMatchObject({ enduranceRegen: 7, manaRegen: 4 });
+    };
+
+    const freshGm = newPlayerClient(gmSessionToken, false);
+    const freshPlayer = newPlayerClient(sessionToken, false);
+    try {
+      const gmInitial = waitForSnapshot(freshGm);
+      const playerInitial = waitForSnapshot(freshPlayer);
+      const connected = [
+        waitForConnection(freshGm),
+        waitForConnection(freshPlayer),
+      ];
+      freshGm.connect();
+      freshPlayer.connect();
+      await Promise.all(connected);
+      const [gmConnected, playerConnected] = await Promise.all([
+        gmInitial,
+        playerInitial,
+      ]);
+      expect(gmConnected.me.role).toBe("GM");
+      expect(playerConnected.me.role).toBe("PLAYER");
+      assertRepaired(gmConnected);
+      assertRepaired(playerConnected);
+
+      const gmResync = waitForSnapshot(freshGm);
+      const playerResync = waitForSnapshot(freshPlayer);
+      freshGm.emit("game:resync", 0);
+      freshPlayer.emit("game:resync", 0);
+      for (const snapshot of await Promise.all([gmResync, playerResync]))
+        assertRepaired(snapshot);
+    } finally {
+      freshGm.disconnect();
+      freshPlayer.disconnect();
+    }
+
+    const [stored] = await db
+      .select({ statLayout: schema.campaigns.statLayout })
+      .from(schema.campaigns)
+      .where(eq(schema.campaigns.id, ids.campaign))
+      .limit(1);
+    expect(stored?.statLayout).toEqual(legacyLayout);
+  });
 });
 
 describe("scene:view lifecycle", () => {
