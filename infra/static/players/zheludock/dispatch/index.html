@@ -12,14 +12,14 @@
     <header class="topbar">
       <a href="../">← Страница Миши</a>
       <div>
-        <span>Смена <strong data-shift>1/5</strong></span
+        <span>Глава I <strong data-shift>1/5</strong></span
         ><span>Репутация <strong data-reputation>5</strong></span
         ><span>Город <strong data-city>10</strong></span>
       </div>
       <button type="button" data-reset>Новая смена</button>
     </header>
     <main class="shell">
-      <section class="map" aria-label="Карта Тристонии">
+      <section class="map" data-mobile-panel="map" aria-label="Карта Тристонии">
         <div class="map__rings" aria-hidden="true"></div>
         <p class="map__label">Тристония · диспетчерский сектор</p>
         <div class="map__markers" data-markers></div>
@@ -27,14 +27,14 @@
           <span>Входящий вызов</span><strong data-signal-title></strong>
         </div>
       </section>
-      <aside class="brief" data-brief aria-live="polite"></aside>
-      <section class="roster" aria-labelledby="roster-title">
+      <aside class="brief" data-brief data-mobile-panel="brief" aria-live="polite"></aside>
+      <section class="roster" data-mobile-panel="team" aria-labelledby="roster-title">
         <div class="section-title">
           <div>
             <span>Доступные специалисты</span>
             <h1 id="roster-title">Команда магов</h1>
           </div>
-          <p>
+          <p data-team-note>
             Выберите до двух магов. Состав влияет на доступные решения и
             последствия.
           </p>
@@ -42,6 +42,11 @@
         <div class="mage-list" data-mage-list></div>
       </section>
     </main>
+    <nav class="mobile-nav" aria-label="Разделы диспетчерской">
+      <button type="button" data-mobile-view="map"><span>01</span>Карта</button>
+      <button type="button" data-mobile-view="team"><span data-team-count>0/2</span>Команда</button>
+      <button type="button" data-mobile-view="brief"><span>03</span>Решение</button>
+    </nav>
     <script type="module" src="./ui.js"></script>
   </body>
 </html>

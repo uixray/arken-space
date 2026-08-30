@@ -41,9 +41,21 @@ function teamStats(state) {
   for (const id of state.selected) {
     const mage = mages.find((item) => item.id === id);
     const fatigue = state.mages[id].fatigue;
+    const levelBonus = Math.floor(state.mages[id].missions / 2);
     for (const key of Object.keys(stats))
-      stats[key] += Math.max(0, mage.stats[key] - Math.floor(fatigue / 2));
+      stats[key] += Math.max(
+        0,
+        mage.stats[key] + levelBonus - Math.floor(fatigue / 2),
+      );
   }
+  if (state.selected.includes("adora") && !state.selected.includes("rem"))
+    for (const key of Object.keys(stats)) stats[key] += 1;
+  if (state.selected.includes("makoto")) stats.mobility += 1;
+  if (
+    state.selected.includes("erkenvald") &&
+    state.missionIndex % 2 === 1
+  )
+    stats.lore = Math.max(0, stats.lore - 2);
   return stats;
 }
 export function forecast(state) {
@@ -63,9 +75,25 @@ export function forecast(state) {
       : { label: "Высокий риск", score: coverage };
 }
 export function dispatchTeam(state) {
+  const mission = currentMission(state);
+  if (
+    state.selected.includes("rem") &&
+    !mission?.requirements.power &&
+    state.selected.length > 1
+  )
+    return {
+      ...state,
+      selected: state.selected.filter((id) => id !== "rem"),
+      notice: "Рэм отказался: «Это задание ниже моего достоинства». Выберите замену.",
+    };
   return !state.selected.length || state.phase !== "briefing"
     ? state
-    : { ...state, phase: "decision", pendingScore: forecast(state).score };
+    : {
+        ...state,
+        phase: "decision",
+        notice: null,
+        pendingScore: forecast(state).score,
+      };
 }
 export function resolveChoice(state, choiceId) {
   const mission = currentMission(state);
@@ -83,7 +111,11 @@ export function resolveChoice(state, choiceId) {
   const delta = outcome === "success" ? 2 : outcome === "mixed" ? 0 : -2;
   const mageState = structuredClone(state.mages);
   for (const id of state.selected) {
-    mageState[id].fatigue += 1 + (choice.fatigue || 0);
+    const memphisRelief = state.selected.includes("memphis") ? 1 : 0;
+    mageState[id].fatigue += Math.max(
+      0,
+      1 + (choice.fatigue || 0) - memphisRelief,
+    );
     mageState[id].trust +=
       (choice.trust || 0) +
       (outcome === "success" ? 1 : outcome === "failure" ? -1 : 0);
@@ -93,7 +125,13 @@ export function resolveChoice(state, choiceId) {
     ...state,
     phase: "result",
     reputation: Math.max(0, state.reputation + delta),
-    city: Math.max(0, state.city + delta + (choice.city || 0)),
+    city: Math.max(
+      0,
+      state.city +
+        delta +
+        (choice.city || 0) -
+        (outcome === "failure" && state.selected.includes("fenser") ? 1 : 0),
+    ),
     mages: mageState,
     log: [
       ...state.log,

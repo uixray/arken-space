@@ -36,6 +36,13 @@ button,
 a {
   font: inherit;
 }
+button,
+a {
+  touch-action: manipulation;
+}
+.mobile-nav {
+  display: none;
+}
 .topbar {
   position: sticky;
   top: 0;
@@ -364,7 +371,7 @@ a {
 }
 .mage-list {
   display: grid;
-  grid-template-columns: repeat(6, minmax(10rem, 1fr));
+  grid-template-columns: repeat(7, minmax(10rem, 1fr));
   gap: var(--space-3);
   overflow-x: auto;
   padding-bottom: var(--space-4);
@@ -401,16 +408,19 @@ a {
   outline: 3px solid color-mix(in oklch, var(--mage) 40%, transparent);
   transform: translateY(-0.35rem);
 }
-.mage__token {
+.mage__portrait {
   display: grid;
-  place-items: center;
-  width: 4.2rem;
-  aspect-ratio: 1;
-  border: 3px solid var(--mage);
-  border-radius: 50%;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 2px solid var(--mage);
   background: oklch(0.18 0.035 220);
-  color: var(--mage);
-  font-size: 2rem;
+}
+.mage__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 30%;
 }
 .mage__school {
   color: var(--mage);
@@ -466,7 +476,7 @@ a {
     gap: var(--space-2);
   }
   .mage-list {
-    grid-template-columns: repeat(6, 12rem);
+    grid-template-columns: repeat(7, 12rem);
   }
 }
 @media (max-width: 520px) {
@@ -497,10 +507,213 @@ a {
     gap: 0.2rem;
   }
   .mage-list {
-    grid-template-columns: repeat(6, 10.5rem);
+    grid-template-columns: repeat(7, 10.5rem);
   }
   .mage {
     min-height: 18rem;
+  }
+}
+@media (max-width: 720px) {
+  body {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+  .topbar {
+    position: sticky;
+    grid-template-columns: 1fr auto;
+    min-height: auto;
+    padding: 0.65rem 0.75rem;
+  }
+  .topbar a,
+  .topbar > button {
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+  }
+  .topbar > button {
+    padding: 0 0.75rem;
+  }
+  .topbar > div {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+  .topbar > div span {
+    min-width: 0;
+    overflow: hidden;
+    display: grid;
+    gap: 0.12rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid oklch(0.44 0.055 216 / 0.7);
+    background: oklch(0.22 0.04 220);
+  }
+  .shell {
+    display: block;
+    width: 100%;
+    margin: 0;
+  }
+  [data-mobile-panel] {
+    display: none;
+  }
+  body[data-mobile-view="map"] [data-mobile-panel="map"],
+  body[data-mobile-view="team"] [data-mobile-panel="team"],
+  body[data-mobile-view="brief"] [data-mobile-panel="brief"] {
+    display: block;
+  }
+  .map {
+    min-height: calc(100svh - 10.5rem);
+    border-width: 0 0 1px;
+  }
+  .map__rings {
+    width: 16rem;
+  }
+  .map__label {
+    top: 1rem;
+  }
+  .marker {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  .marker strong {
+    display: none;
+  }
+  .signal {
+    right: 0.75rem;
+    bottom: 1rem;
+    left: 0.75rem;
+    max-width: none;
+    min-height: 3.5rem;
+  }
+  .brief {
+    min-height: calc(100svh - 10.5rem);
+    border: 0;
+  }
+  .brief > div {
+    min-height: calc(100svh - 10.5rem);
+    padding: 1.25rem 1rem 1.5rem;
+  }
+  .brief h2 {
+    font-size: clamp(2.15rem, 12vw, 3.35rem);
+  }
+  .brief p {
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  .dispatch,
+  .brief button,
+  .complete button {
+    min-height: 3.5rem;
+  }
+  .choices button {
+    min-height: 4.5rem;
+    padding: 0.9rem 1rem;
+  }
+  .roster {
+    min-height: calc(100svh - 10.5rem);
+    padding: 1.25rem 0.75rem 1rem;
+  }
+  .section-title {
+    margin: 0 0 1rem;
+  }
+  .section-title h1 {
+    font-size: 2.5rem;
+  }
+  .section-title p {
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+  .mage-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+    overflow: visible;
+    padding: 0;
+  }
+  .mage {
+    display: grid;
+    grid-template-columns: 3.25rem minmax(0, 1fr);
+    grid-template-areas:
+      "portrait school"
+      "portrait name"
+      "stats stats"
+      "trait trait"
+      "meta meta";
+    gap: 0.25rem 0.75rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 0.85rem;
+  }
+  .mage.is-selected {
+    transform: none;
+  }
+  .mage__portrait {
+    grid-area: portrait;
+    width: 3.25rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+  }
+  .mage__school { grid-area: school; align-self: end; }
+  .mage > strong { grid-area: name; font-size: 1.12rem; }
+  .mage__stats { grid-area: stats; margin-top: 0.4rem; }
+  .mage small { grid-area: trait; }
+  .mage__meta { grid-area: meta; margin-top: 0.3rem; }
+  .mobile-nav {
+    position: fixed;
+    z-index: 50;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 0.35rem 0.4rem calc(0.35rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: oklch(0.16 0.035 220 / 0.98);
+    box-shadow: 0 -0.5rem 1.5rem oklch(0.08 0.02 220 / 0.35);
+  }
+  .mobile-nav button {
+    display: grid;
+    place-items: center;
+    gap: 0.15rem;
+    min-height: 3.6rem;
+    min-width: 0;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 800;
+  }
+  .mobile-nav button span {
+    color: currentColor;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+  }
+  .mobile-nav button.is-active {
+    background: oklch(0.27 0.05 216);
+    color: var(--signal);
+  }
+}
+@media (max-height: 520px) and (orientation: landscape) and (max-width: 900px) {
+  body {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+  .topbar > div {
+    display: none;
+  }
+  .shell,
+  .map,
+  .brief,
+  .roster,
+  .brief > div {
+    min-height: calc(100svh - 8rem);
+  }
+  .map {
+    min-height: calc(100svh - 8rem);
+  }
+  .mobile-nav button {
+    min-height: 3.25rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {
