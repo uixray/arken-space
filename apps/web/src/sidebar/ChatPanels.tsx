@@ -41,7 +41,9 @@ import {
 } from "../activity-filter-menu";
 import type { RollMode } from "../roll-mode";
 import { RollAvatar } from "./RollAvatar";
+import { RollCharacterName } from "./RollCharacterName";
 import { createRollAvatarSource } from "../roll-avatar-source";
+import { createRollCharacterNameSource } from "../roll-character-name";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
@@ -333,6 +335,10 @@ export function ActivityPanel({
 }) {
   const [initiativePending, setInitiativePending] = useState(false);
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
+  const characterNameFor = useMemo(
+    () => createRollCharacterNameSource(snapshot),
+    [snapshot],
+  );
   const [composer, setComposer] = useState("");
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
@@ -803,10 +809,9 @@ export function ActivityPanel({
             >
               <header>
                 <strong>{message.displayName}</strong>
-                {/* UIX-467: убраны две плашки. «Броски» повторяла на каждом
-                 * сообщении то, что и так задано фильтром ленты, а имя
-                 * персонажа у чужого броска вырождалось в слово «Персонаж».
-                 * Личность теперь читается по миниатюре токена слева. */}
+                <RollCharacterName
+                  name={characterNameFor(message.characterId)}
+                />
                 <time>
                   {new Date(occurredAt).toLocaleTimeString([], {
                     hour: "2-digit",
@@ -1314,6 +1319,10 @@ export function ChatPanel({
   );
   const timeline = buildChatTimeline(messages);
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
+  const characterNameFor = useMemo(
+    () => createRollCharacterNameSource(snapshot),
+    [snapshot],
+  );
   const catalogEntryIds = useMemo(
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
@@ -1481,11 +1490,9 @@ export function ChatPanel({
             >
               <header>
                 <strong>{item.message.displayName}</strong>
-                {/* UIX-454: плашка с именем персонажа убрана. У чужого броска
-                 * она вырождалась в слово «Персонаж» — занимала место и не
-                 * сообщала ничего, потому что чужие персонажи игроку не
-                 * приходили. Теперь личность видна портретом слева от броска,
-                 * а имя — в подсказке к нему. */}
+                <RollCharacterName
+                  name={characterNameFor(item.message.characterId)}
+                />
                 <time>
                   {new Date(item.message.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",
