@@ -1782,6 +1782,85 @@ describe("Pool B HTTP boundaries", () => {
     ).toHaveLength(1);
   });
 
+  it("uses default and renamed resource labels with a key fallback", async () => {
+    await db
+      .update(schema.characters)
+      .set({
+        resources: {
+          legacyCharge: { current: 2, maximum: 3 },
+          physicalPower: { current: 7, maximum: 10 },
+        },
+      })
+      .where(eq(schema.characters.id, ids.character));
+    const latestAuditBody = async () => {
+      const [audit] = await db
+        .select({ body: schema.chatMessages.body })
+        .from(schema.chatMessages)
+        .where(
+          and(
+            eq(schema.chatMessages.characterId, ids.character),
+            eq(schema.chatMessages.kind, "SYSTEM"),
+          ),
+        )
+        .orderBy(desc(schema.chatMessages.sequence))
+        .limit(1);
+      return audit?.body;
+    };
+
+    const defaultLabel = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        resources: {
+          legacyCharge: { current: 2, maximum: 3 },
+          physicalPower: { current: 6, maximum: 10 },
+        },
+      },
+    });
+    expect(defaultLabel.statusCode).toBe(200);
+    expect(await latestAuditBody()).toBe(
+      "Hero — ресурсы: Выносливость: 7/10 → 6/10",
+    );
+
+    await db
+      .update(schema.campaigns)
+      .set({
+        statLayout: [
+          {
+            id: "combat",
+            label: "Боевые характеристики",
+            rows: [
+              {
+                key: "physicalPower",
+                label: "Запас сил",
+                source: "RESOURCE",
+              },
+            ],
+          },
+        ],
+      })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const renamedLabelAndFallback = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        resources: {
+          physicalPower: { current: 5, maximum: 10 },
+        },
+      },
+    });
+    expect(renamedLabelAndFallback.statusCode).toBe(200);
+    expect(await latestAuditBody()).toBe(
+      "Hero — ресурсы: legacyCharge: удалён, Запас сил: 6/10 → 5/10",
+    );
+  });
+
   it("applies short and long rests to every recoverable resource", async () => {
     // UIX-425: отдых восстанавливает на величину регена из карточки, поэтому
     // у персонажа теперь есть строки регена. Без них восстанавливать нечего, и
