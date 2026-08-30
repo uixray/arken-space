@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive, noimageindex" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#e62f3d" />
+    <meta
+      name="description"
+      content="Небольшая фан-страница Таисии в образе Леди Баг."
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+    />
+    <title>Таисия — Леди Баг</title>
+    <style>
+      :root {
+        font-family:
+          Inter,
+          ui-rounded,
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        color: #24171a;
+        background: #e62f3d;
+        font-synthesis: none;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        min-height: 100%;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: clamp(18px, 4vw, 48px);
+        overflow-x: hidden;
+        background:
+          radial-gradient(circle at 12% 18%, #1c1719 0 10px, transparent 11px),
+          radial-gradient(circle at 87% 15%, #1c1719 0 18px, transparent 19px),
+          radial-gradient(circle at 78% 84%, #1c1719 0 12px, transparent 13px),
+          radial-gradient(circle at 18% 83%, #1c1719 0 23px, transparent 24px),
+          linear-gradient(135deg, #f04b56 0%, #d91f32 100%);
+      }
+
+      .skip-link {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 2;
+        padding: 10px 14px;
+        border-radius: 999px;
+        color: #fff;
+        background: #171214;
+        transform: translateY(-160%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .page-shell {
+        width: min(760px, 100%);
+      }
+
+      main {
+        width: 100%;
+        padding: clamp(24px, 6vw, 64px);
+        border: 3px solid #171214;
+        border-radius: clamp(28px, 5vw, 52px);
+        background: rgba(255, 249, 244, 0.97);
+        box-shadow:
+          10px 12px 0 #171214,
+          0 28px 80px rgba(69, 6, 16, 0.28);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(150px, 210px) 1fr;
+        gap: clamp(24px, 5vw, 52px);
+        align-items: center;
+      }
+
+      .emblem {
+        position: relative;
+        aspect-ratio: 1;
+        border: 3px solid #171214;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 28% 24%, #171214 0 9%, transparent 10%),
+          radial-gradient(circle at 74% 31%, #171214 0 12%, transparent 13%),
+          radial-gradient(circle at 64% 73%, #171214 0 10%, transparent 11%),
+          radial-gradient(circle at 25% 68%, #171214 0 13%, transparent 14%),
+          #f03d4d;
+        box-shadow: 7px 8px 0 #171214;
+      }
+
+      .emblem::before {
+        content: "";
+        position: absolute;
+        inset: 35% 14% 38%;
+        border-radius: 45% 45% 52% 52%;
+        background: #171214;
+        transform: rotate(-3deg);
+      }
+
+      .emblem::after {
+        content: "";
+        position: absolute;
+        inset: 41% 25% 45%;
+        border-radius: 999px;
+        background:
+          radial-gradient(ellipse at 22% 50%, #fff 0 22%, transparent 24%),
+          radial-gradient(ellipse at 78% 50%, #fff 0 22%, transparent 24%);
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #b1172a;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(3rem, 10vw, 6.4rem);
+        line-height: 0.86;
+        letter-spacing: -0.07em;
+      }
+
+      h1 span {
+        display: block;
+        margin-top: 16px;
+        font-size: clamp(1.25rem, 3.8vw, 2rem);
+        line-height: 1;
+        letter-spacing: -0.03em;
+        color: #e12438;
+      }
+
+      .intro {
+        max-width: 40rem;
+        margin: 24px 0 0;
+        font-size: clamp(1rem, 2.2vw, 1.2rem);
+        line-height: 1.6;
+        color: #60474d;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin: 28px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .tags li {
+        padding: 9px 13px;
+        border: 2px solid #171214;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 750;
+        background: #fff;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-top: clamp(34px, 6vw, 54px);
+        padding-top: 24px;
+        border-top: 2px dashed rgba(36, 23, 26, 0.3);
+      }
+
+      .status {
+        margin: 0;
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: #70585d;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        min-height: 48px;
+        padding: 0 20px;
+        border: 2px solid #171214;
+        border-radius: 999px;
+        color: #fff;
+        background: #171214;
+        font-weight: 800;
+        text-decoration: none;
+        box-shadow: 4px 5px 0 #e12438;
+      }
+
+      .button:focus-visible,
+      .button:hover {
+        color: #171214;
+        background: #fff;
+        outline: 3px solid #e12438;
+        outline-offset: 4px;
+      }
+
+      footer {
+        display: table;
+        margin: 24px auto 0;
+        padding: 7px 12px;
+        border-radius: 999px;
+        text-align: center;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: #24171a;
+        background: rgba(255, 249, 244, 0.94);
+      }
+
+      @media (max-width: 620px) {
+        main {
+          box-shadow: 6px 7px 0 #171214;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .emblem {
+          width: min(150px, 48vw);
+        }
+
+        .actions {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .button {
+          justify-content: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">К содержанию</a>
+    <div class="page-shell">
+      <main id="content">
+        <section class="hero" aria-labelledby="page-title">
+          <div class="emblem" aria-hidden="true"></div>
+          <div>
+            <p class="eyebrow">Маленькая героиня</p>
+            <h1 id="page-title">Таисия <span>в образе Леди Баг</span></h1>
+            <p class="intro">
+              Здесь скоро появятся добрые миссии, загадки и коллекция
+              супергеройских побед.
+            </p>
+            <ul class="tags" aria-label="Что появится на странице">
+              <li>Секретные миссии</li>
+              <li>Награды за смелость</li>
+              <li>Любимые истории</li>
+            </ul>
+          </div>
+        </section>
+        <div class="actions">
+          <p class="status">Страница готова к новым приключениям.</p>
+          <a class="button" href="https://arken-khar.space">В Аркен-Хар →</a>
+        </div>
+      </main>
+      <footer>Неофициальная фан-страница · без рекламы и отслеживания</footer>
+    </div>
+  </body>
+</html>

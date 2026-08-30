@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive, noimageindex" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#111513" />
+    <meta
+      name="description"
+      content="Небольшая фан-страница Льва в образе Супер-Кота."
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+    />
+    <title>Лев — Супер-Кот</title>
+    <style>
+      :root {
+        font-family:
+          Inter,
+          ui-rounded,
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        color: #f4f8ed;
+        background: #111513;
+        font-synthesis: none;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        min-height: 100%;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: clamp(18px, 4vw, 48px);
+        overflow-x: hidden;
+        background:
+          radial-gradient(
+            circle at 8% 20%,
+            rgba(168, 235, 78, 0.16),
+            transparent 24%
+          ),
+          radial-gradient(
+            circle at 88% 78%,
+            rgba(168, 235, 78, 0.12),
+            transparent 28%
+          ),
+          repeating-linear-gradient(
+            116deg,
+            transparent 0 58px,
+            rgba(255, 255, 255, 0.025) 59px 60px
+          ),
+          #111513;
+      }
+
+      .skip-link {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 2;
+        padding: 10px 14px;
+        border-radius: 999px;
+        color: #10140f;
+        background: #b7f255;
+        transform: translateY(-160%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .page-shell {
+        width: min(760px, 100%);
+      }
+
+      main {
+        position: relative;
+        width: 100%;
+        padding: clamp(24px, 6vw, 64px);
+        border: 2px solid rgba(183, 242, 85, 0.65);
+        border-radius: clamp(28px, 5vw, 52px);
+        background: rgba(24, 30, 27, 0.96);
+        box-shadow:
+          10px 12px 0 #b7f255,
+          0 28px 90px rgba(0, 0, 0, 0.55);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(150px, 210px) 1fr;
+        gap: clamp(24px, 5vw, 52px);
+        align-items: center;
+      }
+
+      .emblem {
+        position: relative;
+        isolation: isolate;
+        aspect-ratio: 1;
+        border: 3px solid #b7f255;
+        border-radius: 46% 46% 52% 52%;
+        background: #0a0d0b;
+        box-shadow: 7px 8px 0 rgba(183, 242, 85, 0.82);
+      }
+
+      .ear {
+        position: absolute;
+        top: -24px;
+        z-index: -1;
+        width: 72px;
+        height: 66px;
+        background: #b7f255;
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+      }
+
+      .ear::after {
+        content: "";
+        position: absolute;
+        inset: 6px 7px 0;
+        background: #0a0d0b;
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+      }
+
+      .ear--left {
+        left: 12px;
+        transform: rotate(-12deg);
+      }
+
+      .ear--right {
+        right: 12px;
+        transform: rotate(12deg);
+      }
+
+      .emblem::before,
+      .emblem::after {
+        content: "";
+        position: absolute;
+        top: 39%;
+        width: 31%;
+        height: 14%;
+        border: 3px solid #b7f255;
+        border-radius: 70% 30% 70% 30%;
+        background: #dfff9f;
+        z-index: 1;
+      }
+
+      .emblem::before {
+        left: 14%;
+        transform: rotate(8deg);
+      }
+
+      .emblem::after {
+        right: 14%;
+        transform: rotate(-8deg) scaleX(-1);
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #b7f255;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(3rem, 10vw, 6.4rem);
+        line-height: 0.86;
+        letter-spacing: -0.07em;
+      }
+
+      h1 span {
+        display: block;
+        margin-top: 16px;
+        font-size: clamp(1.25rem, 3.8vw, 2rem);
+        line-height: 1;
+        letter-spacing: -0.03em;
+        color: #b7f255;
+      }
+
+      .intro {
+        max-width: 40rem;
+        margin: 24px 0 0;
+        font-size: clamp(1rem, 2.2vw, 1.2rem);
+        line-height: 1.6;
+        color: #c6d0c4;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin: 28px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .tags li {
+        padding: 9px 13px;
+        border: 1px solid rgba(183, 242, 85, 0.65);
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 750;
+        color: #e8f9cf;
+        background: rgba(183, 242, 85, 0.08);
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-top: clamp(34px, 6vw, 54px);
+        padding-top: 24px;
+        border-top: 1px dashed rgba(183, 242, 85, 0.35);
+      }
+
+      .status {
+        margin: 0;
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: #b8c4b5;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        min-height: 48px;
+        padding: 0 20px;
+        border: 2px solid #b7f255;
+        border-radius: 999px;
+        color: #10140f;
+        background: #b7f255;
+        font-weight: 800;
+        text-decoration: none;
+        box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.82);
+      }
+
+      .button:focus-visible,
+      .button:hover {
+        color: #f4f8ed;
+        background: #151a17;
+        outline: 3px solid #b7f255;
+        outline-offset: 4px;
+      }
+
+      footer {
+        margin-top: 24px;
+        text-align: center;
+        font-size: 0.76rem;
+        color: rgba(244, 248, 237, 0.68);
+      }
+
+      @media (max-width: 620px) {
+        main {
+          box-shadow: 6px 7px 0 #b7f255;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .emblem {
+          width: min(150px, 48vw);
+        }
+
+        .actions {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .button {
+          justify-content: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">К содержанию</a>
+    <div class="page-shell">
+      <main id="content">
+        <section class="hero" aria-labelledby="page-title">
+          <div class="emblem" aria-hidden="true">
+            <i class="ear ear--left"></i>
+            <i class="ear ear--right"></i>
+          </div>
+          <div>
+            <p class="eyebrow">Ночной супергерой</p>
+            <h1 id="page-title">Лев <span>в образе Супер-Кота</span></h1>
+            <p class="intro">
+              Здесь скоро появятся ночные миссии, ловкие испытания и коллекция
+              кошачьих суперсил.
+            </p>
+            <ul class="tags" aria-label="Что появится на странице">
+              <li>Ночные миссии</li>
+              <li>Ловкие испытания</li>
+              <li>Суперсилы</li>
+            </ul>
+          </div>
+        </section>
+        <div class="actions">
+          <p class="status">Страница готова к новым приключениям.</p>
+          <a class="button" href="https://arken-khar.space">В Аркен-Хар →</a>
+        </div>
+      </main>
+      <footer>Неофициальная фан-страница · без рекламы и отслеживания</footer>
+    </div>
+  </body>
+</html>
