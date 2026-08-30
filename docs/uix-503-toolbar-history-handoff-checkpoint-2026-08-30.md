@@ -26,6 +26,7 @@
 - Перенесённый коммит Claude: локальный `a85d295` (исходный `1917328`).
 - Текущая ветка: `codex/uix-503-history-target-order`.
 - Исправления Codex: `ebe2e72`.
+- Актуализация checkpoint: `b528935`; replacement PR: #51.
 
 ## Изменённые файлы
 
@@ -35,6 +36,7 @@
 - `apps/web/src/canvas-history-label.test.ts`
 - `apps/web/src/toolbar-overflow.test.ts`
 - `tests/pool-b-http.test.ts`
+- `tests/e2e/canvas-token-regressions.spec.ts`
 - `tests/e2e/toolbar-overflow-history.spec.ts`
 - `docs/plans/uix-503-toolbar-history-handoff.md`
 - этот checkpoint
@@ -71,6 +73,20 @@
   PGlite `beforeEach` timeout. Два затронутых файла отдельно прошли 99/99;
   следующий повтор дал такие же инфраструктурные timeout уже в других файлах.
   Поэтому штатный полный test-гейт должен подтвердить GitHub CI.
+- Первый CI replacement PR: `checks` и `multiplayer` зелёные; `e2e` уронил
+  прежний shortcut-тест. Тест принимал `commands.push` в route handler за
+  завершённый POST и отправлял Ctrl+Shift+Z в намеренное окно между сменой
+  `refreshEpoch` и новым авторитетным GET.
+- Shortcut-mock переведён на актуальный контракт `nextDirection`: до Undo
+  доступен только Undo, после ответа — только Redo. Тест ждёт отличимую новую
+  подпись, а не устаревшее состояние.
+- Диверсия shortcut-refetch: после Undo оставлен неверный маркер `undo` вместо
+  `redo`. Упал ровно этот Chromium-тест на ожидании кнопки «Повторить: токен
+  перемещён — Selected token»; после восстановления маркера целевой прогон
+  зелёный в Chromium и Firefox (2/2).
+- После изменения теста `format:check`, `lint` (те же три существующих warning)
+  и `typecheck` зелёные. Первый `format:check` штатно поймал
+  неотформатированный файл; после `prettier --write` полный повтор зелёный.
 
 ## Блокеры
 
@@ -79,10 +95,10 @@
   локального stale socket. Это не зелёный гейт; multiplayer должен пройти в CI
   replacement PR.
 - Финальные полные `test` и `e2e` также остаются CI-гейтами по причинам выше;
-  PR нельзя считать готовым до их зелёного результата.
+  PR нельзя считать готовым до повторного зелёного результата.
 
 ## Следующее действие
 
-Открыть replacement PR и дождаться зелёных GitHub CI, включая `e2e` и
-`multiplayer`; после этого перевести UIX-503 в In Review. PR не мержить без
+Закоммитить shortcut-test fix, отправить его в PR #51 и дождаться повторно
+зелёных GitHub CI; после этого перевести UIX-503 в In Review. PR не мержить без
 решения пользователя.
