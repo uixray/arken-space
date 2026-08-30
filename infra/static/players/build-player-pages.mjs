@@ -144,7 +144,7 @@ function render(player) {
             ${player.facts.map((fact) => `<span>${escape(fact)}</span>`).join("")}
           </div>
           <div class="hero__actions">
-            <a class="button button--primary" href="https://arken-khar.space">Войти в игру</a>
+            <a class="button button--primary" href="${escape(player.primaryHref || "https://arken-khar.space")}">${escape(player.primaryLabel || "Войти в игру")}</a>
             <a class="button button--quiet" href="#story">Смотреть страницу</a>
           </div>
         </div>
@@ -158,7 +158,7 @@ function render(player) {
           <p class="eyebrow">${escape(player.feature.kicker)}</p>
           <h2 id="feature-title">${escape(player.feature.title)}</h2>
           <p>${escape(player.feature.text)}</p>
-          ${documents.length ? `<a class="text-action" href="#source-library-title">Открыть полный документ <span aria-hidden="true">↓</span></a>` : `<button class="text-action" type="button" data-feature-toggle aria-expanded="false">${escape(player.feature.label)} <span aria-hidden="true">↗</span></button>`}
+          ${documents.length ? `<a class="text-action" href="#source-library-title">Открыть полный документ <span aria-hidden="true">↓</span></a>` : player.primaryHref ? `<a class="text-action" href="${escape(player.primaryHref)}">${escape(player.feature.label)} <span aria-hidden="true">↗</span></a>` : `<button class="text-action" type="button" data-feature-toggle aria-expanded="false">${escape(player.feature.label)} <span aria-hidden="true">↗</span></button>`}
         </div>
         ${combatStyle}
       </section>
