@@ -9,313 +9,1138 @@
     <meta name="theme-color" content="#111513" />
     <meta
       name="description"
-      content="Небольшая фан-страница Льва в образе Супер-Кота."
+      content="Фан-страница Льва с авторским ночным котом и мини-игрой."
     />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; media-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     />
-    <title>Лев — Супер-Кот</title>
+    <title>Лев — ночной супер-кот</title>
     <style>
       :root {
-        font-family:
-          Inter,
-          ui-rounded,
-          "Segoe UI",
-          system-ui,
-          -apple-system,
-          sans-serif;
-        color: #f4f8ed;
-        background: #111513;
-        font-synthesis: none;
+        --night: #101735;
+        --deep: #090e24;
+        --paper: #f7f1cf;
+        --moon: #ffd968;
+        --mint: #8df3d6;
+        --coral: #ff7f77;
+        --violet: #9d8cff;
+        --soft-line: rgba(247, 241, 207, 0.22);
       }
 
-      * {
+      *,
+      *::before,
+      *::after {
         box-sizing: border-box;
       }
 
-      html {
-        min-width: 320px;
-        min-height: 100%;
-      }
-
       body {
+        display: block;
         min-height: 100vh;
         margin: 0;
-        display: grid;
-        place-items: center;
-        padding: clamp(18px, 4vw, 48px);
-        overflow-x: hidden;
+        padding: 0;
+        color: var(--paper);
         background:
           radial-gradient(
-            circle at 8% 20%,
-            rgba(168, 235, 78, 0.16),
-            transparent 24%
+            circle at 78% 8%,
+            rgba(157, 140, 255, 0.2),
+            transparent 20rem
           ),
-          radial-gradient(
-            circle at 88% 78%,
-            rgba(168, 235, 78, 0.12),
-            transparent 28%
-          ),
-          repeating-linear-gradient(
-            116deg,
-            transparent 0 58px,
-            rgba(255, 255, 255, 0.025) 59px 60px
-          ),
-          #111513;
+          linear-gradient(180deg, #101735 0%, #17204b 48%, #0a1028 100%);
+        font-family: "Trebuchet MS", Verdana, sans-serif;
+      }
+
+      button,
+      a {
+        font: inherit;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button {
+        touch-action: manipulation;
       }
 
       .skip-link {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        z-index: 2;
-        padding: 10px 14px;
-        border-radius: 999px;
-        color: #10140f;
-        background: #b7f255;
-        transform: translateY(-160%);
+        top: 12px;
+        left: 12px;
+        z-index: 20;
+        padding: 12px 16px;
+        color: var(--deep);
+        background: var(--moon);
+        font-weight: 900;
       }
 
-      .skip-link:focus {
-        transform: translateY(0);
+      .site-header,
+      main,
+      .site-footer {
+        width: min(calc(100% - 32px), 68rem);
+        margin-inline: auto;
       }
 
-      .page-shell {
-        width: min(760px, 100%);
+      .site-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 64px;
+        padding-block: 12px;
+      }
+
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--paper);
+        font-size: 0.76rem;
+        font-weight: 900;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+
+      .wordmark::before {
+        content: "";
+        width: 13px;
+        height: 13px;
+        border: 2px solid var(--mint);
+        transform: rotate(45deg);
+      }
+
+      .header-note {
+        margin: 0;
+        color: #d7d7f4;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-align: right;
       }
 
       main {
-        position: relative;
-        width: 100%;
-        padding: clamp(24px, 6vw, 64px);
-        border: 2px solid rgba(183, 242, 85, 0.65);
-        border-radius: clamp(28px, 5vw, 52px);
-        background: rgba(24, 30, 27, 0.96);
-        box-shadow:
-          10px 12px 0 #b7f255,
-          0 28px 90px rgba(0, 0, 0, 0.55);
+        display: grid;
+        gap: 64px;
+        padding: 16px 0 64px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
       }
 
       .hero {
         display: grid;
-        grid-template-columns: minmax(150px, 210px) 1fr;
-        gap: clamp(24px, 5vw, 52px);
+        grid-template-columns: minmax(0, 1fr);
+        gap: 32px;
         align-items: center;
+        min-width: 0;
+        padding-top: 12px;
       }
 
-      .emblem {
+      .hero-art {
         position: relative;
         isolation: isolate;
+        width: min(100%, 24rem);
+        aspect-ratio: 1 / 0.88;
+        margin-inline: auto;
+      }
+
+      .moon-disc {
+        position: absolute;
+        top: 2%;
+        right: 1%;
+        width: 78%;
         aspect-ratio: 1;
-        border: 3px solid #b7f255;
+        border-radius: 50%;
+        background: var(--moon);
+        box-shadow: 0 0 0 10px rgba(255, 217, 104, 0.1);
+      }
+
+      .moon-disc::before,
+      .moon-disc::after {
+        content: "";
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(16, 23, 53, 0.1);
+      }
+
+      .moon-disc::before {
+        top: 18%;
+        left: 20%;
+        width: 17%;
+        aspect-ratio: 1;
+      }
+
+      .moon-disc::after {
+        right: 18%;
+        bottom: 24%;
+        width: 25%;
+        aspect-ratio: 1;
+      }
+
+      .orbit {
+        position: absolute;
+        inset: 9% 10% auto auto;
+        width: 62%;
+        aspect-ratio: 1;
+        border: 2px dashed rgba(16, 23, 53, 0.35);
+        border-radius: 50%;
+        transform: rotate(-16deg);
+      }
+
+      .orbit::after {
+        content: "✦";
+        position: absolute;
+        right: 0;
+        bottom: 12%;
+        color: var(--coral);
+        font-size: 1.8rem;
+        transform: rotate(16deg);
+      }
+
+      .cat-emblem {
+        position: absolute;
+        left: 2%;
+        bottom: 0;
+        width: 72%;
+        aspect-ratio: 0.9;
+        filter: drop-shadow(9px 12px 0 rgba(9, 14, 36, 0.42));
+      }
+
+      .cat-head {
+        position: absolute;
+        inset: 22% 4% 6%;
+        border: 3px solid var(--mint);
         border-radius: 46% 46% 52% 52%;
-        background: #0a0d0b;
-        box-shadow: 7px 8px 0 rgba(183, 242, 85, 0.82);
+        background: var(--deep);
+        transform: rotate(-5deg);
       }
 
-      .ear {
+      .cat-ear {
         position: absolute;
-        top: -24px;
-        z-index: -1;
-        width: 72px;
-        height: 66px;
-        background: #b7f255;
+        top: -29%;
+        width: 42%;
+        height: 44%;
+        border: 3px solid var(--mint);
+        background: var(--deep);
         clip-path: polygon(50% 0, 100% 100%, 0 100%);
       }
 
-      .ear::after {
+      .cat-ear::after {
         content: "";
         position: absolute;
-        inset: 6px 7px 0;
-        background: #0a0d0b;
+        inset: 22% 26% 10%;
+        background: var(--violet);
         clip-path: polygon(50% 0, 100% 100%, 0 100%);
       }
 
-      .ear--left {
-        left: 12px;
-        transform: rotate(-12deg);
+      .cat-ear--left {
+        left: -2%;
+        transform: rotate(-13deg);
       }
 
-      .ear--right {
-        right: 12px;
-        transform: rotate(12deg);
+      .cat-ear--right {
+        right: -2%;
+        transform: rotate(13deg);
       }
 
-      .emblem::before,
-      .emblem::after {
-        content: "";
+      .cat-eye {
         position: absolute;
-        top: 39%;
-        width: 31%;
+        top: 38%;
+        width: 27%;
         height: 14%;
-        border: 3px solid #b7f255;
-        border-radius: 70% 30% 70% 30%;
-        background: #dfff9f;
-        z-index: 1;
+        border-radius: 80% 25% 80% 25%;
+        background: var(--moon);
+        box-shadow: inset 0 0 0 3px rgba(16, 23, 53, 0.22);
       }
 
-      .emblem::before {
+      .cat-eye::after {
+        content: "";
+        position: absolute;
+        top: 10%;
+        left: 46%;
+        width: 3px;
+        height: 80%;
+        border-radius: 999px;
+        background: var(--deep);
+      }
+
+      .cat-eye--left {
         left: 14%;
         transform: rotate(8deg);
       }
 
-      .emblem::after {
+      .cat-eye--right {
         right: 14%;
         transform: rotate(-8deg) scaleX(-1);
       }
 
+      .cat-nose {
+        position: absolute;
+        top: 60%;
+        left: 50%;
+        width: 11%;
+        aspect-ratio: 1.25;
+        border-radius: 55% 55% 70% 70%;
+        background: var(--coral);
+        transform: translateX(-50%);
+      }
+
+      .cat-whisker {
+        position: absolute;
+        top: 65%;
+        width: 34%;
+        height: 2px;
+        background: var(--mint);
+      }
+
+      .cat-whisker::after {
+        content: "";
+        position: absolute;
+        top: 10px;
+        width: 90%;
+        height: 2px;
+        background: var(--mint);
+      }
+
+      .cat-whisker--left {
+        left: -8%;
+        transform: rotate(5deg);
+      }
+
+      .cat-whisker--right {
+        right: -8%;
+        transform: rotate(-5deg);
+      }
+
+      .constellation {
+        position: absolute;
+        top: 18%;
+        left: 45%;
+        width: 7px;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: var(--violet);
+        box-shadow:
+          28px 12px 0 var(--violet),
+          45px 42px 0 var(--violet),
+          17px 58px 0 var(--violet);
+      }
+
+      .constellation::before {
+        content: "";
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        width: 55px;
+        height: 62px;
+        border-top: 2px solid rgba(157, 140, 255, 0.72);
+        border-right: 2px solid rgba(157, 140, 255, 0.72);
+        transform: skewY(28deg) rotate(8deg);
+      }
+
+      .hero-copy {
+        min-width: 0;
+      }
+
       .eyebrow {
-        margin: 0 0 12px;
-        font-size: 0.78rem;
-        font-weight: 800;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: #b7f255;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 16px;
+        padding: 8px 12px;
+        border: 1px solid var(--mint);
+        color: var(--mint);
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 8px;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: var(--coral);
+        box-shadow: 0 0 0 4px rgba(255, 127, 119, 0.18);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        overflow-wrap: break-word;
+      }
+
+      h1,
+      h2 {
+        font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
       }
 
       h1 {
+        max-width: 10ch;
         margin: 0;
-        font-size: clamp(3rem, 10vw, 6.4rem);
-        line-height: 0.86;
+        color: var(--paper);
+        font-size: clamp(3.15rem, 17vw, 6.6rem);
+        line-height: 0.82;
         letter-spacing: -0.07em;
       }
 
       h1 span {
         display: block;
         margin-top: 16px;
-        font-size: clamp(1.25rem, 3.8vw, 2rem);
-        line-height: 1;
-        letter-spacing: -0.03em;
-        color: #b7f255;
+        color: var(--moon);
+        font-size: 0.35em;
+        line-height: 1.02;
+        letter-spacing: -0.035em;
       }
 
-      .intro {
-        max-width: 40rem;
+      .hero-intro {
+        max-width: 34rem;
         margin: 24px 0 0;
-        font-size: clamp(1rem, 2.2vw, 1.2rem);
-        line-height: 1.6;
-        color: #c6d0c4;
+        color: #deddf6;
+        font-size: clamp(1rem, 4.4vw, 1.2rem);
+        line-height: 1.62;
       }
 
-      .tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 9px;
-        margin: 28px 0 0;
+      .hero-note {
+        display: inline-block;
+        margin: 16px 0 0;
+        color: #bdbbe2;
+        font-size: 0.78rem;
+        line-height: 1.5;
+      }
+
+      .section-heading {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+
+      .kicker {
+        margin: 0;
+        color: var(--mint);
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h2 {
+        max-width: 16ch;
+        margin: 0;
+        color: var(--paper);
+        font-size: clamp(2rem, 9vw, 3.5rem);
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+      }
+
+      .section-lede {
+        max-width: 58ch;
+        margin: 0;
+        color: #c9c8e8;
+        line-height: 1.58;
+      }
+
+      .profile {
+        display: grid;
+        gap: 24px;
+      }
+
+      .identity-card {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 16px;
+        align-items: center;
+        min-width: 0;
+        padding: 24px;
+        border: 2px solid var(--moon);
+        border-radius: 28px 10px 28px 10px;
+        color: var(--deep);
+        background: var(--moon);
+        box-shadow: 8px 9px 0 var(--coral);
+        transform: rotate(-1deg);
+      }
+
+      .identity-mark {
+        display: grid;
+        place-items: center;
+        width: 64px;
+        aspect-ratio: 1;
+        border: 3px solid var(--deep);
+        border-radius: 50%;
+        background: var(--paper);
+        font-size: 1.5rem;
+        font-weight: 900;
+      }
+
+      .identity-label,
+      .identity-role {
+        margin: 0;
+      }
+
+      .identity-label {
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .identity-name {
+        margin: 4px 0 0;
+        font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+        font-size: clamp(1.75rem, 9vw, 2.8rem);
+        line-height: 0.95;
+        letter-spacing: -0.05em;
+      }
+
+      .identity-role {
+        margin-top: 8px;
+        font-size: 0.88rem;
+        font-weight: 800;
+      }
+
+      .powers {
+        display: grid;
+        gap: 12px;
+        margin: 0;
         padding: 0;
         list-style: none;
+        counter-reset: power;
       }
 
-      .tags li {
-        padding: 9px 13px;
-        border: 1px solid rgba(183, 242, 85, 0.65);
-        border-radius: 999px;
-        font-size: 0.82rem;
-        font-weight: 750;
-        color: #e8f9cf;
-        background: rgba(183, 242, 85, 0.08);
+      .power {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        padding-block: 16px;
+        border-bottom: 1px solid var(--soft-line);
+        counter-increment: power;
       }
 
-      .actions {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 18px;
-        margin-top: clamp(34px, 6vw, 54px);
-        padding-top: 24px;
-        border-top: 1px dashed rgba(183, 242, 85, 0.35);
+      .power::before {
+        content: "0" counter(power);
+        display: grid;
+        place-items: center;
+        width: 42px;
+        aspect-ratio: 1;
+        border: 1px solid var(--violet);
+        border-radius: 50%;
+        color: var(--violet);
+        font-weight: 900;
       }
 
-      .status {
+      .power:last-child {
+        border-bottom: 0;
+      }
+
+      .power h3,
+      .power p {
         margin: 0;
-        font-size: 0.88rem;
-        font-weight: 700;
-        color: #b8c4b5;
       }
 
-      .button {
-        display: inline-flex;
-        align-items: center;
-        min-height: 48px;
-        padding: 0 20px;
-        border: 2px solid #b7f255;
-        border-radius: 999px;
-        color: #10140f;
-        background: #b7f255;
+      .power h3 {
+        color: var(--paper);
+        font-size: 1.08rem;
+      }
+
+      .power p {
+        margin-top: 4px;
+        color: #c9c8e8;
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      .game-section {
+        min-width: 0;
+        padding: 24px 16px 16px;
+        border: 2px solid var(--mint);
+        border-radius: 34px 12px 34px 12px;
+        background: #0b112a;
+        box-shadow: 8px 10px 0 rgba(141, 243, 214, 0.24);
+      }
+
+      .scoreboard {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .score-chip {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+        padding: 12px;
+        border: 1px solid rgba(247, 241, 207, 0.2);
+        border-radius: 14px;
+        background: #151d43;
+      }
+
+      .score-chip span {
+        color: #bdbbe2;
+        font-size: 0.68rem;
         font-weight: 800;
-        text-decoration: none;
-        box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.82);
+        text-transform: uppercase;
       }
 
-      .button:focus-visible,
-      .button:hover {
-        color: #f4f8ed;
-        background: #151a17;
-        outline: 3px solid #b7f255;
+      .score-chip strong {
+        color: var(--moon);
+        font-size: 1.5rem;
+        line-height: 1;
+      }
+
+      .game-surface {
+        position: relative;
+        width: 100%;
+        max-width: 720px;
+        margin-inline: auto;
+        min-width: 0;
+        overflow: hidden;
+        border: 2px solid rgba(247, 241, 207, 0.34);
+        border-radius: 20px 8px 20px 8px;
+        background: #11183a;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      .game-surface:focus-visible {
+        outline: 4px solid var(--moon);
         outline-offset: 4px;
       }
 
-      footer {
-        margin-top: 24px;
-        text-align: center;
-        font-size: 0.76rem;
-        color: rgba(244, 248, 237, 0.68);
+      #runner-canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 18 / 11;
       }
 
-      @media (max-width: 620px) {
+      .game-label {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        margin: 0;
+        padding: 6px 9px;
+        border-radius: 999px;
+        color: var(--deep);
+        background: var(--mint);
+        font-size: 0.64rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        pointer-events: none;
+      }
+
+      .game-controls {
+        display: grid;
+        width: 100%;
+        max-width: 720px;
+        gap: 12px;
+        margin: 16px auto 0;
+      }
+
+      .game-button {
+        width: 100%;
+        min-height: 58px;
+        border: 2px solid var(--moon);
+        border-radius: 18px 6px 18px 6px;
+        color: var(--deep);
+        background: var(--moon);
+        font-size: 1rem;
+        font-weight: 900;
+        box-shadow: 5px 6px 0 var(--coral);
+        cursor: pointer;
+      }
+
+      .game-button--jump {
+        min-height: 76px;
+        border-color: var(--mint);
+        background: var(--mint);
+        font-size: clamp(1.25rem, 7vw, 1.75rem);
+        box-shadow: 5px 6px 0 var(--violet);
+      }
+
+      .game-button:hover,
+      .game-button:focus-visible {
+        outline: 3px solid var(--paper);
+        outline-offset: 4px;
+        transform: translate(-1px, -1px);
+      }
+
+      .game-button:active {
+        box-shadow: 2px 3px 0 var(--coral);
+        transform: translate(3px, 3px);
+      }
+
+      .game-button--jump:active {
+        box-shadow: 2px 3px 0 var(--violet);
+      }
+
+      .game-help,
+      .game-status {
+        margin: 0;
+        text-align: center;
+      }
+
+      .game-help {
+        color: #bdbbe2;
+        font-size: 0.78rem;
+        line-height: 1.45;
+      }
+
+      .game-status {
+        min-height: 2.8em;
+        color: var(--paper);
+        font-size: 0.88rem;
+        font-weight: 800;
+        line-height: 1.4;
+      }
+
+      .missions-track {
+        display: grid;
+        gap: 12px;
+      }
+
+      .mission {
+        position: relative;
+        min-width: 0;
+        padding: 24px;
+        overflow: hidden;
+        border-radius: 26px 8px 26px 8px;
+        color: var(--deep);
+      }
+
+      .mission::after {
+        position: absolute;
+        right: -8px;
+        bottom: -28px;
+        color: rgba(9, 14, 36, 0.13);
+        font-size: 6rem;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .mission--mint {
+        background: var(--mint);
+        transform: rotate(0.8deg);
+      }
+
+      .mission--mint::after {
+        content: "✦";
+      }
+
+      .mission--coral {
+        background: var(--coral);
+        transform: rotate(-0.7deg);
+      }
+
+      .mission--coral::after {
+        content: "◒";
+      }
+
+      .mission--violet {
+        color: var(--paper);
+        background: var(--violet);
+        transform: rotate(0.5deg);
+      }
+
+      .mission--violet::after {
+        content: "⌁";
+      }
+
+      .mission-number,
+      .mission h3,
+      .mission p {
+        position: relative;
+        z-index: 1;
+        margin: 0;
+      }
+
+      .mission-number {
+        font-size: 0.66rem;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .mission h3 {
+        margin-top: 16px;
+        font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+        font-size: 1.45rem;
+        line-height: 1;
+        letter-spacing: -0.035em;
+      }
+
+      .mission p {
+        max-width: 30ch;
+        margin-top: 8px;
+        font-size: 0.88rem;
+        line-height: 1.5;
+      }
+
+      .return-panel {
+        display: grid;
+        gap: 16px;
+        align-items: center;
+        padding: 24px;
+        border: 2px dashed rgba(255, 217, 104, 0.58);
+        border-radius: 28px;
+      }
+
+      .return-panel h2,
+      .return-panel p {
+        margin: 0;
+      }
+
+      .return-panel h2 {
+        max-width: 14ch;
+        font-size: clamp(1.7rem, 8vw, 2.6rem);
+      }
+
+      .return-panel p {
+        max-width: 46ch;
+        color: #c9c8e8;
+        line-height: 1.55;
+      }
+
+      .site-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 52px;
+        padding-inline: 24px;
+        border: 2px solid var(--moon);
+        border-radius: 999px;
+        color: var(--deep);
+        background: var(--moon);
+        font-weight: 900;
+        text-decoration: none;
+        box-shadow: 4px 5px 0 var(--coral);
+      }
+
+      .site-button:hover,
+      .site-button:focus-visible {
+        color: var(--paper);
+        background: var(--deep);
+        outline: 3px solid var(--moon);
+        outline-offset: 4px;
+      }
+
+      .site-footer {
+        display: grid;
+        gap: 8px;
+        margin-top: 0;
+        padding-block: 24px 32px;
+        border-top: 1px solid var(--soft-line);
+        color: #c9c8e8;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      .site-footer p {
+        margin: 0;
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      @media (min-width: 42rem) {
+        .site-header,
+        main,
+        .site-footer {
+          width: min(calc(100% - 48px), 68rem);
+        }
+
         main {
-          box-shadow: 6px 7px 0 #b7f255;
+          gap: 96px;
         }
 
         .hero {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+          min-height: 38rem;
         }
 
-        .emblem {
-          width: min(150px, 48vw);
+        .hero-art {
+          grid-column: 2;
+          grid-row: 1;
+          width: min(100%, 31rem);
         }
 
-        .actions {
-          align-items: stretch;
-          flex-direction: column;
+        .hero-copy {
+          grid-column: 1;
+          grid-row: 1;
         }
 
-        .button {
-          justify-content: center;
+        .profile {
+          grid-template-columns: minmax(15rem, 0.82fr) minmax(0, 1.18fr);
+          gap: 48px;
+          align-items: start;
+        }
+
+        .identity-card {
+          position: sticky;
+          top: 24px;
+        }
+
+        .game-section {
+          padding: 32px;
+        }
+
+        .game-controls {
+          grid-template-columns: minmax(10rem, 0.65fr) minmax(12rem, 1.35fr);
+        }
+
+        .game-button,
+        .game-button--jump {
+          min-height: 70px;
+        }
+
+        .game-help,
+        .game-status {
+          grid-column: 1 / -1;
+        }
+
+        .missions-track {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 16px;
+        }
+
+        .return-panel {
+          grid-template-columns: minmax(0, 1fr) auto;
+          padding: 32px;
+        }
+
+        .return-panel p {
+          grid-column: 1;
+        }
+
+        .return-panel .site-button {
+          grid-column: 2;
+          grid-row: 1 / span 2;
+        }
+
+        .site-footer {
+          grid-template-columns: 1fr 1fr;
+          text-align: left;
+        }
+
+        .site-footer p:last-child {
+          text-align: right;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
         }
       }
     </style>
+    <script src="game.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#content">К содержанию</a>
-    <div class="page-shell">
-      <main id="content">
-        <section class="hero" aria-labelledby="page-title">
-          <div class="emblem" aria-hidden="true">
-            <i class="ear ear--left"></i>
-            <i class="ear ear--right"></i>
+
+    <header class="site-header">
+      <span class="wordmark">Ночной дозор</span>
+      <p class="header-note">Личная фан-страница</p>
+    </header>
+
+    <main id="content">
+      <section class="hero" aria-labelledby="page-title">
+        <div
+          class="hero-art"
+          role="img"
+          aria-label="Авторская эмблема тёмно-синего ночного кота на фоне луны"
+        >
+          <div class="moon-disc" aria-hidden="true"></div>
+          <div class="orbit" aria-hidden="true"></div>
+          <div class="cat-emblem" aria-hidden="true">
+            <div class="cat-head">
+              <i class="cat-ear cat-ear--left"></i>
+              <i class="cat-ear cat-ear--right"></i>
+              <i class="cat-eye cat-eye--left"></i>
+              <i class="cat-eye cat-eye--right"></i>
+              <i class="cat-nose"></i>
+              <i class="cat-whisker cat-whisker--left"></i>
+              <i class="cat-whisker cat-whisker--right"></i>
+              <i class="constellation"></i>
+            </div>
           </div>
-          <div>
-            <p class="eyebrow">Ночной супергерой</p>
-            <h1 id="page-title">Лев <span>в образе Супер-Кота</span></h1>
-            <p class="intro">
-              Здесь скоро появятся ночные миссии, ловкие испытания и коллекция
-              кошачьих суперсил.
-            </p>
-            <ul class="tags" aria-label="Что появится на странице">
-              <li>Ночные миссии</li>
-              <li>Ловкие испытания</li>
-              <li>Суперсилы</li>
-            </ul>
-          </div>
-        </section>
-        <div class="actions">
-          <p class="status">Страница готова к новым приключениям.</p>
-          <a class="button" href="https://arken-khar.space">В Аркен-Хар →</a>
         </div>
-      </main>
-      <footer>Неофициальная фан-страница · без рекламы и отслеживания</footer>
-    </div>
+
+        <div class="hero-copy">
+          <p class="eyebrow">Патруль начинается</p>
+          <h1 id="page-title">Лев <span>ночной супер-кот</span></h1>
+          <p class="hero-intro">
+            Когда в Аркен-Харе зажигаются фонари, на крыши выходит самый ловкий
+            защитник ночного города.
+          </p>
+          <p class="hero-note">
+            Эмблема нарисована специально для этой страницы и не повторяет
+            официальный костюм.
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="profile-title">
+        <div class="section-heading">
+          <p class="kicker">Досье героя</p>
+          <h2 id="profile-title">Тихий. Быстрый. На страже.</h2>
+        </div>
+
+        <div class="profile">
+          <article class="identity-card" aria-label="Карточка персонажа Льва">
+            <div class="identity-mark" aria-hidden="true">Л</div>
+            <div>
+              <p class="identity-label">Позывной</p>
+              <p class="identity-name">Лев</p>
+              <p class="identity-role">Ночной супер-кот</p>
+            </div>
+          </article>
+
+          <ol class="powers" aria-label="Три суперсилы Льва">
+            <li class="power">
+              <div>
+                <h3>Лунный прыжок</h3>
+                <p>Перелетает между крышами точно в нужный момент.</p>
+              </div>
+            </li>
+            <li class="power">
+              <div>
+                <h3>Кошачий слух</h3>
+                <p>Различает важный шорох даже среди шума ночного города.</p>
+              </div>
+            </li>
+            <li class="power">
+              <div>
+                <h3>Звёздный след</h3>
+                <p>
+                  Находит безопасный путь там, где другие видят только тени.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="game-section" aria-labelledby="game-title">
+        <div class="section-heading">
+          <p class="kicker">Мини-игра № 1</p>
+          <h2 id="game-title">Ночной прыжок</h2>
+          <p class="section-lede">
+            Перепрыгивай трубы и антенны. Один точный прыжок — одна звезда в
+            счёт.
+          </p>
+        </div>
+
+        <div class="scoreboard" aria-label="Результаты игры">
+          <div class="score-chip">
+            <span>Счёт</span>
+            <strong id="score">0</strong>
+          </div>
+          <div class="score-chip">
+            <span>Лучший</span>
+            <strong id="best-score">0</strong>
+          </div>
+        </div>
+
+        <div
+          class="game-surface"
+          id="game-surface"
+          role="button"
+          tabindex="0"
+          aria-label="Игровое поле. Нажмите, чтобы начать или прыгнуть"
+          aria-describedby="game-help"
+        >
+          <canvas
+            id="runner-canvas"
+            width="720"
+            height="440"
+            aria-hidden="true"
+          ></canvas>
+          <p class="game-label">Крыши Аркен-Хара</p>
+        </div>
+
+        <div class="game-controls">
+          <button class="game-button" id="start-button" type="button">
+            Начать забег
+          </button>
+          <button
+            class="game-button game-button--jump"
+            id="jump-button"
+            type="button"
+          >
+            Прыжок ↑
+          </button>
+          <p class="game-help" id="game-help">
+            Тапни по полю или кнопке. На клавиатуре — Space или ↑.
+          </p>
+          <p class="game-status" id="game-status">
+            Готов к старту. Препятствия идут в одном понятном ритме.
+          </p>
+        </div>
+
+        <p class="visually-hidden" id="game-live" aria-live="polite"></p>
+      </section>
+
+      <section aria-labelledby="missions-title">
+        <div class="section-heading">
+          <p class="kicker">Следующая глава</p>
+          <h2 id="missions-title">Миссии уже на карте</h2>
+          <p class="section-lede">
+            Новые задания появятся позже. А пока можно выбрать, какое хочется
+            открыть первым.
+          </p>
+        </div>
+
+        <div class="missions-track">
+          <article class="mission mission--mint">
+            <p class="mission-number">Миссия 01 · скоро</p>
+            <h3>Тихий след</h3>
+            <p>Найти три светящихся отпечатка до рассвета.</p>
+          </article>
+          <article class="mission mission--coral">
+            <p class="mission-number">Миссия 02 · скоро</p>
+            <h3>Лунный код</h3>
+            <p>Собрать созвездие из спрятанных знаков.</p>
+          </article>
+          <article class="mission mission--violet">
+            <p class="mission-number">Миссия 03 · скоро</p>
+            <h3>Гонка теней</h3>
+            <p>Пройти длинный маршрут по крышам без единого промаха.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="return-panel" aria-labelledby="return-title">
+        <h2 id="return-title">Вернуться в большой мир</h2>
+        <p>Открыть главную страницу Аркен-Хара и продолжить путешествие.</p>
+        <a class="site-button" href="https://arken-khar.space">
+          В Аркен-Хар →
+        </a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>Неофициальная фан-страница · без рекламы и отслеживания</p>
+      <p>Игра хранит лучший счёт только до перезагрузки страницы</p>
+    </footer>
   </body>
 </html>
