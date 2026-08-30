@@ -42,10 +42,11 @@ function statsMarkup(stats, requirements = {}) {
     .join("");
 }
 function renderMarkers() {
+  const activeIndex = state.missionIndex % missions.length;
   $("[data-markers]").innerHTML = missions
     .map(
       (mission, index) =>
-        `<button class="marker ${index === state.missionIndex ? "is-current" : ""} ${index < state.missionIndex ? "is-done" : ""}" style="--x:${mission.map.x}%;--y:${mission.map.y}%" ${index !== state.missionIndex ? "disabled" : ""}><span>${index + 1}</span><strong>${mission.district}</strong></button>`,
+        `<button class="marker ${index === activeIndex ? "is-current" : ""} ${state.mode !== "arcade" && index < state.missionIndex ? "is-done" : ""}" style="--x:${mission.map.x}%;--y:${mission.map.y}%" ${index !== activeIndex ? "disabled" : ""}><span>${index + 1}</span><strong>${mission.district}</strong></button>`,
     )
     .join("");
 }
@@ -100,7 +101,7 @@ function renderBrief() {
   }
   if (state.phase === "result") {
     const [title, copy] = outcomeCopy[state.lastOutcome];
-    brief.innerHTML = `<div class="result result--${state.lastOutcome}"><span>Отчёт миссии</span><h2>${title}</h2><p>${copy}</p><button data-continue>${state.missionIndex === missions.length - 1 ? "Завершить смену" : "Принять следующий вызов"}</button></div>`;
+    brief.innerHTML = `<div class="result result--${state.lastOutcome}"><span>Отчёт миссии</span><h2>${title}</h2><p>${copy}</p><button data-continue>${state.mode !== "arcade" && state.missionIndex === missions.length - 1 ? "Завершить главу" : "Принять следующий вызов"}</button></div>`;
     brief
       .querySelector("[data-continue]")
       .addEventListener("click", () => update(continueShift(state), "map"));
@@ -116,8 +117,12 @@ function renderBrief() {
     });
 }
 function render() {
-  $("[data-shift]").textContent =
-    `${Math.min(state.missionIndex + 1, missions.length)}/${missions.length}`;
+  $("[data-shift]").textContent = state.mode === "arcade"
+    ? `Вызов ${state.missionIndex + 1}`
+    : `${Math.min(state.missionIndex + 1, missions.length)}/${missions.length}`;
+  $("[data-mode-label]").childNodes[0].textContent =
+    state.mode === "arcade" ? "Бесконечная аркада " : "Глава I ";
+  $("[data-mode]").textContent = state.mode === "arcade" ? "Сюжет" : "Аркада";
   $("[data-reputation]").textContent = state.reputation;
   $("[data-city]").textContent = state.city;
   const mission = currentMission(state);
@@ -150,7 +155,14 @@ function update(next, nextView) {
   render();
 }
 $("[data-reset]").addEventListener("click", () => {
-  if (confirm("Сбросить текущую смену и начать заново?")) update(freshState());
+  if (confirm("Сбросить текущий прогресс и начать заново?"))
+    update(freshState(state.mode), "map");
+});
+$("[data-mode]").addEventListener("click", () => {
+  const nextMode = state.mode === "arcade" ? "story" : "arcade";
+  const label = nextMode === "arcade" ? "бесконечную аркаду" : "сюжетную главу";
+  if (confirm(`Перейти в ${label}? Текущий забег начнётся заново.`))
+    update(freshState(nextMode), "map");
 });
 document.querySelectorAll("[data-mobile-view]").forEach((button) =>
   button.addEventListener("click", () => setMobileView(button.dataset.mobileView)),

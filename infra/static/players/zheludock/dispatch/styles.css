@@ -84,12 +84,12 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.topbar > div {
+.topbar__stats {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-6);
 }
-.topbar > div span {
+.topbar__stats span {
   color: var(--muted);
   font-size: 0.78rem;
   text-transform: uppercase;
@@ -98,8 +98,12 @@ a {
 .topbar strong {
   color: var(--signal);
 }
-.topbar > button {
+.topbar__actions {
   justify-self: end;
+  display: flex;
+  gap: 0.5rem;
+}
+.topbar__actions button {
   border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
@@ -485,7 +489,7 @@ a {
   .topbar {
     grid-template-columns: 1fr auto;
   }
-  .topbar > div {
+  .topbar__stats {
     grid-column: 1/-1;
     grid-row: 2;
     justify-content: space-between;
@@ -513,13 +517,13 @@ a {
   .topbar {
     position: relative;
   }
-  .topbar > button {
+  .topbar__actions button {
     font-size: 0.75rem;
   }
-  .topbar > div {
+  .topbar__stats {
     gap: var(--space-3);
   }
-  .topbar > div span {
+  .topbar__stats span {
     font-size: 0.66rem;
   }
   .shell {
@@ -555,7 +559,7 @@ a {
     padding: 0.65rem 0.75rem;
   }
   .topbar a,
-  .topbar > button {
+  .topbar__actions button {
     min-height: 2.75rem;
     display: inline-flex;
     align-items: center;
@@ -563,17 +567,17 @@ a {
   .player small {
     display: none;
   }
-  .topbar > button {
+  .topbar__actions button {
     padding: 0 0.75rem;
   }
-  .topbar > div {
+  .topbar__stats {
     grid-column: 1 / -1;
     grid-row: 2;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.35rem;
   }
-  .topbar > div span {
+  .topbar__stats span {
     min-width: 0;
     overflow: hidden;
     display: grid;
@@ -732,7 +736,7 @@ a {
   body {
     padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
   }
-  .topbar > div {
+  .topbar__stats {
     display: none;
   }
   .shell,

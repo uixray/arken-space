@@ -11,12 +11,12 @@
   <body>
     <header class="topbar">
       <a class="player" href="../"><img src="./assets/leonard.webp" alt="" /><span>Леонард<small>Игрок · диспетчер</small></span></a>
-      <div>
-        <span>Глава I <strong data-shift>1/5</strong></span
+      <div class="topbar__stats">
+        <span data-mode-label>Глава I <strong data-shift>1/5</strong></span
         ><span>Репутация <strong data-reputation>5</strong></span
         ><span>Город <strong data-city>10</strong></span>
       </div>
-      <button type="button" data-reset>Новая смена</button>
+      <div class="topbar__actions"><button type="button" data-mode>Аркада</button><button type="button" data-reset>Новая игра</button></div>
     </header>
     <main class="shell">
       <section class="map" data-mobile-panel="map" aria-label="Карта Тристонии">

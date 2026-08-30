@@ -1,8 +1,9 @@
 import { mages, missions } from "./game-data.js";
 
 export const STORAGE_KEY = "arken:misha-dispatch:v1";
-export const freshState = () => ({
+export const freshState = (mode = "story") => ({
   version: 1,
+  mode,
   phase: "briefing",
   missionIndex: 0,
   selected: [],
@@ -26,7 +27,19 @@ export function loadState(storage = localStorage) {
 }
 export const saveState = (state, storage = localStorage) =>
   storage.setItem(STORAGE_KEY, JSON.stringify(state));
-export const currentMission = (state) => missions[state.missionIndex] ?? null;
+export const currentMission = (state) => {
+  if (state.mode !== "arcade") return missions[state.missionIndex] ?? null;
+  const base = missions[state.missionIndex % missions.length];
+  const tier = Math.floor(state.missionIndex / missions.length);
+  return {
+    ...base,
+    id: `${base.id}-${state.missionIndex}`,
+    title: tier ? `${base.title} · угроза ${tier + 1}` : base.title,
+    requirements: Object.fromEntries(
+      Object.entries(base.requirements).map(([key, value]) => [key, value + tier * 2]),
+    ),
+  };
+};
 export function toggleMage(state, mageId) {
   if (state.phase !== "briefing") return state;
   const selected = state.selected.includes(mageId)
@@ -147,7 +160,7 @@ export function resolveChoice(state, choiceId) {
 }
 export function continueShift(state) {
   const nextIndex = state.missionIndex + 1;
-  if (nextIndex >= missions.length)
+  if (state.mode !== "arcade" && nextIndex >= missions.length)
     return { ...state, phase: "complete", selected: [] };
   const mageState = structuredClone(state.mages);
   for (const id of Object.keys(mageState))
