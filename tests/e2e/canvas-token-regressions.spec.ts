@@ -600,12 +600,12 @@ test("Ctrl+Z and Ctrl+Shift+Z call authoritative undo and redo once", async ({
   });
   await page.goto("/");
 
-  await expect(
-    page.getByRole("button", { name: "Отменить последнее действие" }),
-  ).toBeEnabled();
-  await expect(
-    page.getByRole("button", { name: "Повторить отменённое действие" }),
-  ).toBeEnabled();
+  // UIX-503: подпись кнопки теперь называет конкретное действие («Отменить:
+  // токен перемещён»), поэтому поиск идёт по началу имени. Точное прежнее имя
+  // осталось только у недоступной кнопки, а здесь проверяется как раз
+  // доступная — с ним тест искал бы то, чего в этом состоянии не бывает.
+  await expect(page.getByRole("button", { name: /^Отменить/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Повторить/ })).toBeEnabled();
   await page.keyboard.press("Control+z");
   await expect.poll(() => commands.length).toBe(1);
   await page.keyboard.press("Control+Shift+z");
