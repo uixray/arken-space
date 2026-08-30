@@ -4481,32 +4481,67 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    const historyColumns = {
+      sequence: actionJournal.sequence,
+      actorMembershipId: actionJournal.actorMembershipId,
+      type: actionJournal.type,
+      targetType: actionJournal.targetType,
+      targetId: actionJournal.targetId,
+      status: actionJournal.status,
+      createdAt: actionJournal.createdAt,
+    };
+    const visibleHistory = and(
+      eq(actionJournal.campaignId, auth.campaignId),
+      eq(actionJournal.sceneId, scene.id),
+      auth.role === "GM"
+        ? undefined
+        : and(
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.scope, "PUBLIC"),
+          ),
+    );
     const rows = await db
-      .select({
-        sequence: actionJournal.sequence,
-        actorMembershipId: actionJournal.actorMembershipId,
-        type: actionJournal.type,
-        targetType: actionJournal.targetType,
-        targetId: actionJournal.targetId,
-        status: actionJournal.status,
-        createdAt: actionJournal.createdAt,
-      })
+      .select(historyColumns)
+      .from(actionJournal)
+      .where(visibleHistory)
+      // UIX-503: это не лента создания записей, а проекция текущего стека
+      // Undo/Redo. Команды ниже выбирают кандидата по transitionSequence;
+      // если здесь сортировать по исходному sequence, после двух Undo клиент
+      // назовёт одно действие, а сервер повторит другое.
+      .orderBy(desc(actionJournal.transitionSequence))
+      .limit(100);
+    const candidates = await db
+      .selectDistinctOn([actionJournal.status], historyColumns)
       .from(actionJournal)
       .where(
         and(
-          eq(actionJournal.campaignId, auth.campaignId),
-          eq(actionJournal.sceneId, scene.id),
-          auth.role === "GM"
-            ? undefined
-            : and(
-                eq(actionJournal.actorMembershipId, auth.membershipId),
-                eq(actionJournal.scope, "PUBLIC"),
-              ),
+          visibleHistory,
+          inArray(actionJournal.status, ["APPLIED", "UNDONE"]),
         ),
       )
-      .orderBy(desc(actionJournal.sequence))
-      .limit(100);
-    return rows;
+      .orderBy(actionJournal.status, desc(actionJournal.transitionSequence));
+    const nextDirections = new Map(
+      candidates.map((candidate) => [
+        candidate.sequence,
+        candidate.status === "APPLIED" ? ("undo" as const) : ("redo" as const),
+      ]),
+    );
+    const recentSequences = new Set(rows.map((row) => row.sequence));
+    // После ста переходов кандидат противоположного статуса может оказаться за
+    // пределами обычной страницы. Добавляем его отдельно и маркируем, чтобы UI
+    // по-прежнему обещал ровно ту команду, которую выберет POST ниже.
+    return [
+      ...rows.map((row) => ({
+        ...row,
+        nextDirection: nextDirections.get(row.sequence) ?? null,
+      })),
+      ...candidates
+        .filter((candidate) => !recentSequences.has(candidate.sequence))
+        .map((candidate) => ({
+          ...candidate,
+          nextDirection: nextDirections.get(candidate.sequence) ?? null,
+        })),
+    ];
   });
 
   for (const direction of ["undo", "redo"] as const) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import {
+  canvasHistoryVersion,
   describeHistoryEntry,
   historyControlLabel,
   nextHistoryEntry,
@@ -68,6 +69,8 @@ describe("подпись отмены и повтора", () => {
       "DRAWING_DELETE",
       "FOG_CREATE",
       "SCENE_CANVAS",
+      "CANVAS_BULK_MOVE",
+      "CANVAS_BULK_DELETE",
     ])
       expect(
         describeHistoryEntry(
@@ -100,14 +103,24 @@ describe("подпись отмены и повтора", () => {
 
 describe("выбор следующей записи", () => {
   /**
-   * Порядок обязан совпадать с серверным: `/api/canvas/history` отдаёт записи
-   * по убыванию `sequence`, и берётся первая подходящая. Разойдясь с сервером,
-   * подпись назвала бы одно, а отменилось бы другое — хуже прежней родовой.
+   * Авторитетная запись может быть добавлена после обычной страницы истории.
+   * Ставим перед ней другой UNDONE: выбор по одному статусу назвал бы не то
+   * действие, а маркер `nextDirection` обязан всё равно найти правильное.
    */
   const history = [
-    entry({ sequence: 12, status: "UNDONE", type: "DRAWING_CREATE" }),
-    entry({ sequence: 11, status: "APPLIED", type: "TOKEN_RESIZE" }),
-    entry({ sequence: 10, status: "APPLIED", type: "TOKEN_MOVE" }),
+    entry({ sequence: 12, status: "UNDONE", type: "TOKEN_MOVE" }),
+    entry({
+      sequence: 10,
+      status: "UNDONE",
+      type: "DRAWING_CREATE",
+      nextDirection: "redo",
+    }),
+    entry({
+      sequence: 11,
+      status: "APPLIED",
+      type: "TOKEN_RESIZE",
+      nextDirection: "undo",
+    }),
   ];
 
   it("отмена берёт самую свежую применённую", () => {
@@ -115,10 +128,64 @@ describe("выбор следующей записи", () => {
   });
 
   it("повтор берёт самую свежую отменённую", () => {
-    expect(nextHistoryEntry("redo", history)?.sequence).toBe(12);
+    expect(nextHistoryEntry("redo", history)?.sequence).toBe(10);
   });
 
   it("на пустой истории не выбирает ничего", () => {
     expect(nextHistoryEntry("undo", [])).toBeUndefined();
+  });
+
+  it("не воскрешает статусом кандидата, которого новый сервер не отметил", () => {
+    const withoutRedo = [
+      entry({ sequence: 12, status: "UNDONE", nextDirection: null }),
+      entry({
+        sequence: 11,
+        status: "APPLIED",
+        nextDirection: "undo",
+      }),
+    ];
+    expect(nextHistoryEntry("redo", withoutRedo)).toBeUndefined();
+  });
+
+  it("сохраняет fallback для ответа старого сервера без поля кандидата", () => {
+    expect(
+      nextHistoryEntry("redo", [entry({ sequence: 12, status: "UNDONE" })])
+        ?.sequence,
+    ).toBe(12);
+  });
+});
+
+describe("версия канваса для обновления истории", () => {
+  const scene = { id: "scene-1", revision: 3 };
+  const fog = [{ id: "fog-1", revision: 1 }];
+  const drawings = [{ id: "drawing-1", revision: 20 }];
+  const tokens = [
+    { id: "token-low", revision: 1 },
+    { id: "token-high", revision: 20 },
+  ];
+
+  it("меняется, когда растёт не максимальная ревизия", () => {
+    const before = canvasHistoryVersion(scene, fog, drawings, tokens);
+    const after = canvasHistoryVersion(scene, fog, drawings, [
+      { id: "token-low", revision: 2 },
+      { id: "token-high", revision: 20 },
+    ]);
+    expect(after).not.toBe(before);
+  });
+
+  it("учитывает изменения сцены и состав объектов", () => {
+    const before = canvasHistoryVersion(scene, fog, drawings, tokens);
+    expect(
+      canvasHistoryVersion({ ...scene, revision: 4 }, fog, drawings, tokens),
+    ).not.toBe(before);
+    expect(
+      canvasHistoryVersion(scene, fog, drawings, tokens.slice(1)),
+    ).not.toBe(before);
+  });
+
+  it("не меняется только из-за порядка объектов", () => {
+    expect(
+      canvasHistoryVersion(scene, fog, drawings, [...tokens].reverse()),
+    ).toBe(canvasHistoryVersion(scene, fog, drawings, tokens));
   });
 });

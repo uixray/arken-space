@@ -7,10 +7,10 @@ import type { GameSnapshot } from "@arken/contracts";
  * верно и бесполезно: на карте за минуту происходит десяток правок, и человек
  * жмёт отмену вслепую, а на карте боя вслепую отменённое движение стоит хода.
  *
- * Описание собирается **на клиенте, из уже полученной истории**. Сервер новых
- * полей не отдаёт, и это не экономия: `/api/canvas/history` уже отфильтрован по
- * роли — игроку приходят только его собственные публичные действия, — а значит
- * описывать нечего сверх того, что человеку и так показано.
+ * Описание собирается **на клиенте, из уже полученной истории**. Сервер отдаёт
+ * только безопасный маркер авторитетного следующего Undo/Redo, но не добавляет
+ * имён или снимков сущностей: `/api/canvas/history` уже отфильтрован по роли —
+ * игроку приходят только его собственные публичные действия.
  *
  * Имя объекта берётся из **моего** снапшота и только оттуда. Снапшот тоже
  * отфильтрован: токен, скрытый туманом, в него не попадает. Поэтому имени может
@@ -24,6 +24,8 @@ export interface CanvasHistoryEntry {
   targetType: string;
   targetId: string;
   status: string;
+  /** Авторитетный кандидат сервера; отсутствует только у старых/mock ответов. */
+  nextDirection?: "undo" | "redo" | null;
 }
 
 /**
@@ -43,7 +45,41 @@ const ACTION_LABEL: Record<string, string> = {
   DRAWING_DELETE: "рисунок удалён",
   FOG_CREATE: "туман изменён",
   SCENE_CANVAS: "сцена изменена",
+  CANVAS_BULK_MOVE: "объекты перемещены",
+  CANVAS_BULK_DELETE: "объекты удалены",
 };
+
+type CanvasRevision = {
+  id: string;
+  revision?: number | null;
+};
+
+/**
+ * Версия видимого канваса, от которой зависит авторитетная история.
+ *
+ * Одного максимума ревизий недостаточно: если токен 1 → 2 изменился рядом с
+ * токеном ревизии 20, максимум остаётся 20 и история не перезагрузится. Здесь
+ * участвует каждая пара id/revision, а сортировка не превращает простую смену
+ * порядка в ложное canvas-событие.
+ */
+export function canvasHistoryVersion(
+  scene: CanvasRevision | undefined,
+  fogReveals: readonly CanvasRevision[],
+  drawings: readonly CanvasRevision[],
+  tokens: readonly CanvasRevision[],
+): string {
+  const fingerprint = (rows: readonly CanvasRevision[]) =>
+    rows
+      .map((row) => `${row.id}:${row.revision ?? 0}`)
+      .sort()
+      .join(",");
+  return [
+    `scene:${scene?.id ?? ""}:${scene?.revision ?? 0}`,
+    `fog:${fingerprint(fogReveals)}`,
+    `drawings:${fingerprint(drawings)}`,
+    `tokens:${fingerprint(tokens)}`,
+  ].join("|");
+}
 
 /** Имя объекта — только если он есть в моём снапшоте. */
 function nameOf(
@@ -92,16 +128,22 @@ export function historyControlLabel(
 /**
  * Следующая запись, которую тронет кнопка.
  *
- * Отмена берёт самую свежую применённую, повтор — самую свежую отменённую.
- * Порядок здесь тот же, что у сервера: `/api/canvas/history` отдаёт записи по
- * убыванию `sequence`, и первая подходящая — та, которую сервер и выберет.
- * Считать порядок заново на клиенте нельзя: разойдясь с сервером, подпись
- * назовёт одно, а отменится другое — и это хуже прежней родовой подписи.
+ * Отмена берёт последнюю перешедшую в APPLIED, повтор — последнюю перешедшую в
+ * UNDONE. Сервер маркирует обоих авторитетных кандидатов `nextDirection`, в
+ * том числе если один из них оказался за пределами обычной страницы истории.
+ * Fallback по первому статусу нужен только старым мокам и прежнему серверу.
+ * Исходный `sequence` для выбора не подходит: после двух Undo порядок создания
+ * и порядок переходов расходятся.
  */
 export function nextHistoryEntry(
   direction: "undo" | "redo",
   history: CanvasHistoryEntry[],
 ): CanvasHistoryEntry | undefined {
   const wanted = direction === "undo" ? "APPLIED" : "UNDONE";
-  return history.find((entry) => entry.status === wanted);
+  const hasCandidateMetadata = history.some(
+    (entry) => entry.nextDirection !== undefined,
+  );
+  return hasCandidateMetadata
+    ? history.find((entry) => entry.nextDirection === direction)
+    : history.find((entry) => entry.status === wanted);
 }

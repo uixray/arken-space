@@ -43,6 +43,7 @@ import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import {
+  canvasHistoryVersion,
   historyControlLabel,
   nextHistoryEntry,
   type CanvasHistoryEntry,
@@ -172,18 +173,45 @@ function CanvasHistoryControls({
   /** Источник имён объектов — и единственный: он уже отфильтрован по роли. */
   snapshot: GameSnapshot;
 }) {
-  const [history, setHistory] = useState<CanvasHistoryEntry[]>([]);
-  const refresh = useCallback(async () => {
-    if (!sceneId || disabled) return setHistory([]);
-    try {
-      setHistory(await api(`/api/canvas/history?sceneId=${sceneId}`));
-    } catch {
-      setHistory([]);
-    }
-  }, [sceneId, disabled]);
+  const [refreshEpoch, setRefreshEpoch] = useState(0);
+  const requestKey = JSON.stringify([
+    sceneId ?? null,
+    disabled,
+    version,
+    refreshEpoch,
+  ]);
+  const [historyState, setHistoryState] = useState<{
+    requestKey: string;
+    entries: CanvasHistoryEntry[];
+  }>({ requestKey: "", entries: [] });
+  const historyRequestGeneration = useRef(0);
+  const history =
+    historyState.requestKey === requestKey ? historyState.entries : [];
+
   useEffect(() => {
-    void refresh();
-  }, [refresh, version]);
+    const generation = ++historyRequestGeneration.current;
+    let cancelled = false;
+    if (!sceneId || disabled) {
+      setHistoryState({ requestKey, entries: [] });
+      return () => {
+        cancelled = true;
+      };
+    }
+    void api<CanvasHistoryEntry[]>(`/api/canvas/history?sceneId=${sceneId}`)
+      .then((entries) => {
+        if (cancelled || generation !== historyRequestGeneration.current)
+          return;
+        setHistoryState({ requestKey, entries });
+      })
+      .catch(() => {
+        if (cancelled || generation !== historyRequestGeneration.current)
+          return;
+        setHistoryState({ requestKey, entries: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sceneId, disabled, requestKey]);
   const nextUndo = nextHistoryEntry("undo", history);
   const nextRedo = nextHistoryEntry("redo", history);
   const canUndo = nextUndo !== undefined;
@@ -195,9 +223,9 @@ function CanvasHistoryControls({
         method: "POST",
         body: JSON.stringify({ actionId: crypto.randomUUID(), sceneId }),
       });
-      await refresh();
+      setRefreshEpoch((epoch) => epoch + 1);
     },
-    [sceneId, refresh],
+    [sceneId],
   );
   useEffect(() => {
     if (!sceneId || disabled) return;
@@ -1523,14 +1551,12 @@ export function App() {
   // unrelated campaign events like chat, dice or audio, which used to also
   // bump the campaign-wide snapshotVersion this used to key off, refetching
   // /api/canvas/history on literally every event anywhere in the campaign.
-  const activeCanvasVersion = [
-    activeFog.length,
-    activeFog.reduce((max, fog) => Math.max(max, fog.revision ?? 0), 0),
-    activeDrawings.length,
-    activeDrawings.reduce((max, drawing) => Math.max(max, drawing.revision), 0),
-    activeTokens.length,
-    activeTokens.reduce((max, token) => Math.max(max, token.revision), 0),
-  ].join(":");
+  const activeCanvasVersion = canvasHistoryVersion(
+    activeScene,
+    activeFog,
+    activeDrawings,
+    activeTokens,
+  );
 
   /**
    * UIX-503: кнопка «•••» существует только тогда, когда за ней что-то есть.
