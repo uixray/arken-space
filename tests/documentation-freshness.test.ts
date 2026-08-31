@@ -244,11 +244,45 @@ describe("operational documentation keeps its safety boundaries", () => {
     }
 
     const checklist = await read("docs/production-release-checklist.md");
+    const operations = await read("docs/operations.md");
     expect(checklist).toContain("Code quality gate (outside `release.sh`)");
     expect(checklist).toContain("does **not** run the code quality");
-    expect(checklist).toContain("one image upload");
-    expect(checklist).toContain("one audio upload");
-    expect(checklist).toContain("docker compose restart postgres server web");
+    for (const document of [checklist, operations]) {
+      expect(document).toContain(
+        "MEDIA_SMOKE_APPROVAL=non-live-candidate-passed",
+      );
+      expect(document).toContain("MIN_FREE_DISK_BYTES + 5 GiB");
+      expect(document).toContain(
+        "arken-space-rollback-server:<production-sha>",
+      );
+      expect(document).toContain("arken-space-rollback-web:<production-sha>");
+      expect(document).toContain("HttpOnly");
+      expect(document).toContain("Secure");
+      expect(document).toContain("SameSite=Strict");
+      expect(document).toContain("origin/main");
+      expect(document).toContain("401 AUTH_REQUIRED");
+      expect(document).toContain("docker compose restart postgres server web");
+      expect(document).toMatch(/перед build и\s+сразу после build/);
+      expect(document).toMatch(/тестов\S* загрузк\S* в live-кампани/i);
+    }
+
+    expect(checklist).toContain("root-owned mode-`600`");
+    expect(checklist).toContain("disposable non-live candidate");
+    expect(checklist).toContain("APP_ROOT=/home/uixray/apps/arken-space");
+    expect(checklist).toContain("DOMAIN=https://arken-khar.space");
+    expect(checklist).toMatch(/сначала\s+выполните unconfirmed pass/);
+    expect(checklist).toContain("does not change the running production stack");
+    expect(checklist).toMatch(
+      /exact rollback server\/web tags and\s+image IDs/,
+    );
+    expect(checklist).toMatch(/do not prove manual\s+production acceptance/);
+    expect(operations).toMatch(/root-owned с\s+mode `600`/);
+    expect(operations).toMatch(/точную release\s+revision и schema/);
+    expect(operations).toContain("host release lock");
+    expect(operations).toContain("обязателен unconfirmed");
+    expect(operations).toMatch(/running\s+production stack/);
+    expect(operations).toContain("не доказывает эту ручную production-приёмку");
+    expect(checklist).not.toContain("must still verify one image upload");
   });
 
   it("uses the host media path and avoids a stale migration range", async () => {

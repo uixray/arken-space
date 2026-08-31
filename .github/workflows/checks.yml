@@ -34,6 +34,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Release-скрипты выполняются POSIX sh на production host. Structural
+      # Vitest ловит исчезновение gates, но не заменяет parser shell.
+      - name: Check deploy shell syntax
+        run: |
+          sh -n infra/deploy/release.sh
+          sh -n infra/deploy/build-and-start.sh
+          sh -n infra/deploy/smoke-auth.sh
+
       # Пакеты воркспейса собираются ДО тестов. Часть набора импортирует
       # `@arken/contracts`, `@arken/system` и `@arken/db` через `dist`, и на
       # устаревшей сборке тесты врут: проверено на UIX-424, где добор
