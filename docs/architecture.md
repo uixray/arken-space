@@ -105,8 +105,13 @@ flowchart TD
    но финальные координаты, броски, права, ревизии и общий audio state принимает
    сервер.
 2. **Все данные scoped кампанией на уровне application code.** Большинство
-   запросов проверяет `campaignId`; составных tenant-aware foreign keys в БД нет,
-   поэтому эту проверку нельзя опускать в новых use cases.
+   запросов проверяет `campaignId`; составные tenant-aware foreign keys защищают
+   только часть связей, поэтому application predicate нельзя опускать в новых
+   use cases. Runtime-инвентарь `campaign-isolation-routes.test.ts` требует
+   классифицировать каждый URL с `:id`/`:*Id`, а двухкампанейные HTTP-probes
+   доказывают отказ для каждого пути с точным сегментом `:id`. Исключения закрыты
+   двумя доменными политиками: глобальный канонический World Content и
+   operator-only feedback.
 3. **Секреты не хранятся открытым текстом.** Session, invite и persistent player
    access tokens представлены SHA-256 hashes; raw access secret возвращается
    только при создании или ротации.
