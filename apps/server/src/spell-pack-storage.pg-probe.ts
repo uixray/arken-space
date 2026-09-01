@@ -11,7 +11,7 @@ import {
   appendSpellPackVersion,
   createSpellPack,
   SpellPackStorageError,
-} from "../../apps/server/src/spell-pack-storage.js";
+} from "./spell-pack-storage.js";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString)

@@ -50,8 +50,8 @@ describe("порядок в run-multiplayer-e2e", () => {
   });
 
   it("запускает PostgreSQL-пробу spell pack до браузерного сценария", async () => {
-    const compose = await readFile(
-      new URL("../docker-compose.e2e.yml", import.meta.url),
+    const serverDockerfile = await readFile(
+      new URL("../Dockerfile.server", import.meta.url),
       "utf8",
     );
     const probe = script.indexOf('record("spell-pack-postgresql-probe"');
@@ -61,8 +61,9 @@ describe("порядок в run-multiplayer-e2e", () => {
     );
     expect(probe).toBeGreaterThan(-1);
     expect(playwright).toBeGreaterThan(probe);
-    expect(compose).toContain(
-      "./tests/multiplayer/spell-pack-storage.pg-probe.ts:/app/tests/multiplayer/spell-pack-storage.pg-probe.ts:ro",
+    expect(script).toContain(
+      '"apps/server/src/spell-pack-storage.pg-probe.ts"',
     );
+    expect(serverDockerfile).toContain("COPY apps/server apps/server");
   });
 });

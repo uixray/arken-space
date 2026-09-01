@@ -381,7 +381,7 @@ try {
       "pnpm",
       "exec",
       "tsx",
-      "tests/multiplayer/spell-pack-storage.pg-probe.ts",
+      "apps/server/src/spell-pack-storage.pg-probe.ts",
     ],
     { env: environment },
   );

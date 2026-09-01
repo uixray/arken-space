@@ -35,7 +35,6 @@ services:
       MIN_FREE_DISK_BYTES: 1048576
     volumes:
       - media-e2e:/srv/arken-space/media
-      - ./tests/multiplayer/spell-pack-storage.pg-probe.ts:/app/tests/multiplayer/spell-pack-storage.pg-probe.ts:ro
     depends_on:
       postgres:
         condition: service_healthy
