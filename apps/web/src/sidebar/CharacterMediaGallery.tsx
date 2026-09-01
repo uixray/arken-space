@@ -22,6 +22,13 @@ const CATEGORY_OPTIONS = Object.keys(
   CHARACTER_MEDIA_CATEGORY_LABELS,
 ) as CharacterMediaCategory[];
 
+type RemovalTarget = {
+  item: CharacterMediaDto;
+  mode: "detach" | "hard-delete";
+  characterId: string;
+  actionId: string;
+};
+
 function assetUrl(assetId: string): string {
   return `/api/assets/${assetId}/content`;
 }
@@ -32,11 +39,9 @@ function assetUrl(assetId: string): string {
  * The list endpoint already excludes GM_ONLY entries for a non-GM owner, so
  * no client-side visibility filtering happens here.
  *
- * This component deliberately does NOT expose GM-only hard delete
- * (DELETE /api/character-media/:id) — that belongs to the GM
- * cross-character inspection UI (UIX-292 Stage 4), out of scope here. The
- * only removal action offered is `detach` ("remove from gallery"), a soft,
- * non-destructive removal available to the owner (and the GM).
+ * Removal is explicit: an owner (or the GM) may detach an entry from the
+ * character gallery, while the GM may additionally hard-delete the gallery
+ * row. Neither operation deletes the source asset from the media library.
  */
 export function CharacterMediaGallery({
   characterId,
@@ -57,28 +62,60 @@ export function CharacterMediaGallery({
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [removalTarget, setRemovalTarget] = useState<RemovalTarget | null>(
+    null,
+  );
+  const activeCharacterIdRef = useRef(characterId);
+  const loadRequestIdRef = useRef(0);
+  const removalOperationRef = useRef<string | null>(null);
 
-  const load = async () => {
+  const load = async (): Promise<boolean> => {
+    const requestId = ++loadRequestIdRef.current;
+    const requestedCharacterId = characterId;
+    const isCurrentRequest = () =>
+      requestId === loadRequestIdRef.current &&
+      requestedCharacterId === activeCharacterIdRef.current;
     try {
       const list = await api<CharacterMediaDto[]>(
         `/api/characters/${characterId}/media`,
       );
+      if (!isCurrentRequest()) return false;
       setItems(list);
       setError("");
+      return true;
     } catch (reason) {
+      if (!isCurrentRequest()) return false;
+      setItems([]);
       setError(formatApiError(reason, "Не удалось загрузить галерею."));
+      return false;
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   };
 
   useEffect(() => {
+    activeCharacterIdRef.current = characterId;
+    removalOperationRef.current = null;
     setLoading(true);
+    setViewerId(null);
+    setEditingId(null);
+    setPendingId(null);
+    setRemovalTarget(null);
+    setItems([]);
     void load();
+    return () => {
+      loadRequestIdRef.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId]);
 
-  const sorted = useMemo(() => sortMediaByOrdering(items), [items]);
+  const sorted = useMemo(
+    () =>
+      sortMediaByOrdering(
+        items.filter((item) => item.characterId === characterId),
+      ),
+    [characterId, items],
+  );
   const viewerItem = sorted.find((item) => item.id === viewerId) ?? null;
 
   const reorder = async (id: string, direction: "up" | "down") => {
@@ -104,58 +141,101 @@ export function CharacterMediaGallery({
         );
       }
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 409) await load();
+      if (reason instanceof ApiError && reason.status === 409) {
+        const refreshed = await load();
+        if (!refreshed) return;
+      }
       setError(formatApiError(reason, "Не удалось изменить порядок."));
     } finally {
       setPendingId(null);
     }
   };
 
-  const detach = async (item: CharacterMediaDto) => {
-    setPendingId(item.id);
+  const remove = async (target: RemovalTarget) => {
+    if (removalOperationRef.current) return;
+    removalOperationRef.current = target.actionId;
+    setPendingId(target.item.id);
     setError("");
+    const isCurrentOperation = () =>
+      removalOperationRef.current === target.actionId &&
+      activeCharacterIdRef.current === target.characterId;
     try {
-      await api(`/api/character-media/${item.id}/detach`, {
-        method: "POST",
-        body: JSON.stringify({
-          actionId: crypto.randomUUID(),
-          revision: item.revision,
-        }),
-      });
-      setItems((current) => current.filter((entry) => entry.id !== item.id));
-    } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 409) await load();
-      setError(
-        formatApiError(reason, "Не удалось убрать изображение из галереи."),
+      await api(
+        target.mode === "detach"
+          ? `/api/character-media/${target.item.id}/detach`
+          : `/api/character-media/${target.item.id}`,
+        {
+          method: target.mode === "detach" ? "POST" : "DELETE",
+          body: JSON.stringify({
+            actionId: target.actionId,
+            revision: target.item.revision,
+          }),
+        },
       );
+      if (!isCurrentOperation()) return;
+      setItems((current) =>
+        current.filter((entry) => entry.id !== target.item.id),
+      );
+      setRemovalTarget(null);
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 409) {
+        if (!isCurrentOperation()) return;
+        setItems([]);
+        setLoading(true);
+        setRemovalTarget(null);
+        const refreshed = await load();
+        if (!refreshed) return;
+        setError(
+          "Запись уже изменена. Галерея обновлена — повторите действие.",
+        );
+      } else {
+        if (!isCurrentOperation()) return;
+        setError(
+          formatApiError(
+            reason,
+            target.mode === "detach"
+              ? "Не удалось убрать изображение из галереи."
+              : "Не удалось удалить запись галереи.",
+          ),
+        );
+      }
     } finally {
-      setPendingId(null);
+      if (removalOperationRef.current === target.actionId) {
+        removalOperationRef.current = null;
+        setPendingId(null);
+      }
     }
   };
 
-  /**
-   * GM-only hard delete (AC2/AC14): permanently removes the gallery entry
-   * row rather than just hiding it. Never offered to the owner.
-   */
-  const hardDelete = async (item: CharacterMediaDto) => {
-    setPendingId(item.id);
+  const openRemovalDialog = (
+    item: CharacterMediaDto,
+    mode: RemovalTarget["mode"],
+  ) => {
+    if (pendingId !== null || removalOperationRef.current) return;
     setError("");
-    try {
-      await api(`/api/character-media/${item.id}`, {
-        method: "DELETE",
-        body: JSON.stringify({
-          actionId: crypto.randomUUID(),
-          revision: item.revision,
-        }),
-      });
-      setItems((current) => current.filter((entry) => entry.id !== item.id));
-    } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 409) await load();
-      setError(formatApiError(reason, "Не удалось удалить запись галереи."));
-    } finally {
-      setPendingId(null);
-    }
+    setRemovalTarget({
+      item,
+      mode,
+      characterId,
+      actionId: crypto.randomUUID(),
+    });
   };
+
+  const closeRemovalDialog = () => {
+    if (removalOperationRef.current) return;
+    setRemovalTarget(null);
+  };
+
+  /*
+   * GM-only hard delete (AC2/AC14) permanently removes the gallery entry
+   * row rather than just hiding it. Never offered to the owner; the source
+   * asset remains in the media library.
+   */
+  const hardDeleteDescription =
+    "Запись будет безвозвратно удалена из галереи персонажа, но файл останется в медиатеке.";
+
+  const detachDescription =
+    "Изображение исчезнет из галереи персонажа, но исходный файл останется в медиатеке.";
 
   return (
     <div className="character-media-gallery">
@@ -220,8 +300,8 @@ export function CharacterMediaGallery({
                   <Button
                     size="s"
                     view="flat-danger"
-                    disabled={pendingId === item.id}
-                    onClick={() => void detach(item)}
+                    disabled={pendingId !== null}
+                    onClick={() => openRemovalDialog(item, "detach")}
                   >
                     Убрать из галереи
                   </Button>
@@ -229,9 +309,9 @@ export function CharacterMediaGallery({
                     <Button
                       size="s"
                       view="flat-danger"
-                      disabled={pendingId === item.id}
+                      disabled={pendingId !== null}
                       title="Безвозвратно удаляет запись галереи (сам файл не удаляется). Недоступно владельцу."
-                      onClick={() => void hardDelete(item)}
+                      onClick={() => openRemovalDialog(item, "hard-delete")}
                     >
                       Удалить навсегда
                     </Button>
@@ -272,6 +352,30 @@ export function CharacterMediaGallery({
           }}
           onConflict={() => void load()}
         />
+      )}
+      {removalTarget && (
+        <ArkenDialog
+          open
+          title={
+            removalTarget.mode === "detach"
+              ? "Убрать изображение из галереи?"
+              : "Удалить запись галереи навсегда?"
+          }
+          applyLabel={
+            removalTarget.mode === "detach" ? "Убрать" : "Удалить навсегда"
+          }
+          danger
+          loading={pendingId === removalTarget.item.id}
+          error={error}
+          onApply={() => void remove(removalTarget)}
+          onClose={closeRemovalDialog}
+        >
+          <p className="arken-dialog-message">
+            {removalTarget.mode === "detach"
+              ? detachDescription
+              : hardDeleteDescription}
+          </p>
+        </ArkenDialog>
       )}
     </div>
   );
