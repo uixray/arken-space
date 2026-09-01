@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
+import cookie from "@fastify/cookie";
+import Fastify, { type FastifyInstance } from "fastify";
 import { and, asc, eq } from "drizzle-orm";
 import {
   campaigns,
   createDatabase,
+  gameEvents,
+  memberships,
+  sessions,
   spellPackVersions,
   spellPacks,
 } from "@arken/db";
@@ -12,6 +17,9 @@ import {
   createSpellPack,
   SpellPackStorageError,
 } from "./spell-pack-storage.js";
+import { env } from "./env.js";
+import { hashToken } from "./security.js";
+import { registerSpellPackRoutes } from "./spell-pack-routes.js";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString)
@@ -20,28 +28,40 @@ if (!connectionString)
 const campaignId = randomUUID();
 const foreignCampaignId = randomUUID();
 const packId = randomUUID();
+const apiCampaignId = randomUUID();
+const apiForeignCampaignId = randomUUID();
+let apiApp: FastifyInstance | undefined;
 
-function graph(
+function graphFor(
+  targetPackId: string,
   version: number,
   versionId: string = randomUUID(),
   lifecycle: SpellProgressionGraph["lifecycle"] = "DRAFT",
 ): SpellProgressionGraph {
   return {
-    packId,
+    packId: targetPackId,
     versionId,
     version,
     title: `PostgreSQL probe v${version}`,
     lifecycle,
     provenance: {
       sourceType: "GM_AUTHORED",
-      sourceLabel: "UIX-579 PostgreSQL 17 probe",
-      rawSourceText: `Probe source v${version}`,
+      sourceLabel: "UIX-579/UIX-580 PostgreSQL 17 probe",
+      rawSourceText: `Private probe mechanics v${version}`,
     },
     schools: [],
     nodes: [],
     requirementGroups: [],
     edges: [],
   };
+}
+
+function graph(
+  version: number,
+  versionId: string = randomUUID(),
+  lifecycle: SpellProgressionGraph["lifecycle"] = "DRAFT",
+): SpellProgressionGraph {
+  return graphFor(packId, version, versionId, lifecycle);
 }
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -200,9 +220,217 @@ try {
     "campaign cascade left spell-pack history behind",
   );
 
-  console.log("[spell-pack-probe] passed");
+  const apiGmMembershipId = randomUUID();
+  const apiPlayerMembershipId = randomUUID();
+  const apiForeignGmMembershipId = randomUUID();
+  const apiGmSecret = "uix580-gm-".padEnd(40, "g");
+  const apiPlayerSecret = "uix580-player-".padEnd(40, "p");
+  const apiForeignGmSecret = "uix580-foreign-".padEnd(40, "f");
+  await db.insert(campaigns).values([
+    { id: apiCampaignId, name: "UIX-580 PostgreSQL API probe" },
+    { id: apiForeignCampaignId, name: "UIX-580 foreign API probe" },
+  ]);
+  await db.insert(memberships).values([
+    {
+      id: apiGmMembershipId,
+      campaignId: apiCampaignId,
+      role: "GM",
+      displayName: "API probe GM",
+    },
+    {
+      id: apiPlayerMembershipId,
+      campaignId: apiCampaignId,
+      role: "PLAYER",
+      displayName: "API probe player",
+    },
+    {
+      id: apiForeignGmMembershipId,
+      campaignId: apiForeignCampaignId,
+      role: "GM",
+      displayName: "API probe foreign GM",
+    },
+  ]);
+  await db.insert(sessions).values([
+    {
+      membershipId: apiGmMembershipId,
+      tokenHash: hashToken(apiGmSecret),
+      expiresAt: new Date(Date.now() + 600_000),
+    },
+    {
+      membershipId: apiPlayerMembershipId,
+      tokenHash: hashToken(apiPlayerSecret),
+      expiresAt: new Date(Date.now() + 600_000),
+    },
+    {
+      membershipId: apiForeignGmMembershipId,
+      tokenHash: hashToken(apiForeignGmSecret),
+      expiresAt: new Date(Date.now() + 600_000),
+    },
+  ]);
+
+  apiApp = Fastify();
+  await apiApp.register(cookie);
+  registerSpellPackRoutes(apiApp, db);
+  await apiApp.ready();
+  const authHeaders = (secret: string) => ({
+    cookie: `${env.SESSION_COOKIE_NAME}=${secret}`,
+  });
+
+  const apiPackId = randomUUID();
+  const apiCreateActionId = randomUUID();
+  const apiCreatePayload = {
+    actionId: apiCreateActionId,
+    expectedVersion: 0,
+    graph: graphFor(apiPackId, 1),
+  };
+  const apiCreated = await apiApp.inject({
+    method: "POST",
+    url: "/api/spell-packs",
+    headers: authHeaders(apiGmSecret),
+    payload: apiCreatePayload,
+  });
+  assert(apiCreated.statusCode === 201, "PostgreSQL API create failed");
+  const apiReplay = await apiApp.inject({
+    method: "POST",
+    url: "/api/spell-packs",
+    headers: authHeaders(apiGmSecret),
+    payload: apiCreatePayload,
+  });
+  assert(apiReplay.statusCode === 200, "PostgreSQL API replay failed");
+
+  const actionReuse = await apiApp.inject({
+    method: "POST",
+    url: "/api/spell-packs",
+    headers: authHeaders(apiGmSecret),
+    payload: {
+      ...apiCreatePayload,
+      graph: graphFor(randomUUID(), 1),
+    },
+  });
+  assert(
+    actionReuse.statusCode === 409,
+    "PostgreSQL API actionId reuse did not conflict",
+  );
+
+  const playerCreate = await apiApp.inject({
+    method: "POST",
+    url: "/api/spell-packs",
+    headers: authHeaders(apiPlayerSecret),
+    payload: {
+      actionId: randomUUID(),
+      expectedVersion: 0,
+      graph: graphFor(randomUUID(), 1),
+    },
+  });
+  assert(playerCreate.statusCode === 403, "PLAYER reached spell-pack command");
+
+  const competingDrafts = [
+    {
+      actionId: randomUUID(),
+      expectedVersion: 1,
+      graph: graphFor(apiPackId, 2),
+    },
+    {
+      actionId: randomUUID(),
+      expectedVersion: 1,
+      graph: graphFor(apiPackId, 2),
+    },
+  ];
+  const competingResponses = await Promise.all(
+    competingDrafts.map((payload) =>
+      apiApp!.inject({
+        method: "POST",
+        url: `/api/spell-packs/${apiPackId}/versions`,
+        headers: authHeaders(apiGmSecret),
+        payload,
+      }),
+    ),
+  );
+  assert(
+    JSON.stringify(
+      competingResponses.map((response) => response.statusCode).sort(),
+    ) === "[201,409]",
+    "PostgreSQL API CAS race must commit one draft and reject one",
+  );
+  const winningIndex = competingResponses.findIndex(
+    (response) => response.statusCode === 201,
+  );
+  assert(winningIndex >= 0, "PostgreSQL API CAS winner missing");
+  const winningReplay = await apiApp.inject({
+    method: "POST",
+    url: `/api/spell-packs/${apiPackId}/versions`,
+    headers: authHeaders(apiGmSecret),
+    payload: competingDrafts[winningIndex],
+  });
+  assert(
+    winningReplay.statusCode === 200,
+    "PostgreSQL API winning action did not replay",
+  );
+
+  const apiForeignPackId = randomUUID();
+  const foreignCreated = await apiApp.inject({
+    method: "POST",
+    url: "/api/spell-packs",
+    headers: authHeaders(apiForeignGmSecret),
+    payload: {
+      actionId: randomUUID(),
+      expectedVersion: 0,
+      graph: graphFor(apiForeignPackId, 1),
+    },
+  });
+  assert(foreignCreated.statusCode === 201, "foreign API fixture failed");
+  const foreignArchive = await apiApp.inject({
+    method: "POST",
+    url: `/api/spell-packs/${apiForeignPackId}/archive`,
+    headers: authHeaders(apiGmSecret),
+    payload: {
+      actionId: randomUUID(),
+      expectedVersion: 1,
+      versionId: randomUUID(),
+    },
+  });
+  assert(
+    foreignArchive.statusCode === 404,
+    "cross-campaign PostgreSQL API target was not hidden",
+  );
+
+  const apiHistory = await db
+    .select({ version: spellPackVersions.version })
+    .from(spellPackVersions)
+    .where(
+      and(
+        eq(spellPackVersions.campaignId, apiCampaignId),
+        eq(spellPackVersions.packId, apiPackId),
+      ),
+    )
+    .orderBy(asc(spellPackVersions.version));
+  assert(
+    JSON.stringify(apiHistory.map((row) => row.version)) === "[1,2]",
+    "PostgreSQL API history is not immutable and monotonic",
+  );
+  const apiEvents = await db
+    .select()
+    .from(gameEvents)
+    .where(
+      and(
+        eq(gameEvents.campaignId, apiCampaignId),
+        eq(gameEvents.entityId, apiPackId),
+      ),
+    )
+    .orderBy(asc(gameEvents.sequence));
+  assert(apiEvents.length === 2, "PostgreSQL API wrote duplicate events");
+  for (const event of apiEvents) {
+    const serialized = JSON.stringify(event.payload);
+    assert(!serialized.includes("graph"), "audit payload leaked graph");
+    assert(!serialized.includes("mechanics"), "audit payload leaked mechanics");
+  }
+
+  console.log("[spell-pack-probe] storage and API passed");
 } finally {
+  if (apiApp) await apiApp.close();
   await db.delete(campaigns).where(eq(campaigns.id, campaignId));
   await db.delete(campaigns).where(eq(campaigns.id, foreignCampaignId));
+  await db.delete(campaigns).where(eq(campaigns.id, apiCampaignId));
+  await db.delete(campaigns).where(eq(campaigns.id, apiForeignCampaignId));
   await client.end();
 }

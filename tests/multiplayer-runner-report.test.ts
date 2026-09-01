@@ -54,6 +54,13 @@ describe("порядок в run-multiplayer-e2e", () => {
       new URL("../Dockerfile.server", import.meta.url),
       "utf8",
     );
+    const spellPackProbeSource = await readFile(
+      new URL(
+        "../apps/server/src/spell-pack-storage.pg-probe.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
     const probe = script.indexOf('record("spell-pack-postgresql-probe"');
     const playwright = script.indexOf(
       "const playwright = await runPlaywrightWithRestart(environment)",
@@ -65,5 +72,7 @@ describe("порядок в run-multiplayer-e2e", () => {
       '"apps/server/src/spell-pack-storage.pg-probe.ts"',
     );
     expect(serverDockerfile).toContain("COPY apps/server apps/server");
+    expect(spellPackProbeSource).toContain("registerSpellPackRoutes");
+    expect(spellPackProbeSource).toContain("PostgreSQL API CAS race");
   });
 });

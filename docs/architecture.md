@@ -152,9 +152,9 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **144** HTTP-маршрута во всех server route-модулях: 85 остаются в
+Всего **149** HTTP-маршрутов во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, operator
-feedback, заявкам игроков, сюжетному каналу, картам и содержимому мира.
+feedback, заявкам игроков, сюжетному каналу, картам, магии и содержимому мира.
 
 | Домен              | Маршруты                                                                                                                                                                                                                                                        |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -169,6 +169,7 @@ feedback, заявкам игроков, сюжетному каналу, кар
 | Общение            | чат (общий, треды, история с пагинацией, вложения, курсоры прочтения), стикеры, кубы, синхронная музыка                                                                                                                                                         |
 | Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                                                                                                                                                                                    |
 | Заявки игроков     | создание, редактирование, переходы состояний                                                                                                                                                                                                                    |
+| Магия              | `spell-pack-routes.ts` — GM validation, create, draft version, lifecycle promotion и archive                                                                                                                                                                    |
 | Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`                                                                                                                                                           |
 
 Подробные request-схемы являются экспортами `@arken/contracts`. REST response и
@@ -364,6 +365,13 @@ Drizzle schema содержит **53** прикладные таблицы.
 - fog — упорядоченная последовательность `REVEAL`/`COVER`;
 - `spell_packs` хранит устойчивую campaign-scoped identity, а
   `spell_pack_versions` — неизменяемые полные snapshot-ы graph;
+- GM-команды spell pack живут в `spell-pack-routes.ts`: create использует
+  `expectedVersion: 0`, а draft/lifecycle/archive добавляют следующую version
+  под parent lock и CAS `expectedVersion`; точный retry определяется по
+  `(campaignId, actionId)` и canonical command hash;
+- `game_events` для spell pack содержит только version/lifecycle metadata и
+  hash команды — полный graph и mechanics возвращаются лишь GM-ответом и не
+  входят в player snapshot или audit payload;
 - assets лежат в БД как metadata, а content — на файловой системе;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 

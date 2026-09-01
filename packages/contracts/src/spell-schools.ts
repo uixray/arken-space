@@ -408,6 +408,65 @@ export const spellProgressionGraphSchema = z
   .strict();
 export type SpellProgressionGraph = z.infer<typeof spellProgressionGraphSchema>;
 
+const spellPackExpectedVersionSchema = z.number().int().nonnegative();
+
+/** Read-only GM validation. `graph` stays unknown so malformed candidates receive a useful report. */
+export const validateSpellPackGraphSchema = z
+  .object({ graph: z.unknown() })
+  .strict();
+export type ValidateSpellPackGraph = z.infer<
+  typeof validateSpellPackGraphSchema
+>;
+
+/** Creates stable identity and immutable version 1 under an explicit empty-pack CAS. */
+export const createSpellPackCommandSchema = z
+  .object({
+    actionId: spellIdSchema,
+    expectedVersion: z.literal(0),
+    graph: spellProgressionGraphSchema,
+  })
+  .strict();
+export type CreateSpellPackCommand = z.infer<
+  typeof createSpellPackCommandSchema
+>;
+
+/** Replaces no history: a full next DRAFT snapshot is appended under version CAS. */
+export const appendSpellPackDraftVersionCommandSchema = z
+  .object({
+    actionId: spellIdSchema,
+    expectedVersion: spellPackExpectedVersionSchema,
+    graph: spellProgressionGraphSchema,
+  })
+  .strict();
+export type AppendSpellPackDraftVersionCommand = z.infer<
+  typeof appendSpellPackDraftVersionCommandSchema
+>;
+
+/** Lifecycle promotion clones the latest snapshot into a new immutable version. */
+export const transitionSpellPackLifecycleCommandSchema = z
+  .object({
+    actionId: spellIdSchema,
+    expectedVersion: spellPackExpectedVersionSchema,
+    versionId: spellIdSchema,
+    lifecycle: z.enum(["REFERENCE", "ACTIVE"]),
+  })
+  .strict();
+export type TransitionSpellPackLifecycleCommand = z.infer<
+  typeof transitionSpellPackLifecycleCommandSchema
+>;
+
+/** Archive is separate from promotion and also appends a new immutable version. */
+export const archiveSpellPackCommandSchema = z
+  .object({
+    actionId: spellIdSchema,
+    expectedVersion: spellPackExpectedVersionSchema,
+    versionId: spellIdSchema,
+  })
+  .strict();
+export type ArchiveSpellPackCommand = z.infer<
+  typeof archiveSpellPackCommandSchema
+>;
+
 export const spellGraphValidationIssueCodeSchema = z.enum([
   "DUPLICATE_SCHOOL_ID",
   "DUPLICATE_NODE_ID",
@@ -441,6 +500,29 @@ export interface SpellGraphValidationIssue {
 export interface SpellGraphValidationResult {
   errors: SpellGraphValidationIssue[];
   warnings: SpellGraphValidationIssue[];
+}
+
+export interface SpellGraphSchemaIssue {
+  code: "SCHEMA_INVALID";
+  path: string;
+  message: string;
+}
+
+export interface SpellPackValidationResponse {
+  valid: boolean;
+  errors: Array<SpellGraphSchemaIssue | SpellGraphValidationIssue>;
+  warnings: SpellGraphValidationIssue[];
+}
+
+/** Full mechanics are intentionally a GM-only HTTP response, never a player projection. */
+export interface SpellPackVersionDto {
+  packId: string;
+  versionId: string;
+  version: number;
+  lifecycle: SpellPackLifecycle;
+  graph: SpellProgressionGraph;
+  warnings: SpellGraphValidationIssue[];
+  createdAt: string;
 }
 
 function compareText(left: string, right: string): number {

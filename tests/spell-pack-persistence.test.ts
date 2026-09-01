@@ -148,6 +148,21 @@ describe("UIX-579 spell-pack persistence", () => {
     await expect(
       appendSpellPackVersion(storageDb(), {
         campaignId: campaign.id,
+        expectedVersion: 1,
+        graph: graph({
+          packId,
+          versionId: randomUUID(),
+          version: 3,
+        }),
+      }),
+    ).rejects.toMatchObject({
+      code: "SPELL_PACK_VERSION_CONFLICT",
+      details: { expectedVersion: 1, actualVersion: 2 },
+    });
+
+    await expect(
+      appendSpellPackVersion(storageDb(), {
+        campaignId: campaign.id,
         graph: graph({ packId, versionId: randomUUID(), version: 4 }),
       }),
     ).rejects.toMatchObject({
