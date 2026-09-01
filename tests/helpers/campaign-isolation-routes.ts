@@ -102,6 +102,8 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "POST /api/characters/:characterId/catalog/:entryId/recharge",
   "POST /api/characters/:characterId/catalog/:entryId/roll",
   "POST /api/characters/:characterId/media",
+  "POST /api/characters/:characterId/spell-assignments",
+  "POST /api/characters/:characterId/spell-assignments/:assignmentId/versions",
   "POST /api/characters/:id/archive",
   "POST /api/characters/:id/catalog",
   "POST /api/characters/:id/restore",

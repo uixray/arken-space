@@ -13,6 +13,8 @@ const applicationCountTableNames = [
   "character_catalog_entries",
   "character_controllers",
   "character_media",
+  "character_spell_assignment_versions",
+  "character_spell_assignments",
   "characters",
   "chat_attachment_uploads",
   "chat_attachments",

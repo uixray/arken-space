@@ -47,7 +47,7 @@ describe("architecture.md still describes the code it documents", () => {
       .length;
     const stated = statedNumber(
       await read("docs/architecture.md"),
-      /содержит \*\*(\d+)\*\* прикладн(?:ую|ые) таблиц(?:у|ы)/,
+      /содержит \*\*(\d+)\*\* прикладн(?:ую таблицу|ые таблицы|ых таблиц)/,
     );
     expect(stated).toBe(actual);
   });

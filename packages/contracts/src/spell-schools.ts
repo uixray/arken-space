@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-const spellIdSchema = z.string().uuid();
+const spellIdSchema = z
+  .string()
+  .uuid()
+  .transform((value) => value.toLowerCase());
 const spellLabelSchema = z.string().trim().min(1).max(240);
 const spellLongTextSchema = z.string().max(50_000);
 
@@ -522,6 +525,187 @@ export interface SpellPackVersionDto {
   lifecycle: SpellPackLifecycle;
   graph: SpellProgressionGraph;
   warnings: SpellGraphValidationIssue[];
+  createdAt: string;
+}
+
+export const spellAssignmentKindSchema = z.enum(["SCHOOL", "NODE"]);
+export type SpellAssignmentKind = z.infer<typeof spellAssignmentKindSchema>;
+
+export const spellSchoolAssignmentTargetSchema = z
+  .object({
+    kind: z.literal("SCHOOL"),
+    schoolId: spellIdSchema,
+  })
+  .strict();
+
+export const spellNodeAssignmentTargetSchema = z
+  .object({
+    kind: z.literal("NODE"),
+    schoolId: spellIdSchema,
+    nodeId: spellIdSchema,
+    rank: z.number().int().positive().max(1_000),
+  })
+  .strict();
+
+export const spellAssignmentTargetSchema = z.discriminatedUnion("kind", [
+  spellSchoolAssignmentTargetSchema,
+  spellNodeAssignmentTargetSchema,
+]);
+export type SpellAssignmentTarget = z.infer<typeof spellAssignmentTargetSchema>;
+
+const spellAssignmentOverrideReasonSchema = z.string().trim().min(1).max(2_000);
+
+const spellAssignmentCommandFields = {
+  actionId: spellIdSchema,
+  assignmentVersionId: spellIdSchema,
+  packId: spellIdSchema,
+  packVersionId: spellIdSchema,
+  target: spellAssignmentTargetSchema,
+  overrideReason: spellAssignmentOverrideReasonSchema.optional(),
+};
+
+/** Creates stable assignment identity and immutable state version 1. */
+export const createSpellAssignmentCommandSchema = z
+  .object({
+    ...spellAssignmentCommandFields,
+    assignmentId: spellIdSchema,
+    expectedVersion: z.literal(0),
+  })
+  .strict();
+export type CreateSpellAssignmentCommand = z.infer<
+  typeof createSpellAssignmentCommandSchema
+>;
+
+/** Appends a reassignment, pack-version move, or rank upgrade under CAS. */
+export const appendSpellAssignmentVersionCommandSchema = z
+  .object({
+    ...spellAssignmentCommandFields,
+    expectedVersion: z.number().int().positive(),
+  })
+  .strict();
+export type AppendSpellAssignmentVersionCommand = z.infer<
+  typeof appendSpellAssignmentVersionCommandSchema
+>;
+
+const spellAssignmentSnapshotIdentityFields = {
+  schemaVersion: z.literal(1),
+  assignmentId: spellIdSchema,
+  assignmentVersionId: spellIdSchema,
+  assignmentVersion: z.number().int().positive(),
+  packId: spellIdSchema,
+  packVersionId: spellIdSchema,
+  packVersion: z.number().int().positive(),
+  packLifecycle: z.literal("ACTIVE"),
+  provenance: spellGraphProvenanceSchema,
+  schoolId: spellIdSchema,
+  school: spellSchoolSchema,
+};
+
+const spellSchoolAssignmentSnapshotSchema = z
+  .object({
+    ...spellAssignmentSnapshotIdentityFields,
+    kind: z.literal("SCHOOL"),
+    nodeId: z.null(),
+    rank: z.null(),
+    node: z.null(),
+    requirementGroups: z.array(spellRequirementGroupSchema).max(0),
+    edges: z.array(spellRequirementEdgeSchema).max(0),
+  })
+  .strict();
+
+const spellNodeAssignmentSnapshotSchema = z
+  .object({
+    ...spellAssignmentSnapshotIdentityFields,
+    kind: z.literal("NODE"),
+    nodeId: spellIdSchema,
+    rank: z.number().int().positive().max(1_000),
+    node: spellNodeSchema,
+    requirementGroups: z.array(spellRequirementGroupSchema),
+    edges: z.array(spellRequirementEdgeSchema),
+  })
+  .strict();
+
+/**
+ * Immutable server-built rules snapshot. It deliberately contains no layout
+ * and accepts no client-authored mechanics.
+ */
+export const spellAssignmentSnapshotSchema = z
+  .discriminatedUnion("kind", [
+    spellSchoolAssignmentSnapshotSchema,
+    spellNodeAssignmentSnapshotSchema,
+  ])
+  .superRefine((snapshot, context) => {
+    if (
+      snapshot.school.id !== snapshot.schoolId ||
+      snapshot.school.packId !== snapshot.packId ||
+      snapshot.school.packVersionId !== snapshot.packVersionId
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["school"],
+        message: "School identity must match the assignment snapshot",
+      });
+
+    if (snapshot.kind === "SCHOOL") return;
+    if (
+      snapshot.node.id !== snapshot.nodeId ||
+      snapshot.node.schoolId !== snapshot.schoolId ||
+      snapshot.node.packId !== snapshot.packId ||
+      snapshot.node.packVersionId !== snapshot.packVersionId
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["node"],
+        message: "Node identity must match the assignment snapshot",
+      });
+
+    const groupIds = new Set(
+      snapshot.requirementGroups.map((group) => group.id),
+    );
+    for (const [index, group] of snapshot.requirementGroups.entries())
+      if (
+        group.packId !== snapshot.packId ||
+        group.packVersionId !== snapshot.packVersionId ||
+        group.schoolId !== snapshot.schoolId ||
+        group.targetNodeId !== snapshot.nodeId
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["requirementGroups", index],
+          message: "Requirement group must target the assignment node",
+        });
+    for (const [index, edge] of snapshot.edges.entries())
+      if (
+        edge.packId !== snapshot.packId ||
+        edge.packVersionId !== snapshot.packVersionId ||
+        edge.schoolId !== snapshot.schoolId ||
+        edge.targetNodeId !== snapshot.nodeId ||
+        !groupIds.has(edge.requirementGroupId)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["edges", index],
+          message: "Requirement edge must belong to a snapshot group",
+        });
+  });
+export type SpellAssignmentSnapshot = z.infer<
+  typeof spellAssignmentSnapshotSchema
+>;
+
+export interface SpellAssignmentVersionDto {
+  assignmentId: string;
+  assignmentVersionId: string;
+  version: number;
+  characterId: string;
+  packId: string;
+  packVersionId: string;
+  kind: SpellAssignmentKind;
+  schoolId: string;
+  nodeId: string | null;
+  rank: number | null;
+  snapshot: SpellAssignmentSnapshot;
+  overrideReason: string | null;
+  assignedByMembershipId: string;
   createdAt: string;
 }
 

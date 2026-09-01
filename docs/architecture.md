@@ -152,7 +152,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **149** HTTP-маршрутов во всех server route-модулях: 85 остаются в
+Всего **151** HTTP-маршрут во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, operator
 feedback, заявкам игроков, сюжетному каналу, картам, магии и содержимому мира.
 
@@ -169,7 +169,7 @@ feedback, заявкам игроков, сюжетному каналу, кар
 | Общение            | чат (общий, треды, история с пагинацией, вложения, курсоры прочтения), стикеры, кубы, синхронная музыка                                                                                                                                                         |
 | Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                                                                                                                                                                                    |
 | Заявки игроков     | создание, редактирование, переходы состояний                                                                                                                                                                                                                    |
-| Магия              | `spell-pack-routes.ts` — GM validation, create, draft version, lifecycle promotion и archive                                                                                                                                                                    |
+| Магия              | `spell-pack-routes.ts` — GM validation, create, draft version, lifecycle promotion и archive; `spell-assignment-routes.ts` — GM-only назначение школы/узла и append следующего состояния                                                                        |
 | Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`                                                                                                                                                           |
 
 Подробные request-схемы являются экспортами `@arken/contracts`. REST response и
@@ -337,7 +337,7 @@ sequenceDiagram
 
 ## Данные
 
-Drizzle schema содержит **53** прикладные таблицы.
+Drizzle schema содержит **55** прикладных таблиц.
 
 | Группа             | Таблицы                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -349,7 +349,7 @@ Drizzle schema содержит **53** прикладные таблицы.
 | Общение            | `chat_messages`, `chat_threads`, `chat_read_cursors`, `chat_attachments`, `chat_attachment_uploads`                                                     |
 | Стикеры            | `stickers`, `sticker_packs`, `sticker_pack_entitlements`, `sticker_media`                                                                               |
 | Сюжетный канал     | `story_posts`, `story_post_revisions`, `story_post_media`, `story_import_batches`, `story_import_sources`                                               |
-| Магия              | `spell_packs`, `spell_pack_versions`                                                                                                                    |
+| Магия              | `spell_packs`, `spell_pack_versions`, `character_spell_assignments`, `character_spell_assignment_versions`                                              |
 | Заявки игроков     | `player_requests`                                                                                                                                       |
 | Media/audio        | `assets`, `campaign_audio_tracks`                                                                                                                       |
 | Аудит              | `game_events`, `action_journal`                                                                                                                         |
@@ -365,6 +365,9 @@ Drizzle schema содержит **53** прикладные таблицы.
 - fog — упорядоченная последовательность `REVEAL`/`COVER`;
 - `spell_packs` хранит устойчивую campaign-scoped identity, а
   `spell_pack_versions` — неизменяемые полные snapshot-ы graph;
+- `character_spell_assignments` хранит устойчивую lineage назначения школы или
+  узла персонажу, а `character_spell_assignment_versions` — неизменяемые
+  server-built snapshot-ы правил, provenance и аудируемой причины override;
 - GM-команды spell pack живут в `spell-pack-routes.ts`: create использует
   `expectedVersion: 0`, а draft/lifecycle/archive добавляют следующую version
   под parent lock и CAS `expectedVersion`; точный retry определяется по
@@ -372,10 +375,13 @@ Drizzle schema содержит **53** прикладные таблицы.
 - `game_events` для spell pack содержит только version/lifecycle metadata и
   hash команды — полный graph и mechanics возвращаются лишь GM-ответом и не
   входят в player snapshot или audit payload;
+- GM-команды назначения живут в `spell-assignment-routes.ts`, принимают только
+  identity цели, строят snapshot из конкретной ACTIVE-версии pack на сервере,
+  проверяют prerequisite graph и требуют непустую причину для override;
 - assets лежат в БД как metadata, а content — на файловой системе;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0041` применяются при старте server-контейнера до запуска
+Миграции `0000`–`0042` применяются при старте server-контейнера до запуска
 Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 

@@ -75,4 +75,32 @@ describe("порядок в run-multiplayer-e2e", () => {
     expect(spellPackProbeSource).toContain("registerSpellPackRoutes");
     expect(spellPackProbeSource).toContain("PostgreSQL API CAS race");
   });
+
+  it("запускает PostgreSQL-пробу назначений до браузерного сценария", async () => {
+    const source = await readFile(
+      new URL(
+        "../apps/server/src/spell-assignment-storage.pg-probe.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const spellPackProbe = script.indexOf(
+      'record("spell-pack-postgresql-probe"',
+    );
+    const assignmentProbe = script.indexOf(
+      'record("spell-assignment-postgresql-probe"',
+    );
+    const playwright = script.indexOf(
+      "const playwright = await runPlaywrightWithRestart(environment)",
+      assignmentProbe,
+    );
+    expect(assignmentProbe).toBeGreaterThan(spellPackProbe);
+    expect(playwright).toBeGreaterThan(assignmentProbe);
+    expect(script).toContain(
+      '"apps/server/src/spell-assignment-storage.pg-probe.ts"',
+    );
+    expect(source).toContain("registerSpellAssignmentRoutes");
+    expect(source).toContain("assignment CAS race");
+    expect(source).toContain("audit actor deletion");
+  });
 });
