@@ -22,6 +22,7 @@ const ids = {
   foreignCampaign: id(),
   gm: id(),
   player: id(),
+  character: id(),
   playerNoToken: id(), // party member with no controlled token anywhere
   foreign: id(),
   sceneA: id(), // source/active scene, 1000x800
@@ -104,6 +105,29 @@ async function endEncounter(
   });
 }
 
+async function readCampaignClock() {
+  const [clock] = await db
+    .select({
+      battleActive: schema.campaigns.battleActive,
+      battleCounter: schema.campaigns.battleCounter,
+    })
+    .from(schema.campaigns)
+    .where(eq(schema.campaigns.id, ids.campaign))
+    .limit(1);
+  if (!clock) throw new Error("CAMPAIGN_NOT_FOUND");
+  return clock;
+}
+
+async function readCampaignInitiative() {
+  const [campaign] = await db
+    .select({ initiative: schema.campaigns.initiative })
+    .from(schema.campaigns)
+    .where(eq(schema.campaigns.id, ids.campaign))
+    .limit(1);
+  if (!campaign) throw new Error("CAMPAIGN_NOT_FOUND");
+  return campaign.initiative;
+}
+
 beforeEach(() => {
   broadcastCount = 0;
   broadcastedCampaigns.length = 0;
@@ -148,6 +172,22 @@ beforeAll(async () => {
       displayName: "Foreign GM",
     },
   ]);
+  await db.insert(schema.characters).values({
+    id: ids.character,
+    campaignId: ids.campaign,
+    ownerMembershipId: ids.player,
+    name: "Hero",
+    stats: {
+      strength: 0,
+      agility: 0,
+      endurance: 0,
+      vitality: 0,
+      knowledge: 0,
+      intelligence: 0,
+      willpower: 0,
+      charisma: 0,
+    },
+  });
   for (const [membershipId, secret] of [
     [ids.gm, secrets.gm],
     [ids.player, secrets.player],
@@ -369,6 +409,170 @@ describe("encounter start authorization and validation", () => {
   });
 });
 
+describe("encounter and campaign clock lifecycle", () => {
+  it("counts a real map encounter and recharges BATTLE uses exactly once", async () => {
+    const [battleEntry, dailyEntry, weeklyEntry] = await db
+      .insert(schema.characterCatalogEntries)
+      .values([
+        {
+          characterId: ids.character,
+          kind: "ABILITY",
+          name: "Battle use",
+          data: {
+            uses: {
+              current: 0,
+              max: 2,
+              recharge: "BATTLE",
+              lastBattleCounter: 0,
+            },
+          },
+        },
+        {
+          characterId: ids.character,
+          kind: "ABILITY",
+          name: "Daily use",
+          data: {
+            uses: {
+              current: 0,
+              max: 1,
+              recharge: "DAY",
+              lastRechargeDay: 1,
+            },
+          },
+        },
+        {
+          characterId: ids.character,
+          kind: "ABILITY",
+          name: "Weekly use",
+          data: {
+            uses: {
+              current: 0,
+              max: 1,
+              recharge: "WEEK",
+              lastRechargeDay: 1,
+            },
+          },
+        },
+      ])
+      .returning();
+    const initiativeParticipantId = id();
+    await db
+      .update(schema.campaigns)
+      .set({
+        initiative: [
+          {
+            id: initiativeParticipantId,
+            tokenId: ids.token,
+            name: null,
+            initiative: 17,
+            pinned: true,
+          },
+        ],
+      })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const before = await readCampaignClock();
+    const startActionId = id();
+    const started = await startRegion(secrets.gm, {
+      actionId: startActionId,
+    });
+    expect(started.statusCode).toBe(201);
+    const during = await readCampaignClock();
+    const startReplay = await startRegion(secrets.gm, {
+      actionId: startActionId,
+    });
+    expect(startReplay.statusCode).toBe(200);
+    expect(startReplay.json()).toEqual(started.json());
+    expect(await readCampaignClock()).toEqual(during);
+    expect(await readCampaignInitiative()).toEqual([
+      {
+        id: initiativeParticipantId,
+        tokenId: ids.token,
+        name: null,
+        initiative: null,
+        pinned: true,
+      },
+    ]);
+
+    const endActionId = id();
+    const endBody = {
+      actionId: endActionId,
+      revision: started.json().revision,
+    };
+    const ended = await app.inject({
+      method: "POST",
+      url: `/api/encounters/${started.json().id}/end`,
+      headers: headers(secrets.gm),
+      payload: endBody,
+    });
+    expect(ended.statusCode).toBe(200);
+    const after = await readCampaignClock();
+    const endReplay = await app.inject({
+      method: "POST",
+      url: `/api/encounters/${started.json().id}/end`,
+      headers: headers(secrets.gm),
+      payload: endBody,
+    });
+    expect(endReplay.statusCode).toBe(200);
+    expect(endReplay.json()).toEqual(ended.json());
+    expect(await readCampaignClock()).toEqual(after);
+    expect(await readCampaignInitiative()).toEqual([]);
+
+    expect(during).toEqual({
+      battleActive: true,
+      battleCounter: before.battleCounter + 1,
+    });
+    expect(after).toEqual({
+      battleActive: false,
+      battleCounter: before.battleCounter + 1,
+    });
+
+    const entries = await db
+      .select({
+        id: schema.characterCatalogEntries.id,
+        data: schema.characterCatalogEntries.data,
+        revision: schema.characterCatalogEntries.revision,
+      })
+      .from(schema.characterCatalogEntries);
+    const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    expect(byId.get(battleEntry!.id)).toMatchObject({
+      revision: 1,
+      data: {
+        uses: {
+          current: 2,
+          max: 2,
+          recharge: "BATTLE",
+          lastBattleCounter: after.battleCounter,
+        },
+      },
+    });
+    for (const entry of [dailyEntry!, weeklyEntry!]) {
+      expect(byId.get(entry.id)).toMatchObject({
+        revision: 0,
+        data: { uses: { current: 0 } },
+      });
+    }
+
+    const [endEvent] = await db
+      .select({ payload: schema.gameEvents.payload })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, endActionId));
+    expect(endEvent?.payload).toMatchObject({
+      clockBefore: {
+        battleActive: true,
+        battleCounter: after.battleCounter,
+      },
+      clockAfter: {
+        battleActive: false,
+        battleCounter: after.battleCounter,
+      },
+      transitionApplied: true,
+      recharged: 1,
+      initiativeBefore: 1,
+      initiativeAfter: 0,
+    });
+  });
+});
+
 describe("atomic LINKED_SCENE start", () => {
   it("activates the destination scene and transfers only PLAYER-layer tokens by relative position, in one broadcast", async () => {
     const response = await startLinked(secrets.gm, {
@@ -526,6 +730,62 @@ describe("one-active-encounter-at-a-time and idempotency", () => {
     const third = await startRegion(secrets.gm);
     expect(third.statusCode).toBe(201);
     await endEncounter(secrets.gm, third.json().id, third.json().revision);
+  });
+
+  it("maps concurrent starts to replay or a domain conflict instead of 500", async () => {
+    const sameAction = id();
+    const sameBody = {
+      actionId: sameAction,
+      mode: "SCENE_REGION",
+      sourceSceneId: ids.sceneA,
+      sourceSceneRevision: 0,
+      focusRegion: { x: 20, y: 20, width: 80, height: 80 },
+    };
+    const identical = await Promise.all(
+      [sameBody, sameBody].map((payload) =>
+        app.inject({
+          method: "POST",
+          url: "/api/encounters/start",
+          headers: headers(secrets.gm),
+          payload,
+        }),
+      ),
+    );
+    expect(identical.map((response) => response.statusCode).sort()).toEqual([
+      200, 201,
+    ]);
+    expect(identical[0]!.json()).toEqual(identical[1]!.json());
+    await endEncounter(
+      secrets.gm,
+      identical[0]!.json().id,
+      identical[0]!.json().revision,
+    );
+
+    const different = await Promise.all(
+      [30, 40].map((x) =>
+        app.inject({
+          method: "POST",
+          url: "/api/encounters/start",
+          headers: headers(secrets.gm),
+          payload: {
+            ...sameBody,
+            actionId: id(),
+            focusRegion: { x, y: 30, width: 80, height: 80 },
+          },
+        }),
+      ),
+    );
+    expect(different.map((response) => response.statusCode).sort()).toEqual([
+      201, 409,
+    ]);
+    const rejected = different.find((response) => response.statusCode === 409);
+    expect(rejected?.json().error).toBe("ENCOUNTER_ALREADY_ACTIVE");
+    const accepted = different.find((response) => response.statusCode === 201);
+    await endEncounter(
+      secrets.gm,
+      accepted!.json().id,
+      accepted!.json().revision,
+    );
   });
 
   it("replays an identical start action and conflicts on actionId reuse with a different payload", async () => {

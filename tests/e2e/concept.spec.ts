@@ -810,6 +810,105 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
     .toBe(true);
 });
 
+test("GM manages one campaign clock surface and confirms a reset", async ({
+  page,
+}) => {
+  let currentSnapshot = structuredClone(snapshot);
+  currentSnapshot.characters.push({
+    ...currentSnapshot.characters[0]!,
+    id: "e49b79b7-4ddf-49fe-9e7d-4ee03806c116",
+    name: "Второй персонаж",
+  });
+  currentSnapshot.campaign = {
+    ...currentSnapshot.campaign,
+    day: 7,
+    battleCounter: 3,
+    revision: 12,
+  };
+  const clockRequests: Array<{
+    actionId: string;
+    command: string;
+    revision: number;
+  }> = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(currentSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/campaign/clock", async (route) => {
+    const body = route.request().postDataJSON() as {
+      actionId: string;
+      command: string;
+      revision: number;
+    };
+    clockRequests.push(body);
+    currentSnapshot = {
+      ...currentSnapshot,
+      campaign: {
+        ...currentSnapshot.campaign,
+        day: body.command === "RESET_CLOCK" ? 1 : currentSnapshot.campaign.day,
+        battleCounter:
+          body.command === "RESET_CLOCK"
+            ? 0
+            : currentSnapshot.campaign.battleCounter,
+        revision: body.revision + 1,
+      },
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(currentSnapshot.campaign),
+    });
+  });
+  await page.goto("/");
+
+  await openWorkspaceSection(page, "Персонажи");
+  const workspace = page.locator(".character-workspace");
+  await expect(workspace).toBeVisible();
+  const clockTrigger = workspace.getByRole("button", {
+    name: "День 7 · боёв: 3",
+  });
+  await expect(clockTrigger).toHaveCount(1);
+  await clockTrigger.click();
+
+  const clockDialog = page.getByRole("dialog", { name: "Время кампании" });
+  await expect(clockDialog).toBeVisible();
+  await expect(
+    clockDialog.getByRole("button", { name: "Следующий день" }),
+  ).toHaveCount(1);
+  await expect(
+    clockDialog.getByRole("button", { name: "Длинный отдых" }),
+  ).toHaveCount(1);
+  await expect(clockDialog.getByText("Начать бой")).toHaveCount(0);
+  await expect(clockDialog.getByText("Завершить бой")).toHaveCount(0);
+
+  await clockDialog.getByRole("button", { name: "Сбросить время" }).click();
+  expect(clockRequests).toHaveLength(0);
+  const resetDialog = page.getByRole("dialog", {
+    name: "Сбросить время кампании?",
+  });
+  await expect(resetDialog).toBeVisible();
+  await resetDialog.getByRole("button", { name: "Подтвердить сброс" }).click();
+
+  await expect.poll(() => clockRequests).toHaveLength(1);
+  expect(clockRequests[0]).toMatchObject({
+    command: "RESET_CLOCK",
+    revision: 12,
+  });
+  expect(clockRequests[0]?.actionId).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+  await expect(clockDialog.getByText("День 1")).toBeVisible();
+  await expect(
+    clockDialog.getByRole("button", { name: "Сбросить время" }),
+  ).toBeDisabled();
+});
+
 test("GM controls music from the top bar and opens the library", async ({
   page,
 }) => {
