@@ -411,6 +411,27 @@ try {
     );
   record("spell-assignment-postgresql-probe", "passed");
 
+  const spellProjectionProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "apps/server/src/spell-projection.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.spellProjectionProbeExitCode = spellProjectionProbe;
+  if (spellProjectionProbe !== 0)
+    throw new Error(
+      "Spell-projection PostgreSQL probe exited " + spellProjectionProbe,
+    );
+  record("spell-projection-postgresql-probe", "passed");
+
   const playwright = await runPlaywrightWithRestart(environment);
   report.playwrightExitCode = playwright;
   if (playwright !== 0) throw new Error("Playwright exited " + playwright);

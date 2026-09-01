@@ -9,8 +9,9 @@ import {
   validateSpellProgressionGraph,
   type SpellGraphValidationIssue,
   type SpellProgressionGraph,
-  type SpellUsageCadence,
+  type SpellReferenceImportSource,
 } from "../packages/contracts/src/index.js";
+import { previewSpellReferenceImport } from "../apps/server/src/spell-reference-import.js";
 
 const uuid = (value: number): string =>
   `00000000-0000-4000-8000-${value.toString().padStart(12, "0")}`;
@@ -656,200 +657,21 @@ describe("spell-school graph contracts", () => {
   });
 });
 
-interface RawMagicSchoolNode {
-  название: string;
-  вариантНаСхеме: string | null;
-  стоимостьМаны: number | null;
-  частота: string | null;
-  описание: string;
-}
-
-interface RawMagicSchoolEdge {
-  откуда: string;
-  куда: string;
-}
-
-interface RawMagicSchool {
-  ключ: string;
-  название: string;
-  узлы: RawMagicSchoolNode[];
-  связи: RawMagicSchoolEdge[];
-  безСвязей: string[];
-}
-
-interface RawMagicSchoolsFixture {
-  источник: {
-    описания: string;
-    деревья: string;
-    предупреждение: string;
-  };
-  школы: RawMagicSchool[];
-  требуетУточнения: string[];
-}
-
 const referenceSourceText = readFileSync(
   new URL("../docs/content/magic-schools.json", import.meta.url),
   "utf8",
 );
 const referenceFixture = JSON.parse(
   referenceSourceText,
-) as RawMagicSchoolsFixture;
-
-function cadenceFromRaw(rawText: string): SpellUsageCadence {
-  const normalized = rawText.toLocaleLowerCase("ru");
-  if (/раунд/u.test(normalized)) return { kind: "TURN" };
-  if (/бой|битв/u.test(normalized)) return { kind: "COMBAT" };
-  if (/коротк.*отдых/u.test(normalized)) return { kind: "SHORT_REST" };
-  if (/длинн.*отдых/u.test(normalized)) return { kind: "LONG_REST" };
-  if (/день|дня/u.test(normalized)) return { kind: "DAY" };
-  if (/недел/u.test(normalized)) return { kind: "WEEK" };
-  if (/игр|парти|сесси/u.test(normalized)) return { kind: "SESSION" };
-  if (/кампан/u.test(normalized)) return { kind: "CAMPAIGN" };
-  if (/месяц/u.test(normalized)) return { kind: "MONTH" };
-  return { kind: "CUSTOM", rawText };
-}
+) as SpellReferenceImportSource;
 
 function adaptReferenceFixture(): SpellProgressionGraph {
-  const packId = uuid(9_001);
-  const versionId = uuid(9_002);
-  let nextNodeId = 1_000;
-  let nextGroupId = 3_000;
-  let nextEdgeId = 4_000;
-
-  const schools: SpellProgressionGraph["schools"] = [];
-  const nodes: SpellProgressionGraph["nodes"] = [];
-  const requirementGroups: SpellProgressionGraph["requirementGroups"] = [];
-  const edges: SpellProgressionGraph["edges"] = [];
-
-  referenceFixture.школы.forEach((rawSchool, schoolIndex) => {
-    const schoolId = uuid(2_000 + schoolIndex);
-    schools.push({
-      packId,
-      packVersionId: versionId,
-      id: schoolId,
-      slug: rawSchool.ключ,
-      sourceName: rawSchool.название,
-      displayName: rawSchool.название,
-      description: rawSchool.название,
-      rawSourceText: rawSchool.название,
-      visibilityPolicy: "PUBLIC",
-      order: schoolIndex,
-    });
-
-    const nodeIdBySourceName = new Map<string, string>();
-    rawSchool.узлы.forEach((rawNode) => {
-      const nodeId = uuid(nextNodeId++);
-      nodeIdBySourceName.set(rawNode.название, nodeId);
-      if (rawNode.вариантНаСхеме)
-        nodeIdBySourceName.set(rawNode.вариантНаСхеме, nodeId);
-
-      const passive =
-        rawNode.стоимостьМаны === null && rawNode.частота === null;
-      const firstNumber = rawNode.частота?.match(/\d+/u)?.[0];
-      nodes.push({
-        packId,
-        packVersionId: versionId,
-        id: nodeId,
-        schoolId,
-        sourceName: rawNode.название,
-        displayName: rawNode.название,
-        rawSourceText: rawNode.описание,
-        narrativeText: rawNode.описание,
-        mechanicsText: rawNode.описание,
-        lifecycle: "REFERENCE",
-        revision: 0,
-        revisionProvenance: {
-          sourceRevision: "docs/content/magic-schools.json",
-          changeNote: "Review-only транскрипция исходного материала",
-        },
-        activation: {
-          passive,
-          triggers: passive
-            ? []
-            : [
-                {
-                  kind: "OTHER",
-                  rawText: rawNode.частота ?? rawNode.описание,
-                },
-              ],
-        },
-        costs:
-          rawNode.стоимостьМаны === null
-            ? []
-            : [
-                {
-                  resource: "Мана",
-                  amount: {
-                    kind: "FIXED",
-                    value: rawNode.стоимостьМаны,
-                  },
-                  timing: "ON_ACTIVATE",
-                  rawText: `${rawNode.стоимостьМаны} мп`,
-                },
-              ],
-        usageLimit:
-          rawNode.частота === null
-            ? null
-            : {
-                maxUses: firstNumber ? Number(firstNumber) : 1,
-                cadence: cadenceFromRaw(rawNode.частота),
-              },
-      });
-    });
-
-    const incomingEdges = new Map<string, RawMagicSchoolEdge[]>();
-    for (const rawEdge of rawSchool.связи) {
-      const incoming = incomingEdges.get(rawEdge.куда) ?? [];
-      incoming.push(rawEdge);
-      incomingEdges.set(rawEdge.куда, incoming);
-    }
-
-    const groupIdByTargetName = new Map<string, string>();
-    for (const [targetName, incoming] of incomingEdges) {
-      const groupId = uuid(nextGroupId++);
-      groupIdByTargetName.set(targetName, groupId);
-      requirementGroups.push({
-        packId,
-        packVersionId: versionId,
-        id: groupId,
-        schoolId,
-        targetNodeId: nodeIdBySourceName.get(targetName)!,
-        mode: incoming.length === 1 ? "ALL" : "UNRESOLVED",
-        sourceNote: referenceFixture.источник.предупреждение,
-      });
-    }
-
-    for (const rawEdge of rawSchool.связи) {
-      edges.push({
-        packId,
-        packVersionId: versionId,
-        id: uuid(nextEdgeId++),
-        schoolId,
-        requirementGroupId: groupIdByTargetName.get(rawEdge.куда)!,
-        sourceNodeId: nodeIdBySourceName.get(rawEdge.откуда)!,
-        targetNodeId: nodeIdBySourceName.get(rawEdge.куда)!,
-        sourceNote: referenceFixture.источник.предупреждение,
-      });
-    }
-  });
-
-  return {
-    packId,
-    versionId,
+  return previewSpellReferenceImport({
+    packId: uuid(9_001),
+    versionId: uuid(9_002),
     version: 1,
-    title: "Школы магии Аркен-Хара — референс",
-    edition: "review-only",
-    lifecycle: "REFERENCE",
-    provenance: {
-      sourceType: "TRANSCRIBED",
-      sourceLabel: referenceFixture.источник.описания,
-      rawSourceText: JSON.stringify(referenceFixture.источник),
-    },
-    schools,
-    nodes,
-    requirementGroups,
-    edges,
-  };
+    source: referenceFixture,
+  }).graph;
 }
 
 function auditRawReference(): {
@@ -938,12 +760,15 @@ describe("docs/content/magic-schools.json reference", () => {
     expect(parsed.nodes).toHaveLength(145);
     expect(parsed.edges).toHaveLength(114);
     expect(result.errors).toEqual([]);
-    expect(result.warnings).toHaveLength(6);
+    expect(result.warnings).toHaveLength(37);
     expect(
-      result.warnings.every(
+      result.warnings.filter(
         (issue) => issue.code === "UNRESOLVED_REQUIREMENT_GROUP",
       ),
-    ).toBe(true);
+    ).toHaveLength(6);
+    expect(
+      result.warnings.filter((issue) => issue.code === "OPEN_IMPORT_WARNING"),
+    ).toHaveLength(31);
 
     const incomingCountByGroup = new Map<string, number>();
     for (const edge of parsed.edges)

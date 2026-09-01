@@ -156,6 +156,7 @@ import { registerWorldContentRoutes } from "./world-content-routes.js";
 import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
 import { registerSpellPackRoutes } from "./spell-pack-routes.js";
 import { registerSpellAssignmentRoutes } from "./spell-assignment-routes.js";
+import { registerSpellProjectionRoutes } from "./spell-projection-routes.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -893,6 +894,7 @@ export function registerRoutes(
   registerWorldContentInstanceRoutes(app, db);
   registerSpellPackRoutes(app, db);
   registerSpellAssignmentRoutes(app, db);
+  registerSpellProjectionRoutes(app, db);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {

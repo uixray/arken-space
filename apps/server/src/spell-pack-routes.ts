@@ -3,9 +3,11 @@ import { and, desc, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
+  SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS,
   appendSpellPackDraftVersionCommandSchema,
   archiveSpellPackCommandSchema,
   createSpellPackCommandSchema,
+  previewSpellReferenceImportCommandSchema,
   spellProgressionGraphSchema,
   transitionSpellPackLifecycleCommandSchema,
   validateSpellPackGraphSchema,
@@ -18,6 +20,7 @@ import {
 } from "@arken/contracts";
 import { gameEvents, spellPackVersions, spellPacks } from "@arken/db";
 import { requireAuth, type AuthContext } from "./auth.js";
+import { previewSpellReferenceImport } from "./spell-reference-import.js";
 import {
   appendSpellPackVersionInTransaction,
   createSpellPackInTransaction,
@@ -334,6 +337,7 @@ function cloneGraphVersion(
     nodes: graph.nodes.map((node) => ({
       ...node,
       packVersionId: versionId,
+      lifecycle,
     })),
     requirementGroups: graph.requirementGroups.map((group) => ({
       ...group,
@@ -425,6 +429,22 @@ async function sendMutationOutcome<
 }
 
 export function registerSpellPackRoutes(app: FastifyInstance, db: Database) {
+  app.post(
+    "/api/spell-packs/imports/reference/preview",
+    { bodyLimit: SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS * 4 },
+    async (request, reply) => {
+      const auth = await requireGm(request, reply, db);
+      if (!auth) return;
+      const parsed = previewSpellReferenceImportCommandSchema.safeParse(
+        request.body,
+      );
+      if (!parsed.success) return fail(reply, 400, "INVALID_REQUEST");
+      return reply
+        .header("Cache-Control", "private, no-store")
+        .send(previewSpellReferenceImport(parsed.data));
+    },
+  );
+
   app.post("/api/spell-packs/validate", async (request, reply) => {
     const auth = await requireGm(request, reply, db);
     if (!auth) return;

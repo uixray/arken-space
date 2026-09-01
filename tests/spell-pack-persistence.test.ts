@@ -104,9 +104,11 @@ beforeAll(async () => {
 afterAll(async () => database.close());
 
 describe("UIX-579 spell-pack persistence", () => {
-  it("creates empty tables without adding runtime seed content", () => {
+  it("never auto-seeds the review-only 2024 fixture", async () => {
     expect(migrationCounts).toEqual({ packs: 0, versions: 0 });
     expect(seededCounts).toEqual({ packs: 0, versions: 0 });
+    await ensureSeed(storageDb());
+    expect(await spellCounts()).toEqual({ packs: 0, versions: 0 });
   });
 
   it("stores version 1 and appends only the next validated snapshot", async () => {

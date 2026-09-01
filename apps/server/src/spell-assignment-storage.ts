@@ -3,7 +3,10 @@ import {
   spellAssignmentSnapshotSchema,
   type SpellAssignmentSnapshot,
   type SpellAssignmentTarget,
+  type SpellPrerequisiteFailure,
   type SpellProgressionGraph,
+  type SpellRequirementEdge,
+  type SpellRequirementGroup,
 } from "@arken/contracts";
 import { characterSpellAssignmentVersions, spellPackVersions } from "@arken/db";
 import {
@@ -44,20 +47,15 @@ export interface CurrentSpellAssignmentVersion {
   snapshot: SpellAssignmentSnapshot;
 }
 
-export type SpellPrerequisiteFailureCode =
-  | "SOURCE_NODE_MISSING"
-  | "SOURCE_NODE_RANK_TOO_LOW"
-  | "THRESHOLD_NOT_EVALUABLE"
-  | "GM_GRANT_REQUIRED"
-  | "UNRESOLVED_GROUP";
+export type SpellAssignmentReadExecutor = Pick<SpellPackTransaction, "select">;
 
-export interface SpellPrerequisiteFailure {
-  code: SpellPrerequisiteFailureCode;
-  groupId: string;
-  edgeId?: string;
-  sourceNodeId?: string;
-  requiredRank?: number;
-  actualRank?: number;
+export type { SpellPrerequisiteFailure } from "@arken/contracts";
+
+export interface SpellPrerequisiteTarget {
+  packId: string;
+  schoolId: string;
+  requirementGroups: readonly SpellRequirementGroup[];
+  edges: readonly SpellRequirementEdge[];
 }
 
 export async function loadActiveSpellGraph(
@@ -149,7 +147,7 @@ export function buildSpellAssignmentSnapshot(
 }
 
 export async function loadCurrentSpellAssignmentVersions(
-  tx: SpellPackTransaction,
+  tx: SpellAssignmentReadExecutor,
   campaignId: string,
   characterId: string,
   excludeAssignmentId?: string,
@@ -198,7 +196,7 @@ export function hasDuplicateCurrentTarget(
 
 function failureForEdge(
   groupId: string,
-  edge: SpellAssignmentSnapshot["edges"][number],
+  edge: SpellRequirementEdge,
   knownRanks: ReadonlyMap<string, number>,
 ): SpellPrerequisiteFailure[] {
   const failures: SpellPrerequisiteFailure[] = [];
@@ -236,17 +234,16 @@ function failureForEdge(
   return failures;
 }
 
-export function evaluateSpellAssignmentPrerequisites(
-  candidate: SpellAssignmentSnapshot,
+export function evaluateSpellPrerequisites(
+  target: SpellPrerequisiteTarget,
   current: readonly CurrentSpellAssignmentVersion[],
 ): SpellPrerequisiteFailure[] {
-  if (candidate.kind === "SCHOOL") return [];
   const knownRanks = new Map<string, number>();
   for (const { snapshot } of current) {
     if (
       snapshot.kind !== "NODE" ||
-      snapshot.packId !== candidate.packId ||
-      snapshot.schoolId !== candidate.schoolId
+      snapshot.packId !== target.packId ||
+      snapshot.schoolId !== target.schoolId
     )
       continue;
     knownRanks.set(
@@ -255,15 +252,15 @@ export function evaluateSpellAssignmentPrerequisites(
     );
   }
 
-  const edgesByGroup = new Map<string, SpellAssignmentSnapshot["edges"]>();
-  for (const edge of candidate.edges) {
+  const edgesByGroup = new Map<string, SpellRequirementEdge[]>();
+  for (const edge of target.edges) {
     const groupEdges = edgesByGroup.get(edge.requirementGroupId) ?? [];
     groupEdges.push(edge);
     edgesByGroup.set(edge.requirementGroupId, groupEdges);
   }
 
   const failures: SpellPrerequisiteFailure[] = [];
-  for (const group of candidate.requirementGroups) {
+  for (const group of target.requirementGroups) {
     if (group.mode === "UNRESOLVED") {
       failures.push({ code: "UNRESOLVED_GROUP", groupId: group.id });
       continue;
@@ -279,4 +276,12 @@ export function evaluateSpellAssignmentPrerequisites(
     for (const edgeFailure of edgeFailures) failures.push(...edgeFailure);
   }
   return failures;
+}
+
+export function evaluateSpellAssignmentPrerequisites(
+  candidate: SpellAssignmentSnapshot,
+  current: readonly CurrentSpellAssignmentVersion[],
+): SpellPrerequisiteFailure[] {
+  if (candidate.kind === "SCHOOL") return [];
+  return evaluateSpellPrerequisites(candidate, current);
 }

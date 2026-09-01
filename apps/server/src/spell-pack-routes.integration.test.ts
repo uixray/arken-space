@@ -5,7 +5,10 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { and, asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { SpellProgressionGraph } from "@arken/contracts";
+import {
+  SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS,
+  type SpellProgressionGraph,
+} from "@arken/contracts";
 import * as schema from "@arken/db";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
@@ -223,6 +226,238 @@ afterAll(async () => {
 });
 
 describe("UIX-580 spell-pack GM API", () => {
+  it("keeps the 2024 import in review until warnings are resolved", async () => {
+    const source = JSON.parse(
+      await readFile(
+        new URL("../../../docs/content/magic-schools.json", import.meta.url),
+        "utf8",
+      ),
+    ) as unknown;
+    const packId = id();
+    const versionId = id();
+    const previewPayload = {
+      packId,
+      versionId,
+      version: 1,
+      source,
+    };
+
+    const playerPreview = await app.inject({
+      method: "POST",
+      url: "/api/spell-packs/imports/reference/preview",
+      headers: playerHeaders,
+      payload: previewPayload,
+    });
+    expect(playerPreview.statusCode).toBe(403);
+    expect(playerPreview.json()).toEqual({ error: "GM_REQUIRED" });
+
+    const activeInjection = await app.inject({
+      method: "POST",
+      url: "/api/spell-packs/imports/reference/preview",
+      headers: ownGmHeaders,
+      payload: { ...previewPayload, lifecycle: "ACTIVE" },
+    });
+    expect(activeInjection.statusCode).toBe(400);
+    expect(activeInjection.json()).toEqual({ error: "INVALID_REQUEST" });
+
+    const oversizedTransport = await app.inject({
+      method: "POST",
+      url: "/api/spell-packs/imports/reference/preview",
+      headers: { ...ownGmHeaders, "content-type": "application/json" },
+      payload: JSON.stringify({
+        ...previewPayload,
+        padding: "x".repeat(SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS * 4),
+      }),
+    });
+    expect(oversizedTransport.statusCode).toBe(413);
+
+    const preview = await app.inject({
+      method: "POST",
+      url: "/api/spell-packs/imports/reference/preview",
+      headers: ownGmHeaders,
+      payload: previewPayload,
+    });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.headers["cache-control"]).toBe("private, no-store");
+    const candidate = preview.json();
+    expect(candidate.graph).toMatchObject({
+      packId,
+      versionId,
+      version: 1,
+      lifecycle: "REFERENCE",
+    });
+    expect(candidate.graph.schools).toHaveLength(13);
+    expect(candidate.graph.nodes).toHaveLength(145);
+    expect(candidate.graph.edges).toHaveLength(114);
+    expect(candidate.graph.importWarnings).toHaveLength(31);
+    expect(
+      candidate.graph.importWarnings.every(
+        (warning: { status: string }) => warning.status === "OPEN",
+      ),
+    ).toBe(true);
+    expect(candidate.validation).toMatchObject({ valid: true, errors: [] });
+    expect(candidate.validation.warnings).toHaveLength(37);
+    expect(
+      candidate.validation.warnings.filter(
+        (warning: { code: string }) =>
+          warning.code === "UNRESOLVED_REQUIREMENT_GROUP",
+      ),
+    ).toHaveLength(6);
+    expect(
+      candidate.validation.warnings.filter(
+        (warning: { code: string }) => warning.code === "OPEN_IMPORT_WARNING",
+      ),
+    ).toHaveLength(31);
+
+    const created = await createPack(ownGmHeaders, candidate.graph);
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      packId,
+      versionId,
+      lifecycle: "REFERENCE",
+    });
+    expect(created.json().warnings).toHaveLength(37);
+
+    const rejectedActionId = id();
+    const promotion = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/lifecycle`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: rejectedActionId,
+        expectedVersion: 1,
+        versionId: id(),
+        lifecycle: "ACTIVE",
+      },
+    });
+    expect(promotion.statusCode).toBe(422);
+    expect(promotion.json()).toMatchObject({
+      error: "SPELL_GRAPH_SEMANTIC_INVALID",
+    });
+    expect(promotion.json().details).toHaveLength(37);
+    expect(await versionsForPack(ids.campaign.own, packId)).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, rejectedActionId)),
+    ).toHaveLength(0);
+
+    const events = await eventsForPack(ids.campaign.own, packId);
+    expect(events).toHaveLength(1);
+    const serializedAudit = JSON.stringify(events[0]!.payload);
+    expect(serializedAudit).not.toContain("graph");
+    expect(serializedAudit).not.toContain("требуетУточнения");
+    expect(serializedAudit).not.toContain("mechanics");
+
+    const reviewedVersionId = id();
+    const reviewedGraph = {
+      ...candidate.graph,
+      versionId: reviewedVersionId,
+      version: 2,
+      lifecycle: "DRAFT",
+      schools: candidate.graph.schools.map(
+        (school: Record<string, unknown>) => ({
+          ...school,
+          packVersionId: reviewedVersionId,
+        }),
+      ),
+      nodes: candidate.graph.nodes.map((node: Record<string, unknown>) => ({
+        ...node,
+        packVersionId: reviewedVersionId,
+        lifecycle: "DRAFT",
+      })),
+      requirementGroups: candidate.graph.requirementGroups.map(
+        (group: Record<string, unknown>) => ({
+          ...group,
+          packVersionId: reviewedVersionId,
+          mode: group.mode === "UNRESOLVED" ? "ALL" : group.mode,
+        }),
+      ),
+      edges: candidate.graph.edges.map((edge: Record<string, unknown>) => ({
+        ...edge,
+        packVersionId: reviewedVersionId,
+      })),
+      importWarnings: candidate.graph.importWarnings.map(
+        (warning: Record<string, unknown>) => ({
+          ...warning,
+          status: "RESOLVED",
+          resolutionReason: "Проверено мастером в новой immutable версии",
+        }),
+      ),
+    };
+    const reviewed = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/versions`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        expectedVersion: 1,
+        graph: reviewedGraph,
+      },
+    });
+    expect(reviewed.statusCode).toBe(201);
+    expect(reviewed.json()).toMatchObject({
+      versionId: reviewedVersionId,
+      version: 2,
+      lifecycle: "DRAFT",
+      warnings: [],
+    });
+
+    const activeVersionId = id();
+    const activated = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/lifecycle`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        expectedVersion: 2,
+        versionId: activeVersionId,
+        lifecycle: "ACTIVE",
+      },
+    });
+    expect(activated.statusCode).toBe(201);
+    const activeGraph = activated.json().graph;
+    expect(activeGraph.lifecycle).toBe("ACTIVE");
+    expect(activeGraph.importWarnings).toHaveLength(31);
+    expect(
+      activeGraph.importWarnings.every(
+        (warning: { status: string; resolutionReason?: string }) =>
+          warning.status === "RESOLVED" &&
+          warning.resolutionReason ===
+            "Проверено мастером в новой immutable версии",
+      ),
+    ).toBe(true);
+    expect(
+      activeGraph.requirementGroups.every(
+        (group: { mode: string }) => group.mode !== "UNRESOLVED",
+      ),
+    ).toBe(true);
+    expect(
+      activeGraph.nodes.every(
+        (node: { lifecycle: string; packVersionId: string }) =>
+          node.lifecycle === "ACTIVE" && node.packVersionId === activeVersionId,
+      ),
+    ).toBe(true);
+    expect(
+      (await versionsForPack(ids.campaign.own, packId)).map(
+        ({ version, lifecycle }) => [version, lifecycle],
+      ),
+    ).toEqual([
+      [1, "REFERENCE"],
+      [2, "DRAFT"],
+      [3, "ACTIVE"],
+    ]);
+    const finalEvents = await eventsForPack(ids.campaign.own, packId);
+    expect(finalEvents).toHaveLength(3);
+    for (const event of finalEvents) {
+      const serialized = JSON.stringify(event.payload);
+      expect(serialized).not.toContain("graph");
+      expect(serialized).not.toContain("mechanics");
+      expect(serialized).not.toContain("требуетУточнения");
+    }
+  });
+
   it("validates malformed and unresolved candidates without persistence", async () => {
     const beforePacks = await db.select().from(schema.spellPacks);
     const beforeEvents = await db.select().from(schema.gameEvents);

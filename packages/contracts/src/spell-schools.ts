@@ -6,6 +6,10 @@ const spellIdSchema = z
   .transform((value) => value.toLowerCase());
 const spellLabelSchema = z.string().trim().min(1).max(240);
 const spellLongTextSchema = z.string().max(50_000);
+export const SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS = 250_000;
+const spellRawSourcePayloadSchema = z
+  .string()
+  .max(SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS);
 
 /** Lifecycle of one immutable spell-pack version. */
 export const spellPackLifecycleSchema = z.enum([
@@ -35,7 +39,7 @@ export const spellGraphProvenanceSchema = z
     sourceExternalId: z.string().trim().min(1).max(500).nullable().optional(),
     capturedAt: z.string().datetime().nullable().optional(),
     attribution: z.string().trim().min(1).max(1_000).nullable().optional(),
-    rawSourceText: spellLongTextSchema,
+    rawSourceText: spellRawSourcePayloadSchema,
   })
   .strict();
 export type SpellGraphProvenance = z.infer<typeof spellGraphProvenanceSchema>;
@@ -390,6 +394,50 @@ export type SpellGraphCompatibility = z.infer<
   typeof spellGraphCompatibilitySchema
 >;
 
+export const spellImportWarningCodeSchema = z.literal("SOURCE_AMBIGUITY");
+export type SpellImportWarningCode = z.infer<
+  typeof spellImportWarningCodeSchema
+>;
+
+export const spellImportWarningStatusSchema = z.enum(["OPEN", "RESOLVED"]);
+export type SpellImportWarningStatus = z.infer<
+  typeof spellImportWarningStatusSchema
+>;
+
+const spellImportWarningIdentityFields = {
+  id: spellIdSchema,
+  code: spellImportWarningCodeSchema,
+  path: z.string().trim().min(1).max(1_000),
+  message: z.string().trim().min(1).max(5_000),
+  entityId: spellIdSchema.optional(),
+};
+
+const openSpellImportWarningSchema = z
+  .object({
+    ...spellImportWarningIdentityFields,
+    status: z.literal("OPEN"),
+  })
+  .strict();
+
+const resolvedSpellImportWarningSchema = z
+  .object({
+    ...spellImportWarningIdentityFields,
+    status: z.literal("RESOLVED"),
+    resolutionReason: z.string().trim().min(1).max(2_000),
+  })
+  .strict();
+
+/**
+ * Review markers are part of an immutable graph version. Resolving one means
+ * appending a new graph whose marker carries an explicit reason; mutating the
+ * original warning in place is never valid.
+ */
+export const spellImportWarningSchema = z.discriminatedUnion("status", [
+  openSpellImportWarningSchema,
+  resolvedSpellImportWarningSchema,
+]);
+export type SpellImportWarning = z.infer<typeof spellImportWarningSchema>;
+
 /** One immutable, flat, normalized spell-pack version. */
 export const spellProgressionGraphSchema = z
   .object({
@@ -404,12 +452,348 @@ export const spellProgressionGraphSchema = z
     nodes: z.array(spellNodeSchema),
     requirementGroups: z.array(spellRequirementGroupSchema),
     edges: z.array(spellRequirementEdgeSchema),
+    /** Optional for immutable versions created before import review markers existed. */
+    importWarnings: z.array(spellImportWarningSchema).max(2_000).optional(),
     layout: spellGraphLayoutSchema.optional(),
     notes: spellLongTextSchema.optional(),
     compatibility: spellGraphCompatibilitySchema.optional(),
   })
   .strict();
 export type SpellProgressionGraph = z.infer<typeof spellProgressionGraphSchema>;
+
+/** An immutable version must always be selected explicitly for projection. */
+export const spellProgressionQuerySchema = z
+  .object({
+    packId: spellIdSchema,
+    packVersionId: spellIdSchema,
+  })
+  .strict();
+export type SpellProgressionQuery = z.infer<typeof spellProgressionQuerySchema>;
+
+export const spellProjectionNodeStateSchema = z.enum([
+  "DISCOVERED",
+  "AVAILABLE",
+  "LOCKED",
+  "HIDDEN",
+]);
+export type SpellProjectionNodeState = z.infer<
+  typeof spellProjectionNodeStateSchema
+>;
+
+export const spellPrerequisiteFailureCodeSchema = z.enum([
+  "SOURCE_NODE_MISSING",
+  "SOURCE_NODE_RANK_TOO_LOW",
+  "THRESHOLD_NOT_EVALUABLE",
+  "GM_GRANT_REQUIRED",
+  "UNRESOLVED_GROUP",
+]);
+export type SpellPrerequisiteFailureCode = z.infer<
+  typeof spellPrerequisiteFailureCodeSchema
+>;
+
+const spellPrerequisiteEdgeFailureFields = {
+  groupId: spellIdSchema,
+  edgeId: spellIdSchema,
+  sourceNodeId: spellIdSchema,
+};
+
+export const spellPrerequisiteFailureSchema = z.discriminatedUnion("code", [
+  z
+    .object({
+      code: z.literal("SOURCE_NODE_MISSING"),
+      ...spellPrerequisiteEdgeFailureFields,
+    })
+    .strict(),
+  z
+    .object({
+      code: z.literal("SOURCE_NODE_RANK_TOO_LOW"),
+      ...spellPrerequisiteEdgeFailureFields,
+      requiredRank: z.number().int().positive().max(1_000),
+      actualRank: z.number().int().positive().max(1_000),
+    })
+    .strict(),
+  z
+    .object({
+      code: z.literal("THRESHOLD_NOT_EVALUABLE"),
+      ...spellPrerequisiteEdgeFailureFields,
+    })
+    .strict(),
+  z
+    .object({
+      code: z.literal("GM_GRANT_REQUIRED"),
+      ...spellPrerequisiteEdgeFailureFields,
+    })
+    .strict(),
+  z
+    .object({
+      code: z.literal("UNRESOLVED_GROUP"),
+      groupId: spellIdSchema,
+    })
+    .strict(),
+]);
+export type SpellPrerequisiteFailure = z.infer<
+  typeof spellPrerequisiteFailureSchema
+>;
+
+const playerSpellSchoolSchema = z
+  .object({
+    id: spellIdSchema,
+    displayName: spellLabelSchema,
+  })
+  .strict();
+
+const playerSpellNodeIdentityFields = {
+  id: spellIdSchema,
+  schoolId: spellIdSchema,
+  displayName: spellLabelSchema,
+};
+
+const playerSpellNodeGameplayFields = {
+  mechanicsText: spellLongTextSchema,
+  activation: spellActivationSchema,
+  costs: z.array(spellCostSchema).max(50),
+  usageLimit: spellUsageLimitSchema.nullable(),
+  durationText: z.string().max(2_000).nullable().optional(),
+  rangeText: z.string().max(2_000).nullable().optional(),
+  targetText: z.string().max(2_000).nullable().optional(),
+  areaText: z.string().max(2_000).nullable().optional(),
+  rollActions: z.array(spellRollActionSchema).max(50).optional(),
+  effects: z.array(spellEffectSchema).max(100).optional(),
+};
+
+const playerLockedSpellNodeSchema = z
+  .object({
+    ...playerSpellNodeIdentityFields,
+    state: z.literal("LOCKED"),
+  })
+  .strict();
+
+const playerAvailableSpellNodeSchema = z
+  .object({
+    ...playerSpellNodeIdentityFields,
+    ...playerSpellNodeGameplayFields,
+    state: z.literal("AVAILABLE"),
+  })
+  .strict();
+
+const playerDiscoveredSpellNodeSchema = z
+  .object({
+    ...playerSpellNodeIdentityFields,
+    ...playerSpellNodeGameplayFields,
+    state: z.literal("DISCOVERED"),
+  })
+  .strict();
+
+export const playerSpellProjectionNodeSchema = z.discriminatedUnion("state", [
+  playerLockedSpellNodeSchema,
+  playerAvailableSpellNodeSchema,
+  playerDiscoveredSpellNodeSchema,
+]);
+export type PlayerSpellProjectionNode = z.infer<
+  typeof playerSpellProjectionNodeSchema
+>;
+
+export const playerSpellProgressionProjectionSchema = z
+  .object({
+    characterId: spellIdSchema,
+    packId: spellIdSchema,
+    packVersionId: spellIdSchema,
+    schools: z.array(playerSpellSchoolSchema),
+    nodes: z.array(playerSpellProjectionNodeSchema),
+    edges: z.array(
+      z
+        .object({
+          sourceNodeId: spellIdSchema,
+          targetNodeId: spellIdSchema,
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type PlayerSpellProgressionProjection = z.infer<
+  typeof playerSpellProgressionProjectionSchema
+>;
+
+const gmSpellProjectionNodeSchema = z
+  .object({
+    school: spellSchoolSchema,
+    node: spellNodeSchema,
+    state: spellProjectionNodeStateSchema,
+    prerequisiteFailures: z.array(spellPrerequisiteFailureSchema),
+  })
+  .strict();
+
+export const gmSpellProgressionProjectionSchema = z
+  .object({
+    characterId: spellIdSchema,
+    packId: spellIdSchema,
+    packVersionId: spellIdSchema,
+    graph: spellProgressionGraphSchema,
+    nodes: z.array(gmSpellProjectionNodeSchema),
+  })
+  .strict();
+export type GmSpellProgressionProjection = z.infer<
+  typeof gmSpellProgressionProjectionSchema
+>;
+
+const spellReferenceNodeSourceSchema = z
+  .object({
+    название: spellLabelSchema,
+    вариантНаСхеме: spellLabelSchema.nullable(),
+    стоимостьМаны: z.number().finite().positive().nullable(),
+    частота: z.string().trim().min(1).max(2_000).nullable(),
+    описание: z.string().min(1).max(50_000),
+  })
+  .strict();
+
+const spellReferenceEdgeSourceSchema = z
+  .object({
+    откуда: spellLabelSchema,
+    куда: spellLabelSchema,
+  })
+  .strict();
+
+const spellReferenceSchoolSourceSchema = z
+  .object({
+    ключ: z
+      .string()
+      .trim()
+      .min(1)
+      .max(160)
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+        "School key must be kebab-case lowercase",
+      ),
+    название: spellLabelSchema,
+    узлы: z.array(spellReferenceNodeSourceSchema).max(2_000),
+    связи: z.array(spellReferenceEdgeSourceSchema).max(10_000),
+    безСвязей: z.array(spellLabelSchema).max(2_000),
+  })
+  .strict();
+
+export const spellReferenceImportSourceSchema = z
+  .object({
+    источник: z
+      .object({
+        описания: z.string().trim().min(1).max(5_000),
+        деревья: z.string().trim().min(1).max(5_000),
+        предупреждение: z.string().trim().min(1).max(5_000),
+      })
+      .strict(),
+    школы: z.array(spellReferenceSchoolSourceSchema).max(100),
+    требуетУточнения: z.array(z.string().trim().min(1).max(5_000)).max(2_000),
+  })
+  .strict()
+  .superRefine((source, context) => {
+    if (JSON.stringify(source).length > SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS)
+      context.addIssue({
+        code: "custom",
+        path: [],
+        message: `Reference source exceeds ${SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS} characters`,
+      });
+
+    const schoolKeys = new Set<string>();
+    source.школы.forEach((school, schoolIndex) => {
+      if (schoolKeys.has(school.ключ))
+        context.addIssue({
+          code: "custom",
+          path: ["школы", schoolIndex, "ключ"],
+          message: `Duplicate school key: ${school.ключ}`,
+        });
+      schoolKeys.add(school.ключ);
+
+      const canonicalBySourceName = new Map<string, string>();
+      school.узлы.forEach((node, nodeIndex) => {
+        const priorNode = canonicalBySourceName.get(node.название);
+        if (priorNode && priorNode !== node.название)
+          context.addIssue({
+            code: "custom",
+            path: ["школы", schoolIndex, "узлы", nodeIndex, "название"],
+            message: `Node name collides with an existing scheme alias: ${node.название}`,
+          });
+        else if (canonicalBySourceName.has(node.название))
+          context.addIssue({
+            code: "custom",
+            path: ["школы", schoolIndex, "узлы", nodeIndex, "название"],
+            message: `Duplicate node name: ${node.название}`,
+          });
+        canonicalBySourceName.set(node.название, node.название);
+
+        if (!node.вариантНаСхеме) return;
+        const priorAlias = canonicalBySourceName.get(node.вариантНаСхеме);
+        if (priorAlias && priorAlias !== node.название)
+          context.addIssue({
+            code: "custom",
+            path: ["школы", schoolIndex, "узлы", nodeIndex, "вариантНаСхеме"],
+            message: `Scheme alias maps to multiple nodes: ${node.вариантНаСхеме}`,
+          });
+        canonicalBySourceName.set(node.вариантНаСхеме, node.название);
+      });
+
+      const seenEdges = new Set<string>();
+      school.связи.forEach((edge, edgeIndex) => {
+        const sourceName = canonicalBySourceName.get(edge.откуда);
+        const targetName = canonicalBySourceName.get(edge.куда);
+        if (!sourceName)
+          context.addIssue({
+            code: "custom",
+            path: ["школы", schoolIndex, "связи", edgeIndex, "откуда"],
+            message: `Unknown source node: ${edge.откуда}`,
+          });
+        if (!targetName)
+          context.addIssue({
+            code: "custom",
+            path: ["школы", schoolIndex, "связи", edgeIndex, "куда"],
+            message: `Unknown target node: ${edge.куда}`,
+          });
+        if (!sourceName || !targetName) return;
+        const identity = `${sourceName}\u0000${targetName}`;
+        if (seenEdges.has(identity))
+          context.addIssue({
+            code: "custom",
+            path: ["школы", schoolIndex, "связи", edgeIndex],
+            message: `Duplicate reference edge: ${edge.откуда} -> ${edge.куда}`,
+          });
+        seenEdges.add(identity);
+      });
+
+      school.безСвязей.forEach((nodeName, nodeIndex) => {
+        if (!canonicalBySourceName.has(nodeName))
+          context.addIssue({
+            code: "custom",
+            path: ["школы", schoolIndex, "безСвязей", nodeIndex],
+            message: `Unknown isolated node: ${nodeName}`,
+          });
+      });
+    });
+
+    const ambiguityMessages = new Set<string>();
+    source.требуетУточнения.forEach((message, index) => {
+      if (ambiguityMessages.has(message))
+        context.addIssue({
+          code: "custom",
+          path: ["требуетУточнения", index],
+          message: `Duplicate source ambiguity: ${message}`,
+        });
+      ambiguityMessages.add(message);
+    });
+  });
+export type SpellReferenceImportSource = z.infer<
+  typeof spellReferenceImportSourceSchema
+>;
+
+/** Stateless review preview. Lifecycle is intentionally absent and forced by the adapter. */
+export const previewSpellReferenceImportCommandSchema = z
+  .object({
+    packId: spellIdSchema,
+    versionId: spellIdSchema,
+    version: z.number().int().positive(),
+    source: spellReferenceImportSourceSchema,
+  })
+  .strict();
+export type PreviewSpellReferenceImportCommand = z.infer<
+  typeof previewSpellReferenceImportCommandSchema
+>;
 
 const spellPackExpectedVersionSchema = z.number().int().nonnegative();
 
@@ -475,6 +859,7 @@ export const spellGraphValidationIssueCodeSchema = z.enum([
   "DUPLICATE_NODE_ID",
   "DUPLICATE_REQUIREMENT_GROUP_ID",
   "DUPLICATE_EDGE_ID",
+  "DUPLICATE_IMPORT_WARNING_ID",
   "DUPLICATE_EDGE",
   "EMPTY_REQUIREMENT_GROUP",
   "DANGLING_SCHOOL",
@@ -488,34 +873,60 @@ export const spellGraphValidationIssueCodeSchema = z.enum([
   "GROUP_TARGET_MISMATCH",
   "CYCLE",
   "UNRESOLVED_REQUIREMENT_GROUP",
+  "OPEN_IMPORT_WARNING",
 ]);
 export type SpellGraphValidationIssueCode = z.infer<
   typeof spellGraphValidationIssueCodeSchema
 >;
 
-export interface SpellGraphValidationIssue {
-  code: SpellGraphValidationIssueCode;
-  path: string;
-  message: string;
-  entityId?: string;
-}
+export const spellGraphValidationIssueSchema = z
+  .object({
+    code: spellGraphValidationIssueCodeSchema,
+    path: z.string(),
+    message: z.string(),
+    entityId: spellIdSchema.optional(),
+  })
+  .strict();
+export type SpellGraphValidationIssue = z.infer<
+  typeof spellGraphValidationIssueSchema
+>;
 
 export interface SpellGraphValidationResult {
   errors: SpellGraphValidationIssue[];
   warnings: SpellGraphValidationIssue[];
 }
 
-export interface SpellGraphSchemaIssue {
-  code: "SCHEMA_INVALID";
-  path: string;
-  message: string;
-}
+export const spellGraphSchemaIssueSchema = z
+  .object({
+    code: z.literal("SCHEMA_INVALID"),
+    path: z.string(),
+    message: z.string(),
+  })
+  .strict();
+export type SpellGraphSchemaIssue = z.infer<typeof spellGraphSchemaIssueSchema>;
 
-export interface SpellPackValidationResponse {
-  valid: boolean;
-  errors: Array<SpellGraphSchemaIssue | SpellGraphValidationIssue>;
-  warnings: SpellGraphValidationIssue[];
-}
+export const spellPackValidationResponseSchema = z
+  .object({
+    valid: z.boolean(),
+    errors: z.array(
+      z.union([spellGraphSchemaIssueSchema, spellGraphValidationIssueSchema]),
+    ),
+    warnings: z.array(spellGraphValidationIssueSchema),
+  })
+  .strict();
+export type SpellPackValidationResponse = z.infer<
+  typeof spellPackValidationResponseSchema
+>;
+
+export const spellReferenceImportPreviewResponseSchema = z
+  .object({
+    graph: spellProgressionGraphSchema,
+    validation: spellPackValidationResponseSchema,
+  })
+  .strict();
+export type SpellReferenceImportPreviewResponse = z.infer<
+  typeof spellReferenceImportPreviewResponseSchema
+>;
 
 /** Full mechanics are intentionally a GM-only HTTP response, never a player projection. */
 export interface SpellPackVersionDto {
@@ -888,6 +1299,25 @@ export function validateSpellProgressionGraph(
     "edge",
     errors,
   );
+  pushDuplicateIssues(
+    graph.importWarnings ?? [],
+    "importWarnings",
+    "DUPLICATE_IMPORT_WARNING_ID",
+    "import warning",
+    errors,
+  );
+
+  (graph.importWarnings ?? []).forEach((warning, index) => {
+    if (warning.status !== "OPEN") return;
+    const issue: SpellGraphValidationIssue = {
+      code: "OPEN_IMPORT_WARNING",
+      path: `importWarnings[${index}].status`,
+      entityId: warning.id,
+      message: warning.message,
+    };
+    if (graph.lifecycle === "ACTIVE") errors.push(issue);
+    else warnings.push(issue);
+  });
 
   const schoolsById = new Map(
     graph.schools.map((school) => [school.id, school] as const),

@@ -103,4 +103,31 @@ describe("порядок в run-multiplayer-e2e", () => {
     expect(source).toContain("assignment CAS race");
     expect(source).toContain("audit actor deletion");
   });
+
+  it("запускает PostgreSQL-пробу безопасных проекций после назначений", async () => {
+    const source = await readFile(
+      new URL(
+        "../apps/server/src/spell-projection.pg-probe.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const assignmentProbe = script.indexOf(
+      'record("spell-assignment-postgresql-probe"',
+    );
+    const projectionProbe = script.indexOf(
+      'record("spell-projection-postgresql-probe"',
+    );
+    const playwright = script.indexOf(
+      "const playwright = await runPlaywrightWithRestart(environment)",
+      projectionProbe,
+    );
+    expect(projectionProbe).toBeGreaterThan(assignmentProbe);
+    expect(playwright).toBeGreaterThan(projectionProbe);
+    expect(script).toContain('"apps/server/src/spell-projection.pg-probe.ts"');
+    expect(script).toContain("report.spellProjectionProbeExitCode");
+    expect(source).toContain("registerSpellProjectionRoutes");
+    expect(source).toContain("safe projection leaked");
+    expect(source).toContain("OPEN import warning reached ACTIVE lifecycle");
+  });
 });

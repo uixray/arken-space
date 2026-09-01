@@ -18,12 +18,14 @@
 Родительская UIX-262 разбита на независимые этапы:
 
 1. **UIX-575** — контракты, чистый валидатор и проверка review-only фикстуры.
-2. **UIX-576** — хранение версий и GM API.
+2. **UIX-576** — umbrella хранения и GM API, разделённый на
+   **UIX-579** (persistence/migration) и **UIX-580** (GM-команды).
 3. **UIX-577** — снимки назначений и аудируемый prerequisite override.
 4. **UIX-578** — безопасные player/GM projections и review-only импорт.
 
-Текущий пул выполняет только UIX-575. Остальные подзадачи остаются в Backlog и
-не входят в этот коммит.
+UIX-575, UIX-579, UIX-580 и UIX-577 имеют отдельные локальные коммиты и
+переведены в `In Review`. Текущий пул выполняет только UIX-578; umbrella
+UIX-576 остаётся отдельной задачей Linear и не закрывается этим коммитом.
 
 ## Решения доменной модели
 
@@ -55,7 +57,7 @@
    являются duplicate IDs/edges, dangling reference, self edge, cross-school,
    cross-pack/cross-version corruption и cycle.
 
-## UIX-575 — текущий пул
+## UIX-575 — контракты и валидатор
 
 ### Файлы
 
@@ -100,14 +102,29 @@ UI и пользовательский поток не меняются, поэ�
 Persistence, ACL, realtime и миграции не меняются, поэтому
 `test:multiplayer` не является гейтом UIX-575.
 
+## UIX-578 — текущий пул
+
+- Player-safe и полный GM payload разнесены по разным маршрутам. Безопасный
+  payload строится allowlist-ом: `GM_ONLY` отсутствует во всех структурах,
+  locked node не содержит mechanics, provenance или условий рёбер.
+- Состояния `DISCOVERED | AVAILABLE | LOCKED | HIDDEN` вычисляются общим
+  prerequisite evaluator по текущим immutable assignment snapshot-ам. Layout
+  не участвует в доменной логике.
+- Review import является stateless preview без runtime-доступа к
+  `docs/content`: adapter жёстко строит `REFERENCE`, после чего GM при желании
+  сохраняет candidate существующей командой create.
+- 31 неоднозначность сохраняется внутри graph как `OPEN` import warning, а
+  шесть неизвестных схождений — как `UNRESOLVED` requirement group. Все 37
+  предупреждений разрешены для review и становятся ошибками при promotion в
+  `ACTIVE`.
+- Изменение visibility/access требует PostgreSQL probe и полного
+  `test:multiplayer`; UI-поток и hot frontend-файлы в пул не входят.
+
 ## Следующие пулы и блокеры
 
-- UIX-576 потребует миграцию, campaign isolation и `test:multiplayer`.
-- UIX-577 переиспользует существующий snapshot-подход каталога, но добавит
-  immutable pack/version provenance и reason для override.
-- UIX-578 отделит GM DTO от player DTO: hidden узлы отсутствуют в payload, а
-  locked узлы не раскрывают mechanics и скрытые рёбра.
 - Runtime reset для часовых/месячных/session cadence зависит от отдельного
   решения campaign clock; хранение raw cadence этим не блокируется.
 - Promotion референса 2024 в ACTIVE заблокирован до подтверждения мастером
   рёбер, шести схождений и 31 неоднозначной записи.
+- Визуальный player graph, GM-редактор и spell cards остаются отдельными
+  продуктово-интерфейсными задачами и не входят в серверный UIX-578.
