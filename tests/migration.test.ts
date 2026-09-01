@@ -42,6 +42,8 @@ describe("initial PostgreSQL migration", () => {
         "player_requests",
         "scenes",
         "sessions",
+        "spell_pack_versions",
+        "spell_packs",
         "tokens",
         "world_content",
         "world_content_actions",
@@ -49,6 +51,13 @@ describe("initial PostgreSQL migration", () => {
         "world_content_relations",
       ]),
     );
+    const emptySpellTables = await database.query<{
+      packs: number;
+      versions: number;
+    }>(
+      "select (select count(*) from spell_packs) packs, (select count(*) from spell_pack_versions) versions",
+    );
+    expect(emptySpellTables.rows[0]).toEqual({ packs: 0, versions: 0 });
     await database.close();
   });
 
@@ -196,7 +205,11 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
     p = "00000000-0000-0000-0000-000000000003",
     foreign = "00000000-0000-0000-0000-000000000010",
     foreignGm = "00000000-0000-0000-0000-000000000011",
-    scene = "00000000-0000-0000-0000-000000000005";
+    scene = "00000000-0000-0000-0000-000000000005",
+    spellPack = "00000000-0000-0000-0000-000000000020",
+    spellVersion = "00000000-0000-0000-0000-000000000021",
+    foreignSpellPack = "00000000-0000-0000-0000-000000000030",
+    foreignSpellVersion = "00000000-0000-0000-0000-000000000031";
   await database.exec(
     `insert into campaigns (id,name) values ('${c}','C'),('${foreign}','Foreign');
      insert into memberships (id,campaign_id,role,display_name) values ('${gm}','${c}','GM','GM'),('${p}','${c}','PLAYER','P'),('${foreignGm}','${foreign}','GM','Foreign GM');
@@ -207,7 +220,11 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
      insert into tokens (scene_id,owner_membership_id,name,x,y) values ('${scene}','${p}','T',0,0);
      insert into fog_reveals (scene_id,x,y,width,height) values ('${scene}',0,0,1,1);
      insert into chat_messages (campaign_id,membership_id,body,thread_id) select '${c}','${p}','hi',id from chat_threads where campaign_id='${c}' and stream='TABLE';
-     insert into player_access_grants (campaign_id,membership_id,label,token_hash) values ('${c}','${p}','P','hash');`,
+     insert into player_access_grants (campaign_id,membership_id,label,token_hash) values ('${c}','${p}','P','hash');
+     insert into spell_packs(id,campaign_id) values ('${spellPack}','${c}'),('${foreignSpellPack}','${foreign}');
+     insert into spell_pack_versions(id,campaign_id,pack_id,version,lifecycle,graph) values
+       ('${spellVersion}','${c}','${spellPack}',1,'DRAFT',jsonb_build_object('packId','${spellPack}','versionId','${spellVersion}','version',1,'title','Target','lifecycle','DRAFT','provenance',jsonb_build_object())),
+       ('${foreignSpellVersion}','${foreign}','${foreignSpellPack}',1,'DRAFT',jsonb_build_object('packId','${foreignSpellPack}','versionId','${foreignSpellVersion}','version',1,'title','Foreign','lifecycle','DRAFT','provenance',jsonb_build_object()));`,
   );
   await database.exec("begin");
   await executeGameplayReset({ query: database.query.bind(database) }, c, gm);
@@ -241,16 +258,24 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
     revision: 0,
   });
   const cleared = await database.query(
-    `select (select count(*) from scenes where campaign_id='${c}') scenes, (select count(*) from characters where campaign_id='${c}') characters, (select count(*) from chat_messages where campaign_id='${c}') chat`,
+    `select (select count(*) from scenes where campaign_id='${c}') scenes, (select count(*) from characters where campaign_id='${c}') characters, (select count(*) from chat_messages where campaign_id='${c}') chat, (select count(*) from spell_packs where campaign_id='${c}') spell_packs, (select count(*) from spell_pack_versions where campaign_id='${c}') spell_pack_versions`,
   );
-  expect(cleared.rows[0]).toMatchObject({ scenes: 0, characters: 0, chat: 0 });
+  expect(cleared.rows[0]).toMatchObject({
+    scenes: 0,
+    characters: 0,
+    chat: 0,
+    spell_packs: 0,
+    spell_pack_versions: 0,
+  });
   const foreignCounts = await database.query(
-    `select (select count(*) from memberships where campaign_id='${foreign}') members, (select count(*) from scenes where campaign_id='${foreign}') scenes, (select count(*) from assets where campaign_id='${foreign}') assets`,
+    `select (select count(*) from memberships where campaign_id='${foreign}') members, (select count(*) from scenes where campaign_id='${foreign}') scenes, (select count(*) from assets where campaign_id='${foreign}') assets, (select count(*) from spell_packs where campaign_id='${foreign}') spell_packs, (select count(*) from spell_pack_versions where campaign_id='${foreign}') spell_pack_versions`,
   );
   expect(foreignCounts.rows[0]).toMatchObject({
     members: 1,
     scenes: 1,
     assets: 1,
+    spell_packs: 1,
+    spell_pack_versions: 1,
   });
   await database.close();
 });

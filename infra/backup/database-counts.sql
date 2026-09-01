@@ -41,6 +41,8 @@ FROM (
     ('player_requests'),
     ('scenes'),
     ('sessions'),
+    ('spell_pack_versions'),
+    ('spell_packs'),
     ('sticker_media'),
     ('sticker_pack_entitlements'),
     ('sticker_packs'),

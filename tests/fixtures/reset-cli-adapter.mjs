@@ -23,6 +23,8 @@ const cleared = {
   gameEvents: 0,
   tokens: 0,
   fogReveals: 0,
+  spellPacks: 0,
+  spellPackVersions: 0,
   activeSceneId: null,
   campaignDay: 1,
   battleActive: false,
@@ -31,6 +33,8 @@ const cleared = {
   foreignCampaigns: 1,
   foreignAssets: 2,
   foreignMemberships: 1,
+  foreignSpellPacks: 1,
+  foreignSpellPackVersions: 1,
 };
 
 export default {

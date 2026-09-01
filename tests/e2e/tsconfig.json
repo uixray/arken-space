@@ -11,5 +11,5 @@
        error boundary, а Playwright показывает лишь «кнопка не найдена». */
     "noUncheckedIndexedAccess": false
   },
-  "include": ["."]
+  "include": [".", "../multiplayer/spell-pack-storage.pg-probe.ts"]
 }

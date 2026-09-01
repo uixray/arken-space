@@ -48,4 +48,21 @@ describe("порядок в run-multiplayer-e2e", () => {
     expect(script).toContain("../test-results/multiplayer/");
     expect(compose).toContain("./test-results/multiplayer:");
   });
+
+  it("запускает PostgreSQL-пробу spell pack до браузерного сценария", async () => {
+    const compose = await readFile(
+      new URL("../docker-compose.e2e.yml", import.meta.url),
+      "utf8",
+    );
+    const probe = script.indexOf('record("spell-pack-postgresql-probe"');
+    const playwright = script.indexOf(
+      "const playwright = await runPlaywrightWithRestart(environment)",
+      probe,
+    );
+    expect(probe).toBeGreaterThan(-1);
+    expect(playwright).toBeGreaterThan(probe);
+    expect(compose).toContain(
+      "./tests/multiplayer/spell-pack-storage.pg-probe.ts:/app/tests/multiplayer/spell-pack-storage.pg-probe.ts:ro",
+    );
+  });
 });

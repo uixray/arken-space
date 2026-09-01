@@ -235,6 +235,12 @@ export const feedbackStatusEnum = pgEnum("feedback_status", [
   "RESOLVED",
   "DISMISSED",
 ]);
+export const spellPackLifecycleEnum = pgEnum("spell_pack_lifecycle", [
+  "DRAFT",
+  "REFERENCE",
+  "ACTIVE",
+  "ARCHIVED",
+]);
 
 export const campaigns = pgTable("campaigns", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -320,6 +326,88 @@ export const campaigns = pgTable("campaigns", {
     .defaultNow()
     .notNull(),
 });
+
+/**
+ * Stable campaign-scoped identity of a spell pack. Every content or lifecycle
+ * change is appended to `spellPackVersions`; this row is never rewritten.
+ */
+export const spellPacks = pgTable(
+  "spell_packs",
+  {
+    id: uuid("id").primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("spell_packs_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+  ],
+);
+
+/**
+ * Immutable snapshot of one spell-pack version. The JSON graph is retained in
+ * full for source fidelity; relational columns make identity, ordering and
+ * campaign isolation enforceable by PostgreSQL.
+ */
+export const spellPackVersions = pgTable(
+  "spell_pack_versions",
+  {
+    id: uuid("id").primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    packId: uuid("pack_id").notNull(),
+    version: integer("version").notNull(),
+    lifecycle: spellPackLifecycleEnum("lifecycle").notNull(),
+    /** Runtime shape is validated in the server storage boundary. */
+    graph: jsonb("graph").$type<unknown>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("spell_pack_versions_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("spell_pack_versions_campaign_pack_version_idx").on(
+      table.campaignId,
+      table.packId,
+      table.version,
+    ),
+    index("spell_pack_versions_campaign_pack_created_idx").on(
+      table.campaignId,
+      table.packId,
+      table.createdAt,
+    ),
+    foreignKey({
+      name: "spell_pack_versions_campaign_pack_fk",
+      columns: [table.campaignId, table.packId],
+      foreignColumns: [spellPacks.campaignId, spellPacks.id],
+    }).onDelete("cascade"),
+    check(
+      "spell_pack_versions_positive_version_check",
+      sql`${table.version} > 0`,
+    ),
+    check(
+      "spell_pack_versions_graph_shape_check",
+      sql`(
+        jsonb_typeof(${table.graph}) = 'object'
+        AND ${table.graph} @> jsonb_build_object(
+          'packId', ${table.packId}::text,
+          'versionId', ${table.id}::text,
+          'version', ${table.version},
+          'lifecycle', ${table.lifecycle}::text
+        )
+        AND jsonb_typeof(${table.graph}->'provenance') = 'object'
+      ) IS TRUE`,
+    ),
+  ],
+);
 
 export const memberships = pgTable(
   "memberships",

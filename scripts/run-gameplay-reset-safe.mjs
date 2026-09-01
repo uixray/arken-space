@@ -183,6 +183,8 @@ export const productionDependencies = {
         'gameEvents',(select count(*) from game_events where campaign_id=${c}),
         'tokens',(select count(*) from tokens t join scenes s on s.id=t.scene_id where s.campaign_id=${c}),
         'fogReveals',(select count(*) from fog_reveals f join scenes s on s.id=f.scene_id where s.campaign_id=${c}),
+        'spellPacks',(select count(*) from spell_packs where campaign_id=${c}),
+        'spellPackVersions',(select count(*) from spell_pack_versions where campaign_id=${c}),
         'activeSceneId',(select active_scene_id from campaigns where id=${c}),
         'campaignDay',(select day from campaigns where id=${c}),
         'battleActive',(select battle_active from campaigns where id=${c}),
@@ -197,7 +199,9 @@ export const productionDependencies = {
         'foreignInvites',(select count(*) from invites where campaign_id<>${c}),
         'foreignChatMessages',(select count(*) from chat_messages where campaign_id<>${c}),
         'foreignAudioStates',(select count(*) from campaign_audio_tracks where campaign_id<>${c}),
-        'foreignGameEvents',(select count(*) from game_events where campaign_id<>${c})
+        'foreignGameEvents',(select count(*) from game_events where campaign_id<>${c}),
+        'foreignSpellPacks',(select count(*) from spell_packs where campaign_id<>${c}),
+        'foreignSpellPackVersions',(select count(*) from spell_pack_versions where campaign_id<>${c})
       );`,
     ]);
     return JSON.parse(output);
@@ -266,6 +270,8 @@ export const productionDependencies = {
       "gameEvents",
       "tokens",
       "fogReveals",
+      "spellPacks",
+      "spellPackVersions",
     ];
     const foreign = Object.keys(before).filter((key) =>
       key.startsWith("foreign"),

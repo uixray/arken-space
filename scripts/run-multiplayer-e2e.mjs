@@ -371,6 +371,25 @@ try {
     );
   record("isolated-edge-health", "passed", { buildRevision });
 
+  const spellPackProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "tests/multiplayer/spell-pack-storage.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.spellPackProbeExitCode = spellPackProbe;
+  if (spellPackProbe !== 0)
+    throw new Error("Spell-pack PostgreSQL probe exited " + spellPackProbe);
+  record("spell-pack-postgresql-probe", "passed");
+
   const playwright = await runPlaywrightWithRestart(environment);
   report.playwrightExitCode = playwright;
   if (playwright !== 0) throw new Error("Playwright exited " + playwright);

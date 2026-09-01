@@ -15,6 +15,11 @@ import {
 const root = process.cwd();
 const campaign = "00000000-0000-0000-0000-000000000001";
 const gm = "00000000-0000-0000-0000-000000000002";
+const foreignCampaign = "00000000-0000-0000-0000-000000000010";
+const spellPack = "00000000-0000-0000-0000-000000000020";
+const spellPackVersion = "00000000-0000-0000-0000-000000000021";
+const foreignSpellPack = "00000000-0000-0000-0000-000000000030";
+const foreignSpellPackVersion = "00000000-0000-0000-0000-000000000031";
 
 describe("isolated operator CLI boundary", () => {
   it("executes the real entry point only with explicit isolation guards", () => {
@@ -68,12 +73,16 @@ describe("isolated operator CLI boundary", () => {
         playerSessions: 0,
         gmSessions: 1,
         playerAccessGrants: 0,
+        spellPacks: 0,
+        spellPackVersions: 0,
         activeSceneId: null,
         campaignDay: 1,
         battleActive: false,
         battleCounter: 0,
         campaignRevision: 0,
         foreignCampaigns: 1,
+        foreignSpellPacks: 1,
+        foreignSpellPackVersions: 1,
       },
     });
     if (process.platform !== "win32")
@@ -90,6 +99,8 @@ describe("isolated operator CLI boundary", () => {
     expect(sql).toContain("battle_active = false");
     expect(sql).toContain("battle_counter = 0");
     expect(sql).toContain("revision = 0");
+    expect(sql).toContain("delete from spell_packs");
+    expect(sql).not.toContain("delete from spell_pack_versions");
     expect(sql).not.toContain("$1");
     expect(sql).not.toContain("$2");
   });
@@ -135,7 +146,13 @@ describe("isolated operator CLI boundary", () => {
       );
     const player = "00000000-0000-0000-0000-000000000003";
     await database.exec(
-      `insert into campaigns(id,name,day,battle_active,battle_counter,revision) values('${campaign}','C',9,true,4,12); insert into memberships(id,campaign_id,role,display_name) values('${gm}','${campaign}','GM','GM'),('${player}','${campaign}','PLAYER','P'); insert into assets(campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values('${campaign}','${player}','IMAGE','A','a','image/png',1);`,
+      `insert into campaigns(id,name,day,battle_active,battle_counter,revision) values('${campaign}','C',9,true,4,12),('${foreignCampaign}','Foreign',1,false,0,0);
+       insert into memberships(id,campaign_id,role,display_name) values('${gm}','${campaign}','GM','GM'),('${player}','${campaign}','PLAYER','P');
+       insert into assets(campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values('${campaign}','${player}','IMAGE','A','a','image/png',1);
+       insert into spell_packs(id,campaign_id) values('${spellPack}','${campaign}'),('${foreignSpellPack}','${foreignCampaign}');
+       insert into spell_pack_versions(id,campaign_id,pack_id,version,lifecycle,graph) values
+         ('${spellPackVersion}','${campaign}','${spellPack}',1,'DRAFT',jsonb_build_object('packId','${spellPack}','versionId','${spellPackVersion}','version',1,'title','Target','lifecycle','DRAFT','provenance',jsonb_build_object())),
+         ('${foreignSpellPackVersion}','${foreignCampaign}','${foreignSpellPack}',1,'DRAFT',jsonb_build_object('packId','${foreignSpellPack}','versionId','${foreignSpellPackVersion}','version',1,'title','Foreign','lifecycle','DRAFT','provenance',jsonb_build_object()));`,
     );
     await database.exec(resetSql(campaign, gm));
     const result = await database.query<{
@@ -146,8 +163,21 @@ describe("isolated operator CLI boundary", () => {
       battle_active: boolean;
       battle_counter: number;
       revision: number;
+      spell_packs: number;
+      spell_pack_versions: number;
+      foreign_spell_packs: number;
+      foreign_spell_pack_versions: number;
     }>(
-      `select (select count(*) from memberships where campaign_id='${campaign}' and role='PLAYER') players,(select count(*) from assets where campaign_id='${campaign}') assets,(select uploaded_by_membership_id from assets where campaign_id='${campaign}') owner,day,battle_active,battle_counter,revision from campaigns where id='${campaign}'`,
+      `select
+         (select count(*) from memberships where campaign_id='${campaign}' and role='PLAYER') players,
+         (select count(*) from assets where campaign_id='${campaign}') assets,
+         (select uploaded_by_membership_id from assets where campaign_id='${campaign}') owner,
+         (select count(*) from spell_packs where campaign_id='${campaign}') spell_packs,
+         (select count(*) from spell_pack_versions where campaign_id='${campaign}') spell_pack_versions,
+         (select count(*) from spell_packs where campaign_id='${foreignCampaign}') foreign_spell_packs,
+         (select count(*) from spell_pack_versions where campaign_id='${foreignCampaign}') foreign_spell_pack_versions,
+         day,battle_active,battle_counter,revision
+       from campaigns where id='${campaign}'`,
     );
     expect(result.rows[0]).toMatchObject({
       players: 0,
@@ -157,6 +187,10 @@ describe("isolated operator CLI boundary", () => {
       battle_active: false,
       battle_counter: 0,
       revision: 0,
+      spell_packs: 0,
+      spell_pack_versions: 0,
+      foreign_spell_packs: 1,
+      foreign_spell_pack_versions: 1,
     });
     await database.close();
   });

@@ -288,6 +288,13 @@
       "when": 1787712230372,
       "tag": "0040_curly_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788272225130,
+      "tag": "0041_polite_titania",
+      "breakpoints": true
     }
   ]
 }

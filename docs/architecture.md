@@ -336,7 +336,7 @@ sequenceDiagram
 
 ## Данные
 
-Drizzle schema содержит **51** прикладную таблицу.
+Drizzle schema содержит **53** прикладные таблицы.
 
 | Группа             | Таблицы                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -348,6 +348,7 @@ Drizzle schema содержит **51** прикладную таблицу.
 | Общение            | `chat_messages`, `chat_threads`, `chat_read_cursors`, `chat_attachments`, `chat_attachment_uploads`                                                     |
 | Стикеры            | `stickers`, `sticker_packs`, `sticker_pack_entitlements`, `sticker_media`                                                                               |
 | Сюжетный канал     | `story_posts`, `story_post_revisions`, `story_post_media`, `story_import_batches`, `story_import_sources`                                               |
+| Магия              | `spell_packs`, `spell_pack_versions`                                                                                                                    |
 | Заявки игроков     | `player_requests`                                                                                                                                       |
 | Media/audio        | `assets`, `campaign_audio_tracks`                                                                                                                       |
 | Аудит              | `game_events`, `action_journal`                                                                                                                         |
@@ -361,10 +362,12 @@ Drizzle schema содержит **51** прикладную таблицу.
 - token definition хранит повторно используемую идентичность и many-to-many
   controllers, а token — placement и revision на конкретной сцене;
 - fog — упорядоченная последовательность `REVEAL`/`COVER`;
+- `spell_packs` хранит устойчивую campaign-scoped identity, а
+  `spell_pack_versions` — неизменяемые полные snapshot-ы graph;
 - assets лежат в БД как metadata, а content — на файловой системе;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0040` применяются при старте server-контейнера до запуска
+Миграции `0000`–`0041` применяются при старте server-контейнера до запуска
 Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 
