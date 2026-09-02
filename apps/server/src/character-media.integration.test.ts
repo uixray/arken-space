@@ -315,14 +315,23 @@ describe("character media HTTP: detach", () => {
       payload: { actionId: id(), revision: 0 },
     });
     expect(forbidden.statusCode).toBe(403);
+    const detachActionId = id();
     const detached = await app.inject({
       method: "POST",
       url: `/api/character-media/${created.id}/detach`,
       headers: headers(secrets.owner),
-      payload: { actionId: id(), revision: 0 },
+      payload: { actionId: detachActionId, revision: 0 },
     });
     expect(detached.statusCode).toBe(200);
     expect(detached.json().detachedAt).not.toBeNull();
+    const replay = await app.inject({
+      method: "POST",
+      url: `/api/character-media/${created.id}/detach`,
+      headers: headers(secrets.owner),
+      payload: { actionId: detachActionId, revision: 0 },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ duplicate: true });
     const list = (
       await app.inject({
         method: "GET",
@@ -333,6 +342,24 @@ describe("character media HTTP: detach", () => {
     expect(list.some((row: { id: string }) => row.id === created.id)).toBe(
       false,
     );
+    const assetStillThere = await db
+      .select({ id: schema.assets.id })
+      .from(schema.assets)
+      .where(eq(schema.assets.id, ids.asset));
+    expect(assetStillThere).toEqual([{ id: ids.asset }]);
+    const audits = await db
+      .select({
+        type: schema.gameEvents.type,
+        entityRevision: schema.gameEvents.entityRevision,
+      })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, detachActionId));
+    expect(audits).toEqual([
+      {
+        type: "character_media.detached",
+        entityRevision: 1,
+      },
+    ]);
   });
 });
 
