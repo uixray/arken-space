@@ -48,4 +48,86 @@ describe("порядок в run-multiplayer-e2e", () => {
     expect(script).toContain("../test-results/multiplayer/");
     expect(compose).toContain("./test-results/multiplayer:");
   });
+
+  it("запускает PostgreSQL-пробу spell pack до браузерного сценария", async () => {
+    const serverDockerfile = await readFile(
+      new URL("../Dockerfile.server", import.meta.url),
+      "utf8",
+    );
+    const spellPackProbeSource = await readFile(
+      new URL(
+        "../apps/server/src/spell-pack-storage.pg-probe.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const probe = script.indexOf('record("spell-pack-postgresql-probe"');
+    const playwright = script.indexOf(
+      "const playwright = await runPlaywrightWithRestart(environment)",
+      probe,
+    );
+    expect(probe).toBeGreaterThan(-1);
+    expect(playwright).toBeGreaterThan(probe);
+    expect(script).toContain(
+      '"apps/server/src/spell-pack-storage.pg-probe.ts"',
+    );
+    expect(serverDockerfile).toContain("COPY apps/server apps/server");
+    expect(spellPackProbeSource).toContain("registerSpellPackRoutes");
+    expect(spellPackProbeSource).toContain("PostgreSQL API CAS race");
+  });
+
+  it("запускает PostgreSQL-пробу назначений до браузерного сценария", async () => {
+    const source = await readFile(
+      new URL(
+        "../apps/server/src/spell-assignment-storage.pg-probe.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const spellPackProbe = script.indexOf(
+      'record("spell-pack-postgresql-probe"',
+    );
+    const assignmentProbe = script.indexOf(
+      'record("spell-assignment-postgresql-probe"',
+    );
+    const playwright = script.indexOf(
+      "const playwright = await runPlaywrightWithRestart(environment)",
+      assignmentProbe,
+    );
+    expect(assignmentProbe).toBeGreaterThan(spellPackProbe);
+    expect(playwright).toBeGreaterThan(assignmentProbe);
+    expect(script).toContain(
+      '"apps/server/src/spell-assignment-storage.pg-probe.ts"',
+    );
+    expect(source).toContain("registerSpellAssignmentRoutes");
+    expect(source).toContain("assignment CAS race");
+    expect(source).toContain("audit actor deletion");
+  });
+
+  it("запускает PostgreSQL-пробу безопасных проекций после назначений", async () => {
+    const source = await readFile(
+      new URL(
+        "../apps/server/src/spell-projection.pg-probe.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const assignmentProbe = script.indexOf(
+      'record("spell-assignment-postgresql-probe"',
+    );
+    const projectionProbe = script.indexOf(
+      'record("spell-projection-postgresql-probe"',
+    );
+    const playwright = script.indexOf(
+      "const playwright = await runPlaywrightWithRestart(environment)",
+      projectionProbe,
+    );
+    expect(projectionProbe).toBeGreaterThan(assignmentProbe);
+    expect(playwright).toBeGreaterThan(projectionProbe);
+    expect(script).toContain('"apps/server/src/spell-projection.pg-probe.ts"');
+    expect(script).toContain("report.spellProjectionProbeExitCode");
+    expect(source).toContain("registerSpellProjectionRoutes");
+    expect(source).toContain("safe projection leaked");
+    expect(source).toContain("OPEN import warning reached ACTIVE lifecycle");
+  });
 });

@@ -152,24 +152,25 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **144** HTTP-маршрута во всех server route-модулях: 85 остаются в
+Всего **154** HTTP-маршрута во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, operator
-feedback, заявкам игроков, сюжетному каналу, картам и содержимому мира.
+feedback, заявкам игроков, сюжетному каналу, картам, магии и содержимому мира.
 
-| Домен              | Маршруты                                                                                                                                                                                                                                                        |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                                                                                                                                                                               |
-| Membership/access  | rename membership, legacy invite, list/revoke/rotate persistent player access                                                                                                                                                                                   |
-| Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll                                                                                                                                                            |
-| Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo, состояния фигур (`/api/tokens/:id/conditions`)                                                                                                       |
-| Столкновения       | создание, переходы состояний, применение результатов                                                                                                                                                                                                            |
-| Карты мира         | `world-map-routes.ts` — карты, локации, привязка сцен, положение партии                                                                                                                                                                                         |
-| Содержимое мира    | `world-content-routes.ts` — шаблоны сущностей мира, экземпляры, действия, связи                                                                                                                                                                                 |
-| Кампания           | переименование, часы, раскладка характеристик (`/api/campaign/stat-layout`), очередь ходов (`/api/campaign/initiative` — мастер, `/api/campaign/initiative/self` — своё значение), зона боя (`/api/campaign/battle-zone`, `/api/campaign/initiative/from-zone`) |
-| Общение            | чат (общий, треды, история с пагинацией, вложения, курсоры прочтения), стикеры, кубы, синхронная музыка                                                                                                                                                         |
-| Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                                                                                                                                                                                    |
-| Заявки игроков     | создание, редактирование, переходы состояний                                                                                                                                                                                                                    |
-| Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`                                                                                                                                                           |
+| Домен              | Маршруты                                                                                                                                                                                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                                                                                                                                                                                                                |
+| Membership/access  | rename membership, legacy invite, list/revoke/rotate persistent player access                                                                                                                                                                                                                    |
+| Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll                                                                                                                                                                                             |
+| Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo, состояния фигур (`/api/tokens/:id/conditions`)                                                                                                                                        |
+| Столкновения       | создание, переходы состояний, применение результатов                                                                                                                                                                                                                                             |
+| Карты мира         | `world-map-routes.ts` — карты, локации, привязка сцен, положение партии                                                                                                                                                                                                                          |
+| Содержимое мира    | `world-content-routes.ts` — шаблоны сущностей мира, экземпляры, действия, связи                                                                                                                                                                                                                  |
+| Кампания           | переименование, часы, раскладка характеристик (`/api/campaign/stat-layout`), очередь ходов (`/api/campaign/initiative` — мастер, `/api/campaign/initiative/self` — своё значение), зона боя (`/api/campaign/battle-zone`, `/api/campaign/initiative/from-zone`)                                  |
+| Общение            | чат (общий, треды, история с пагинацией, вложения, курсоры прочтения), стикеры, кубы, синхронная музыка                                                                                                                                                                                          |
+| Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                                                                                                                                                                                                                     |
+| Заявки игроков     | создание, редактирование, переходы состояний                                                                                                                                                                                                                                                     |
+| Магия              | `spell-pack-routes.ts` — GM validation, review-only import preview, create, draft version, lifecycle promotion и archive; `spell-assignment-routes.ts` — GM-only назначение школы/узла и append следующего состояния; `spell-projection-routes.ts` — раздельные player-safe и полная GM-проекции |
+| Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`                                                                                                                                                                                            |
 
 Подробные request-схемы являются экспортами `@arken/contracts`. REST response и
 error shapes централизованы не полностью, поэтому при добавлении endpoint нужно
@@ -336,7 +337,7 @@ sequenceDiagram
 
 ## Данные
 
-Drizzle schema содержит **51** прикладную таблицу.
+Drizzle schema содержит **55** прикладных таблиц.
 
 | Группа             | Таблицы                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -348,6 +349,7 @@ Drizzle schema содержит **51** прикладную таблицу.
 | Общение            | `chat_messages`, `chat_threads`, `chat_read_cursors`, `chat_attachments`, `chat_attachment_uploads`                                                     |
 | Стикеры            | `stickers`, `sticker_packs`, `sticker_pack_entitlements`, `sticker_media`                                                                               |
 | Сюжетный канал     | `story_posts`, `story_post_revisions`, `story_post_media`, `story_import_batches`, `story_import_sources`                                               |
+| Магия              | `spell_packs`, `spell_pack_versions`, `character_spell_assignments`, `character_spell_assignment_versions`                                              |
 | Заявки игроков     | `player_requests`                                                                                                                                       |
 | Media/audio        | `assets`, `campaign_audio_tracks`                                                                                                                       |
 | Аудит              | `game_events`, `action_journal`                                                                                                                         |
@@ -361,10 +363,32 @@ Drizzle schema содержит **51** прикладную таблицу.
 - token definition хранит повторно используемую идентичность и many-to-many
   controllers, а token — placement и revision на конкретной сцене;
 - fog — упорядоченная последовательность `REVEAL`/`COVER`;
+- `spell_packs` хранит устойчивую campaign-scoped identity, а
+  `spell_pack_versions` — неизменяемые полные snapshot-ы graph;
+- `character_spell_assignments` хранит устойчивую lineage назначения школы или
+  узла персонажу, а `character_spell_assignment_versions` — неизменяемые
+  server-built snapshot-ы правил, provenance и аудируемой причины override;
+- GM-команды spell pack живут в `spell-pack-routes.ts`: create использует
+  `expectedVersion: 0`, а draft/lifecycle/archive добавляют следующую version
+  под parent lock и CAS `expectedVersion`; точный retry определяется по
+  `(campaignId, actionId)` и canonical command hash;
+- `game_events` для spell pack содержит только version/lifecycle metadata и
+  hash команды — полный graph и mechanics возвращаются лишь GM-ответом и не
+  входят в player snapshot или audit payload;
+- GM-команды назначения живут в `spell-assignment-routes.ts`, принимают только
+  identity цели, строят snapshot из конкретной ACTIVE-версии pack на сервере,
+  проверяют prerequisite graph и требуют непустую причину для override;
+- player-safe проекция графа доступна владельцу и контролёру активного
+  персонажа: GM-only узлы отсутствуют целиком, а locked узлы содержат только
+  безопасную identity-оболочку; отдельный GM-маршрут возвращает полный граф;
+- review-only импорт принимает ограниченный исходный payload, детерминированно
+  строит только `REFERENCE`-кандидат и не читает `docs/content` в runtime;
+  незакрытые import warnings сохраняются в snapshot и блокируют promotion в
+  `ACTIVE` через тот же валидатор;
 - assets лежат в БД как metadata, а content — на файловой системе;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0040` применяются при старте server-контейнера до запуска
+Миграции `0000`–`0042` применяются при старте server-контейнера до запуска
 Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 

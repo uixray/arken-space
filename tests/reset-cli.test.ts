@@ -15,6 +15,20 @@ import {
 const root = process.cwd();
 const campaign = "00000000-0000-0000-0000-000000000001";
 const gm = "00000000-0000-0000-0000-000000000002";
+const foreignCampaign = "00000000-0000-0000-0000-000000000010";
+const spellPack = "00000000-0000-0000-0000-000000000020";
+const spellPackVersion = "00000000-0000-0000-0000-000000000021";
+const foreignSpellPack = "00000000-0000-0000-0000-000000000030";
+const foreignSpellPackVersion = "00000000-0000-0000-0000-000000000031";
+const character = "00000000-0000-0000-0000-000000000040";
+const spellAssignment = "00000000-0000-0000-0000-000000000041";
+const spellAssignmentVersion = "00000000-0000-0000-0000-000000000042";
+const school = "00000000-0000-0000-0000-000000000043";
+const foreignGm = "00000000-0000-0000-0000-000000000011";
+const foreignCharacter = "00000000-0000-0000-0000-000000000050";
+const foreignSpellAssignment = "00000000-0000-0000-0000-000000000051";
+const foreignSpellAssignmentVersion = "00000000-0000-0000-0000-000000000052";
+const foreignSchool = "00000000-0000-0000-0000-000000000053";
 
 describe("isolated operator CLI boundary", () => {
   it("executes the real entry point only with explicit isolation guards", () => {
@@ -68,12 +82,20 @@ describe("isolated operator CLI boundary", () => {
         playerSessions: 0,
         gmSessions: 1,
         playerAccessGrants: 0,
+        characterSpellAssignments: 0,
+        characterSpellAssignmentVersions: 0,
+        spellPacks: 0,
+        spellPackVersions: 0,
         activeSceneId: null,
         campaignDay: 1,
         battleActive: false,
         battleCounter: 0,
         campaignRevision: 0,
         foreignCampaigns: 1,
+        foreignCharacterSpellAssignments: 1,
+        foreignCharacterSpellAssignmentVersions: 1,
+        foreignSpellPacks: 1,
+        foreignSpellPackVersions: 1,
       },
     });
     if (process.platform !== "win32")
@@ -90,6 +112,12 @@ describe("isolated operator CLI boundary", () => {
     expect(sql).toContain("battle_active = false");
     expect(sql).toContain("battle_counter = 0");
     expect(sql).toContain("revision = 0");
+    expect(sql).toContain("delete from character_spell_assignments");
+    expect(sql).not.toContain(
+      "delete from character_spell_assignment_versions",
+    );
+    expect(sql).toContain("delete from spell_packs");
+    expect(sql).not.toContain("delete from spell_pack_versions");
     expect(sql).not.toContain("$1");
     expect(sql).not.toContain("$2");
   });
@@ -135,7 +163,20 @@ describe("isolated operator CLI boundary", () => {
       );
     const player = "00000000-0000-0000-0000-000000000003";
     await database.exec(
-      `insert into campaigns(id,name,day,battle_active,battle_counter,revision) values('${campaign}','C',9,true,4,12); insert into memberships(id,campaign_id,role,display_name) values('${gm}','${campaign}','GM','GM'),('${player}','${campaign}','PLAYER','P'); insert into assets(campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values('${campaign}','${player}','IMAGE','A','a','image/png',1);`,
+      `insert into campaigns(id,name,day,battle_active,battle_counter,revision) values('${campaign}','C',9,true,4,12),('${foreignCampaign}','Foreign',1,false,0,0);
+       insert into memberships(id,campaign_id,role,display_name) values('${gm}','${campaign}','GM','GM'),('${player}','${campaign}','PLAYER','P'),('${foreignGm}','${foreignCampaign}','GM','Foreign GM');
+       insert into assets(campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values('${campaign}','${player}','IMAGE','A','a','image/png',1);
+       insert into characters(id,campaign_id,name) values('${character}','${campaign}','Target character'),('${foreignCharacter}','${foreignCampaign}','Foreign character');
+       insert into spell_packs(id,campaign_id) values('${spellPack}','${campaign}'),('${foreignSpellPack}','${foreignCampaign}');
+       insert into spell_pack_versions(id,campaign_id,pack_id,version,lifecycle,graph) values
+         ('${spellPackVersion}','${campaign}','${spellPack}',1,'ACTIVE',jsonb_build_object('packId','${spellPack}','versionId','${spellPackVersion}','version',1,'title','Target','lifecycle','ACTIVE','provenance',jsonb_build_object())),
+         ('${foreignSpellPackVersion}','${foreignCampaign}','${foreignSpellPack}',1,'ACTIVE',jsonb_build_object('packId','${foreignSpellPack}','versionId','${foreignSpellPackVersion}','version',1,'title','Foreign','lifecycle','ACTIVE','provenance',jsonb_build_object()));
+       insert into character_spell_assignments(id,campaign_id,character_id,pack_id) values
+         ('${spellAssignment}','${campaign}','${character}','${spellPack}'),
+         ('${foreignSpellAssignment}','${foreignCampaign}','${foreignCharacter}','${foreignSpellPack}');
+       insert into character_spell_assignment_versions(id,campaign_id,assignment_id,character_id,pack_id,pack_version_id,version,kind,school_id,snapshot,assigned_by_membership_id) values
+         ('${spellAssignmentVersion}','${campaign}','${spellAssignment}','${character}','${spellPack}','${spellPackVersion}',1,'SCHOOL','${school}',jsonb_build_object('schemaVersion',1,'assignmentId','${spellAssignment}','assignmentVersionId','${spellAssignmentVersion}','assignmentVersion',1,'packId','${spellPack}','packVersionId','${spellPackVersion}','packLifecycle','ACTIVE','kind','SCHOOL','schoolId','${school}','nodeId',null,'rank',null,'provenance',jsonb_build_object(),'school',jsonb_build_object()),'${gm}'),
+         ('${foreignSpellAssignmentVersion}','${foreignCampaign}','${foreignSpellAssignment}','${foreignCharacter}','${foreignSpellPack}','${foreignSpellPackVersion}',1,'SCHOOL','${foreignSchool}',jsonb_build_object('schemaVersion',1,'assignmentId','${foreignSpellAssignment}','assignmentVersionId','${foreignSpellAssignmentVersion}','assignmentVersion',1,'packId','${foreignSpellPack}','packVersionId','${foreignSpellPackVersion}','packLifecycle','ACTIVE','kind','SCHOOL','schoolId','${foreignSchool}','nodeId',null,'rank',null,'provenance',jsonb_build_object(),'school',jsonb_build_object()),'${foreignGm}');`,
     );
     await database.exec(resetSql(campaign, gm));
     const result = await database.query<{
@@ -146,8 +187,29 @@ describe("isolated operator CLI boundary", () => {
       battle_active: boolean;
       battle_counter: number;
       revision: number;
+      spell_packs: number;
+      spell_pack_versions: number;
+      spell_assignments: number;
+      spell_assignment_versions: number;
+      foreign_spell_packs: number;
+      foreign_spell_pack_versions: number;
+      foreign_spell_assignments: number;
+      foreign_spell_assignment_versions: number;
     }>(
-      `select (select count(*) from memberships where campaign_id='${campaign}' and role='PLAYER') players,(select count(*) from assets where campaign_id='${campaign}') assets,(select uploaded_by_membership_id from assets where campaign_id='${campaign}') owner,day,battle_active,battle_counter,revision from campaigns where id='${campaign}'`,
+      `select
+         (select count(*) from memberships where campaign_id='${campaign}' and role='PLAYER') players,
+         (select count(*) from assets where campaign_id='${campaign}') assets,
+         (select uploaded_by_membership_id from assets where campaign_id='${campaign}') owner,
+         (select count(*) from spell_packs where campaign_id='${campaign}') spell_packs,
+         (select count(*) from spell_pack_versions where campaign_id='${campaign}') spell_pack_versions,
+         (select count(*) from character_spell_assignments where campaign_id='${campaign}') spell_assignments,
+         (select count(*) from character_spell_assignment_versions where campaign_id='${campaign}') spell_assignment_versions,
+         (select count(*) from spell_packs where campaign_id='${foreignCampaign}') foreign_spell_packs,
+         (select count(*) from spell_pack_versions where campaign_id='${foreignCampaign}') foreign_spell_pack_versions,
+         (select count(*) from character_spell_assignments where campaign_id='${foreignCampaign}') foreign_spell_assignments,
+         (select count(*) from character_spell_assignment_versions where campaign_id='${foreignCampaign}') foreign_spell_assignment_versions,
+         day,battle_active,battle_counter,revision
+       from campaigns where id='${campaign}'`,
     );
     expect(result.rows[0]).toMatchObject({
       players: 0,
@@ -157,6 +219,14 @@ describe("isolated operator CLI boundary", () => {
       battle_active: false,
       battle_counter: 0,
       revision: 0,
+      spell_packs: 0,
+      spell_pack_versions: 0,
+      spell_assignments: 0,
+      spell_assignment_versions: 0,
+      foreign_spell_packs: 1,
+      foreign_spell_pack_versions: 1,
+      foreign_spell_assignments: 1,
+      foreign_spell_assignment_versions: 1,
     });
     await database.close();
   });

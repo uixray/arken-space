@@ -1,6 +1,7 @@
 import { z } from "zod";
 export * from "./fog-geometry.js";
 export * from "./fog-visibility.js";
+export * from "./spell-schools.js";
 import { fogGeometrySchema } from "./fog-geometry.js";
 export * from "./ruler-geometry.js";
 import { rulerUpdateSchema } from "./ruler-geometry.js";
