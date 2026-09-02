@@ -6,8 +6,9 @@ let mobileView = ["map", "team", "brief"].includes(location.hash.slice(1)) ? loc
 const $ = (s) => document.querySelector(s);
 const mage = (id) => mages.find((item) => item.id === id);
 const statusLabels = { waiting: "Ожидает", outbound: "В пути", decision: "На месте", returning: "Возвращается" };
+const statIcons = { power: "⚔", control: "◈", lore: "✦", mobility: "➜", empathy: "♥" };
 
-const stats = (values, needed = {}) => Object.entries(values).map(([key, value]) => `<span class="stat ${needed[key] ? "stat--needed" : ""}" title="${statLabels[key]}"><i>${statLabels[key][0]}</i><b>${value}</b></span>`).join("");
+const stats = (values, needed = {}) => Object.entries(values).map(([key, value]) => `<span class="stat ${needed[key] ? "stat--needed" : ""}" title="${statLabels[key]}" aria-label="${statLabels[key]}: ${value}"><i aria-hidden="true">${statIcons[key]}</i><em>${statLabels[key]}</em><b>${value}</b></span>`).join("");
 function update(next, view) { state = next; if (view) mobileView = view; saveLiveState(state); render(); }
 
 function renderMap() {
@@ -32,8 +33,15 @@ function renderMap() {
 
 function renderRoster() {
   const call = focusedCall(state); $("[data-team-note]").textContent = call ? `Команда для вызова «${missionForCall(call).title}». Занятые герои недоступны.` : "Ожидайте новый вызов.";
-  $("[data-mage-list]").innerHTML = mages.map((hero) => { const meta = state.heroes[hero.id]; const selected = call?.team.includes(hero.id); const benched = meta.benchedCalls > 0; const performance = meta.morale > 0 ? "Вдохновлён · +1" : meta.morale < 0 ? "Подавлен · −1" : "Настрой ровный"; return `<button class="mage ${selected ? "is-selected" : ""} ${benched ? "is-benched" : ""}" style="--mage:${hero.color}" data-mage="${hero.id}" ${(meta.status !== "ready" || benched) && !selected ? "disabled" : ""}><span class="mage__portrait"><img src="${hero.image}" alt=""/></span><span class="mage__school">${benched ? `Временно выбыл · ${meta.benchedCalls} выз.` : meta.status === "ready" ? hero.school : "На задании"}</span><strong>${hero.name}</strong><span class="mage__stats">${stats(hero.stats, call?.requirements)}</span><small>${hero.trait}</small><span class="mage__meta">${performance}<br>Усталость ${meta.fatigue} · ${meta.status === "ready" ? "Готов" : "Занят"}</span></button>`; }).join("");
+  $("[data-mage-list]").innerHTML = mages.map((hero) => { const meta = state.heroes[hero.id]; const selected = call?.team.includes(hero.id); const benched = meta.benchedCalls > 0; const unavailable = meta.status !== "ready" || benched; const performance = meta.morale > 0 ? "Вдохновлён · +1" : meta.morale < 0 ? "Подавлен · −1" : "Настрой ровный"; return `<article class="mage ${selected ? "is-selected" : ""} ${unavailable ? "is-unavailable" : ""}" style="--mage:${hero.color}"><button class="mage__select" data-mage="${hero.id}" ${unavailable && !selected ? "disabled" : ""} aria-pressed="${selected}"><span class="mage__portrait"><img src="${hero.image}" alt=""/></span><span class="mage__school">${benched ? `Выбыл · ${meta.benchedCalls} выз.` : meta.status === "ready" ? hero.school : "На задании"}</span><strong>${hero.name}</strong><span class="mage__stats">${stats(hero.stats, call?.requirements)}</span><span class="mage__meta">${performance}</span></button><button class="mage__details" data-details="${hero.id}" aria-label="Подробнее о ${hero.name}">Досье</button></article>`; }).join("");
   document.querySelectorAll("[data-mage]").forEach((button) => button.onclick = () => update(toggleHero(state, button.dataset.mage)));
+  document.querySelectorAll("[data-details]").forEach((button) => button.onclick = () => showHero(button.dataset.details));
+}
+
+function showHero(heroId) {
+  const hero = mage(heroId); const meta = state.heroes[heroId]; const dialog = $("[data-hero-dialog]");
+  dialog.innerHTML = `<button class="hero-card__close" data-close aria-label="Закрыть">×</button><div class="hero-card" style="--mage:${hero.color}"><img src="${hero.image}" alt="${hero.name}"><div><span>${hero.school}</span><h2>${hero.name}</h2><p>${hero.trait}</p><div class="hero-card__stats">${stats(hero.stats)}</div><dl><div><dt>Настрой</dt><dd>${meta.morale > 0 ? "Вдохновлён" : meta.morale < 0 ? "Подавлен" : "Ровный"}</dd></div><div><dt>Опыт</dt><dd>${meta.missions} заданий</dd></div><div><dt>Доверие</dt><dd>${meta.trust}</dd></div><div><dt>Усталость</dt><dd>${meta.fatigue}</dd></div></dl><blockquote>«${hero.voice.selected}»</blockquote></div></div>`;
+  dialog.querySelector("[data-close]").onclick = () => dialog.close(); dialog.showModal();
 }
 
 function renderBrief() {
