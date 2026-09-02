@@ -147,6 +147,7 @@ import {
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
+import { assetContentVersion } from "./asset-lifecycle.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
@@ -8590,9 +8591,15 @@ export function registerRoutes(
         asset.storageKey,
         request.headers.range,
       );
+      const etag = assetContentVersion(asset.storageKey);
+      reply.header("ETag", etag);
+      reply.header("Cache-Control", "private, no-cache");
+      if (request.headers["if-none-match"] === etag) {
+        file.stream.destroy();
+        return reply.code(304).send();
+      }
       reply.header("Accept-Ranges", "bytes");
       reply.header("Content-Type", asset.mimeType);
-      reply.header("Cache-Control", "private, max-age=86400");
       reply.header("Content-Length", String(file.end - file.start + 1));
       if (file.partial) {
         reply.code(206);

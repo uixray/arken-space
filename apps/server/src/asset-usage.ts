@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql, sum } from "drizzle-orm";
+import { actionIdSchema } from "@arken/contracts";
 import type {
   AssetUsageDto,
   ClientToServerEvents,
@@ -21,12 +22,42 @@ import {
 } from "@arken/db";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
+import { env } from "./env.js";
 import { buildSnapshot } from "./snapshot.js";
-import { removeStoredUpload } from "./storage.js";
-import { assetUsagePolicy, deleteUnusedAsset } from "./asset-lifecycle.js";
+import {
+  assertStorageCapacity,
+  removeStoredUpload,
+  storeUpload,
+} from "./storage.js";
+import { publicUploadError } from "./telemetry.js";
+import {
+  assetContentVersion,
+  assetDto,
+  assetUsagePolicy,
+  deleteUnusedAsset,
+} from "./asset-lifecycle.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
+
+function replacementReplay(
+  event:
+    { type: string; entityId: string | null; payload: unknown } | undefined,
+  assetId: string,
+  contentSha256: string,
+) {
+  if (!event) return "NONE" as const;
+  if (
+    event.type !== "asset.replaced" ||
+    event.entityId !== assetId ||
+    !event.payload ||
+    typeof event.payload !== "object" ||
+    !("contentSha256" in event.payload) ||
+    event.payload.contentSha256 !== contentSha256
+  )
+    return "CONFLICT" as const;
+  return "EXACT" as const;
+}
 /** Resolve only schema- or route-confirmed references to rows in assets. */
 export async function resolveAssetUsages(
   db: Database,
@@ -51,8 +82,13 @@ export async function resolveAssetUsages(
         and(eq(scenes.campaignId, campaignId), eq(scenes.mapAssetId, assetId)),
       ),
     db
-      .select({ id: tokenDefinitions.id, name: tokenDefinitions.name })
+      .select({
+        id: tokenDefinitions.id,
+        name: tokenDefinitions.name,
+        characterName: characters.name,
+      })
       .from(tokenDefinitions)
+      .leftJoin(characters, eq(tokenDefinitions.characterId, characters.id))
       .where(
         and(
           eq(tokenDefinitions.campaignId, campaignId),
@@ -153,7 +189,7 @@ export async function resolveAssetUsages(
     ...definitionRows.map((row) => ({
       kind: "TOKEN_DEFINITION" as const,
       entityId: row.id,
-      label: row.name,
+      label: row.name ?? row.characterName ?? "Token definition",
       location: "Token catalog",
       visibility: "GM_ONLY" as const,
       deletionPolicy: "BLOCK" as const,
@@ -316,6 +352,207 @@ export function registerAssetLifecycleRoutes(
           usages,
         });
       }
+      throw error;
+    }
+  });
+
+  app.put("/api/assets/:id/content", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const actionId = actionIdSchema.parse(request.headers["x-action-id"]);
+    const expectedVersion = z
+      .string()
+      .min(3)
+      .parse(request.headers["if-match"]);
+    const [current] = await db
+      .select()
+      .from(assets)
+      .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+
+    const file = await request.file({
+      limits: {
+        fileSize:
+          current.kind === "AUDIO" ? env.MAX_AUDIO_BYTES : env.MAX_IMAGE_BYTES,
+        files: 1,
+      },
+    });
+    if (!file) return reply.code(400).send({ error: "FILE_REQUIRED" });
+    const buffer = await file.toBuffer();
+    const contentSha256 = createHash("sha256").update(buffer).digest("hex");
+    const [existingAction] = await db
+      .select({
+        type: gameEvents.type,
+        entityId: gameEvents.entityId,
+        payload: gameEvents.payload,
+      })
+      .from(gameEvents)
+      .where(
+        and(
+          eq(gameEvents.campaignId, auth.campaignId),
+          eq(gameEvents.actionId, actionId),
+        ),
+      )
+      .limit(1);
+    const replay = replacementReplay(existingAction, id, contentSha256);
+    if (replay === "CONFLICT")
+      return reply.code(409).send({ error: "ACTION_ID_REUSED" });
+    if (replay === "EXACT")
+      return reply.send({
+        asset: assetDto(current),
+        version: assetContentVersion(current.storageKey),
+        replayed: true,
+      });
+
+    let stored: Awaited<ReturnType<typeof storeUpload>> | undefined;
+    let committed = false;
+    try {
+      const [usage] = await db
+        .select({ used: sum(assets.sizeBytes) })
+        .from(assets)
+        .where(eq(assets.campaignId, auth.campaignId));
+      await assertStorageCapacity(
+        Math.max(0, Number(usage?.used ?? 0) - current.sizeBytes),
+        buffer.length,
+      );
+      stored = await storeUpload(
+        buffer,
+        current.kind === "AUDIO" ? "audio" : "image",
+      );
+      const result = await db.transaction(async (tx) => {
+        const [locked] = await tx
+          .select()
+          .from(assets)
+          .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
+          .for("update")
+          .limit(1);
+        if (!locked) return null;
+        const beforeVersion = assetContentVersion(locked.storageKey);
+        if (beforeVersion !== expectedVersion)
+          throw new Error("ASSET_VERSION_CONFLICT");
+        const [updated] = await tx
+          .update(assets)
+          .set({
+            storageKey: stored!.storageKey,
+            mimeType: stored!.mimeType,
+            sizeBytes: stored!.sizeBytes,
+            width: stored!.width,
+            height: stored!.height,
+            durationSeconds: stored!.durationSeconds,
+          })
+          .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
+          .returning();
+        if (!updated) throw new Error("ASSET_REPLACE_FAILED");
+        const afterVersion = assetContentVersion(updated.storageKey);
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId,
+          membershipId: auth.membershipId,
+          type: "asset.replaced",
+          entityType: "asset",
+          entityId: id,
+          payload: {
+            assetId: id,
+            beforeVersion,
+            afterVersion,
+            contentSha256,
+            mimeType: updated.mimeType,
+            sizeBytes: updated.sizeBytes,
+            width: updated.width,
+            height: updated.height,
+            durationSeconds: updated.durationSeconds,
+          },
+        });
+        return { updated, oldStorageKey: locked.storageKey, afterVersion };
+      });
+      if (!result) {
+        await removeStoredUpload(stored.storageKey);
+        return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+      }
+      committed = true;
+      let oldBlobCleanupPending = false;
+      try {
+        await removeStoredUpload(result.oldStorageKey);
+      } catch {
+        oldBlobCleanupPending = true;
+        request.log.error(
+          { assetId: id, errorCode: "ASSET_OLD_BLOB_CLEANUP_FAILED" },
+          "asset.replace_cleanup_pending",
+        );
+      }
+      try {
+        await broadcastSnapshots(io, db, auth.campaignId);
+      } catch (error) {
+        request.log.error(
+          { assetId: id, error },
+          "asset.replace_broadcast_failed",
+        );
+      }
+      return reply.send({
+        asset: assetDto(result.updated),
+        version: result.afterVersion,
+        oldBlobCleanupPending,
+        replayed: false,
+      });
+    } catch (error) {
+      if (!committed && stored) await removeStoredUpload(stored.storageKey);
+      if (
+        error instanceof Error &&
+        error.message === "ASSET_VERSION_CONFLICT"
+      ) {
+        const [latest] = await db
+          .select({ storageKey: assets.storageKey })
+          .from(assets)
+          .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
+          .limit(1);
+        return reply.code(409).send({
+          error: "ASSET_VERSION_CONFLICT",
+          currentVersion: latest
+            ? assetContentVersion(latest.storageKey)
+            : undefined,
+        });
+      }
+      const concurrentAction = await db
+        .select({
+          type: gameEvents.type,
+          entityId: gameEvents.entityId,
+          payload: gameEvents.payload,
+        })
+        .from(gameEvents)
+        .where(
+          and(
+            eq(gameEvents.campaignId, auth.campaignId),
+            eq(gameEvents.actionId, actionId),
+          ),
+        )
+        .limit(1);
+      const concurrentReplay = replacementReplay(
+        concurrentAction[0],
+        id,
+        contentSha256,
+      );
+      if (concurrentReplay === "EXACT") {
+        const [latest] = await db
+          .select()
+          .from(assets)
+          .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
+          .limit(1);
+        if (latest)
+          return reply.send({
+            asset: assetDto(latest),
+            version: assetContentVersion(latest.storageKey),
+            replayed: true,
+          });
+      }
+      if (concurrentReplay === "CONFLICT")
+        return reply.code(409).send({ error: "ACTION_ID_REUSED" });
+      const errorCode = publicUploadError(error);
+      if (errorCode !== "UPLOAD_FAILED")
+        return reply.code(400).send({ error: errorCode });
       throw error;
     }
   });

@@ -1,9 +1,15 @@
+import { createHash } from "node:crypto";
 import type {
   AssetDto,
   AssetUsageDto,
   AssetUsageResponseDto,
   DeleteAssetResponseDto,
 } from "@arken/contracts";
+
+/** Stable opaque validator for one concrete blob revision. */
+export function assetContentVersion(storageKey: string) {
+  return `"${createHash("sha256").update(storageKey).digest("hex")}"`;
+}
 
 export const ASSET_DEPENDENCY_REGISTRY = [
   "SCENE_BACKGROUND",
