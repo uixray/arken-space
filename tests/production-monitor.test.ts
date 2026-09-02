@@ -439,6 +439,17 @@ describe("workflow and operational contract", () => {
     expect(workflow).toContain("node-version: 22");
     expect(workflow).toContain("continue-on-error: true");
     expect(workflow).toContain("if: always()");
+    expect(workflow.match(/ARKEN_MONITOR_RESULT_PATH:/g)).toHaveLength(2);
+    expect(workflow).toContain(
+      `id: production_health
+        env:
+          ARKEN_MONITOR_RESULT_PATH: \${{ runner.temp }}/production-health.json`,
+    );
+    expect(workflow).toContain(
+      `if: always()
+        env:
+          ARKEN_MONITOR_RESULT_PATH: \${{ runner.temp }}/production-health.json`,
+    );
     expect(workflow).toContain(
       "if: steps.production_health.outcome != 'success'",
     );

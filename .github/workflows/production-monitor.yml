@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     env:
-      ARKEN_MONITOR_RESULT_PATH: ${{ runner.temp }}/production-health.json
       ARKEN_MONITOR_HEALTH_URL: https://arken-khar.space/healthz
       ARKEN_MONITOR_TIMEOUT_MS: "15000"
       ARKEN_MONITOR_MAX_CLOCK_SKEW_MS: "600000"
@@ -37,12 +36,15 @@ jobs:
 
       - name: Check public production health
         id: production_health
+        env:
+          ARKEN_MONITOR_RESULT_PATH: ${{ runner.temp }}/production-health.json
         continue-on-error: true
         run: node scripts/run-production-health-monitor.mjs
 
       - name: Send deduplicated GitHub issue notification
         if: always()
         env:
+          ARKEN_MONITOR_RESULT_PATH: ${{ runner.temp }}/production-health.json
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/sync-production-monitor-issue.mjs
 

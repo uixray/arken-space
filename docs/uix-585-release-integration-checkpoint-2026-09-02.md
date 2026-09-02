@@ -63,3 +63,19 @@
 
 Опубликовать один integration PR и дождаться зелёных `checks`, `e2e` и
 `multiplayer`; merge разрешён только после всех трёх workflow.
+
+## Post-merge hotfix production monitor
+
+- Блокер: на `main@28ab97a` GitHub отклонил `workflow_dispatch` с HTTP 422 —
+  контекст `runner.temp` недоступен в job-level `env`; push-run завершался без
+  jobs и не являлся health evidence.
+- Решение: `ARKEN_MONITOR_RESULT_PATH` перенесён в step-level `env` обоих
+  потребителей — health probe и issue sync.
+- Файлы: `.github/workflows/production-monitor.yml`,
+  `tests/production-monitor.test.ts`.
+- Диверсия: новый точный контракт до исправления упал один, 17 skipped, на
+  единственном occurrence result path вместо двух; после исправления — passed.
+- Проверка: полный `tests/production-monitor.test.ts` — 18/18 passed,
+  `git diff --check` — clean.
+- Следующее действие: отдельный hotfix PR, GitHub CI и повторный
+  `workflow_dispatch`; production остаётся заблокирован до реального job run.
