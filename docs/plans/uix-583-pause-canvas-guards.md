@@ -171,7 +171,7 @@ UI-поток UIX-584 не входит в этот пул, поэтому но�
 2. [x] **Guard primitive** — единые update/share wrappers и bounded ошибки.
 3. [x] **Интеграция** — HTTP, Socket.IO и campaign-scoped cleanup.
 4. [x] **Доказательство** — focused, гонки, отрицательные контроли и диверсия.
-5. [ ] **Gate** — полный локальный набор и isolated multiplayer.
+5. [x] **Gate** — полный локальный набор и isolated multiplayer.
 
 ## Чекпоинт реализации
 
@@ -187,3 +187,9 @@ UI-поток UIX-584 не входит в этот пул, поэтому но�
   после восстановления тот же тест зелёный.
 - Focused после adversarial fixes: 6 файлов, 124 теста — passed одним worker;
   серверный typecheck и формат изменённых файлов — passed.
+- Финальный локальный gate: format, lint, typecheck, build и 209 файлов / 1714
+  Vitest-тестов — passed; lint оставил только 3 существующих warning.
+- Isolated multiplayer на `53a47d21daa724bdabcc5d5dbca7b0efc0908a41`:
+  PostgreSQL probe UIX-583, backend restart, 2 Playwright-сценария, cleanup и
+  resource leak check — passed. Production health намеренно пропущен режимом
+  `ARKEN_ISOLATED_ONLY=true`.

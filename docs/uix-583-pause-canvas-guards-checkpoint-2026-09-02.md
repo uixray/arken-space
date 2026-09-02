@@ -23,7 +23,7 @@
 - Baseline: `origin/main@d789d97`.
 - Ветка: `codex/uix-583-pause-canvas-guards`.
 - Plan revision: `981a1dc`.
-- Implementation revision: pending commit.
+- Implementation revision: `53a47d21daa724bdabcc5d5dbca7b0efc0908a41`.
 
 ## Изменённые файлы
 
@@ -63,7 +63,7 @@
 - Structural runner test закрепляет отдельный PostgreSQL probe до Playwright.
 - Probe доказывает mutation → pause, pause → mutation, relay → pause,
   pause → relay и удержание lock на время transition cleanup через
-  `pg_blocking_pids`. Сам Docker/PostgreSQL прогон ещё не выполнен.
+  `pg_blocking_pids`.
 - Полный локальный gate на финальном дереве:
   - `format:check` — passed;
   - `lint` — passed, 0 errors и 3 существующих warning;
@@ -71,10 +71,18 @@
   - `build` — passed;
   - `test --maxWorkers=1` — 209 файлов, 1714 тестов passed.
 - `git diff --check` — passed.
+- Isolated `test:multiplayer` на точной implementation revision — passed:
+  - `campaign-pause-guard-postgresql-probe` — passed, exit code `0`;
+  - остальные PostgreSQL probes — passed;
+  - backend restart — passed с первой попытки;
+  - Playwright — 2 сценария passed одним worker;
+  - compose cleanup и resource leak check — passed, оставшихся контейнеров и
+    томов нет;
+  - production health до/после намеренно skipped через
+    `ARKEN_ISOLATED_ONLY=true`.
 
 ## Блокеры и следующее действие
 
-- Блокеров реализации сейчас нет.
-- Остались implementation commit и isolated `test:multiplayer` с Docker при
-  ограниченной нагрузке. Push, PR, merge и production не выполняются на этом
-  этапе.
+- Блокеров реализации и локальных гейтов нет.
+- Следующее действие: зафиксировать этот gate-checkpoint, перевести UIX-583 в
+  review stage и оставить push/PR/merge/production отдельными решениями.
