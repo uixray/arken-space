@@ -178,6 +178,10 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.16em;
 }
+.location-state { position: absolute; z-index: 9; left: 1rem; top: 3rem; display: flex; flex-wrap: wrap; gap: .35rem; max-width: calc(100% - 2rem); }
+.location-chip { padding: .3rem .5rem; border: 1px solid var(--line); background: oklch(.14 .04 220/.9); font-size: .68rem; }
+.location-chip--open { border-color: oklch(.66 .15 150); }
+.location-chip--closed { border-color: var(--danger); text-decoration: line-through; opacity: .75; }
 .marker {
   position: absolute;
   left: var(--x);
@@ -497,6 +501,8 @@ a {
   outline: 3px solid color-mix(in oklch, var(--mage) 40%, transparent);
   transform: translateY(-0.35rem);
 }
+.mage.is-benched { filter: grayscale(.8); opacity: .6; }
+.interlude > img { width: min(100%, 18rem); aspect-ratio: 16/10; object-fit: cover; object-position: top; border: 1px solid var(--signal); }
 .mage__portrait {
   display: grid;
   width: 100%;

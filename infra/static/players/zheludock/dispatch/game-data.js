@@ -204,3 +204,63 @@ export const statLabels = {
   mobility: "Ловкость",
   empathy: "Красота",
 };
+
+// Campaign rules are data-first so following chapters can be authored without
+// rewriting the dispatcher. A choice can open/close districts and bench a hero.
+export const campaignChapters = [
+  {
+    id: "chapter-1",
+    title: "Глава I · Шум под картой",
+    missionIds: ["runaway", "bridge", "echo", "storm", "crown"],
+    interludes: ["erkenvald-trust", "rem-duty"],
+  },
+  {
+    id: "chapter-2",
+    title: "Глава II · Расколотый маршрут",
+    missionIds: ["echo", "runaway", "storm", "bridge", "crown"],
+    interludes: ["adora-team", "makoto-control"],
+  },
+];
+
+export const campaignConsequences = {
+  "runaway:child": { open: ["Таравис"], close: [], bench: null },
+  "bridge:reroute": { open: ["Жангар"], close: ["Сайдрис"], bench: null },
+  "echo:seal": { open: [], close: ["Хельдрис"], bench: { heroId: "erkenvald", calls: 1 } },
+  "storm:chase": { open: ["Ланс"], close: ["Диларн"], bench: { heroId: "tir", calls: 1 } },
+  "crown:accept": { open: ["Триумн"], close: ["Норбиан"], bench: { heroId: "rem", calls: 1 } },
+};
+
+export const interludes = {
+  "erkenvald-trust": {
+    heroId: "erkenvald",
+    title: "Формула, которой не доверяют",
+    line: "Если расчёт снова не сойдётся, ты всё равно отправишь меня?",
+    answers: [
+      { id: "trust", label: "Да. Ошибка — тоже данные.", morale: 1, reply: "Тогда я пересчитаю всё ещё раз. Для нас." },
+      { id: "control", label: "Только под присмотром.", morale: -1, reply: "Разумно. И всё же неприятно." },
+    ],
+  },
+  "rem-duty": {
+    heroId: "rem",
+    title: "Достоинство и долг",
+    line: "Почему император должен спасать тех, кто не умеет спасать себя?",
+    answers: [
+      { id: "service", label: "Потому что власть — это служение.", morale: 1, reply: "Смелая формулировка. Я её запомню." },
+      { id: "status", label: "Потому что они запомнят твоё имя.", morale: -1, reply: "Наконец-то честный ответ." },
+    ],
+  },
+  "adora-team": {
+    heroId: "adora", title: "Нельзя спасти всех", line: "Скажи честно: мы команда или просто полезные ресурсы?",
+    answers: [
+      { id: "people", label: "Команда. Я отвечаю за каждого.", morale: 1, reply: "Тогда и я отвечаю за тебя." },
+      { id: "tools", label: "Сегодня мне нужны результаты.", morale: -1, reply: "Понятно. Постараюсь не мешать результатам." },
+    ],
+  },
+  "makoto-control": {
+    heroId: "makoto", title: "Право на импровизацию", line: "Если увижу лучший ход, мне ждать твоего разрешения?",
+    answers: [
+      { id: "freedom", label: "Действуй, но выходи на связь.", morale: 1, reply: "Вот это уже похоже на доверие." },
+      { id: "orders", label: "Приказ важнее импровизации.", morale: -1, reply: "Конечно. Если успеешь его отдать." },
+    ],
+  },
+};
