@@ -146,6 +146,7 @@ import {
 } from "./stat-layout.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
+import { registerAssetLifecycleRoutes } from "./asset-usage.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
@@ -873,7 +874,7 @@ export function registerRoutes(
   registerWorldContentInstanceRoutes(app, db);
   registerSpellPackRoutes(app, db);
   registerSpellAssignmentRoutes(app, db);
-  registerSpellProjectionRoutes(app, db);
+  registerAssetLifecycleRoutes(app, db, io, broadcastSnapshots);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
