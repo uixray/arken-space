@@ -252,6 +252,8 @@ export const campaigns = pgTable("campaigns", {
   systemId: text("system_id").notNull().default("arken-core"),
   systemVersion: integer("system_version").notNull().default(1),
   activeSceneId: uuid("active_scene_id"),
+  /** UIX-582: authoritative session break; Canvas guards consume this state. */
+  paused: boolean("paused").notNull().default(false),
   day: integer("day").notNull().default(1),
   /**
    * UIX-424: раскладка характеристик кампании — какие строки, в каких группах,

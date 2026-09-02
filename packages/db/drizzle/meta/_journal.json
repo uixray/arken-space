@@ -302,6 +302,13 @@
       "when": 1788281071819,
       "tag": "0042_polite_magik",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788345789570,
+      "tag": "0043_campaign_pause",
+      "breakpoints": true
     }
   ]
 }

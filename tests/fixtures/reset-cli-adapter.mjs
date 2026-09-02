@@ -28,6 +28,7 @@ const cleared = {
   spellPacks: 0,
   spellPackVersions: 0,
   activeSceneId: null,
+  campaignPaused: false,
   campaignDay: 1,
   battleActive: false,
   battleCounter: 0,

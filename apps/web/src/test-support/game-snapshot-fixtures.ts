@@ -54,6 +54,7 @@ export function buildGameSnapshot(
       id: "campaign-under-test",
       name: "Test Campaign",
       day: 1,
+      paused: false,
       battleActive: false,
       initiative: [],
       battleZone: null,

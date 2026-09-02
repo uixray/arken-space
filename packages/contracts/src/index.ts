@@ -2097,6 +2097,33 @@ export const campaignClockCommandSchema = z.object({
   ]),
   revision: z.number().int().nonnegative(),
 });
+
+/**
+ * UIX-582 — сохраняемая пауза кампании задаёт желаемое состояние, а не
+ * переключает его.
+ *
+ * Поэтому повтор несёт прежнее значение `paused` и сверяется по хешу команды.
+ * `campaignId` намеренно отсутствует: сервер берёт его только из
+ * аутентифицированного членства, и клиент не может выбрать чужую кампанию.
+ */
+export const campaignPauseCommandSchema = z
+  .object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    paused: z.boolean(),
+  })
+  .strict();
+export type CampaignPauseCommand = z.infer<typeof campaignPauseCommandSchema>;
+
+/** Безопасная квитанция для принятой команды и её точного повтора. */
+export const campaignPauseStateSchema = z
+  .object({
+    campaignId: z.string().uuid(),
+    paused: z.boolean(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type CampaignPauseState = z.infer<typeof campaignPauseStateSchema>;
 export const walletSchema = z.object({
   gold: z.number().int().nonnegative(),
   silver: z.number().int().nonnegative(),
@@ -2699,6 +2726,8 @@ export interface GameSnapshot {
   campaign: {
     id: string;
     name: string;
+    /** UIX-582: сохраняемое серверно-авторитетное состояние паузы. */
+    paused: boolean;
     day: number;
     battleActive: boolean;
     battleCounter: number;

@@ -232,7 +232,7 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
      insert into memberships (id,campaign_id,role,display_name) values ('${gm}','${c}','GM','GM'),('${p}','${c}','PLAYER','P'),('${foreignGm}','${foreign}','GM','Foreign GM');
      insert into assets (id,campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values ('00000000-0000-0000-0000-000000000004','${c}','${p}','IMAGE','A','a','image/png',1),('00000000-0000-0000-0000-000000000012','${foreign}','${foreignGm}','IMAGE','F','f','image/png',1);
      insert into scenes (id,campaign_id,name,grid) values ('${scene}','${c}','S','{}'),('00000000-0000-0000-0000-000000000013','${foreign}','Foreign S','{}');
-     update campaigns set active_scene_id='${scene}',day=9,battle_active=true,battle_counter=4,revision=12 where id='${c}';
+     update campaigns set active_scene_id='${scene}',paused=true,day=9,battle_active=true,battle_counter=4,revision=12 where id='${c}';
      insert into characters (id,campaign_id,owner_membership_id,name) values ('${character}','${c}','${p}','P'),('${foreignCharacter}','${foreign}','${foreignGm}','Foreign character');
      insert into tokens (scene_id,owner_membership_id,name,x,y) values ('${scene}','${p}','T',0,0);
      insert into fog_reveals (scene_id,x,y,width,height) values ('${scene}',0,0,1,1);
@@ -270,11 +270,12 @@ it("preserves GM and assets in a disposable reset rehearsal", async () => {
   expect(
     (
       await database.query(
-        `select active_scene_id,day,battle_active,battle_counter,revision from campaigns where id='${c}'`,
+        `select active_scene_id,paused,day,battle_active,battle_counter,revision from campaigns where id='${c}'`,
       )
     ).rows[0],
   ).toMatchObject({
     active_scene_id: null,
+    paused: false,
     day: 1,
     battle_active: false,
     battle_counter: 0,
@@ -529,6 +530,48 @@ describe("chat thread migration", () => {
       "select table_name from information_schema.tables where table_schema = 'public' and table_name = 'audio_states'",
     );
     expect(oldTable.rows).toHaveLength(0);
+    await database.close();
+  });
+
+  it("UIX-582: upgrades existing campaigns to an explicit non-paused state", async () => {
+    const database = new PGlite();
+    const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
+    const files = (await readdir(migrationsUrl))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    const target = files.findIndex(
+      (file) => file === "0043_campaign_pause.sql",
+    );
+    expect(target).toBeGreaterThan(0);
+
+    for (const file of files.slice(0, target))
+      await database.exec(
+        (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
+          "--> statement-breakpoint",
+          "",
+        ),
+      );
+
+    const campaignId = "70000000-0000-0000-0000-000000000001";
+    await database.exec(
+      `insert into campaigns (id,name) values ('${campaignId}','Pause upgrade fixture')`,
+    );
+    await database.exec(
+      (
+        await readFile(new URL(files[target]!, migrationsUrl), "utf8")
+      ).replaceAll("--> statement-breakpoint", ""),
+    );
+
+    const retained = await database.query<{
+      id: string;
+      paused: boolean;
+    }>(`select id,paused from campaigns where id='${campaignId}'`);
+    expect(retained.rows).toEqual([{ id: campaignId, paused: false }]);
+    await expect(
+      database.exec(
+        `update campaigns set paused=null where id='${campaignId}'`,
+      ),
+    ).rejects.toThrow();
     await database.close();
   });
 });

@@ -63,6 +63,7 @@ function snapshotFor(
       id: ids.campaign,
       name: "Skill cards",
       day: 1,
+      paused: false,
       battleActive: false,
       battleCounter: 0,
       statLayout: [],
