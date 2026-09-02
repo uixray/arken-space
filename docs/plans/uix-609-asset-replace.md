@@ -19,7 +19,7 @@
   `If-None-Match`. Поэтому стабильный URL переиспользует cache, но всегда
   перевалидирует его после замены.
 - Replace требует `If-Match` текущего ETag. Несовпадение даёт bounded `409
-  ASSET_VERSION_CONFLICT`.
+ASSET_VERSION_CONFLICT`.
 
 ### Commit protocol
 
