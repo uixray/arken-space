@@ -8,6 +8,45 @@ Current production host paths:
 - media: `/home/uixray/apps/arken-space-data/media`;
 - local backups: `/home/uixray/apps/arken-space-data/backups`.
 
+## Внешний мониторинг health
+
+После merge в default branch GitHub Actions workflow `production-monitor`
+планируется на GitHub-hosted runner каждые пять минут; доступен и ручной
+`workflow_dispatch`. Проверка работает вне хоста Arken, поэтому потеря самого
+хоста или nginx не заставит её замолчать.
+
+Production считается здоровым, только когда выполнены все условия:
+
+- HTTPS `/healthz` возвращает HTTP 200 и валидный JSON;
+- `status` и `database` равны `ok`;
+- `buildRevision` содержит полный 40-символьный SHA коммита;
+- `schemaVersion` — положительное целое число;
+- серверное время отличается от времени runner не более чем на десять минут.
+
+Последнее наблюдаемое состояние хранится в одном GitHub issue с меткой
+`production-monitor`. Workflow упоминает владельца репозитория при первом
+падении, восстановлении и смене ревизии или схемы. Повторяющиеся одинаковые
+ошибки не меняют issue и не создают комментарии, поэтому пятиминутная проверка
+не засыпает уведомлениями. Если оповещение должен получать не владелец,
+задайте необязательную repository variable `ARKEN_MONITOR_MENTION` со ссылкой
+на GitHub-пользователя или команду.
+
+Issue — основной канал; при нездоровом ответе workflow также остаётся красным.
+Настройки GitHub должны разрешать уведомления об упоминаниях или падениях
+Actions. Активация и доставка — отдельный live gate после merge: запустите
+workflow вручную, во временной проверяемой ревизии подставьте несуществующий
+health URL, получите одно оповещение, верните канонический URL и получите одно
+сообщение о восстановлении. Нельзя имитировать падение остановкой production.
+
+Workflow читает только публичный health-контракт. Он не читает строки БД, не
+вызывает авторизованную диагностику и не проверяет свежесть бэкапа.
+
+Schedule GitHub — best effort, а не жёсткий SLA: GitHub допускает задержку и
+пропуск scheduled run. Пока репозиторий публичный, standard GitHub-hosted runner
+не расходует платные минуты. Перед переводом репозитория в private этот
+пятиминутный schedule нужно отключить до отдельной проверки бюджета или заменить
+внешним uptime-сервисом: каждый короткий job округляется до целой минуты.
+
 ## Deploy and migrate
 
 Routine releases use the fail-closed
@@ -105,7 +144,30 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now arken-space-backup.timer
 ```
 
-The timer runs daily at 03:15 server time with up to 15 minutes randomized delay. The retention policy keeps 7 daily, 4 weekly and 6 monthly snapshots and prunes unreferenced data.
+Timer запускается ежедневно в 03:15 по времени сервера со случайной задержкой
+до 15 минут. Это не гарантированный RPO 24 часа: между успешными запусками может
+пройти до 24 часов 15 минут, а незамеченная ошибка делает интервал
+неограниченным. Владелец ещё не принимал такой риск. До отдельного решения
+ручной бэкап перед каждой реальной игровой сессией обязателен. Политика хранения
+оставляет 7 дневных, 4 недельных и 6 месячных снапшотов и удаляет неиспользуемые
+данные.
+
+### Предыгровой бэкап
+
+Запускайте не раньше чем за час до входа игроков:
+
+```sh
+sudo systemctl start arken-space-backup.service
+sudo systemctl status arken-space-backup.service --no-pager
+sudo journalctl -u arken-space-backup.service -n 20 --no-pager
+```
+
+Гейт пройден, только если `systemctl start` завершился с кодом 0, service имеет
+состояние `inactive (dead)` после успешного oneshot, а последняя строка лога
+содержит новый `snapshot <id>`. Запишите этот ID и время в заметку сессии. При
+ошибке бэкапа игру не начинайте: сначала восстановите штатный backup path и
+повторите команду. Эта процедура защищает состояние до начала игры, но не
+является непрерывным бэкапом событий самой сессии.
 
 Verified 2026-07-13: Yandex repository `e5eb7068a7` was initialized, snapshot `07bc8d52` stored 6.192 MiB, retention and `restic check` passed, and `arken-space-backup.timer` is enabled and active.
 
