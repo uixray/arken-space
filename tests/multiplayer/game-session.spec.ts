@@ -877,6 +877,40 @@ test("GM and six isolated players recover authoritative state without security l
         { timeout: 30_000 },
       );
 
+    // UIX-582: пауза хранится в кампании, а не в локальном состоянии оверлея.
+    // Подписываем все семь клиентов до команды, чтобы GM + 6 получили один
+    // согласованный broadcast, и сохраняем паузу после рестарта backend.
+    const beforePause = await bootstrap(gm);
+    const pausedPromises = connections.map(({ socket }) =>
+      waitForSnapshot(
+        socket,
+        (snapshot) =>
+          snapshot.campaign.paused &&
+          snapshot.campaign.revision === beforePause.campaign.revision + 1,
+      ),
+    );
+    const pauseResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/campaign/pause", {
+        data: {
+          actionId: actionId(),
+          revision: beforePause.campaign.revision,
+          paused: true,
+        },
+      }),
+    );
+    expect(await pauseResponse.json()).toMatchObject({
+      paused: true,
+      revision: beforePause.campaign.revision + 1,
+    });
+    const pausedSnapshots = await Promise.all(pausedPromises);
+    expect(
+      new Set(pausedSnapshots.map((snapshot) => snapshot.campaign.revision))
+        .size,
+    ).toBe(1);
+    for (const snapshot of pausedSnapshots)
+      expect(snapshot.campaign.paused).toBe(true);
+    expect((await bootstrap(players[0])).campaign.paused).toBe(true);
+
     const recoveryPromises = connections.map(({ socket }) =>
       waitForRecovery(socket),
     );
@@ -891,6 +925,8 @@ test("GM and six isolated players recover authoritative state without security l
           (scene) => scene.id === recoveryScene.id && scene.active,
         ),
       ).toBe(true);
+    for (const snapshot of recoveredSnapshots)
+      expect(snapshot.campaign.paused).toBe(true);
 
     const resyncPromises = connections.map(({ socket }) =>
       waitForSnapshot(socket, (snapshot) =>
@@ -904,6 +940,35 @@ test("GM and six isolated players recover authoritative state without security l
     expect(
       new Set(resynced.map((snapshot) => snapshot.snapshotVersion)).size,
     ).toBe(1);
+    expect(
+      new Set(resynced.map((snapshot) => snapshot.campaign.revision)).size,
+    ).toBe(1);
+    for (const snapshot of resynced)
+      expect(snapshot.campaign.paused).toBe(true);
+
+    const pauseRevision = resynced[0]!.campaign.revision;
+    const resumedPromises = connections.map(({ socket }) =>
+      waitForSnapshot(
+        socket,
+        (snapshot) =>
+          !snapshot.campaign.paused &&
+          snapshot.campaign.revision === pauseRevision + 1,
+      ),
+    );
+    await expectOk(
+      await gm.request.post(baseUrl + "/api/campaign/pause", {
+        data: {
+          actionId: actionId(),
+          revision: pauseRevision,
+          paused: false,
+        },
+      }),
+    );
+    const resumedSnapshots = await Promise.all(resumedPromises);
+    for (const snapshot of resumedSnapshots)
+      expect(snapshot.campaign.paused).toBe(false);
+    expect((await bootstrap(gm)).campaign.paused).toBe(false);
+    expect((await bootstrap(players[0])).campaign.paused).toBe(false);
 
     const authoritativeGm = resynced[0];
     for (const collection of [

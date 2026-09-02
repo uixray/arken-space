@@ -119,6 +119,7 @@ function snapshotWithCharacter(nextCharacter: CharacterDto): GameSnapshot {
       id: "campaign-1",
       name: "Campaign",
       day: 1,
+      paused: false,
       battleActive: false,
       initiative: [],
       battleZone: null,

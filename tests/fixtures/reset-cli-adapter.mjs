@@ -24,6 +24,7 @@ const cleared = {
   tokens: 0,
   fogReveals: 0,
   activeSceneId: null,
+  campaignPaused: false,
   campaignDay: 1,
   battleActive: false,
   battleCounter: 0,
