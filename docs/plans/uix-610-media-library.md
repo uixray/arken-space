@@ -22,3 +22,18 @@ upload action через `Sidebar.tsx`. Для вертикального flow �
 - Не добавлять force-delete и не воспроизводить серверное правило usage на
   клиенте.
 - Не выполнять push, merge или deploy.
+
+## Checkpoint — 2026-09-02
+
+- **Решение:** flow остаётся внутри `MediaPanel` и `AssetActions`; серверное
+  правило usage не дублируется, force-delete отсутствует.
+- **Ревизия:** `4d46329` (реализация `e3436d0`, browser flow `4d46329`).
+- **Изменено:** `use-asset-actions.ts`, `MediaPanel.tsx`, его component tests,
+  безопасная передача actions через `Sidebar.tsx`, один E2E flow.
+- **Проверка:** format/lint/typecheck/build PASS; Vitest 209 файлов / 1692 теста
+  PASS; focused component 6/6 PASS; isolated Chromium + Firefox 2/2 PASS.
+- **Диверсия:** неверный usage count дал 1 failed / 5 passed, после возврата
+  6/6 PASS.
+- **Открытый gate:** полный `pnpm test:e2e` требует `DATABASE_URL`; без него
+  runner ожидаемо остановлен. Связанный mock-based flow прошёл в обоих браузерах.
+- **Дальше:** review/интеграция ветки; push, PR, merge и deploy не выполнялись.
