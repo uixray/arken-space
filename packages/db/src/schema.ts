@@ -235,6 +235,16 @@ export const feedbackStatusEnum = pgEnum("feedback_status", [
   "RESOLVED",
   "DISMISSED",
 ]);
+export const spellPackLifecycleEnum = pgEnum("spell_pack_lifecycle", [
+  "DRAFT",
+  "REFERENCE",
+  "ACTIVE",
+  "ARCHIVED",
+]);
+export const spellAssignmentKindEnum = pgEnum("spell_assignment_kind", [
+  "SCHOOL",
+  "NODE",
+]);
 
 export const campaigns = pgTable("campaigns", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -322,6 +332,93 @@ export const campaigns = pgTable("campaigns", {
     .defaultNow()
     .notNull(),
 });
+
+/**
+ * Stable campaign-scoped identity of a spell pack. Every content or lifecycle
+ * change is appended to `spellPackVersions`; this row is never rewritten.
+ */
+export const spellPacks = pgTable(
+  "spell_packs",
+  {
+    id: uuid("id").primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("spell_packs_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+  ],
+);
+
+/**
+ * Immutable snapshot of one spell-pack version. The JSON graph is retained in
+ * full for source fidelity; relational columns make identity, ordering and
+ * campaign isolation enforceable by PostgreSQL.
+ */
+export const spellPackVersions = pgTable(
+  "spell_pack_versions",
+  {
+    id: uuid("id").primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    packId: uuid("pack_id").notNull(),
+    version: integer("version").notNull(),
+    lifecycle: spellPackLifecycleEnum("lifecycle").notNull(),
+    /** Runtime shape is validated in the server storage boundary. */
+    graph: jsonb("graph").$type<unknown>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("spell_pack_versions_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("spell_pack_versions_campaign_pack_id_idx").on(
+      table.campaignId,
+      table.packId,
+      table.id,
+    ),
+    uniqueIndex("spell_pack_versions_campaign_pack_version_idx").on(
+      table.campaignId,
+      table.packId,
+      table.version,
+    ),
+    index("spell_pack_versions_campaign_pack_created_idx").on(
+      table.campaignId,
+      table.packId,
+      table.createdAt,
+    ),
+    foreignKey({
+      name: "spell_pack_versions_campaign_pack_fk",
+      columns: [table.campaignId, table.packId],
+      foreignColumns: [spellPacks.campaignId, spellPacks.id],
+    }).onDelete("cascade"),
+    check(
+      "spell_pack_versions_positive_version_check",
+      sql`${table.version} > 0`,
+    ),
+    check(
+      "spell_pack_versions_graph_shape_check",
+      sql`(
+        jsonb_typeof(${table.graph}) = 'object'
+        AND ${table.graph} @> jsonb_build_object(
+          'packId', ${table.packId}::text,
+          'versionId', ${table.id}::text,
+          'version', ${table.version},
+          'lifecycle', ${table.lifecycle}::text
+        )
+        AND jsonb_typeof(${table.graph}->'provenance') = 'object'
+      ) IS TRUE`,
+    ),
+  ],
+);
 
 export const memberships = pgTable(
   "memberships",
@@ -778,6 +875,158 @@ export const characterCatalogEntries = pgTable(
     uniqueIndex("character_catalog_source_unique").on(
       table.characterId,
       table.sourceCatalogEntryId,
+    ),
+  ],
+);
+
+/** Stable identity for one character assignment lineage. */
+export const characterSpellAssignments = pgTable(
+  "character_spell_assignments",
+  {
+    id: uuid("id").primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    characterId: uuid("character_id").notNull(),
+    packId: uuid("pack_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("character_spell_assignments_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("character_spell_assignments_scope_id_idx").on(
+      table.campaignId,
+      table.characterId,
+      table.packId,
+      table.id,
+    ),
+    index("character_spell_assignments_character_idx").on(
+      table.campaignId,
+      table.characterId,
+    ),
+    foreignKey({
+      name: "character_spell_assignments_campaign_character_fk",
+      columns: [table.campaignId, table.characterId],
+      foreignColumns: [characters.campaignId, characters.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "character_spell_assignments_campaign_pack_fk",
+      columns: [table.campaignId, table.packId],
+      foreignColumns: [spellPacks.campaignId, spellPacks.id],
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * Append-only assignment state. The rules snapshot is built by the server from
+ * an immutable ACTIVE spell-pack version and is never supplied by a client.
+ */
+export const characterSpellAssignmentVersions = pgTable(
+  "character_spell_assignment_versions",
+  {
+    id: uuid("id").primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    assignmentId: uuid("assignment_id").notNull(),
+    characterId: uuid("character_id").notNull(),
+    packId: uuid("pack_id").notNull(),
+    packVersionId: uuid("pack_version_id").notNull(),
+    version: integer("version").notNull(),
+    kind: spellAssignmentKindEnum("kind").notNull(),
+    schoolId: uuid("school_id").notNull(),
+    nodeId: uuid("node_id"),
+    rank: integer("rank"),
+    /** Runtime shape is validated at the server storage boundary. */
+    snapshot: jsonb("snapshot").$type<unknown>().notNull(),
+    overrideReason: text("override_reason"),
+    assignedByMembershipId: uuid("assigned_by_membership_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("character_spell_assignment_versions_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("character_spell_assignment_versions_sequence_idx").on(
+      table.campaignId,
+      table.assignmentId,
+      table.version,
+    ),
+    index("character_spell_assignment_versions_character_idx").on(
+      table.campaignId,
+      table.characterId,
+      table.createdAt,
+    ),
+    foreignKey({
+      name: "character_spell_assignment_versions_parent_fk",
+      columns: [
+        table.campaignId,
+        table.characterId,
+        table.packId,
+        table.assignmentId,
+      ],
+      foreignColumns: [
+        characterSpellAssignments.campaignId,
+        characterSpellAssignments.characterId,
+        characterSpellAssignments.packId,
+        characterSpellAssignments.id,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "character_spell_assignment_versions_pack_version_fk",
+      columns: [table.campaignId, table.packId, table.packVersionId],
+      foreignColumns: [
+        spellPackVersions.campaignId,
+        spellPackVersions.packId,
+        spellPackVersions.id,
+      ],
+    }),
+    /*
+     * Migration 0042 makes this NO ACTION constraint DEFERRABLE INITIALLY
+     * DEFERRED. Drizzle has no builder option for that PostgreSQL clause.
+     * Individual membership deletion stays blocked while audit history exists,
+     * but a whole-campaign cascade may remove assignments and actors together.
+     */
+    foreignKey({
+      name: "character_spell_assignment_versions_actor_fk",
+      columns: [table.campaignId, table.assignedByMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }),
+    check(
+      "character_spell_assignment_versions_shape_check",
+      sql`${table.version} > 0 AND (
+        (${table.kind} = 'SCHOOL' AND ${table.nodeId} IS NULL AND ${table.rank} IS NULL)
+        OR
+        (${table.kind} = 'NODE' AND ${table.nodeId} IS NOT NULL AND ${table.rank} > 0)
+      )`,
+    ),
+    check(
+      "character_spell_assignment_versions_override_reason_check",
+      sql`${table.overrideReason} IS NULL OR length(trim(${table.overrideReason})) BETWEEN 1 AND 2000`,
+    ),
+    check(
+      "character_spell_assignment_versions_snapshot_shape_check",
+      sql`(
+        jsonb_typeof(${table.snapshot}) = 'object'
+        AND ${table.snapshot} @> jsonb_build_object(
+          'schemaVersion', 1,
+          'assignmentId', ${table.assignmentId}::text,
+          'assignmentVersionId', ${table.id}::text,
+          'assignmentVersion', ${table.version},
+          'packId', ${table.packId}::text,
+          'packVersionId', ${table.packVersionId}::text,
+          'packLifecycle', 'ACTIVE',
+          'kind', ${table.kind}::text,
+          'schoolId', ${table.schoolId}::text,
+          'nodeId', ${table.nodeId}::text,
+          'rank', ${table.rank}
+        )
+        AND jsonb_typeof(${table.snapshot}->'provenance') = 'object'
+        AND jsonb_typeof(${table.snapshot}->'school') = 'object'
+      ) IS TRUE`,
     ),
   ],
 );

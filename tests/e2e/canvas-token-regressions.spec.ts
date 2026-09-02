@@ -576,41 +576,67 @@ test("Ctrl+Z and Ctrl+Shift+Z call authoritative undo and redo once", async ({
   await installCanvasRoutes(page);
   const commands: Array<{ direction: string; body: Record<string, unknown> }> =
     [];
+  let historyEntry = {
+    sequence: 21,
+    type: "TOKEN_MOVE",
+    targetType: "TOKEN",
+    targetId: tokenId,
+    status: "APPLIED",
+    nextDirection: "undo" as "undo" | "redo",
+  };
   await page.route("**/api/canvas/history**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([{ status: "APPLIED" }, { status: "UNDONE" }]),
+      body: JSON.stringify([historyEntry]),
     }),
   );
   await page.route("**/api/canvas/undo", async (route) => {
     commands.push({ direction: "undo", body: route.request().postDataJSON() });
+    historyEntry = {
+      ...historyEntry,
+      status: "UNDONE",
+      nextDirection: "redo",
+    };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: "{}",
+      body: JSON.stringify({ sequence: 21, status: "UNDONE" }),
     });
   });
   await page.route("**/api/canvas/redo", async (route) => {
     commands.push({ direction: "redo", body: route.request().postDataJSON() });
+    historyEntry = {
+      ...historyEntry,
+      status: "APPLIED",
+      nextDirection: "undo",
+    };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: "{}",
+      body: JSON.stringify({ sequence: 21, status: "APPLIED" }),
     });
   });
   await page.goto("/");
 
-  await expect(
-    page.getByRole("button", { name: "Отменить последнее действие" }),
-  ).toBeEnabled();
-  await expect(
-    page.getByRole("button", { name: "Повторить отменённое действие" }),
-  ).toBeEnabled();
+  const undo = page.getByRole("button", {
+    name: "Отменить: токен перемещён — Selected token",
+  });
+  const redo = page.getByRole("button", {
+    name: "Повторить: токен перемещён — Selected token",
+  });
+  await expect(undo).toBeEnabled();
+  await expect(redo).toHaveCount(0);
   await page.keyboard.press("Control+z");
   await expect.poll(() => commands.length).toBe(1);
+
+  // Перехват POST ещё не означает, что команда завершилась: refreshEpoch
+  // намеренно скрывает прежнюю историю до нового авторитетного GET. Ждём
+  // отличимый post-Undo маркер, а не отправляем Redo по устаревшему состоянию.
+  await expect(redo).toBeEnabled();
   await page.keyboard.press("Control+Shift+z");
   await expect.poll(() => commands.length).toBe(2);
+  await expect(undo).toBeEnabled();
 
   expect(commands.map(({ direction }) => direction)).toEqual(["undo", "redo"]);
   for (const { body } of commands) {

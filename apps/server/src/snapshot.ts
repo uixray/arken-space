@@ -52,6 +52,7 @@ import { projectInitiative } from "./initiative.js";
 import { normalizeTokenConditions } from "./token-conditions.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
+import { normalizeSystemRegenStatRows } from "./stat-layout.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -84,8 +85,11 @@ const NO_SCENE = "00000000-0000-0000-0000-000000000000";
 
 export function resolveStatLayout(stored: unknown): StatLayout {
   const parsed = statLayoutSchema.safeParse(stored);
-  if (parsed.success && parsed.data.length > 0) return parsed.data;
-  return statLayoutSchema.parse(starterStatLayout);
+  const layout =
+    parsed.success && parsed.data.length > 0
+      ? parsed.data
+      : statLayoutSchema.parse(starterStatLayout);
+  return normalizeSystemRegenStatRows(layout);
 }
 
 /**

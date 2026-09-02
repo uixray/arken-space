@@ -51,6 +51,7 @@ import {
 } from "../wallet";
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
+import { CampaignClockDialog } from "./CampaignClockDialog";
 
 // UIX-389/UIX-391: re-exported for backward compatibility — RollButton now
 // lives in its own module (./RollButton) so CatalogEntryPicker can import it
@@ -97,6 +98,7 @@ export function CharacterWorkspace({
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
+  const [campaignClockOpen, setCampaignClockOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // UIX-393: GM-only archive/restore. `archiveTarget` drives the confirm
   // dialog for a single character; `restoreDialogOpen` opens the separate
@@ -153,6 +155,18 @@ export function CharacterWorkspace({
         <p className="muted">
           Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
         </p>
+        {props.snapshot.me.role === "GM" && (
+          <Button
+            view="flat"
+            title="Управление временем кампании"
+            onClick={() => setCampaignClockOpen(true)}
+          >
+            День {props.snapshot.campaign.day} ·{" "}
+            {props.snapshot.campaign.battleActive
+              ? `бой #${props.snapshot.campaign.battleCounter}`
+              : `боёв: ${props.snapshot.campaign.battleCounter}`}
+          </Button>
+        )}
         <button
           type="button"
           className="character-rail-toggle"
@@ -340,7 +354,6 @@ export function CharacterWorkspace({
                       onReplaceControllers={props.onReplaceCharacterControllers}
                       onRoll={props.onRoll}
                       onUpdateCounters={props.onUpdateCounters}
-                      onCampaignClock={props.onCampaignClock}
                     />
                   </div>
                 </article>
@@ -368,6 +381,12 @@ export function CharacterWorkspace({
         onLoad={worldMapActions.onLoadArchivedCharacters}
         onRestore={worldMapActions.onRestoreCharacter}
         onClose={() => setRestoreDialogOpen(false)}
+      />
+      <CampaignClockDialog
+        open={campaignClockOpen}
+        snapshot={props.snapshot}
+        onCommand={props.onCampaignClock}
+        onClose={() => setCampaignClockOpen(false)}
       />
     </main>,
     document.body,
@@ -752,7 +771,6 @@ export function CharacterPanel({
   onReplaceControllers,
   onRoll,
   onUpdateCounters,
-  onCampaignClock,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -763,7 +781,6 @@ export function CharacterPanel({
   onReplaceControllers: Props["onReplaceCharacterControllers"];
   onRoll: Props["onRoll"];
   onUpdateCounters: Props["onUpdateCounters"];
-  onCampaignClock: Props["onCampaignClock"];
 }) {
   // The catalog handlers are read here rather than passed in: this panel is
   // the only place that uses them, so threading them through the workspace
@@ -1256,35 +1273,6 @@ export function CharacterPanel({
         isGm={snapshot.me.role === "GM"}
         onUpload={assetActions.uploadAsset}
       />
-      {snapshot.me.role === "GM" && (
-        <div className="subsection">
-          <h3>Время кампании</h3>
-          <p>
-            День {snapshot.campaign.day} ·{" "}
-            {snapshot.campaign.battleActive
-              ? `бой #${snapshot.campaign.battleCounter}`
-              : "вне боя"}
-          </p>
-          <Button
-            title="Реген выносливости и маны всем персонажам, +1 день"
-            onClick={() =>
-              onCampaignClock("LONG_REST", snapshot.campaign.revision)
-            }
-          >
-            Длинный отдых
-          </Button>
-          <Button
-            onClick={() =>
-              onCampaignClock(
-                snapshot.campaign.battleActive ? "END_BATTLE" : "START_BATTLE",
-                snapshot.campaign.revision,
-              )
-            }
-          >
-            {snapshot.campaign.battleActive ? "Завершить бой" : "Начать бой"}
-          </Button>
-        </div>
-      )}
       <details className="subsection">
         <summary>Предыстория</summary>
         <FormTextArea

@@ -1,0 +1,56 @@
+name: production-monitor
+
+on:
+  schedule:
+    # Offset from minute 0: GitHub documents higher schedule load at the
+    # beginning of each hour, where queued runs may be delayed or dropped.
+    - cron: "2-59/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: production-monitor
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      ARKEN_MONITOR_HEALTH_URL: https://arken-khar.space/healthz
+      ARKEN_MONITOR_TIMEOUT_MS: "15000"
+      ARKEN_MONITOR_MAX_CLOCK_SKEW_MS: "600000"
+      ARKEN_MONITOR_MENTION: ${{ vars.ARKEN_MONITOR_MENTION }}
+      ARKEN_MONITOR_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check public production health
+        id: production_health
+        env:
+          ARKEN_MONITOR_RESULT_PATH: ${{ runner.temp }}/production-health.json
+        continue-on-error: true
+        run: node scripts/run-production-health-monitor.mjs
+
+      - name: Send deduplicated GitHub issue notification
+        if: always()
+        env:
+          ARKEN_MONITOR_RESULT_PATH: ${{ runner.temp }}/production-health.json
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/sync-production-monitor-issue.mjs
+
+      # Issue is the primary alert channel. A failed run remains a second,
+      # independent signal in GitHub Actions instead of looking green after
+      # the notification step succeeded.
+      - name: Preserve unhealthy exit status
+        if: steps.production_health.outcome != 'success'
+        run: exit 1

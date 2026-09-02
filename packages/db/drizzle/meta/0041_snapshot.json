@@ -1,5 +1,5 @@
 {
-  "id": "37aff9a2-a121-4eed-8a9e-7d92d31635f3",
+  "id": "1530c171-6e24-4e9e-bbb0-50ede9a33704",
   "prevId": "546e566a-7986-41ca-816a-b39ea57beeb9",
   "version": "7",
   "dialect": "postgresql",
@@ -557,13 +557,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "paused": {
-          "name": "paused",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "day": {
           "name": "day",
@@ -4567,6 +4560,232 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.spell_pack_versions": {
+      "name": "spell_pack_versions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pack_id": {
+          "name": "pack_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lifecycle": {
+          "name": "lifecycle",
+          "type": "spell_pack_lifecycle",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "graph": {
+          "name": "graph",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "spell_pack_versions_campaign_id_id_idx": {
+          "name": "spell_pack_versions_campaign_id_id_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "spell_pack_versions_campaign_pack_version_idx": {
+          "name": "spell_pack_versions_campaign_pack_version_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "pack_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "spell_pack_versions_campaign_pack_created_idx": {
+          "name": "spell_pack_versions_campaign_pack_created_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "pack_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "spell_pack_versions_campaign_pack_fk": {
+          "name": "spell_pack_versions_campaign_pack_fk",
+          "tableFrom": "spell_pack_versions",
+          "tableTo": "spell_packs",
+          "columnsFrom": [
+            "campaign_id",
+            "pack_id"
+          ],
+          "columnsTo": [
+            "campaign_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "spell_pack_versions_positive_version_check": {
+          "name": "spell_pack_versions_positive_version_check",
+          "value": "\"spell_pack_versions\".\"version\" > 0"
+        },
+        "spell_pack_versions_graph_shape_check": {
+          "name": "spell_pack_versions_graph_shape_check",
+          "value": "(\n        jsonb_typeof(\"spell_pack_versions\".\"graph\") = 'object'\n        AND \"spell_pack_versions\".\"graph\" @> jsonb_build_object(\n          'packId', \"spell_pack_versions\".\"pack_id\"::text,\n          'versionId', \"spell_pack_versions\".\"id\"::text,\n          'version', \"spell_pack_versions\".\"version\",\n          'lifecycle', \"spell_pack_versions\".\"lifecycle\"::text\n        )\n        AND jsonb_typeof(\"spell_pack_versions\".\"graph\"->'provenance') = 'object'\n      ) IS TRUE"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.spell_packs": {
+      "name": "spell_packs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "spell_packs_campaign_id_id_idx": {
+          "name": "spell_packs_campaign_id_id_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "spell_packs_campaign_id_campaigns_id_fk": {
+          "name": "spell_packs_campaign_id_campaigns_id_fk",
+          "tableFrom": "spell_packs",
+          "tableTo": "campaigns",
+          "columnsFrom": [
+            "campaign_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.sticker_media": {
       "name": "sticker_media",
       "schema": "",
@@ -8319,6 +8538,16 @@
       "values": [
         "GM",
         "PLAYER"
+      ]
+    },
+    "public.spell_pack_lifecycle": {
+      "name": "spell_pack_lifecycle",
+      "schema": "public",
+      "values": [
+        "DRAFT",
+        "REFERENCE",
+        "ACTIVE",
+        "ARCHIVED"
       ]
     },
     "public.sticker_pack_audience": {

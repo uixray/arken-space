@@ -119,6 +119,21 @@ export const RESOURCE_REGEN_STAT: Readonly<Record<string, string>> = {
   magicPower: "manaRegen",
 };
 
+/**
+ * Системные характеристики, от которых зависит восстановление ресурсов.
+ *
+ * Набор выводится из `RESOURCE_REGEN_STAT`, чтобы защита редактора раскладки и
+ * формула отдыха не разошлись при добавлении нового системного ресурса.
+ * Проверка идёт только по точному ключу: подпись мастер может менять свободно.
+ */
+export const SYSTEM_REGEN_STAT_KEYS: ReadonlySet<string> = new Set(
+  Object.values(RESOURCE_REGEN_STAT),
+);
+
+export function isSystemRegenStatKey(key: string): boolean {
+  return SYSTEM_REGEN_STAT_KEYS.has(key);
+}
+
 export const arkenSystem: SystemDefinition = {
   id: "arken-core",
   version: 2,

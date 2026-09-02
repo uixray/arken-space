@@ -24,7 +24,8 @@
 - Реализация:
   - `apps/server/src/campaign-pause.ts`, `routes.ts`, `snapshot.ts`;
   - `packages/contracts/src/index.ts`;
-  - `packages/db/src/schema.ts`, migration и metadata `0041`.
+  - `packages/db/src/schema.ts`, migration и metadata `0043` в release-интеграции
+    после spell-миграций `0041`/`0042`.
 - Проверки и эксплуатационная граница:
   - `apps/server/src/campaign-pause.integration.test.ts`;
   - `tests/campaign-pause-contract.test.ts`, migration/integrity/reset/backup;
@@ -36,8 +37,9 @@
 
 ## Проверка
 
-- Красный baseline: отсутствовали contract-схемы и migration `0041`; новые
-  целевые тесты падали до production-кода.
+- Красный baseline исходной task-ветки: отсутствовали contract-схемы и
+  миграция pause-state; новые целевые тесты падали до production-кода. В
+  release-интеграции миграция пересобрана как `0043`, а не переименована.
 - Focused: 8 файлов, 97 тестов — passed.
 - Независимый code/concurrency review и adversarial test review — блокирующих
   замечаний после исправлений нет.

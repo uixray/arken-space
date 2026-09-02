@@ -10,7 +10,10 @@ import { registerRoutes } from "../apps/server/src/routes.js";
 import { hashToken } from "../apps/server/src/security.js";
 import { env } from "../apps/server/src/env.js";
 import { starterStatLayout } from "../packages/system/src/index.js";
-import type { StatLayout } from "../packages/contracts/src/index.js";
+import type {
+  GameSnapshot,
+  StatLayout,
+} from "../packages/contracts/src/index.js";
 
 /**
  * UIX-424, шаг 5 — маршрут правки раскладки.
@@ -23,6 +26,7 @@ import type { StatLayout } from "../packages/contracts/src/index.js";
 let database: PGlite;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 let app: FastifyInstance;
+let broadcastAttempts: number;
 
 const ids = {
   campaign: crypto.randomUUID(),
@@ -46,6 +50,7 @@ const patch = (secret: string, body: Record<string, unknown>) =>
   });
 
 beforeEach(async () => {
+  broadcastAttempts = 0;
   database = new PGlite();
   const migrations = new URL("../packages/db/drizzle/", import.meta.url);
   for (const file of (await readdir(migrations))
@@ -88,7 +93,12 @@ beforeEach(async () => {
     app,
     db as never,
     {
-      in: () => ({ fetchSockets: async () => [] }),
+      in: () => ({
+        fetchSockets: async () => {
+          broadcastAttempts++;
+          return [];
+        },
+      }),
       to: () => ({ emit() {} }),
     } as never,
   );
@@ -144,6 +154,135 @@ describe("правка раскладки характеристик", () => {
     expect((await patch(secrets.gm, { layout: next })).statusCode).toBe(200);
     const stored = await storedLayout();
     expect(stored[0]!.rows.map((row) => row.key)).not.toContain("luck");
+  });
+
+  it("отказывается удалять системную строку регена без записи и broadcast", async () => {
+    const next = layout();
+    const combat = next.find((group) => group.id === "combat")!;
+    combat.rows = combat.rows.filter((row) => row.key !== "enduranceRegen");
+
+    const response = await patch(secrets.gm, { layout: next });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "SYSTEM_STAT_ROW_REQUIRED",
+      key: "enduranceRegen",
+    });
+    expect(await storedLayout()).toEqual([]);
+    expect(broadcastAttempts).toBe(0);
+  });
+
+  it("чинит legacy-раскладку в bootstrap для GM и игрока без записи в БД", async () => {
+    const legacyLayout: StatLayout = [
+      {
+        id: "characteristics",
+        label: "Свои характеристики",
+        rows: [{ key: "customLuck", label: "Фарт", source: "STAT" }],
+      },
+    ];
+    await db
+      .update(schema.campaigns)
+      .set({ statLayout: legacyLayout })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const characterId = crypto.randomUUID();
+    await db.insert(schema.characters).values({
+      id: characterId,
+      campaignId: ids.campaign,
+      ownerMembershipId: ids.player,
+      name: "Ллойд",
+      stats: { customLuck: 5, enduranceRegen: 7, manaRegen: 4 },
+    });
+
+    for (const secret of [secrets.gm, secrets.player]) {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/bootstrap",
+        headers: headers(secret),
+      });
+      expect(response.statusCode).toBe(200);
+      const snapshot = response.json() as GameSnapshot;
+      const regenRows = snapshot.campaign.statLayout
+        .flatMap((group) =>
+          group.rows.map((row) => ({ groupId: group.id, ...row })),
+        )
+        .filter(
+          (row) => row.key === "enduranceRegen" || row.key === "manaRegen",
+        );
+      expect(regenRows).toEqual([
+        {
+          groupId: "combat",
+          key: "enduranceRegen",
+          label: "Реген Выносливости",
+          source: "STAT",
+        },
+        {
+          groupId: "combat",
+          key: "manaRegen",
+          label: "Реген Маны",
+          source: "STAT",
+        },
+      ]);
+      expect(snapshot.campaign.statLayout[0]).toEqual(legacyLayout[0]);
+      expect(
+        snapshot.characters.find((character) => character.id === characterId)
+          ?.stats,
+      ).toMatchObject({ enduranceRegen: 7, manaRegen: 4 });
+    }
+
+    expect(await storedLayout()).toEqual(legacyLayout);
+  });
+
+  it("сохраняет repaired combat из 60 пользовательских и 2 системных строк", async () => {
+    const legacyLayout: StatLayout = [
+      {
+        id: "combat",
+        label: "Свои боевые характеристики",
+        rows: Array.from({ length: 60 }, (_, index) => ({
+          key: `custom${index}`,
+          label: `Строка ${index}`,
+          source: "STAT" as const,
+        })),
+      },
+    ];
+    await db
+      .update(schema.campaigns)
+      .set({ statLayout: legacyLayout })
+      .where(eq(schema.campaigns.id, ids.campaign));
+
+    const bootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(bootstrap.statusCode).toBe(200);
+    const repaired = (bootstrap.json() as GameSnapshot).campaign.statLayout;
+    const combat = repaired.find((group) => group.id === "combat")!;
+    expect(combat.rows).toHaveLength(62);
+    const manaRegen = combat.rows.find((row) => row.key === "manaRegen")!;
+    manaRegen.label = "Темп маны";
+    combat.rows = [
+      manaRegen,
+      ...combat.rows.filter((row) => row.key !== manaRegen.key),
+    ];
+
+    const response = await patch(secrets.gm, { layout: repaired });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().revision).toBe(1);
+    expect(broadcastAttempts).toBe(1);
+
+    const storedCombat = (await storedLayout()).find(
+      (group) => group.id === "combat",
+    )!;
+    expect(storedCombat.rows).toHaveLength(62);
+    expect(storedCombat.rows[0]).toEqual({
+      key: "manaRegen",
+      label: "Темп маны",
+      source: "STAT",
+    });
+    expect(
+      storedCombat.rows.filter(
+        (row) => row.key === "enduranceRegen" || row.key === "manaRegen",
+      ),
+    ).toHaveLength(2);
   });
 
   it("отказывается удалять строку, на которую ссылается навык", async () => {
@@ -220,9 +359,9 @@ describe("правка раскладки характеристик", () => {
       ],
     });
 
-    const response = await patch(secrets.gm, {
-      layout: [{ id: "characteristics", label: "Характеристики", rows: [] }],
-    });
+    const next = layout();
+    next[0]!.rows = next[0]!.rows.filter((row) => row.key !== "strength");
+    const response = await patch(secrets.gm, { layout: next });
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({
       error: "STAT_ROW_REFERENCED",

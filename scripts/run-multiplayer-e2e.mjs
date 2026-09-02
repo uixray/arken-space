@@ -371,6 +371,67 @@ try {
     );
   record("isolated-edge-health", "passed", { buildRevision });
 
+  const spellPackProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "apps/server/src/spell-pack-storage.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.spellPackProbeExitCode = spellPackProbe;
+  if (spellPackProbe !== 0)
+    throw new Error("Spell-pack PostgreSQL probe exited " + spellPackProbe);
+  record("spell-pack-postgresql-probe", "passed");
+
+  const spellAssignmentProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "apps/server/src/spell-assignment-storage.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.spellAssignmentProbeExitCode = spellAssignmentProbe;
+  if (spellAssignmentProbe !== 0)
+    throw new Error(
+      "Spell-assignment PostgreSQL probe exited " + spellAssignmentProbe,
+    );
+  record("spell-assignment-postgresql-probe", "passed");
+
+  const spellProjectionProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "apps/server/src/spell-projection.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.spellProjectionProbeExitCode = spellProjectionProbe;
+  if (spellProjectionProbe !== 0)
+    throw new Error(
+      "Spell-projection PostgreSQL probe exited " + spellProjectionProbe,
+    );
+  record("spell-projection-postgresql-probe", "passed");
+
   const playwright = await runPlaywrightWithRestart(environment);
   report.playwrightExitCode = playwright;
   if (playwright !== 0) throw new Error("Playwright exited " + playwright);

@@ -21,6 +21,8 @@ import {
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
 import { requireAuth } from "./auth.js";
+import { recruitFromBattleZone } from "./battle-initiative.js";
+import { rechargeCampaignCatalogEntries } from "./campaign-clock.js";
 import { transferRelativePosition } from "./encounter-transform.js";
 
 /**
@@ -40,6 +42,24 @@ type EncounterDb = Database | Transaction;
 type EncounterRow = typeof encounters.$inferSelect;
 /** Broadcasts one coherent game:snapshot to every connected campaign socket. */
 type Broadcast = (campaignId: string) => Promise<void>;
+
+function isUniqueViolation(error: unknown, constraint: string): boolean {
+  for (const candidate of [error, (error as { cause?: unknown })?.cause]) {
+    if (typeof candidate !== "object" || candidate === null) continue;
+    if (
+      !("code" in candidate) ||
+      (candidate as { code?: unknown }).code !== "23505"
+    )
+      continue;
+    const name =
+      ("constraint_name" in candidate &&
+        (candidate as { constraint_name?: unknown }).constraint_name) ||
+      ("constraint" in candidate &&
+        (candidate as { constraint?: unknown }).constraint);
+    if (name === constraint) return true;
+  }
+  return false;
+}
 
 function fail(reply: FastifyReply, status: number, error: string) {
   return reply.code(status).send({ error });
@@ -97,6 +117,7 @@ async function record(
   id: string,
   revision: number,
   hash: string,
+  details: Record<string, unknown> = {},
 ) {
   const [event] = await tx
     .insert(gameEvents)
@@ -108,7 +129,7 @@ async function record(
       entityType: "ENCOUNTER",
       entityId: id,
       entityRevision: revision,
-      payload: { commandHash: hash },
+      payload: { commandHash: hash, ...details },
     })
     .returning();
   if (!event) throw new Error("EVENT_RECORD_FAILED");
@@ -258,7 +279,14 @@ export function registerEncounterRoutes(
       return fail(reply, 409, "ENCOUNTER_ALREADY_ACTIVE");
 
     const [campaign] = await db
-      .select({ activeSceneId: campaigns.activeSceneId })
+      .select({
+        activeSceneId: campaigns.activeSceneId,
+        battleActive: campaigns.battleActive,
+        battleCounter: campaigns.battleCounter,
+        battleZone: campaigns.battleZone,
+        initiative: campaigns.initiative,
+        revision: campaigns.revision,
+      })
       .from(campaigns)
       .where(eq(campaigns.id, auth.campaignId))
       .limit(1);
@@ -322,6 +350,26 @@ export function registerEncounterRoutes(
       targetScene = destination;
     }
 
+    const startsBattle = !campaign.battleActive;
+    const resetRoster = campaign.initiative.map((participant) => ({
+      ...participant,
+      initiative: null,
+    }));
+    const recruited =
+      startsBattle && campaign.battleZone
+        ? await recruitFromBattleZone(
+            db,
+            auth.campaignId,
+            campaign.battleZone,
+            resetRoster,
+          )
+        : null;
+    if (startsBattle && campaign.battleZone && !recruited)
+      return fail(reply, 409, "BATTLE_ZONE_SCENE_MISSING");
+    const nextInitiative = startsBattle
+      ? (recruited ?? resetRoster)
+      : campaign.initiative;
+
     let created: EncounterRow;
     try {
       created = await db.transaction(async (tx) => {
@@ -342,12 +390,31 @@ export function registerEncounterRoutes(
           .returning();
         if (!row) throw new Error("ENCOUNTER_CREATE_FAILED");
 
-        if (body.mode === "LINKED_SCENE") {
-          await tx
-            .update(campaigns)
-            .set({ activeSceneId: targetScene.id, updatedAt: new Date() })
-            .where(eq(campaigns.id, auth.campaignId));
+        const nextBattleCounter =
+          campaign.battleCounter + (campaign.battleActive ? 0 : 1);
+        const [updatedCampaign] = await tx
+          .update(campaigns)
+          .set({
+            activeSceneId:
+              body.mode === "LINKED_SCENE"
+                ? targetScene.id
+                : campaign.activeSceneId,
+            battleActive: true,
+            battleCounter: nextBattleCounter,
+            initiative: nextInitiative,
+            revision: campaign.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(campaigns.id, auth.campaignId),
+              eq(campaigns.revision, campaign.revision),
+            ),
+          )
+          .returning({ revision: campaigns.revision });
+        if (!updatedCampaign) throw new Error("CAMPAIGN_CONFLICT");
 
+        if (body.mode === "LINKED_SCENE") {
           // Only PLAYER-layer tokens (participants) auto-transfer; MAP/GM
           // layer tokens (scenery, GM markers) stay put on the source scene.
           const participantTokens = await tx
@@ -393,12 +460,55 @@ export function registerEncounterRoutes(
           row.id,
           row.revision,
           hash,
+          {
+            clockBefore: {
+              battleActive: campaign.battleActive,
+              battleCounter: campaign.battleCounter,
+              revision: campaign.revision,
+            },
+            clockAfter: {
+              battleActive: true,
+              battleCounter: nextBattleCounter,
+              revision: updatedCampaign.revision,
+            },
+            transitionApplied: !campaign.battleActive,
+            recharged: 0,
+            initiativeBefore: campaign.initiative.length,
+            initiativeAfter: nextInitiative.length,
+          },
         );
         return row;
       });
     } catch (error) {
-      if (error instanceof Error && error.message === "TOKEN_TRANSFER_CONFLICT")
-        return fail(reply, 409, "TOKEN_TRANSFER_CONFLICT");
+      if (isUniqueViolation(error, "encounters_campaign_active_idx")) {
+        const raced = await replay(
+          db,
+          auth,
+          body.actionId,
+          "ENCOUNTER_STARTED",
+          null,
+          hash,
+        );
+        if (raced.kind === "CONFLICT")
+          return fail(reply, 409, "ACTION_ID_CONFLICT");
+        if (raced.kind === "MATCH") {
+          const row = await findEncounterById(
+            db,
+            auth.campaignId,
+            raced.entityId,
+          );
+          return row
+            ? reply.code(200).send(encounterDto(row))
+            : fail(reply, 500, "ENCOUNTER_PROJECTION_FAILED");
+        }
+        return fail(reply, 409, "ENCOUNTER_ALREADY_ACTIVE");
+      }
+      if (
+        error instanceof Error &&
+        (error.message === "TOKEN_TRANSFER_CONFLICT" ||
+          error.message === "CAMPAIGN_CONFLICT")
+      )
+        return fail(reply, 409, error.message);
       throw error;
     }
 
@@ -440,50 +550,106 @@ export function registerEncounterRoutes(
     if (existing.revision !== body.revision)
       return fail(reply, 409, "REVISION_CONFLICT");
 
-    // Return-after-battle (decision #2) is purely client-driven: SCENE_REGION
-    // never moved the campaign's active scene or any token in the first
-    // place (source === target, camera-focus hint only), so "resetting the
-    // camera" needs no server-side state change. LINKED_SCENE deliberately
-    // leaves players on the battle scene (no auto-return). Battle
-    // recharge/counter state (campaigns.battleActive/battleCounter, driven
-    // by the separate POST /api/campaign/clock START_BATTLE/END_BATTLE
-    // commands) is untouched here on purpose — ending an encounter only
-    // updates the `encounters` row, never the `campaigns` row, so it can
-    // never silently clobber that counter.
-    const updated = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(encounters)
-        .set({
-          status: "ENDED",
-          endedAt: new Date(),
-          endedByMembershipId: auth.membershipId,
-          revision: existing.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(encounters.id, id),
-            eq(encounters.campaignId, auth.campaignId),
-            eq(encounters.revision, existing.revision),
-          ),
-        )
-        .returning();
-      if (!row) return null;
-      await record(
-        tx,
-        auth,
-        body.actionId,
-        "ENCOUNTER_ENDED",
-        id,
-        row.revision,
-        hash,
-      );
-      return row;
-    });
-    if (!updated) return fail(reply, 409, "REVISION_CONFLICT");
+    const [campaign] = await db
+      .select({
+        day: campaigns.day,
+        battleActive: campaigns.battleActive,
+        battleCounter: campaigns.battleCounter,
+        initiative: campaigns.initiative,
+        revision: campaigns.revision,
+      })
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!campaign) return fail(reply, 404, "CAMPAIGN_NOT_FOUND");
+
+    // Camera/scene return remains client-driven. The durable encounter and
+    // campaign clock, however, are one lifecycle and commit together.
+    let result;
+    try {
+      result = await db.transaction(async (tx) => {
+        const [updatedCampaign] = await tx
+          .update(campaigns)
+          .set({
+            battleActive: false,
+            initiative: [],
+            revision: campaign.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(campaigns.id, auth.campaignId),
+              eq(campaigns.revision, campaign.revision),
+            ),
+          )
+          .returning({ revision: campaigns.revision });
+        if (!updatedCampaign) throw new Error("CAMPAIGN_CONFLICT");
+
+        const [row] = await tx
+          .update(encounters)
+          .set({
+            status: "ENDED",
+            endedAt: new Date(),
+            endedByMembershipId: auth.membershipId,
+            revision: existing.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(encounters.id, id),
+              eq(encounters.campaignId, auth.campaignId),
+              eq(encounters.revision, existing.revision),
+            ),
+          )
+          .returning();
+        if (!row) throw new Error("REVISION_CONFLICT");
+        const recharged = campaign.battleActive
+          ? await rechargeCampaignCatalogEntries(tx, auth.campaignId, {
+              trigger: "END_BATTLE",
+              day: campaign.day,
+              battleCounter: campaign.battleCounter,
+            })
+          : 0;
+        await record(
+          tx,
+          auth,
+          body.actionId,
+          "ENCOUNTER_ENDED",
+          id,
+          row.revision,
+          hash,
+          {
+            clockBefore: {
+              battleActive: campaign.battleActive,
+              battleCounter: campaign.battleCounter,
+              revision: campaign.revision,
+            },
+            clockAfter: {
+              battleActive: false,
+              battleCounter: campaign.battleCounter,
+              revision: updatedCampaign.revision,
+            },
+            transitionApplied: campaign.battleActive,
+            recharged,
+            initiativeBefore: campaign.initiative.length,
+            initiativeAfter: 0,
+          },
+        );
+        return { row, recharged };
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message === "CAMPAIGN_CONFLICT" ||
+          error.message === "REVISION_CONFLICT" ||
+          error.message === "ENTRY_CONFLICT")
+      )
+        return fail(reply, 409, error.message);
+      throw error;
+    }
 
     await broadcastSnapshots(auth.campaignId);
-    return reply.send(encounterDto(updated));
+    return reply.send(encounterDto(result.row));
   });
 
   app.get("/api/encounters", async (request, reply) => {
