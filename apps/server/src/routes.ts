@@ -423,17 +423,39 @@ function formatResourceValue(value: Resources[string] | undefined) {
     : `${value.current}/${value.maximum}`;
 }
 
-function formatResourceChanges(before: Resources, after: Resources) {
+/**
+ * UIX-476 — имя ресурса принадлежит раскладке кампании, а не ключу JSON.
+ * Строка могла быть удалена уже после создания ресурса, поэтому отсутствие
+ * подписи штатно: formatter ниже оставляет сам ключ вместо пустого имени.
+ */
+function resourceLabelsFromLayout(
+  layout: ReturnType<typeof resolveStatLayout>,
+): ReadonlyMap<string, string> {
+  return new Map(
+    layout.flatMap((group) =>
+      group.rows
+        .filter((row) => row.source === "RESOURCE")
+        .map((row) => [row.key, row.label] as const),
+    ),
+  );
+}
+
+function formatResourceChanges(
+  before: Resources,
+  after: Resources,
+  labels: ReadonlyMap<string, string>,
+) {
   const keys = [
     ...new Set([...Object.keys(before), ...Object.keys(after)]),
   ].sort();
   const changes = keys
     .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
     .map((key) => {
+      const label = labels.get(key) ?? key;
       if (!before[key])
-        return `${key}: добавлен ${formatResourceValue(after[key])}`;
-      if (!after[key]) return `${key}: удалён`;
-      return `${key}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
+        return `${label}: добавлен ${formatResourceValue(after[key])}`;
+      if (!after[key]) return `${label}: удалён`;
+      return `${label}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
     });
   return changes.length > 0 ? `ресурсы: ${changes.join(", ")}` : "";
 }
@@ -7631,6 +7653,17 @@ export function registerRoutes(
           normalizeLegacyStats(character!.stats),
         )
       : body.resources;
+    let resourceLabels: ReadonlyMap<string, string> = new Map();
+    if (nextResources) {
+      const [campaign] = await db
+        .select({ statLayout: campaigns.statLayout })
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      resourceLabels = resourceLabelsFromLayout(
+        resolveStatLayout(campaign?.statLayout),
+      );
+    }
     const changes = [
       body.wallet
         ? formatWalletChanges(
@@ -7642,6 +7675,7 @@ export function registerRoutes(
         ? formatResourceChanges(
             (character!.resources ?? {}) as Resources,
             nextResources,
+            resourceLabels,
           )
         : "",
     ]
