@@ -35,6 +35,9 @@ UIX-583 продолжает уже опубликованную серверн�
 - `PATCH /api/tokens/:id/conditions`;
 - `PATCH /api/tokens/:id/layer`;
 - `DELETE /api/tokens/:id`;
+- `PATCH /api/token-definitions/:id`, потому что name/default asset/character
+  меняют проекцию уже размещённых токенов;
+- `DELETE /api/token-definitions/:id`, потому что FK cascade удаляет placements;
 - `POST /api/fog-reveals`;
 - `POST /api/drawings`;
 - `PATCH /api/drawings/:id`;
@@ -42,13 +45,17 @@ UIX-583 продолжает уже опубликованную серверн�
 - `DELETE /api/drawings/:id`;
 - `POST /api/canvas/bulk`;
 - `POST /api/canvas/undo` и `POST /api/canvas/redo`;
+- `POST /api/scenes/activate`;
+- `PATCH /api/scenes/:id` при смене map/background-проекции;
 - `PATCH /api/scenes/:id/canvas`;
+- `POST /api/encounters/start` в режиме `LINKED_SCENE`, потому что он меняет
+  active scene и переносит PLAYER-токены между сценами;
 - Socket.IO `token:moved`.
 
 `DELETE /api/fog-reveals/latest` уже retired и отвечает `410`, поэтому новой
-мутации там нет. Создание определений токенов без placement, управление
-контроллерами, чат, броски и звук не являются Canvas-мутациями этого пула и не
-получают лишний запрет.
+мутации там нет. Создание offscreen scene/определения токена без placement,
+управление контроллерами, архивная материализация имени, чат, броски и звук не
+являются видимой Canvas-мутацией этого пула и не получают лишний запрет.
 
 ### Эфемерный realtime
 
@@ -98,7 +105,7 @@ journal row, повторяется уже под campaign lock.
 
 ### Очистка при pause
 
-После commit `paused=true`, но до нового snapshot broadcast, сервер:
+После записи `paused=true`, но до commit той же транзакции, сервер:
 
 - рассылает `ruler:cleared` для campaign-scoped сцен и участников;
 - рассылает `cursor:gone` для участников в campaign и GM-аудиторию;
@@ -161,8 +168,22 @@ UI-поток UIX-584 не входит в этот пул, поэтому но�
 ## Этапы
 
 1. [x] **Измерение** — поверхность durable/ephemeral и lock order зафиксированы.
-2. [ ] **Guard primitive** — единые update/share wrappers и bounded ошибки.
-3. [ ] **Интеграция** — HTTP, Socket.IO и campaign-scoped cleanup.
-4. [ ] **Доказательство** — focused, гонки, отрицательные контроли и диверсия.
+2. [x] **Guard primitive** — единые update/share wrappers и bounded ошибки.
+3. [x] **Интеграция** — HTTP, Socket.IO и campaign-scoped cleanup.
+4. [x] **Доказательство** — focused, гонки, отрицательные контроли и диверсия.
 5. [ ] **Gate** — полный локальный набор и isolated multiplayer.
 
+## Чекпоинт реализации
+
+- Cleanup линейки и курсора выполняется внутри pause-транзакции под campaign
+  `FOR UPDATE`; replay старого receipt не повторяет transition-side cleanup.
+- Post-commit snapshot повторно сверяет `paused + revision` под эксклюзивной
+  блокировкой и не рассылает историческое состояние после более новой команды.
+- Disconnect и завершившийся после disconnect async relay не оставляют
+  недоступную для будущей очистки эфемеру.
+- Оба режима запуска encounter берут campaign lock до уникального ACTIVE slot,
+  чтобы LINKED_SCENE и SCENE_REGION не образовали взаимную блокировку.
+- Диверсия `POST /api/drawings`: без guard целевой тест дал `201` вместо `409`;
+  после восстановления тот же тест зелёный.
+- Focused после adversarial fixes: 6 файлов, 124 теста — passed одним worker;
+  серверный typecheck и формат изменённых файлов — passed.

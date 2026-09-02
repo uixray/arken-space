@@ -156,7 +156,9 @@ import {
   rechargeCampaignCatalogEntries,
   resetCampaignRechargeAnchors,
 } from "./campaign-clock.js";
+import { campaignCanvasDatabase } from "./campaign-pause-guard.js";
 import { registerCampaignPauseRoutes } from "./campaign-pause.js";
+import { clearCampaignCanvasEphemera } from "./realtime.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
 import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
 import { registerSpellPackRoutes } from "./spell-pack-routes.js";
@@ -336,6 +338,35 @@ async function broadcastSnapshots(
       largest: largestFields(measurement.bytesByField),
     }),
   );
+}
+
+/**
+ * A historical exact retry may arrive after a newer pause/resume command.
+ * Recheck the authoritative revision under the same exclusive campaign lock
+ * used by Canvas mutations before emitting a snapshot for that receipt.
+ */
+export async function broadcastCampaignPauseSnapshot(
+  io: RealtimeServer,
+  db: Database,
+  campaignId: string,
+  expected: { paused: boolean; revision: number },
+) {
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ paused: campaigns.paused, revision: campaigns.revision })
+      .from(campaigns)
+      .where(eq(campaigns.id, campaignId))
+      .limit(1)
+      .for("update");
+    if (
+      !current ||
+      current.paused !== expected.paused ||
+      current.revision !== expected.revision
+    )
+      return false;
+    await broadcastSnapshots(io, db, campaignId);
+    return true;
+  });
 }
 
 function errorMessage(error: unknown) {
@@ -856,6 +887,8 @@ export function registerRoutes(
   db: Database,
   io: RealtimeServer,
 ) {
+  const canvasTx = (campaignId: string) =>
+    campaignCanvasDatabase(db, campaignId);
   registerWorldMapRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
@@ -866,8 +899,15 @@ export function registerRoutes(
   registerEncounterRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
-  registerCampaignPauseRoutes(app, db, (campaignId) =>
-    broadcastSnapshots(io, db, campaignId),
+  registerCampaignPauseRoutes(
+    app,
+    db,
+    async (campaignId, state) => {
+      await broadcastCampaignPauseSnapshot(io, db, campaignId, state);
+    },
+    async (campaignId, state) => {
+      if (state.paused) await clearCampaignCanvasEphemera(io, campaignId);
+    },
   );
   registerWorldContentRoutes(app, db);
   registerWorldContentInstanceRoutes(app, db);
@@ -2558,7 +2598,7 @@ export function registerRoutes(
       if (mapAsset.kind !== "MAP")
         return reply.code(422).send({ error: "MAP_ASSET_REQUIRED" });
     }
-    const scene = await db.transaction(async (tx) => {
+    const scene = await canvasTx(auth.campaignId).transaction(async (tx) => {
       const [updated] = await tx
         .update(scenes)
         .set({
@@ -2609,7 +2649,7 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    await db.transaction(async (tx) => {
+    await canvasTx(auth.campaignId).transaction(async (tx) => {
       await tx
         .update(campaigns)
         .set({ activeSceneId: scene.id, updatedAt: new Date() })
@@ -2750,7 +2790,8 @@ export function registerRoutes(
     // UIX-400: имя обязательно, когда наследовать не от кого.
     if (!body.name && !body.characterId)
       return reply.code(400).send({ error: "TOKEN_NAME_REQUIRED" });
-    const placement = await db.transaction(async (tx) => {
+    const guardedDb = canvasTx(auth.campaignId);
+    const placement = await guardedDb.transaction(async (tx) => {
       await tx.execute(
         sql`select id from scenes where id = ${scene.id} and campaign_id = ${auth.campaignId} for update`,
       );
@@ -3047,7 +3088,8 @@ export function registerRoutes(
       !controllers.some((item) => item.membershipId === auth.membershipId)
     )
       return reply.code(403).send({ error: "TOKEN_DEFINITION_FORBIDDEN" });
-    const placement = await db.transaction(async (tx) => {
+    const guardedDb = canvasTx(auth.campaignId);
+    const placement = await guardedDb.transaction(async (tx) => {
       await tx.execute(
         sql`select id from scenes where id = ${scene.id} and campaign_id = ${auth.campaignId} for update`,
       );
@@ -3194,7 +3236,7 @@ export function registerRoutes(
     );
     const width = Math.round(row.token.width * boundedScale);
     const height = Math.round(row.token.height * boundedScale);
-    const updated = await db.transaction(async (tx) => {
+    const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [saved] = await tx
         .update(tokens)
@@ -3257,7 +3299,7 @@ export function registerRoutes(
     if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
     if (row.token.revision !== body.revision)
       return reply.code(409).send({ error: "STALE_REVISION" });
-    const updated = await db.transaction(async (tx) => {
+    const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [saved] = await tx
         .update(tokens)
@@ -3352,7 +3394,7 @@ export function registerRoutes(
     }
     if (row.token.revision !== body.revision)
       return reply.code(409).send({ error: "STALE_REVISION" });
-    const updated = await db.transaction(async (tx) => {
+    const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [saved] = await tx
         .update(tokens)
@@ -3440,7 +3482,7 @@ export function registerRoutes(
       )
         return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
     }
-    const deleted = await db.transaction(async (tx) => {
+    const deleted = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [placement] = await tx
         .delete(tokens)
@@ -3666,7 +3708,7 @@ export function registerRoutes(
         return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
     }
     const { actionId, revision: _revision, ...changes } = body;
-    const updated = await db.transaction(async (tx) => {
+    const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
       const [next] = await tx
         .update(tokenDefinitions)
         .set({
@@ -3708,7 +3750,7 @@ export function registerRoutes(
     const body = revisionCommandSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
-    const result = await db.transaction(async (tx) => {
+    const result = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await tx.execute(
         sql`select id from token_definitions where id = ${id} and campaign_id = ${auth.campaignId} for update`,
       );
@@ -3851,7 +3893,7 @@ export function registerRoutes(
       width: canonical.bbox.width,
       height: canonical.bbox.height,
     };
-    const result = await db.transaction(async (tx) => {
+    const result = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, scene.id);
       const [reveal] = await tx
         .insert(fogReveals)
@@ -3947,7 +3989,7 @@ export function registerRoutes(
     if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
     if (row.token.revision !== body.revision)
       return reply.code(409).send({ error: "TOKEN_CONFLICT" });
-    const saved = await db.transaction(async (tx) => {
+    const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [updated] = await tx
         .update(tokens)
@@ -4013,7 +4055,7 @@ export function registerRoutes(
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
     const { actionId, ...input } = body;
-    const saved = await db.transaction(async (tx) => {
+    const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, scene.id);
       const [drawing] = await tx
         .insert(drawings)
@@ -4074,7 +4116,7 @@ export function registerRoutes(
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
     const { actionId, revision: _revision, ...changes } = body;
-    const saved = await db.transaction(async (tx) => {
+    const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
       const [updated] = await tx
         .update(drawings)
@@ -4143,7 +4185,7 @@ export function registerRoutes(
       return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    const saved = await db.transaction(async (tx) => {
+    const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
       const [copy] = await tx
         .insert(drawings)
@@ -4211,7 +4253,7 @@ export function registerRoutes(
       return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    await db.transaction(async (tx) => {
+    await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
       const [deleted] = await tx
         .delete(drawings)
@@ -4346,7 +4388,8 @@ export function registerRoutes(
       )
         return reply.code(403).send({ error: "CANVAS_TARGET_FORBIDDEN" });
     }
-    const result = await db
+    const guardedDb = canvasTx(auth.campaignId);
+    const result = await guardedDb
       .transaction(async (tx) => {
         await invalidateRedoBranch(tx, auth, scene.id);
         const afterTokens: (typeof tokens.$inferSelect)[] = [];
@@ -4581,7 +4624,8 @@ export function registerRoutes(
         .limit(1);
       if (!candidateCommand)
         return reply.code(404).send({ error: "HISTORY_ACTION_NOT_FOUND" });
-      const saved = await db
+      const guardedDb = canvasTx(auth.campaignId);
+      const saved = await guardedDb
         .transaction(async (tx) => {
           // Every canvas mutation that can create or restore tokens takes the
           // scene lock first. Grid rescale uses the same lock, making token
@@ -5283,7 +5327,8 @@ export function registerRoutes(
       if (mapAsset.kind !== "MAP")
         return reply.code(422).send({ error: "MAP_ASSET_REQUIRED" });
     }
-    const result = await db
+    const guardedDb = canvasTx(auth.campaignId);
+    const result = await guardedDb
       .transaction(async (tx) => {
         // Scene mutation, token placement, and token-restoring history all use
         // this same row lock. The token set below is therefore a complete,

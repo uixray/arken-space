@@ -16,7 +16,10 @@ import type {
   TokenDto,
 } from "../packages/contracts/src/index.js";
 import * as schema from "../packages/db/src/schema.js";
-import { registerRealtime } from "../apps/server/src/realtime.js";
+import {
+  clearCampaignCanvasEphemera,
+  registerRealtime,
+} from "../apps/server/src/realtime.js";
 import { sessionIsActive as realSessionIsActive } from "../apps/server/src/auth.js";
 import { buildSnapshot as realBuildSnapshot } from "../apps/server/src/snapshot.js";
 import { hashToken } from "../apps/server/src/security.js";
@@ -2250,6 +2253,34 @@ describe("cursor presence (UIX-392)", () => {
     await expect(gone).resolves.toEqual({ membershipId: ids.player });
   });
 
+  it("clears a visible ruler when its socket disconnects", async () => {
+    const visible = new Promise<void>((resolve) =>
+      gmClient.once("ruler:updated", () => resolve()),
+    );
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [
+        { x: 0, y: 0 },
+        { x: 32, y: 32 },
+      ],
+    });
+    await visible;
+    const cleared = new Promise<unknown>((resolve) =>
+      gmClient.once("ruler:cleared", resolve),
+    );
+
+    // A valid but unrelated scene must not make the server forget the ruler
+    // that is still visible on the original scene.
+    client.emit("ruler:clear", { sceneId: ids.inactiveScene });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    client.disconnect();
+
+    await expect(cleared).resolves.toEqual({
+      sceneId: ids.scene,
+      membershipId: ids.player,
+    });
+  });
+
   it("does not broadcast cursor:gone for a socket that never sent a cursor", async () => {
     let received = false;
     gmClient.on("cursor:gone", () => {
@@ -2268,6 +2299,141 @@ describe("cursor presence (UIX-392)", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     client.emit("cursor:gone");
     await expect(gone).resolves.toEqual({ membershipId: ids.player });
+  });
+});
+
+describe("campaign pause Canvas realtime guards (UIX-583)", () => {
+  it("cleans active ephemera, blocks paused relays and resumes the same paths", async () => {
+    const rulerWasVisible = new Promise<void>((resolve) =>
+      otherClient.once("ruler:updated", () => resolve()),
+    );
+    const cursorWasVisible = new Promise<void>((resolve) =>
+      gmClient.once("cursor:moved", () => resolve()),
+    );
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [
+        { x: 0, y: 0 },
+        { x: 64, y: 64 },
+      ],
+    });
+    client.emit("cursor:move", { sceneId: ids.scene, x: 10, y: 10 });
+    await Promise.all([rulerWasVisible, cursorWasVisible]);
+
+    const rulerCleared = new Promise<unknown>((resolve) =>
+      otherClient.once("ruler:cleared", resolve),
+    );
+    const cursorGone = new Promise<unknown>((resolve) =>
+      gmClient.once("cursor:gone", resolve),
+    );
+    await clearCampaignCanvasEphemera(ioServer, ids.campaign);
+    await expect(rulerCleared).resolves.toEqual({
+      sceneId: ids.scene,
+      membershipId: ids.player,
+    });
+    await expect(cursorGone).resolves.toEqual({ membershipId: ids.player });
+
+    await database.exec(
+      `update campaigns set paused = true where id = '${ids.campaign}'`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const blocked = { preview: 0, ruler: 0, cursor: 0, ping: 0 };
+    const onPreview = () => blocked.preview++;
+    const onRuler = () => blocked.ruler++;
+    const onCursor = () => blocked.cursor++;
+    const onPing = () => blocked.ping++;
+    otherClient.on("token:moving", onPreview);
+    otherClient.on("ruler:updated", onRuler);
+    gmClient.on("cursor:moved", onCursor);
+    otherClient.on("map:ping", onPing);
+
+    client.emit("token:moving", {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.token,
+      x: 128,
+      y: 128,
+      z: 0,
+      levelId: null,
+      revision: 0,
+    });
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [
+        { x: 0, y: 0 },
+        { x: 128, y: 128 },
+      ],
+    });
+    client.emit("cursor:move", { sceneId: ids.scene, x: 20, y: 20 });
+    const [moveAck, pingAck] = await Promise.all([
+      move(client, {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        x: 128,
+        y: 128,
+      }),
+      ping(gmClient, ids.scene),
+    ]);
+    expect(moveAck).toMatchObject({
+      ok: false,
+      status: "CONFLICT",
+      reason: "CAMPAIGN_PAUSED",
+    });
+    expect(pingAck).toEqual({ ok: false, reason: "CAMPAIGN_PAUSED" });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(blocked).toEqual({ preview: 0, ruler: 0, cursor: 0, ping: 0 });
+    const tokenWhilePaused = await database.query<{
+      x: number;
+      y: number;
+      revision: number;
+    }>(`select x,y,revision from tokens where id = '${ids.token}'`);
+    expect(tokenWhilePaused.rows).toEqual([{ x: 0, y: 0, revision: 0 }]);
+
+    otherClient.off("token:moving", onPreview);
+    otherClient.off("ruler:updated", onRuler);
+    gmClient.off("cursor:moved", onCursor);
+    otherClient.off("map:ping", onPing);
+    await database.exec(
+      `update campaigns set paused = false where id = '${ids.campaign}'`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const previewResumed = new Promise<void>((resolve) =>
+      otherClient.once("token:moving", () => resolve()),
+    );
+    const rulerResumed = new Promise<void>((resolve) =>
+      otherClient.once("ruler:updated", () => resolve()),
+    );
+    const cursorResumed = new Promise<void>((resolve) =>
+      gmClient.once("cursor:moved", () => resolve()),
+    );
+    const pingResumed = new Promise<void>((resolve) =>
+      otherClient.once("map:ping", () => resolve()),
+    );
+    client.emit("token:moving", {
+      actionId: crypto.randomUUID(),
+      tokenId: ids.token,
+      x: 64,
+      y: 64,
+      z: 0,
+      levelId: null,
+      revision: 0,
+    });
+    client.emit("ruler:update", {
+      sceneId: ids.scene,
+      points: [
+        { x: 0, y: 0 },
+        { x: 64, y: 64 },
+      ],
+    });
+    client.emit("cursor:move", { sceneId: ids.scene, x: 30, y: 30 });
+    const resumedPingAck = ping(gmClient, ids.scene);
+    await Promise.all([
+      previewResumed,
+      rulerResumed,
+      cursorResumed,
+      pingResumed,
+    ]);
+    await expect(resumedPingAck).resolves.toEqual({ ok: true });
   });
 });
 
