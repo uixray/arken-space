@@ -564,6 +564,32 @@ export async function buildSnapshot(
   const visibleTokens = allowedTokens.filter(
     ({ token }) => !hiddenByFog.has(token.id),
   );
+  const projectedTokens = visibleTokens.map(({ token, definition }) => {
+    const { updatedAt: _updatedAt, ...dto } = token;
+    return {
+      ...dto,
+      // UIX-471: состояния из `jsonb` — разбираются схемой, а не приводятся.
+      conditions: normalizeTokenConditions(token.conditions),
+      definitionId: definition.id,
+      definitionRevision: definition.revision,
+      characterId: definition.characterId,
+      assetId: definition.defaultAssetId,
+      // UIX-400: имя разрешается в одном месте — здесь. Собственное, либо
+      // унаследованное от персонажа.
+      name: resolveTokenName({
+        name: definition.name,
+        characterName: characterNameById.get(definition.characterId ?? ""),
+      }),
+      width: token.width,
+      height: token.height,
+      controllerMembershipIds:
+        auth.role === "GM"
+          ? (controllersByDefinition.get(definition.id) ?? [])
+          : (controllersByDefinition.get(definition.id) ?? []).filter(
+              (id) => id === auth.membershipId,
+            ),
+    };
+  });
   const entriesByCharacter = new Map<
     string,
     (typeof assignedRows)[number]["entry"][]
@@ -577,7 +603,7 @@ export async function buildSnapshot(
   for (const scene of visibleScenes) {
     if (scene.mapAssetId) visibleAssetIds.add(scene.mapAssetId);
   }
-  for (const { token } of visibleTokens) {
+  for (const token of projectedTokens) {
     if (token.assetId) visibleAssetIds.add(token.assetId);
   }
   const visibleDefinitions = definitionRows.filter(
@@ -792,32 +818,7 @@ export async function buildSnapshot(
             revision: entry.revision,
           }))
         : [],
-    tokens: visibleTokens.map(({ token, definition }) => {
-      const { updatedAt: _updatedAt, ...dto } = token;
-      return {
-        ...dto,
-        // UIX-471: состояния из `jsonb` — разбираются схемой, а не приводятся.
-        conditions: normalizeTokenConditions(token.conditions),
-        definitionId: definition.id,
-        definitionRevision: definition.revision,
-        characterId: definition.characterId,
-        assetId: definition.defaultAssetId,
-        // UIX-400: имя разрешается в одном месте — здесь. Собственное, либо
-        // унаследованное от персонажа.
-        name: resolveTokenName({
-          name: definition.name,
-          characterName: characterNameById.get(definition.characterId ?? ""),
-        }),
-        width: token.width,
-        height: token.height,
-        controllerMembershipIds:
-          auth.role === "GM"
-            ? (controllersByDefinition.get(definition.id) ?? [])
-            : (controllersByDefinition.get(definition.id) ?? []).filter(
-                (id) => id === auth.membershipId,
-              ),
-      };
-    }),
+    tokens: projectedTokens,
     tokenDefinitions: visibleDefinitions.map((definition) => ({
       id: definition.id,
       characterId: definition.characterId,

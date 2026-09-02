@@ -31,16 +31,35 @@ integration coverage. Schema, migrations и web UI не меняются.
 
 ## Этапы
 
-1. [ ] **Reproduction** — Fastify/PGlite test A → B доказывает текущую ошибку в
+1. [x] **Reproduction** — Fastify/PGlite test A → B доказывает текущую ошибку в
        snapshot и content route до production fix.
-2. [ ] **Projection fix** — Token DTO строится один раз; asset closure использует
+2. [x] **Projection fix** — Token DTO строится один раз; asset closure использует
        его `assetId`; return переиспользует тот же массив.
-3. [ ] **Focused proof** — PLAYER получает B и не получает A; direct A/foreign/
+3. [x] **Focused proof** — PLAYER получает B и не получает A; direct A/foreign/
        unknown — 404; B и GM paths — 200.
-4. [ ] **Diversion** — временно вернуть legacy placement asset в closure и
+4. [x] **Diversion** — временно вернуть legacy placement asset в closure и
        убедиться, что падает ровно новый privacy-тест.
 5. [ ] **Gates** — format, lint, typecheck, build, full test одним worker и
        isolated multiplayer без production health.
+
+## Доказательство до правки и диверсия
+
+- До production fix focused-тест падал на том, что финальный Token DTO уже
+  указывал B, но `snapshot.assets` не содержал B.
+- После исправления тест прошёл.
+- В диверсии closure временно вернули к `tokens.assetId`: упал ровно UIX-587
+  test на том же отсутствии B, остальные девять тестов файла были skipped.
+- После восстановления closure из финальных Token DTO focused-тест снова
+  прошёл.
+
+## Совместимость с UIX-293
+
+Незамерженная ветка UIX-293 считает legacy `tokens.assetId` самостоятельным
+`TOKEN_PLACEMENT` usage. Это противоречит текущей модели и после A → B навсегда
+блокировало бы удаление A. Перед возобновлением UIX-293 её resolver должен
+учитывать `TOKEN_DEFINITION`, но не эмитить placement usage для legacy mirror.
+Долгосрочное удаление колонки требует отдельной миграции и аудита history
+restore; в UIX-587 schema не меняется.
 
 ## Предполагаемые файлы
 
