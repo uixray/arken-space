@@ -875,6 +875,7 @@ export function registerRoutes(
   registerWorldContentInstanceRoutes(app, db);
   registerSpellPackRoutes(app, db);
   registerSpellAssignmentRoutes(app, db);
+  registerSpellProjectionRoutes(app, db);
   registerAssetLifecycleRoutes(app, db, io, broadcastSnapshots);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
