@@ -16,8 +16,7 @@
 ## Ревизия
 
 - Интеграционный merge: `49f8dab`.
-- Следующий checkpoint commit добавит только найденную review-правку fixture,
-  форматирование конфликтной поверхности и этот отчёт.
+- Review-fix и checkpoint: `52f60be`.
 
 ## Изменённые файлы интеграционного слоя
 
@@ -42,15 +41,25 @@
 - Диверсия: из `0043_campaign_pause.sql` временно удалён `NOT NULL`; точный тест
   UIX-582 упал один (остальные 8 skipped) на разрешённом `paused=null`. После
   восстановления SQL тот же тест прошёл.
+- Полный локальный core gate на `52f60be`:
+  - `format:check` — passed;
+  - `lint` — passed, 0 errors и 3 прежних warning;
+  - `typecheck` — passed;
+  - `build` — passed;
+  - `test` — 207 файлов / 1672 теста passed.
+- Full E2E был остановлен после `ECONNREFUSED /api/bootstrap`: API не был
+  поднят, поэтому это инфраструктурно невалидный прогон, а не продуктовый fail.
+- Проверен правильный Docker context `desktop-linux`; daemon сейчас не запущен.
 
 ## Блокеры
 
-- Единый полный локальный gate, full E2E и isolated multiplayer ещё не запущены.
-- Integration branch ещё не опубликована; GitHub CI отсутствует.
+- Локальные full E2E и isolated multiplayer требуют недоступный сейчас Docker
+  Desktop; обязательное доказательство переносится в GitHub workflows.
+- Integration branch ещё не опубликована; GitHub CI отсутствует до создания PR.
 - Production gate требует доступ к host, реальный non-live media smoke и ручной
   GM+6 прогон.
 
 ## Следующее действие
 
-Последовательно запустить `format:check → lint → typecheck → build → test`, затем
-`test:e2e` и `test:multiplayer`; после зелёного результата опубликовать один PR.
+Опубликовать один integration PR и дождаться зелёных `checks`, `e2e` и
+`multiplayer`; merge разрешён только после всех трёх workflow.
