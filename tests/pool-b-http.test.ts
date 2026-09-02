@@ -3169,6 +3169,22 @@ describe("Pool B HTTP boundaries", () => {
       headers: headers(secrets.player),
     });
     expect(recoveredEmpty.json().drawings).toEqual([]);
+    const advertisedHistory = await app.inject({
+      method: "GET",
+      url: `/api/canvas/history?sceneId=${ids.scene}`,
+      headers: headers(secrets.player),
+    });
+    expect(advertisedHistory.statusCode).toBe(200);
+    const advertisedRedo = advertisedHistory
+      .json<
+        Array<{
+          sequence: number;
+          status: string;
+          nextDirection: "undo" | "redo" | null;
+        }>
+      >()
+      .find((entry) => entry.nextDirection === "redo");
+    expect(advertisedRedo).toBeDefined();
     const firstRedo = await app.inject({
       method: "POST",
       url: "/api/canvas/redo",
@@ -3176,6 +3192,7 @@ describe("Pool B HTTP boundaries", () => {
       payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
     });
     expect(firstRedo.statusCode).toBe(200);
+    expect(firstRedo.json().sequence).toBe(advertisedRedo?.sequence);
     const recoveredFirst = await app.inject({
       method: "GET",
       url: "/api/bootstrap",
@@ -3199,6 +3216,30 @@ describe("Pool B HTTP boundaries", () => {
     expect(
       recoveredAll.json().drawings.map((item: { id: string }) => item.id),
     ).toEqual(idsCreated);
+    const advertisedUndoHistory = await app.inject({
+      method: "GET",
+      url: `/api/canvas/history?sceneId=${ids.scene}`,
+      headers: headers(secrets.player),
+    });
+    const advertisedUndo = advertisedUndoHistory
+      .json<Array<{ sequence: number; nextDirection: string | null }>>()
+      .find((entry) => entry.nextDirection === "undo");
+    expect(advertisedUndo).toBeDefined();
+    const exactUndo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(exactUndo.statusCode).toBe(200);
+    expect(exactUndo.json().sequence).toBe(advertisedUndo?.sequence);
+    const restoreUndo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/redo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(restoreUndo.statusCode).toBe(200);
     for (const x of [0, 20]) {
       const fog = await app.inject({
         method: "POST",
