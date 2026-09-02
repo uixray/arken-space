@@ -39,7 +39,7 @@ integration coverage. Schema, migrations и web UI не меняются.
        unknown — 404; B и GM paths — 200.
 4. [x] **Diversion** — временно вернуть legacy placement asset в closure и
        убедиться, что падает ровно новый privacy-тест.
-5. [ ] **Gates** — format, lint, typecheck, build, full test одним worker и
+5. [x] **Gates** — format, lint, typecheck, build, full test одним worker и
        isolated multiplayer без production health.
 
 ## Доказательство до правки и диверсия
