@@ -36,6 +36,7 @@ const snapshot = {
   campaign: {
     id: ids.campaign,
     name: "Character media detach",
+    paused: false,
     day: 1,
     battleActive: false,
     battleCounter: 0,

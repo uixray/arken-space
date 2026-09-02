@@ -73,4 +73,3 @@ pnpm test:multiplayer
 - отсутствие SSH/production-доступа;
 - неподтверждённый non-live media smoke;
 - отсутствие ручного GM+6 release gate.
-
