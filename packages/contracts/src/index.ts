@@ -2056,7 +2056,13 @@ export const entryRollRequestSchema = z.union([
 export type EntryCardRequest = z.infer<typeof entryRollRequestSchema>;
 export const campaignClockCommandSchema = z.object({
   actionId: actionIdSchema,
-  command: z.enum(["ADVANCE_DAY", "LONG_REST", "START_BATTLE", "END_BATTLE"]),
+  command: z.enum([
+    "ADVANCE_DAY",
+    "LONG_REST",
+    "START_BATTLE",
+    "END_BATTLE",
+    "RESET_CLOCK",
+  ]),
   revision: z.number().int().nonnegative(),
 });
 export const walletSchema = z.object({

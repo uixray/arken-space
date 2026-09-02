@@ -130,6 +130,18 @@ flowchart TD
 8. **Canvas undo/redo durable.** `action_journal` хранит before/after и отдельное
    состояние `APPLIED`, `UNDONE` или `INVALIDATED`; новая команда инвалидирует
    соответствующую redo-ветку.
+9. **Столкновение и боевые часы — один lifecycle.**
+   `POST /api/encounters/start` в одной транзакции создаёт ACTIVE encounter,
+   включает `campaigns.battleActive` и увеличивает `battleCounter` только при
+   переходе из состояния вне боя; состав инициативы набирается по зоне по тем
+   же правилам, что legacy clock-start, а старые броски обнуляются. Завершение
+   encounter там же выключает бой, очищает инициативу и один раз выполняет
+   BATTLE-перезарядку. `RESET_CLOCK` доступен только мастеру вне активного
+   encounter: он возвращает день/счётчик к `1/0` и переносит recharge-якоря, не
+   выдавая персонажам новые uses. Старые clock-команды
+   `START_BATTLE`/`END_BATTLE` сервер пока принимает для совместимости, но UI их
+   не предлагает; при ACTIVE encounter они отклоняются, чтобы второй lifecycle
+   не мог разорвать состояние.
 
 ## Сервер
 

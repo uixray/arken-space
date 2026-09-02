@@ -11,6 +11,7 @@ import type {
   AssetDto,
   ClientToServerEvents,
   CommandAck,
+  EncounterDto,
   FogRevealDto,
   GameSnapshot,
   MapPing,
@@ -540,6 +541,9 @@ test("GM and six isolated players recover authoritative state without security l
     await openWorkspaceSection(pages[0]!, "Персонажи");
     await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(1);
     await expect(pages[0]!.locator(".character-sheet-card")).toHaveCount(1);
+    await expect(
+      pages[0]!.getByTitle("Управление временем кампании"),
+    ).toHaveCount(0);
     await pages[0]!.getByRole("button", { name: "Закрыть персонажей" }).click();
     await expect(
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
@@ -650,6 +654,79 @@ test("GM and six isolated players recover authoritative state without security l
     const playerInitialSnapshots = await Promise.all(
       players.map((player) => bootstrap(player)),
     );
+
+    // UIX-402: the encounter lifecycle is the single source of truth for the
+    // campaign battle clock. Prove the persisted transition reaches every
+    // connected role before the later backend-restart recovery assertion.
+    const battleCounterBefore = gmInitialSnapshot.campaign.battleCounter;
+    const startActionId = actionId();
+    const startedSnapshots = connections.map(({ socket }) =>
+      waitForSnapshot(
+        socket,
+        (candidate) =>
+          candidate.campaign.battleActive &&
+          candidate.campaign.battleCounter === battleCounterBefore + 1 &&
+          candidate.encounters.some(
+            (encounter) => encounter.status === "ACTIVE",
+          ),
+      ),
+    );
+    const startedResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/encounters/start", {
+        data: {
+          actionId: startActionId,
+          mode: "SCENE_REGION",
+          sourceSceneId: initialScene.id,
+          sourceSceneRevision: initialScene.revision ?? 0,
+          focusRegion: { x: 0, y: 0, width: 64, height: 64 },
+        },
+      }),
+    );
+    const startedEncounter = (await startedResponse.json()) as EncounterDto;
+    for (const candidate of await Promise.all(startedSnapshots)) {
+      expect(candidate.campaign).toMatchObject({
+        battleActive: true,
+        battleCounter: battleCounterBefore + 1,
+      });
+      expect(candidate.encounters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: startedEncounter.id,
+            status: "ACTIVE",
+          }),
+        ]),
+      );
+    }
+
+    const endedSnapshots = connections.map(({ socket }) =>
+      waitForSnapshot(
+        socket,
+        (candidate) =>
+          !candidate.campaign.battleActive &&
+          candidate.campaign.battleCounter === battleCounterBefore + 1 &&
+          candidate.encounters.some(
+            (encounter) =>
+              encounter.id === startedEncounter.id &&
+              encounter.status === "ENDED",
+          ),
+      ),
+    );
+    await expectOk(
+      await gm.request.post(
+        baseUrl + `/api/encounters/${startedEncounter.id}/end`,
+        {
+          data: {
+            actionId: actionId(),
+            revision: startedEncounter.revision,
+          },
+        },
+      ),
+    );
+    for (const candidate of await Promise.all(endedSnapshots))
+      expect(candidate.campaign).toMatchObject({
+        battleActive: false,
+        battleCounter: battleCounterBefore + 1,
+      });
 
     const playerOneSnapshot = playerInitialSnapshots[0];
     if (!playerOneSnapshot) throw new Error("Player one snapshot not found");
@@ -906,6 +983,10 @@ test("GM and six isolated players recover authoritative state without security l
     ).toBe(1);
 
     const authoritativeGm = resynced[0];
+    expect(authoritativeGm.campaign).toMatchObject({
+      battleActive: false,
+      battleCounter: battleCounterBefore + 1,
+    });
     for (const collection of [
       authoritativeGm.members,
       authoritativeGm.characters,
