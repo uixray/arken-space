@@ -66,6 +66,43 @@ export function writeAuditReceipt(path, receipt) {
   writeFileSync(path, JSON.stringify(receipt, null, 2) + "\n", { mode: 0o600 });
 }
 
+export function verifyGameplayResetBoundary(counts, before) {
+  const cleared = [
+    "playerMemberships",
+    "scenes",
+    "characters",
+    "playerSessions",
+    "playerAccessGrants",
+    "invites",
+    "chatMessages",
+    "audioStates",
+    "actionJournal",
+    "drawings",
+    "gameEvents",
+    "tokens",
+    "fogReveals",
+  ];
+  const foreign = Object.keys(before).filter((key) =>
+    key.startsWith("foreign"),
+  );
+  if (
+    counts.campaigns !== 1 ||
+    counts.gmMemberships !== 1 ||
+    counts.gmSessions !== before.gmSessions ||
+    counts.assets !== before.assets ||
+    counts.assetOwnershipValid !== counts.assets ||
+    counts.activeSceneId !== null ||
+    counts.campaignPaused !== false ||
+    counts.campaignDay !== 1 ||
+    counts.battleActive !== false ||
+    counts.battleCounter !== 0 ||
+    counts.campaignRevision !== 0 ||
+    cleared.some((key) => counts[key] !== 0) ||
+    foreign.some((key) => counts[key] !== before[key])
+  )
+    throw new Error("Post-reset database boundary verification failed");
+}
+
 async function health() {
   const response = await fetch(
     process.env.ARKEN_PRODUCTION_HEALTH_URL ??
@@ -184,6 +221,7 @@ export const productionDependencies = {
         'tokens',(select count(*) from tokens t join scenes s on s.id=t.scene_id where s.campaign_id=${c}),
         'fogReveals',(select count(*) from fog_reveals f join scenes s on s.id=f.scene_id where s.campaign_id=${c}),
         'activeSceneId',(select active_scene_id from campaigns where id=${c}),
+        'campaignPaused',(select paused from campaigns where id=${c}),
         'campaignDay',(select day from campaigns where id=${c}),
         'battleActive',(select battle_active from campaigns where id=${c}),
         'battleCounter',(select battle_counter from campaigns where id=${c}),
@@ -252,39 +290,7 @@ export const productionDependencies = {
     if (afterHealth.schemaVersion !== expectedSchemaVersion)
       throw new Error("Post-reset schema version changed");
     const counts = await productionDependencies.countState(campaignId);
-    const cleared = [
-      "playerMemberships",
-      "scenes",
-      "characters",
-      "playerSessions",
-      "playerAccessGrants",
-      "invites",
-      "chatMessages",
-      "audioStates",
-      "actionJournal",
-      "drawings",
-      "gameEvents",
-      "tokens",
-      "fogReveals",
-    ];
-    const foreign = Object.keys(before).filter((key) =>
-      key.startsWith("foreign"),
-    );
-    if (
-      counts.campaigns !== 1 ||
-      counts.gmMemberships !== 1 ||
-      counts.gmSessions !== before.gmSessions ||
-      counts.assets !== before.assets ||
-      counts.assetOwnershipValid !== counts.assets ||
-      counts.activeSceneId !== null ||
-      counts.campaignDay !== 1 ||
-      counts.battleActive !== false ||
-      counts.battleCounter !== 0 ||
-      counts.campaignRevision !== 0 ||
-      cleared.some((key) => counts[key] !== 0) ||
-      foreign.some((key) => counts[key] !== before[key])
-    )
-      throw new Error("Post-reset database boundary verification failed");
+    verifyGameplayResetBoundary(counts, before);
     const gm = docker([
       "exec",
       "-T",

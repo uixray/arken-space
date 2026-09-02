@@ -9,6 +9,7 @@ import { PGlite } from "@electric-sql/pglite";
 import {
   buildComposeArgs,
   resetSql,
+  verifyGameplayResetBoundary,
   writeAuditReceipt,
 } from "../scripts/run-gameplay-reset-safe.mjs";
 
@@ -17,6 +18,46 @@ const campaign = "00000000-0000-0000-0000-000000000001";
 const gm = "00000000-0000-0000-0000-000000000002";
 
 describe("isolated operator CLI boundary", () => {
+  it("fail-closes post-reset verification while campaign pause remains set", () => {
+    const before = {
+      assets: 1,
+      gmSessions: 1,
+      foreignCampaigns: 1,
+    };
+    const after = {
+      campaigns: 1,
+      assets: 1,
+      assetOwnershipValid: 1,
+      gmMemberships: 1,
+      gmSessions: 1,
+      playerMemberships: 0,
+      scenes: 0,
+      characters: 0,
+      playerSessions: 0,
+      playerAccessGrants: 0,
+      invites: 0,
+      chatMessages: 0,
+      audioStates: 0,
+      actionJournal: 0,
+      drawings: 0,
+      gameEvents: 0,
+      tokens: 0,
+      fogReveals: 0,
+      activeSceneId: null,
+      campaignPaused: false,
+      campaignDay: 1,
+      battleActive: false,
+      battleCounter: 0,
+      campaignRevision: 0,
+      foreignCampaigns: 1,
+    };
+
+    expect(() => verifyGameplayResetBoundary(after, before)).not.toThrow();
+    expect(() =>
+      verifyGameplayResetBoundary({ ...after, campaignPaused: true }, before),
+    ).toThrow("Post-reset database boundary verification failed");
+  });
+
   it("executes the real entry point only with explicit isolation guards", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "arken-reset-cli-"));
     const calls = path.join(directory, "calls.txt");
@@ -69,6 +110,7 @@ describe("isolated operator CLI boundary", () => {
         gmSessions: 1,
         playerAccessGrants: 0,
         activeSceneId: null,
+        campaignPaused: false,
         campaignDay: 1,
         battleActive: false,
         battleCounter: 0,
@@ -86,6 +128,7 @@ describe("isolated operator CLI boundary", () => {
     expect(sql.endsWith("\ncommit;")).toBe(true);
     expect(sql).toContain("RETAINED_GM_INVALID");
     expect(sql).toContain("active_scene_id = null");
+    expect(sql).toContain("paused = false");
     expect(sql).toContain("day = 1");
     expect(sql).toContain("battle_active = false");
     expect(sql).toContain("battle_counter = 0");
@@ -135,24 +178,26 @@ describe("isolated operator CLI boundary", () => {
       );
     const player = "00000000-0000-0000-0000-000000000003";
     await database.exec(
-      `insert into campaigns(id,name,day,battle_active,battle_counter,revision) values('${campaign}','C',9,true,4,12); insert into memberships(id,campaign_id,role,display_name) values('${gm}','${campaign}','GM','GM'),('${player}','${campaign}','PLAYER','P'); insert into assets(campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values('${campaign}','${player}','IMAGE','A','a','image/png',1);`,
+      `insert into campaigns(id,name,paused,day,battle_active,battle_counter,revision) values('${campaign}','C',true,9,true,4,12); insert into memberships(id,campaign_id,role,display_name) values('${gm}','${campaign}','GM','GM'),('${player}','${campaign}','PLAYER','P'); insert into assets(campaign_id,uploaded_by_membership_id,kind,name,storage_key,mime_type,size_bytes) values('${campaign}','${player}','IMAGE','A','a','image/png',1);`,
     );
     await database.exec(resetSql(campaign, gm));
     const result = await database.query<{
       players: number;
       assets: number;
       owner: string;
+      paused: boolean;
       day: number;
       battle_active: boolean;
       battle_counter: number;
       revision: number;
     }>(
-      `select (select count(*) from memberships where campaign_id='${campaign}' and role='PLAYER') players,(select count(*) from assets where campaign_id='${campaign}') assets,(select uploaded_by_membership_id from assets where campaign_id='${campaign}') owner,day,battle_active,battle_counter,revision from campaigns where id='${campaign}'`,
+      `select (select count(*) from memberships where campaign_id='${campaign}' and role='PLAYER') players,(select count(*) from assets where campaign_id='${campaign}') assets,(select uploaded_by_membership_id from assets where campaign_id='${campaign}') owner,paused,day,battle_active,battle_counter,revision from campaigns where id='${campaign}'`,
     );
     expect(result.rows[0]).toMatchObject({
       players: 0,
       assets: 1,
       owner: gm,
+      paused: false,
       day: 1,
       battle_active: false,
       battle_counter: 0,

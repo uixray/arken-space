@@ -7,6 +7,7 @@ const snapshot: GameSnapshot = {
     id: "campaign-1",
     name: "Проверка сцен",
     day: 1,
+    paused: false,
     battleActive: false,
     battleCounter: 0,
     statLayout: [],

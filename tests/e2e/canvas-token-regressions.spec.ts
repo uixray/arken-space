@@ -14,6 +14,7 @@ const snapshot = {
     id: "b4c34840-cb11-4a07-884d-680ae85c48db",
     name: "Canvas regression fixture",
     day: 1,
+    paused: false,
     battleActive: false,
     battleCounter: 0,
     statLayout: [],

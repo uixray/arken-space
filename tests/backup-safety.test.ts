@@ -577,6 +577,7 @@ it("keeps assets and GM membership outside the reset plan", () => {
     .join("\n");
   expect(sql).toContain("update assets set uploaded_by_membership_id");
   expect(sql).toContain("update campaigns set active_scene_id = null");
+  expect(sql).toContain("paused = false");
   expect(sql).not.toMatch(/delete from assets/);
   expect(sql).toContain("delete from player_access_grants");
   expect(sql).toContain(

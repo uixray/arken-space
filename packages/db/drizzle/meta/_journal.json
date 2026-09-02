@@ -288,6 +288,13 @@
       "when": 1787712230372,
       "tag": "0040_curly_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788297748549,
+      "tag": "0041_funny_lyja",
+      "breakpoints": true
     }
   ]
 }

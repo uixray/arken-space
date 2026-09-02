@@ -152,6 +152,7 @@ import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
 import { recruitFromZone } from "./initiative.js";
 import { registerEncounterRoutes } from "./encounters.js";
+import { registerCampaignPauseRoutes } from "./campaign-pause.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
 import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
 import {
@@ -885,6 +886,9 @@ export function registerRoutes(
   registerPlayerRequestRoutes(app, db, io);
   registerCharacterMediaRoutes(app, db);
   registerEncounterRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
+  registerCampaignPauseRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
   registerWorldContentRoutes(app, db);
