@@ -25,7 +25,7 @@
 
 - Baseline: `origin/main@d789d97`.
 - Ветка: `codex/uix-319-multi-map-architecture`.
-- Discovery revision: pending commit.
+- Discovery revision: `2a8f61c31804595e4493c0e6e7e97487c6dc716d`.
 
 ## Изменённые файлы
 
@@ -46,8 +46,8 @@
   Renderer-аудит предпочёл isolated submaps внутри scene; расхождение явно
   разобрано, вариант submaps оставлен запасным из-за обязательного rekey всех
   canvas/history/realtime данных.
-- Тяжёлые тесты не запускались: Discovery меняет только Markdown. Перед
-  коммитом обязательны Prettier и `git diff --check`.
+- Тяжёлые тесты не запускались: Discovery меняет только Markdown.
+- Prettier двух документов и staged `git diff --check` — passed.
 
 ## Отдельная находка
 
