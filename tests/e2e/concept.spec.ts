@@ -702,6 +702,88 @@ test("GM opens token and file workflows without leaving the canvas", async ({
   await expect(page.locator("canvas").first()).toBeVisible();
 });
 
+test("GM checks usage and deletes an unused media asset", async ({ page }) => {
+  const assetId = "00000000-0000-4000-8000-000000000610";
+  const assetSnapshot = structuredClone(snapshot);
+  assetSnapshot.assets = [
+    {
+      id: assetId,
+      kind: "IMAGE",
+      name: "Замок.webp",
+      mimeType: "image/webp",
+      sizeBytes: 1024 * 1024,
+      width: 800,
+      height: 600,
+      durationSeconds: null,
+      url: `/api/assets/${assetId}/content`,
+      createdAt: new Date(0).toISOString(),
+    },
+  ];
+  let deleted = false;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...assetSnapshot,
+        assets: deleted ? [] : assetSnapshot.assets,
+      }),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route(`**/api/assets/${assetId}/usage`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        asset: assetSnapshot.assets[0],
+        inUse: false,
+        usages: [],
+        hiddenUsageCount: 0,
+        canDelete: true,
+        deletionBlockedReason: null,
+      }),
+    }),
+  );
+  await page.route(`**/api/assets/${assetId}/content`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    }),
+  );
+  await page.route(`**/api/assets/${assetId}`, (route) => {
+    if (route.request().method() !== "DELETE") return route.continue();
+    deleted = true;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        assetId,
+        deleted: true,
+        blobCleanupPending: false,
+      }),
+    });
+  });
+
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openWorkspaceSection(page, "Файлы");
+  const filesDialog = page.getByRole("dialog", { name: "Файлы" });
+  await expect(filesDialog.getByText("Замок.webp")).toBeVisible();
+  await expect(filesDialog.getByText("IMAGE · 1.0 МБ")).toBeVisible();
+
+  await filesDialog.getByText("Проверить использование").click();
+  await expect(filesDialog.getByText("Не используется")).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await filesDialog.getByText("Удалить файл").click();
+  await expect(filesDialog.getByText("Замок.webp")).toHaveCount(0);
+});
+
 test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
   const workspaceSnapshot = structuredClone(snapshot);
   workspaceSnapshot.characters.push({
