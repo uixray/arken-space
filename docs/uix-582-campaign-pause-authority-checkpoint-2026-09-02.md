@@ -19,6 +19,8 @@
 
 - Baseline: `23683aeb1e3e0d50ca98e82b29b2c07682c9dde6` (`origin/main`).
 - Ветка: `codex/uix-582-pause-authority`.
+- Implementation revision:
+  `2ae99d67fdd4423e64a129ecc455c952ab438409`.
 - Реализация:
   - `apps/server/src/campaign-pause.ts`, `routes.ts`, `snapshot.ts`;
   - `packages/contracts/src/index.ts`;
@@ -48,12 +50,17 @@
   - `typecheck` — passed;
   - `build` — passed;
   - `test` — 187 файлов, 1443 теста — passed.
-- Isolated multiplayer на exact commit — ещё не запускался.
+- Isolated multiplayer с `DOCKER_CONTEXT=desktop-linux` и
+  `ARKEN_ISOLATED_ONLY=true` — 2/2 passed на exact build revision
+  `2ae99d67fdd4423e64a129ecc455c952ab438409`:
+  - GM + 6 получили согласованную паузу до backend restart;
+  - restart/reconnect сохранил `paused=true` и одну campaign revision;
+  - resume дошёл до всех клиентов, fresh GM/PLAYER bootstrap дал false;
+  - compose cleanup и resource-leak-check — passed, production не проверялся и
+    не изменялся.
 
 ## Блокеры и следующее действие
 
-- Блокеров реализации нет.
-- Следующее действие: зафиксировать implementation commit, запустить
-  `DOCKER_CONTEXT=desktop-linux`, `ARKEN_ISOLATED_ONLY=true`,
-  `pnpm test:multiplayer` без конвейера, записать exact revision и перевести
-  UIX-582 в In Review. Push, PR, merge и production не входят в этот пул.
+- Блокеров реализации и локальных гейтов нет.
+- Следующее действие: перевести UIX-582 в In Review и продолжить серверный пул
+  UIX-583. Push, PR, merge и production не выполнялись.

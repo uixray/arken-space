@@ -82,5 +82,5 @@ retry получает 409 вместо 200, падает ровно этот т
        красные.
 2. [x] **Persistence и API** — migration metadata, contract, route, broadcast.
 3. [x] **Проверка** — 97 focused tests, диверсия, два независимых review.
-4. [ ] **Gate** — основной локальный набор уже зелёный; остаются exact-code
-       isolated multiplayer, финальный checkpoint и перевод UIX-582 в In Review.
+4. [x] **Gate** — основной локальный набор и exact-code isolated multiplayer
+       зелёные; checkpoint готов к stage-gate UIX-582 в In Review.
