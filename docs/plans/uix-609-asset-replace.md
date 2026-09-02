@@ -60,3 +60,17 @@ Audit payload хранит `assetId`, предыдущий и новый version
 - история всех версий blob и восстановление старой версии;
 - force-delete используемых файлов;
 - production deploy.
+
+## Checkpoint — 2026-09-02
+
+- **Решение:** ID ассета остаётся стабильным; версия содержимого — закрытый ETag
+  от `storageKey`; замена требует `If-Match` и `x-action-id`.
+- **Ревизия:** `5a0d893` (реализация `ffe9c74`, реестр изоляции `5a0d893`).
+- **Изменено:** `asset-lifecycle.ts`, `asset-usage.ts`, `routes.ts`, HTTP-тесты,
+  реестр UIX-413 и счётчик маршрутов в архитектуре.
+- **Проверка:** format/lint/typecheck/build PASS; Vitest 209 файлов / 1688 тестов
+  PASS; multiplayer 3 PostgreSQL probe + 2 Playwright PASS; cleanup и leak-check
+  PASS. Диверсия дала ровно 1 failed / 12 passed, после возврата 13/13 PASS.
+- **Блокеры:** нет. Ветка локальная, push/PR/merge не выполнялись.
+- **Дальше:** UIX-610 — клиентское использование API usage/delete/replace без
+  правок конфликтных файлов Claude.
