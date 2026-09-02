@@ -239,6 +239,10 @@ export function CharacterMediaGallery({
 
   return (
     <div className="character-media-gallery">
+      <p className="muted">
+        Арт персонажа, референсы предметов и памятные сцены — всё, что помогает
+        помнить его историю.
+      </p>
       {error && (
         <p className="field-error" role="alert">
           {error}
@@ -247,7 +251,10 @@ export function CharacterMediaGallery({
       {loading ? (
         <p className="muted">Загрузка галереи…</p>
       ) : sorted.length === 0 ? (
-        <p className="muted">В галерее пока нет изображений.</p>
+        <p className="muted">
+          Здесь пока пусто. Добавьте изображение ниже — оно появится в галерее,
+          а исходный файл останется в медиатеке.
+        </p>
       ) : (
         <ul className="character-media-gallery__grid">
           {sorted.map((item, index) => (
@@ -461,6 +468,11 @@ function AttachMediaForm({
   return (
     <div className="character-media-gallery__attach subsection">
       <h3>Добавить в галерею</h3>
+      <p className="muted">
+        {isGm
+          ? "Загрузите арт или референс и выберите, кто его увидит. Режим «Только GM» скрывает материал от игрока."
+          : "Загрузите арт, референс предмета или памятную сцену и выберите, показать ли её группе."}
+      </p>
       <ImageUploadField
         label="Изображение для галереи"
         value={file}
