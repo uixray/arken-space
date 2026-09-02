@@ -47,7 +47,13 @@ export function toggleMage(state, mageId) {
     : state.selected.length < 2
       ? [...state.selected, mageId]
       : [state.selected[1], mageId];
-  return { ...state, selected };
+  const added = selected.includes(mageId) && !state.selected.includes(mageId);
+  const mage = mages.find((item) => item.id === mageId);
+  return {
+    ...state,
+    selected,
+    notice: added ? `${mage.name}: «${mage.voice?.selected || "Принято."}»` : null,
+  };
 }
 function teamStats(state) {
   const stats = { power: 0, control: 0, lore: 0, mobility: 0, empathy: 0 };
@@ -103,10 +109,25 @@ export function dispatchTeam(state) {
     ? state
     : {
         ...state,
-        phase: "decision",
+        phase: "traveling",
         notice: null,
         pendingScore: forecast(state).score,
+        travel: {
+          direction: "outbound",
+          startedAt: Date.now(),
+          duration: Math.max(
+            1800,
+            5200 - Math.max(...state.selected.map((id) => mages.find((mage) => mage.id === id).stats.mobility)) * 500,
+          ),
+        },
       };
+}
+export function advanceTravel(state, now = Date.now()) {
+  if (!state.travel || !["traveling", "returning"].includes(state.phase)) return state;
+  if (now - state.travel.startedAt < state.travel.duration) return state;
+  if (state.phase === "traveling")
+    return { ...state, phase: "decision", travel: null };
+  return { ...state, phase: "result", travel: null };
 }
 export function resolveChoice(state, choiceId) {
   const mission = currentMission(state);
@@ -136,7 +157,7 @@ export function resolveChoice(state, choiceId) {
   }
   return {
     ...state,
-    phase: "result",
+    phase: "returning",
     reputation: Math.max(0, state.reputation + delta),
     city: Math.max(
       0,
@@ -156,6 +177,14 @@ export function resolveChoice(state, choiceId) {
       },
     ],
     lastOutcome: outcome,
+    travel: {
+      direction: "returning",
+      startedAt: Date.now(),
+      duration: Math.max(
+        1400,
+        4300 - Math.max(...state.selected.map((id) => mages.find((mage) => mage.id === id).stats.mobility)) * 420,
+      ),
+    },
   };
 }
 export function continueShift(state) {

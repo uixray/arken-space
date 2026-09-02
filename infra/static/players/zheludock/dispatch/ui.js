@@ -1,5 +1,6 @@
 import { mages, missions, statLabels } from "./game-data.js";
 import {
+  advanceTravel,
   continueShift,
   currentMission,
   dispatchTeam,
@@ -50,6 +51,36 @@ function renderMarkers() {
     )
     .join("");
 }
+function voiceFor(mage, situation) {
+  return mage.voice?.[situation] || mage.voice?.idle || "Принято.";
+}
+function travelProgress() {
+  if (!state.travel) return 0;
+  return Math.min(1, Math.max(0, (Date.now() - state.travel.startedAt) / state.travel.duration));
+}
+function renderTravel() {
+  const mission = currentMission(state);
+  const layer = $("[data-hero-tokens]");
+  const radio = $("[data-radio-line]");
+  if (!mission || !state.travel || !state.selected.length) {
+    layer.innerHTML = "";
+    radio.hidden = true;
+    return;
+  }
+  const raw = travelProgress();
+  const progress = state.travel.direction === "returning" ? 1 - raw : raw;
+  const home = { x: 50, y: 58 };
+  layer.innerHTML = state.selected.map((id, index) => {
+    const mage = mageById(id);
+    const x = home.x + (mission.map.x - home.x) * progress + (index ? 2 : -2);
+    const y = home.y + (mission.map.y - home.y) * progress + (index ? 1 : -1);
+    return `<span class="hero-token" style="--x:${x}%;--y:${y}%;--mage:${mage.color}" title="${mage.name}"><img src="${mage.image}" alt="${mage.name}" /></span>`;
+  }).join("");
+  const speaker = mageById(state.selected[0]);
+  radio.hidden = false;
+  const situation = state.travel.direction === "returning" ? state.lastOutcome : "travel";
+  radio.innerHTML = `<img src="${speaker.image}" alt="" /><p><strong>${speaker.name}</strong>${voiceFor(speaker, situation)}</p><span>${state.travel.direction === "returning" ? "Возвращается" : "В пути"} · ${Math.round(raw * 100)}%</span>`;
+}
 function renderRoster() {
   $("[data-team-note]").textContent =
     state.notice || "Выберите до двух героев. Состав влияет на решения и последствия.";
@@ -99,6 +130,11 @@ function renderBrief() {
       );
     return;
   }
+  if (state.phase === "traveling" || state.phase === "returning") {
+    const outbound = state.phase === "traveling";
+    brief.innerHTML = `<div class="en-route"><span>${outbound ? "Команда выдвинулась" : "Возвращение на базу"}</span><h2>${mission.title}</h2><p>${outbound ? "Токены показывают путь героев к заданию. По прибытии откроется канал решения." : "Герои возвращаются после задания. Итоговый отчёт появится на базе."}</p><div class="route-progress"><i style="width:${Math.round(travelProgress() * 100)}%"></i></div><strong>${Math.round(travelProgress() * 100)}%</strong></div>`;
+    return;
+  }
   if (state.phase === "result") {
     const [title, copy] = outcomeCopy[state.lastOutcome];
     brief.innerHTML = `<div class="result result--${state.lastOutcome}"><span>Отчёт миссии</span><h2>${title}</h2><p>${copy}</p><button data-continue>${state.mode !== "arcade" && state.missionIndex === missions.length - 1 ? "Завершить главу" : "Принять следующий вызов"}</button></div>`;
@@ -129,6 +165,7 @@ function render() {
   $("[data-signal-title]").textContent = mission?.title || "Смена завершена";
   $("[data-signal]").classList.toggle("is-quiet", state.phase === "complete");
   renderMarkers();
+  renderTravel();
   renderRoster();
   renderBrief();
   syncMobileView();
@@ -168,3 +205,12 @@ document.querySelectorAll("[data-mobile-view]").forEach((button) =>
   button.addEventListener("click", () => setMobileView(button.dataset.mobileView)),
 );
 render();
+setInterval(() => {
+  if (!["traveling", "returning"].includes(state.phase)) return;
+  const next = advanceTravel(state);
+  if (next !== state) update(next, next.phase === "decision" ? "brief" : mobileView);
+  else {
+    renderTravel();
+    renderBrief();
+  }
+}, 100);
