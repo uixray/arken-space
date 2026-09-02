@@ -38,6 +38,7 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
       id: ids.campaign,
       name: "Story QA",
       day: 1,
+      paused: false,
       battleActive: false,
       battleCounter: 0,
       statLayout: [],

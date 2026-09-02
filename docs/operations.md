@@ -8,6 +8,45 @@ Current production host paths:
 - media: `/home/uixray/apps/arken-space-data/media`;
 - local backups: `/home/uixray/apps/arken-space-data/backups`.
 
+## Внешний мониторинг health
+
+После merge в default branch GitHub Actions workflow `production-monitor`
+планируется на GitHub-hosted runner каждые пять минут; доступен и ручной
+`workflow_dispatch`. Проверка работает вне хоста Arken, поэтому потеря самого
+хоста или nginx не заставит её замолчать.
+
+Production считается здоровым, только когда выполнены все условия:
+
+- HTTPS `/healthz` возвращает HTTP 200 и валидный JSON;
+- `status` и `database` равны `ok`;
+- `buildRevision` содержит полный 40-символьный SHA коммита;
+- `schemaVersion` — положительное целое число;
+- серверное время отличается от времени runner не более чем на десять минут.
+
+Последнее наблюдаемое состояние хранится в одном GitHub issue с меткой
+`production-monitor`. Workflow упоминает владельца репозитория при первом
+падении, восстановлении и смене ревизии или схемы. Повторяющиеся одинаковые
+ошибки не меняют issue и не создают комментарии, поэтому пятиминутная проверка
+не засыпает уведомлениями. Если оповещение должен получать не владелец,
+задайте необязательную repository variable `ARKEN_MONITOR_MENTION` со ссылкой
+на GitHub-пользователя или команду.
+
+Issue — основной канал; при нездоровом ответе workflow также остаётся красным.
+Настройки GitHub должны разрешать уведомления об упоминаниях или падениях
+Actions. Активация и доставка — отдельный live gate после merge: запустите
+workflow вручную, во временной проверяемой ревизии подставьте несуществующий
+health URL, получите одно оповещение, верните канонический URL и получите одно
+сообщение о восстановлении. Нельзя имитировать падение остановкой production.
+
+Workflow читает только публичный health-контракт. Он не читает строки БД, не
+вызывает авторизованную диагностику и не проверяет свежесть бэкапа.
+
+Schedule GitHub — best effort, а не жёсткий SLA: GitHub допускает задержку и
+пропуск scheduled run. Пока репозиторий публичный, standard GitHub-hosted runner
+не расходует платные минуты. Перед переводом репозитория в private этот
+пятиминутный schedule нужно отключить до отдельной проверки бюджета или заменить
+внешним uptime-сервисом: каждый короткий job округляется до целой минуты.
+
 ## Deploy and migrate
 
 Routine releases use the fail-closed
@@ -20,17 +59,46 @@ Routine releases use the fail-closed
    Vitest, Playwright or multiplayer tests.
 2. On the production host run
    `sh infra/deploy/release.sh <reviewed-40-character-sha>`. It performs host
-   preflight, records the rollback revision, checks restic, creates a fresh
-   backup, checks out the exact revision and rehearses that snapshot. Without
-   confirmation it stops before changing production.
-3. After explicit release approval run
-   `RELEASE_CONFIRM=deploy-now sh infra/deploy/release.sh <same-sha>`. The
-   confirmed invocation builds/starts the stack, runs all journaled pending
+   preflight, acquires the single host release lock, checks production
+   environment and permissions before and after checkout, records the
+   rollback revision, checks restic, creates a fresh backup, checks out the
+   exact revision only when it belongs to fetched `origin/main`, and rehearses
+   that snapshot. Without confirmation it stops before changing the running
+   production stack.
+3. До подтверждённой выкладки вручную проверьте загрузку изображения и аудио на
+   одноразовом non-live candidate-контуре ровно той же ревизии. После проверки
+   контур и его данные удаляются. Тестовые загрузки в live-кампанию запрещены;
+   успешный результат фиксируется только явным
+   `MEDIA_SMOKE_APPROVAL=non-live-candidate-passed`.
+4. После явного одобрения релиза запустите
+   `RELEASE_CONFIRM=deploy-now MEDIA_SMOKE_APPROVAL=non-live-candidate-passed sh infra/deploy/release.sh <same-sha>`.
+   Confirmed запуск разрешён только если checkout уже начинается на `<same-sha>`:
+   при первом rollout новой release automation сначала обязателен unconfirmed
+   pass, затем отдельная сверка `git rev-parse HEAD`, и только потом напечатанная
+   confirmed-команда. Она повторно проходит все host gates.
+   Перед build скрипт закрепляет точные текущие image IDs сервисов `server` и
+   `web` неизменяемыми тегами
+   `arken-space-rollback-server:<production-sha>` и
+   `arken-space-rollback-web:<production-sha>`. После build и запуска он
+   повторно сверяет эти теги с исходными IDs и печатает точные rollback tags и
+   image IDs в итоговом release evidence.
+5. Confirmed invocation builds/starts the stack, runs all journaled pending
    PostgreSQL migrations before Fastify, and verifies health, authenticated
-   diagnostics and the WebSocket upgrade.
-4. Manually verify GM/player browser flows, one image upload, one audio upload
-   and persistence across `docker compose restart postgres server web`. These
-   post-deploy checks are not automated by `release.sh`.
+   diagnostics and the WebSocket upgrade. Auth smoke требует точную release
+   revision и schema, а также все флаги session cookie: `HttpOnly`, `Secure` и
+   `SameSite=Strict`; после logout та же cookie должна получить
+   `401 AUTH_REQUIRED` на diagnostics.
+6. После автоматизированного прогона вручную примите production-потоки
+   GM/player и сохранность уже существующих данных после
+   `docker compose restart postgres server web`. Финальный успешный вывод
+   `release.sh` не доказывает эту ручную production-приёмку.
+
+До backup и build скрипт fail-closed проверяет, что production `.env` — обычный
+не-symlink файл владельца-оператора с mode `600`, он не отслеживается Git и не
+содержит backup-секретов. Restic env и password file должны быть root-owned с
+mode `600`; значения секретов не печатаются. На файловой системе
+`MEDIA_HOST_PATH` требуется не меньше `MIN_FREE_DISK_BYTES + 5 GiB` свободного
+места: gate выполняется перед build и сразу после build.
 
 `infra/deploy/build-and-start.sh` is the bounded fallback for a first deployment
 or when `release.sh` itself is under investigation. It requires the exact
@@ -44,7 +112,8 @@ Do not change the database schema unless a current restic snapshot exists.
 1. Create a scene, token, chat message and character edit; note their values.
 2. Run `docker compose restart postgres server web`.
 3. Wait for the server healthcheck.
-4. Reload a clean browser session and verify all noted state and uploaded media.
+4. Reload a clean browser session and verify all noted state and previously
+   existing legitimate media. Do not create test uploads in a live campaign.
 
 Verified 2026-07-13 after the production disk expansion: the host booted kernel `6.8.0-134-generic`; PostgreSQL and the Arken Space server returned healthy at build `d6a224b`, schema 2; the web container and portfolio returned; the PM2 Figma/Linear integrations and backup timer returned; Jellyfin, AI Design Ops and Redis remained deliberately disabled. The root filesystem reported 39 GiB total, 27 GiB available and 31% usage. See [host-reboot-2026-07-13.md](./host-reboot-2026-07-13.md).
 
@@ -75,7 +144,30 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now arken-space-backup.timer
 ```
 
-The timer runs daily at 03:15 server time with up to 15 minutes randomized delay. The retention policy keeps 7 daily, 4 weekly and 6 monthly snapshots and prunes unreferenced data.
+Timer запускается ежедневно в 03:15 по времени сервера со случайной задержкой
+до 15 минут. Это не гарантированный RPO 24 часа: между успешными запусками может
+пройти до 24 часов 15 минут, а незамеченная ошибка делает интервал
+неограниченным. Владелец ещё не принимал такой риск. До отдельного решения
+ручной бэкап перед каждой реальной игровой сессией обязателен. Политика хранения
+оставляет 7 дневных, 4 недельных и 6 месячных снапшотов и удаляет неиспользуемые
+данные.
+
+### Предыгровой бэкап
+
+Запускайте не раньше чем за час до входа игроков:
+
+```sh
+sudo systemctl start arken-space-backup.service
+sudo systemctl status arken-space-backup.service --no-pager
+sudo journalctl -u arken-space-backup.service -n 20 --no-pager
+```
+
+Гейт пройден, только если `systemctl start` завершился с кодом 0, service имеет
+состояние `inactive (dead)` после успешного oneshot, а последняя строка лога
+содержит новый `snapshot <id>`. Запишите этот ID и время в заметку сессии. При
+ошибке бэкапа игру не начинайте: сначала восстановите штатный backup path и
+повторите команду. Эта процедура защищает состояние до начала игры, но не
+является непрерывным бэкапом событий самой сессии.
 
 Verified 2026-07-13: Yandex repository `e5eb7068a7` was initialized, snapshot `07bc8d52` stored 6.192 MiB, retention and `restic check` passed, and `arken-space-backup.timer` is enabled and active.
 

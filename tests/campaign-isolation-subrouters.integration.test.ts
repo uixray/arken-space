@@ -5,12 +5,14 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { drizzle } from "drizzle-orm/pglite";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { SpellProgressionGraph } from "@arken/contracts";
 import * as schema from "../packages/db/src/schema.js";
 import { registerCharacterMediaRoutes } from "../apps/server/src/character-media.js";
 import { registerEncounterRoutes } from "../apps/server/src/encounters.js";
 import { env } from "../apps/server/src/env.js";
 import { registerPlayerRequestRoutes } from "../apps/server/src/player-requests.js";
 import { hashToken } from "../apps/server/src/security.js";
+import { registerSpellPackRoutes } from "../apps/server/src/spell-pack-routes.js";
 import { registerWorldContentInstanceRoutes } from "../apps/server/src/world-content-instances.js";
 import { registerWorldMapRoutes } from "../apps/server/src/world-map-routes.js";
 import {
@@ -43,6 +45,16 @@ const ids = {
     get: pair(),
     patch: pair(),
     action: pair(),
+  },
+  spellPack: {
+    versions: pair(),
+    lifecycle: pair(),
+    archive: pair(),
+  },
+  spellPackVersion: {
+    versions: pair(),
+    lifecycle: pair(),
+    archive: pair(),
   },
   worldContent: uuid(),
   instance: {
@@ -85,6 +97,41 @@ const grid = {
   color: "#ffffff",
   opacity: 0.2,
 };
+
+function spellGraph(
+  packId: string,
+  versionId: string,
+  version = 1,
+): SpellProgressionGraph {
+  return {
+    packId,
+    versionId,
+    version,
+    title: "Campaign isolation spell pack",
+    lifecycle: "DRAFT",
+    provenance: {
+      sourceType: "GM_AUTHORED",
+      sourceLabel: "UIX-580 tenant probe",
+      rawSourceText: "Tenant probe source",
+    },
+    schools: [],
+    nodes: [],
+    requirementGroups: [],
+    edges: [],
+  };
+}
+
+async function spellVersions(campaignId: string, packId: string) {
+  return db
+    .select()
+    .from(schema.spellPackVersions)
+    .where(
+      and(
+        eq(schema.spellPackVersions.campaignId, campaignId),
+        eq(schema.spellPackVersions.packId, packId),
+      ),
+    );
+}
 
 type ProbeRequest = {
   method: "GET" | "PATCH" | "POST" | "DELETE";
@@ -453,11 +500,43 @@ beforeAll(async () => {
     },
   ]);
 
+  const spellPackRows = Object.values(ids.spellPack).flatMap((packIds) => [
+    { id: packIds.own, campaignId: ids.campaign.own },
+    { id: packIds.foreign, campaignId: ids.campaign.foreign },
+  ]);
+  await db.insert(schema.spellPacks).values(spellPackRows);
+  const spellVersionRows = Object.entries(ids.spellPack).flatMap(
+    ([operation, packIds]) => {
+      const versionIds =
+        ids.spellPackVersion[operation as keyof typeof ids.spellPackVersion];
+      return [
+        {
+          id: versionIds.own,
+          campaignId: ids.campaign.own,
+          packId: packIds.own,
+          version: 1,
+          lifecycle: "DRAFT" as const,
+          graph: spellGraph(packIds.own, versionIds.own),
+        },
+        {
+          id: versionIds.foreign,
+          campaignId: ids.campaign.foreign,
+          packId: packIds.foreign,
+          version: 1,
+          lifecycle: "DRAFT" as const,
+          graph: spellGraph(packIds.foreign, versionIds.foreign),
+        },
+      ];
+    },
+  );
+  await db.insert(schema.spellPackVersions).values(spellVersionRows);
+
   app = Fastify();
   await app.register(cookie);
   registerCharacterMediaRoutes(app, db as never);
   registerEncounterRoutes(app, db as never, async () => {});
   registerPlayerRequestRoutes(app, db as never);
+  registerSpellPackRoutes(app, db as never);
   registerWorldContentInstanceRoutes(app, db as never);
   registerWorldMapRoutes(app, db as never, async () => {});
   await app.ready();
@@ -1040,5 +1119,77 @@ describe("UIX-413 campaign isolation: world map sub-router", () => {
       );
     expect(ownLinkAfter).toHaveLength(0);
     expect(foreignLinkAfter).toEqual(foreignLinkBefore);
+  });
+});
+
+describe("UIX-580 campaign isolation: spell-pack sub-router", () => {
+  const cases = [
+    {
+      key: "POST /api/spell-packs/:id/versions" as const,
+      packIds: ids.spellPack.versions,
+      suffix: "/versions",
+      payload: (packId: string) => ({
+        actionId: uuid(),
+        expectedVersion: 1,
+        graph: spellGraph(packId, uuid(), 2),
+      }),
+      lifecycle: "DRAFT",
+    },
+    {
+      key: "POST /api/spell-packs/:id/lifecycle" as const,
+      packIds: ids.spellPack.lifecycle,
+      suffix: "/lifecycle",
+      payload: () => ({
+        actionId: uuid(),
+        expectedVersion: 1,
+        versionId: uuid(),
+        lifecycle: "ACTIVE",
+      }),
+      lifecycle: "ACTIVE",
+    },
+    {
+      key: "POST /api/spell-packs/:id/archive" as const,
+      packIds: ids.spellPack.archive,
+      suffix: "/archive",
+      payload: () => ({
+        actionId: uuid(),
+        expectedVersion: 1,
+        versionId: uuid(),
+      }),
+      lifecycle: "ARCHIVED",
+    },
+  ];
+
+  it.each(cases)("rejects a foreign target for $key", async (probe) => {
+    const foreignBefore = await spellVersions(
+      ids.campaign.foreign,
+      probe.packIds.foreign,
+    );
+    await expectForeignNotFound(
+      probe.key,
+      {
+        method: "POST",
+        url: `/api/spell-packs/${probe.packIds.foreign}${probe.suffix}`,
+        headers: ownGmHeaders,
+        payload: probe.payload(probe.packIds.foreign),
+      },
+      "SPELL_PACK_NOT_FOUND",
+    );
+    expect(
+      await spellVersions(ids.campaign.foreign, probe.packIds.foreign),
+    ).toEqual(foreignBefore);
+
+    const ownResponse = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${probe.packIds.own}${probe.suffix}`,
+      headers: ownGmHeaders,
+      payload: probe.payload(probe.packIds.own),
+    });
+    expect(ownResponse.statusCode, `${probe.key} own control`).toBe(201);
+    expect(ownResponse.json(), `${probe.key} own control`).toMatchObject({
+      packId: probe.packIds.own,
+      version: 2,
+      lifecycle: probe.lifecycle,
+    });
   });
 });

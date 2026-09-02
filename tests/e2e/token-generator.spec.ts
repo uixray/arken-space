@@ -7,6 +7,7 @@ const snapshot: GameSnapshot = {
     id: "b4c34840-cb11-4a07-884d-680ae85c48db",
     name: "РџРµСЂРІР°СЏ СЌРєСЃРїРµРґРёС†РёСЏ",
     day: 1,
+    paused: false,
     battleActive: false,
     battleCounter: 0,
     statLayout: [],

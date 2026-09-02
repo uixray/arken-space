@@ -8,6 +8,7 @@ const snapshot = {
     id: "campaign-input",
     name: "Input diagnostics",
     day: 1,
+    paused: false,
     battleActive: false,
     battleCounter: 0,
     statLayout: [],

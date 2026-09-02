@@ -1,7 +1,8 @@
 # Production release checklist
 
 This checklist prepares and verifies a release. It is not evidence that backup,
-restore, deployment, or the human GM + 6 rehearsal has passed.
+restore, deployment, the human GM + 6 rehearsal, or final manual production
+acceptance has passed.
 
 ## Release identity
 
@@ -13,7 +14,13 @@ test -z "$(git status --porcelain --untracked-files=normal)"
 test "$(printf %s "$EXPECTED_BUILD_REVISION" | wc -c)" -eq 40
 ```
 
-The production `.env` must be mode `600`, must not be committed, and must set:
+На production host `release.sh` после `git fetch origin` принимает target только
+если он входит в историю `origin/main`; локальный или ещё не смерженный SHA
+выкладывать нельзя.
+
+Production `.env` проходит fail-closed gate: это обычный не-symlink файл,
+который принадлежит оператору, имеет mode `600` и не отслеживается Git. Он
+должен задавать:
 
 - `APP_VERSION`, `POSTGRES_PASSWORD`, `GM_ACCESS_TOKEN`;
 - `WEB_ORIGIN=https://arken-khar.space` and
@@ -21,8 +28,10 @@ The production `.env` must be mode `600`, must not be committed, and must set:
 - absolute persistent `MEDIA_HOST_PATH` outside the checkout;
 - media quota, free-disk reserve, image and audio limits.
 
-Restic and S3 credentials belong only in root-owned `/etc/arken-space` files,
-never in the application `.env` or GitHub.
+Restic and S3 credentials belong only in root-owned mode-`600` files under
+`/etc/arken-space`, never in the application `.env` or GitHub. Release gate
+проверяет владельца и права restic env и password file до чтения, запрещает
+backup-секреты в `.env` и никогда не печатает их значения.
 
 ## Code quality gate (outside `release.sh`)
 
@@ -38,6 +47,10 @@ corepack pnpm test:e2e
 corepack pnpm test:multiplayer
 ```
 
+GitHub `checks` дополнительно запускает `sh -n` для `release.sh`,
+`build-and-start.sh` и `smoke-auth.sh`; structural unit-тесты не заменяют parser
+POSIX shell.
+
 `pnpm typecheck` includes `tests/e2e/tsconfig.json`; Playwright remains at
 `workers: 1` because the specs share one campaign/database. Preserve the exit
 code of each command. In particular, do not pipe Playwright into a trailing
@@ -48,27 +61,53 @@ evidence.
 ## The scripted host path (preferred)
 
 `infra/deploy/release.sh` automates the host-side safety and deployment gates:
-nginx/certificate/disk preflight, rollback identity, restic check, fresh backup,
-exact-snapshot restore rehearsal, exact checkout, build/start, health,
-authenticated smoke and WebSocket upgrade. It does **not** run the code quality
-gate above, upload media, restart the stack to prove persistence, or perform the
-human GM/player browser rehearsal.
+nginx/certificate/disk preflight, environment/permission validation, exact
+rollback image preservation, restic check, fresh backup, exact-snapshot restore
+rehearsal, exact checkout, build/start, health, authenticated smoke and
+WebSocket upgrade. It does **not** run the code quality gate above, upload
+media, restart the stack to prove persistence, or perform the human GM/player
+browser rehearsal. Скрипт использует фиксированный Compose project `arken-space`
+независимо от общего development `.env` и удерживает host release lock до выхода.
 
 ```sh
 sh infra/deploy/release.sh <reviewed-40-character-sha>
 ```
 
 It stops after the restore rehearsal and prints the exact command to proceed.
-Nothing touches production until the deploy is confirmed explicitly:
+It does not change the running production stack until the deploy is confirmed
+explicitly:
 
 ```sh
-RELEASE_CONFIRM=deploy-now sh infra/deploy/release.sh <same-sha>
+RELEASE_CONFIRM=deploy-now \
+MEDIA_SMOKE_APPROVAL=non-live-candidate-passed \
+sh infra/deploy/release.sh <same-sha>
 ```
+
+Confirmed invocation fail-closed требует, чтобы host checkout уже начинался с
+той же целевой ревизии. Поэтому первый rollout, который меняет саму release
+automation, нельзя начинать сразу с `RELEASE_CONFIRM=deploy-now`: сначала
+выполните unconfirmed pass, отдельно проверьте
+`test "$(git rev-parse HEAD)" = "<same-sha>"`, и только затем запускайте
+напечатанную confirmed-команду. Confirmed pass заново выполняет все host gates.
 
 The stop is not a dry run: the backup and the rehearsal are real. Only the
 production-changing steps wait for confirmation. A failure at any gate aborts
 with a non-zero status and repeats the rollback revision recorded before the
 first change.
+
+`MEDIA_SMOKE_APPROVAL=non-live-candidate-passed` — это ручная аттестация, а не
+автоматический тест. До confirmed deploy оператор должен на одноразовом
+disposable non-live candidate-контуре точной release revision проверить
+загрузку одного изображения и одного аудиофайла, затем удалить контур вместе с
+его данными. Никогда не создавайте тестовую загрузку в live-кампании.
+
+До build скрипт получает image ID ровно одного запущенного контейнера каждого
+сервиса и создаёт неизменяемые теги
+`arken-space-rollback-server:<production-sha>` и
+`arken-space-rollback-web:<production-sha>`. Существующий тег принимается только
+если он указывает на тот же ID. После build оба тега повторно сверяются с
+исходными IDs; итоговый release evidence печатает точные rollback tags и image
+IDs вместе с IDs новых запущенных образов.
 
 The manual host steps below remain the fallback and the specification of the
 host-side part only. They are also what to follow when the script itself is
@@ -94,7 +133,9 @@ path.
 5. Inspect `test-results/restore/runner.json`: overall result, dump/media
    checksums, table counts, schema `2`, exact build revision, cleanup,
    production health and disk checks must all pass.
-6. Confirm at least 5 GiB free after the configured media reserve. Confirm
+6. На файловой системе `MEDIA_HOST_PATH` подтвердите свободное место не меньше
+   `MIN_FREE_DISK_BYTES + 5 GiB`. Byte-accurate gate должен пройти перед build и
+   сразу после build. Confirm
    `/home/uixray/apps/arken-space-data/media` and the Compose PostgreSQL volume
    are included in the backup/restore evidence.
 
@@ -118,25 +159,36 @@ After startup, require all services healthy and verify:
 
 ```sh
 curl -fsS https://arken-khar.space/healthz
+APP_ROOT=/home/uixray/apps/arken-space \
+DOMAIN=https://arken-khar.space \
+EXPECTED_BUILD_REVISION="$EXPECTED_BUILD_REVISION" \
+EXPECTED_SCHEMA_VERSION="$EXPECTED_SCHEMA_VERSION" \
 sh infra/deploy/smoke-auth.sh
 ```
 
-The health and authenticated diagnostics responses must report the exact release
-revision and schema `2`. The script verifies the WebSocket upgrade; an operator
-must still verify one image upload, one audio upload, persistence across
-`docker compose restart postgres server web`, and GM/player smoke flows. Record
-these results separately: a zero exit from `release.sh` does not prove them.
+The health and authenticated diagnostics responses must report the exact
+release revision and schema `2`. Auth smoke также требует точную session cookie
+и каждый её флаг: `HttpOnly`, `Secure`, `SameSite=Strict`. После logout старая
+cookie обязана получить `401 AUTH_REQUIRED` на diagnostics — ответ `{ok:true}`
+сам по себе не доказывает инвалидирование сессии. The script verifies the
+WebSocket upgrade; an operator must still verify GM/player production flows and
+persistence of legitimate existing data across
+`docker compose restart postgres server web`. Record these results separately:
+a zero exit and final success output from `release.sh` do not prove manual
+production acceptance.
 
 ## Rollback
 
-Before deploy, record the previous commit/image identity and the fresh snapshot
-ID. If startup, migration, health, authentication, realtime, or persistence
-verification fails:
+Before deploy, record the previous commit, exact rollback server/web tags and
+image IDs, and the fresh snapshot ID. If startup, migration, health,
+authentication, realtime, or persistence verification fails:
 
 1. stop application writes and retain logs;
 2. stop the failed stack;
-3. check out the recorded previous revision and rebuild it with its exact
-   `BUILD_REVISION`;
+3. verify that `arken-space-rollback-server:<production-sha>` and
+   `arken-space-rollback-web:<production-sha>` still resolve to the recorded
+   image IDs, then restore those exact preserved images; rebuilding the previous
+   revision is not a substitute for the captured image identity;
 4. if migrations changed persisted data, restore the recorded exact snapshot
    using the isolated rehearsal procedure first, then the separately approved
    production recovery procedure;
@@ -152,3 +204,5 @@ separate destructive operation requiring its own explicit approval.
 - Publishing the public GitHub repository does not deploy production.
 - Do not mark the release ready until the fresh backup and exact-snapshot restore
   rehearsal have actually passed on the operator environment.
+- Final automated release output is evidence only for scripted gates. It does
+  not prove manual production acceptance or authorize marking the release Done.

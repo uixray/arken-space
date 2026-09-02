@@ -129,7 +129,12 @@ export type Props = {
     intent?: CharacterCounterMutationIntent,
   ) => Promise<void>;
   onCampaignClock: (
-    command: "ADVANCE_DAY" | "LONG_REST" | "START_BATTLE" | "END_BATTLE",
+    command:
+      | "ADVANCE_DAY"
+      | "LONG_REST"
+      | "START_BATTLE"
+      | "END_BATTLE"
+      | "RESET_CLOCK",
     revision: number,
   ) => Promise<void>;
   requestedChatMessageId: string | null;

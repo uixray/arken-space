@@ -7,6 +7,7 @@ const baseSnapshot: GameSnapshot = {
     id: "campaign-1",
     name: "Первая экспедиция",
     day: 1,
+    paused: false,
     battleActive: false,
     battleCounter: 0,
     statLayout: [],

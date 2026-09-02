@@ -1782,6 +1782,85 @@ describe("Pool B HTTP boundaries", () => {
     ).toHaveLength(1);
   });
 
+  it("uses default and renamed resource labels with a key fallback", async () => {
+    await db
+      .update(schema.characters)
+      .set({
+        resources: {
+          legacyCharge: { current: 2, maximum: 3 },
+          physicalPower: { current: 7, maximum: 10 },
+        },
+      })
+      .where(eq(schema.characters.id, ids.character));
+    const latestAuditBody = async () => {
+      const [audit] = await db
+        .select({ body: schema.chatMessages.body })
+        .from(schema.chatMessages)
+        .where(
+          and(
+            eq(schema.chatMessages.characterId, ids.character),
+            eq(schema.chatMessages.kind, "SYSTEM"),
+          ),
+        )
+        .orderBy(desc(schema.chatMessages.sequence))
+        .limit(1);
+      return audit?.body;
+    };
+
+    const defaultLabel = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        resources: {
+          legacyCharge: { current: 2, maximum: 3 },
+          physicalPower: { current: 6, maximum: 10 },
+        },
+      },
+    });
+    expect(defaultLabel.statusCode).toBe(200);
+    expect(await latestAuditBody()).toBe(
+      "Hero — ресурсы: Выносливость: 7/10 → 6/10",
+    );
+
+    await db
+      .update(schema.campaigns)
+      .set({
+        statLayout: [
+          {
+            id: "combat",
+            label: "Боевые характеристики",
+            rows: [
+              {
+                key: "physicalPower",
+                label: "Запас сил",
+                source: "RESOURCE",
+              },
+            ],
+          },
+        ],
+      })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const renamedLabelAndFallback = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        resources: {
+          physicalPower: { current: 5, maximum: 10 },
+        },
+      },
+    });
+    expect(renamedLabelAndFallback.statusCode).toBe(200);
+    expect(await latestAuditBody()).toBe(
+      "Hero — ресурсы: legacyCharge: удалён, Запас сил: 6/10 → 5/10",
+    );
+  });
+
   it("applies short and long rests to every recoverable resource", async () => {
     // UIX-425: отдых восстанавливает на величину регена из карточки, поэтому
     // у персонажа теперь есть строки регена. Без них восстанавливать нечего, и
@@ -1891,6 +1970,350 @@ describe("Pool B HTTP boundaries", () => {
       command: "LONG_REST",
       day: 2,
       restoredCharacters: 1,
+    });
+  });
+
+  it("resets the campaign clock once and rebases recharge anchors without granting uses", async () => {
+    await db
+      .update(schema.campaigns)
+      .set({ day: 12, battleActive: false, battleCounter: 4, revision: 0 })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const entries = await db
+      .insert(schema.characterCatalogEntries)
+      .values([
+        {
+          characterId: ids.character,
+          kind: "ABILITY",
+          name: "Daily reset anchor",
+          data: {
+            uses: {
+              current: 0,
+              max: 1,
+              recharge: "DAY",
+              lastRechargeDay: 12,
+            },
+          },
+        },
+        {
+          characterId: ids.character,
+          kind: "ABILITY",
+          name: "Weekly reset anchor",
+          data: {
+            uses: {
+              current: 0,
+              max: 1,
+              recharge: "WEEK",
+              lastRechargeDay: 10,
+            },
+          },
+        },
+        {
+          characterId: ids.character,
+          kind: "ABILITY",
+          name: "Battle reset anchor",
+          data: {
+            uses: {
+              current: 0,
+              max: 2,
+              recharge: "BATTLE",
+              lastBattleCounter: 4,
+            },
+          },
+        },
+      ])
+      .returning();
+
+    const playerAttempt = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "RESET_CLOCK",
+        revision: 0,
+      },
+    });
+    expect(playerAttempt.statusCode).toBe(403);
+
+    const staleAttempt = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "RESET_CLOCK",
+        revision: 99,
+      },
+    });
+    expect(staleAttempt.statusCode).toBe(409);
+    expect(staleAttempt.json()).toEqual({
+      error: "CAMPAIGN_CONFLICT",
+      revision: 0,
+    });
+
+    await db
+      .update(schema.campaigns)
+      .set({ battleActive: true })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const activeBattleAttempt = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "RESET_CLOCK",
+        revision: 0,
+      },
+    });
+    expect(activeBattleAttempt.statusCode).toBe(409);
+    expect(activeBattleAttempt.json()).toEqual({ error: "BATTLE_ACTIVE" });
+    await db
+      .update(schema.campaigns)
+      .set({ battleActive: false })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const [legacyActiveEncounter] = await db
+      .insert(schema.encounters)
+      .values({
+        campaignId: ids.campaign,
+        mode: "SCENE_REGION",
+        sourceSceneId: ids.scene,
+        targetSceneId: ids.scene,
+        focusRegion: { x: 0, y: 0, width: 10, height: 10 },
+        sourceSceneRevision: 0,
+        initiatorMembershipId: ids.gm,
+      })
+      .returning({ id: schema.encounters.id });
+    const activeEncounterAttempt = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "RESET_CLOCK",
+        revision: 0,
+      },
+    });
+    expect(activeEncounterAttempt.statusCode).toBe(409);
+    expect(activeEncounterAttempt.json()).toEqual({ error: "BATTLE_ACTIVE" });
+    for (const command of ["START_BATTLE", "END_BATTLE"] as const) {
+      const legacyAttempt = await app.inject({
+        method: "POST",
+        url: "/api/campaign/clock",
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          command,
+          revision: 0,
+        },
+      });
+      expect(legacyAttempt.statusCode).toBe(409);
+      expect(legacyAttempt.json()).toEqual({ error: "ENCOUNTER_ACTIVE" });
+    }
+    const [clockAfterLegacyAttempts] = await db
+      .select({
+        battleActive: schema.campaigns.battleActive,
+        battleCounter: schema.campaigns.battleCounter,
+        revision: schema.campaigns.revision,
+      })
+      .from(schema.campaigns)
+      .where(eq(schema.campaigns.id, ids.campaign));
+    expect(clockAfterLegacyAttempts).toEqual({
+      battleActive: false,
+      battleCounter: 4,
+      revision: 0,
+    });
+    await db
+      .delete(schema.encounters)
+      .where(eq(schema.encounters.id, legacyActiveEncounter!.id));
+
+    const actionId = crypto.randomUUID();
+    const payload = { actionId, command: "RESET_CLOCK", revision: 0 };
+    const reset = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload,
+    });
+    expect(reset.statusCode, JSON.stringify(reset.json())).toBe(200);
+    expect(reset.json()).toMatchObject({
+      day: 1,
+      battleActive: false,
+      battleCounter: 0,
+      revision: 1,
+    });
+
+    const resetEntries = await db
+      .select({
+        id: schema.characterCatalogEntries.id,
+        data: schema.characterCatalogEntries.data,
+        revision: schema.characterCatalogEntries.revision,
+      })
+      .from(schema.characterCatalogEntries);
+    const resetById = new Map(resetEntries.map((entry) => [entry.id, entry]));
+    expect(resetById.get(entries[0]!.id)).toMatchObject({
+      revision: 1,
+      data: { uses: { current: 0, lastRechargeDay: 1 } },
+    });
+    expect(resetById.get(entries[1]!.id)).toMatchObject({
+      revision: 1,
+      data: { uses: { current: 0, lastRechargeDay: 1 } },
+    });
+    expect(resetById.get(entries[2]!.id)).toMatchObject({
+      revision: 1,
+      data: { uses: { current: 0, lastBattleCounter: 0 } },
+    });
+
+    const systemMessages = await db
+      .select({
+        body: schema.chatMessages.body,
+        visibility: schema.chatMessages.visibility,
+      })
+      .from(schema.chatMessages)
+      .where(
+        and(
+          eq(schema.chatMessages.campaignId, ids.campaign),
+          eq(schema.chatMessages.kind, "SYSTEM"),
+        ),
+      );
+    expect(systemMessages).toEqual([
+      {
+        body: "Время кампании сброшено: день 1, боёв 0.",
+        visibility: "PUBLIC",
+      },
+    ]);
+    const events = await db
+      .select({ payload: schema.gameEvents.payload })
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toMatchObject({
+      command: "RESET_CLOCK",
+      previousDay: 12,
+      previousBattleCounter: 4,
+      day: 1,
+      battleCounter: 0,
+      recharged: 0,
+      rebasedEntries: 3,
+      restoredCharacters: 0,
+    });
+
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ duplicate: true });
+    expect(
+      await db
+        .select({ actionId: schema.gameEvents.actionId })
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, actionId)),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select({ id: schema.chatMessages.id })
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.kind, "SYSTEM")),
+    ).toHaveLength(1);
+
+    const alreadyReset = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "RESET_CLOCK",
+        revision: 1,
+      },
+    });
+    expect(alreadyReset.statusCode).toBe(400);
+    expect(alreadyReset.json()).toEqual({ error: "CLOCK_ALREADY_RESET" });
+
+    await db
+      .update(schema.characterCatalogEntries)
+      .set({
+        data: {
+          uses: {
+            current: 0,
+            max: 1,
+            recharge: "WEEK",
+            lastRechargeDay: 9,
+          },
+        },
+        revision: 2,
+      })
+      .where(eq(schema.characterCatalogEntries.id, entries[1]!.id));
+    const repairedBaseline = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "RESET_CLOCK",
+        revision: 1,
+      },
+    });
+    expect(repairedBaseline.statusCode).toBe(200);
+    expect(repairedBaseline.json()).toMatchObject({
+      day: 1,
+      battleCounter: 0,
+      revision: 2,
+    });
+    const [repairedWeekly] = await db
+      .select({
+        data: schema.characterCatalogEntries.data,
+        revision: schema.characterCatalogEntries.revision,
+      })
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entries[1]!.id));
+    expect(repairedWeekly).toMatchObject({
+      revision: 3,
+      data: { uses: { current: 0, lastRechargeDay: 1 } },
+    });
+
+    const cleanBaseline = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "RESET_CLOCK",
+        revision: 2,
+      },
+    });
+    expect(cleanBaseline.statusCode).toBe(400);
+    expect(cleanBaseline.json()).toEqual({ error: "CLOCK_ALREADY_RESET" });
+
+    await db
+      .update(schema.campaigns)
+      .set({
+        initiative: [
+          {
+            id: crypto.randomUUID(),
+            tokenId: null,
+            name: "Старая строка",
+            initiative: 14,
+            pinned: false,
+          },
+        ],
+      })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const clearedInitiative = await app.inject({
+      method: "POST",
+      url: "/api/campaign/clock",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        command: "RESET_CLOCK",
+        revision: 2,
+      },
+    });
+    expect(clearedInitiative.statusCode).toBe(200);
+    expect(clearedInitiative.json()).toMatchObject({
+      initiative: [],
+      revision: 3,
     });
   });
 

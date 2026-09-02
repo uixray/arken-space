@@ -32,7 +32,15 @@ the release checklist.
 
 ## Backup
 
-Run `infra/backup/backup.sh` nightly with a systemd timer or cron. Recovery target: RPO 24 hours, RTO 30 minutes. Run a restore drill before the first real game.
+`infra/backup/backup.sh` запускается ночью через systemd timer. Обычный интервал
+составляет около 24 часов и может достигать 24 часов 15 минут из-за случайной
+задержки timer; незамеченная ошибка делает его неограниченным. Владелец ещё не
+принимал этот риск как гарантированный RPO. До отдельного решения перед
+**каждой реальной игровой сессией** обязательно запустите
+`arken-space-backup.service` вручную и запишите snapshot ID из успешного лога.
+Строгий постоянный RPO и мониторинг свежести бэкапа требуют отдельного
+эксплуатационного гейта. Целевой RTO остаётся 30 минут. До первой настоящей игры
+проведите репетицию восстановления.
 
 ## Rollback
 

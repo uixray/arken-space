@@ -1,6 +1,7 @@
 import { z } from "zod";
 export * from "./fog-geometry.js";
 export * from "./fog-visibility.js";
+export * from "./spell-schools.js";
 import { fogGeometrySchema } from "./fog-geometry.js";
 export * from "./ruler-geometry.js";
 import { rulerUpdateSchema } from "./ruler-geometry.js";
@@ -667,11 +668,43 @@ export const statRowSchema = z.object({
   source: statRowSourceSchema.default("STAT"),
 });
 
-export const statGroupSchema = z.object({
-  id: z.enum(["characteristics", "combat", "skills", "talents"]),
-  label: z.string().trim().min(1).max(60),
-  rows: z.array(statRowSchema).max(60),
-});
+const STAT_GROUP_USER_ROW_LIMIT = 60;
+// Это только резерв ёмкости, а не список обязательных строк: partial-layout
+// без регена должна остаться валидной для read-time repair. Тест `60 + 2`
+// намеренно связывает эти ключи с RESOURCE_REGEN_STAT и упадёт при их drift.
+const reservedCombatStatKeys = new Set(["enduranceRegen", "manaRegen"]);
+
+export const statGroupSchema = z
+  .object({
+    id: z.enum(["characteristics", "combat", "skills", "talents"]),
+    label: z.string().trim().min(1).max(60),
+    /**
+     * До UIX-516 редактор разрешал до 60 пользовательских строк. Физический
+     * предел 62 оставляет место read-time repair, а refinement ниже не даёт
+     * использовать системный резерв как две дополнительные custom-строки.
+     */
+    rows: z.array(statRowSchema).max(62),
+  })
+  .superRefine((group, context) => {
+    const reservedRows =
+      group.id === "combat"
+        ? new Set(
+            group.rows
+              .filter(
+                (row) =>
+                  row.source === "STAT" && reservedCombatStatKeys.has(row.key),
+              )
+              .map((row) => row.key),
+          ).size
+        : 0;
+    if (group.rows.length <= STAT_GROUP_USER_ROW_LIMIT + reservedRows) return;
+    context.addIssue({
+      code: "custom",
+      path: ["rows"],
+      message:
+        "Группа допускает не более 60 пользовательских строк; ещё два места зарезервированы системным регеном",
+    });
+  });
 
 export const statLayoutSchema = z
   .array(statGroupSchema)
@@ -2055,9 +2088,42 @@ export const entryRollRequestSchema = z.union([
 export type EntryCardRequest = z.infer<typeof entryRollRequestSchema>;
 export const campaignClockCommandSchema = z.object({
   actionId: actionIdSchema,
-  command: z.enum(["ADVANCE_DAY", "LONG_REST", "START_BATTLE", "END_BATTLE"]),
+  command: z.enum([
+    "ADVANCE_DAY",
+    "LONG_REST",
+    "START_BATTLE",
+    "END_BATTLE",
+    "RESET_CLOCK",
+  ]),
   revision: z.number().int().nonnegative(),
 });
+
+/**
+ * UIX-582 — сохраняемая пауза кампании задаёт желаемое состояние, а не
+ * переключает его.
+ *
+ * Поэтому повтор несёт прежнее значение `paused` и сверяется по хешу команды.
+ * `campaignId` намеренно отсутствует: сервер берёт его только из
+ * аутентифицированного членства, и клиент не может выбрать чужую кампанию.
+ */
+export const campaignPauseCommandSchema = z
+  .object({
+    actionId: actionIdSchema,
+    revision: z.number().int().nonnegative(),
+    paused: z.boolean(),
+  })
+  .strict();
+export type CampaignPauseCommand = z.infer<typeof campaignPauseCommandSchema>;
+
+/** Безопасная квитанция для принятой команды и её точного повтора. */
+export const campaignPauseStateSchema = z
+  .object({
+    campaignId: z.string().uuid(),
+    paused: z.boolean(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type CampaignPauseState = z.infer<typeof campaignPauseStateSchema>;
 export const walletSchema = z.object({
   gold: z.number().int().nonnegative(),
   silver: z.number().int().nonnegative(),
@@ -2660,6 +2726,8 @@ export interface GameSnapshot {
   campaign: {
     id: string;
     name: string;
+    /** UIX-582: сохраняемое серверно-авторитетное состояние паузы. */
+    paused: boolean;
     day: number;
     battleActive: boolean;
     battleCounter: number;

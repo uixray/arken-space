@@ -48,7 +48,7 @@ export function gameplayResetStatements(campaignId, gmMembershipId) {
       [campaignId],
     ],
     [
-      "update campaigns set active_scene_id = null, day = 1, battle_active = false, battle_counter = 0, revision = 0, updated_at = now() where id = $1",
+      "update campaigns set active_scene_id = null, paused = false, day = 1, battle_active = false, battle_counter = 0, revision = 0, updated_at = now() where id = $1",
       [campaignId],
     ],
     [
@@ -60,6 +60,11 @@ export function gameplayResetStatements(campaignId, gmMembershipId) {
       [campaignId],
     ],
     ["delete from token_definitions where campaign_id = $1", [campaignId]],
+    [
+      "delete from character_spell_assignments where campaign_id = $1",
+      [campaignId],
+    ],
+    ["delete from spell_packs where campaign_id = $1", [campaignId]],
     ["delete from characters where campaign_id = $1", [campaignId]],
     ["delete from catalog_entries where campaign_id = $1", [campaignId]],
     ["delete from scenes where campaign_id = $1", [campaignId]],

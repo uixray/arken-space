@@ -1,4 +1,4 @@
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import {
@@ -59,8 +59,6 @@ import {
   renameCampaignSchema,
   setOwnInitiativeSchema,
   setBattleZoneSchema,
-  tokensInBattleZone,
-  type BattleZone,
   updateTokenConditionsSchema,
   orderInitiative,
   updateInitiativeSchema,
@@ -100,6 +98,7 @@ import {
   stickers,
   playerLikenessConsents,
   drawings,
+  encounters,
   fogReveals,
   feedbackAttachments,
   feedbackReports,
@@ -150,10 +149,19 @@ import { registerStoryRoutes } from "./story.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
-import { recruitFromZone } from "./initiative.js";
 import { registerEncounterRoutes } from "./encounters.js";
+import { recruitFromBattleZone } from "./battle-initiative.js";
+import {
+  campaignRechargeAnchorsNeedReset,
+  rechargeCampaignCatalogEntries,
+  resetCampaignRechargeAnchors,
+} from "./campaign-clock.js";
+import { registerCampaignPauseRoutes } from "./campaign-pause.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
 import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
+import { registerSpellPackRoutes } from "./spell-pack-routes.js";
+import { registerSpellAssignmentRoutes } from "./spell-assignment-routes.js";
+import { registerSpellProjectionRoutes } from "./spell-projection-routes.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -220,57 +228,6 @@ const sessionRoom = (id: string) => `session:${id}`;
  * которой в снапшоте нет.
  */
 /** Рассматриваемая сцена сокета, если она есть, — в виде списка для снапшота. */
-/**
- * UIX-466 п. 3 — кто из стоящих на карте попадает в зону боя.
- *
- * Сцена зоны перепроверяется здесь, а не только при её установке: между тем и
- * другим мастер мог удалить сцену. Молчаливый пустой набор был бы хуже отказа —
- * мастер решил бы, что в зоне никого, и начал бы бой без противников.
- *
- * Возвращает `null`, если сцены зоны в этой кампании больше нет.
- */
-async function recruitFromBattleZone(
-  db: Database,
-  campaignId: string,
-  zone: BattleZone,
-  existing: readonly {
-    id: string;
-    tokenId: string | null;
-    name: string | null;
-    initiative: number | null;
-  }[],
-) {
-  const [scene] = await db
-    .select({ id: scenes.id })
-    .from(scenes)
-    .where(and(eq(scenes.id, zone.sceneId), eq(scenes.campaignId, campaignId)))
-    .limit(1);
-  if (!scene) return null;
-  const placed = await db
-    .select({
-      id: tokens.id,
-      sceneId: tokens.sceneId,
-      x: tokens.x,
-      y: tokens.y,
-      width: tokens.width,
-      height: tokens.height,
-    })
-    .from(tokens)
-    .where(eq(tokens.sceneId, zone.sceneId));
-  return recruitFromZone(
-    existing,
-    tokensInBattleZone(placed, zone),
-    (tokenId) => ({
-      id: randomUUID(),
-      tokenId,
-      // Имя наследуется от токена, а не копируется: переименование дойдёт до
-      // очереди само (UIX-400).
-      name: null,
-      initiative: null,
-    }),
-  );
-}
-
 function viewedScenes(data: { viewedSceneId?: string | null }): string[] {
   return data.viewedSceneId ? [data.viewedSceneId] : [];
 }
@@ -467,17 +424,39 @@ function formatResourceValue(value: Resources[string] | undefined) {
     : `${value.current}/${value.maximum}`;
 }
 
-function formatResourceChanges(before: Resources, after: Resources) {
+/**
+ * UIX-476 — имя ресурса принадлежит раскладке кампании, а не ключу JSON.
+ * Строка могла быть удалена уже после создания ресурса, поэтому отсутствие
+ * подписи штатно: formatter ниже оставляет сам ключ вместо пустого имени.
+ */
+function resourceLabelsFromLayout(
+  layout: ReturnType<typeof resolveStatLayout>,
+): ReadonlyMap<string, string> {
+  return new Map(
+    layout.flatMap((group) =>
+      group.rows
+        .filter((row) => row.source === "RESOURCE")
+        .map((row) => [row.key, row.label] as const),
+    ),
+  );
+}
+
+function formatResourceChanges(
+  before: Resources,
+  after: Resources,
+  labels: ReadonlyMap<string, string>,
+) {
   const keys = [
     ...new Set([...Object.keys(before), ...Object.keys(after)]),
   ].sort();
   const changes = keys
     .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
     .map((key) => {
+      const label = labels.get(key) ?? key;
       if (!before[key])
-        return `${key}: добавлен ${formatResourceValue(after[key])}`;
-      if (!after[key]) return `${key}: удалён`;
-      return `${key}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
+        return `${label}: добавлен ${formatResourceValue(after[key])}`;
+      if (!after[key]) return `${label}: удалён`;
+      return `${label}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
     });
   return changes.length > 0 ? `ресурсы: ${changes.join(", ")}` : "";
 }
@@ -887,8 +866,14 @@ export function registerRoutes(
   registerEncounterRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
+  registerCampaignPauseRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
   registerWorldContentRoutes(app, db);
   registerWorldContentInstanceRoutes(app, db);
+  registerSpellPackRoutes(app, db);
+  registerSpellAssignmentRoutes(app, db);
+  registerSpellProjectionRoutes(app, db);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
@@ -6856,15 +6841,49 @@ export function registerRoutes(
       return reply
         .code(409)
         .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    const resetsClock = body.command === "RESET_CLOCK";
+    const legacyBattleCommand =
+      body.command === "START_BATTLE" || body.command === "END_BATTLE";
+    const [activeEncounter] =
+      resetsClock || legacyBattleCommand
+        ? await db
+            .select({ id: encounters.id })
+            .from(encounters)
+            .where(
+              and(
+                eq(encounters.campaignId, auth.campaignId),
+                eq(encounters.status, "ACTIVE"),
+              ),
+            )
+            .limit(1)
+        : [];
+    if (legacyBattleCommand && activeEncounter)
+      return reply.code(409).send({ error: "ENCOUNTER_ACTIVE" });
+    if (resetsClock) {
+      if (current.battleActive || activeEncounter)
+        return reply.code(409).send({ error: "BATTLE_ACTIVE" });
+      const anchorsNeedReset = await campaignRechargeAnchorsNeedReset(
+        db,
+        auth.campaignId,
+      );
+      if (
+        current.day === 1 &&
+        current.battleCounter === 0 &&
+        current.initiative.length === 0 &&
+        !anchorsNeedReset
+      )
+        return reply.code(400).send({ error: "CLOCK_ALREADY_RESET" });
+    }
     if (body.command === "START_BATTLE" && current.battleActive)
       return reply.code(409).send({ error: "BATTLE_ALREADY_ACTIVE" });
     if (body.command === "END_BATTLE" && !current.battleActive)
       return reply.code(409).send({ error: "BATTLE_NOT_ACTIVE" });
     const advancesDay =
       body.command === "ADVANCE_DAY" || body.command === "LONG_REST";
-    const nextDay = current.day + (advancesDay ? 1 : 0);
-    const nextBattle =
-      current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
+    const nextDay = resetsClock ? 1 : current.day + (advancesDay ? 1 : 0);
+    const nextBattle = resetsClock
+      ? 0
+      : current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
     /**
      * UIX-466 п. 3 — начало боя собирает состав по зоне.
      *
@@ -6897,8 +6916,9 @@ export function registerRoutes(
           .update(campaigns)
           .set({
             day: nextDay,
-            battleActive:
-              body.command === "START_BATTLE"
+            battleActive: resetsClock
+              ? false
+              : body.command === "START_BATTLE"
                 ? true
                 : body.command === "END_BATTLE"
                   ? false
@@ -6918,8 +6938,9 @@ export function registerRoutes(
              * ушедшие, и следующий бой начинался с вычёркивания прошлого. Состав
              * собирается заново — рамкой на карте это несколько секунд.
              */
-            initiative:
-              body.command === "START_BATTLE"
+            initiative: resetsClock
+              ? []
+              : body.command === "START_BATTLE"
                 ? (recruited ??
                   current.initiative.map((participant) => ({
                     ...participant,
@@ -6939,55 +6960,22 @@ export function registerRoutes(
           )
           .returning();
         if (!updated) throw new Error("CAMPAIGN_CONFLICT");
-        const entryRows = await tx
-          .select({ entry: characterCatalogEntries })
-          .from(characterCatalogEntries)
-          .innerJoin(
-            characters,
-            eq(characterCatalogEntries.characterId, characters.id),
-          )
-          .where(eq(characters.campaignId, auth.campaignId));
-        let recharged = 0;
-        for (const { entry } of entryRows) {
-          const parsed = entryDataSchema.safeParse(
-            normalizeLegacyEntryData(entry.data),
-          );
-          if (!parsed.success || !parsed.data.uses) continue;
-          const uses = parsed.data.uses;
-          const due =
-            (advancesDay && uses.recharge === "DAY") ||
-            (body.command === "END_BATTLE" && uses.recharge === "BATTLE") ||
-            (advancesDay &&
-              uses.recharge === "WEEK" &&
-              nextDay - (uses.lastRechargeDay ?? 1) >= 7);
-          if (!due) continue;
-          const nextUses = {
-            ...uses,
-            current: uses.max,
-            ...(uses.recharge === "WEEK" || uses.recharge === "DAY"
-              ? { lastRechargeDay: nextDay }
-              : {}),
-            ...(uses.recharge === "BATTLE"
-              ? { lastBattleCounter: nextBattle }
-              : {}),
-          };
-          const [rechargedEntry] = await tx
-            .update(characterCatalogEntries)
-            .set({
-              data: { ...parsed.data, uses: nextUses },
-              revision: entry.revision + 1,
-              updatedAt: new Date(),
+        const rechargeTrigger =
+          body.command === "ADVANCE_DAY" ||
+          body.command === "LONG_REST" ||
+          body.command === "END_BATTLE"
+            ? body.command
+            : null;
+        const recharged = rechargeTrigger
+          ? await rechargeCampaignCatalogEntries(tx, auth.campaignId, {
+              trigger: rechargeTrigger,
+              day: nextDay,
+              battleCounter: nextBattle,
             })
-            .where(
-              and(
-                eq(characterCatalogEntries.id, entry.id),
-                eq(characterCatalogEntries.revision, entry.revision),
-              ),
-            )
-            .returning({ id: characterCatalogEntries.id });
-          if (!rechargedEntry) throw new Error("ENTRY_CONFLICT");
-          recharged++;
-        }
+          : 0;
+        const rebasedEntries = resetsClock
+          ? await resetCampaignRechargeAnchors(tx, auth.campaignId)
+          : 0;
         let restoredCharacters = 0;
         if (body.command === "LONG_REST") {
           const characterRows = await tx
@@ -7024,13 +7012,15 @@ export function registerRoutes(
           }
         }
         const label =
-          body.command === "LONG_REST"
-            ? "Длинный отдых завершён"
-            : body.command === "ADVANCE_DAY"
-              ? `День кампании: ${nextDay}`
-              : body.command === "START_BATTLE"
-                ? `Бой #${nextBattle} начат`
-                : `Бой #${current.battleCounter} завершён`;
+          body.command === "RESET_CLOCK"
+            ? "Время кампании сброшено: день 1, боёв 0"
+            : body.command === "LONG_REST"
+              ? "Длинный отдых завершён"
+              : body.command === "ADVANCE_DAY"
+                ? `День кампании: ${nextDay}`
+                : body.command === "START_BATTLE"
+                  ? `Бой #${nextBattle} начат`
+                  : `Бой #${current.battleCounter} завершён`;
         const [message] = await tx
           .insert(chatMessages)
           .values({
@@ -7055,9 +7045,12 @@ export function registerRoutes(
           entityRevision: updated.revision,
           payload: {
             command: body.command,
+            previousDay: current.day,
+            previousBattleCounter: current.battleCounter,
             day: nextDay,
             battleCounter: nextBattle,
             recharged,
+            rebasedEntries,
             restoredCharacters,
           },
         });
@@ -7664,6 +7657,17 @@ export function registerRoutes(
           normalizeLegacyStats(character!.stats),
         )
       : body.resources;
+    let resourceLabels: ReadonlyMap<string, string> = new Map();
+    if (nextResources) {
+      const [campaign] = await db
+        .select({ statLayout: campaigns.statLayout })
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      resourceLabels = resourceLabelsFromLayout(
+        resolveStatLayout(campaign?.statLayout),
+      );
+    }
     const changes = [
       body.wallet
         ? formatWalletChanges(
@@ -7675,6 +7679,7 @@ export function registerRoutes(
         ? formatResourceChanges(
             (character!.resources ?? {}) as Resources,
             nextResources,
+            resourceLabels,
           )
         : "",
     ]
