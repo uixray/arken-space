@@ -1,4 +1,27 @@
 import { formulaReferencesStatKey, type StatLayout } from "@arken/contracts";
+import {
+  isSystemRegenStatKey,
+  starterStatLayout,
+  SYSTEM_REGEN_STAT_KEYS,
+} from "@arken/system";
+
+const SYSTEM_STAT_GROUP_ID = "combat";
+const starterCombatGroup = starterStatLayout.find(
+  (group) => group.id === SYSTEM_STAT_GROUP_ID,
+);
+const starterRowsByKey = new Map(
+  starterStatLayout.flatMap((group) =>
+    group.rows.map((row) => [row.key, row] as const),
+  ),
+);
+const canonicalSystemRegenRows = [...SYSTEM_REGEN_STAT_KEYS].map((key) => {
+  const row = starterRowsByKey.get(key);
+  if (!row || row.source !== "STAT")
+    throw new Error(
+      `Системная строка регена ${key} отсутствует в стартовой STAT-раскладке`,
+    );
+  return row;
+});
 
 /**
  * UIX-424, шаги 5-6 — что мастеру можно менять в раскладке.
@@ -31,6 +54,7 @@ export interface StatKeyReference {
  * и своё имя поля здесь означало бы, что этот отказ мимо общего разбора.
  */
 export type StatLayoutRejection =
+  | { error: "SYSTEM_STAT_ROW_REQUIRED"; key: string }
   | { error: "STAT_SOURCE_CHANGED"; key: string }
   | {
       error: "STAT_ROW_REFERENCED";
@@ -50,6 +74,64 @@ export interface StatReferenceSources {
     entries: readonly { name: string; data: unknown }[];
   }[];
   catalogEntries: readonly { name: string; data: unknown }[];
+}
+
+/**
+ * Возвращает системные строки регена в видимую боевую группу.
+ *
+ * Старые кампании могли сохранить валидную partial-layout без этих строк или
+ * с ними в другой группе/source. Такие данные нельзя целиком заменять
+ * стартовой раскладкой: пользовательские строки, подписи и порядок — данные
+ * мастера. Поэтому нормализация меняет только строки с точными системными
+ * ключами, сохраняет их подписи и добавляет отсутствующие со стартовыми.
+ */
+export function normalizeSystemRegenStatRows(layout: StatLayout): StatLayout {
+  const existingSystemRows = new Map(
+    layout.flatMap((group) =>
+      group.rows
+        .filter((row) => isSystemRegenStatKey(row.key))
+        .map((row) => [row.key, row] as const),
+    ),
+  );
+  const systemKeysAlreadyInCombat = new Set<string>();
+
+  const normalized = layout.map((group) => {
+    if (group.id !== SYSTEM_STAT_GROUP_ID)
+      return {
+        ...group,
+        rows: group.rows.filter((row) => !isSystemRegenStatKey(row.key)),
+      };
+
+    return {
+      ...group,
+      rows: group.rows.map((row) => {
+        if (!isSystemRegenStatKey(row.key)) return row;
+        systemKeysAlreadyInCombat.add(row.key);
+        return { ...row, source: "STAT" as const };
+      }),
+    };
+  });
+
+  const rowsToAppend = canonicalSystemRegenRows
+    .filter((row) => !systemKeysAlreadyInCombat.has(row.key))
+    .map((row) => ({
+      ...(existingSystemRows.get(row.key) ?? row),
+      source: "STAT" as const,
+    }));
+  const combat = normalized.find((group) => group.id === SYSTEM_STAT_GROUP_ID);
+  if (combat) {
+    combat.rows.push(...rowsToAppend);
+    return normalized;
+  }
+
+  return [
+    ...normalized,
+    {
+      id: SYSTEM_STAT_GROUP_ID,
+      label: starterCombatGroup?.label ?? "Боевые характеристики",
+      rows: rowsToAppend,
+    },
+  ];
 }
 
 /**
@@ -134,18 +216,40 @@ export function rejectDestructiveLayoutChange(
   next: StatLayout,
   sources: StatReferenceSources,
 ): StatLayoutRejection | null {
+  const currentKeys = new Set(
+    current.flatMap((group) => group.rows.map((row) => row.key)),
+  );
+  const nextRows = new Map(
+    next.flatMap((group) =>
+      group.rows.map((row) => [row.key, { groupId: group.id, row }] as const),
+    ),
+  );
+  for (const { key } of canonicalSystemRegenRows) {
+    const replacement = nextRows.get(key);
+    // Прямые вызовы функции со старой раскладкой без системных строк остаются
+    // совместимыми. В маршруте current всегда проходит resolveStatLayout и
+    // содержит обе строки, поэтому их удаление всё равно fail-closed.
+    if (!currentKeys.has(key) && !replacement) continue;
+    if (
+      !replacement ||
+      replacement.groupId !== SYSTEM_STAT_GROUP_ID ||
+      replacement.row.source !== "STAT"
+    )
+      return { error: "SYSTEM_STAT_ROW_REQUIRED", key };
+  }
+
   for (const key of removedStatKeys(current, next)) {
     const references = findStatKeyReferences(key, sources);
     if (references.length > 0)
       return { error: "STAT_ROW_REFERENCED", key, references };
   }
 
-  const nextRows = new Map(
+  const nextRowsByKey = new Map(
     next.flatMap((group) => group.rows.map((row) => [row.key, row] as const)),
   );
   for (const group of current)
     for (const row of group.rows) {
-      const replacement = nextRows.get(row.key);
+      const replacement = nextRowsByKey.get(row.key);
       if (replacement && replacement.source !== row.source)
         return { error: "STAT_SOURCE_CHANGED", key: row.key };
     }

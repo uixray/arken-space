@@ -293,6 +293,50 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   });
 });
 
+test("UIX-516 GM sees protected regen deletes before and after reload", async ({
+  page,
+}) => {
+  const repairedSnapshot = structuredClone(snapshot);
+  repairedSnapshot.characters[0]!.stats = {
+    ...repairedSnapshot.characters[0]!.stats,
+    enduranceRegen: 7,
+    manaRegen: 4,
+  };
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(repairedSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+
+  const expectProtectedControls = async () => {
+    await openWorkspaceSection(page, "Персонажи");
+    for (const label of ["Реген Выносливости", "Реген Маны"]) {
+      const protectedDelete = page.getByRole("button", {
+        name: `Нельзя удалить «${label}»: установите значение 0, чтобы отключить восстановление`,
+      });
+      await expect(protectedDelete).toBeVisible();
+      await expect(protectedDelete).toBeDisabled();
+      await expect(protectedDelete).toHaveAttribute(
+        "title",
+        "Системную строку нельзя удалить. Чтобы отключить восстановление, установите значение 0.",
+      );
+    }
+    await expect(
+      page.getByRole("button", { name: "Удалить «Сила»" }),
+    ).toBeEnabled();
+  };
+
+  await page.goto("/");
+  await expectProtectedControls();
+  await page.reload();
+  await expectProtectedControls();
+});
+
 test("GM compact chrome keeps actions discoverable at release width", async ({
   page,
 }) => {
