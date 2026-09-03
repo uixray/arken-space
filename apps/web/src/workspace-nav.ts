@@ -46,7 +46,7 @@ export function workspaceNavItems(context: {
     label: context.isGm ? "Открытые заявки" : "Мои заявки",
   });
   if (context.operatorFeedbackAllowed)
-    items.push({ id: "operator-feedback", label: "Operator feedback" });
+    items.push({ id: "operator-feedback", label: OPERATOR_FEEDBACK_TITLE });
   if (context.isGm) items.push({ id: "media", label: "Файлы" });
   return items;
 }
@@ -89,3 +89,4 @@ export function splitWorkspaceNav<T extends { id: WorkspaceId }>(
   }
   return { visible: items.slice(0, fits), overflow: items.slice(fits) };
 }
+import { OPERATOR_FEEDBACK_TITLE } from "./operator-feedback";

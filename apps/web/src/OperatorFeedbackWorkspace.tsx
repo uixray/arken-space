@@ -3,9 +3,12 @@ import { Button } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import {
   fetchAttachment,
+  FEEDBACK_KIND_LABELS,
+  FEEDBACK_STATUS_LABELS,
   fetchFeedbackDetail,
   fetchFeedbackList,
   fetchRedactedExport,
+  OPERATOR_FEEDBACK_TITLE,
   transitionPayload,
   transitions,
   updateFeedback,
@@ -15,7 +18,7 @@ import {
 } from "./operator-feedback";
 import "./OperatorFeedbackWorkspace.css";
 
-const safeError = "Operation failed. Try again.";
+const safeError = "Операция не выполнена. Попробуйте снова.";
 
 /**
  * UIX-395: memoized since this panel is self-fetching (fetches its own list
@@ -63,7 +66,7 @@ export const OperatorFeedbackWorkspace = memo(
       }
       setError("");
       void refreshList().catch(() => {
-        setError("Feedback access was lost");
+        setError("Доступ к обратной связи потерян.");
         clearSensitive();
         onClose();
       });
@@ -86,7 +89,7 @@ export const OperatorFeedbackWorkspace = memo(
       if (!detail) return;
       const payload = transitionPayload(status, linearKey, linearUrl);
       if (!payload) {
-        setError("Enter a valid Linear key and URL.");
+        setError("Укажите корректные ключ и URL задачи Linear.");
         return;
       }
       const id = detail.id;
@@ -129,9 +132,9 @@ export const OperatorFeedbackWorkspace = memo(
       try {
         const data = await fetchRedactedExport(detail.id);
         await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-        setNotice("Redacted copy copied.");
+        setNotice("Обезличенная копия скопирована.");
       } catch {
-        setError("Copy failed. Try again.");
+        setError("Не удалось скопировать. Попробуйте снова.");
       } finally {
         setBusy(false);
       }
@@ -145,7 +148,7 @@ export const OperatorFeedbackWorkspace = memo(
         const blob = await fetchAttachment(detail.id, attachmentId);
         setImageUrl(URL.createObjectURL(blob));
       } catch {
-        setError("Could not open the image.");
+        setError("Не удалось открыть изображение.");
       } finally {
         setBusy(false);
       }
@@ -154,7 +157,7 @@ export const OperatorFeedbackWorkspace = memo(
     return (
       <ArkenDialog
         open={open}
-        title="Operator feedback"
+        title={OPERATOR_FEEDBACK_TITLE}
         variant="workspace"
         footer={false}
         className="operator-feedback"
@@ -164,7 +167,7 @@ export const OperatorFeedbackWorkspace = memo(
         }}
       >
         <div className="operator-feedback__grid">
-          <nav aria-label="Operator feedback">
+          <nav aria-label={OPERATOR_FEEDBACK_TITLE}>
             {items.map((item) => (
               <button
                 type="button"
@@ -172,9 +175,10 @@ export const OperatorFeedbackWorkspace = memo(
                 disabled={busy}
                 onClick={() => void select(item.id)}
               >
-                <b>{item.kind}</b>
+                <b>{FEEDBACK_KIND_LABELS[item.kind]}</b>
                 <span>
-                  {item.status} / {new Date(item.createdAt).toLocaleString()}
+                  {FEEDBACK_STATUS_LABELS[item.status]} /{" "}
+                  {new Date(item.createdAt).toLocaleString()}
                 </span>
               </button>
             ))}
@@ -186,11 +190,11 @@ export const OperatorFeedbackWorkspace = memo(
               <>
                 <h3>{detail.title}</h3>
                 <p>{detail.description}</p>
-                <p>Status: {detail.status}</p>
+                <p>Статус: {FEEDBACK_STATUS_LABELS[detail.status]}</p>
                 {transitions[detail.status].includes("LINKED") && (
                   <div>
                     <label>
-                      Linear key
+                      Ключ Linear
                       <input
                         value={linearKey}
                         onChange={(event) => setLinearKey(event.target.value)}
@@ -198,7 +202,7 @@ export const OperatorFeedbackWorkspace = memo(
                       />
                     </label>
                     <label>
-                      Linear URL
+                      URL задачи Linear
                       <input
                         value={linearUrl}
                         onChange={(event) => setLinearUrl(event.target.value)}
@@ -220,13 +224,13 @@ export const OperatorFeedbackWorkspace = memo(
                         disabled={busy || payload === null}
                         onClick={() => void transition(status)}
                       >
-                        {status}
+                        {FEEDBACK_STATUS_LABELS[status]}
                       </Button>
                     );
                   })}
                 </div>
                 <Button disabled={busy} onClick={() => void reveal()}>
-                  Reveal sensitive data
+                  Показать чувствительные данные
                 </Button>
                 <Button disabled={busy} onClick={() => void copy()}>
                   Копировать обезличенную версию
@@ -244,16 +248,18 @@ export const OperatorFeedbackWorkspace = memo(
                     key={attachment.id}
                     onClick={() => void openAttachment(attachment.id)}
                   >
-                    Open image
+                    Открыть изображение
                   </Button>
                 ))}
-                {imageUrl && <img src={imageUrl} alt="Feedback attachment" />}
+                {imageUrl && (
+                  <img src={imageUrl} alt="Вложение обратной связи" />
+                )}
               </>
             ) : (
               <p>
                 {busy
-                  ? "Loading..."
-                  : "Select feedback. Detail is hidden by default."}
+                  ? "Загрузка…"
+                  : "Выберите сообщение. Детали по умолчанию скрыты."}
               </p>
             )}
           </section>
