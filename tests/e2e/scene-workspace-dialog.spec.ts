@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
 
@@ -7,10 +7,12 @@ const snapshot: GameSnapshot = {
     id: "campaign-1",
     name: "Проверка сцен",
     day: 1,
+    paused: false,
     battleActive: false,
     battleCounter: 0,
     statLayout: [],
     initiative: [],
+    battleZone: null,
     revision: 0,
   },
   me: {

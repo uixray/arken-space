@@ -58,8 +58,9 @@ import {
   rechargeEntryCommandSchema,
   renameCampaignSchema,
   setOwnInitiativeSchema,
+  setBattleZoneSchema,
   updateTokenConditionsSchema,
-  sortByInitiative,
+  orderInitiative,
   updateInitiativeSchema,
   updateStatLayoutSchema,
   deleteTokenSchema,
@@ -97,6 +98,7 @@ import {
   stickers,
   playerLikenessConsents,
   drawings,
+  encounters,
   fogReveals,
   feedbackAttachments,
   feedbackReports,
@@ -148,8 +150,18 @@ import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
 import { registerEncounterRoutes } from "./encounters.js";
+import { recruitFromBattleZone } from "./battle-initiative.js";
+import {
+  campaignRechargeAnchorsNeedReset,
+  rechargeCampaignCatalogEntries,
+  resetCampaignRechargeAnchors,
+} from "./campaign-clock.js";
+import { registerCampaignPauseRoutes } from "./campaign-pause.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
 import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
+import { registerSpellPackRoutes } from "./spell-pack-routes.js";
+import { registerSpellAssignmentRoutes } from "./spell-assignment-routes.js";
+import { registerSpellProjectionRoutes } from "./spell-projection-routes.js";
 import {
   canPostToStream,
   createOrGetDirectThread,
@@ -412,17 +424,39 @@ function formatResourceValue(value: Resources[string] | undefined) {
     : `${value.current}/${value.maximum}`;
 }
 
-function formatResourceChanges(before: Resources, after: Resources) {
+/**
+ * UIX-476 — имя ресурса принадлежит раскладке кампании, а не ключу JSON.
+ * Строка могла быть удалена уже после создания ресурса, поэтому отсутствие
+ * подписи штатно: formatter ниже оставляет сам ключ вместо пустого имени.
+ */
+function resourceLabelsFromLayout(
+  layout: ReturnType<typeof resolveStatLayout>,
+): ReadonlyMap<string, string> {
+  return new Map(
+    layout.flatMap((group) =>
+      group.rows
+        .filter((row) => row.source === "RESOURCE")
+        .map((row) => [row.key, row.label] as const),
+    ),
+  );
+}
+
+function formatResourceChanges(
+  before: Resources,
+  after: Resources,
+  labels: ReadonlyMap<string, string>,
+) {
   const keys = [
     ...new Set([...Object.keys(before), ...Object.keys(after)]),
   ].sort();
   const changes = keys
     .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
     .map((key) => {
+      const label = labels.get(key) ?? key;
       if (!before[key])
-        return `${key}: добавлен ${formatResourceValue(after[key])}`;
-      if (!after[key]) return `${key}: удалён`;
-      return `${key}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
+        return `${label}: добавлен ${formatResourceValue(after[key])}`;
+      if (!after[key]) return `${label}: удалён`;
+      return `${label}: ${formatResourceValue(before[key])} → ${formatResourceValue(after[key])}`;
     });
   return changes.length > 0 ? `ресурсы: ${changes.join(", ")}` : "";
 }
@@ -832,8 +866,14 @@ export function registerRoutes(
   registerEncounterRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
+  registerCampaignPauseRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
   registerWorldContentRoutes(app, db);
   registerWorldContentInstanceRoutes(app, db);
+  registerSpellPackRoutes(app, db);
+  registerSpellAssignmentRoutes(app, db);
+  registerSpellProjectionRoutes(app, db);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
@@ -2934,12 +2974,36 @@ export function registerRoutes(
     if (priorAction) {
       if (priorAction.entityType === "token" && priorAction.entityId) {
         const [priorPlacement] = await db
-          .select()
+          .select({ token: tokens })
           .from(tokens)
-          .where(eq(tokens.id, priorAction.entityId))
+          .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+          .innerJoin(
+            tokenDefinitions,
+            eq(tokens.definitionId, tokenDefinitions.id),
+          )
+          .where(
+            and(
+              eq(tokens.id, priorAction.entityId),
+              eq(tokens.definitionId, id),
+              eq(scenes.campaignId, auth.campaignId),
+              eq(tokenDefinitions.campaignId, auth.campaignId),
+            ),
+          )
           .limit(1);
-        if (priorPlacement) return reply.code(200).send(priorPlacement);
+        if (priorPlacement) return reply.code(200).send(priorPlacement.token);
       }
+      const [definition] = await db
+        .select({ id: tokenDefinitions.id })
+        .from(tokenDefinitions)
+        .where(
+          and(
+            eq(tokenDefinitions.id, id),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!definition)
+        return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
       return reply.code(200).send({ duplicate: true });
     }
     const [campaign] = await db
@@ -4426,32 +4490,67 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    const historyColumns = {
+      sequence: actionJournal.sequence,
+      actorMembershipId: actionJournal.actorMembershipId,
+      type: actionJournal.type,
+      targetType: actionJournal.targetType,
+      targetId: actionJournal.targetId,
+      status: actionJournal.status,
+      createdAt: actionJournal.createdAt,
+    };
+    const visibleHistory = and(
+      eq(actionJournal.campaignId, auth.campaignId),
+      eq(actionJournal.sceneId, scene.id),
+      auth.role === "GM"
+        ? undefined
+        : and(
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.scope, "PUBLIC"),
+          ),
+    );
     const rows = await db
-      .select({
-        sequence: actionJournal.sequence,
-        actorMembershipId: actionJournal.actorMembershipId,
-        type: actionJournal.type,
-        targetType: actionJournal.targetType,
-        targetId: actionJournal.targetId,
-        status: actionJournal.status,
-        createdAt: actionJournal.createdAt,
-      })
+      .select(historyColumns)
+      .from(actionJournal)
+      .where(visibleHistory)
+      // UIX-503: это не лента создания записей, а проекция текущего стека
+      // Undo/Redo. Команды ниже выбирают кандидата по transitionSequence;
+      // если здесь сортировать по исходному sequence, после двух Undo клиент
+      // назовёт одно действие, а сервер повторит другое.
+      .orderBy(desc(actionJournal.transitionSequence))
+      .limit(100);
+    const candidates = await db
+      .selectDistinctOn([actionJournal.status], historyColumns)
       .from(actionJournal)
       .where(
         and(
-          eq(actionJournal.campaignId, auth.campaignId),
-          eq(actionJournal.sceneId, scene.id),
-          auth.role === "GM"
-            ? undefined
-            : and(
-                eq(actionJournal.actorMembershipId, auth.membershipId),
-                eq(actionJournal.scope, "PUBLIC"),
-              ),
+          visibleHistory,
+          inArray(actionJournal.status, ["APPLIED", "UNDONE"]),
         ),
       )
-      .orderBy(desc(actionJournal.sequence))
-      .limit(100);
-    return rows;
+      .orderBy(actionJournal.status, desc(actionJournal.transitionSequence));
+    const nextDirections = new Map(
+      candidates.map((candidate) => [
+        candidate.sequence,
+        candidate.status === "APPLIED" ? ("undo" as const) : ("redo" as const),
+      ]),
+    );
+    const recentSequences = new Set(rows.map((row) => row.sequence));
+    // После ста переходов кандидат противоположного статуса может оказаться за
+    // пределами обычной страницы. Добавляем его отдельно и маркируем, чтобы UI
+    // по-прежнему обещал ровно ту команду, которую выберет POST ниже.
+    return [
+      ...rows.map((row) => ({
+        ...row,
+        nextDirection: nextDirections.get(row.sequence) ?? null,
+      })),
+      ...candidates
+        .filter((candidate) => !recentSequences.has(candidate.sequence))
+        .map((candidate) => ({
+          ...candidate,
+          nextDirection: nextDirections.get(candidate.sequence) ?? null,
+        })),
+    ];
   });
 
   for (const direction of ["undo", "redo"] as const) {
@@ -6742,15 +6841,73 @@ export function registerRoutes(
       return reply
         .code(409)
         .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    const resetsClock = body.command === "RESET_CLOCK";
+    const legacyBattleCommand =
+      body.command === "START_BATTLE" || body.command === "END_BATTLE";
+    const [activeEncounter] =
+      resetsClock || legacyBattleCommand
+        ? await db
+            .select({ id: encounters.id })
+            .from(encounters)
+            .where(
+              and(
+                eq(encounters.campaignId, auth.campaignId),
+                eq(encounters.status, "ACTIVE"),
+              ),
+            )
+            .limit(1)
+        : [];
+    if (legacyBattleCommand && activeEncounter)
+      return reply.code(409).send({ error: "ENCOUNTER_ACTIVE" });
+    if (resetsClock) {
+      if (current.battleActive || activeEncounter)
+        return reply.code(409).send({ error: "BATTLE_ACTIVE" });
+      const anchorsNeedReset = await campaignRechargeAnchorsNeedReset(
+        db,
+        auth.campaignId,
+      );
+      if (
+        current.day === 1 &&
+        current.battleCounter === 0 &&
+        current.initiative.length === 0 &&
+        !anchorsNeedReset
+      )
+        return reply.code(400).send({ error: "CLOCK_ALREADY_RESET" });
+    }
     if (body.command === "START_BATTLE" && current.battleActive)
       return reply.code(409).send({ error: "BATTLE_ALREADY_ACTIVE" });
     if (body.command === "END_BATTLE" && !current.battleActive)
       return reply.code(409).send({ error: "BATTLE_NOT_ACTIVE" });
     const advancesDay =
       body.command === "ADVANCE_DAY" || body.command === "LONG_REST";
-    const nextDay = current.day + (advancesDay ? 1 : 0);
-    const nextBattle =
-      current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
+    const nextDay = resetsClock ? 1 : current.day + (advancesDay ? 1 : 0);
+    const nextBattle = resetsClock
+      ? 0
+      : current.battleCounter + (body.command === "START_BATTLE" ? 1 : 0);
+    /**
+     * UIX-466 п. 3 — начало боя собирает состав по зоне.
+     *
+     * Снимок, а не живой состав: вошедший в рамку позже не появляется в очереди
+     * сам, вышедший из неё не исчезает. Живой пересчёт означал бы, что случайно
+     * задетая мышью фигура меняет порядок ходов посреди хода. Подтянуть
+     * опоздавших мастер может отдельным действием.
+     *
+     * Зона не задана — начало боя работает как раньше: состав собирается рамкой
+     * выделения. Отказывать здесь нельзя, иначе бой стал бы невозможен, пока
+     * поле не обведено.
+     */
+    const recruited =
+      body.command === "START_BATTLE" && current.battleZone
+        ? await recruitFromBattleZone(
+            db,
+            auth.campaignId,
+            current.battleZone,
+            current.initiative.map((participant) => ({
+              ...participant,
+              initiative: null,
+            })),
+          )
+        : null;
     const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
     let result;
     try {
@@ -6759,8 +6916,9 @@ export function registerRoutes(
           .update(campaigns)
           .set({
             day: nextDay,
-            battleActive:
-              body.command === "START_BATTLE"
+            battleActive: resetsClock
+              ? false
+              : body.command === "START_BATTLE"
                 ? true
                 : body.command === "END_BATTLE"
                   ? false
@@ -6780,12 +6938,14 @@ export function registerRoutes(
              * ушедшие, и следующий бой начинался с вычёркивания прошлого. Состав
              * собирается заново — рамкой на карте это несколько секунд.
              */
-            initiative:
-              body.command === "START_BATTLE"
-                ? current.initiative.map((participant) => ({
+            initiative: resetsClock
+              ? []
+              : body.command === "START_BATTLE"
+                ? (recruited ??
+                  current.initiative.map((participant) => ({
                     ...participant,
                     initiative: null,
-                  }))
+                  })))
                 : body.command === "END_BATTLE"
                   ? []
                   : current.initiative,
@@ -6800,55 +6960,22 @@ export function registerRoutes(
           )
           .returning();
         if (!updated) throw new Error("CAMPAIGN_CONFLICT");
-        const entryRows = await tx
-          .select({ entry: characterCatalogEntries })
-          .from(characterCatalogEntries)
-          .innerJoin(
-            characters,
-            eq(characterCatalogEntries.characterId, characters.id),
-          )
-          .where(eq(characters.campaignId, auth.campaignId));
-        let recharged = 0;
-        for (const { entry } of entryRows) {
-          const parsed = entryDataSchema.safeParse(
-            normalizeLegacyEntryData(entry.data),
-          );
-          if (!parsed.success || !parsed.data.uses) continue;
-          const uses = parsed.data.uses;
-          const due =
-            (advancesDay && uses.recharge === "DAY") ||
-            (body.command === "END_BATTLE" && uses.recharge === "BATTLE") ||
-            (advancesDay &&
-              uses.recharge === "WEEK" &&
-              nextDay - (uses.lastRechargeDay ?? 1) >= 7);
-          if (!due) continue;
-          const nextUses = {
-            ...uses,
-            current: uses.max,
-            ...(uses.recharge === "WEEK" || uses.recharge === "DAY"
-              ? { lastRechargeDay: nextDay }
-              : {}),
-            ...(uses.recharge === "BATTLE"
-              ? { lastBattleCounter: nextBattle }
-              : {}),
-          };
-          const [rechargedEntry] = await tx
-            .update(characterCatalogEntries)
-            .set({
-              data: { ...parsed.data, uses: nextUses },
-              revision: entry.revision + 1,
-              updatedAt: new Date(),
+        const rechargeTrigger =
+          body.command === "ADVANCE_DAY" ||
+          body.command === "LONG_REST" ||
+          body.command === "END_BATTLE"
+            ? body.command
+            : null;
+        const recharged = rechargeTrigger
+          ? await rechargeCampaignCatalogEntries(tx, auth.campaignId, {
+              trigger: rechargeTrigger,
+              day: nextDay,
+              battleCounter: nextBattle,
             })
-            .where(
-              and(
-                eq(characterCatalogEntries.id, entry.id),
-                eq(characterCatalogEntries.revision, entry.revision),
-              ),
-            )
-            .returning({ id: characterCatalogEntries.id });
-          if (!rechargedEntry) throw new Error("ENTRY_CONFLICT");
-          recharged++;
-        }
+          : 0;
+        const rebasedEntries = resetsClock
+          ? await resetCampaignRechargeAnchors(tx, auth.campaignId)
+          : 0;
         let restoredCharacters = 0;
         if (body.command === "LONG_REST") {
           const characterRows = await tx
@@ -6885,13 +7012,15 @@ export function registerRoutes(
           }
         }
         const label =
-          body.command === "LONG_REST"
-            ? "Длинный отдых завершён"
-            : body.command === "ADVANCE_DAY"
-              ? `День кампании: ${nextDay}`
-              : body.command === "START_BATTLE"
-                ? `Бой #${nextBattle} начат`
-                : `Бой #${current.battleCounter} завершён`;
+          body.command === "RESET_CLOCK"
+            ? "Время кампании сброшено: день 1, боёв 0"
+            : body.command === "LONG_REST"
+              ? "Длинный отдых завершён"
+              : body.command === "ADVANCE_DAY"
+                ? `День кампании: ${nextDay}`
+                : body.command === "START_BATTLE"
+                  ? `Бой #${nextBattle} начат`
+                  : `Бой #${current.battleCounter} завершён`;
         const [message] = await tx
           .insert(chatMessages)
           .values({
@@ -6916,9 +7045,12 @@ export function registerRoutes(
           entityRevision: updated.revision,
           payload: {
             command: body.command,
+            previousDay: current.day,
+            previousBattleCounter: current.battleCounter,
             day: nextDay,
             battleCounter: nextBattle,
             recharged,
+            rebasedEntries,
             restoredCharacters,
           },
         });
@@ -7148,14 +7280,18 @@ export function registerRoutes(
     /**
      * UIX-466: порядок — производная от введённых значений, а не отдельное
      * намерение. Раньше его собирали руками, а сортировка была кнопкой; теперь
-     * ручной перестановки нет вовсе, и очередь пересобирается после каждой
-     * правки.
+     * очередь пересобирается после каждой правки.
+     *
+     * Исключение — строки, закреплённые мастером (`pinned`): они держат своё
+     * место, остальные сортируются вокруг них. Закрепление приезжает в составе
+     * очереди, поэтому отдельной операции «переставить» нет — есть присланный
+     * порядок, который сервер обязан воспроизвести ровно там, где его закрепили.
      *
      * Сортировка живёт здесь, а не на клиенте: значения вносят и мастер, и
      * игрок, и порядок обязан получиться один и тот же у всех — независимо от
      * того, чей клиент прислал правку.
      */
-    const ordered = sortByInitiative(body.participants);
+    const ordered = orderInitiative(body.participants);
     const updated = await db.transaction(async (tx) => {
       const [next] = await tx
         .update(campaigns)
@@ -7256,7 +7392,7 @@ export function registerRoutes(
         return reply.code(403).send({ error: "NOT_YOUR_PARTICIPANT" });
     }
 
-    const ordered = sortByInitiative(
+    const ordered = orderInitiative(
       roster.map((row) =>
         row.id === body.participantId
           ? { ...row, initiative: body.initiative }
@@ -7295,6 +7431,162 @@ export function registerRoutes(
       return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
     return updatedSelf;
+  });
+
+  /**
+   * UIX-466 п. 4 — мастер обводит поле боя.
+   *
+   * Зона живёт отдельно от очереди и переживает бой: `END_BATTLE` очищает
+   * состав, но не рамку. На той же карте следующий бой начинается с уже
+   * обведённым полем.
+   *
+   * Сцена в теле не принимается на веру — она обязана существовать и
+   * принадлежать этой кампании, иначе зона указывала бы на чужую карту, а
+   * пополнение состава по ней молча не находило бы никого.
+   */
+  app.put("/api/campaign/battle-zone", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    // Поле боя обводит мастер. Игроку эта ручка не нужна и опасна: зоной
+    // задаётся, кто вообще участвует в бою.
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = setBattleZoneSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    if (body.zone) {
+      const [scene] = await db
+        .select({ id: scenes.id })
+        .from(scenes)
+        .where(
+          and(
+            eq(scenes.id, body.zone.sceneId),
+            eq(scenes.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    }
+    const updatedZone = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(campaigns)
+        .set({
+          battleZone: body.zone,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.battle_zone.updated",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: next.revision,
+        payload: { cleared: body.zone === null },
+      });
+      return next;
+    });
+    if (!updatedZone)
+      return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updatedZone;
+  });
+
+  /**
+   * UIX-466 п. 3 — пополнить очередь теми, кто сейчас в зоне.
+   *
+   * **Добавляет, но не выбрасывает.** Вышедший из зоны остаётся в бою: он мог
+   * отступить, а не выйти из боя, и стирать его строку вместе с уже внесённым
+   * броском значило бы наказывать за отступление. Убирает участников мастер
+   * сам — крестиком в строке.
+   *
+   * Отдельная операция, а не пересчёт на каждое движение токена: живой состав
+   * означал бы, что случайно задетая мышью фигура меняет очередь посреди хода.
+   */
+  app.post("/api/campaign/initiative/from-zone", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const body = revisionCommandSchema.parse(request.body);
+    const duplicate = await findAction(db, auth.campaignId, body.actionId);
+    if (duplicate) return reply.code(200).send({ duplicate: true });
+    const [current] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    if (!current) return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+    if (current.revision !== body.revision)
+      return reply
+        .code(409)
+        .send({ error: "CAMPAIGN_CONFLICT", revision: current.revision });
+    if (!current.battleZone)
+      return reply.code(409).send({ error: "BATTLE_ZONE_NOT_SET" });
+    const roster = await recruitFromBattleZone(
+      db,
+      auth.campaignId,
+      current.battleZone,
+      current.initiative,
+    );
+    // Сцена зоны исчезла между её установкой и этим вызовом. Пустой состав
+    // выглядел бы как «в зоне никого», и мастер начал бы бой без противников.
+    if (!roster)
+      return reply.code(409).send({ error: "BATTLE_ZONE_SCENE_MISSING" });
+    const updatedRoster = await db.transaction(async (tx) => {
+      const [next] = await tx
+        .update(campaigns)
+        .set({
+          initiative: roster,
+          revision: current.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(campaigns.id, auth.campaignId),
+            eq(campaigns.revision, current.revision),
+          ),
+        )
+        .returning();
+      if (!next) return null;
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "campaign.initiative.updated",
+        entityType: "campaign",
+        entityId: auth.campaignId,
+        entityRevision: next.revision,
+        payload: {
+          participants: roster.length,
+          added: roster.length - current.initiative.length,
+        },
+      });
+      return next;
+    });
+    if (!updatedRoster)
+      return reply.code(409).send({ error: "CAMPAIGN_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return updatedRoster;
   });
 
   app.patch("/api/characters/:id/counters", async (request, reply) => {
@@ -7365,6 +7657,17 @@ export function registerRoutes(
           normalizeLegacyStats(character!.stats),
         )
       : body.resources;
+    let resourceLabels: ReadonlyMap<string, string> = new Map();
+    if (nextResources) {
+      const [campaign] = await db
+        .select({ statLayout: campaigns.statLayout })
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      resourceLabels = resourceLabelsFromLayout(
+        resolveStatLayout(campaign?.statLayout),
+      );
+    }
     const changes = [
       body.wallet
         ? formatWalletChanges(
@@ -7376,6 +7679,7 @@ export function registerRoutes(
         ? formatResourceChanges(
             (character!.resources ?? {}) as Resources,
             nextResources,
+            resourceLabels,
           )
         : "",
     ]
@@ -8300,7 +8604,26 @@ export function registerRoutes(
     } catch (error) {
       if (errorMessage(error) === "INVALID_RANGE")
         return reply.code(416).send({ error: "INVALID_RANGE" });
-      return reply.code(404).send({ error: "ASSET_CONTENT_NOT_FOUND" });
+      // UIX-474: строка в `assets` есть, файла по ней нет. Клиенту это по-
+      // прежнему 404 — показать нечего, — но в журнале сервера случай обязан
+      // быть отличим от «такого ассета нет». Именно из-за неразличимости
+      // вопрос «битая запись или потерянный файл» пришлось разбирать в
+      // браузере: снаружи оба ответа выглядели одинаково.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        request.log.warn(
+          { assetId: asset.id, storageKey: asset.storageKey },
+          "asset.content_missing",
+        );
+        return reply.code(404).send({ error: "ASSET_CONTENT_NOT_FOUND" });
+      }
+      // Отказ прав, каталог вместо файла, сбой диска — это не «нет файла».
+      // Раньше всё это превращалось в 404, и авария хранилища выглядела
+      // потерянным ассетом: чинили бы не то.
+      request.log.error(
+        { assetId: asset.id, storageKey: asset.storageKey, error },
+        "asset.content_unreadable",
+      );
+      return reply.code(500).send({ error: "ASSET_CONTENT_UNREADABLE" });
     }
   });
 }

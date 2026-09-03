@@ -1,4 +1,5 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { type Locator } from "@playwright/test";
+import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { starterStatLayout } from "@arken/system";
 import {
@@ -6,16 +7,19 @@ import {
   selectViewedScene,
   viewedScenePicker,
 } from "./workspace-nav-helper";
+import { WALLET_ADJUST_DELAY_MS } from "../../apps/web/src/wallet";
 
 const snapshot: GameSnapshot = {
   campaign: {
     id: "b4c34840-cb11-4a07-884d-680ae85c48db",
     name: "Первая экспедиция",
     day: 1,
+    paused: false,
     battleActive: false,
     battleCounter: 0,
     statLayout: starterStatLayout,
     initiative: [],
+    battleZone: null,
     revision: 0,
   },
   me: {
@@ -288,6 +292,50 @@ test("concept shell keeps the map primary and exposes core tools", async ({
     path: "test-results/concept-shell.png",
     fullPage: true,
   });
+});
+
+test("UIX-516 GM sees protected regen deletes before and after reload", async ({
+  page,
+}) => {
+  const repairedSnapshot = structuredClone(snapshot);
+  repairedSnapshot.characters[0]!.stats = {
+    ...repairedSnapshot.characters[0]!.stats,
+    enduranceRegen: 7,
+    manaRegen: 4,
+  };
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(repairedSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+
+  const expectProtectedControls = async () => {
+    await openWorkspaceSection(page, "Персонажи");
+    for (const label of ["Реген Выносливости", "Реген Маны"]) {
+      const protectedDelete = page.getByRole("button", {
+        name: `Нельзя удалить «${label}»: установите значение 0, чтобы отключить восстановление`,
+      });
+      await expect(protectedDelete).toBeVisible();
+      await expect(protectedDelete).toBeDisabled();
+      await expect(protectedDelete).toHaveAttribute(
+        "title",
+        "Системную строку нельзя удалить. Чтобы отключить восстановление, установите значение 0.",
+      );
+    }
+    await expect(
+      page.getByRole("button", { name: "Удалить «Сила»" }),
+    ).toBeEnabled();
+  };
+
+  await page.goto("/");
+  await expectProtectedControls();
+  await page.reload();
+  await expectProtectedControls();
 });
 
 test("GM compact chrome keeps actions discoverable at release width", async ({
@@ -672,9 +720,29 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
   await page.goto("/");
+  /**
+   * UIX-561: узла дожидаются до снимка, а не после.
+   *
+   * Раньше снимок брали сразу после `goto`. Если Konva не успел
+   * смонтироваться — на загруженном раннере это обычное дело, — в переменную
+   * попадал `null`, и сравнение `null === <canvas>` в конце теста не становилось
+   * истинным **никогда**. Проверка при этом выглядела как «не дождались»: она
+   * падала по сроку, хотя ждать было нечего, значение уже снято.
+   *
+   * Отсюда и то, почему UIX-530 не помог. Там сроку подняли потолок с пяти
+   * секунд до пятнадцати, приняв симптом за причину; пятнадцати хватило на три
+   * дня, после чего тест снова начал красить чужие PR. Срок здесь вообще ни при
+   * чём: проверка сверяет тождество узла, а не скорость.
+   */
+  await page.locator("canvas").first().waitFor();
   await page.evaluate(() => {
+    const canvas = document.querySelector("canvas");
+    // Страховка от самой себя: пустой снимок сделал бы проверку в конце
+    // невыполнимой при любом поведении продукта, то есть превратил бы её из
+    // проверки в генератор красных прогонов.
+    if (!canvas) throw new Error("Канвас не появился до снятия снимка");
     (window as unknown as { __uix229Canvas: Element | null }).__uix229Canvas =
-      document.querySelector("canvas");
+      canvas;
   });
 
   await openWorkspaceSection(page, "Персонажи");
@@ -759,14 +827,131 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
   );
   await expect(page.locator("canvas").first()).toBeVisible();
   await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (window as unknown as { __uix229Canvas: Element | null })
-            .__uix229Canvas === document.querySelector("canvas"),
-      ),
+    /**
+     * UIX-530: пятнадцать секунд именно здесь, а не в конфиге.
+     *
+     * Проверка ловит настоящий и дорогой дефект — пересоздание `<canvas>` при
+     * каждом закрытии рабочей области рвёт состояние сцены Konva. Но срок ей
+     * достался чужой: пять секунд по умолчанию — тонкий запас на
+     * перемонтирование сцены, и на загруженном раннере он кончался. Тест падал
+     * и проходил на одном и том же поведении продукта, красил чужие PR и
+     * съедал разбор по кругу.
+     *
+     * Запас поднят точечно: общий потолок в конфиге спрятал бы медленные места
+     * там, где медленно — это и есть дефект. Проверяется по-прежнему
+     * переиспользование узла, а не скорость, поэтому больший срок ничего не
+     * ослабляет: пересозданный canvas не станет прежним ни за пятнадцать
+     * секунд, ни за пятьдесят.
+     */
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __uix229Canvas: Element | null })
+              .__uix229Canvas === document.querySelector("canvas"),
+        ),
+      { timeout: 15_000 },
     )
     .toBe(true);
+});
+
+test("GM manages one campaign clock surface and confirms a reset", async ({
+  page,
+}) => {
+  let currentSnapshot = structuredClone(snapshot);
+  currentSnapshot.characters.push({
+    ...currentSnapshot.characters[0]!,
+    id: "e49b79b7-4ddf-49fe-9e7d-4ee03806c116",
+    name: "Второй персонаж",
+  });
+  currentSnapshot.campaign = {
+    ...currentSnapshot.campaign,
+    day: 7,
+    battleCounter: 3,
+    revision: 12,
+  };
+  const clockRequests: Array<{
+    actionId: string;
+    command: string;
+    revision: number;
+  }> = [];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(currentSnapshot),
+    }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/campaign/clock", async (route) => {
+    const body = route.request().postDataJSON() as {
+      actionId: string;
+      command: string;
+      revision: number;
+    };
+    clockRequests.push(body);
+    currentSnapshot = {
+      ...currentSnapshot,
+      campaign: {
+        ...currentSnapshot.campaign,
+        day: body.command === "RESET_CLOCK" ? 1 : currentSnapshot.campaign.day,
+        battleCounter:
+          body.command === "RESET_CLOCK"
+            ? 0
+            : currentSnapshot.campaign.battleCounter,
+        revision: body.revision + 1,
+      },
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(currentSnapshot.campaign),
+    });
+  });
+  await page.goto("/");
+
+  await openWorkspaceSection(page, "Персонажи");
+  const workspace = page.locator(".character-workspace");
+  await expect(workspace).toBeVisible();
+  const clockTrigger = workspace.getByRole("button", {
+    name: "День 7 · боёв: 3",
+  });
+  await expect(clockTrigger).toHaveCount(1);
+  await clockTrigger.click();
+
+  const clockDialog = page.getByRole("dialog", { name: "Время кампании" });
+  await expect(clockDialog).toBeVisible();
+  await expect(
+    clockDialog.getByRole("button", { name: "Следующий день" }),
+  ).toHaveCount(1);
+  await expect(
+    clockDialog.getByRole("button", { name: "Длинный отдых" }),
+  ).toHaveCount(1);
+  await expect(clockDialog.getByText("Начать бой")).toHaveCount(0);
+  await expect(clockDialog.getByText("Завершить бой")).toHaveCount(0);
+
+  await clockDialog.getByRole("button", { name: "Сбросить время" }).click();
+  expect(clockRequests).toHaveLength(0);
+  const resetDialog = page.getByRole("dialog", {
+    name: "Сбросить время кампании?",
+  });
+  await expect(resetDialog).toBeVisible();
+  await resetDialog.getByRole("button", { name: "Подтвердить сброс" }).click();
+
+  await expect.poll(() => clockRequests).toHaveLength(1);
+  expect(clockRequests[0]).toMatchObject({
+    command: "RESET_CLOCK",
+    revision: 12,
+  });
+  expect(clockRequests[0]?.actionId).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+  await expect(clockDialog.getByText("День 1")).toBeVisible();
+  await expect(
+    clockDialog.getByRole("button", { name: "Сбросить время" }),
+  ).toBeDisabled();
 });
 
 test("GM controls music from the top bar and opens the library", async ({
@@ -2160,7 +2345,7 @@ test("character card submits normal, advantage and disadvantage rolls for GM and
   });
 });
 
-test("wallet queues rapid mutations and ignores unchanged blur", async ({
+test("wallet batches rapid mutations and ignores unchanged blur", async ({
   page,
 }) => {
   const playerSnapshot = structuredClone(snapshot);
@@ -2182,6 +2367,7 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   const submittedGold: number[] = [];
   const submittedSp: number[] = [];
   const submittedRevisions: number[] = [];
+  let rejectNextCounter = false;
   let releaseFirstResponse!: () => void;
   const firstResponseGate = new Promise<void>((resolve) => {
     releaseFirstResponse = resolve;
@@ -2203,6 +2389,15 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
     submittedGold.push(payload.wallet.gold);
     submittedSp.push(payload.wallet.sp);
     submittedRevisions.push(payload.revision);
+    if (rejectNextCounter) {
+      rejectNextCounter = false;
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "COUNTER_WRITE_FAILED" }),
+      });
+      return;
+    }
     if (submittedGold.length === 1) await firstResponseGate;
     playerSnapshot.characters[0]!.wallet = payload.wallet;
     playerSnapshot.characters[0]!.revision += 1;
@@ -2222,6 +2417,9 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
       body: JSON.stringify(response),
     });
   });
+  await page.clock.install({
+    time: new Date("2026-08-29T12:00:00.000Z"),
+  });
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const goldRow = page
@@ -2233,30 +2431,90 @@ test("wallet queues rapid mutations and ignores unchanged blur", async ({
   await page.locator(".character-workspace__header h2").click();
   expect(submittedGold).toEqual([]);
 
+  await page.clock.pauseAt(new Date("2026-08-29T12:01:00.000Z"));
+
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
   await goldRow.locator("button").last().click();
-  await expect.poll(() => submittedGold).toEqual([1]);
-  await expect(input).toHaveValue("3");
-  releaseFirstResponse();
-  await input.focus();
-  await page.locator(".character-workspace__header h2").click();
-  await expect.poll(() => submittedGold).toEqual([1, 2, 3]);
-  expect(submittedRevisions).toEqual([1, 2, 3]);
   await expect(input).toHaveValue("3");
 
-  await input.fill("5");
+  // The regression boundary: until the interaction pause ends, not even the
+  // first queued PATCH may reach the server.
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS - 1);
+  expect(submittedGold).toEqual([]);
+  await page.clock.runFor(1);
+  await expect.poll(() => submittedGold).toEqual([3]);
+
+  // A second batch remains optimistic while App serializes it behind the
+  // deliberately delayed first response.
   await goldRow.locator("button").last().click();
-  await expect.poll(() => submittedGold).toEqual([1, 2, 3, 6]);
-  await expect(input).toHaveValue("6");
+  await goldRow.locator("button").last().click();
+  await expect(input).toHaveValue("5");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
+  expect(submittedGold).toEqual([3]);
+
+  // An absolute input made while the batches are still queued must be kept as
+  // a compensating SET, even when it equals the older rendered snapshot.
+  await input.fill("0");
+  await page.locator(".character-workspace__header h2").click();
+  await expect(input).toHaveValue("0");
+  expect(submittedGold).toEqual([3]);
+  releaseFirstResponse();
+  await expect.poll(() => submittedGold).toEqual([3, 5, 0]);
+  expect(submittedRevisions).toEqual([1, 2, 3]);
+  await expect(input).toHaveValue("0");
+
+  // An unfinished manual value plus a click is one absolute target, not a
+  // retryable delta applied twice after a conflict.
+  await input.fill("0");
+  await goldRow.locator("button").last().click();
+  await expect(input).toHaveValue("1");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
+  await expect.poll(() => submittedGold).toEqual([3, 5, 0, 1]);
+
+  // Manual typing absorbs an active optimistic batch without letting the
+  // released pending reservation restore the older canonical snapshot.
+  await goldRow.locator("button").last().click();
+  await expect(input).toHaveValue("2");
+  await input.fill("9");
+  expect(submittedGold).toEqual([3, 5, 0, 1]);
+  await page.locator(".character-workspace__header h2").click();
+  await expect.poll(() => submittedGold).toEqual([3, 5, 0, 1, 9]);
+  await expect(input).toHaveValue("9");
+
+  // A relative series that returns to its base is a no-op.
+  await goldRow.locator("button").last().click();
+  await goldRow.locator("button").first().click();
+  await expect(input).toHaveValue("9");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
+  expect(submittedGold).toEqual([3, 5, 0, 1, 9]);
 
   const spRow = page
     .locator(".character-workspace .inline-fields")
     .filter({ hasText: /^sp/ });
-  for (let index = 0; index < 12; index += 1)
+  const spRequestsBefore = submittedSp.length;
+  for (let index = 0; index < 25; index += 1)
     await spRow.locator("button").last().click();
-  await expect.poll(() => submittedSp.at(-1)).toBe(12);
-  await expect(spRow.locator('input[type="number"]')).toHaveValue("12");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS - 1);
+  expect(submittedSp.slice(spRequestsBefore)).toEqual([]);
+  await page.clock.runFor(1);
+  await expect.poll(() => submittedSp.at(-1)).toBe(25);
+  expect(submittedSp.slice(spRequestsBefore)).toEqual([25]);
+  await expect(spRow.locator('input[type="number"]')).toHaveValue("25");
+
+  // A final server refusal restores the latest canonical wallet instead of
+  // leaving the optimistic click visible as if it had been accepted.
+  rejectNextCounter = true;
+  await goldRow.locator("button").last().click();
+  await expect(input).toHaveValue("10");
+  await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
+  await expect.poll(() => submittedGold.at(-1)).toBe(10);
+  await expect(input).toHaveValue("9");
+  await expect(
+    page
+      .locator(".character-workspace")
+      .getByText(/Не удалось сохранить кошелёк/),
+  ).toBeVisible();
   await expect(page.getByText("Интерфейс временно остановлен")).toHaveCount(0);
   expect(renderErrors.filter((error) => error.name === "TypeError")).toEqual(
     [],

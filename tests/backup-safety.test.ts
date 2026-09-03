@@ -96,7 +96,7 @@ describe("backup and restore safety", () => {
     expect(describeDatabaseCountCoverage(oldManifest)).toMatchObject({
       mode: "sampled",
       countedTables: 11,
-      knownPersistedTables: 51,
+      knownPersistedTables: 55,
     });
   });
 
@@ -577,8 +577,15 @@ it("keeps assets and GM membership outside the reset plan", () => {
     .join("\n");
   expect(sql).toContain("update assets set uploaded_by_membership_id");
   expect(sql).toContain("update campaigns set active_scene_id = null");
+  expect(sql).toContain("paused = false");
   expect(sql).not.toMatch(/delete from assets/);
   expect(sql).toContain("delete from player_access_grants");
+  expect(sql).toContain("delete from spell_packs where campaign_id = $1");
+  expect(sql).toContain(
+    "delete from character_spell_assignments where campaign_id = $1",
+  );
+  expect(sql).not.toContain("delete from character_spell_assignment_versions");
+  expect(sql).not.toContain("delete from spell_pack_versions");
   expect(sql).toContain(
     "delete from memberships where campaign_id = $1 and role = 'PLAYER'",
   );
@@ -593,7 +600,7 @@ it("executes the reset plan through one injected transaction", async () => {
     },
   };
   await executeGameplayReset(transaction, "campaign", "gm");
-  expect(calls).toHaveLength(18);
+  expect(calls).toHaveLength(20);
   expect(calls[0][0]).toMatch(/select id/);
   expect(calls[1][0]).toMatch(/update assets/);
   expect(calls.at(-1)[0]).toMatch(/delete from memberships/);

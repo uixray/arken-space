@@ -52,6 +52,7 @@ import { projectInitiative } from "./initiative.js";
 import { normalizeTokenConditions } from "./token-conditions.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
+import { normalizeSystemRegenStatRows } from "./stat-layout.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -84,8 +85,11 @@ const NO_SCENE = "00000000-0000-0000-0000-000000000000";
 
 export function resolveStatLayout(stored: unknown): StatLayout {
   const parsed = statLayoutSchema.safeParse(stored);
-  if (parsed.success && parsed.data.length > 0) return parsed.data;
-  return statLayoutSchema.parse(starterStatLayout);
+  const layout =
+    parsed.success && parsed.data.length > 0
+      ? parsed.data
+      : statLayoutSchema.parse(starterStatLayout);
+  return normalizeSystemRegenStatRows(layout);
 }
 
 /**
@@ -102,6 +106,7 @@ export function resolveStatLayout(stored: unknown): StatLayout {
  */
 export interface CampaignReadSet {
   campaignId: string;
+  campaignRows: Awaited<ReturnType<typeof loadCampaign>>;
   memberRows: Awaited<ReturnType<typeof loadMembers>>;
   characterRows: Awaited<ReturnType<typeof loadCharacters>>;
   characterControllerRows: Awaited<ReturnType<typeof loadCharacterControllers>>;
@@ -122,6 +127,9 @@ export interface CampaignReadSet {
    */
   audioTracks: Awaited<ReturnType<typeof normalizeAudioTrackDeadlines>>;
 }
+
+const loadCampaign = (db: Database, campaignId: string) =>
+  db.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1);
 
 const loadMembers = (db: Database, campaignId: string) =>
   db
@@ -224,6 +232,7 @@ export async function loadCampaignReadSet(
   campaignId: string,
 ): Promise<CampaignReadSet> {
   const [
+    campaignRows,
     memberRows,
     characterRows,
     characterControllerRows,
@@ -237,6 +246,7 @@ export async function loadCampaignReadSet(
     sequenceRows,
     audioTracks,
   ] = await Promise.all([
+    loadCampaign(db, campaignId),
     loadMembers(db, campaignId),
     loadCharacters(db, campaignId),
     loadCharacterControllers(db, campaignId),
@@ -252,6 +262,7 @@ export async function loadCampaignReadSet(
   ]);
   return {
     campaignId,
+    campaignRows,
     memberRows,
     characterRows,
     characterControllerRows,
@@ -294,11 +305,11 @@ export async function buildSnapshot(
   if (readSet && readSet.campaignId !== auth.campaignId)
     throw new Error("CAMPAIGN_READ_SET_MISMATCH");
 
-  const [campaign] = await db
-    .select()
-    .from(campaigns)
-    .where(eq(campaigns.id, auth.campaignId))
-    .limit(1);
+  // UIX-582 закрывает последний межсокетный разрыв в общем срезе UIX-409.
+  // Без строки кампании один broadcast мог бы прочитать паузу и ревизию в
+  // разные моменты для разных сокетов, сохранив согласованность остальных полей.
+  const shared = readSet ?? (await loadCampaignReadSet(db, auth.campaignId));
+  const [campaign] = shared.campaignRows;
   if (!campaign) throw new Error("Campaign not found");
 
   /**
@@ -335,7 +346,6 @@ export async function buildSnapshot(
    * Туман и рисунки в общий набор **не входят**: после UIX-408 их выборка
    * зависит от того, какую сцену рассматривает конкретный зритель.
    */
-  const shared = readSet ?? (await loadCampaignReadSet(db, auth.campaignId));
   const {
     memberRows,
     characterRows,
@@ -694,6 +704,7 @@ export async function buildSnapshot(
     campaign: {
       id: campaign.id,
       name: campaign.name,
+      paused: campaign.paused,
       day: campaign.day,
       battleActive: campaign.battleActive,
       battleCounter: campaign.battleCounter,
@@ -705,6 +716,14 @@ export async function buildSnapshot(
         initiativeBonusByToken,
         role: auth.role,
       }),
+      /**
+       * UIX-466 п. 4: зона боя — инструмент мастера, и уезжает только ему.
+       *
+       * Игроку она сказала бы, где мастер собирается драться, ещё до начала
+       * боя, и заодно очертила бы место засады на карте, где тумана нет. Это та
+       * же утечка намерения, что UIX-449 закрыл для позиций.
+       */
+      battleZone: auth.role === "GM" ? (campaign.battleZone ?? null) : null,
       revision: campaign.revision,
     },
     me: {

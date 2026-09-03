@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyWalletDelta,
   changeWalletValue,
   EMPTY_WALLET,
+  mergeWalletDelta,
   normalizeWallet,
   normalizeWalletValue,
+  walletDeltaIsEmpty,
 } from "./wallet.js";
 
 describe("wallet numeric input", () => {
@@ -31,5 +34,23 @@ describe("wallet numeric input", () => {
       copper: 0,
       sp: 0,
     });
+  });
+
+  it("accumulates and replays a multi-denomination relative decision", () => {
+    let delta = mergeWalletDelta({}, "gold", 3);
+    delta = mergeWalletDelta(delta, "silver", -2);
+    delta = mergeWalletDelta(delta, "gold", -1);
+
+    expect(delta).toEqual({ gold: 2, silver: -2 });
+    expect(
+      applyWalletDelta({ gold: 10, silver: 1, copper: 4, sp: 0 }, delta),
+    ).toEqual({ gold: 12, silver: 0, copper: 4, sp: 0 });
+  });
+
+  it("drops a click series that cancels itself", () => {
+    const added = mergeWalletDelta({}, "sp", 1);
+    const cancelled = mergeWalletDelta(added, "sp", -1);
+
+    expect(walletDeltaIsEmpty(cancelled)).toBe(true);
   });
 });

@@ -21,6 +21,12 @@
   --line-strong: var(--color-border-hover);
   --text: var(--color-text);
   --muted: var(--color-text-muted);
+  /* UIX-532: `--faint` (ink.300) даёт 3.41 к поверхности — ниже требуемых
+     4.5 для обычного текста. Токен и сам говорит о себе «не использовать для
+     того, что нужно прочитать», но использовался ровно для этого: названия
+     вкладок, заголовки групп инструментов, максимум ресурса. Всё это уехало на
+     `--muted` (6.65). Оставлен объявленным: у него есть законная роль в
+     нечитаемом декоре, а удаление токена — решение владельца палитры. */
   --faint: var(--color-text-faint);
   --accent: var(--color-accent);
   --accent-hover: var(--color-accent-hover);
@@ -251,7 +257,7 @@ code {
   display: none;
 }
 .workspace-nav__count {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.72rem;
 }
 .workspace-nav__menu {
@@ -1028,7 +1034,7 @@ code {
   box-shadow: inset 0 -2px var(--accent);
 }
 .tabs span {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.75rem;
 }
 .panel-scroll {
@@ -1053,14 +1059,14 @@ code {
 .eyebrow {
   display: block;
   margin-bottom: var(--space-xs);
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 .revision {
-  color: var(--faint);
+  color: var(--muted);
   font:
     0.72rem ui-monospace,
     monospace;
@@ -1091,8 +1097,14 @@ code {
    * them collide with the numeric input. The label now gets the flexible
    * share of the row and wraps; the input column only needs to fit a
    * 3-character value ("-20" through "20"), so it stays a small fixed
-   * track. */
-  grid-template-columns: minmax(0, 1fr) 3.75rem;
+   * track.
+   *
+   * UIX-489: ширина колонки поднята с 3.75rem. Замер показал, что в неё не
+   * помещалось не только «-20», но и «20»: на значение оставалось 23 px при
+   * нужных 38, и обрезалось всё, что длиннее одной цифры. Колонка считается от
+   * самого длинного допустимого значения (диапазон характеристики — от -20 до
+   * 20), а не от «на глаз кажется, что хватит». */
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
   align-items: center;
   border: 1px solid var(--line);
   background: var(--surface-2);
@@ -1111,11 +1123,28 @@ code {
    * otherwise fight the fixed 3.75rem grid track above. */
   width: 100%;
 }
-.stat-field input {
+/* UIX-489: селектор с классом контрола, а не просто `input`.
+
+   `.stat-field input` — это (0,1,1), а собственное правило uikit
+   `.g-text-input_size_m .g-text-input__control` — (0,2,0), и оно выигрывало.
+   Замер показал цену: вместо задуманных 1.15rem/700 значение рисовалось
+   13px/400, а разделительная черта между подписью и значением не рисовалась
+   вовсе (`border-left` оставался нулевым). То есть блок ниже был написан, но
+   почти целиком не применялся — из него доезжало только выравнивание, которого
+   uikit не трогает. */
+.stat-field input.g-text-input__control {
   min-width: 0;
+  /* Стиль рамки задан явно: uikit объявляет контролу `border: none`, а `none`
+     — это стиль. Одной ширины мало, при стиле `none` она считается нулевой, и
+     разделительная черта не рисовалась даже после победы в специфичности. */
+  border-style: solid;
   border-width: 0 0 0 1px;
   border-color: var(--line);
   border-radius: 0;
+  /* Отступы uikit съедали 16 px из 39 доступных — больше трети поля. Значение
+     здесь выровнено по центру и ни к чему не прижимается, так что отступы ему
+     не нужны вовсе. */
+  padding-inline: 2px;
   background: transparent;
   font-size: 1.15rem;
   font-weight: 700;
@@ -1161,7 +1190,7 @@ code {
 }
 .resource-counters__summary-values {
   overflow: hidden;
-  color: var(--faint);
+  color: var(--muted);
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1207,7 +1236,7 @@ code {
   text-align: center;
 }
 .resource-counters__maximum {
-  color: var(--faint);
+  color: var(--muted);
 }
 .stat-field__add {
   width: 100%;
@@ -1360,9 +1389,23 @@ code {
 .activity-feed > * {
   flex: 0 0 auto;
 }
+/* UIX-560: у ленты есть пол, ниже которого её не отдают соседям.
+
+   `flex: 1 1 0` означает «возьму остаток», а не «возьму своё»: базис ноль
+   ставит ленту последней в очереди раздачи высоты. Пока она готова отдать
+   всё, переполнения не возникает, и соседям незачем ужиматься — сначала свои
+   высоты забирают блок бросков, ресурсы, полоса журнала и поле ввода, а лента
+   получает то, что осталось. Замер на 1280×720: от колонки в 637 px ленте
+   доставалось 24 — одна строка на 1865 px содержимого.
+
+   Минимум переводит её из «остатка» в участника сжатия: не хватило места —
+   ужимается блок бросков, у которого внутренняя прокрутка уже есть и который
+   ради этого и получил `flex: 0 1 auto` в UIX-469. Здесь тот же довод
+   доводится до конца: сжиматься должно то, что умеет, а не то, что стоит
+   последним в списке. */
 .activity-feed > .message-list {
   flex: 1 1 0;
-  min-height: 0;
+  min-height: 160px;
 }
 /* UIX-469: блок бросков обязан ужиматься, когда колонке не хватает высоты.
    Жёстким он был по недосмотру — `flex: 0 0 auto` выше распространялся и на
@@ -1420,7 +1463,7 @@ code {
 }
 .activity-log-truncated-note {
   margin: 0;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.72rem;
 }
 .chat-date-divider {
@@ -1467,6 +1510,21 @@ code {
 .message header span {
   padding: 1px 4px;
   border: 1px solid var(--line);
+}
+/* UIX-501: автор строки и персонаж, за которого бросают, — разные сущности, и
+   выглядеть должны по-разному. Автор набран `strong` цветом текста; персонаж
+   остаётся приглушённым, но получает рамку, чтобы не сливаться со временем и
+   пометкой «мастеру» в той же строке.
+
+   Усечение обязательно: заголовок — flex-строка, и длинное имя без `min-width:
+   0` растолкало бы её, отобрав место у времени. В узкой панели это заметили бы
+   первым делом — именно из-за тесноты подпись убирали в UIX-467. Полное имя
+   остаётся в подсказке. */
+.message header .message-character {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .message p {
   line-height: 1.45;
@@ -1569,7 +1627,13 @@ code {
 }
 /* UIX-388: room for sticker + slash + send icon buttons stacked in the
    bottom-right corner of the textarea (see .chat-composer-actions below). */
-.chat-composer-input textarea {
+/* UIX-419: селектор обязан быть специфичнее, чем `.g-text-area_size_m
+   .g-text-area__control` из uikit — иначе отступ не применяется вовсе. Так и
+   было: место под значки не резервировалось, и на любой ширине панели текст
+   уходил под кнопку отправки. Правило выглядело работающим, потому что
+   `.chat-composer-input textarea` читается как более точное, а весит меньше
+   двух классов uikit. */
+.chat-composer-input textarea.g-text-area__control {
   padding-right: 108px;
 }
 .chat-composer-actions {
@@ -1619,7 +1683,7 @@ code {
 }
 .composer-hint {
   margin: 4px 0 0;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.7rem;
 }
 /* UIX-388: with the Send button + GM-only checkbox column gone, the
@@ -2116,7 +2180,7 @@ code {
   min-width: 0;
 }
 .music-state span {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.68rem;
   text-transform: uppercase;
 }
@@ -3886,7 +3950,7 @@ code {
    шестнадцати кнопок, где туман, метки и настройки идут вперемешку. */
 .toolbar-group__title {
   padding: 2px 8px 0;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -3926,6 +3990,12 @@ code {
 }
 .map-toolbar .map-tool[data-tool="COVER_POLYGON"]::before {
   content: "\2B21";
+}
+/* UIX-466: зона боя. Скрещённые мечи — единственный глиф на панели, говорящий
+   о бое, а не о геометрии: остальные инструменты рисуют, этот назначает, кто
+   дерётся. */
+.map-toolbar .map-tool[data-tool="BATTLE_ZONE"]::before {
+  content: "\2694";
 }
 .map-toolbar .map-tool[data-tool="ENCOUNTER_START"]::before {
   content: "\2694";
@@ -4139,7 +4209,7 @@ code {
   font-weight: 700;
 }
 .initiative-panel__summary-count {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.78rem;
   font-weight: 400;
 }
@@ -4192,6 +4262,15 @@ code {
 .initiative-panel__actions {
   display: flex;
   gap: 2px;
+}
+/* UIX-466: у игрока булавка — подпись, а не кнопка. Выравнивается по ряду
+   кнопок мастера, чтобы строки в обеих ролях читались одинаково. */
+.initiative-panel__pinned {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-xs);
+  opacity: 0.7;
+  cursor: default;
 }
 .initiative-panel__controls,
 .initiative-panel__add-row {
@@ -4854,4 +4933,24 @@ code {
     grid-template-columns: 1fr;
     gap: 4px;
   }
+}
+
+/* UIX-532: ссылка перехода к карте. Видна только под фокусом — она нужна тому,
+   кто идёт табом, и не должна занимать место у всех остальных. Прятать её
+   через `display: none` нельзя: спрятанное так не получает фокус вовсе, то
+   есть ссылка перестала бы существовать ровно для тех, ради кого сделана. */
+.skip-link {
+  position: absolute;
+  top: var(--space-xs);
+  left: var(--space-xs);
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-weight: 700;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
 }

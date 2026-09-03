@@ -17,6 +17,7 @@ import { ApiError, formatApiError } from "../api";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 import { ArkenDialog } from "../ui/ArkenDialog";
 import { isEditableEventTarget } from "../input-diagnostics";
+import { useRemoteFieldValue } from "../ui/remote-field-value";
 import { ImageUploadField } from "../ui/ImageUploadField";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
 import { AssetPicker } from "../ui/AssetPicker";
@@ -40,16 +41,31 @@ import { selectableCatalogEntries } from "./catalog-entry-selection";
 import {
   changeWalletValue,
   EMPTY_WALLET,
+  mergeWalletDelta,
   normalizeWallet,
   normalizeWalletValue,
+  WALLET_ADJUST_DELAY_MS,
+  walletDeltaIsEmpty,
+  type Wallet,
+  type WalletDelta,
 } from "../wallet";
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
+import { CampaignClockDialog } from "./CampaignClockDialog";
 
 // UIX-389/UIX-391: re-exported for backward compatibility — RollButton now
 // lives in its own module (./RollButton) so CatalogEntryPicker can import it
 // without a circular dependency on this file.
 export { RollButton } from "./RollButton";
+
+type WalletBatch = {
+  /** null means that a preceding manual input made this an absolute SET. */
+  delta: WalletDelta | null;
+  wallet: Wallet;
+  baseWallet: Wallet;
+  flush: () => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 
 export function CharacterWorkspace({
   onClose,
@@ -82,6 +98,7 @@ export function CharacterWorkspace({
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
+  const [campaignClockOpen, setCampaignClockOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // UIX-393: GM-only archive/restore. `archiveTarget` drives the confirm
   // dialog for a single character; `restoreDialogOpen` opens the separate
@@ -138,6 +155,18 @@ export function CharacterWorkspace({
         <p className="muted">
           Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
         </p>
+        {props.snapshot.me.role === "GM" && (
+          <Button
+            view="flat"
+            title="Управление временем кампании"
+            onClick={() => setCampaignClockOpen(true)}
+          >
+            День {props.snapshot.campaign.day} ·{" "}
+            {props.snapshot.campaign.battleActive
+              ? `бой #${props.snapshot.campaign.battleCounter}`
+              : `боёв: ${props.snapshot.campaign.battleCounter}`}
+          </Button>
+        )}
         <button
           type="button"
           className="character-rail-toggle"
@@ -325,7 +354,6 @@ export function CharacterWorkspace({
                       onReplaceControllers={props.onReplaceCharacterControllers}
                       onRoll={props.onRoll}
                       onUpdateCounters={props.onUpdateCounters}
-                      onCampaignClock={props.onCampaignClock}
                     />
                   </div>
                 </article>
@@ -353,6 +381,12 @@ export function CharacterWorkspace({
         onLoad={worldMapActions.onLoadArchivedCharacters}
         onRestore={worldMapActions.onRestoreCharacter}
         onClose={() => setRestoreDialogOpen(false)}
+      />
+      <CampaignClockDialog
+        open={campaignClockOpen}
+        snapshot={props.snapshot}
+        onCommand={props.onCampaignClock}
+        onClose={() => setCampaignClockOpen(false)}
       />
     </main>,
     document.body,
@@ -737,7 +771,6 @@ export function CharacterPanel({
   onReplaceControllers,
   onRoll,
   onUpdateCounters,
-  onCampaignClock,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -748,7 +781,6 @@ export function CharacterPanel({
   onReplaceControllers: Props["onReplaceCharacterControllers"];
   onRoll: Props["onRoll"];
   onUpdateCounters: Props["onUpdateCounters"];
-  onCampaignClock: Props["onCampaignClock"];
 }) {
   // The catalog handlers are read here rather than passed in: this panel is
   // the only place that uses them, so threading them through the workspace
@@ -897,19 +929,37 @@ export function CharacterPanel({
   );
   const walletDraftRef = useRef(walletDraft);
   const walletInputDirtyRef = useRef(false);
+  const walletBatchRef = useRef<WalletBatch | undefined>(undefined);
+  const walletMountedRef = useRef(true);
   const [resourcesDraft, setResourcesDraft] = useState<
     CharacterDto["resources"]
   >(() => ({ ...(character?.resources ?? {}) }));
   const [newResourceName, setNewResourceName] = useState("");
   useEffect(() => {
     if (character && countersPending === 0) {
-      const nextWallet = normalizeWallet(character.wallet);
-      walletDraftRef.current = nextWallet;
-      walletInputDirtyRef.current = false;
-      setWalletDraft(nextWallet);
+      // A manual value can start by absorbing an unsent +/- batch. That
+      // releases the batch reservation, but must not let this sync effect
+      // overwrite the still-focused absolute draft with the old snapshot.
+      if (!walletInputDirtyRef.current) {
+        const nextWallet = normalizeWallet(character.wallet);
+        walletDraftRef.current = nextWallet;
+        setWalletDraft(nextWallet);
+      }
       setResourcesDraft({ ...character.resources });
     }
   }, [character, countersPending]);
+  useEffect(() => {
+    walletMountedRef.current = true;
+    return () => {
+      // A visible click is already an accepted decision. Closing the sheet
+      // before the pause expires flushes it into App's stable character queue.
+      walletMountedRef.current = false;
+      const batch = walletBatchRef.current;
+      if (!batch) return;
+      clearTimeout(batch.timer);
+      batch.flush();
+    };
+  }, []);
   const editable =
     character &&
     (snapshot.me.role === "GM" ||
@@ -922,6 +972,12 @@ export function CharacterPanel({
     character &&
     (snapshot.me.role === "GM" ||
       character.ownerMembershipId === snapshot.me.id);
+  // Хук обязан стоять до раннего выхода ниже: порядок вызовов не должен
+  // зависеть от того, назначен ли персонаж. Пустая строка безопасна — без
+  // персонажа поле не отрисовано, и класть значение некуда.
+  const inventoryRef = useRemoteFieldValue<HTMLTextAreaElement>(
+    character?.inventory.join("\n") ?? "",
+  );
   if (!character)
     return (
       <Empty
@@ -970,11 +1026,54 @@ export function CharacterPanel({
     character.entries,
     "ABILITY",
   );
+  const submitWallet = async (
+    nextWallet: CharacterDto["wallet"],
+    intent: Parameters<typeof onUpdateCounters>[3],
+    pendingReserved: boolean,
+    conflictMessage: string,
+    failureMessage: string,
+  ) => {
+    if (!pendingReserved && walletMountedRef.current)
+      setCountersPending((current) => current + 1);
+    if (walletMountedRef.current) setCountersError("");
+    try {
+      await onUpdateCounters(
+        character.id,
+        character.revision,
+        { wallet: normalizeWallet(nextWallet) },
+        intent,
+      );
+    } catch (reason) {
+      if (!walletMountedRef.current) return;
+      setCountersError(
+        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
+          ? conflictMessage
+          : failureMessage,
+      );
+    } finally {
+      if (walletMountedRef.current)
+        setCountersPending((current) => Math.max(0, current - 1));
+    }
+  };
+
+  const cancelWalletBatch = (restoreBase: boolean) => {
+    const batch = walletBatchRef.current;
+    if (!batch) return;
+    clearTimeout(batch.timer);
+    walletBatchRef.current = undefined;
+    if (restoreBase) {
+      walletDraftRef.current = batch.baseWallet;
+      setWalletDraft(batch.baseWallet);
+    }
+    setCountersPending((current) => Math.max(0, current - 1));
+  };
+
   const saveWallet = async (nextWallet: CharacterDto["wallet"]) => {
     nextWallet = normalizeWallet(nextWallet);
     if (!walletInputDirtyRef.current) return;
     const canonicalWallet = normalizeWallet(character.wallet);
     if (
+      countersPending === 0 &&
       (Object.keys(nextWallet) as Array<keyof CharacterDto["wallet"]>).every(
         (key) => nextWallet[key] === canonicalWallet[key],
       )
@@ -985,21 +1084,13 @@ export function CharacterPanel({
     walletInputDirtyRef.current = false;
     walletDraftRef.current = nextWallet;
     setWalletDraft(nextWallet);
-    setCountersPending((current) => current + 1);
-    setCountersError("");
-    try {
-      await onUpdateCounters(character.id, character.revision, {
-        wallet: nextWallet,
-      });
-    } catch (reason) {
-      setCountersError(
-        reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
-          ? "Кошелёк уже изменён в другой сессии. Значения обновлены — повторите действие."
-          : "Не удалось сохранить кошелёк. Проверьте соединение и повторите действие.",
-      );
-    } finally {
-      setCountersPending((current) => Math.max(0, current - 1));
-    }
+    await submitWallet(
+      nextWallet,
+      undefined,
+      false,
+      "Кошелёк уже изменён в другой сессии. Значения обновлены — повторите действие.",
+      "Не удалось сохранить кошелёк. Проверьте соединение и повторите действие.",
+    );
   };
   const saveResources = async (next: CharacterDto["resources"]) => {
     setResourcesDraft(next);
@@ -1051,26 +1142,42 @@ export function CharacterPanel({
     if (appliedDelta === 0) return;
     walletDraftRef.current = next;
     setWalletDraft(next);
-    setCountersPending((count) => count + 1);
     setCountersError("");
-    const intent = walletInputDirtyRef.current
-      ? undefined
-      : { walletDelta: { key, delta: appliedDelta } };
+
+    const running = walletBatchRef.current;
+    if (running) clearTimeout(running.timer);
+    const absolute = walletInputDirtyRef.current || running?.delta === null;
+    const combinedDelta = absolute
+      ? null
+      : mergeWalletDelta(running?.delta ?? {}, key, appliedDelta);
     walletInputDirtyRef.current = false;
-    void onUpdateCounters(
-      character.id,
-      character.revision,
-      { wallet: next },
-      intent,
-    )
-      .catch((reason) => {
-        setCountersError(
-          reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
-            ? "Кошелёк изменён в другой сессии. Данные обновлены; повторите изменение, если оно всё ещё нужно."
-            : "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите действие.",
-        );
-      })
-      .finally(() => setCountersPending((count) => Math.max(0, count - 1)));
+
+    if (combinedDelta && walletDeltaIsEmpty(combinedDelta)) {
+      // A relative +/- series that returns to its starting wallet is no action.
+      cancelWalletBatch(true);
+      return;
+    }
+
+    if (!running) setCountersPending((count) => count + 1);
+    const flush = () => {
+      if (walletBatchRef.current !== batch) return;
+      walletBatchRef.current = undefined;
+      void submitWallet(
+        batch.wallet,
+        batch.delta ? { walletDelta: batch.delta } : undefined,
+        true,
+        "Кошелёк изменён в другой сессии. Данные обновлены; повторите изменение, если оно всё ещё нужно.",
+        "Не удалось сохранить кошелёк. Данные обновлены — проверьте соединение и повторите действие.",
+      );
+    };
+    const batch: WalletBatch = {
+      delta: combinedDelta,
+      wallet: next,
+      baseWallet: running?.baseWallet ?? current,
+      flush,
+      timer: setTimeout(flush, WALLET_ADJUST_DELAY_MS),
+    };
+    walletBatchRef.current = batch;
   };
   return (
     <section className="panel-section">
@@ -1166,35 +1273,6 @@ export function CharacterPanel({
         isGm={snapshot.me.role === "GM"}
         onUpload={assetActions.uploadAsset}
       />
-      {snapshot.me.role === "GM" && (
-        <div className="subsection">
-          <h3>Время кампании</h3>
-          <p>
-            День {snapshot.campaign.day} ·{" "}
-            {snapshot.campaign.battleActive
-              ? `бой #${snapshot.campaign.battleCounter}`
-              : "вне боя"}
-          </p>
-          <Button
-            title="Реген выносливости и маны всем персонажам, +1 день"
-            onClick={() =>
-              onCampaignClock("LONG_REST", snapshot.campaign.revision)
-            }
-          >
-            Длинный отдых
-          </Button>
-          <Button
-            onClick={() =>
-              onCampaignClock(
-                snapshot.campaign.battleActive ? "END_BATTLE" : "START_BATTLE",
-                snapshot.campaign.revision,
-              )
-            }
-          >
-            {snapshot.campaign.battleActive ? "Завершить бой" : "Начать бой"}
-          </Button>
-        </div>
-      )}
       <details className="subsection">
         <summary>Предыстория</summary>
         <FormTextArea
@@ -1243,7 +1321,6 @@ export function CharacterPanel({
           modifier="stats"
           rows={characteristicRows}
           values={character.stats}
-          valuesRevisionKey={`${character.id}-${character.revision}`}
           editable={Boolean(editable)}
           rollPending={rollPending}
           canEditLayout={snapshot.me.role === "GM"}
@@ -1259,7 +1336,6 @@ export function CharacterPanel({
           modifier="combat"
           rows={combatRows}
           values={character.stats}
-          valuesRevisionKey={`${character.id}-${character.revision}`}
           editable={Boolean(editable)}
           rollPending={rollPending}
           canEditLayout={snapshot.me.role === "GM"}
@@ -1472,10 +1548,13 @@ export function CharacterPanel({
         </ArkenDialog>
       )}
       <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
+      {/* UIX-532: ревизии в `key` здесь больше нет — она пересоздавала поле и
+          роняла фокус посреди набора (UIX-325). Чужая правка доносится до
+          живого элемента, кроме поля, в котором сейчас печатают. */}
       <label className="field">
         Инвентарь (один предмет на строку)
         <FormTextArea
-          key={`${character.id}:${character.revision}`}
+          controlRef={inventoryRef}
           defaultValue={character.inventory.join("\n")}
           disabled={!editable}
           rows={5}
@@ -1726,6 +1805,9 @@ export function CharacterPanel({
               value={walletDraft[key]}
               disabled={!editable}
               onChange={(event) => {
+                // Manual input chooses an absolute target. It absorbs any
+                // visible but unsent +/- batch instead of applying it twice.
+                cancelWalletBatch(false);
                 const next = {
                   ...walletDraftRef.current,
                   [key]: normalizeWalletValue(event.target.value),

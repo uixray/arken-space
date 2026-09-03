@@ -22,6 +22,26 @@ const reportDirectory = new URL(
   "../test-results/multiplayer/",
   import.meta.url,
 );
+/*
+ * UIX-523: каталог отчёта создаётся до любой команды docker, а не в
+ * `writeReport` по окончании прогона.
+ *
+ * `docker-compose.e2e.yml` монтирует `./test-results/multiplayer` внутрь
+ * контейнера Playwright. Если каталога нет, его создаёт сам Docker — и на
+ * нативном Linux владельцем становится root. Прогон после этого проходит
+ * целиком, а падает последняя строка: хостовый процесс не может положить
+ * рядом `runner.json` и получает EACCES.
+ *
+ * На Docker Desktop это не воспроизводится — он подменяет владельца при
+ * монтировании, — поэтому дефект пришёл вместе с первым же прогоном в CI и
+ * положил его дважды подряд, включая прогон на самом `main`.
+ *
+ * Каталог, созданный заранее от текущего пользователя, остаётся его: файлы
+ * внутрь пишет root, но это не мешает создать в нём новый файл. Оставшийся
+ * от прошлого прогона root-каталог так не чинится — там нужен разовый
+ * `rm -rf test-results`; в CI дерево чистое каждый раз.
+ */
+mkdirSync(reportDirectory, { recursive: true });
 const report = {
   projectName,
   startedAt: new Date().toISOString(),
@@ -350,6 +370,67 @@ try {
       "Isolated build revision " + edge.buildRevision + " != " + buildRevision,
     );
   record("isolated-edge-health", "passed", { buildRevision });
+
+  const spellPackProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "apps/server/src/spell-pack-storage.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.spellPackProbeExitCode = spellPackProbe;
+  if (spellPackProbe !== 0)
+    throw new Error("Spell-pack PostgreSQL probe exited " + spellPackProbe);
+  record("spell-pack-postgresql-probe", "passed");
+
+  const spellAssignmentProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "apps/server/src/spell-assignment-storage.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.spellAssignmentProbeExitCode = spellAssignmentProbe;
+  if (spellAssignmentProbe !== 0)
+    throw new Error(
+      "Spell-assignment PostgreSQL probe exited " + spellAssignmentProbe,
+    );
+  record("spell-assignment-postgresql-probe", "passed");
+
+  const spellProjectionProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "apps/server/src/spell-projection.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.spellProjectionProbeExitCode = spellProjectionProbe;
+  if (spellProjectionProbe !== 0)
+    throw new Error(
+      "Spell-projection PostgreSQL probe exited " + spellProjectionProbe,
+    );
+  record("spell-projection-postgresql-probe", "passed");
 
   const playwright = await runPlaywrightWithRestart(environment);
   report.playwrightExitCode = playwright;

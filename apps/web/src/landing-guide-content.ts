@@ -25,6 +25,12 @@ export interface GuideShortcut {
   action: string;
   /** GM-only shortcuts are marked so a player is not left hunting for them. */
   gmOnly?: boolean;
+  /**
+   * UIX-466: инструмент относится к туману. Раздел шпаргалки собирался по
+   * `gmOnly`, пока мастерское и туманное совпадали; зона боя это совпадение
+   * сломала, и признак стал отдельным вместо угадывания по роли.
+   */
+  fog?: boolean;
 }
 
 export interface GuideSection {
@@ -38,11 +44,23 @@ export interface GuideSection {
  * Ctrl, Alt or Cmd — which is why none of these collide with browser
  * shortcuts, and why clicking the map first is part of the instruction.
  */
+/**
+ * UIX-466: «мастерский» и «про туман» перестали быть одним и тем же.
+ *
+ * Раздел шпаргалки собирался по `gmOnly`, и пока все мастерские инструменты
+ * были туманом, это совпадало. Зона боя совпадение сломала: она мастерская, но
+ * под заголовком «Туман войны» с подсказкой про Shift оказалась бы враньём.
+ * Принадлежность к туману теперь читается из самого инструмента.
+ */
+const isFogTool = (tool: string) =>
+  tool.startsWith("FOG") || tool.startsWith("COVER");
+
 const mapToolGuideShortcuts = MAP_TOOL_SHORTCUTS.flatMap((shortcut) => {
   const base: GuideShortcut = {
     keys: [shortcut.key.toUpperCase()],
     action: shortcut.action,
     gmOnly: shortcut.gmOnly,
+    fog: isFogTool(shortcut.tool),
   };
   const shifted: GuideShortcut[] = shortcut.shiftTool
     ? [
@@ -50,6 +68,7 @@ const mapToolGuideShortcuts = MAP_TOOL_SHORTCUTS.flatMap((shortcut) => {
           keys: ["Shift", shortcut.key.toUpperCase()],
           action: shortcut.shiftAction,
           gmOnly: shortcut.gmOnly,
+          fog: isFogTool(shortcut.shiftTool),
         },
       ]
     : [];
@@ -84,7 +103,16 @@ export const canvasSections: GuideSection[] = [
   {
     title: "Туман войны",
     hint: "Только мастер. С Shift тот же инструмент закрывает туман обратно.",
-    shortcuts: [...mapToolGuideShortcuts.filter((shortcut) => shortcut.gmOnly)],
+    shortcuts: [...mapToolGuideShortcuts.filter((shortcut) => shortcut.fog)],
+  },
+  {
+    title: "Бой",
+    hint: "Только мастер.",
+    shortcuts: [
+      ...mapToolGuideShortcuts.filter(
+        (shortcut) => shortcut.gmOnly && !shortcut.fog,
+      ),
+    ],
   },
   {
     title: "Камера",

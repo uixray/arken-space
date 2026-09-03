@@ -42,6 +42,12 @@ import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { useDismissibleDetails } from "./ui/dismissible-details";
+import {
+  canvasHistoryVersion,
+  historyControlLabel,
+  nextHistoryEntry,
+  type CanvasHistoryEntry,
+} from "./canvas-history-label";
 import { normalizeClientDiceResult } from "./dice-result";
 import { applyBulkMoveResult } from "./canvas-bulk-move";
 import { useMutationRunners } from "./use-mutation-runners";
@@ -159,27 +165,57 @@ function CanvasHistoryControls({
   sceneId,
   disabled,
   version,
+  snapshot,
 }: {
   sceneId?: string;
   disabled: boolean;
   version: string;
+  /** Источник имён объектов — и единственный: он уже отфильтрован по роли. */
+  snapshot: GameSnapshot;
 }) {
-  const [history, setHistory] = useState<
-    Array<{ status: "APPLIED" | "UNDONE" | "INVALIDATED" }>
-  >([]);
-  const refresh = useCallback(async () => {
-    if (!sceneId || disabled) return setHistory([]);
-    try {
-      setHistory(await api(`/api/canvas/history?sceneId=${sceneId}`));
-    } catch {
-      setHistory([]);
-    }
-  }, [sceneId, disabled]);
+  const [refreshEpoch, setRefreshEpoch] = useState(0);
+  const requestKey = JSON.stringify([
+    sceneId ?? null,
+    disabled,
+    version,
+    refreshEpoch,
+  ]);
+  const [historyState, setHistoryState] = useState<{
+    requestKey: string;
+    entries: CanvasHistoryEntry[];
+  }>({ requestKey: "", entries: [] });
+  const historyRequestGeneration = useRef(0);
+  const history =
+    historyState.requestKey === requestKey ? historyState.entries : [];
+
   useEffect(() => {
-    void refresh();
-  }, [refresh, version]);
-  const canUndo = history.some((item) => item.status === "APPLIED");
-  const canRedo = history.some((item) => item.status === "UNDONE");
+    const generation = ++historyRequestGeneration.current;
+    let cancelled = false;
+    if (!sceneId || disabled) {
+      setHistoryState({ requestKey, entries: [] });
+      return () => {
+        cancelled = true;
+      };
+    }
+    void api<CanvasHistoryEntry[]>(`/api/canvas/history?sceneId=${sceneId}`)
+      .then((entries) => {
+        if (cancelled || generation !== historyRequestGeneration.current)
+          return;
+        setHistoryState({ requestKey, entries });
+      })
+      .catch(() => {
+        if (cancelled || generation !== historyRequestGeneration.current)
+          return;
+        setHistoryState({ requestKey, entries: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sceneId, disabled, requestKey]);
+  const nextUndo = nextHistoryEntry("undo", history);
+  const nextRedo = nextHistoryEntry("redo", history);
+  const canUndo = nextUndo !== undefined;
+  const canRedo = nextRedo !== undefined;
   const act = useCallback(
     async (direction: "undo" | "redo") => {
       if (!sceneId) return;
@@ -187,9 +223,9 @@ function CanvasHistoryControls({
         method: "POST",
         body: JSON.stringify({ actionId: crypto.randomUUID(), sceneId }),
       });
-      await refresh();
+      setRefreshEpoch((epoch) => epoch + 1);
     },
-    [sceneId, refresh],
+    [sceneId],
   );
   useEffect(() => {
     if (!sceneId || disabled) return;
@@ -205,13 +241,17 @@ function CanvasHistoryControls({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [sceneId, disabled, canUndo, canRedo, act]);
+  // Подпись и всплывающая подсказка — один и тот же текст: подсказка недоступна
+  // ни клавиатуре, ни программе чтения с экрана, и расходиться им незачем.
+  const undoLabel = historyControlLabel("undo", nextUndo, snapshot);
+  const redoLabel = historyControlLabel("redo", nextRedo, snapshot);
   return (
     <>
       <button
         className="map-tool"
         data-tool="UNDO"
-        aria-label="Отменить последнее действие"
-        title="Отменить последнее действие"
+        aria-label={undoLabel}
+        title={undoLabel}
         disabled={disabled || !canUndo}
         onClick={() => void act("undo")}
       >
@@ -220,8 +260,8 @@ function CanvasHistoryControls({
       <button
         className="map-tool"
         data-tool="REDO"
-        aria-label="Повторить отменённое действие"
-        title="Повторить отменённое действие"
+        aria-label={redoLabel}
+        title={redoLabel}
         disabled={disabled || !canRedo}
         onClick={() => void act("redo")}
       >
@@ -508,8 +548,23 @@ export function App() {
   >(null);
   const scenePickerRef = useRef<HTMLDetailsElement>(null);
   const resizeSettingsRef = useRef<HTMLDetailsElement>(null);
+  /**
+   * UIX-531: меню сеанса, «Ещё» на панели карты и лоток токенов — последние
+   * поповеры без общего закрытия.
+   *
+   * Меню сеанса объявлено в одном CSS-правиле с поповерами музыки
+   * (`styles.css:3719`): та же шапка, тот же z-index, то же свешивание поверх
+   * правого сайдбара. UIX-517 починила соседей по правилу, а его пропустила —
+   * открытое меню перехватывало клики по вкладкам чата ровно так же.
+   */
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
+  const toolbarOverflowRef = useRef<HTMLDetailsElement>(null);
+  const tokenTrayRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(scenePickerRef);
   useDismissibleDetails(resizeSettingsRef);
+  useDismissibleDetails(accountMenuRef);
+  useDismissibleDetails(toolbarOverflowRef);
+  useDismissibleDetails(tokenTrayRef);
 
   useEffect(() => {
     if (!snapshot) {
@@ -1496,18 +1551,84 @@ export function App() {
   // unrelated campaign events like chat, dice or audio, which used to also
   // bump the campaign-wide snapshotVersion this used to key off, refetching
   // /api/canvas/history on literally every event anywhere in the campaign.
-  const activeCanvasVersion = [
-    activeFog.length,
-    activeFog.reduce((max, fog) => Math.max(max, fog.revision ?? 0), 0),
-    activeDrawings.length,
-    activeDrawings.reduce((max, drawing) => Math.max(max, drawing.revision), 0),
-    activeTokens.length,
-    activeTokens.reduce((max, token) => Math.max(max, token.revision), 0),
-  ].join(":");
+  const activeCanvasVersion = canvasHistoryVersion(
+    activeScene,
+    activeFog,
+    activeDrawings,
+    activeTokens,
+  );
+
+  /**
+   * UIX-503: кнопка «•••» существует только тогда, когда за ней что-то есть.
+   *
+   * Всё содержимое меню было под `role === "GM"`, а сама кнопка — нет: игрок
+   * открывал пустую панель. Условие переехало сюда, к решению «показывать ли
+   * кнопку», и теперь у обоих ответов один источник — нельзя показать кнопку и
+   * забыть про её содержимое.
+   *
+   * Значение, а не булев флаг: список инструментов будет расти, и флаг рядом с
+   * ним разошёлся бы при первом же добавлении. Пусто — значит `null`, и кнопки
+   * нет вовсе: скрывать её стилем нельзя, скрытое так остаётся в порядке обхода
+   * с клавиатуры.
+   */
+  const overflowTools =
+    snapshot.me.role === "GM" ? (
+      <div className="fog-view-controls">
+        <label>
+          <input
+            type="checkbox"
+            checked={gmGridVisible}
+            onChange={(event) => {
+              const visible = event.target.checked;
+              setGmGridVisible(visible);
+              localStorage.setItem("arken.gmGridVisible", String(visible));
+            }}
+          />
+          Показывать сетку
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={gmFogVisible}
+            onChange={(event) => setGmFogVisible(event.target.checked)}
+          />
+          Показывать туман
+        </label>
+        <label>
+          Прозрачность мастера
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={gmFogOpacity}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              setGmFogOpacity(value);
+              localStorage.setItem("arken.gmFogOpacity", String(value));
+            }}
+          />
+        </label>
+      </div>
+    ) : null;
+
+  const workspaceHidden =
+    workspace === "characters" ||
+    workspace === "setup" ||
+    workspace === "world-maps";
 
   return (
     <CampaignActionsContext.Provider value={campaignActions}>
       <div className="app-shell">
+        {/* UIX-532: без этой ссылки путь с клавиатуры к карте проходит через
+            всю верхнюю панель. Прячется, пока рабочая область открыта поверх
+            карты: там карта помечена `aria-hidden`, и уводить фокус в
+            скрытое — хуже, чем не предлагать переход вовсе. */}
+        {!workspaceHidden && (
+          <a className="skip-link" href="#main-content">
+            Перейти к карте
+          </a>
+        )}
         <header className="topbar">
           <div className="brand">
             <strong>arken-space</strong>
@@ -1676,7 +1797,7 @@ export function App() {
               socket={socket}
               onUpload={(file) => assetActions.uploadAsset(file, "AUDIO")}
             />
-            <details className="account-menu">
+            <details className="account-menu" ref={accountMenuRef}>
               <summary aria-label="Меню сеанса" title="Меню сеанса">
                 <span aria-hidden="true">&#x2630;</span>
               </summary>
@@ -1916,18 +2037,12 @@ export function App() {
             </button>
           )}
           <main
-            className={`map-shell${
-              workspace === "characters" ||
-              workspace === "setup" ||
-              workspace === "world-maps"
-                ? " is-workspace-hidden"
-                : ""
-            }`}
-            aria-hidden={
-              workspace === "characters" ||
-              workspace === "setup" ||
-              workspace === "world-maps"
-            }
+            id="main-content"
+            // UIX-532: цель ссылки «к карте». `-1` даёт фокус по переходу, но
+            // не добавляет карту в обход табом — она и так первая за панелью.
+            tabIndex={-1}
+            className={`map-shell${workspaceHidden ? " is-workspace-hidden" : ""}`}
+            aria-hidden={workspaceHidden}
           >
             <div
               ref={toolbarRef}
@@ -2087,6 +2202,48 @@ export function App() {
                       Пинг
                     </button>
                     <div className="toolbar-group__title">Прочее</div>
+                    {/* UIX-466 п. 4: зона боя. Стоит рядом с «Начать бой»,
+                        потому что отвечает на тот же вопрос — кто дерётся, —
+                        только заранее и на карте. Кнопка тумблерная: повторное
+                        нажатие снимает зону, иначе убрать её было бы нечем. */}
+                    <button
+                      aria-label={
+                        viewSnapshot.campaign.battleZone
+                          ? "Снять зону боя"
+                          : "Обвести зону боя"
+                      }
+                      title={
+                        viewSnapshot.campaign.battleZone
+                          ? `Снять зону боя · ${shortcutLabel("BATTLE_ZONE")}`
+                          : `Обвести поле боя: из него собирается очередь ходов · ${shortcutLabel("BATTLE_ZONE")}`
+                      }
+                      className="map-tool"
+                      data-tool="BATTLE_ZONE"
+                      // Без активной сцены обводить нечего: зона привязана к
+                      // ней и в другой карте означала бы совсем другое место.
+                      // Заодно кнопка перестаёт быть лишней остановкой Tab
+                      // между «Пингом» и «Рисованием» — это закреплено тестом
+                      // доступности панели (concept.spec.ts:435).
+                      disabled={!activeScene}
+                      aria-pressed={tool === "BATTLE_ZONE"}
+                      onClick={() => {
+                        if (viewSnapshot.campaign.battleZone) {
+                          setTool("PAN");
+                          void run(() =>
+                            initiativeActions.onSetBattleZone(
+                              null,
+                              viewSnapshot.campaign.revision,
+                            ),
+                          );
+                          return;
+                        }
+                        setTool("BATTLE_ZONE");
+                      }}
+                    >
+                      {viewSnapshot.campaign.battleZone
+                        ? "Снять зону"
+                        : "Зона боя"}
+                    </button>
                     {/*
                      * UIX-311 Stage 4: real GM "Начать бой" / "Завершить бой"
                      * entry point, replacing the Stage 2/3 temp triggers. Only
@@ -2243,66 +2400,19 @@ export function App() {
                     sceneId={activeScene?.id}
                     disabled={!activeScene}
                     version={activeCanvasVersion}
+                    snapshot={viewSnapshot}
                   />
                 </div>
               )}
-              {!previewSnapshot && (
-                <details className="toolbar-overflow">
+              {!previewSnapshot && overflowTools && (
+                <details className="toolbar-overflow" ref={toolbarOverflowRef}>
                   <summary
                     aria-label="Дополнительные инструменты"
                     title="Дополнительные инструменты карты"
                   >
                     •••
                   </summary>
-                  <div className="toolbar-overflow-menu">
-                    {snapshot.me.role === "GM" && (
-                      <div className="fog-view-controls">
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={gmGridVisible}
-                            onChange={(event) => {
-                              const visible = event.target.checked;
-                              setGmGridVisible(visible);
-                              localStorage.setItem(
-                                "arken.gmGridVisible",
-                                String(visible),
-                              );
-                            }}
-                          />
-                          Показывать сетку
-                        </label>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={gmFogVisible}
-                            onChange={(event) =>
-                              setGmFogVisible(event.target.checked)
-                            }
-                          />
-                          Показывать туман
-                        </label>
-                        <label>
-                          Прозрачность мастера
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={gmFogOpacity}
-                            onChange={(event) => {
-                              const value = Number(event.target.value);
-                              setGmFogOpacity(value);
-                              localStorage.setItem(
-                                "arken.gmFogOpacity",
-                                String(value),
-                              );
-                            }}
-                          />
-                        </label>
-                      </div>
-                    )}
-                  </div>
+                  <div className="toolbar-overflow-menu">{overflowTools}</div>
                 </details>
               )}
             </div>
@@ -2367,6 +2477,26 @@ export function App() {
                       targetSceneName: activeScene.name,
                       focusRegion: rect,
                     });
+                  }}
+                  battleZone={
+                    // Зона относится к конкретной сцене; на чужой её рисовать
+                    // нельзя — прямоугольник тех же координат означал бы там
+                    // совсем другое место.
+                    viewSnapshot.campaign.battleZone?.sceneId === activeScene.id
+                      ? viewSnapshot.campaign.battleZone
+                      : null
+                  }
+                  onBattleZoneSelect={(rect) => {
+                    // Обвели — сохранили. Подтверждения нет намеренно: в отличие
+                    // от начала боя зона ничего не запускает, а перерисовать её
+                    // дешевле, чем подтверждать каждую попытку.
+                    setTool("PAN");
+                    void run(() =>
+                      initiativeActions.onSetBattleZone(
+                        { sceneId: activeScene.id, ...rect },
+                        viewSnapshot.campaign.revision,
+                      ),
+                    );
                   }}
                   canvasEditMode={canvasEditMode}
                   onCanvasEditCancel={() => setCanvasEditMode(null)}
@@ -2721,7 +2851,7 @@ export function App() {
               </div>
             )}
             {!previewSnapshot && (
-              <details className="token-tray">
+              <details className="token-tray" ref={tokenTrayRef}>
                 <summary>
                   Токены · {snapshot.tokenDefinitions?.length ?? 0}
                 </summary>
@@ -2801,6 +2931,18 @@ export function App() {
               onUpdateInitiative={initiativeActions.onUpdateInitiative}
               onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
               onRollInitiative={initiativeActions.onRollInitiative}
+              onRecruitFromBattleZone={
+                // Кнопка появляется, только когда зона задана на этой же сцене:
+                // ручка, всегда отвечающая отказом, хуже отсутствующей.
+                viewSnapshot.campaign.battleZone
+                  ? () =>
+                      void run(() =>
+                        initiativeActions.onRecruitFromBattleZone(
+                          viewSnapshot.campaign.revision,
+                        ),
+                      )
+                  : undefined
+              }
               snapshot={snapshot}
               requestedCharacterId={requestedCharacterId}
               socket={socket}

@@ -120,6 +120,31 @@ describe("drizzle migration metadata integrity", () => {
     expect([...snapshotTables].sort()).toEqual([...declared].sort());
   });
 
+  it("records the persisted campaign pause column in the newest snapshot", () => {
+    const newestIndex = readJournal().at(-1)!.idx;
+    const snapshot = JSON.parse(
+      readFileSync(
+        path.join(
+          metaDirectory,
+          `${String(newestIndex).padStart(4, "0")}_snapshot.json`,
+        ),
+        "utf8",
+      ),
+    ) as {
+      tables: Record<
+        string,
+        { columns: Record<string, Record<string, unknown>> }
+      >;
+    };
+
+    expect(snapshot.tables["public.campaigns"]?.columns.paused).toMatchObject({
+      name: "paused",
+      type: "boolean",
+      notNull: true,
+      default: false,
+    });
+  });
+
   it("documents the historical snapshot gap without treating it as a regression", () => {
     // Snapshots 0014-0031 were never committed. That is pre-existing debt,
     // harmless today because only the newest snapshot is used as a diff

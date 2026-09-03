@@ -52,24 +52,6 @@ export function streamForMessage(
   return message.stream ?? "TABLE";
 }
 
-export function nextChatStream(
-  current: ChatStream,
-  key: string,
-): ChatStream | null {
-  const index = CHAT_STREAM_ORDER.indexOf(current);
-  if (key === "Home") return CHAT_STREAM_ORDER[0] ?? null;
-  if (key === "End") return CHAT_STREAM_ORDER.at(-1) ?? null;
-  if (key === "ArrowRight")
-    return CHAT_STREAM_ORDER[(index + 1) % CHAT_STREAM_ORDER.length] ?? null;
-  if (key === "ArrowLeft")
-    return (
-      CHAT_STREAM_ORDER[
-        (index - 1 + CHAT_STREAM_ORDER.length) % CHAT_STREAM_ORDER.length
-      ] ?? null
-    );
-  return null;
-}
-
 /**
  * Сколько сообщений потока клиент держит в памяти при **автоматическом**
  * пополнении — то есть когда приходит новое сообщение.

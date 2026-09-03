@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./react-console-guard";
 import type {
   GameSnapshot,
   StoryPostAdminDto,
@@ -37,10 +38,12 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
       id: ids.campaign,
       name: "Story QA",
       day: 1,
+      paused: false,
       battleActive: false,
       battleCounter: 0,
       statLayout: [],
       initiative: [],
+      battleZone: null,
       revision: 0,
     },
     me: {

@@ -13,6 +13,7 @@ export type MapTool =
   | "RULER"
   | "PING"
   | "SCENE_REGION"
+  | "BATTLE_ZONE"
   | "FOG_BRUSH"
   | "COVER_BRUSH"
   | "FOG_POLYGON"
@@ -92,6 +93,18 @@ export const MAP_TOOL_SHORTCUTS: readonly MapToolShortcut[] = [
     shiftAction: "Закрыть туман полигоном",
     gmOnly: true,
   },
+  {
+    /**
+     * Не `z`: она уже занята отменой (`Ctrl+Z`). Инструмент на той же букве
+     * означал бы, что промах мимо Ctrl включает зону боя вместо отмены — и
+     * тест шпаргалки справедливо считает такую букву противоречивой, потому
+     * что одна и та же клавиша не может быть и общей, и мастерской.
+     */
+    key: "e",
+    tool: "BATTLE_ZONE",
+    action: "Зона боя — обвести поле, из которого собирается очередь",
+    gmOnly: true,
+  },
 ];
 
 const MAP_VIEWPORT_KEYS_BEFORE_TOOLS = [
@@ -128,6 +141,23 @@ export function mapViewportAriaKeyShortcuts(role: Role): string {
     ...toolKeys,
     ...MAP_VIEWPORT_KEYS_AFTER_TOOLS,
   ].join(" ");
+}
+
+/**
+ * UIX-466: куда уходит прямоугольник, который мастер только что обвёл.
+ *
+ * Два инструмента тянут одну и ту же рамку и различаются лишь адресатом.
+ * Развилка живёт здесь, а не в обработчике внутри Konva-компонента, потому что
+ * там её нечем проверить: подмена адресата не ломает ни типы, ни один тест —
+ * мастер просто получает диалог «Начать бой» вместо сохранённой зоны. Ровно это
+ * и случилось при диверсии, пока функции не было.
+ */
+export function regionCommitTarget(
+  tool: MapTool,
+): "BATTLE_ZONE" | "ENCOUNTER" | null {
+  if (tool === "BATTLE_ZONE") return "BATTLE_ZONE";
+  if (tool === "SCENE_REGION") return "ENCOUNTER";
+  return null;
 }
 
 /** Клавиша инструмента для подсказки на кнопке: `undefined`, если её нет. */

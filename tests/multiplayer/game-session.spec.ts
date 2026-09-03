@@ -11,6 +11,7 @@ import type {
   AssetDto,
   ClientToServerEvents,
   CommandAck,
+  EncounterDto,
   FogRevealDto,
   GameSnapshot,
   MapPing,
@@ -540,6 +541,9 @@ test("GM and six isolated players recover authoritative state without security l
     await openWorkspaceSection(pages[0]!, "Персонажи");
     await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(1);
     await expect(pages[0]!.locator(".character-sheet-card")).toHaveCount(1);
+    await expect(
+      pages[0]!.getByTitle("Управление временем кампании"),
+    ).toHaveCount(0);
     await pages[0]!.getByRole("button", { name: "Закрыть персонажей" }).click();
     await expect(
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
@@ -650,6 +654,79 @@ test("GM and six isolated players recover authoritative state without security l
     const playerInitialSnapshots = await Promise.all(
       players.map((player) => bootstrap(player)),
     );
+
+    // UIX-402: the encounter lifecycle is the single source of truth for the
+    // campaign battle clock. Prove the persisted transition reaches every
+    // connected role before the later backend-restart recovery assertion.
+    const battleCounterBefore = gmInitialSnapshot.campaign.battleCounter;
+    const startActionId = actionId();
+    const startedSnapshots = connections.map(({ socket }) =>
+      waitForSnapshot(
+        socket,
+        (candidate) =>
+          candidate.campaign.battleActive &&
+          candidate.campaign.battleCounter === battleCounterBefore + 1 &&
+          candidate.encounters.some(
+            (encounter) => encounter.status === "ACTIVE",
+          ),
+      ),
+    );
+    const startedResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/encounters/start", {
+        data: {
+          actionId: startActionId,
+          mode: "SCENE_REGION",
+          sourceSceneId: initialScene.id,
+          sourceSceneRevision: initialScene.revision ?? 0,
+          focusRegion: { x: 0, y: 0, width: 64, height: 64 },
+        },
+      }),
+    );
+    const startedEncounter = (await startedResponse.json()) as EncounterDto;
+    for (const candidate of await Promise.all(startedSnapshots)) {
+      expect(candidate.campaign).toMatchObject({
+        battleActive: true,
+        battleCounter: battleCounterBefore + 1,
+      });
+      expect(candidate.encounters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: startedEncounter.id,
+            status: "ACTIVE",
+          }),
+        ]),
+      );
+    }
+
+    const endedSnapshots = connections.map(({ socket }) =>
+      waitForSnapshot(
+        socket,
+        (candidate) =>
+          !candidate.campaign.battleActive &&
+          candidate.campaign.battleCounter === battleCounterBefore + 1 &&
+          candidate.encounters.some(
+            (encounter) =>
+              encounter.id === startedEncounter.id &&
+              encounter.status === "ENDED",
+          ),
+      ),
+    );
+    await expectOk(
+      await gm.request.post(
+        baseUrl + `/api/encounters/${startedEncounter.id}/end`,
+        {
+          data: {
+            actionId: actionId(),
+            revision: startedEncounter.revision,
+          },
+        },
+      ),
+    );
+    for (const candidate of await Promise.all(endedSnapshots))
+      expect(candidate.campaign).toMatchObject({
+        battleActive: false,
+        battleCounter: battleCounterBefore + 1,
+      });
 
     const playerOneSnapshot = playerInitialSnapshots[0];
     if (!playerOneSnapshot) throw new Error("Player one snapshot not found");
@@ -877,6 +954,40 @@ test("GM and six isolated players recover authoritative state without security l
         { timeout: 30_000 },
       );
 
+    // UIX-582: пауза хранится в кампании, а не в локальном состоянии оверлея.
+    // Подписываем все семь клиентов до команды, чтобы GM + 6 получили один
+    // согласованный broadcast, и сохраняем паузу после рестарта backend.
+    const beforePause = await bootstrap(gm);
+    const pausedPromises = connections.map(({ socket }) =>
+      waitForSnapshot(
+        socket,
+        (snapshot) =>
+          snapshot.campaign.paused &&
+          snapshot.campaign.revision === beforePause.campaign.revision + 1,
+      ),
+    );
+    const pauseResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/campaign/pause", {
+        data: {
+          actionId: actionId(),
+          revision: beforePause.campaign.revision,
+          paused: true,
+        },
+      }),
+    );
+    expect(await pauseResponse.json()).toMatchObject({
+      paused: true,
+      revision: beforePause.campaign.revision + 1,
+    });
+    const pausedSnapshots = await Promise.all(pausedPromises);
+    expect(
+      new Set(pausedSnapshots.map((snapshot) => snapshot.campaign.revision))
+        .size,
+    ).toBe(1);
+    for (const snapshot of pausedSnapshots)
+      expect(snapshot.campaign.paused).toBe(true);
+    expect((await bootstrap(players[0])).campaign.paused).toBe(true);
+
     const recoveryPromises = connections.map(({ socket }) =>
       waitForRecovery(socket),
     );
@@ -891,6 +1002,8 @@ test("GM and six isolated players recover authoritative state without security l
           (scene) => scene.id === recoveryScene.id && scene.active,
         ),
       ).toBe(true);
+    for (const snapshot of recoveredSnapshots)
+      expect(snapshot.campaign.paused).toBe(true);
 
     const resyncPromises = connections.map(({ socket }) =>
       waitForSnapshot(socket, (snapshot) =>
@@ -904,8 +1017,41 @@ test("GM and six isolated players recover authoritative state without security l
     expect(
       new Set(resynced.map((snapshot) => snapshot.snapshotVersion)).size,
     ).toBe(1);
+    expect(
+      new Set(resynced.map((snapshot) => snapshot.campaign.revision)).size,
+    ).toBe(1);
+    for (const snapshot of resynced)
+      expect(snapshot.campaign.paused).toBe(true);
+
+    const pauseRevision = resynced[0]!.campaign.revision;
+    const resumedPromises = connections.map(({ socket }) =>
+      waitForSnapshot(
+        socket,
+        (snapshot) =>
+          !snapshot.campaign.paused &&
+          snapshot.campaign.revision === pauseRevision + 1,
+      ),
+    );
+    await expectOk(
+      await gm.request.post(baseUrl + "/api/campaign/pause", {
+        data: {
+          actionId: actionId(),
+          revision: pauseRevision,
+          paused: false,
+        },
+      }),
+    );
+    const resumedSnapshots = await Promise.all(resumedPromises);
+    for (const snapshot of resumedSnapshots)
+      expect(snapshot.campaign.paused).toBe(false);
+    expect((await bootstrap(gm)).campaign.paused).toBe(false);
+    expect((await bootstrap(players[0])).campaign.paused).toBe(false);
 
     const authoritativeGm = resynced[0];
+    expect(authoritativeGm.campaign).toMatchObject({
+      battleActive: false,
+      battleCounter: battleCounterBefore + 1,
+    });
     for (const collection of [
       authoritativeGm.members,
       authoritativeGm.characters,

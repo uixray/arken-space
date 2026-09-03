@@ -119,8 +119,10 @@ function snapshotWithCharacter(nextCharacter: CharacterDto): GameSnapshot {
       id: "campaign-1",
       name: "Campaign",
       day: 1,
+      paused: false,
       battleActive: false,
       initiative: [],
+      battleZone: null,
       battleCounter: 0,
       // Реалистичное значение, а не пустой массив: фикстура, у которой нет ни
       // одной строки раскладки, не поймает ошибку в коде, который её читает.

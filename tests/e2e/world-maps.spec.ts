@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
 
@@ -25,10 +26,12 @@ function snapshotFor(role: "GM" | "PLAYER"): GameSnapshot {
       id: ids.campaign,
       name: "Тестовая кампания",
       day: 1,
+      paused: false,
       battleActive: false,
       battleCounter: 0,
       statLayout: [],
       initiative: [],
+      battleZone: null,
       revision: 0,
     },
     me,

@@ -41,7 +41,9 @@ import {
 } from "../activity-filter-menu";
 import type { RollMode } from "../roll-mode";
 import { RollAvatar } from "./RollAvatar";
+import { RollCharacterName } from "./RollCharacterName";
 import { createRollAvatarSource } from "../roll-avatar-source";
+import { createRollCharacterNameSource } from "../roll-character-name";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
@@ -297,6 +299,7 @@ export function ActivityPanel({
   onUpdateInitiative,
   onSetOwnInitiative,
   onRollInitiative,
+  onRecruitFromBattleZone,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -327,9 +330,15 @@ export function ActivityPanel({
     revision: number,
     isGm: boolean,
   ) => Promise<void>;
+  /** UIX-466 п. 3: подтянуть в очередь тех, кто в зоне боя. */
+  onRecruitFromBattleZone?: () => void;
 }) {
   const [initiativePending, setInitiativePending] = useState(false);
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
+  const characterNameFor = useMemo(
+    () => createRollCharacterNameSource(snapshot),
+    [snapshot],
+  );
   const [composer, setComposer] = useState("");
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
@@ -609,6 +618,7 @@ export function ActivityPanel({
               snapshot.me.role === "GM",
             ).finally(() => setInitiativePending(false));
           }}
+          onRecruitFromZone={onRecruitFromBattleZone}
         />
       )}
       <section className="activity-roll-controls" aria-label="Быстрые броски">
@@ -627,21 +637,24 @@ export function ActivityPanel({
               ))}
             </FormSelect>
           )}
-          <label className="compact-check">
-            <FormInput
-              type="checkbox"
-              checked={physicalDice}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setPhysicalDice(enabled);
-                window.localStorage.setItem(
-                  physicalDiceStorageKey(snapshot.me.id),
-                  String(enabled),
-                );
-              }}
-            />
+          {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
+              подписывала — uikit рисует свой `<label>` внутри, а вложенные не
+              связываются: программа чтения с экрана называла поле «флажок». */}
+          <FormInput
+            className="compact-check"
+            type="checkbox"
+            checked={physicalDice}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              setPhysicalDice(enabled);
+              window.localStorage.setItem(
+                physicalDiceStorageKey(snapshot.me.id),
+                String(enabled),
+              );
+            }}
+          >
             Физические кубы
-          </label>
+          </FormInput>
         </div>
         <DiceTrayPanel
           characterId={snapshot.me.characterId}
@@ -700,19 +713,20 @@ export function ActivityPanel({
           <fieldset className="activity-filters">
             <legend className="visually-hidden">Показывать</legend>
             {ACTIVITY_FILTERS.map((filter) => (
-              <label className="compact-check" key={filter}>
-                <FormInput
-                  type="checkbox"
-                  checked={activityFilters.has(filter)}
-                  onChange={(event) => {
-                    const next = new Set(activityFilters);
-                    if (event.target.checked) next.add(filter);
-                    else next.delete(filter);
-                    onActivityFiltersChange(next);
-                  }}
-                />
+              <FormInput
+                className="compact-check"
+                key={filter}
+                type="checkbox"
+                checked={activityFilters.has(filter)}
+                onChange={(event) => {
+                  const next = new Set(activityFilters);
+                  if (event.target.checked) next.add(filter);
+                  else next.delete(filter);
+                  onActivityFiltersChange(next);
+                }}
+              >
                 {ACTIVITY_FILTER_LABEL[filter]}
-              </label>
+              </FormInput>
             ))}
           </fieldset>
         </details>
@@ -744,9 +758,17 @@ export function ActivityPanel({
           </button>
         </div>
       )}
+      {/* UIX-532: лента прокручивается, значит должна доставаться и с
+          клавиатуры. Без `tabIndex` до неё нельзя добраться табом, и человек
+          без мыши не может пролистать журнал вовсе — прокрутка есть, а
+          управлять ею нечем. `role="log"` называет то, что здесь уже
+          происходит: список, в конец которого дописываются записи. */}
       <div
         className="message-list"
         id="activity-message-list"
+        role="log"
+        tabIndex={0}
+        aria-label="Лента событий"
         aria-live="polite"
         ref={listRef}
         onScroll={onScroll}
@@ -787,10 +809,9 @@ export function ActivityPanel({
             >
               <header>
                 <strong>{message.displayName}</strong>
-                {/* UIX-467: убраны две плашки. «Броски» повторяла на каждом
-                 * сообщении то, что и так задано фильтром ленты, а имя
-                 * персонажа у чужого броска вырождалось в слово «Персонаж».
-                 * Личность теперь читается по миниатюре токена слева. */}
+                <RollCharacterName
+                  name={characterNameFor(message.characterId)}
+                />
                 <time>
                   {new Date(occurredAt).toLocaleTimeString([], {
                     hour: "2-digit",
@@ -1298,6 +1319,10 @@ export function ChatPanel({
   );
   const timeline = buildChatTimeline(messages);
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
+  const characterNameFor = useMemo(
+    () => createRollCharacterNameSource(snapshot),
+    [snapshot],
+  );
   const catalogEntryIds = useMemo(
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
     [snapshot.catalogEntries],
@@ -1465,11 +1490,9 @@ export function ChatPanel({
             >
               <header>
                 <strong>{item.message.displayName}</strong>
-                {/* UIX-454: плашка с именем персонажа убрана. У чужого броска
-                 * она вырождалась в слово «Персонаж» — занимала место и не
-                 * сообщала ничего, потому что чужие персонажи игроку не
-                 * приходили. Теперь личность видна портретом слева от броска,
-                 * а имя — в подсказке к нему. */}
+                <RollCharacterName
+                  name={characterNameFor(item.message.characterId)}
+                />
                 <time>
                   {new Date(item.message.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",

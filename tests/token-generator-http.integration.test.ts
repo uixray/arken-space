@@ -324,3 +324,86 @@ describe("UIX-255 token generator HTTP", () => {
     expect(response.json()).toEqual({ error: "ASSET_NOT_FOUND" });
   });
 });
+
+/**
+ * UIX-474 п. 2 — почему в снапшоте живут ссылки на ассеты без содержимого.
+ *
+ * Разбор кода дал ответ: строку в `assets` не удаляет никто, а файл исчезает
+ * лишь на откате неудачной загрузки — вместе со своей строкой. Значит расхождение
+ * приходит снаружи: база пережила каталог `MEDIA_ROOT` (сброс стенда, другой
+ * том, другой путь). Кода, который создаёт такую пару, в репозитории нет.
+ *
+ * Чинить здесь нечего — но узнавать об этом по битой картинке в браузере,
+ * как вышло с журналом бросков, нельзя. Снаружи «нет такой строки» и «строка
+ * есть, файла нет» отвечали одинаковым 404 и не различались в журнале сервера.
+ * Теперь второй случай называет себя и печатает `storageKey`, а сбой чтения
+ * (права, каталог вместо файла) перестал притворяться отсутствием файла:
+ * иначе авария хранилища выглядела бы потерянным ассетом и чинили бы не то.
+ *
+ * Живёт рядом с генератором токенов ради его стенда: настоящий `MEDIA_ROOT`,
+ * строки ассетов и сессии обеих ролей — всё, что этой проверке нужно.
+ */
+describe("UIX-474 asset content", () => {
+  const contentUrl = (assetId: string) => `/api/assets/${assetId}/content`;
+
+  it("serves a stored asset to the GM", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: contentUrl(ids.image),
+      headers: headers(secrets.gm),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("image/webp");
+  });
+
+  it("names the lost file instead of a bare 404", async () => {
+    await rm(join(mediaRoot, "source.webp"));
+    const warnings: unknown[] = [];
+    app.log.warn = ((payload: unknown, message?: string) => {
+      if (message === "asset.content_missing") warnings.push(payload);
+    }) as typeof app.log.warn;
+
+    const response = await app.inject({
+      method: "GET",
+      url: contentUrl(ids.image),
+      headers: headers(secrets.gm),
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "ASSET_CONTENT_NOT_FOUND" });
+    // Без `storageKey` в журнале вопрос «битая запись или потерянный файл»
+    // снова пришлось бы разбирать в браузере.
+    expect(warnings).toEqual([
+      { assetId: ids.image, storageKey: "source.webp" },
+    ]);
+  });
+
+  it("does not disguise an unreadable file as a missing one", async () => {
+    // Каталог на месте файла — самый дешёвый способ получить не-ENOENT: чтение
+    // падает на EISDIR, хотя запись в базе цела и файл «есть».
+    await rm(join(mediaRoot, "source.webp"));
+    await mkdir(join(mediaRoot, "source.webp"));
+    app.log.error = (() => {}) as typeof app.log.error;
+
+    const response = await app.inject({
+      method: "GET",
+      url: contentUrl(ids.image),
+      headers: headers(secrets.gm),
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({ error: "ASSET_CONTENT_UNREADABLE" });
+  });
+
+  it("hides an asset the player cannot see behind the same 404", async () => {
+    // Утечка была бы в различии ответов: игрок не должен узнавать по коду
+    // ошибки, что засадный токен вообще существует.
+    const response = await app.inject({
+      method: "GET",
+      url: contentUrl(ids.image),
+      headers: headers(secrets.player),
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "ASSET_NOT_FOUND" });
+  });
+});

@@ -13,6 +13,30 @@ export function isTrackableCursorPointerType(pointerType: string): boolean {
   return pointerType === "mouse";
 }
 
+/**
+ * UIX-403: the one place that decides whether a position leaves this machine.
+ *
+ * The privacy the ticket asks for is not "do not draw it" but "do not send
+ * it": a position that is broadcast and merely hidden is one devtools tab away
+ * from telling players where the GM is looking. That makes this condition a
+ * safety property rather than a rendering detail, and it belongs next to the
+ * other broadcast decisions where it can be tested without Konva, a DOM, or a
+ * real socket — the renderer had it inline, where nothing could reach it.
+ *
+ * A missing socket counts as "do not send" rather than an error: the app runs
+ * fine offline, and cursor presence is the first thing that should go quiet.
+ */
+export function shouldBroadcastCursor(input: {
+  sendEnabled: boolean;
+  hasSocket: boolean;
+  /** `undefined` when the move did not come from a real pointer event. */
+  pointerType: string | undefined;
+}): boolean {
+  if (!input.sendEnabled || !input.hasSocket) return false;
+  if (input.pointerType === undefined) return false;
+  return isTrackableCursorPointerType(input.pointerType);
+}
+
 /** A few seconds of no pointer movement is treated as "gone". */
 export const CURSOR_INACTIVITY_MS = 4000;
 

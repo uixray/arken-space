@@ -66,6 +66,47 @@ export function writeAuditReceipt(path, receipt) {
   writeFileSync(path, JSON.stringify(receipt, null, 2) + "\n", { mode: 0o600 });
 }
 
+export function verifyGameplayResetBoundary(counts, before) {
+  const cleared = [
+    "playerMemberships",
+    "scenes",
+    "characters",
+    "playerSessions",
+    "playerAccessGrants",
+    "invites",
+    "chatMessages",
+    "audioStates",
+    "actionJournal",
+    "drawings",
+    "gameEvents",
+    "tokens",
+    "fogReveals",
+    "characterSpellAssignments",
+    "characterSpellAssignmentVersions",
+    "spellPacks",
+    "spellPackVersions",
+  ];
+  const foreign = Object.keys(before).filter((key) =>
+    key.startsWith("foreign"),
+  );
+  if (
+    counts.campaigns !== 1 ||
+    counts.gmMemberships !== 1 ||
+    counts.gmSessions !== before.gmSessions ||
+    counts.assets !== before.assets ||
+    counts.assetOwnershipValid !== counts.assets ||
+    counts.activeSceneId !== null ||
+    counts.campaignPaused !== false ||
+    counts.campaignDay !== 1 ||
+    counts.battleActive !== false ||
+    counts.battleCounter !== 0 ||
+    counts.campaignRevision !== 0 ||
+    cleared.some((key) => counts[key] !== 0) ||
+    foreign.some((key) => counts[key] !== before[key])
+  )
+    throw new Error("Post-reset database boundary verification failed");
+}
+
 async function health() {
   const response = await fetch(
     process.env.ARKEN_PRODUCTION_HEALTH_URL ??
@@ -183,7 +224,12 @@ export const productionDependencies = {
         'gameEvents',(select count(*) from game_events where campaign_id=${c}),
         'tokens',(select count(*) from tokens t join scenes s on s.id=t.scene_id where s.campaign_id=${c}),
         'fogReveals',(select count(*) from fog_reveals f join scenes s on s.id=f.scene_id where s.campaign_id=${c}),
+        'characterSpellAssignments',(select count(*) from character_spell_assignments where campaign_id=${c}),
+        'characterSpellAssignmentVersions',(select count(*) from character_spell_assignment_versions where campaign_id=${c}),
+        'spellPacks',(select count(*) from spell_packs where campaign_id=${c}),
+        'spellPackVersions',(select count(*) from spell_pack_versions where campaign_id=${c}),
         'activeSceneId',(select active_scene_id from campaigns where id=${c}),
+        'campaignPaused',(select paused from campaigns where id=${c}),
         'campaignDay',(select day from campaigns where id=${c}),
         'battleActive',(select battle_active from campaigns where id=${c}),
         'battleCounter',(select battle_counter from campaigns where id=${c}),
@@ -197,7 +243,11 @@ export const productionDependencies = {
         'foreignInvites',(select count(*) from invites where campaign_id<>${c}),
         'foreignChatMessages',(select count(*) from chat_messages where campaign_id<>${c}),
         'foreignAudioStates',(select count(*) from campaign_audio_tracks where campaign_id<>${c}),
-        'foreignGameEvents',(select count(*) from game_events where campaign_id<>${c})
+        'foreignGameEvents',(select count(*) from game_events where campaign_id<>${c}),
+        'foreignCharacterSpellAssignments',(select count(*) from character_spell_assignments where campaign_id<>${c}),
+        'foreignCharacterSpellAssignmentVersions',(select count(*) from character_spell_assignment_versions where campaign_id<>${c}),
+        'foreignSpellPacks',(select count(*) from spell_packs where campaign_id<>${c}),
+        'foreignSpellPackVersions',(select count(*) from spell_pack_versions where campaign_id<>${c})
       );`,
     ]);
     return JSON.parse(output);
@@ -252,39 +302,7 @@ export const productionDependencies = {
     if (afterHealth.schemaVersion !== expectedSchemaVersion)
       throw new Error("Post-reset schema version changed");
     const counts = await productionDependencies.countState(campaignId);
-    const cleared = [
-      "playerMemberships",
-      "scenes",
-      "characters",
-      "playerSessions",
-      "playerAccessGrants",
-      "invites",
-      "chatMessages",
-      "audioStates",
-      "actionJournal",
-      "drawings",
-      "gameEvents",
-      "tokens",
-      "fogReveals",
-    ];
-    const foreign = Object.keys(before).filter((key) =>
-      key.startsWith("foreign"),
-    );
-    if (
-      counts.campaigns !== 1 ||
-      counts.gmMemberships !== 1 ||
-      counts.gmSessions !== before.gmSessions ||
-      counts.assets !== before.assets ||
-      counts.assetOwnershipValid !== counts.assets ||
-      counts.activeSceneId !== null ||
-      counts.campaignDay !== 1 ||
-      counts.battleActive !== false ||
-      counts.battleCounter !== 0 ||
-      counts.campaignRevision !== 0 ||
-      cleared.some((key) => counts[key] !== 0) ||
-      foreign.some((key) => counts[key] !== before[key])
-    )
-      throw new Error("Post-reset database boundary verification failed");
+    verifyGameplayResetBoundary(counts, before);
     const gm = docker([
       "exec",
       "-T",

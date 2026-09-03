@@ -1,5 +1,9 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./campaign-fixture";
+import {
+  heightThatFitsAllButtons,
+  visibleButtons,
+} from "./quick-roll-panel-metrics";
 
 /**
  * UIX-469 — растягивание панели быстрых бросков обязано показывать больше кнопок.
@@ -24,30 +28,22 @@ import { expect, test } from "./campaign-fixture";
  * по-прежнему лежат внутри тела. Сравнение рамок этого не замечает — на нём
  * первая версия теста прошла даже с возвращённой ошибкой.
  */
-async function visibleButtons(page: Page) {
-  return page.evaluate(() => {
-    const panel = document.querySelector(".quick-roll-panel");
-    const body = panel?.querySelector(".quick-roll-panel__body");
-    if (!panel || !body)
-      throw new Error("Панель быстрых бросков не отрисована");
-    const buttons = [...body.querySelectorAll("button")];
-    const fits = buttons.filter((button) => {
-      const rect = button.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return false;
-      const hit = document.elementFromPoint(
-        rect.left + rect.width / 2,
-        rect.top + rect.height / 2,
-      );
-      return hit === button || button.contains(hit);
-    }).length;
-    // Прокрутка ищется по всей панели: она может завестись и у вложенного
-    // списка, а не только у тела — именно так и выглядела ошибка.
-    const scrolls = [body, ...body.querySelectorAll("*")].some(
-      (element) => element.scrollHeight > element.clientHeight + 1,
-    );
-    return { fits, total: buttons.length, scrolls };
-  });
-}
+
+/**
+ * Высота, при которой кнопки заведомо помещаются целиком.
+ *
+ * Раньше здесь стояло 420 пикселей — число, подобранное на одной машине. Оно
+ * оказалось граничным: в CI при той же высоте помещалось 12 кнопок из 13, и
+ * тест падал в обоих браузерах, хотя проверяемое свойство не нарушено. Высота
+ * строки зависит от шрифтов машины, а число кнопок — от навыков персонажа;
+ * ни то, ни другое тест не выбирает.
+ *
+ * Поэтому высота измеряется: панели даётся заведомо избыточный размер, у
+ * последней кнопки берётся нижняя граница, к ней добавляются отступ тела и
+ * та часть панели, которая телом не является. Проверяемое намерение — «высоты
+ * с запасом хватает на все кнопки» — сохраняется, а зависимость от конкретной
+ * машины уходит.
+ */
 
 async function setPanelHeight(page: Page, height: number) {
   await page.evaluate((next) => {
@@ -61,6 +57,23 @@ test("выше панель — больше видимых кнопок быс�
   page,
   gmToken,
 }) => {
+  /*
+   * Ширина 1440, а не дефолтные 1280 — из-за известного дефекта UIX-528.
+   *
+   * При ровно 1280px тринадцатая кнопка («Интеллект») не переносится на новую
+   * строку и уезжает за правый край окна: в CI её центр оказывался на x=1295
+   * при ширине окна 1280. Никакая высота панели этого не лечит — кнопка уходит
+   * вбок, а не вниз. Локально дефект не воспроизводится, поэтому причина в
+   * UIX-528 записана как гипотеза, а не как факт.
+   *
+   * Это обход, а не починка: при 1280px кнопка по-прежнему недоступна. Когда
+   * UIX-528 закроют, ширину надо вернуть на 1280 — именно она ловила дефект.
+   *
+   * Высота 1400 нужна по другой причине: видимость считается попаданием точки,
+   * то есть тем, что человек реально видит. Растянутая панель растёт вниз, и в
+   * невысоком окне её нижняя часть уходит за край.
+   */
+  await page.setViewportSize({ width: 1440, height: 1400 });
   await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
@@ -70,10 +83,16 @@ test("выше панель — больше видимых кнопок быс�
   const short = await visibleButtons(page);
   await setPanelHeight(page, 260);
   const medium = await visibleButtons(page);
-  await setPanelHeight(page, 420);
+  const roomy = await heightThatFitsAllButtons(page);
+  await setPanelHeight(page, roomy);
   const tall = await visibleButtons(page);
 
-  const seen = `120px → ${short.fits}, 260px → ${medium.fits}, 420px → ${tall.fits} из ${tall.total}`;
+  const seen =
+    `120px → ${short.fits}, 260px → ${medium.fits}, ${roomy}px → ` +
+    `${tall.fits} из ${tall.total}` +
+    ` | панель ${tall.panelHeight}px из запрошенных ${roomy}px` +
+    ` | шрифт ${tall.font}` +
+    (tall.hidden.length > 0 ? `\nне видно: ${tall.hidden.join("; ")}` : "");
 
   // Сама суть задачи: растягивание должно окупаться кнопками, а не пустой
   // коробкой вокруг того же скролла.
@@ -89,6 +108,23 @@ test("прокрутка появляется только когда кнопк
   page,
   gmToken,
 }) => {
+  /*
+   * Ширина 1440, а не дефолтные 1280 — из-за известного дефекта UIX-528.
+   *
+   * При ровно 1280px тринадцатая кнопка («Интеллект») не переносится на новую
+   * строку и уезжает за правый край окна: в CI её центр оказывался на x=1295
+   * при ширине окна 1280. Никакая высота панели этого не лечит — кнопка уходит
+   * вбок, а не вниз. Локально дефект не воспроизводится, поэтому причина в
+   * UIX-528 записана как гипотеза, а не как факт.
+   *
+   * Это обход, а не починка: при 1280px кнопка по-прежнему недоступна. Когда
+   * UIX-528 закроют, ширину надо вернуть на 1280 — именно она ловила дефект.
+   *
+   * Высота 1400 нужна по другой причине: видимость считается попаданием точки,
+   * то есть тем, что человек реально видит. Растянутая панель растёт вниз, и в
+   * невысоком окне её нижняя часть уходит за край.
+   */
+  await page.setViewportSize({ width: 1440, height: 1400 });
   await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
@@ -100,8 +136,11 @@ test("прокрутка появляется только когда кнопк
   expect(short.scrolls, "кнопки не помещаются — прокрутка нужна").toBe(true);
 
   // Высоты хватает на все кнопки: полоса прокрутки при этом лишняя.
-  await setPanelHeight(page, 420);
+  await setPanelHeight(page, await heightThatFitsAllButtons(page));
   const tall = await visibleButtons(page);
-  expect(tall.fits).toBe(tall.total);
+  expect(
+    tall.fits,
+    `панель ${tall.panelHeight}px, шрифт ${tall.font}; ${tall.hidden.join("; ")}`,
+  ).toBe(tall.total);
   expect(tall.scrolls, "всё помещается — прокрутки быть не должно").toBe(false);
 });

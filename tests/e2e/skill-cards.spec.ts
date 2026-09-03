@@ -1,4 +1,5 @@
-﻿import { expect, test, type Page } from "@playwright/test";
+﻿import { type Page } from "@playwright/test";
+import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 
@@ -62,10 +63,12 @@ function snapshotFor(
       id: ids.campaign,
       name: "Skill cards",
       day: 1,
+      paused: false,
       battleActive: false,
       battleCounter: 0,
       statLayout: [],
       initiative: [],
+      battleZone: null,
       revision: 0,
     },
     me: {

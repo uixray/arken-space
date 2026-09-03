@@ -11,8 +11,14 @@ import { initiativeRollFormula, initiativeRollLabel } from "./initiative-roll";
  * конфликтом, а не слиться в порядок, которого никто не задумывал.
  *
  * На сервер едет только то, что там хранится: собственное имя (а не показанное),
- * ссылка на токен и бросок. Отправив показанное имя, панель молча превратила бы
- * наследование в копию — тот же урок, что в UIX-400.
+ * ссылка на токен, бросок и закрепление. Отправив показанное имя, панель молча
+ * превратила бы наследование в копию — тот же урок, что в UIX-400.
+ *
+ * Список полей собирается вручную, и это осознанная цена: `canEdit` и
+ * `initiativeBonus` — вычисленные сервером, обратно им ехать нечего. Но плата
+ * за ручной список — забытое поле, и один раз она уже была уплачена: `pinned`
+ * из UIX-466 п. 9 не попал сюда, и закрепление гибло по дороге к серверу при
+ * каждой правке очереди. Тест ниже держит именно это.
  */
 export interface InitiativeActions {
   onUpdateInitiative: (
@@ -48,6 +54,31 @@ export interface InitiativeActions {
     revision: number,
     isGm: boolean,
   ) => Promise<void>;
+  /**
+   * UIX-466 п. 4 — сохранить обведённую зону боя или снять её.
+   *
+   * Зона едет целиком: правки «подвинуть на пиксель» нет, мастер обводит поле
+   * заново. `null` снимает зону — без этого её нельзя было бы убрать, не
+   * рисуя вырожденный прямоугольник где-нибудь в углу.
+   */
+  onSetBattleZone: (
+    zone: {
+      sceneId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    } | null,
+    revision: number,
+  ) => Promise<void>;
+  /**
+   * UIX-466 п. 3 — подтянуть в очередь тех, кто сейчас в зоне.
+   *
+   * Отдельное действие, а не пересчёт на каждое движение токена: живой состав
+   * означал бы, что случайно задетая мышью фигура меняет очередь посреди хода.
+   * Пополняет, не выбрасывая: вышедший из зоны мог отступить, а не выйти из боя.
+   */
+  onRecruitFromBattleZone: (revision: number) => Promise<void>;
 }
 
 export function useInitiativeActions(dependencies: {
@@ -68,6 +99,7 @@ export function useInitiativeActions(dependencies: {
               tokenId: participant.tokenId,
               name: participant.ownName,
               initiative: participant.initiative,
+              pinned: participant.pinned,
             })),
           }),
         });
@@ -118,6 +150,7 @@ export function useInitiativeActions(dependencies: {
                 tokenId: row.tokenId,
                 name: row.ownName,
                 initiative: row.id === participant.id ? total : row.initiative,
+                pinned: row.pinned,
               })),
             }),
           });
@@ -131,6 +164,24 @@ export function useInitiativeActions(dependencies: {
               initiative: total,
             }),
           });
+        await load();
+      },
+      onSetBattleZone: async (zone, revision) => {
+        await api("/api/campaign/battle-zone", {
+          method: "PUT",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+            zone,
+          }),
+        });
+        await load();
+      },
+      onRecruitFromBattleZone: async (revision) => {
+        await api("/api/campaign/initiative/from-zone", {
+          method: "POST",
+          body: JSON.stringify({ actionId: crypto.randomUUID(), revision }),
+        });
         await load();
       },
     }),

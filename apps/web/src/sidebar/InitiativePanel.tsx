@@ -16,8 +16,20 @@ import { Button, TextInput } from "@gravity-ui/uikit";
  * броски и всё равно каждый раз нажимал «пересортировать», то есть ручной
  * порядок был не намерением, а лишней работой. Теперь очередь сортируется после
  * каждой правки — и сортирует **сервер**, чтобы порядок совпадал у всех
- * независимо от того, чей клиент прислал число. Кнопок ↑/↓ и «Пересортировать»
- * здесь больше нет: переставлять то, что вычисляется, нечем.
+ * независимо от того, чей клиент прислал число. Кнопки «Пересортировать» здесь
+ * больше нет: она стала лишней работой.
+ *
+ * UIX-466 п. 9 — но переставить руками мастер обязан уметь.
+ *
+ * Кнопки ↑/↓ вернулись в новом смысле: они не «двигают строку в списке», а
+ * закрепляют её на месте. Обмен закрепляет **обе** участвовавшие строки —
+ * закрепив одну, вторую мы отпустили бы в общий пул, откуда сортировка унесла
+ * бы её не туда, где её только что оставили руками. Закрепление снимается
+ * кнопкой-булавкой, иначе к автоматике было бы не вернуться.
+ *
+ * Перетаскивание намеренно не делалось: кнопки работают с клавиатуры и на
+ * планшете, и их поведение проверяется тестом — а имитация drag в jsdom
+ * проверяла бы саму имитацию.
  *
  * Значение своей строки игрок вносит сам — право приходит с сервера строкой
  * `canEdit`. До этого броски игроков вносил мастер с их слов, то есть самое
@@ -31,6 +43,7 @@ export function InitiativePanel({
   onUpdate,
   onSetOwnInitiative,
   onRoll,
+  onRecruitFromZone,
 }: {
   participants: readonly InitiativeParticipantDto[];
   isGm: boolean;
@@ -45,6 +58,11 @@ export function InitiativePanel({
    */
   onSetOwnInitiative: (participantId: string, value: number | null) => void;
   onRoll?: (participant: InitiativeParticipantDto) => void;
+  /**
+   * UIX-466 п. 3 — подтянуть тех, кто сейчас в зоне боя. `undefined`, когда
+   * зона не задана: кнопка, которая всегда отвечает отказом, хуже отсутствующей.
+   */
+  onRecruitFromZone?: () => void;
 }) {
   const [newName, setNewName] = useState("");
 
@@ -73,6 +91,26 @@ export function InitiativePanel({
     );
   };
 
+  /**
+   * Обмен соседей. Закрепляются оба: порядок этой пары мастер только что задал
+   * руками, и следующий чужой бросок не должен его расталкивать.
+   */
+  const swap = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= participants.length) return;
+    const next = participants.map((row) => ({ ...row }));
+    next[index] = { ...participants[target]!, pinned: true };
+    next[target] = { ...participants[index]!, pinned: true };
+    onUpdate(next);
+  };
+
+  const unpin = (id: string) =>
+    onUpdate(
+      participants.map((row) =>
+        row.id === id ? { ...row, pinned: false } : row,
+      ),
+    );
+
   return (
     // UIX-466: панель сворачивается. В бою она нужна постоянно, а между боями
     // занимает верх колонки списком, который уже ничего не решает.
@@ -88,7 +126,7 @@ export function InitiativePanel({
       {participants.length === 0 && (
         <p className="muted">
           {isGm
-            ? "Выделите рамкой тех, кто вступает в бой, и нажмите «Ввести в бой»."
+            ? "Обведите зону боя на карте или выделите рамкой тех, кто вступает в бой."
             : "Мастер ещё не собрал очередь."}
         </p>
       )}
@@ -134,6 +172,51 @@ export function InitiativePanel({
               </span>
             )}
             <div className="initiative-panel__actions">
+              {/* Булавка только у закреплённых: у остальных ей нечего снимать,
+                  а ряд одинаковых серых кнопок мешал бы найти нужную. Игрок её
+                  видит, но не нажимает — это объяснение, а не ручка. */}
+              {participant.pinned &&
+                (isGm ? (
+                  <Button
+                    view="flat"
+                    disabled={pending}
+                    onClick={() => unpin(participant.id)}
+                    title="Открепить: строка снова встанет по броску"
+                    aria-label={`Открепить «${participant.name}»`}
+                  >
+                    <span aria-hidden="true">📌</span>
+                  </Button>
+                ) : (
+                  <span
+                    className="initiative-panel__pinned"
+                    title="Место задано мастером"
+                    aria-label={`«${participant.name}» — место задано мастером`}
+                  >
+                    <span aria-hidden="true">📌</span>
+                  </span>
+                ))}
+              {isGm && (
+                <>
+                  <Button
+                    view="flat"
+                    disabled={pending || index === 0}
+                    onClick={() => swap(index, -1)}
+                    title="Поставить выше и закрепить"
+                    aria-label={`Переместить «${participant.name}» выше`}
+                  >
+                    <span aria-hidden="true">↑</span>
+                  </Button>
+                  <Button
+                    view="flat"
+                    disabled={pending || index === participants.length - 1}
+                    onClick={() => swap(index, 1)}
+                    title="Поставить ниже и закрепить"
+                    aria-label={`Переместить «${participant.name}» ниже`}
+                  >
+                    <span aria-hidden="true">↓</span>
+                  </Button>
+                </>
+              )}
               {/* Бросок доступен по тому же праву, что и ввод значения: игрок
                   бросает за себя, мастер — за любого. Кубик и перенос числа
                   руками были двумя действиями там, где смысл один. */}
@@ -184,6 +267,7 @@ export function InitiativePanel({
                   initiative: null,
                   initiativeBonus: null,
                   canEdit: true,
+                  pinned: false,
                 })),
               ])
             }
@@ -191,6 +275,18 @@ export function InitiativePanel({
           >
             Ввести в бой{addable.length > 0 ? ` · ${addable.length}` : ""}
           </Button>
+          {/* UIX-466 п. 3: пополнение по зоне — рядом с ручным вводом, потому
+              что это тот же вопрос «кто в бою», решённый рамкой на карте
+              вместо выделения. Показывается только когда зона задана. */}
+          {onRecruitFromZone && (
+            <Button
+              disabled={pending}
+              onClick={onRecruitFromZone}
+              title="Добавить всех, кто сейчас в зоне боя; уже введённых не тронет"
+            >
+              Обновить по зоне
+            </Button>
+          )}
           {/* Участник без токена — тот, кого на карте нет: «Волк №3», брошенный
            * физическим кубом за столом. */}
           <div className="initiative-panel__add-row">
@@ -214,6 +310,7 @@ export function InitiativePanel({
                     initiative: null,
                     initiativeBonus: null,
                     canEdit: true,
+                    pinned: false,
                   },
                 ]);
                 setNewName("");

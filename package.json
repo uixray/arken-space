@@ -29,6 +29,7 @@
     "tokens:check": "style-dictionary build --config style-dictionary.config.js && git diff --exit-code apps/web/src/design-system/tokens.generated.css"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@electric-sql/pglite": "0.5.4",
     "@eslint/js": "10.0.1",
     "@fastify/cookie": "11.1.2",

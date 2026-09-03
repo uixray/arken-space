@@ -72,6 +72,7 @@ const participants: InitiativeParticipantDto[] = [
     initiative: 12,
     initiativeBonus: 3,
     canEdit: true,
+    pinned: false,
   },
   {
     id: "b",
@@ -81,6 +82,7 @@ const participants: InitiativeParticipantDto[] = [
     initiative: 19,
     initiativeBonus: null,
     canEdit: true,
+    pinned: false,
   },
 ];
 
@@ -104,6 +106,11 @@ const renderPanel = (
   );
   return { onUpdate, onSetOwnInitiative, onRoll };
 };
+
+/** Очередь, где первую строку мастер поставил на место руками. */
+const withPinnedLloyd: InitiativeParticipantDto[] = participants.map((row) =>
+  row.id === "a" ? { ...row, pinned: true } : row,
+);
 
 const order = () =>
   Array.from(document.querySelectorAll(".initiative-panel__name")).map(
@@ -135,14 +142,78 @@ describe("очередь ходов", () => {
     ]);
   });
 
-  it("не даёт ручной перестановки вовсе", async () => {
-    // Порядок стал вычисляемым: кнопки, двигающие строку, обещали бы власть
-    // над ним, которой больше нет. И «Пересортировать» тоже — сортировка
-    // происходит сама после каждой правки.
+  it("не возвращает кнопку «Пересортировать»", async () => {
+    // Заменяет прежний тест «не даёт ручной перестановки вовсе»: он закреплял
+    // решение, отменённое пунктом 9 — переставлять мастер обязан уметь. А вот
+    // «Пересортировать» отменена по-прежнему: сортировка идёт сама после
+    // каждой правки, и кнопка была бы лишней работой.
     renderPanel();
-    expect(screen.queryByLabelText("Переместить «Тэйн» выше")).toBeNull();
-    expect(screen.queryByLabelText("Переместить «Ллойд» ниже")).toBeNull();
     expect(screen.queryByText("Пересортировать")).toBeNull();
+  });
+
+  it("меняет местами соседей и закрепляет обоих", async () => {
+    // UIX-466 п. 9. Закрепляются оба: отпустив второго в общий пул, мы бы
+    // отдали сортировке ровно ту пару, которую мастер только что расставил.
+    const { onUpdate } = renderPanel();
+    await userEvent.click(screen.getByLabelText("Переместить «Тэйн» выше"));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({ id: "b", pinned: true }),
+      expect.objectContaining({ id: "a", pinned: true }),
+    ]);
+  });
+
+  it("не двигает крайние строки за пределы очереди", async () => {
+    // Кнопка, которая ничего не делает, обязана выглядеть так, а не молча
+    // отправлять серверу неизменившийся порядок.
+    renderPanel();
+    expect(screen.getByLabelText("Переместить «Ллойд» выше")).toBeDisabled();
+    expect(screen.getByLabelText("Переместить «Тэйн» ниже")).toBeDisabled();
+  });
+
+  it("даёт мастеру открепить строку", async () => {
+    const { onUpdate } = renderPanel({ participants: withPinnedLloyd });
+    await userEvent.click(screen.getByLabelText("Открепить «Ллойд»"));
+    expect(onUpdate.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({ id: "a", pinned: false }),
+      expect.objectContaining({ id: "b", pinned: false }),
+    ]);
+  });
+
+  it("игроку булавка объясняет порядок, но ручкой не становится", async () => {
+    // Без неё чужой ход, не поднявшийся после большого броска, выглядит как
+    // ошибка. Нажимать её игроку при этом нечего: состав ведёт мастер.
+    renderPanel({ participants: withPinnedLloyd, isGm: false });
+    expect(screen.queryByLabelText("Открепить «Ллойд»")).toBeNull();
+    expect(
+      screen.getByLabelText("«Ллойд» — место задано мастером"),
+    ).toBeTruthy();
+  });
+
+  it("не предлагает пополнение по зоне, пока она не задана", async () => {
+    // Кнопка, которая всегда отвечает отказом, хуже отсутствующей: мастер
+    // нажал бы её, получил «зона не задана» и не понял, чего от него хотят.
+    renderPanel();
+    expect(screen.queryByText("Обновить по зоне")).toBeNull();
+  });
+
+  it("пополняет состав по зоне, когда она есть", async () => {
+    const onRecruitFromZone = vi.fn();
+    renderPanel({ onRecruitFromZone });
+    await userEvent.click(screen.getByText("Обновить по зоне"));
+    expect(onRecruitFromZone).toHaveBeenCalledTimes(1);
+  });
+
+  it("не предлагает пополнение по зоне игроку", async () => {
+    // Состав ведёт мастер: у игрока нет ни зоны, ни права её применять.
+    renderPanel({ onRecruitFromZone: vi.fn(), isGm: false });
+    expect(screen.queryByText("Обновить по зоне")).toBeNull();
+  });
+
+  it("не показывает булавку у незакреплённой строки", async () => {
+    renderPanel();
+    expect(screen.queryByLabelText("Открепить «Ллойд»")).toBeNull();
+    expect(screen.queryByLabelText("Открепить «Тэйн»")).toBeNull();
   });
 
   it("показывает бонус к инициативе рядом с именем", async () => {
