@@ -1,8 +1,7 @@
 import type { AssetDto } from "@arken/contracts";
 
-const SUPPORTED_TOKEN_ASSET_KINDS = new Set(["IMAGE", "TOKEN"]);
 export function tokenDefinitionAssets(assets: AssetDto[]) {
-  return assets.filter((asset) => SUPPORTED_TOKEN_ASSET_KINDS.has(asset.kind));
+  return assets.filter((asset) => asset.kind === "TOKEN");
 }
 export function tokenGeneratorSources(assets: AssetDto[]) {
   return assets.filter((asset) => asset.kind === "IMAGE");

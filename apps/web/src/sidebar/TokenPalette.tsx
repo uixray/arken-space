@@ -307,7 +307,7 @@ export function TokenImageAssignment({
   );
 }
 
-function TokenDefinitionEditor({
+export function TokenDefinitionEditor({
   snapshot,
   definition,
   onUpload,
@@ -365,10 +365,16 @@ function TokenDefinitionEditor({
     setSaving(true);
     setError("");
     try {
-      let selectedAssetId = assetId || null;
+      const selectedAssetId = assetId || null;
       if (image && uploadSourcePromise.current) {
-        const uploaded = await uploadSourcePromise.current;
-        if (!selectedAssetId) selectedAssetId = uploaded.id;
+        await uploadSourcePromise.current;
+      }
+      const selectedAsset = snapshot.assets
+        .concat(uploadedSource ?? [])
+        .find((asset) => asset.id === selectedAssetId);
+      if (selectedAsset?.kind === "IMAGE" || (image && !selectedAssetId)) {
+        setError("Обрежьте исходное изображение и создайте TOKEN.");
+        return;
       }
       const input = {
         // Пустое поле у токена с персонажем — это «зовусь как он».
@@ -480,7 +486,6 @@ function TokenDefinitionEditor({
               .then((asset) => {
                 if (uploadSourcePromise.current !== upload) return;
                 setUploadedSource(asset);
-                setAssetId(asset.id);
               })
               .catch((reason) => {
                 if (uploadSourcePromise.current !== upload) return;
