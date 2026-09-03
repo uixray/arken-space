@@ -473,7 +473,8 @@ export function TokenDefinitionEditor({
         <ImageUploadField
           label="Загрузить новое изображение"
           value={image}
-          hint="После выбора файл станет доступен в генераторе"
+          hint="Выберите, вставьте или перетащите файл — он станет доступен в генераторе"
+          unifiedIntake
           onUpdate={(file) => {
             setImage(file);
             setError("");

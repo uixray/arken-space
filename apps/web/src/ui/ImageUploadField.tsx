@@ -1,4 +1,10 @@
-import { useEffect, useId, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useState,
+  type DragEvent,
+  type ClipboardEvent,
+} from "react";
 import { Button, Icon } from "@gravity-ui/uikit";
 import { TrashBin } from "@gravity-ui/icons";
 
@@ -8,7 +14,30 @@ export interface ImageUploadFieldProps {
   accept?: string;
   disabled?: boolean;
   hint?: string;
+  unifiedIntake?: boolean;
   onUpdate: (file?: File) => void;
+}
+
+const SUPPORTED_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
+
+function validateImageUploadFile(file: File) {
+  return SUPPORTED_IMAGE_TYPES.has(file.type)
+    ? null
+    : "Поддерживаются только PNG, JPEG и WebP.";
+}
+
+function firstTransferredFile(
+  items: DataTransferItemList | null,
+  files: FileList | null,
+) {
+  const item = items
+    ? Array.from(items).find((candidate) => candidate.kind === "file")
+    : undefined;
+  return item?.getAsFile() ?? files?.[0] ?? null;
 }
 
 export function ImageUploadField({
@@ -17,10 +46,38 @@ export function ImageUploadField({
   accept = "image/png,image/jpeg,image/webp",
   disabled,
   hint,
+  unifiedIntake = false,
   onUpdate,
 }: ImageUploadFieldProps) {
   const inputId = useId();
   const [previewUrl, setPreviewUrl] = useState<string>();
+  const [intakeError, setIntakeError] = useState("");
+
+  const acceptFile = (file?: File | null) => {
+    if (!file) return;
+    const nextError = validateImageUploadFile(file);
+    setIntakeError(nextError ?? "");
+    if (!nextError) onUpdate(file);
+  };
+
+  const acceptDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!unifiedIntake || disabled) return;
+    event.preventDefault();
+    acceptFile(
+      firstTransferredFile(event.dataTransfer.items, event.dataTransfer.files),
+    );
+  };
+
+  const acceptPaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    if (!unifiedIntake || disabled) return;
+    const file = firstTransferredFile(
+      event.clipboardData.items,
+      event.clipboardData.files,
+    );
+    if (!file) return;
+    event.preventDefault();
+    acceptFile(file);
+  };
 
   useEffect(() => {
     if (!value) {
@@ -33,7 +90,14 @@ export function ImageUploadField({
   }, [value]);
 
   return (
-    <div className="arken-upload-field">
+    <div
+      className="arken-upload-field"
+      onPaste={acceptPaste}
+      onDragOver={(event) => {
+        if (unifiedIntake && !disabled) event.preventDefault();
+      }}
+      onDrop={acceptDrop}
+    >
       <div className="arken-upload-field__heading">
         <div>
           <strong>{label}</strong>
@@ -57,7 +121,7 @@ export function ImageUploadField({
         type="file"
         accept={accept}
         disabled={disabled}
-        onChange={(event) => onUpdate(event.currentTarget.files?.[0])}
+        onChange={(event) => acceptFile(event.currentTarget.files?.[0])}
       />
       {value ? (
         <figure className="arken-upload-field__preview">
@@ -81,9 +145,16 @@ export function ImageUploadField({
         </figure>
       ) : (
         <div className="arken-upload-field__empty">
-          Предпросмотр появится после выбора файла
+          {unifiedIntake
+            ? "Выберите, вставьте или перетащите изображение сюда"
+            : "Предпросмотр появится после выбора файла"}
         </div>
       )}
+      {intakeError ? (
+        <div className="field-error" role="alert">
+          {intakeError}
+        </div>
+      ) : null}
     </div>
   );
 }
