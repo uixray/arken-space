@@ -3,7 +3,6 @@ import {
   Suspense,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -21,14 +20,12 @@ import type {
 import { api, ApiError, reportClientEvent } from "./api";
 import { AuthGate } from "./AuthGate";
 import { createGameSocket, type GameSocket } from "./realtime";
-import { CursorPresenceMenu } from "./ui/CursorPresenceMenu";
 import { Sidebar } from "./Sidebar";
 import { MusicBar } from "./MusicBar";
 import { FeedbackReporter } from "./FeedbackReporter";
 import { fetchOperatorCapability } from "./operator-feedback";
 import { appendChatMessage } from "./chat-state";
 import { upsertDirectThread } from "./direct-chat-state";
-import { isEditableEventTarget } from "./input-diagnostics";
 import { setErrorReportContext } from "./error-report-context";
 import {
   addRollToast,
@@ -42,12 +39,7 @@ import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { useDismissibleDetails } from "./ui/dismissible-details";
-import {
-  canvasHistoryVersion,
-  historyControlLabel,
-  nextHistoryEntry,
-  type CanvasHistoryEntry,
-} from "./canvas-history-label";
+import { canvasHistoryVersion } from "./canvas-history-label";
 import { normalizeClientDiceResult } from "./dice-result";
 import { applyBulkMoveResult } from "./canvas-bulk-move";
 import { useMutationRunners } from "./use-mutation-runners";
@@ -61,12 +53,8 @@ import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
 import { useInitiativeActions } from "./use-initiative-actions";
 import { WorkspaceNav } from "./WorkspaceNav";
-import { shortcutLabel } from "./renderers/map-tool-shortcuts";
 import { ShortcutsDialog } from "./ShortcutsDialog";
-import {
-  readToolbarCollapsed,
-  writeToolbarCollapsed,
-} from "./toolbar-preference";
+import { MapToolbar } from "./MapToolbar";
 import { workspaceNavItems } from "./workspace-nav";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
@@ -159,235 +147,6 @@ function emitSceneViewIfNeeded(
     return;
   lastEmission.current = { socket, connectionId, sceneId };
   socket.emit("scene:view", { sceneId });
-}
-
-function CanvasHistoryControls({
-  sceneId,
-  disabled,
-  version,
-  snapshot,
-}: {
-  sceneId?: string;
-  disabled: boolean;
-  version: string;
-  /** Источник имён объектов — и единственный: он уже отфильтрован по роли. */
-  snapshot: GameSnapshot;
-}) {
-  const [refreshEpoch, setRefreshEpoch] = useState(0);
-  const requestKey = JSON.stringify([
-    sceneId ?? null,
-    disabled,
-    version,
-    refreshEpoch,
-  ]);
-  const [historyState, setHistoryState] = useState<{
-    requestKey: string;
-    entries: CanvasHistoryEntry[];
-  }>({ requestKey: "", entries: [] });
-  const historyRequestGeneration = useRef(0);
-  const history =
-    historyState.requestKey === requestKey ? historyState.entries : [];
-
-  useEffect(() => {
-    const generation = ++historyRequestGeneration.current;
-    let cancelled = false;
-    if (!sceneId || disabled) {
-      setHistoryState({ requestKey, entries: [] });
-      return () => {
-        cancelled = true;
-      };
-    }
-    void api<CanvasHistoryEntry[]>(`/api/canvas/history?sceneId=${sceneId}`)
-      .then((entries) => {
-        if (cancelled || generation !== historyRequestGeneration.current)
-          return;
-        setHistoryState({ requestKey, entries });
-      })
-      .catch(() => {
-        if (cancelled || generation !== historyRequestGeneration.current)
-          return;
-        setHistoryState({ requestKey, entries: [] });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sceneId, disabled, requestKey]);
-  const nextUndo = nextHistoryEntry("undo", history);
-  const nextRedo = nextHistoryEntry("redo", history);
-  const canUndo = nextUndo !== undefined;
-  const canRedo = nextRedo !== undefined;
-  const act = useCallback(
-    async (direction: "undo" | "redo") => {
-      if (!sceneId) return;
-      await api(`/api/canvas/${direction}`, {
-        method: "POST",
-        body: JSON.stringify({ actionId: crypto.randomUUID(), sceneId }),
-      });
-      setRefreshEpoch((epoch) => epoch + 1);
-    },
-    [sceneId],
-  );
-  useEffect(() => {
-    if (!sceneId || disabled) return;
-    const handler = (event: KeyboardEvent) => {
-      if (event.isComposing || isEditableEventTarget(event.target)) return;
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z")
-        return;
-      event.preventDefault();
-      const direction = event.shiftKey ? "redo" : "undo";
-      if (direction === "undo" ? canUndo : canRedo)
-        void act(direction).catch(() => undefined);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [sceneId, disabled, canUndo, canRedo, act]);
-  // Подпись и всплывающая подсказка — один и тот же текст: подсказка недоступна
-  // ни клавиатуре, ни программе чтения с экрана, и расходиться им незачем.
-  const undoLabel = historyControlLabel("undo", nextUndo, snapshot);
-  const redoLabel = historyControlLabel("redo", nextRedo, snapshot);
-  return (
-    <>
-      <button
-        className="map-tool"
-        data-tool="UNDO"
-        aria-label={undoLabel}
-        title={undoLabel}
-        disabled={disabled || !canUndo}
-        onClick={() => void act("undo")}
-      >
-        <span aria-hidden="true">&#x21b6;</span>
-      </button>
-      <button
-        className="map-tool"
-        data-tool="REDO"
-        aria-label={redoLabel}
-        title={redoLabel}
-        disabled={disabled || !canRedo}
-        onClick={() => void act("redo")}
-      >
-        <span aria-hidden="true">&#x21b7;</span>
-      </button>
-    </>
-  );
-}
-
-function GridSettings({
-  scene,
-  onSave,
-  onPreview,
-}: {
-  scene: import("@arken/contracts").SceneDto;
-  onSave: (grid: import("@arken/contracts").SceneDto["grid"]) => Promise<void>;
-  onPreview: (grid: import("@arken/contracts").SceneDto["grid"] | null) => void;
-}) {
-  const [draft, setDraft] = useState(scene.grid);
-  const [saving, setSaving] = useState(false);
-  const settingsRef = useRef<HTMLDetailsElement>(null);
-  useEffect(() => setDraft(scene.grid), [scene]);
-  const dismissGridSettings = useCallback(() => {
-    setDraft(scene.grid);
-    onPreview(null);
-  }, [onPreview, scene.grid]);
-  useDismissibleDetails(settingsRef, dismissGridSettings);
-  const resetGrid = () => {
-    const next = {
-      enabled: true,
-      size: 64,
-      offsetX: 0,
-      offsetY: 0,
-      color: "#c8b78b",
-      opacity: 0.22,
-    };
-    setDraft(next);
-    onPreview(next);
-  };
-  return (
-    <details className="grid-settings" ref={settingsRef}>
-      <summary
-        aria-label="Настройки сетки"
-        title="Настройки сетки"
-        className="toolbar-detail-trigger"
-        data-tool="GRID"
-      >
-        Сетка
-      </summary>
-      <div className="grid-settings-popover">
-        <label>
-          Шаг
-          <input
-            type="number"
-            min="16"
-            max="256"
-            value={draft.size}
-            onChange={(event) => {
-              const next = { ...draft, size: Number(event.target.value) };
-              setDraft(next);
-              onPreview(next);
-            }}
-          />
-        </label>
-        <label>
-          Сдвиг X
-          <input
-            type="number"
-            value={draft.offsetX}
-            onChange={(event) => {
-              const next = { ...draft, offsetX: Number(event.target.value) };
-              setDraft(next);
-              onPreview(next);
-            }}
-          />
-        </label>
-        <label>
-          Сдвиг Y
-          <input
-            type="number"
-            value={draft.offsetY}
-            onChange={(event) => {
-              const next = { ...draft, offsetY: Number(event.target.value) };
-              setDraft(next);
-              onPreview(next);
-            }}
-          />
-        </label>
-        <div className="inline-fields">
-          <button type="button" onClick={resetGrid}>
-            {"Сбросить"}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                await onSave(draft);
-                onPreview(null);
-                if (settingsRef.current) settingsRef.current.open = false;
-              } catch {
-                // The shared mutation runner exposes the server error. Keep the
-                // draft open so a conflict or validation failure can be fixed
-                // and retried instead of looking like a successful reset.
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            Сохранить
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(scene.grid);
-              onPreview(null);
-              if (settingsRef.current) settingsRef.current.open = false;
-            }}
-          >
-            Отмена
-          </button>
-        </div>
-      </div>
-    </details>
-  );
 }
 
 export function App() {
@@ -485,51 +244,6 @@ export function App() {
   const [cursorPreference, setCursorPreference] = useState(
     CURSOR_PREFERENCE_DEFAULT,
   );
-  // UIX-475: свёрнута ли панель инструментов до значков. Читается по членству,
-  // как и прочие настройки панели, — после того, как снапшот назовёт участника.
-  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
-  /**
-   * UIX-470/475: палитра рисования встаёт правее панели инструментов.
-   *
-   * Раньше её отступ был вписан числом под панель из одних значков. Подписи
-   * сделали панель втрое шире, и палитра уехала под неё — незаметно для тестов,
-   * потому что видимой она осталась. Ширину теперь сообщает сама панель: она
-   * меняется и от подписей, и от сворачивания, и от длины слов, так что любая
-   * константа здесь снова разойдётся с разметкой.
-   */
-  const toolbarRef = useRef<HTMLDivElement | null>(null);
-  // Ширину панели держим в переменной на её родителе: палитра — соседний
-  // абсолютный блок в другом компоненте, и общего потока, который расставил бы
-  // их сам, между ними нет.
-  useLayoutEffect(() => {
-    const toolbar = toolbarRef.current;
-    const host = toolbar?.parentElement;
-    if (!toolbar || !host) return;
-    const publish = () => {
-      host.style.setProperty(
-        "--map-toolbar-width",
-        `${Math.round(toolbar.getBoundingClientRect().width)}px`,
-      );
-    };
-    publish();
-    if (typeof ResizeObserver === "function") {
-      const observer = new ResizeObserver(publish);
-      observer.observe(toolbar);
-      return () => {
-        observer.disconnect();
-        host.style.removeProperty("--map-toolbar-width");
-      };
-    }
-
-    // Старые WebView не знают ResizeObserver. Там ширина всё равно меняется
-    // прежде всего при ресайзе окна; начальное значение уже опубликовано выше.
-    window.addEventListener("resize", publish);
-    return () => {
-      window.removeEventListener("resize", publish);
-      host.style.removeProperty("--map-toolbar-width");
-    };
-  }, [toolbarCollapsed, snapshot?.me.role]);
-
   const [previewSnapshot, setPreviewSnapshot] = useState<GameSnapshot | null>(
     null,
   );
@@ -547,7 +261,6 @@ export function App() {
     string | null
   >(null);
   const scenePickerRef = useRef<HTMLDetailsElement>(null);
-  const resizeSettingsRef = useRef<HTMLDetailsElement>(null);
   /**
    * UIX-531: меню сеанса, «Ещё» на панели карты и лоток токенов — последние
    * поповеры без общего закрытия.
@@ -558,12 +271,9 @@ export function App() {
    * открытое меню перехватывало клики по вкладкам чата ровно так же.
    */
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
-  const toolbarOverflowRef = useRef<HTMLDetailsElement>(null);
   const tokenTrayRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(scenePickerRef);
-  useDismissibleDetails(resizeSettingsRef);
   useDismissibleDetails(accountMenuRef);
-  useDismissibleDetails(toolbarOverflowRef);
   useDismissibleDetails(tokenTrayRef);
 
   useEffect(() => {
@@ -726,9 +436,6 @@ export function App() {
         snapshot.me.id,
         snapshot.me.role === "GM" ? "GM" : "PLAYER",
       ),
-    );
-    setToolbarCollapsed(
-      readToolbarCollapsed(window.localStorage, snapshot.me.id),
     );
   }, [campaignId, snapshot?.me.id]);
   const updateCursorPreference = useCallback(
@@ -1558,60 +1265,6 @@ export function App() {
     activeTokens,
   );
 
-  /**
-   * UIX-503: кнопка «•••» существует только тогда, когда за ней что-то есть.
-   *
-   * Всё содержимое меню было под `role === "GM"`, а сама кнопка — нет: игрок
-   * открывал пустую панель. Условие переехало сюда, к решению «показывать ли
-   * кнопку», и теперь у обоих ответов один источник — нельзя показать кнопку и
-   * забыть про её содержимое.
-   *
-   * Значение, а не булев флаг: список инструментов будет расти, и флаг рядом с
-   * ним разошёлся бы при первом же добавлении. Пусто — значит `null`, и кнопки
-   * нет вовсе: скрывать её стилем нельзя, скрытое так остаётся в порядке обхода
-   * с клавиатуры.
-   */
-  const overflowTools =
-    snapshot.me.role === "GM" ? (
-      <div className="fog-view-controls">
-        <label>
-          <input
-            type="checkbox"
-            checked={gmGridVisible}
-            onChange={(event) => {
-              const visible = event.target.checked;
-              setGmGridVisible(visible);
-              localStorage.setItem("arken.gmGridVisible", String(visible));
-            }}
-          />
-          Показывать сетку
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={gmFogVisible}
-            onChange={(event) => setGmFogVisible(event.target.checked)}
-          />
-          Показывать туман
-        </label>
-        <label>
-          Прозрачность мастера
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={gmFogOpacity}
-            onChange={(event) => {
-              const value = Number(event.target.value);
-              setGmFogOpacity(value);
-              localStorage.setItem("arken.gmFogOpacity", String(value));
-            }}
-          />
-        </label>
-      </div>
-    ) : null;
-
   const workspaceHidden =
     workspace === "characters" ||
     workspace === "setup" ||
@@ -2044,378 +1697,70 @@ export function App() {
             className={`map-shell${workspaceHidden ? " is-workspace-hidden" : ""}`}
             aria-hidden={workspaceHidden}
           >
-            <div
-              ref={toolbarRef}
-              className={`map-toolbar${toolbarCollapsed ? " is-collapsed" : ""}`}
-              role="toolbar"
-              aria-label="Инструменты карты"
-            >
-              {/* UIX-475: панель сворачивается до значков. С подписями она
-                  втрое шире и заметно отъедает карту на узком экране; кому
-                  подписи нужны — оставляет развёрнутой. */}
-              <button
-                type="button"
-                className="map-toolbar__collapse"
-                aria-expanded={!toolbarCollapsed}
-                aria-label={
-                  toolbarCollapsed
-                    ? "Показать подписи инструментов"
-                    : "Свернуть панель до значков"
-                }
-                title={
-                  toolbarCollapsed
-                    ? "Показать подписи инструментов"
-                    : "Свернуть панель до значков"
-                }
-                onClick={() => {
-                  const next = !toolbarCollapsed;
-                  setToolbarCollapsed(next);
-                  writeToolbarCollapsed(
-                    window.localStorage,
-                    snapshot.me.id,
-                    next,
+            <MapToolbar
+              tool={tool}
+              onToolSelect={setTool}
+              snapshot={snapshot}
+              viewSnapshot={viewSnapshot}
+              previewSnapshot={previewSnapshot}
+              activeScene={activeScene}
+              activeEncounter={activeEncounter}
+              activeCanvasVersion={activeCanvasVersion}
+              cursorPreference={cursorPreference}
+              onCursorPreferenceChange={updateCursorPreference}
+              fogBrushRadius={fogBrushRadius}
+              onFogBrushRadiusChange={setFogBrushRadius}
+              canvasEditMode={canvasEditMode}
+              onCanvasEditModeChange={setCanvasEditMode}
+              onStartEncounter={() => setEncounterMenuOpen(true)}
+              onEndEncounter={() => {
+                if (!activeEncounter) return;
+                void run(() =>
+                  endEncounter(activeEncounter.id, activeEncounter.revision),
+                );
+              }}
+              onToggleBattleZone={() => {
+                if (viewSnapshot.campaign.battleZone) {
+                  setTool("PAN");
+                  void run(() =>
+                    initiativeActions.onSetBattleZone(
+                      null,
+                      viewSnapshot.campaign.revision,
+                    ),
                   );
-                }}
-              >
-                <span aria-hidden="true">{toolbarCollapsed ? "»" : "«"}</span>
-              </button>
-              <div className="toolbar-group">
-                <button
-                  aria-label="Перемещение"
-                  title={`Перемещение по карте (средняя кнопка мыши) · ${shortcutLabel("PAN")}`}
-                  className="map-tool"
-                  data-tool="PAN"
-                  aria-pressed={tool === "PAN"}
-                  onClick={() => setTool("PAN")}
-                >
-                  Двигать
-                </button>
-                {!previewSnapshot && snapshot.me.role === "GM" && (
-                  <>
-                    {/* UIX-470: панель мастера разбита на блоки. Туман — самый
-                        частый и самый многолюдный набор: шесть кнопок, три
-                        пары «открыть/закрыть». Рядом друг с другом они читаются
-                        как пары, а вперемешку с линейкой и сеткой — нет. */}
-                    <div className="toolbar-group__title">Туман</div>
-                    <button
-                      aria-label="Открыть туман"
-                      title={`Открыть выбранную область тумана · ${shortcutLabel("FOG")}`}
-                      className="map-tool"
-                      data-tool="FOG"
-                      aria-pressed={tool === "FOG"}
-                      onClick={() => setTool("FOG")}
-                    >
-                      Открыть
-                    </button>
-                    <button
-                      aria-label="Закрыть туман"
-                      title={`Закрыть выбранную область туманом · ${shortcutLabel("COVER")}`}
-                      className="map-tool"
-                      data-tool="COVER"
-                      aria-pressed={tool === "COVER"}
-                      onClick={() => setTool("COVER")}
-                    >
-                      Закрыть
-                    </button>
-                    <button
-                      aria-label="Открыть туман кистью"
-                      title={`Открыть туман круглой кистью (клик или протяжка) · ${shortcutLabel("FOG_BRUSH")}`}
-                      className="map-tool"
-                      data-tool="FOG_BRUSH"
-                      aria-pressed={tool === "FOG_BRUSH"}
-                      onClick={() => setTool("FOG_BRUSH")}
-                    >
-                      Кисть
-                    </button>
-                    <button
-                      aria-label="Закрыть туман кистью"
-                      title={`Закрыть область круглой кистью тумана · ${shortcutLabel("COVER_BRUSH")}`}
-                      className="map-tool"
-                      data-tool="COVER_BRUSH"
-                      aria-pressed={tool === "COVER_BRUSH"}
-                      onClick={() => setTool("COVER_BRUSH")}
-                    >
-                      Кисть закр.
-                    </button>
-                    {(tool === "FOG_BRUSH" || tool === "COVER_BRUSH") && (
-                      <label
-                        className="map-tool-text"
-                        title="Радиус кисти тумана"
-                      >
-                        Радиус
-                        <input
-                          type="range"
-                          min={8}
-                          max={200}
-                          step={4}
-                          value={fogBrushRadius}
-                          onChange={(event) =>
-                            setFogBrushRadius(Number(event.target.value))
-                          }
-                          aria-label="Радиус кисти тумана"
-                          style={{ verticalAlign: "middle", margin: "0 6px" }}
-                        />
-                        {fogBrushRadius}
-                      </label>
-                    )}
-                    <button
-                      aria-label="Открыть туман полигоном"
-                      title={`Открыть туман многоугольником (клик — вершина, Enter/двойной клик — завершить, Esc — отмена) · ${shortcutLabel("FOG_POLYGON")}`}
-                      className="map-tool"
-                      data-tool="FOG_POLYGON"
-                      aria-pressed={tool === "FOG_POLYGON"}
-                      onClick={() => setTool("FOG_POLYGON")}
-                    >
-                      Полигон
-                    </button>
-                    <button
-                      aria-label="Закрыть туман полигоном"
-                      title={`Закрыть область многоугольником тумана (клик — вершина, Enter/двойной клик — завершить, Esc — отмена) · ${shortcutLabel("COVER_POLYGON")}`}
-                      className="map-tool"
-                      data-tool="COVER_POLYGON"
-                      aria-pressed={tool === "COVER_POLYGON"}
-                      onClick={() => setTool("COVER_POLYGON")}
-                    >
-                      Полигон закр.
-                    </button>
-                    {/* Второй блок: то, чем показывают и меряют. Две кнопки,
-                        но обе нужны каждый бой, и в общем списке они тонули. */}
-                    <div className="toolbar-group__title">Метки</div>
-                    <button
-                      aria-label="Линейка"
-                      title={`Измерить расстояние на карте · ${shortcutLabel("RULER")}`}
-                      className="map-tool"
-                      data-tool="RULER"
-                      aria-pressed={tool === "RULER"}
-                      onClick={() => setTool("RULER")}
-                    >
-                      Линейка
-                    </button>
-                    <button
-                      aria-label="Пинг"
-                      title={`Показать точку группе · ${shortcutLabel("PING")}`}
-                      className="map-tool"
-                      data-tool="PING"
-                      aria-pressed={tool === "PING"}
-                      onClick={() => setTool("PING")}
-                    >
-                      Пинг
-                    </button>
-                    <div className="toolbar-group__title">Прочее</div>
-                    {/* UIX-466 п. 4: зона боя. Стоит рядом с «Начать бой»,
-                        потому что отвечает на тот же вопрос — кто дерётся, —
-                        только заранее и на карте. Кнопка тумблерная: повторное
-                        нажатие снимает зону, иначе убрать её было бы нечем. */}
-                    <button
-                      aria-label={
-                        viewSnapshot.campaign.battleZone
-                          ? "Снять зону боя"
-                          : "Обвести зону боя"
-                      }
-                      title={
-                        viewSnapshot.campaign.battleZone
-                          ? `Снять зону боя · ${shortcutLabel("BATTLE_ZONE")}`
-                          : `Обвести поле боя: из него собирается очередь ходов · ${shortcutLabel("BATTLE_ZONE")}`
-                      }
-                      className="map-tool"
-                      data-tool="BATTLE_ZONE"
-                      // Без активной сцены обводить нечего: зона привязана к
-                      // ней и в другой карте означала бы совсем другое место.
-                      // Заодно кнопка перестаёт быть лишней остановкой Tab
-                      // между «Пингом» и «Рисованием» — это закреплено тестом
-                      // доступности панели (concept.spec.ts:435).
-                      disabled={!activeScene}
-                      aria-pressed={tool === "BATTLE_ZONE"}
-                      onClick={() => {
-                        if (viewSnapshot.campaign.battleZone) {
-                          setTool("PAN");
-                          void run(() =>
-                            initiativeActions.onSetBattleZone(
-                              null,
-                              viewSnapshot.campaign.revision,
-                            ),
-                          );
-                          return;
-                        }
-                        setTool("BATTLE_ZONE");
-                      }}
-                    >
-                      {viewSnapshot.campaign.battleZone
-                        ? "Снять зону"
-                        : "Зона боя"}
-                    </button>
-                    {/*
-                     * UIX-311 Stage 4: real GM "Начать бой" / "Завершить бой"
-                     * entry point, replacing the Stage 2/3 temp triggers. Only
-                     * one encounter can be ACTIVE at a time (server-enforced),
-                     * so the button swaps based on activeEncounter.
-                     */}
-                    {activeEncounter ? (
-                      <button
-                        aria-label="Завершить бой"
-                        title="Завершить текущий бой"
-                        className="map-tool"
-                        data-tool="ENCOUNTER_END"
-                        onClick={() =>
-                          void run(() =>
-                            endEncounter(
-                              activeEncounter.id,
-                              activeEncounter.revision,
-                            ),
-                          )
-                        }
-                      >
-                        Завершить бой
-                      </button>
-                    ) : (
-                      <button
-                        aria-label="Начать бой"
-                        title="Начать бой из области сцены или связанной локации"
-                        className="map-tool"
-                        data-tool="ENCOUNTER_START"
-                        disabled={!activeScene}
-                        onClick={() => setEncounterMenuOpen(true)}
-                      >
-                        Начать бой
-                      </button>
-                    )}
-                  </>
-                )}
-                <button
-                  aria-label="Рисование"
-                  title={`Нарисовать линию на карте · ${shortcutLabel("DRAW")}`}
-                  className="map-tool"
-                  data-tool="DRAW"
-                  aria-pressed={tool === "DRAW"}
-                  onClick={() => setTool("DRAW")}
-                >
-                  Рисовать
-                </button>
-                {/* UIX-470: линейка и пинг переехали в блок «Метки» выше — у
-                    мастера. Игроку блоков нет: у него всего три инструмента, и
-                    делить их не на что. */}
-                {(previewSnapshot || snapshot.me.role !== "GM") && (
-                  <>
-                    <button
-                      aria-label="Линейка"
-                      title={`Измерить расстояние на карте · ${shortcutLabel("RULER")}`}
-                      className="map-tool"
-                      data-tool="RULER"
-                      aria-pressed={tool === "RULER"}
-                      onClick={() => setTool("RULER")}
-                    >
-                      Линейка
-                    </button>
-                    <button
-                      aria-label="Пинг"
-                      title={`Показать точку группе · ${shortcutLabel("PING")}`}
-                      className="map-tool"
-                      data-tool="PING"
-                      aria-pressed={tool === "PING"}
-                      onClick={() => setTool("PING")}
-                    >
-                      Пинг
-                    </button>
-                  </>
-                )}
-                <CursorPresenceMenu
-                  preference={cursorPreference}
-                  role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
-                  onChange={updateCursorPreference}
-                />
-                {!previewSnapshot &&
-                  snapshot.me.role === "GM" &&
-                  activeScene && (
-                    <>
-                      <GridSettings
-                        scene={activeScene}
-                        onPreview={setGridPreview}
-                        onSave={(grid) =>
-                          run(
-                            () =>
-                              api(`/api/scenes/${activeScene.id}/canvas`, {
-                                method: "PATCH",
-                                body: JSON.stringify({
-                                  actionId: crypto.randomUUID(),
-                                  revision: activeScene.revision ?? 0,
-                                  grid,
-                                }),
-                              }),
-                            true,
-                          )
-                        }
-                      />
-                      <details
-                        ref={resizeSettingsRef}
-                        className="resize-settings"
-                      >
-                        <summary
-                          aria-label="Настройки размера карты"
-                          title="Настройки размера карты"
-                          className="toolbar-detail-trigger"
-                          data-tool="RESIZE"
-                        >
-                          Размер
-                        </summary>
-                        <div className="resize-settings-popover">
-                          <button
-                            aria-pressed={canvasEditMode === "BACKGROUND"}
-                            onClick={() => {
-                              setTool("PAN");
-                              setCanvasEditMode("BACKGROUND");
-                            }}
-                          >
-                            Изображение
-                          </button>
-                          <button
-                            aria-pressed={canvasEditMode === "WORLD"}
-                            onClick={() => {
-                              setTool("PAN");
-                              setCanvasEditMode("WORLD");
-                            }}
-                          >
-                            Область
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCanvasEditMode(null);
-                              if (resizeSettingsRef.current) {
-                                resizeSettingsRef.current.open = false;
-                                resizeSettingsRef.current
-                                  .querySelector<HTMLElement>("summary")
-                                  ?.focus();
-                              }
-                            }}
-                          >
-                            Готово
-                          </button>
-                        </div>
-                      </details>
-                    </>
-                  )}
-              </div>
-              {!previewSnapshot && (
-                <div className="toolbar-history">
-                  <CanvasHistoryControls
-                    sceneId={activeScene?.id}
-                    disabled={!activeScene}
-                    version={activeCanvasVersion}
-                    snapshot={viewSnapshot}
-                  />
-                </div>
-              )}
-              {!previewSnapshot && overflowTools && (
-                <details className="toolbar-overflow" ref={toolbarOverflowRef}>
-                  <summary
-                    aria-label="Дополнительные инструменты"
-                    title="Дополнительные инструменты карты"
-                  >
-                    •••
-                  </summary>
-                  <div className="toolbar-overflow-menu">{overflowTools}</div>
-                </details>
-              )}
-            </div>
+                  return;
+                }
+                setTool("BATTLE_ZONE");
+              }}
+              onGridPreview={setGridPreview}
+              onGridSave={(grid) => {
+                if (!activeScene) return Promise.resolve();
+                return run(
+                  () =>
+                    api(`/api/scenes/${activeScene.id}/canvas`, {
+                      method: "PATCH",
+                      body: JSON.stringify({
+                        actionId: crypto.randomUUID(),
+                        revision: activeScene.revision ?? 0,
+                        grid,
+                      }),
+                    }),
+                  true,
+                );
+              }}
+              gmFogOpacity={gmFogOpacity}
+              onGmFogOpacityChange={(value) => {
+                setGmFogOpacity(value);
+                localStorage.setItem("arken.gmFogOpacity", String(value));
+              }}
+              gmFogVisible={gmFogVisible}
+              onGmFogVisibleChange={setGmFogVisible}
+              gmGridVisible={gmGridVisible}
+              onGmGridVisibleChange={(visible) => {
+                setGmGridVisible(visible);
+                localStorage.setItem("arken.gmGridVisible", String(visible));
+              }}
+            />
             {activeScene ? (
               <Suspense
                 fallback={<div className="empty-map">Загружаем карту…</div>}

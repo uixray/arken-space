@@ -2175,6 +2175,59 @@ export interface AssetDto {
   createdAt: string;
 }
 
+export const assetUsageKindSchema = z.enum([
+  "SCENE_BACKGROUND",
+  "TOKEN_DEFINITION",
+  "CHARACTER_PORTRAIT",
+  "CHARACTER_MEDIA",
+  "WORLD_MAP_BACKGROUND",
+  "AUDIO_TRACK",
+  "WORLD_CONTENT_COVER",
+  "WORLD_CONTENT_MEDIA",
+  "GENERATED_TOKEN_SOURCE",
+]);
+export type AssetUsageKind = z.infer<typeof assetUsageKindSchema>;
+
+export const assetUsageVisibilitySchema = z.enum([
+  "PUBLIC",
+  "PARTICIPANT",
+  "GM_ONLY",
+]);
+export type AssetUsageVisibility = z.infer<typeof assetUsageVisibilitySchema>;
+
+export const assetDeletionPolicySchema = z.enum([
+  "BLOCK",
+  "DETACH",
+  "RETAIN_HISTORY",
+]);
+export type AssetDeletionPolicy = z.infer<typeof assetDeletionPolicySchema>;
+
+/** A server-normalized dependency. Labels never contain storage keys or paths. */
+export interface AssetUsageDto {
+  kind: AssetUsageKind;
+  entityId: string;
+  label: string;
+  location?: string;
+  visibility: AssetUsageVisibility;
+  deletionPolicy: AssetDeletionPolicy;
+}
+
+export interface AssetUsageResponseDto {
+  asset: AssetDto;
+  inUse: boolean;
+  usages: AssetUsageDto[];
+  hiddenUsageCount: number;
+  canDelete: boolean;
+  deletionBlockedReason: "ASSET_IN_USE" | "GM_REQUIRED" | null;
+}
+
+export interface DeleteAssetResponseDto {
+  assetId: string;
+  deleted: true;
+  /** True means the DB row is gone and an inaccessible orphan awaits cleanup. */
+  blobCleanupPending: boolean;
+}
+
 export interface MembershipDto {
   id: string;
   role: Role;

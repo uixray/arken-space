@@ -1,117 +1,2384 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="knight">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta
+      name="description"
+      content="Черновая персональная страница Ираклий в Аркен-Харе."
+    />
+    <meta name="theme-color" content="#171411" />
     <title>Ираклий — Arken-Khar</title>
     <style>
       :root {
         color-scheme: dark;
-        --bg: #100b08;
-        --bg-glow: #2a1a10;
-        --card: #1a130e;
-        --border: #3a2a1c;
-        --ember: #d97b3f;
-        --ember-bright: #f0a05c;
-        --text: #e8dcc8;
-        --text-dim: #a8977e;
+        --space-xs: 0.25rem;
+        --space-sm: 0.5rem;
+        --space-md: 0.75rem;
+        --space-lg: 1rem;
+        --space-xl: 1.5rem;
+        --space-2xl: 2rem;
+        --space-3xl: 3rem;
+        --space-4xl: 4rem;
+        --space-5xl: 6rem;
+        --bg: oklch(0.16 0.012 62);
+        --surface: oklch(0.205 0.014 62);
+        --surface-raised: oklch(0.25 0.018 62);
+        --ink: oklch(0.92 0.025 82);
+        --muted: oklch(0.69 0.025 72);
+        --line: oklch(0.38 0.025 62);
+        --accent: oklch(0.7 0.14 45);
+        --accent-ink: oklch(0.18 0.04 45);
+        --display: "Forum", "Palatino Linotype", Georgia, serif;
+        --body: "Onest", "Trebuchet MS", sans-serif;
+        --detail: "Onest", "Trebuchet MS", sans-serif;
+        --radius: 0;
+        --pattern-opacity: 0.08;
       }
+
+      html[data-theme="design"] {
+        --bg: oklch(0.94 0.025 78);
+        --surface: oklch(0.98 0.012 78);
+        --surface-raised: oklch(0.89 0.035 76);
+        --ink: oklch(0.23 0.035 28);
+        --muted: oklch(0.48 0.045 35);
+        --line: oklch(0.7 0.045 44);
+        --accent: oklch(0.61 0.19 35);
+        --accent-ink: oklch(0.97 0.015 55);
+        --radius: 1.5rem;
+      }
+
+      html[data-theme="knight"] {
+        --bg: oklch(0.89 0.035 84);
+        --surface: oklch(0.94 0.032 84);
+        --surface-raised: oklch(0.82 0.045 80);
+        --ink: oklch(0.27 0.035 60);
+        --muted: oklch(0.48 0.04 65);
+        --line: oklch(0.6 0.055 72);
+        --accent: oklch(0.49 0.13 34);
+        --accent-ink: oklch(0.95 0.025 82);
+        --radius: 0.15rem;
+        --pattern-opacity: 0.24;
+      }
+
+      html[data-theme="cosmos"] {
+        --bg: oklch(0.12 0.035 276);
+        --surface: oklch(0.18 0.04 280);
+        --surface-raised: oklch(0.23 0.055 292);
+        --ink: oklch(0.9 0.045 242);
+        --muted: oklch(0.65 0.07 246);
+        --line: oklch(0.36 0.09 284);
+        --accent: oklch(0.72 0.14 32);
+        --accent-ink: oklch(0.14 0.035 276);
+        --radius: 50rem;
+      }
+
+      html[data-theme="dragon"] {
+        --bg: oklch(0.16 0.045 22);
+        --surface: oklch(0.21 0.055 24);
+        --surface-raised: oklch(0.27 0.07 30);
+        --ink: oklch(0.91 0.045 76);
+        --muted: oklch(0.68 0.065 65);
+        --line: oklch(0.39 0.085 31);
+        --accent: oklch(0.72 0.13 72);
+        --accent-ink: oklch(0.18 0.045 27);
+        --radius: 0.45rem;
+      }
+
+      html[data-theme="blueprint"] {
+        --bg: oklch(0.28 0.075 239);
+        --surface: oklch(0.32 0.08 239);
+        --surface-raised: oklch(0.37 0.085 239);
+        --ink: oklch(0.94 0.035 215);
+        --muted: oklch(0.77 0.045 213);
+        --line: oklch(0.62 0.07 220);
+        --accent: oklch(0.84 0.14 95);
+        --accent-ink: oklch(0.25 0.075 239);
+        --display: "Onest", "Trebuchet MS", sans-serif;
+        --radius: 0;
+      }
+
+      html[data-theme="apocalypse"] {
+        --bg: oklch(0.17 0.025 96);
+        --surface: oklch(0.22 0.034 96);
+        --surface-raised: oklch(0.27 0.043 91);
+        --ink: oklch(0.9 0.04 92);
+        --muted: oklch(0.68 0.05 91);
+        --line: oklch(0.4 0.06 93);
+        --accent: oklch(0.73 0.14 98);
+        --accent-ink: oklch(0.2 0.045 96);
+        --display: "Onest", "Trebuchet MS", sans-serif;
+        --radius: 0.25rem;
+      }
+
+      html[data-theme="studio"] {
+        --bg: oklch(0.15 0.028 30);
+        --surface: oklch(0.2 0.035 30);
+        --surface-raised: oklch(0.25 0.04 31);
+        --ink: oklch(0.92 0.035 70);
+        --muted: oklch(0.68 0.05 57);
+        --line: oklch(0.39 0.07 34);
+        --accent: oklch(0.68 0.16 38);
+        --accent-ink: oklch(0.17 0.04 31);
+        --radius: 0.75rem;
+      }
+
       * {
         box-sizing: border-box;
       }
-      html,
+      html {
+        scroll-behavior: smooth;
+      }
       body {
         margin: 0;
-        min-height: 100%;
+        min-width: 18rem;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--body);
+        line-height: 1.65;
+        overflow-x: hidden;
       }
-      body {
-        font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-        background: radial-gradient(
-          circle at 50% 0%,
-          var(--bg-glow) 0%,
-          var(--bg) 55%
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: var(--pattern-opacity);
+        background-image:
+          linear-gradient(var(--line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line) 1px, transparent 1px);
+        background-size: 2rem 2rem;
+        mask-image: linear-gradient(to bottom, black, transparent 75%);
+      }
+
+      html[data-theme="cosmos"] body::before {
+        background-image: radial-gradient(
+          circle,
+          var(--ink) 0 1px,
+          transparent 1.5px
         );
-        color: var(--text);
+        background-size: 3.4rem 3.4rem;
+        opacity: 0.18;
+      }
+
+      html[data-theme="dragon"] body::before {
+        background-image: radial-gradient(
+          ellipse at top,
+          transparent 45%,
+          var(--line) 46% 49%,
+          transparent 50%
+        );
+        background-size: 5rem 3.5rem;
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+      a {
+        color: inherit;
+      }
+      button {
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 4px;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 20;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: var(--accent);
+        color: var(--accent-ink);
+        transform: translateY(-150%);
+      }
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .site-head,
+      main,
+      footer {
+        width: min(100% - 2rem, 76rem);
+        margin-inline: auto;
+      }
+      .site-head {
+        position: relative;
+        z-index: 2;
         display: flex;
         align-items: center;
-        justify-content: center;
-        padding: 24px;
+        justify-content: space-between;
+        gap: var(--space-lg);
+        padding-block: var(--space-xl);
+        border-bottom: 1px solid var(--line);
       }
-      .card {
-        width: 100%;
-        max-width: 420px;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 40px 32px;
-        text-align: center;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.7rem;
+        text-decoration: none;
+        font-weight: 700;
       }
-      .sigil {
-        width: 56px;
-        height: 56px;
-        margin: 0 auto 20px;
-        border-radius: 50%;
-        background: radial-gradient(
-          circle,
-          var(--ember-bright),
-          var(--ember) 70%
-        );
-        box-shadow: 0 0 24px rgba(217, 123, 63, 0.55);
+      .wordmark__mark {
+        display: grid;
+        place-items: center;
+        width: 2.3rem;
+        aspect-ratio: 1;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        font-size: 0.72rem;
+        letter-spacing: -0.06em;
       }
-      .brand {
-        font-size: 13px;
-        letter-spacing: 0.28em;
+      .draft-mark,
+      .eyebrow,
+      .chapter__number,
+      .artifact__index {
+        font-family: var(--detail);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--text-dim);
-        margin: 0 0 6px;
+      }
+      .draft-mark {
+        color: var(--muted);
+      }
+
+      .hero {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+        gap: clamp(3rem, 8vw, 8rem);
+        align-items: center;
+        min-height: min(48rem, 82vh);
+        padding-block: clamp(4rem, 10vw, 8rem);
+      }
+      .hero__copy {
+        position: relative;
+        z-index: 2;
+      }
+      .eyebrow {
+        margin: 0 0 var(--space-lg);
+        color: var(--accent);
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+      h1,
+      h2 {
+        font-family: var(--display);
+        font-weight: 400;
+        letter-spacing: -0.03em;
+        line-height: 0.98;
+        overflow-wrap: break-word;
       }
       h1 {
-        font-size: 32px;
-        margin: 0 0 8px;
-        font-weight: 500;
-        color: var(--ember-bright);
+        max-width: 9ch;
+        margin-bottom: var(--space-md);
+        font-size: clamp(4.5rem, 12vw, 10rem);
       }
-      p.tagline {
-        color: var(--text-dim);
-        font-size: 15px;
-        margin: 0 0 32px;
+      h2 {
+        margin-bottom: var(--space-xl);
+        font-size: clamp(2.6rem, 6vw, 5.2rem);
       }
-      a.enter {
-        display: inline-block;
-        width: 100%;
-        padding: 14px 20px;
-        border-radius: 8px;
-        background: linear-gradient(180deg, var(--ember-bright), var(--ember));
-        color: #1a0f06;
+      h3 {
+        margin-bottom: var(--space-sm);
+        font-size: 1.25rem;
+      }
+      .role {
+        margin-bottom: var(--space-2xl);
+        color: var(--accent);
+        font-family: var(--detail);
         font-weight: 600;
+      }
+      .intro {
+        max-width: 44rem;
+        margin-bottom: var(--space-xl);
+        font-size: clamp(1.05rem, 2vw, 1.35rem);
+        color: var(--muted);
+      }
+      .facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-2xl);
+      }
+      .facts span {
+        padding: 0.35rem 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: 99rem;
+        font-family: var(--detail);
+        font-size: 0.75rem;
+      }
+      .hero__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-md);
+      }
+      .button {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 3rem;
+        padding: 0.75rem 1.1rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
         text-decoration: none;
-        font-family: inherit;
-        letter-spacing: 0.02em;
+        font-weight: 700;
+      }
+      .button--primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .button--quiet:hover {
+        background: var(--surface);
+      }
+
+      .sigil {
+        position: relative;
+        display: grid;
+        place-items: center;
+        min-height: 26rem;
+      }
+      .sigil::before,
+      .sigil::after,
+      .sigil__core {
+        content: "";
+        position: absolute;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        transform: rotate(-8deg);
+      }
+      .sigil::before {
+        width: min(27rem, 80vw);
+        aspect-ratio: 1;
+      }
+      .sigil::after {
+        width: min(20rem, 62vw);
+        aspect-ratio: 1;
+        transform: rotate(14deg);
+      }
+      .sigil__core {
+        display: grid;
+        place-items: center;
+        width: min(12rem, 42vw);
+        aspect-ratio: 1;
+        background: var(--surface-raised);
+        z-index: 1;
+        transform: rotate(4deg);
+      }
+      .sigil__core span {
+        width: 36%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .sigil p {
+        position: absolute;
+        z-index: 2;
+        bottom: 1rem;
+        margin: 0;
+        font-family: var(--detail);
+        color: var(--muted);
+      }
+      .hero-photo {
+        position: relative;
+        width: min(100%, 28rem);
+        margin: 0 auto;
+        padding: 1rem 1rem 3.6rem;
+        background: #f8f0dc;
+        box-shadow: 0 1.5rem 3rem oklch(0.25 0.04 60 / 0.22);
+        transform: rotate(2.2deg);
+      }
+      .hero-photo::before {
+        content: "";
+        position: absolute;
+        width: 7rem;
+        height: 2rem;
+        top: -0.7rem;
+        left: 50%;
+        background: oklch(0.88 0.08 88 / 0.78);
+        transform: translateX(-50%) rotate(-3deg);
+      }
+      .hero-photo img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: cover;
+        object-position: 50% 28%;
+        filter: sepia(0.13) contrast(1.04);
+      }
+      .hero-photo figcaption {
+        position: absolute;
+        inset-inline: 1rem;
+        bottom: 1rem;
+        color: #443528;
+        font-family: "Segoe Print", "Comic Sans MS", cursive;
+        text-align: center;
+      }
+      html[data-theme="cosmos"] .sigil::before,
+      html[data-theme="cosmos"] .sigil::after,
+      html[data-theme="cosmos"] .sigil__core {
+        border-radius: 50%;
+      }
+      html[data-theme="knight"] .sigil__core {
+        clip-path: polygon(50% 0, 94% 19%, 82% 78%, 50% 100%, 18% 78%, 6% 19%);
+      }
+      html[data-theme="knight"] h1 {
+        max-width: none;
+        white-space: nowrap;
+        font-size: clamp(4.5rem, 9vw, 8rem);
+      }
+      html[data-theme="knight"] .feature h2 {
+        font-size: clamp(2.5rem, 4vw, 3rem);
+      }
+      html[data-theme="dragon"] .sigil__core {
+        clip-path: polygon(
+          50% 0,
+          62% 33%,
+          100% 40%,
+          69% 60%,
+          78% 100%,
+          50% 72%,
+          22% 100%,
+          31% 60%,
+          0 40%,
+          38% 33%
+        );
+      }
+
+      .signal {
+        margin: 0;
+        padding: clamp(2rem, 6vw, 5rem) 0;
+        border-block: 1px solid var(--line);
+      }
+      .signal p {
+        max-width: 25ch;
+        margin: 0;
+        font-family: var(--display);
+        font-size: clamp(2rem, 5vw, 4.25rem);
+        line-height: 1.08;
+      }
+      .signal p::before {
+        content: "“";
+        color: var(--accent);
+      }
+
+      .feature,
+      .chronicle,
+      .collection {
+        padding-block: clamp(5rem, 12vw, 10rem);
+      }
+      .feature {
+        display: grid;
+        grid-template-columns: minmax(0, 0.85fr) minmax(20rem, 1.15fr);
+        gap: clamp(3rem, 8vw, 8rem);
+        align-items: center;
+      }
+      .feature__copy {
+        min-width: 0;
+      }
+      .feature__copy > p:not(.eyebrow),
+      .section-head > p:not(.eyebrow) {
+        max-width: 44rem;
+        color: var(--muted);
+      }
+      .text-action {
+        padding: 0.75rem 1rem;
+        border: 2px solid var(--accent);
+        background: var(--accent);
+        color: var(--accent-ink);
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .text-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0.3rem 0.3rem 0 var(--line);
+      }
+      .feature__stage {
+        position: relative;
+        display: grid;
+        place-content: end start;
+        min-height: 30rem;
+        overflow: hidden;
+        padding: var(--space-2xl);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
         transition:
-          transform 0.15s ease,
-          box-shadow 0.15s ease;
+          background 250ms ease,
+          transform 250ms ease;
       }
-      a.enter:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 8px 24px rgba(217, 123, 63, 0.35);
+      .feature__stage.is-active {
+        background: var(--surface-raised);
+        transform: rotate(-1deg);
       }
-      .foot {
-        margin-top: 24px;
-        font-size: 12px;
-        color: var(--text-dim);
-        opacity: 0.7;
+      .feature__stage p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .feature__stage strong {
+        max-width: 20ch;
+        font-family: var(--display);
+        font-size: 2rem;
+        font-weight: 400;
+        line-height: 1.05;
+      }
+      .stage-grid {
+        position: absolute;
+        inset: 0;
+      }
+      .stage-grid i {
+        position: absolute;
+        width: clamp(3rem, 9vw, 7rem);
+        aspect-ratio: 1;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        transition: transform 350ms ease;
+      }
+      .stage-grid i:nth-child(1) {
+        top: 14%;
+        left: 12%;
+      }
+      .stage-grid i:nth-child(2) {
+        top: 24%;
+        right: 17%;
+      }
+      .stage-grid i:nth-child(3) {
+        top: 49%;
+        left: 42%;
+      }
+      .stage-grid i:nth-child(4) {
+        bottom: 14%;
+        left: 16%;
+      }
+      .stage-grid i:nth-child(5) {
+        bottom: 19%;
+        right: 10%;
+      }
+      .is-active .stage-grid i:nth-child(odd) {
+        transform: translate(1rem, -0.5rem) rotate(12deg);
+        background: color-mix(in oklch, var(--accent) 28%, transparent);
+      }
+      .is-active .stage-grid i:nth-child(even) {
+        transform: translate(-1rem, 0.7rem) rotate(-8deg);
+      }
+
+      .chronicle {
+        border-top: 1px solid var(--line);
+      }
+      .section-head {
+        display: grid;
+        grid-template-columns: minmax(12rem, 0.5fr) minmax(0, 1fr);
+        gap: var(--space-2xl);
+        align-items: end;
+        margin-bottom: var(--space-3xl);
+      }
+      .section-head .eyebrow {
+        align-self: start;
+      }
+      .section-head h2 {
+        margin: 0;
+      }
+      .section-head > p:last-child {
+        grid-column: 2;
+      }
+      .chapter-list {
+        border-top: 1px solid var(--line);
+      }
+      .chapter {
+        display: grid;
+        grid-template-columns: 5rem minmax(10rem, 0.55fr) minmax(0, 1fr);
+        gap: var(--space-xl);
+        padding-block: var(--space-2xl);
+        border-bottom: 1px solid var(--line);
+      }
+      html[data-theme="knight"] .chapter:nth-child(2) h3,
+      html[data-theme="knight"] .chapter:nth-child(3) h3 {
+        width: fit-content;
+        padding: 0.35rem 0.7rem;
+        background: #f2cc65;
+        box-shadow: 0.2rem 0.3rem 0.7rem oklch(0.3 0.04 60 / 0.15);
+        transform: rotate(-1.5deg);
+      }
+      html[data-theme="knight"] .chapter:nth-child(3) h3 {
+        background: #b8dca7;
+        transform: rotate(1.2deg);
+      }
+      .chapter__number {
+        color: var(--accent);
+      }
+      .chapter p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .collection,
+      .gallery,
+      .archive {
+        border-top: 1px solid var(--line);
+      }
+      .gallery__grid {
+        display: flex;
+        gap: var(--space-md);
+        overflow-x: auto;
+        padding: 1.5rem 1rem 2.5rem;
+        scroll-snap-type: x mandatory;
+        scrollbar-color: var(--accent) transparent;
+      }
+      .gallery figure {
+        margin: 0;
+        flex: 0 0 min(24rem, 78vw);
+        scroll-snap-align: center;
+        padding: 0.75rem 0.75rem 2.6rem;
+        background: #f8f0dc;
+        box-shadow: 0.35rem 0.55rem 1.2rem oklch(0.25 0.04 60 / 0.2);
+        transform: rotate(-1.5deg);
+      }
+      .gallery figure:nth-child(even) {
+        transform: rotate(1.8deg);
+      }
+      .gallery figure:first-child,
+      .gallery figure:last-child {
+        flex-basis: min(24rem, 78vw);
+      }
+      .gallery img {
+        width: 100%;
+        aspect-ratio: 4 / 5;
+        object-fit: cover;
+        border-radius: 0;
+        border: 0;
+        filter: sepia(0.16);
+      }
+      .gallery figcaption {
+        padding-top: var(--space-sm);
+        color: var(--muted);
+        font-size: 0.8rem;
+        color: #443528;
+        font-family: "Segoe Print", "Comic Sans MS", cursive;
+      }
+      .gallery__controls {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-sm);
+      }
+      .gallery__controls button {
+        width: 3rem;
+        aspect-ratio: 1;
+        border: 2px solid var(--ink);
+        background: var(--surface);
+        cursor: pointer;
+        font-size: 1.25rem;
+      }
+      .gallery__controls button:hover {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .combat-tree {
+        display: grid;
+        gap: var(--space-lg);
+        min-width: 0;
+      }
+      .combat-tree > section {
+        border: 2px solid var(--ink);
+        background: #f5ead1;
+        box-shadow: 0.4rem 0.45rem 0 var(--line);
+      }
+      .combat-tree > section:nth-child(even) {
+        transform: rotate(-0.3deg);
+      }
+      .combat-tree header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 2px solid var(--ink);
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .combat-tree header span {
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 0.7rem;
+      }
+      .combat-tree details {
+        border-bottom: 1px dashed var(--line);
+      }
+      .combat-tree details:last-child {
+        border: 0;
+      }
+      .combat-tree summary {
+        padding: 0.7rem 1rem;
+        cursor: pointer;
+        font-weight: 800;
+      }
+      .combat-tree details p {
+        margin: 0;
+        padding: 0 1rem 1rem;
+        color: #5e4939;
+        font-size: 0.88rem;
+        line-height: 1.45;
+      }
+      .source-library {
+        padding-block: clamp(5rem, 12vw, 10rem);
+        border-top: 1px solid var(--line);
+      }
+      .source-library__list > details {
+        margin-bottom: var(--space-lg);
+        border: 2px solid var(--ink);
+        background: var(--surface);
+      }
+      .source-library__list > details > summary {
+        display: grid;
+        grid-template-columns: 9rem 1fr auto;
+        gap: var(--space-lg);
+        padding: var(--space-xl);
+        cursor: pointer;
+        background: #edd08a;
+      }
+      .source-library__list > details > summary::after {
+        content: "+ Читать";
+        justify-self: end;
+        color: var(--accent);
+        font-weight: 800;
+      }
+      .source-library__list > details[open] > summary::after {
+        content: "− Свернуть";
+      }
+      .source-library__list > details > section {
+        padding: var(--space-xl);
+        border-top: 1px solid var(--line);
+      }
+      .source-library__list section > div {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-md);
+      }
+      .source-library__list article {
+        padding: var(--space-lg);
+        border: 1px solid var(--line);
+        background: #f8f0dc;
+      }
+      .source-library__list h4 {
+        margin: 0 0 var(--space-sm);
+        font-size: 1rem;
+      }
+      .source-library__list p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .archive__chapters {
+        border-top: 1px solid var(--line);
+      }
+      .archive details {
+        border-bottom: 1px solid var(--line);
+      }
+      .archive summary {
+        display: grid;
+        grid-template-columns: 7rem 1fr;
+        gap: var(--space-lg);
+        padding: var(--space-lg) 0;
+        cursor: pointer;
+        list-style: none;
+        background: color-mix(in oklch, var(--surface) 75%, transparent);
+      }
+      .archive summary::after {
+        content: "+ Открыть";
+        justify-self: end;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .archive details[open] summary::after {
+        content: "− Свернуть";
+      }
+      .archive summary span {
+        color: var(--accent);
+      }
+      .archive__entries {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-lg);
+        padding: 0 0 var(--space-xl) 7rem;
+      }
+      .archive__entries article {
+        padding: var(--space-lg);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      .archive__entries h3 {
+        margin-top: 0;
+      }
+      .archive__entries p {
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+      .artifact-list {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-lg);
+      }
+      .artifact {
+        position: relative;
+        min-height: 18rem;
+        padding: var(--space-xl);
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          transform 180ms ease,
+          border-color 180ms ease;
+      }
+      .artifact::after {
+        content: "";
+        position: absolute;
+        width: 8rem;
+        aspect-ratio: 1;
+        right: -2rem;
+        bottom: -2rem;
+        border-radius: 50%;
+        background: var(--artifact);
+        opacity: 0.68;
+        transition: transform 220ms ease;
+      }
+      .artifact:hover {
+        transform: translateY(-0.35rem);
+      }
+      .artifact.is-selected {
+        border-color: var(--accent);
+        transform: translateY(-0.6rem) rotate(-1deg);
+      }
+      .artifact.is-selected::after {
+        transform: scale(1.35);
+      }
+      .artifact__index,
+      .artifact__title,
+      .artifact__text {
+        position: relative;
+        z-index: 1;
+        display: block;
+      }
+      .artifact__control {
+        position: absolute;
+        z-index: 2;
+        left: var(--space-xl);
+        bottom: var(--space-xl);
+        padding: 0.3rem 0.6rem;
+        border: 1px solid currentColor;
+        font-size: 0.75rem;
+        font-weight: 700;
+      }
+      .artifact__index {
+        margin-bottom: 5rem;
+        color: var(--muted);
+      }
+      .artifact__title {
+        margin-bottom: var(--space-sm);
+        font-family: var(--display);
+        font-size: 2rem;
+        line-height: 1;
+      }
+      .artifact__text {
+        max-width: 22ch;
+        color: var(--muted);
+      }
+      .selection-status {
+        min-height: 1.6em;
+        margin: var(--space-lg) 0 0;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .runner__hud {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: var(--space-sm);
+        font-family: var(--detail);
+      }
+      .runner__stage {
+        position: relative;
+        height: min(25rem, 58vw);
+        min-height: 18rem;
+        overflow: hidden;
+        border: 2px solid var(--ink);
+        background: linear-gradient(#d8e5d2 0 67%, #b9a879 67%);
+        box-shadow: 0.5rem 0.6rem 0 var(--line);
+      }
+      .runner__stage::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        opacity: 0.25;
+        background-image:
+          linear-gradient(var(--line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line) 1px, transparent 1px);
+        background-size: 2rem 2rem;
+      }
+      .runner__ground {
+        position: absolute;
+        inset: auto 0 14% 0;
+        height: 3px;
+        background: var(--ink);
+      }
+      .runner__hero {
+        position: absolute;
+        z-index: 3;
+        left: 12%;
+        bottom: 14%;
+        width: clamp(4rem, 9vw, 6rem);
+        aspect-ratio: 1;
+        border: 0.28rem solid #f8f0dc;
+        border-radius: 50%;
+        object-fit: cover;
+        box-shadow: 0 0.4rem 0.8rem #0004;
+      }
+      .runner__obstacle {
+        position: absolute;
+        z-index: 2;
+        left: 0;
+        bottom: 14%;
+        width: 2.3rem;
+        height: 5.2rem;
+        background: repeating-linear-gradient(
+          135deg,
+          #532820 0 0.55rem,
+          #dca943 0.55rem 1.1rem
+        );
+        border: 2px solid var(--ink);
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+      }
+      .runner__message {
+        position: absolute;
+        z-index: 5;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        text-align: center;
+        background: oklch(0.95 0.03 84 / 0.78);
+      }
+      .runner__message strong {
+        font-family: var(--display);
+        font-size: clamp(2rem, 6vw, 4rem);
+      }
+      .runner__message span {
+        color: var(--muted);
+      }
+      .runner__message[hidden] {
+        display: none;
+      }
+      .runner__button {
+        margin-top: var(--space-lg);
+        min-width: 12rem;
+        cursor: pointer;
+      }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-xl);
+        padding-block: var(--space-2xl);
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      footer p {
+        margin: 0;
+      }
+
+      .ambient i {
+        position: fixed;
+        z-index: -1;
+        border-radius: 50%;
+        filter: blur(5rem);
+        opacity: 0.08;
+        background: var(--accent);
+      }
+      .ambient i:nth-child(1) {
+        width: 28rem;
+        height: 28rem;
+        top: -12rem;
+        right: -8rem;
+      }
+      .ambient i:nth-child(2) {
+        width: 20rem;
+        height: 20rem;
+        top: 45%;
+        left: -10rem;
+      }
+      .ambient i:nth-child(3) {
+        width: 24rem;
+        height: 24rem;
+        bottom: -12rem;
+        right: 20%;
+      }
+
+      @media (max-width: 760px) {
+        .site-head,
+        main,
+        footer {
+          width: min(100% - 1.5rem, 76rem);
+        }
+        .draft-mark {
+          display: none;
+        }
+        .hero {
+          grid-template-columns: 1fr;
+          min-height: auto;
+          gap: var(--space-2xl);
+        }
+        .sigil {
+          min-height: 21rem;
+          order: -1;
+        }
+        .feature {
+          grid-template-columns: 1fr;
+        }
+        .feature__stage {
+          min-height: 22rem;
+        }
+        .section-head {
+          grid-template-columns: 1fr;
+          gap: var(--space-sm);
+        }
+        .section-head > p:last-child {
+          grid-column: auto;
+        }
+        .gallery figure,
+        .gallery figure:first-child,
+        .gallery figure:last-child {
+          flex-basis: 82vw;
+        }
+        .combat-tree {
+          margin-top: var(--space-lg);
+        }
+        .source-library__list > details > summary {
+          grid-template-columns: 1fr;
+          gap: var(--space-xs);
+        }
+        .source-library__list > details > summary::after {
+          justify-self: start;
+        }
+        .source-library__list section > div {
+          grid-template-columns: 1fr;
+        }
+        h1 {
+          font-size: clamp(3.8rem, 20vw, 6rem);
+        }
+        html[data-theme="knight"] h1 {
+          white-space: normal;
+          font-size: clamp(3.8rem, 19vw, 5.5rem);
+        }
+        .feature h2 {
+          font-size: clamp(2.5rem, 13vw, 4rem);
+        }
+        .chapter {
+          grid-template-columns: 3rem 1fr;
+        }
+        .chapter p {
+          grid-column: 2;
+        }
+        .archive summary::after {
+          justify-self: start;
+        }
+        .archive summary {
+          grid-template-columns: 1fr;
+          gap: var(--space-xs);
+        }
+        .archive__entries {
+          grid-template-columns: 1fr;
+          padding-left: 0;
+        }
+        .chapter {
+          grid-template-columns: 3rem 1fr;
+        }
+        .chapter p {
+          grid-column: 2;
+        }
+        .artifact-list {
+          grid-template-columns: 1fr;
+        }
+        .artifact {
+          min-height: 14rem;
+        }
+        footer {
+          flex-direction: column;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
       }
     </style>
   </head>
   <body>
-    <main class="card">
-      <div class="sigil" aria-hidden="true"></div>
-      <p class="brand">Arken-Khar</p>
-      <h1>Ираклий</h1>
-      <p class="tagline">Личная страница игрока</p>
-      <a class="enter" href="https://arken-khar.space">Войти в игру</a>
-      <p class="foot">arken-khar.space</p>
+    <a class="skip-link" href="#content">К содержанию</a>
+    <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
+    <header class="site-head">
+      <a
+        class="wordmark"
+        href="https://arken-khar.space"
+        aria-label="Arken-Khar, главная"
+      >
+        <span class="wordmark__mark" aria-hidden="true">AK</span>
+        <span>Arken-Khar</span>
+      </a>
+      <span class="draft-mark">Черновик · noindex</span>
+    </header>
+
+    <main id="content">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero__copy">
+          <p class="eyebrow">Полевой архив</p>
+          <h1 id="page-title">Ираклий</h1>
+          <p class="role">
+            Прародитель Тристонии · рыцарь · автор боевых веток
+          </p>
+          <p class="intro">
+            Клинки, схемы и заметки с полей — история бойца, который сначала
+            проверяет идею на бумаге, а затем в бою.
+          </p>
+          <div class="facts" aria-label="Темы страницы">
+            <span>Рыцари</span><span>Мечники</span><span>Сочи</span>
+          </div>
+          <div class="hero__actions">
+            <a class="button button--primary" href="https://arken-khar.space"
+              >Войти в игру</a
+            >
+            <a class="button button--quiet" href="#story">Смотреть страницу</a>
+          </div>
+        </div>
+        <figure class="hero-photo">
+          <img
+            src="assets/irakli-knight-river.png"
+            alt="Ираклий в доспехах у горной реки"
+          />
+          <figcaption>@IRAKLY123 · прародитель Тристонии</figcaption>
+        </figure>
+      </section>
+
+      <blockquote class="signal">
+        <p>Сталь помнит каждое решение.</p>
+      </blockquote>
+
+      <section class="feature" id="story" aria-labelledby="feature-title">
+        <div class="feature__copy">
+          <p class="eyebrow">Боевой стиль</p>
+          <h2 id="feature-title">Велторианский Клинок</h2>
+          <p>
+            Черновая ветка «Короля Воинов»: четыре уровня, двадцать семь узлов и
+            место для финальных техник.
+          </p>
+          <a class="text-action" href="#source-library-title"
+            >Открыть полный документ <span aria-hidden="true">↓</span></a
+          >
+        </div>
+        <div class="combat-tree">
+          <section>
+            <header>
+              <span>Уровень 1</span><strong>Скилы 1 уровня</strong>
+            </header>
+            <div>
+              <details open>
+                <summary>Защитная стойка</summary>
+                <p>
+                  состояние во время боя дающее небольшие бафы на Реакцию, но
+                  постоянные.
+                </p>
+              </details>
+              <details>
+                <summary>Атакующая стойка</summary>
+                <p>
+                  состояние во время боя дающее небольшие бафы на Попадание
+                  Оружием, но постоянные. (воин может быть только в одной
+                  Стойке)
+                </p>
+              </details>
+              <details>
+                <summary>Защита с отходом</summary>
+                <p>
+                  разовый бонус при броске на Реакцию, при успехе Воин ловко
+                  отходит от противника на безопасную дистанцию не провоцируя
+                  атаки и иные скилы. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Удар с финтом</summary>
+                <p>
+                  Сопутствующим Действием воин делает обманное движение чтобы
+                  запутать противника и Основным Действием ударить его.
+                  Противник от такой атаки совершает Реакцию с помехой.
+                  Противники у которых Внимательность или Интуиция намного выше
+                  мастерства воина могут распознать уловку и нивелировать этот
+                  прием. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Уверенность кошки</summary>
+                <p>
+                  воин получает бафф чтоб устоять на ногах, держать баланс и
+                  смягчить урон от падения. Действие вне инициативы. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Удар по ногам</summary>
+                <p>
+                  ослабляющая атака которая наносит противнику дебаф на
+                  передвижение. Основное Действие 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Быстрые ноги</summary>
+                <p>идентичен скилу Бегун из Ветки Короля Воинов.</p>
+              </details>
+              <details>
+                <summary>Контратака</summary>
+                <p>
+                  как она есть. Сработает при успешной Реакции Действие вне
+                  инициативы. 1/бой
+                </p>
+              </details>
+            </div>
+          </section>
+          <section>
+            <header>
+              <span>Уровень 2</span><strong>Скилы 2 уровня</strong>
+            </header>
+            <div>
+              <details open>
+                <summary>Быстрый удар</summary>
+                <p>
+                  скилл заявляется до броска Инициативы. Большой бонус к
+                  инициативе и воин обязательно делает атаку по противнику.
+                  1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Парирование</summary>
+                <p>
+                  большой бонус к Реакции, но только с помощью оружия отражая
+                  вражеский удар оружием. Также возможно отразить и некоторые
+                  дальние атаки. Действие вне инициативы. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Открывающий удар</summary>
+                <p>
+                  воин делает атаку которая не нанесет много урона, но в
+                  следующем раунде один следующий удар по противнику будет с
+                  преимуществом. Удар может быть от кого угодно помимо воина.
+                  Основное Действие. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Защита с отпрыжкой</summary>
+                <p>
+                  если позволяет окружение то воин получает баф на Реакцию от
+                  атаки и ловко прыгает на какую либо возвышенность до 2 метров.
+                  Действие вне инициативы. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Опрокидывающий удар</summary>
+                <p>
+                  воин делает атаку с бонусом подставляя подножку противнику.
+                  Противник упадёт если его бросок Силы или Ловкости будет ниже
+                  попадания воина. Основное действие. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Изнуряющий удар</summary>
+                <p>
+                  воин делает атаку которая снижает Выносливость противника.
+                  Основное действие. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Дополнительная атака</summary>
+                <p>
+                  1/бой можно ударить дважды. Можно также скил вместо обычной
+                  атаки.
+                </p>
+              </details>
+              <details>
+                <summary>Обезоруживающая атака</summary>
+                <p>
+                  помимо оружия у противника с рук можно выбить любой предмет.
+                  Основное действие. 1/бой
+                </p>
+              </details>
+            </div>
+          </section>
+          <section>
+            <header>
+              <span>Уровень 3</span><strong>Скилы 3 уровня</strong>
+            </header>
+            <div>
+              <details open>
+                <summary>Сквозной удар</summary>
+                <p>
+                  атака частично игнорирующая броню, барьеры и резисты. Основное
+                  действие. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Опытный фехтовальщик</summary>
+                <p>
+                  воин частично не получает дебафов если его атакуют сразу
+                  несколько противников.
+                </p>
+              </details>
+              <details>
+                <summary>Точный удар</summary>
+                <p>
+                  такая атака не наносит много урона, но получает огромный баф к
+                  попаданию. Основное действие. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Болевой прием</summary>
+                <p>
+                  при атаке или защите воин с бонусом может взять противника в
+                  болевой захват оружием. Провальные попытки выбраться наносит
+                  урон. Основное действие при атаке и действие вне инициативы
+                  при защите. 1/бой.
+                </p>
+              </details>
+              <details>
+                <summary>Перенаправление</summary>
+                <p>
+                  воин способен при Реакции перенаправить атаку противнику в
+                  другого противника или в предмет. С бонусом. Действие вне
+                  инициативы. 1/бой
+                </p>
+              </details>
+              <details>
+                <summary>Воля ветерана</summary>
+                <p>
+                  постоянный большой бонус к Силе Воли когда воина пытаются
+                  запугать, навести отчаяние или сбить с толку.
+                </p>
+              </details>
+              <details>
+                <summary>Оглушающий Удар</summary>
+                <p>
+                  удар способный оглушить противника. Основное действие. 1/бой
+                </p>
+              </details>
+            </div>
+          </section>
+          <section>
+            <header>
+              <span>Уровень 4</span><strong>Скилы 4 уровня</strong>
+            </header>
+            <div>
+              <details open>
+                <summary>Метка</summary>
+                <p>
+                  воин делает какого либо противника своей жертвой. Огромный
+                  бонус ко всем броскам против врага. Сопутствующее действие.
+                  3/игру
+                </p>
+              </details>
+              <details>
+                <summary>Абсолютное мастерство</summary>
+                <p>автоматически успех для любого применяемого скила. 2/день</p>
+              </details>
+              <details>
+                <summary>Боевое чутье</summary>
+                <p>постоянный большой бонус к боевым проверкам Интуиции.</p>
+              </details>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="chronicle" aria-labelledby="chronicle-title">
+        <div class="section-head">
+          <p class="eyebrow">Структура истории</p>
+          <h2 id="chronicle-title">Три главы</h2>
+        </div>
+        <div class="chapter-list">
+          <article class="chapter">
+            <span class="chapter__number">I</span>
+            <h3>Основа</h3>
+            <p>Любимое оружие, сила и доспех как вторая кожа.</p>
+          </article>
+          <article class="chapter">
+            <span class="chapter__number">II</span>
+            <h3>Тактика</h3>
+            <p>Толчок, прыжок и точные боевые связки.</p>
+          </article>
+          <article class="chapter">
+            <span class="chapter__number">III</span>
+            <h3>Мастерство</h3>
+            <p>Контроль темпа, стойкость и сверхусилие.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="collection runner" aria-labelledby="collection-title">
+        <div class="section-head">
+          <p class="eyebrow">Записки оружейника</p>
+          <h2 id="collection-title">Рыцарский рывок</h2>
+          <p>Пробегите как можно дальше. Прыжок: пробел, ↑ или кнопка.</p>
+        </div>
+        <div class="runner__hud">
+          <span>Счёт: <strong data-runner-score>0</strong></span
+          ><span>Рекорд: <strong data-runner-best>0</strong></span>
+        </div>
+        <div
+          class="runner__stage"
+          data-runner-stage
+          tabindex="0"
+          aria-label="Мини-игра Рыцарский рывок"
+        >
+          <div class="runner__ground"></div>
+          <img
+            class="runner__hero"
+            data-runner-hero
+            src="assets/irakli-token.webp"
+            alt="Игровой токен Ираклия"
+          />
+          <div class="runner__message" data-runner-message>
+            <strong>Рыцарский рывок</strong><span>Нажмите «Начать забег»</span>
+          </div>
+        </div>
+        <button
+          class="button button--primary runner__button"
+          type="button"
+          data-runner-start
+        >
+          Начать забег
+        </button>
+      </section>
+      <section class="gallery" aria-labelledby="gallery-title">
+        <div class="section-head">
+          <p class="eyebrow">Личный архив</p>
+          <h2 id="gallery-title">Ираклий в кадре</h2>
+          <p>Фотографии героя и его рыцарских образов.</p>
+        </div>
+        <div class="gallery__controls">
+          <button type="button" data-gallery-prev aria-label="Предыдущее фото">
+            ←</button
+          ><button type="button" data-gallery-next aria-label="Следующее фото">
+            →
+          </button>
+        </div>
+        <div class="gallery__grid" data-gallery-track>
+          <figure>
+            <img
+              src="assets/irakli-knight-river.png"
+              alt="Ираклий в доспехах у горной реки"
+              loading="lazy"
+            />
+            <figcaption>Ираклий в доспехах у горной реки</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="assets/irakli-coin.png"
+              alt="Ираклий показывает находку"
+              loading="lazy"
+            />
+            <figcaption>Ираклий показывает находку</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="assets/irakli-knight-winter.png"
+              alt="Зимний выход в полном доспехе"
+              loading="lazy"
+            />
+            <figcaption>Зимний выход в полном доспехе</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="assets/irakli-character.png"
+              alt="Образ персонажа из личного архива"
+              loading="lazy"
+            />
+            <figcaption>Образ персонажа из личного архива</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="assets/irakli-knight-rose.png"
+              alt="Рыцарская сцена с розой"
+              loading="lazy"
+            />
+            <figcaption>Рыцарская сцена с розой</figcaption>
+          </figure>
+        </div>
+      </section>
+      <section class="source-library" aria-labelledby="source-library-title">
+        <div class="section-head">
+          <p class="eyebrow">Полные авторские тексты</p>
+          <h2 id="source-library-title">Материалы Ираклия</h2>
+          <p>
+            Три документа перенесены полностью, без сокращения формулировок.
+          </p>
+        </div>
+        <div class="source-library__list">
+          <details open>
+            <summary>
+              <span>Документ 01</span><strong>Магия Жизни</strong>
+            </summary>
+            <section>
+              <h3>Заклинания 1 уровня</h3>
+              <div>
+                <article>
+                  <h4>Восстанавливающее прикосновение</h4>
+                  <p>
+                    восстанавливает плоть и кости. При использовании в бою -3 к
+                    Инициативе. Проверка 1к12+медицина для определения успеха
+                    лечения. 5 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Очищающее прикосновение</h4>
+                  <p>
+                    очищает тело от болезней и яда. При использовании в бою -3 к
+                    Инициативе. Проверка 1к12+медицина для определения успеха
+                    лечения. 5 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Манипулирование с водой</h4>
+                  <p>
+                    маг способен менять цвет жидкости (не более чем на 5 минут),
+                    придавать ей любую форму, нагревать, охлаждать и перемещать
+                    в воздухе. Размер манипулирующей жидкости до 5 литров. Маг
+                    должен видеть жидкость и заклинание не действует на кровь!
+                  </p>
+                </article>
+                <article>
+                  <h4>Магический резерв</h4>
+                  <p>
+                    во время отдыха, и только, маг способен создать себе резерв
+                    маны из которого он может себе или союзнику восстанавливать
+                    мп. Сколько мп маг вложит, столько и будет. Резерв
+                    существует количество дней равное бонусу Интеллекта мага.
+                  </p>
+                </article>
+                <article>
+                  <h4>Подводное дыхание</h4>
+                  <p>
+                    в течении 1 часа маг или цель заклинания могут дышать под
+                    водой. 8 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Взор Фреятрон</h4>
+                  <p>
+                    маг магическим взором точечно анализирует потоки маны,
+                    болезни, отравления, травмы, инородные вещи и прочие болячки
+                    тела, как естественного так и магического характера. По
+                    решению мастера к последующему магическому лечению будет
+                    большой баф. 7 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Прилив сил</h4>
+                  <p>восстанавливает цели 5 единиц Выносливости. 5 мп.</p>
+                </article>
+              </div>
+            </section>
+            <section>
+              <h3>Заклинания 2 уровня</h3>
+              <div>
+                <article>
+                  <h4>Волна</h4>
+                  <p>
+                    Восстанавливающее прикосновение, Очищающее прикосновение или
+                    Прилив сил можно использовать волной вокруг мага диаметром 6
+                    метров. Количество союзников которых можно зацепить равно
+                    бонусу Интеллекта мага. 11 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Водное усиление</h4>
+                  <p>
+                    на выбор мага он может усилить Силу, Ловкость, Живучесть или
+                    Выносливость цели на 1к4. 10 мп
+                  </p>
+                </article>
+                <article>
+                  <h4>Водный шар</h4>
+                  <p>
+                    1,5 метровый шар воды который взрывается большими сильными
+                    брызгами. Силы заклинания хватает чтоб оглушить и сбить с
+                    ног по площади в 6 метров, в также разрушить небольшие
+                    сооружения из камня и дерева. 12 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Насыщение</h4>
+                  <p>
+                    маг способен временно восполнить потерю крови магической
+                    водой которая заменяет отсутствующую кровь. В течении одного
+                    дня цель не получает штрафов от потери крови. 15 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Водный элементаль</h4>
+                  <p>
+                    Состоит из воды и сферы внутри, до которой нужно ещё
+                    дотянуться в толще воды. Элементаль получает урон если
+                    сбивать с него куски воды, испарять воду и бить по сфере.
+                    Ему можно отдавать команду Сопутствующим Действием или дать
+                    одну простую команду оставив в режиме автоматики. Облик
+                    определяется совместно игроком с мастером. 17 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Водная темница</h4>
+                  <p>
+                    маг заключает цель в водный пузырь на 1к6 раундов. Цель
+                    должна успешно пройти проверку Силы или Интеллекта (если
+                    цель владеет магией), при провале цель получает дебафф на
+                    физ. статы в размере 1к6, при успехе заклинание
+                    заканчивается. Маг может в любой момент решить оставить цели
+                    возможность дышать. 14 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Водный плащ</h4>
+                  <p>
+                    цель получает магическое покрытие которое защищает от
+                    заклинаний Атакующего и Ослабляющего типа, а также дает
+                    пассивное небольшое лечение. А также дает физ защиту как
+                    средняя броня. 17 мп.
+                  </p>
+                </article>
+              </div>
+            </section>
+            <section>
+              <h3>Заклинания 3 уровня</h3>
+              <div>
+                <article>
+                  <h4>Великий водный элементаль</h4>
+                  <p>
+                    как Водный Элементаль, но намного пизже. Игрок совместно с
+                    мастером создаёт этого монстра и что он умеет. 24 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Путь Фреятрон</h4>
+                  <p>
+                    это заклинание лечит тело до нужного состояния для
+                    возвращения души из Серой Долины. В самой Серой Долине душа
+                    возвращает часть Силы Воли необходимой для желания вернуться
+                    в мир живых и находит берег на котором лодка. На лодке душа
+                    и плывет обратно в мир живых и просыпается в своем теле. 46
+                    мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Водная стена</h4>
+                  <p>
+                    до 12 метров длиной, 3 метров в высоту и 1 метр в толщину.
+                    Можно менять размер, сделать замкнутым кругом или даже
+                    сделать как мост. Отлично держит физ урон и крайне
+                    эффективно поглощает Атакующую и Ослабляющую магию. 21 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Милость Фреятрон</h4>
+                  <p>
+                    в радиусе 12 метров от мага начинается магический дождь
+                    который исцеляет и восстанавливает 15 мп всем кого маг
+                    считает союзником. 25 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Гнев Фреятрон</h4>
+                  <p>
+                    огромная волна которая несет колоссальное разрушение и урон
+                    по площади в 12 метров. 22 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Облик воды</h4>
+                  <p>
+                    тело мага меняется, становясь водой на 1к8 раундов. В любой
+                    момент маг может стать лужой воды и пройти через любые
+                    отверстия и слиться с жидкостью. А также в этом состоянии
+                    80% к физ урону и 50% резист к магии. 24 мп.
+                  </p>
+                </article>
+                <article>
+                  <h4>Родная стихия</h4>
+                  <p>
+                    цель получает высокую скорость плавания, хорошее зрение в
+                    воде, подводное дыхание и почти не получает дебафов от
+                    нахождения в воде на 1 час. 20 мп.
+                  </p>
+                </article>
+              </div>
+            </section>
+          </details>
+          <details>
+            <summary>
+              <span>Документ 02</span><strong>Велторианский Клинок</strong>
+            </summary>
+            <section>
+              <h3>Скилы 1 уровня</h3>
+              <div>
+                <article>
+                  <h4>Защитная стойка</h4>
+                  <p>
+                    состояние во время боя дающее небольшие бафы на Реакцию, но
+                    постоянные.
+                  </p>
+                </article>
+                <article>
+                  <h4>Атакующая стойка</h4>
+                  <p>
+                    состояние во время боя дающее небольшие бафы на Попадание
+                    Оружием, но постоянные. (воин может быть только в одной
+                    Стойке)
+                  </p>
+                </article>
+                <article>
+                  <h4>Защита с отходом</h4>
+                  <p>
+                    разовый бонус при броске на Реакцию, при успехе Воин ловко
+                    отходит от противника на безопасную дистанцию не провоцируя
+                    атаки и иные скилы. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Удар с финтом</h4>
+                  <p>
+                    Сопутствующим Действием воин делает обманное движение чтобы
+                    запутать противника и Основным Действием ударить его.
+                    Противник от такой атаки совершает Реакцию с помехой.
+                    Противники у которых Внимательность или Интуиция намного
+                    выше мастерства воина могут распознать уловку и нивелировать
+                    этот прием. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Уверенность кошки</h4>
+                  <p>
+                    воин получает бафф чтоб устоять на ногах, держать баланс и
+                    смягчить урон от падения. Действие вне инициативы. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Удар по ногам</h4>
+                  <p>
+                    ослабляющая атака которая наносит противнику дебаф на
+                    передвижение. Основное Действие 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Быстрые ноги</h4>
+                  <p>идентичен скилу Бегун из Ветки Короля Воинов.</p>
+                </article>
+                <article>
+                  <h4>Контратака</h4>
+                  <p>
+                    как она есть. Сработает при успешной Реакции Действие вне
+                    инициативы. 1/бой
+                  </p>
+                </article>
+              </div>
+            </section>
+            <section>
+              <h3>Скилы 2 уровня</h3>
+              <div>
+                <article>
+                  <h4>Быстрый удар</h4>
+                  <p>
+                    скилл заявляется до броска Инициативы. Большой бонус к
+                    инициативе и воин обязательно делает атаку по противнику.
+                    1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Парирование</h4>
+                  <p>
+                    большой бонус к Реакции, но только с помощью оружия отражая
+                    вражеский удар оружием. Также возможно отразить и некоторые
+                    дальние атаки. Действие вне инициативы. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Открывающий удар</h4>
+                  <p>
+                    воин делает атаку которая не нанесет много урона, но в
+                    следующем раунде один следующий удар по противнику будет с
+                    преимуществом. Удар может быть от кого угодно помимо воина.
+                    Основное Действие. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Защита с отпрыжкой</h4>
+                  <p>
+                    если позволяет окружение то воин получает баф на Реакцию от
+                    атаки и ловко прыгает на какую либо возвышенность до 2
+                    метров. Действие вне инициативы. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Опрокидывающий удар</h4>
+                  <p>
+                    воин делает атаку с бонусом подставляя подножку противнику.
+                    Противник упадёт если его бросок Силы или Ловкости будет
+                    ниже попадания воина. Основное действие. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Изнуряющий удар</h4>
+                  <p>
+                    воин делает атаку которая снижает Выносливость противника.
+                    Основное действие. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Дополнительная атака</h4>
+                  <p>
+                    1/бой можно ударить дважды. Можно также скил вместо обычной
+                    атаки.
+                  </p>
+                </article>
+                <article>
+                  <h4>Обезоруживающая атака</h4>
+                  <p>
+                    помимо оружия у противника с рук можно выбить любой предмет.
+                    Основное действие. 1/бой
+                  </p>
+                </article>
+              </div>
+            </section>
+            <section>
+              <h3>Скилы 3 уровня</h3>
+              <div>
+                <article>
+                  <h4>Сквозной удар</h4>
+                  <p>
+                    атака частично игнорирующая броню, барьеры и резисты.
+                    Основное действие. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Опытный фехтовальщик</h4>
+                  <p>
+                    воин частично не получает дебафов если его атакуют сразу
+                    несколько противников.
+                  </p>
+                </article>
+                <article>
+                  <h4>Точный удар</h4>
+                  <p>
+                    такая атака не наносит много урона, но получает огромный баф
+                    к попаданию. Основное действие. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Болевой прием</h4>
+                  <p>
+                    при атаке или защите воин с бонусом может взять противника в
+                    болевой захват оружием. Провальные попытки выбраться наносит
+                    урон. Основное действие при атаке и действие вне инициативы
+                    при защите. 1/бой.
+                  </p>
+                </article>
+                <article>
+                  <h4>Перенаправление</h4>
+                  <p>
+                    воин способен при Реакции перенаправить атаку противнику в
+                    другого противника или в предмет. С бонусом. Действие вне
+                    инициативы. 1/бой
+                  </p>
+                </article>
+                <article>
+                  <h4>Воля ветерана</h4>
+                  <p>
+                    постоянный большой бонус к Силе Воли когда воина пытаются
+                    запугать, навести отчаяние или сбить с толку.
+                  </p>
+                </article>
+                <article>
+                  <h4>Оглушающий Удар</h4>
+                  <p>
+                    удар способный оглушить противника. Основное действие. 1/бой
+                  </p>
+                </article>
+              </div>
+            </section>
+            <section>
+              <h3>Скилы 4 уровня</h3>
+              <div>
+                <article>
+                  <h4>Метка</h4>
+                  <p>
+                    воин делает какого либо противника своей жертвой. Огромный
+                    бонус ко всем броскам против врага. Сопутствующее действие.
+                    3/игру
+                  </p>
+                </article>
+                <article>
+                  <h4>Абсолютное мастерство</h4>
+                  <p>
+                    автоматически успех для любого применяемого скила. 2/день
+                  </p>
+                </article>
+                <article>
+                  <h4>Боевое чутье</h4>
+                  <p>постоянный большой бонус к боевым проверкам Интуиции.</p>
+                </article>
+              </div>
+            </section>
+          </details>
+          <details>
+            <summary>
+              <span>Документ 03</span
+              ><strong>Иерархия гильдии Келлзериас</strong>
+            </summary>
+            <section>
+              <h3>Основные положения</h3>
+              <div>
+                <article>
+                  <h4>Глава/Вожак</h4>
+                  <p>лидер с абсолютной властью. Основатель гильдии.</p>
+                </article>
+                <article>
+                  <h4>Левое крыло</h4>
+                  <p>
+                    советник главы, чаще всего занимается большей частью
+                    управленческих дел, в том числе снабжение и логистика.
+                  </p>
+                </article>
+                <article>
+                  <h4>Правое крыло</h4>
+                  <p>
+                    чемпион гильдии, сильнейший боец, будь то волшебник или
+                    воин. Отвечает за посвящение в клыки и создание команд с
+                    кураторами.
+                  </p>
+                </article>
+                <article>
+                  <h4>Клыки</h4>
+                  <p>
+                    влиятельные члены гильдии которые выполнили не одно тяжёлое
+                    задание и имеющие немалый опыт и доверие. А также
+                    заслужившие значок гильдии из гронира. Именно клыки чаще
+                    всего становятся кураторами команд из чешуек.
+                  </p>
+                </article>
+                <article>
+                  <h4>Когти</h4>
+                  <p>
+                    члены гильдии пережившие первые серьёзные задания и
+                    заслужившие считаться полноценными представителями гильдии.
+                  </p>
+                </article>
+                <article>
+                  <h4>Чешуйки</h4>
+                  <p>
+                    зелёные новички которые выполняет самые простые задание, а
+                    также бытовые обязательства в здании гильдии.
+                  </p>
+                </article>
+              </div>
+            </section>
+          </details>
+        </div>
+      </section>
+      <section class="archive" aria-labelledby="archive-title">
+        <div class="section-head">
+          <p class="eyebrow">Авторские материалы</p>
+          <h2 id="archive-title">Дневники разработчика Аркен-Хара</h2>
+          <p>
+            Материалы Ираклия, ранее опубликованные отдельной страницей:
+            первоэлементы мира, характеристики, навыки и игровые правила.
+            Авторский черновик, а не финальная редакция системы.
+          </p>
+        </div>
+        <div class="archive__chapters">
+          <details open>
+            <summary>
+              <span>Глава I</span><strong>Фундаментальные элементы мира</strong>
+            </summary>
+            <div class="archive__entries">
+              <article>
+                <h3>Материя</h3>
+                <p>
+                  Физическое воплощение мира. Выражается в физических законах
+                  природы, биологических процессах в телах, лесах, океанах,
+                  пустынях и прочих местах, по которым можно перемещаться.
+                </p>
+              </article>
+              <article>
+                <h3>Дух</h3>
+                <p>
+                  Сакральное воплощение мира. Его нельзя познать разумом или
+                  физическим восприятием, но можно ощутить эмоционально и
+                  интуитивно. К Духу относятся душа, интуиция, сила воли, всё
+                  божественное и сами боги.
+                </p>
+              </article>
+              <article>
+                <h3>Разум</h3>
+                <p>
+                  Сила, упорядочивающая вселенную и поддерживающая баланс между
+                  Духом и Материей. Благодаря Разуму мироздание меняется и
+                  совершенствуется; от него существует магия, способная менять
+                  реальность, а также способность мыслить и анализировать.
+                </p>
+              </article>
+              <article>
+                <h3>Душа и предрасположенности</h3>
+                <p>
+                  Каждое живое существо имеет душу. При рождении она получает
+                  предрасположенность к одному из фундаментальных элементов. Это
+                  влияет на рост и развитие, но не ограничивает существо:
+                  свобода воли позволяет самостоятельно выбирать путь.
+                </p>
+              </article>
+              <article>
+                <h3>Драконы</h3>
+                <p>
+                  Из-за первозданной природы обладают фиксированной
+                  предрасположенностью к Материи.
+                </p>
+              </article>
+              <article>
+                <h3>Демоны</h3>
+                <p>
+                  По решению верховных мастеров имеют врождённую
+                  предрасположенность к Разуму.
+                </p>
+              </article>
+            </div>
+          </details>
+          <details>
+            <summary>
+              <span>Глава II</span><strong>Основные характеристики</strong>
+            </summary>
+            <div class="archive__entries">
+              <article>
+                <h3>Правило бонуса</h3>
+                <p>
+                  Базовое значение характеристики 10 даёт +0. Каждая единица
+                  выше даёт +1 к проверке: например, 14 даёт +4. Значения ниже
+                  10 дают штраф: например, 8 даёт −2.
+                </p>
+              </article>
+              <article>
+                <h3>Человеческий предел</h3>
+                <p>
+                  Максимальный лимит характеристик — 20. Обычных тренировок
+                  недостаточно, чтобы его превысить: нужны легендарные усилия,
+                  магия или божественное благословение.
+                </p>
+              </article>
+              <article>
+                <h3>Сила</h3>
+                <p>
+                  Перенос тяжестей, сила физических ударов и мышечный объём.
+                </p>
+              </article>
+              <article>
+                <h3>Ловкость</h3>
+                <p>
+                  Грация, рефлексы, тонкая моторика и общая скорость
+                  передвижения.
+                </p>
+              </article>
+              <article>
+                <h3>Выносливость</h3>
+                <p>
+                  Перенос боли, перегрузок и неблагоприятной среды,
+                  продолжительность физических действий.
+                </p>
+              </article>
+              <article>
+                <h3>Сообразительность</h3>
+                <p>
+                  Быстрое решение вопросов, импровизация и мгновенная реакция на
+                  опасности.
+                </p>
+              </article>
+              <article>
+                <h3>Интеллект</h3>
+                <p>
+                  Память, логическое мышление, анализ данных и глубокое
+                  академическое понимание.
+                </p>
+              </article>
+              <article>
+                <h3>Восприятие</h3>
+                <p>
+                  Способность замечать скрытые детали, звуки и изменения
+                  окружения всеми органами чувств.
+                </p>
+              </article>
+              <article>
+                <h3>Харизма</h3>
+                <p>Общение, красноречие, переговоры и личное обаяние.</p>
+              </article>
+              <article>
+                <h3>Сила воли</h3>
+                <p>
+                  Хладнокровие, контроль эмоций, сопротивление ментальному удару
+                  и способность не сдаваться.
+                </p>
+              </article>
+              <article>
+                <h3>Интуиция</h3>
+                <p>
+                  Бессознательное понимание мира на духовном уровне и верные
+                  решения на основе чутья.
+                </p>
+              </article>
+            </div>
+          </details>
+          <details>
+            <summary>
+              <span>Глава III</span><strong>Навыки и умения</strong>
+            </summary>
+            <div class="archive__entries">
+              <article>
+                <h3>Законы изучения</h3>
+                <p>
+                  В Аркен-Харе нет жёстко заданного списка умений. У каждого
+                  героя формируется уникальный набор навыков по предыстории и
+                  жизненному опыту. При проверке бонус навыка суммируется со
+                  связанной характеристикой.
+                </p>
+              </article>
+              <article>
+                <h3>Предел мастерства</h3>
+                <p>
+                  Навык нельзя развить выше +10 обычными способами. Преодолеть
+                  предел позволяют только магические, божественные и иные
+                  сверхъестественные воздействия.
+                </p>
+              </article>
+              <article>
+                <h3>Верховая езда · Ловкость</h3>
+                <p>
+                  Управление ездовым животным при быстром или экстремальном
+                  перемещении. Проверка: d20 + модификатор Ловкости + бонус
+                  навыка, вплоть до +10.
+                </p>
+              </article>
+              <article>
+                <h3>Убеждение · Харизма</h3>
+                <p>
+                  Умение аргументировать, договариваться и склонять собеседника
+                  к нужному решению.
+                </p>
+              </article>
+              <article>
+                <h3>Эмпатия · Восприятие / Интуиция</h3>
+                <p>
+                  Считывание эмоционального состояния, намерений и невысказанных
+                  реакций другого существа.
+                </p>
+              </article>
+              <article>
+                <h3>Анализ · Интеллект / Сообразительность</h3>
+                <p>
+                  Разбор данных, поиск закономерностей и быстрое построение
+                  рабочих выводов.
+                </p>
+              </article>
+              <article>
+                <h3>Знания · Интеллект / Сообразительность</h3>
+                <p>
+                  Накопленная учёность и способность применить сведения в
+                  конкретной ситуации.
+                </p>
+              </article>
+              <article>
+                <h3>Самообладание · Сила воли</h3>
+                <p>
+                  Сохранение контроля над собой под давлением, страхом и
+                  эмоциональной нагрузкой.
+                </p>
+              </article>
+              <article>
+                <h3>Владение оружием · Сила / Ловкость</h3>
+                <p>
+                  Практический навык обращения с выбранным оружием и выполнения
+                  боевых приёмов.
+                </p>
+              </article>
+            </div>
+          </details>
+        </div>
+      </section>
     </main>
+
+    <footer>
+      <p>Персональная страница в общей системе Аркен-Хара.</p>
+      <a href="https://arken-khar.space">arken-khar.space</a>
+    </footer>
+    <script>
+      const featureButton = document.querySelector("[data-feature-toggle]");
+      const featureStage = document.querySelector("[data-feature-stage]");
+
+      featureButton?.addEventListener("click", () => {
+        const active = featureButton.getAttribute("aria-expanded") === "true";
+        featureButton.setAttribute("aria-expanded", String(!active));
+        featureStage?.classList.toggle("is-active", !active);
+      });
+
+      const artifacts = [...document.querySelectorAll("[data-reveal]")];
+      const selectionStatus = document.querySelector("[data-selection-status]");
+
+      for (const artifact of artifacts) {
+        artifact.addEventListener("click", () => {
+          for (const item of artifacts) item.classList.remove("is-selected");
+          for (const item of artifacts)
+            item.setAttribute("aria-pressed", "false");
+          artifact.classList.add("is-selected");
+          artifact.setAttribute("aria-pressed", "true");
+          selectionStatus.textContent = `Выбрано: ${artifact.querySelector(".artifact__title")?.textContent ?? "объект"}`;
+        });
+      }
+
+      const galleryTrack = document.querySelector("[data-gallery-track]");
+      document
+        .querySelector("[data-gallery-prev]")
+        ?.addEventListener("click", () =>
+          galleryTrack?.scrollBy({ left: -380, behavior: "smooth" }),
+        );
+      document
+        .querySelector("[data-gallery-next]")
+        ?.addEventListener("click", () =>
+          galleryTrack?.scrollBy({ left: 380, behavior: "smooth" }),
+        );
+
+      const runner = document.querySelector("[data-runner-stage]");
+      const runnerHero = document.querySelector("[data-runner-hero]");
+      const runnerStart = document.querySelector("[data-runner-start]");
+      const runnerMessage = document.querySelector("[data-runner-message]");
+      const runnerScore = document.querySelector("[data-runner-score]");
+      const runnerBest = document.querySelector("[data-runner-best]");
+
+      if (runner && runnerHero && runnerStart) {
+        let running = false,
+          jumping = false,
+          velocity = 0,
+          height = 0,
+          score = 0,
+          last = 0,
+          spawnAt = 0;
+        let obstacles = [];
+        let best = Number(localStorage.getItem("irakli-runner-best") || 0);
+        runnerBest.textContent = String(best);
+        const jump = () => {
+          if (running && !jumping) {
+            jumping = true;
+            velocity = 760;
+          }
+        };
+        const finish = () => {
+          running = false;
+          runnerMessage.hidden = false;
+          runnerMessage.querySelector("strong").textContent = "Доспех звенит";
+          runnerMessage.querySelector("span").textContent =
+            `Счёт: ${Math.floor(score)}. Попробуйте ещё раз.`;
+          runnerStart.textContent = "Ещё один забег";
+          best = Math.max(best, Math.floor(score));
+          localStorage.setItem("irakli-runner-best", String(best));
+          runnerBest.textContent = String(best);
+        };
+        const frame = (now) => {
+          if (!running) return;
+          const dt = Math.min((now - last) / 1000, 0.034);
+          last = now;
+          score += dt * 10;
+          runnerScore.textContent = String(Math.floor(score));
+          velocity -= 1850 * dt;
+          height = Math.max(0, height + velocity * dt);
+          if (!height) {
+            jumping = false;
+            velocity = 0;
+          }
+          runnerHero.style.transform = `translateY(${-height}px)`;
+          spawnAt -= dt;
+          if (spawnAt <= 0) {
+            const node = document.createElement("i");
+            node.className = "runner__obstacle";
+            runner.append(node);
+            obstacles.push({ node, x: runner.clientWidth + 40 });
+            spawnAt = 1.15 + Math.random() * 1.1;
+          }
+          const heroX = runner.clientWidth * 0.12,
+            heroW = runnerHero.offsetWidth;
+          for (const item of obstacles) {
+            item.x -= (260 + Math.min(score * 2, 180)) * dt;
+            item.node.style.transform = `translateX(${item.x}px)`;
+            if (
+              item.x < heroX + heroW &&
+              item.x + item.node.offsetWidth > heroX &&
+              height < item.node.offsetHeight * 0.78
+            )
+              return finish();
+          }
+          obstacles = obstacles.filter((item) => {
+            if (item.x < -80) {
+              item.node.remove();
+              return false;
+            }
+            return true;
+          });
+          requestAnimationFrame(frame);
+        };
+        const start = () => {
+          obstacles.forEach((item) => item.node.remove());
+          obstacles = [];
+          score = 0;
+          height = 0;
+          velocity = 0;
+          jumping = false;
+          running = true;
+          spawnAt = 1.2;
+          runnerMessage.hidden = true;
+          runnerStart.textContent = "Прыжок";
+          runner.focus();
+          last = performance.now();
+          requestAnimationFrame(frame);
+        };
+        runnerStart.addEventListener("click", () =>
+          running ? jump() : start(),
+        );
+        runner.addEventListener("pointerdown", jump);
+        window.addEventListener("keydown", (event) => {
+          if (event.code === "Space" || event.code === "ArrowUp") {
+            event.preventDefault();
+            if (running) jump();
+            else start();
+          }
+        });
+      }
+    </script>
   </body>
 </html>

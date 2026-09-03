@@ -42,6 +42,9 @@ export const CORE_CAMPAIGN_PROBE_KEYS = [
   "PUT /api/sticker-packs/:id/consent",
   "GET /api/stickers/:id/content",
   "PATCH /api/characters/:id/counters",
+  "DELETE /api/assets/:id",
+  "GET /api/assets/:id/usage",
+  "PUT /api/assets/:id/content",
   "GET /api/assets/:id/content",
 ] as const;
 

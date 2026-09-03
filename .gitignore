@@ -4,6 +4,7 @@ dist/
 coverage/
 playwright-report/
 test-results/
+.tmp-*.mjs
 .env
 .env.*
 !.env.example

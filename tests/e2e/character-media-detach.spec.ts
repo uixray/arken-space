@@ -308,7 +308,13 @@ test("an owner confirms before detaching character media from the gallery", asyn
   ]);
   await expect(dialog).toBeHidden();
   await expect(
-    gallery.getByText("В галерее пока нет изображений.", { exact: true }),
+    gallery.getByText(
+      "Здесь пока пусто. Добавьте изображение ниже — оно появится в галерее, а исходный файл останется в медиатеке.",
+      { exact: true },
+    ),
   ).toBeVisible();
+  await expect(gallery.locator(".character-media-gallery__grid")).toHaveCount(
+    0,
+  );
   expect(unexpectedApiRequests).toEqual([]);
 });

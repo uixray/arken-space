@@ -24,9 +24,8 @@ describe("token definition asset options", () => {
     asset("token", "TOKEN", "Goblin"),
     asset("map", "MAP", "Dungeon"),
   ];
-  it("offers IMAGE and TOKEN assets", () => {
+  it("offers only ready TOKEN assets for a definition", () => {
     expect(tokenDefinitionAssets(assets).map(({ id }) => id)).toEqual([
-      "image",
       "token",
     ]);
     expect(tokenAssetLabel(assets[0]!)).toBe("Portrait ? IMAGE");

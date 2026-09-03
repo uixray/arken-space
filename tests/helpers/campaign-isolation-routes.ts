@@ -58,6 +58,7 @@ export const OPERATOR_FEEDBACK_ROUTE_KEYS = [
 
 export const CAMPAIGN_ROUTE_KEYS = [
   "DELETE /api/catalog/:id",
+  "DELETE /api/assets/:id",
   "DELETE /api/character-media/:id",
   "DELETE /api/characters/:characterId/catalog/:id",
   "DELETE /api/drawings/:id",
@@ -68,6 +69,7 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "DELETE /api/world-maps/locations/:id",
   "DELETE /api/world-maps/locations/:id/scenes/:sceneId",
   "GET /api/assets/:id/content",
+  "GET /api/assets/:id/usage",
   "GET /api/characters/:characterId/media",
   "GET /api/characters/:characterId/spell-progression",
   "GET /api/chat/attachments/:contentId/content",
@@ -132,6 +134,7 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "PUT /api/sticker-packs/:id/consent",
   "PUT /api/sticker-packs/:id/entitlements/:membershipId",
   "PUT /api/token-definitions/:id/controllers",
+  "PUT /api/assets/:id/content",
 ] as const satisfies readonly HttpRouteKey[];
 
 export const GLOBAL_ROUTE_EXCEPTIONS = {

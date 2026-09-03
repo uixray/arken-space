@@ -53,6 +53,9 @@ export interface TokenDefinitionActions {
     defaultHeight: number;
     controllerMembershipIds: string[];
   }) => Promise<void>;
+  onCreateAndPlaceTokenDefinition: (
+    input: Parameters<TokenDefinitionActions["onCreateTokenDefinition"]>[0],
+  ) => Promise<void>;
   onReplaceTokenControllers: (
     definitionId: string,
     revision: number,
@@ -113,6 +116,29 @@ export function useTokenDefinitionActions(dependencies: {
             }),
           true,
         ).then(() => undefined),
+
+      onCreateAndPlaceTokenDefinition: async (input) => {
+        const scene = activeSceneRef.current;
+        if (!scene) return;
+        await run(
+          () =>
+            api("/api/tokens", {
+              method: "POST",
+              body: withAction({
+                sceneId: scene.id,
+                characterId: input.characterId,
+                assetId: input.defaultAssetId,
+                name: input.name ?? undefined,
+                x: scene.width / 2 - input.defaultWidth / 2,
+                y: scene.height / 2 - input.defaultHeight / 2,
+                width: input.defaultWidth,
+                height: input.defaultHeight,
+                controllerMembershipIds: input.controllerMembershipIds,
+              }),
+            }),
+          true,
+        );
+      },
 
       onReplaceTokenControllers: (
         definitionId,
