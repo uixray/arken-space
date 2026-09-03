@@ -3685,6 +3685,16 @@ export function registerRoutes(
         )
         .returning();
       if (!next) return null;
+      if (body.defaultAssetId !== undefined) {
+        // Размещённый токен хранит снимок изображения определения. Меняем
+        // только экземпляры этого definition в той же транзакции: общий asset
+        // может использоваться другими определениями и не должен
+        // перезаписываться вместе с одним токеном.
+        await tx
+          .update(tokens)
+          .set({ assetId: body.defaultAssetId, updatedAt: new Date() })
+          .where(eq(tokens.definitionId, id));
+      }
       await tx.insert(gameEvents).values({
         campaignId: auth.campaignId,
         actionId,
