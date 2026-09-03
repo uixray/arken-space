@@ -559,6 +559,8 @@ export function Sidebar(props: Props) {
             <MediaPanel
               snapshot={props.snapshot}
               onUpload={assetActions.uploadAsset}
+              onGetUsage={assetActions.getAssetUsage}
+              onDelete={assetActions.deleteAsset}
             />
           </ArkenDialog>
         )}

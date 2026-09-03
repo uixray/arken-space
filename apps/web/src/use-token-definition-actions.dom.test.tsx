@@ -77,6 +77,47 @@ describe("тело запроса определения токена", () => {
     });
   });
 
+  it("создание с размещением использует атомарный POST /api/tokens", async () => {
+    const activeScene = {
+      id: "сцена-1",
+      width: 1000,
+      height: 800,
+    } as SceneDto;
+    const run = vi.fn(async (action: () => Promise<unknown>) => action());
+    let captured!: ReturnType<typeof useTokenDefinitionActions>;
+    function Probe() {
+      captured = useTokenDefinitionActions({
+        run: run as never,
+        snapshotRef: { current: null },
+        activeSceneRef: { current: activeScene },
+      });
+      return null;
+    }
+    renderComponent(<Probe />);
+
+    await captured.onCreateAndPlaceTokenDefinition({
+      name: "Страж",
+      characterId: null,
+      defaultAssetId: "ассет-3",
+      defaultWidth: 128,
+      defaultHeight: 64,
+      controllerMembershipIds: ["участник-1"],
+    });
+
+    expect(sentPath()).toBe("/api/tokens");
+    expect(sentMethod()).toBe("POST");
+    expect(sentBody()).toMatchObject({
+      sceneId: "сцена-1",
+      assetId: "ассет-3",
+      name: "Страж",
+      x: 436,
+      y: 368,
+      width: 128,
+      height: 64,
+      controllerMembershipIds: ["участник-1"],
+    });
+  });
+
   it("правка везёт ревизию и ровно те поля, которые меняют", async () => {
     await actions().onPatchTokenDefinition("токен-1", 4, {
       name: null,

@@ -498,6 +498,54 @@ describe("Pool B HTTP boundaries", () => {
     expect(replay.json().id).toBe(created.json().id);
   });
 
+  it("cascades a definition image only to its placed tokens", async () => {
+    const otherDefinitionId = crypto.randomUUID();
+    const otherTokenId = crypto.randomUUID();
+    await db.insert(schema.tokenDefinitions).values({
+      id: otherDefinitionId,
+      campaignId: ids.campaign,
+      name: "Other",
+    });
+    await db.insert(schema.tokens).values({
+      id: otherTokenId,
+      definitionId: otherDefinitionId,
+      sceneId: ids.scene,
+      name: "Other",
+      x: 64,
+      y: 64,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${ids.definition}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        defaultAssetId: ids.tokenAsset,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [definition] = await db
+      .select()
+      .from(schema.tokenDefinitions)
+      .where(eq(schema.tokenDefinitions.id, ids.definition));
+    const placed = await db
+      .select()
+      .from(schema.tokens)
+      .where(eq(schema.tokens.definitionId, ids.definition));
+    const [otherToken] = await db
+      .select()
+      .from(schema.tokens)
+      .where(eq(schema.tokens.id, otherTokenId));
+    expect(definition?.defaultAssetId).toBe(ids.tokenAsset);
+    expect(placed).toEqual([
+      expect.objectContaining({ id: ids.token, assetId: ids.tokenAsset }),
+    ]);
+    expect(otherToken?.assetId).toBeNull();
+  });
+
   it("filters the palette, exposes own unassigned image assets and places definitions idempotently", async () => {
     const ownToken = crypto.randomUUID();
     const ownPortrait = crypto.randomUUID();

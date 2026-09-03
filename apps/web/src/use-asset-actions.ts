@@ -1,5 +1,10 @@
 import { useMemo } from "react";
-import type { AssetDto, AssetKind } from "@arken/contracts";
+import type {
+  AssetDto,
+  AssetKind,
+  AssetUsageResponseDto,
+  DeleteAssetResponseDto,
+} from "@arken/contracts";
 import { api } from "./api";
 import type { TokenFramePreset } from "./token-image-editor-state";
 
@@ -15,6 +20,8 @@ import type { TokenFramePreset } from "./token-image-editor-state";
  */
 export interface AssetActions {
   uploadAsset: (file: File, kind: AssetKind) => Promise<AssetDto>;
+  getAssetUsage: (assetId: string) => Promise<AssetUsageResponseDto>;
+  deleteAsset: (assetId: string) => Promise<DeleteAssetResponseDto>;
   generateTokenImage: (input: {
     sourceAssetId: string;
     cropX: number;
@@ -49,6 +56,18 @@ export function useAssetActions(dependencies: {
           url: `/api/assets/${asset.id}/content`,
           createdAt: String(asset.createdAt),
         };
+      },
+
+      getAssetUsage: (assetId) =>
+        api<AssetUsageResponseDto>(`/api/assets/${assetId}/usage`),
+
+      deleteAsset: async (assetId) => {
+        const result = await api<DeleteAssetResponseDto>(
+          `/api/assets/${assetId}`,
+          { method: "DELETE" },
+        );
+        await load();
+        return result;
       },
 
       generateTokenImage: async ({ sourceAssetId, ...transform }) => {

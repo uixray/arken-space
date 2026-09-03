@@ -984,6 +984,38 @@ const probes: readonly Probe[] = [
     error: "CHARACTER_FORBIDDEN",
   },
   {
+    key: "DELETE /api/assets/:id",
+    request: () => ({
+      method: "DELETE",
+      url: `/api/assets/${ids.foreignAsset}`,
+      headers: { "x-action-id": actionId() },
+    }),
+    status: 404,
+    error: "ASSET_NOT_FOUND",
+  },
+  {
+    key: "GET /api/assets/:id/usage",
+    request: () => ({
+      method: "GET",
+      url: `/api/assets/${ids.foreignAsset}/usage`,
+    }),
+    status: 404,
+    error: "ASSET_NOT_FOUND",
+  },
+  {
+    key: "PUT /api/assets/:id/content",
+    request: () => ({
+      method: "PUT",
+      url: `/api/assets/${ids.foreignAsset}/content`,
+      headers: {
+        "x-action-id": actionId(),
+        "if-match": '"foreign-version"',
+      },
+    }),
+    status: 404,
+    error: "ASSET_NOT_FOUND",
+  },
+  {
     key: "GET /api/assets/:id/content",
     request: () => ({
       method: "GET",
@@ -1002,7 +1034,7 @@ const probes: readonly Probe[] = [
 describe("UIX-413 core campaign isolation", () => {
   it("keeps the exported behavioral inventory exact and executable", () => {
     expect(probes.map((probe) => probe.key)).toEqual(CORE_CAMPAIGN_PROBE_KEYS);
-    expect(new Set(probes.map((probe) => probe.key)).size).toBe(36);
+    expect(new Set(probes.map((probe) => probe.key)).size).toBe(39);
   });
 
   it.each(probes)("rejects foreign entity: $key", async (probe) => {

@@ -190,6 +190,27 @@ afterEach(() => {
 });
 
 describe("подтверждение удаления изображения из галереи персонажа", () => {
+  it("объясняет назначение пустой галереи и форму добавления", async () => {
+    apiMock.mockResolvedValueOnce([]);
+    renderGallery(true);
+
+    expect(
+      await screen.findByText(
+        "Здесь пока пусто. Добавьте изображение ниже — оно появится в галерее, а исходный файл останется в медиатеке.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Арт персонажа, референсы предметов и памятные сцены — всё, что помогает помнить его историю.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Загрузите арт или референс и выберите, кто его увидит. Режим «Только GM» скрывает материал от игрока.",
+      ),
+    ).toBeVisible();
+  });
+
   it("не отсоединяет до подтверждения, объясняет судьбу файла и отменяется без запроса", async () => {
     renderGallery(false);
     const openButton = await screen.findByRole("button", {

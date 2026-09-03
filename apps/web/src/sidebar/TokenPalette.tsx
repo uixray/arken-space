@@ -184,6 +184,7 @@ export function PalettePanel(props: Props) {
           onGenerateTokenImage={assetActions.generateTokenImage}
           onCancel={() => setEditor(null)}
           onCreate={tokenActions.onCreateTokenDefinition}
+          onCreateAndPlace={tokenActions.onCreateAndPlaceTokenDefinition}
           onPatch={tokenActions.onPatchTokenDefinition}
           onReplaceControllers={tokenActions.onReplaceTokenControllers}
           onOpenCharacters={() => {
@@ -307,13 +308,14 @@ export function TokenImageAssignment({
   );
 }
 
-function TokenDefinitionEditor({
+export function TokenDefinitionEditor({
   snapshot,
   definition,
   onUpload,
   onGenerateTokenImage,
   onCancel,
   onCreate,
+  onCreateAndPlace,
   onPatch,
   onReplaceControllers,
   onOpenCharacters,
@@ -325,6 +327,7 @@ function TokenDefinitionEditor({
   onGenerateTokenImage: AssetActions["generateTokenImage"];
   onCancel: () => void;
   onCreate: TokenDefinitionActions["onCreateTokenDefinition"];
+  onCreateAndPlace: TokenDefinitionActions["onCreateAndPlaceTokenDefinition"];
   onPatch: TokenDefinitionActions["onPatchTokenDefinition"];
   onReplaceControllers: TokenDefinitionActions["onReplaceTokenControllers"];
   onOpenCharacters: () => void;
@@ -359,16 +362,25 @@ function TokenDefinitionEditor({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
+    const createAndPlace = submitter?.value === "create-and-place";
     // Имя обязательно, только когда наследовать не от кого.
     if (!name.trim() && !characterId)
       return setError("Укажите название токена или выберите персонажа.");
     setSaving(true);
     setError("");
     try {
-      let selectedAssetId = assetId || null;
+      const selectedAssetId = assetId || null;
       if (image && uploadSourcePromise.current) {
-        const uploaded = await uploadSourcePromise.current;
-        if (!selectedAssetId) selectedAssetId = uploaded.id;
+        await uploadSourcePromise.current;
+      }
+      const selectedAsset = snapshot.assets
+        .concat(uploadedSource ?? [])
+        .find((asset) => asset.id === selectedAssetId);
+      if (selectedAsset?.kind === "IMAGE" || (image && !selectedAssetId)) {
+        setError("Обрежьте исходное изображение и создайте TOKEN.");
+        return;
       }
       const input = {
         // Пустое поле у токена с персонажем — это «зовусь как он».
@@ -381,7 +393,8 @@ function TokenDefinitionEditor({
         defaultHeight: Math.round(height * gridSize),
         controllerMembershipIds: controllers,
       };
-      if (!definition) await onCreate(input);
+      if (!definition && createAndPlace) await onCreateAndPlace(input);
+      else if (!definition) await onCreate(input);
       else {
         await onPatch(definition.id, definition.revision, input);
         await onReplaceControllers(
@@ -467,7 +480,8 @@ function TokenDefinitionEditor({
         <ImageUploadField
           label="Загрузить новое изображение"
           value={image}
-          hint="После выбора файл станет доступен в генераторе"
+          hint="Выберите, вставьте или перетащите файл — он станет доступен в генераторе"
+          unifiedIntake
           onUpdate={(file) => {
             setImage(file);
             setError("");
@@ -480,7 +494,6 @@ function TokenDefinitionEditor({
               .then((asset) => {
                 if (uploadSourcePromise.current !== upload) return;
                 setUploadedSource(asset);
-                setAssetId(asset.id);
               })
               .catch((reason) => {
                 if (uploadSourcePromise.current !== upload) return;
@@ -569,6 +582,16 @@ function TokenDefinitionEditor({
           <Button type="submit" view="action" loading={saving}>
             Сохранить
           </Button>
+          {!definition && activeScene ? (
+            <Button
+              type="submit"
+              name="token-submit-mode"
+              value="create-and-place"
+              loading={saving}
+            >
+              Создать и поставить
+            </Button>
+          ) : null}
           <Button type="button" onClick={onCancel} disabled={saving}>
             Отмена
           </Button>

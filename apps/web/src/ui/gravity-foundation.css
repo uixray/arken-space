@@ -179,7 +179,35 @@
   place-items: center;
   padding: 16px;
   border: 1px dashed var(--arken-ui-border);
+  border-radius: 8px;
   text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.arken-upload-field--interactive .arken-upload-field__empty {
+  cursor: pointer;
+  user-select: none;
+}
+
+.arken-upload-field--interactive .arken-upload-field__empty:hover,
+.arken-upload-field--interactive .arken-upload-field__empty:focus-visible {
+  border-color: var(--arken-ui-accent);
+  background: var(--arken-ui-surface-raised);
+  outline: none;
+}
+
+.arken-upload-field[data-dragover="true"] .arken-upload-field__empty {
+  border-color: var(--arken-ui-accent);
+  background: var(--arken-ui-surface-raised);
+}
+
+@media (max-width: 520px), (pointer: coarse) {
+  .arken-upload-field__empty {
+    min-height: 84px;
+    padding: 20px 16px;
+  }
 }
 
 .arken-upload-field__preview {
