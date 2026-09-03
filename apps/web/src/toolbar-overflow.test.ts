@@ -21,7 +21,7 @@ import { describe, expect, it } from "vitest";
  * с содержимым.
  */
 const source = readFileSync(
-  fileURLToPath(new URL("./App.tsx", import.meta.url)),
+  fileURLToPath(new URL("./MapToolbar.tsx", import.meta.url)),
   "utf8",
 );
 

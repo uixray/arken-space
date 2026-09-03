@@ -9,6 +9,10 @@ const styles = readFileSync(
 const toolbarSources = [
   readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8"),
   readFileSync(
+    fileURLToPath(new URL("./MapToolbar.tsx", import.meta.url)),
+    "utf8",
+  ),
+  readFileSync(
     fileURLToPath(new URL("./ui/CursorPresenceMenu.tsx", import.meta.url)),
     "utf8",
   ),
