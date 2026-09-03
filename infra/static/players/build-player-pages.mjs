@@ -1,6 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import process from "node:process";
+
+import { format, resolveConfig } from "prettier";
 
 import { players } from "./player-pages.data.mjs";
 
@@ -187,6 +190,11 @@ ${gallery}${documentArchive}${archive}
 for (const player of players) {
   const target = join(here, player.slug, "index.html");
   await mkdir(dirname(target), { recursive: true });
-  await writeFile(target, render(player), "utf8");
+  const options = (await resolveConfig(target)) ?? {};
+  await writeFile(
+    target,
+    await format(render(player), { ...options, filepath: target }),
+    "utf8",
+  );
   process.stdout.write(`generated ${player.slug}/index.html\n`);
 }

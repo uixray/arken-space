@@ -3731,7 +3731,7 @@ code {
   color: var(--text);
 }
 .token-image-generator > label input[type="range"] {
-  min-height: 40px;
+  min-height: 44px;
   cursor: pointer;
 }
 .token-image-generator__actions {
@@ -3749,12 +3749,12 @@ code {
   }
   .token-image-generator__frame-option {
     flex: 1 1 42%;
-    min-height: 40px;
+    min-height: 44px;
   }
 }
 @media (pointer: coarse) {
   .token-image-generator__frame-option {
-    min-height: 40px;
+    min-height: 44px;
   }
   .token-image-generator__actions > button,
   .token-image-generator__actions > .g-button {

@@ -129,7 +129,8 @@ if (runner && runnerHero && runnerStart) {
   window.addEventListener("keydown", (event) => {
     if (event.code === "Space" || event.code === "ArrowUp") {
       event.preventDefault();
-      running ? jump() : start();
+      if (running) jump();
+      else start();
     }
   });
 }

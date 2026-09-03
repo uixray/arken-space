@@ -28,6 +28,28 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    files: ["infra/static/players/**/*.js"],
+    languageOptions: {
+      globals: Object.fromEntries(
+        [
+          "document",
+          "window",
+          "location",
+          "history",
+          "localStorage",
+          "performance",
+          "requestAnimationFrame",
+          "setInterval",
+          "confirm",
+          "structuredClone",
+          "HTMLElement",
+          "HTMLButtonElement",
+          "HTMLCanvasElement",
+        ].map((name) => [name, "readonly"]),
+      ),
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },
     rules: {

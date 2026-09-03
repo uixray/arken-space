@@ -2,6 +2,36 @@ import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 
+test("UIX-589 narrow frame targets are at least 44px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockBootstrap(page, "GM");
+  await page.goto("/");
+  await openWorkspaceSection(page, "Токены");
+  await page.locator(".token-palette > button").click();
+  const editor = page.locator(".g-modal").last();
+  await expect(editor.locator(".token-image-generator")).toBeVisible();
+  await editor.evaluate(async (node) => {
+    await Promise.all(
+      node
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+  const sizes = await editor
+    .locator(".token-image-generator__frame-option")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const rect = node.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      }),
+    );
+  expect(sizes.length).toBeGreaterThan(0);
+  for (const size of sizes) {
+    expect(size.width).toBeGreaterThanOrEqual(44);
+    expect(size.height).toBeGreaterThanOrEqual(44);
+  }
+});
+
 const snapshot: GameSnapshot = {
   campaign: {
     id: "b4c34840-cb11-4a07-884d-680ae85c48db",
