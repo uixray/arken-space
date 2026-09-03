@@ -36,7 +36,10 @@ export const currentMission = (state) => {
     id: `${base.id}-${state.missionIndex}`,
     title: tier ? `${base.title} · угроза ${tier + 1}` : base.title,
     requirements: Object.fromEntries(
-      Object.entries(base.requirements).map(([key, value]) => [key, value + tier * 2]),
+      Object.entries(base.requirements).map(([key, value]) => [
+        key,
+        value + tier * 2,
+      ]),
     ),
   };
 };
@@ -52,7 +55,9 @@ export function toggleMage(state, mageId) {
   return {
     ...state,
     selected,
-    notice: added ? `${mage.name}: «${mage.voice?.selected || "Принято."}»` : null,
+    notice: added
+      ? `${mage.name}: «${mage.voice?.selected || "Принято."}»`
+      : null,
   };
 }
 function teamStats(state) {
@@ -70,10 +75,7 @@ function teamStats(state) {
   if (state.selected.includes("adora") && !state.selected.includes("rem"))
     for (const key of Object.keys(stats)) stats[key] += 1;
   if (state.selected.includes("makoto")) stats.mobility += 1;
-  if (
-    state.selected.includes("erkenvald") &&
-    state.missionIndex % 2 === 1
-  )
+  if (state.selected.includes("erkenvald") && state.missionIndex % 2 === 1)
     stats.lore = Math.max(0, stats.lore - 2);
   return stats;
 }
@@ -103,7 +105,8 @@ export function dispatchTeam(state) {
     return {
       ...state,
       selected: state.selected.filter((id) => id !== "rem"),
-      notice: "Рэм отказался: «Это задание ниже моего достоинства». Выберите замену.",
+      notice:
+        "Рэм отказался: «Это задание ниже моего достоинства». Выберите замену.",
     };
   return !state.selected.length || state.phase !== "briefing"
     ? state
@@ -117,13 +120,20 @@ export function dispatchTeam(state) {
           startedAt: Date.now(),
           duration: Math.max(
             1800,
-            5200 - Math.max(...state.selected.map((id) => mages.find((mage) => mage.id === id).stats.mobility)) * 500,
+            5200 -
+              Math.max(
+                ...state.selected.map(
+                  (id) => mages.find((mage) => mage.id === id).stats.mobility,
+                ),
+              ) *
+                500,
           ),
         },
       };
 }
 export function advanceTravel(state, now = Date.now()) {
-  if (!state.travel || !["traveling", "returning"].includes(state.phase)) return state;
+  if (!state.travel || !["traveling", "returning"].includes(state.phase))
+    return state;
   if (now - state.travel.startedAt < state.travel.duration) return state;
   if (state.phase === "traveling")
     return { ...state, phase: "decision", travel: null };
@@ -182,7 +192,13 @@ export function resolveChoice(state, choiceId) {
       startedAt: Date.now(),
       duration: Math.max(
         1400,
-        4300 - Math.max(...state.selected.map((id) => mages.find((mage) => mage.id === id).stats.mobility)) * 420,
+        4300 -
+          Math.max(
+            ...state.selected.map(
+              (id) => mages.find((mage) => mage.id === id).stats.mobility,
+            ),
+          ) *
+            420,
       ),
     },
   };

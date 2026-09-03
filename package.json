@@ -26,7 +26,8 @@
     "format": "prettier --write . --ignore-unknown",
     "format:check": "prettier --check . --ignore-unknown",
     "tokens:build": "style-dictionary build --config style-dictionary.config.js",
-    "tokens:check": "style-dictionary build --config style-dictionary.config.js && git diff --exit-code apps/web/src/design-system/tokens.generated.css"
+    "tokens:check": "style-dictionary build --config style-dictionary.config.js && git diff --exit-code apps/web/src/design-system/tokens.generated.css",
+    "players:build": "node infra/static/players/build-player-pages.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

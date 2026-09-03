@@ -56,7 +56,10 @@ function voiceFor(mage, situation) {
 }
 function travelProgress() {
   if (!state.travel) return 0;
-  return Math.min(1, Math.max(0, (Date.now() - state.travel.startedAt) / state.travel.duration));
+  return Math.min(
+    1,
+    Math.max(0, (Date.now() - state.travel.startedAt) / state.travel.duration),
+  );
 }
 function renderTravel() {
   const mission = currentMission(state);
@@ -70,20 +73,24 @@ function renderTravel() {
   const raw = travelProgress();
   const progress = state.travel.direction === "returning" ? 1 - raw : raw;
   const home = { x: 50, y: 58 };
-  layer.innerHTML = state.selected.map((id, index) => {
-    const mage = mageById(id);
-    const x = home.x + (mission.map.x - home.x) * progress + (index ? 2 : -2);
-    const y = home.y + (mission.map.y - home.y) * progress + (index ? 1 : -1);
-    return `<span class="hero-token" style="--x:${x}%;--y:${y}%;--mage:${mage.color}" title="${mage.name}"><img src="${mage.image}" alt="${mage.name}" /></span>`;
-  }).join("");
+  layer.innerHTML = state.selected
+    .map((id, index) => {
+      const mage = mageById(id);
+      const x = home.x + (mission.map.x - home.x) * progress + (index ? 2 : -2);
+      const y = home.y + (mission.map.y - home.y) * progress + (index ? 1 : -1);
+      return `<span class="hero-token" style="--x:${x}%;--y:${y}%;--mage:${mage.color}" title="${mage.name}"><img src="${mage.image}" alt="${mage.name}" /></span>`;
+    })
+    .join("");
   const speaker = mageById(state.selected[0]);
   radio.hidden = false;
-  const situation = state.travel.direction === "returning" ? state.lastOutcome : "travel";
+  const situation =
+    state.travel.direction === "returning" ? state.lastOutcome : "travel";
   radio.innerHTML = `<img src="${speaker.image}" alt="" /><p><strong>${speaker.name}</strong>${voiceFor(speaker, situation)}</p><span>${state.travel.direction === "returning" ? "Возвращается" : "В пути"} · ${Math.round(raw * 100)}%</span>`;
 }
 function renderRoster() {
   $("[data-team-note]").textContent =
-    state.notice || "Выберите до двух героев. Состав влияет на решения и последствия.";
+    state.notice ||
+    "Выберите до двух героев. Состав влияет на решения и последствия.";
   $("[data-mage-list]").innerHTML = mages
     .map((mage) => {
       const meta = state.mages[mage.id];
@@ -145,17 +152,16 @@ function renderBrief() {
   }
   const prediction = forecast(state);
   brief.innerHTML = `<div class="briefing"><span>${mission.district}</span><h2>${mission.title}</h2><p>${mission.summary}</p><h3>Требования</h3><div class="requirements">${statsMarkup(mission.requirements, mission.requirements)}</div><div class="forecast"><span>Прогноз</span><strong>${prediction.label}</strong><small>Точная формула скрыта. Усталость снижает эффективность.</small></div><div class="team-slot">${state.selected.length ? state.selected.map((id) => `<span>${mageById(id).glyph} ${mageById(id).name}</span>`).join("") : "Назначьте команду"}</div><button class="dispatch" data-dispatch ${state.selected.length ? "" : "disabled"}>Отправить магов</button>`;
-  brief
-    .querySelector("[data-dispatch]")
-    .addEventListener("click", () => {
-      const next = dispatchTeam(state);
-      update(next, next.phase === "decision" ? "brief" : "team");
-    });
+  brief.querySelector("[data-dispatch]").addEventListener("click", () => {
+    const next = dispatchTeam(state);
+    update(next, next.phase === "decision" ? "brief" : "team");
+  });
 }
 function render() {
-  $("[data-shift]").textContent = state.mode === "arcade"
-    ? `Вызов ${state.missionIndex + 1}`
-    : `${Math.min(state.missionIndex + 1, missions.length)}/${missions.length}`;
+  $("[data-shift]").textContent =
+    state.mode === "arcade"
+      ? `Вызов ${state.missionIndex + 1}`
+      : `${Math.min(state.missionIndex + 1, missions.length)}/${missions.length}`;
   $("[data-mode-label]").childNodes[0].textContent =
     state.mode === "arcade" ? "Бесконечная аркада " : "Глава I ";
   $("[data-mode]").textContent = state.mode === "arcade" ? "Сюжет" : "Аркада";
@@ -201,14 +207,19 @@ $("[data-mode]").addEventListener("click", () => {
   if (confirm(`Перейти в ${label}? Текущий забег начнётся заново.`))
     update(freshState(nextMode), "map");
 });
-document.querySelectorAll("[data-mobile-view]").forEach((button) =>
-  button.addEventListener("click", () => setMobileView(button.dataset.mobileView)),
-);
+document
+  .querySelectorAll("[data-mobile-view]")
+  .forEach((button) =>
+    button.addEventListener("click", () =>
+      setMobileView(button.dataset.mobileView),
+    ),
+  );
 render();
 setInterval(() => {
   if (!["traveling", "returning"].includes(state.phase)) return;
   const next = advanceTravel(state);
-  if (next !== state) update(next, next.phase === "decision" ? "brief" : mobileView);
+  if (next !== state)
+    update(next, next.phase === "decision" ? "brief" : mobileView);
   else {
     renderTravel();
     renderBrief();
