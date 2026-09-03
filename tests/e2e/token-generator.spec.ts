@@ -1,4 +1,4 @@
-﻿import { expect, test } from "./react-console-guard";
+import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 
@@ -389,4 +389,91 @@ test("UIX-272 empty character select opens above token editor with guidance and 
     };
   });
   expect(layers.popup).toBeGreaterThan(layers.modal);
+});
+
+test("UIX-613 GM creates and places token on active scene in one action", async ({
+  page,
+}) => {
+  const tokenRequests: Array<Record<string, unknown>> = [];
+  await mockBootstrap(page, "GM");
+  await page.route(
+    "**/api/assets/a1111111-1111-4111-8111-111111111111/token",
+    async (route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...sourceAsset,
+          id: "b2222222-2222-4222-8222-222222222222",
+          kind: "TOKEN",
+          name: "Explorer token",
+          mimeType: "image/webp",
+          width: 512,
+          height: 512,
+          url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
+        }),
+      });
+    },
+  );
+  await page.route("**/api/tokens", async (route) => {
+    if (route.request().method() === "POST") {
+      tokenRequests.push(
+        route.request().postDataJSON() as Record<string, unknown>,
+      );
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "35f46186-2ebc-4cf8-bce7-870097305a99",
+          definitionId: "45f46186-2ebc-4cf8-bce7-870097305a99",
+          definitionRevision: 0,
+          baseColor: "#8899aa",
+          frameColor: null,
+          layer: "PLAYER",
+          conditions: [],
+          sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
+          characterId: null,
+          ownerMembershipId: null,
+          controllerMembershipIds: [],
+          x: 768,
+          y: 468,
+          width: 64,
+          height: 64,
+          rotation: 0,
+          assetId: "b2222222-2222-4222-8222-222222222222",
+          name: "Ranger",
+          character: null,
+          asset: null,
+          revision: 0,
+        }),
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+
+  await page.goto("/");
+  await openWorkspaceSection(page, "Токены");
+  await page.locator(".token-palette > button").click();
+  const editor = page.locator(".g-modal").last();
+  await expect(editor.locator(".token-image-generator")).toBeVisible();
+
+  await editor.locator(".token-image-generator__actions button").last().click();
+  await editor.locator("form input").first().fill("Ranger");
+  const createAndPlaceButton = editor.locator(
+    'button[value="create-and-place"]',
+  );
+  await expect(createAndPlaceButton).toBeVisible();
+  await createAndPlaceButton.click();
+
+  await expect.poll(() => tokenRequests.length).toBe(1);
+  expect(tokenRequests[0]).toMatchObject({
+    sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
+    name: "Ranger",
+    assetId: "b2222222-2222-4222-8222-222222222222",
+    width: 64,
+    height: 64,
+    controllerMembershipIds: [],
+    actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+  });
 });

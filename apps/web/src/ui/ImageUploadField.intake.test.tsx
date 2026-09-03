@@ -77,4 +77,37 @@ describe("UIX-612 — единый intake изображения", () => {
     expect(fireEvent.paste(root, { clipboardData: transfer(file) })).toBe(true);
     expect(onUpdate).not.toHaveBeenCalled();
   });
+
+  it("устанавливает data-dragover при dragenter и снимает при dragleave", () => {
+    const { root } = setup();
+    expect(root).not.toHaveAttribute("data-dragover");
+
+    fireEvent.dragEnter(root, {
+      dataTransfer: transfer(new File([], "a.png")),
+    });
+    expect(root).toHaveAttribute("data-dragover", "true");
+
+    fireEvent.dragLeave(root, { relatedTarget: document.body });
+    expect(root).not.toHaveAttribute("data-dragover");
+  });
+
+  it("открывает выбор файла по клику и клавиатуре на интерактивной дропзоне", () => {
+    setup();
+    const input = screen.getByLabelText("Исходник");
+    const clickSpy = vi.spyOn(input, "click");
+    const dropzone = screen.getByRole("button", {
+      name: "Выбрать, вставить или перетащить файл",
+    });
+
+    fireEvent.click(dropzone);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(dropzone, { key: "Enter" });
+    expect(clickSpy).toHaveBeenCalledTimes(2);
+
+    fireEvent.keyDown(dropzone, { key: " " });
+    expect(clickSpy).toHaveBeenCalledTimes(3);
+
+    clickSpy.mockRestore();
+  });
 });

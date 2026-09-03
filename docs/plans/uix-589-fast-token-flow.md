@@ -58,3 +58,17 @@ nudge, zoom и server-side 512×512 derivative.
 - **Дальше:** после освобождения hot-file выполнить narrow/touch CSS и browser
   QA; отдельно диагностировать зависание полного Vitest без повторного
   неограниченного запуска.
+
+## Checkpoint — 2026-09-03 (Slice 5 — Responsive, touch targets, browser QA)
+
+- **Решения:** `apps/web/src/styles.css` и `gravity-foundation.css` обновлены:
+  - `.entity-form > .dialog-actions` получил flex wrap и мобильную раскладку с минимальной высотой тач-таргетов 44px;
+  - `.token-dimensions .inline-fields` на экранах <= 520px перестраивается в двухколоночную сетку с сохранением пропорций на отдельной строке;
+  - `.token-image-generator` слайдер масштаба увеличен до 40px touch-height, кнопки действий и пресеты рамок получили 44px touch targets для coarse pointers;
+  - `.arken-upload-field__empty` получил интерактивный курсор, состояния `:hover`/`:focus-visible`, visual drag-over (`data-dragover="true"`) и доступность с клавиатуры (Enter / Space) и клика;
+  - в `tests/e2e/token-generator.spec.ts` добавлен браузерный тест UIX-613 на быстрое создание и размещение токена на сцене в одно действие.
+- **Проверка:**
+  - `ImageUploadField.intake.test.tsx`: 9/9 PASS (добавлены тесты клика, клавиатуры и drag-over, диверсия проверена);
+  - `token-generator.spec.ts`: 4/4 PASS (диверсия проверена, падает целево);
+  - `pnpm --filter @arken/web typecheck` PASS;
+  - `pnpm prettier --check` PASS.

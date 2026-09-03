@@ -2831,9 +2831,16 @@ code {
 }
 .entity-form > label,
 .entity-form > fieldset,
-.entity-form > .inline-fields,
+.entity-form > .inline-fields {
+  margin: 0;
+}
 .entity-form > .dialog-actions {
   margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+  align-items: center;
 }
 .token-dimensions__hint {
   margin: calc(var(--space-xs) * -1) 0 0;
@@ -2849,6 +2856,27 @@ code {
   padding: 0 0 7px;
   border: 0;
   background: transparent;
+}
+@media (max-width: 520px) {
+  .entity-form > .dialog-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .entity-form > .dialog-actions > button,
+  .entity-form > .dialog-actions > .g-button {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .token-dimensions .inline-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-sm);
+  }
+  .token-dimensions .aspect-lock {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
 }
 
 .chat-stream-tabs button[aria-selected="true"] {
@@ -3702,6 +3730,10 @@ code {
   border-color: var(--accent);
   color: var(--text);
 }
+.token-image-generator > label input[type="range"] {
+  min-height: 40px;
+  cursor: pointer;
+}
 .token-image-generator__actions {
   justify-content: flex-end;
 }
@@ -3709,11 +3741,24 @@ code {
   .token-image-preview {
     width: min(100%, 216px);
   }
-  .token-image-generator__actions > button {
-    flex: 1 1 132px;
+  .token-image-generator__actions > button,
+  .token-image-generator__actions > .g-button {
+    flex: 1 1 100%;
+    min-height: 44px;
+    justify-content: center;
   }
   .token-image-generator__frame-option {
     flex: 1 1 42%;
+    min-height: 40px;
+  }
+}
+@media (pointer: coarse) {
+  .token-image-generator__frame-option {
+    min-height: 40px;
+  }
+  .token-image-generator__actions > button,
+  .token-image-generator__actions > .g-button {
+    min-height: 44px;
   }
 }
 

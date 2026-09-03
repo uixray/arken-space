@@ -52,6 +52,7 @@ export function ImageUploadField({
   const inputId = useId();
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [intakeError, setIntakeError] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const acceptFile = (file?: File | null) => {
     if (!file) return;
@@ -61,6 +62,7 @@ export function ImageUploadField({
   };
 
   const acceptDrop = (event: DragEvent<HTMLDivElement>) => {
+    setIsDragOver(false);
     if (!unifiedIntake || disabled) return;
     event.preventDefault();
     acceptFile(
@@ -79,6 +81,26 @@ export function ImageUploadField({
     acceptFile(file);
   };
 
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    if (!unifiedIntake || disabled) return;
+    event.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!unifiedIntake || disabled) return;
+    event.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!unifiedIntake || disabled) return;
+    if (event.currentTarget.contains(event.relatedTarget as Node | null))
+      return;
+    event.preventDefault();
+    setIsDragOver(false);
+  };
+
   useEffect(() => {
     if (!value) {
       setPreviewUrl(undefined);
@@ -91,11 +113,12 @@ export function ImageUploadField({
 
   return (
     <div
-      className="arken-upload-field"
+      className={`arken-upload-field ${unifiedIntake && !disabled ? "arken-upload-field--interactive" : ""}`}
+      data-dragover={isDragOver ? "true" : undefined}
       onPaste={acceptPaste}
-      onDragOver={(event) => {
-        if (unifiedIntake && !disabled) event.preventDefault();
-      }}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={acceptDrop}
     >
       <div className="arken-upload-field__heading">
@@ -144,7 +167,31 @@ export function ImageUploadField({
           </figcaption>
         </figure>
       ) : (
-        <div className="arken-upload-field__empty">
+        <div
+          className={`arken-upload-field__empty ${unifiedIntake && !disabled ? "arken-upload-field__empty--interactive" : ""}`}
+          role={unifiedIntake && !disabled ? "button" : undefined}
+          tabIndex={unifiedIntake && !disabled ? 0 : undefined}
+          aria-label={
+            unifiedIntake && !disabled
+              ? "Выбрать, вставить или перетащить файл"
+              : undefined
+          }
+          onClick={() => {
+            if (unifiedIntake && !disabled) {
+              document.getElementById(inputId)?.click();
+            }
+          }}
+          onKeyDown={(event) => {
+            if (
+              unifiedIntake &&
+              !disabled &&
+              (event.key === "Enter" || event.key === " ")
+            ) {
+              event.preventDefault();
+              document.getElementById(inputId)?.click();
+            }
+          }}
+        >
           {unifiedIntake
             ? "Выберите, вставьте или перетащите изображение сюда"
             : "Предпросмотр появится после выбора файла"}
