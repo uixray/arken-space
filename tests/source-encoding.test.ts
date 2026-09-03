@@ -87,7 +87,7 @@ describe("web source encoding", () => {
       .map((codePoint) => String.fromCodePoint(codePoint))
       .join("");
     const source = readFileSync(
-      path.join(process.cwd(), "apps", "web", "src", "App.tsx"),
+      path.join(process.cwd(), "apps", "web", "src", "MapToolbar.tsx"),
       "utf8",
     );
     expect(source).toContain(expected);
