@@ -91,22 +91,28 @@ const snapshot = {
   members: [],
 } as unknown as GameSnapshot;
 
-function setup(upload = vi.fn().mockResolvedValue(asset("uploaded", "IMAGE"))) {
+function setup(
+  upload = vi.fn().mockResolvedValue(asset("uploaded", "IMAGE")),
+  snapshotOverride = snapshot,
+  createAndPlace = vi.fn().mockResolvedValue(undefined),
+) {
   const onCreate = vi.fn().mockResolvedValue(undefined);
+  const onCreateAndPlace = createAndPlace;
   renderComponent(
     <TokenDefinitionEditor
-      snapshot={snapshot}
+      snapshot={snapshotOverride}
       onUpload={upload}
       onGenerateTokenImage={vi.fn()}
       onCancel={vi.fn()}
       onCreate={onCreate}
+      onCreateAndPlace={onCreateAndPlace}
       onPatch={vi.fn()}
       onReplaceControllers={vi.fn()}
       onOpenCharacters={vi.fn()}
       onOpenMedia={vi.fn()}
     />,
   );
-  return onCreate;
+  return { onCreate, onCreateAndPlace };
 }
 
 describe("UIX-611 — IMAGE служит только исходником TOKEN", () => {
@@ -117,7 +123,7 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
   });
 
   it("не сохраняет загруженный портрет без производного TOKEN", async () => {
-    const onCreate = setup();
+    const { onCreate } = setup();
     await userEvent.type(screen.getByLabelText("Название"), "Страж");
     await userEvent.click(
       screen.getByRole("button", { name: "Загрузить портрет" }),
@@ -132,7 +138,7 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
   });
 
   it("сохраняет id созданного производного TOKEN", async () => {
-    const onCreate = setup();
+    const { onCreate } = setup();
     await userEvent.type(screen.getByLabelText("Название"), "Страж");
     await userEvent.click(
       screen.getByRole("button", { name: "Загрузить портрет" }),
@@ -147,7 +153,7 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
   });
 
   it("по-прежнему сохраняет уже готовый квадратный TOKEN", async () => {
-    const onCreate = setup();
+    const { onCreate } = setup();
     await userEvent.type(screen.getByLabelText("Название"), "Страж");
     await userEvent.click(screen.getByText("Выбрать готовый TOKEN"));
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -157,7 +163,7 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
   });
 
   it("не создаёт определение, если загрузка исходника не удалась", async () => {
-    const onCreate = setup(
+    const { onCreate } = setup(
       vi.fn().mockRejectedValue(new Error("Сбой загрузки")),
     );
     await userEvent.type(screen.getByLabelText("Название"), "Страж");
@@ -166,5 +172,53 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
     );
     expect(await screen.findByText("Сбой загрузки")).toBeInTheDocument();
     expect(onCreate).not.toHaveBeenCalled();
+  });
+
+  it("создаёт и ставит токен одним действием на активной сцене", async () => {
+    const activeSnapshot = {
+      ...snapshot,
+      scenes: [
+        {
+          id: "scene",
+          active: true,
+          grid: { enabled: false, size: 64 },
+        },
+      ],
+    } as unknown as GameSnapshot;
+    const { onCreate, onCreateAndPlace } = setup(undefined, activeSnapshot);
+    await userEvent.type(screen.getByLabelText("Название"), "Страж");
+    await userEvent.click(screen.getByText("Выбрать готовый TOKEN"));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Создать и поставить" }),
+    );
+    expect(onCreateAndPlace).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultAssetId: "ready" }),
+    );
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
+  it("оставляет форму открытой при отказе create-and-place", async () => {
+    const activeSnapshot = {
+      ...snapshot,
+      scenes: [
+        {
+          id: "scene",
+          active: true,
+          grid: { enabled: false, size: 64 },
+        },
+      ],
+    } as unknown as GameSnapshot;
+    setup(
+      undefined,
+      activeSnapshot,
+      vi.fn().mockRejectedValue(new Error("Сцена недоступна")),
+    );
+    await userEvent.type(screen.getByLabelText("Название"), "Страж");
+    await userEvent.click(screen.getByText("Выбрать готовый TOKEN"));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Создать и поставить" }),
+    );
+    expect(await screen.findByText("Сцена недоступна")).toBeInTheDocument();
+    expect(screen.getByLabelText("Название")).toHaveValue("Страж");
   });
 });

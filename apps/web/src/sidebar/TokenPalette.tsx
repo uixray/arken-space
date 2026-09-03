@@ -184,6 +184,7 @@ export function PalettePanel(props: Props) {
           onGenerateTokenImage={assetActions.generateTokenImage}
           onCancel={() => setEditor(null)}
           onCreate={tokenActions.onCreateTokenDefinition}
+          onCreateAndPlace={tokenActions.onCreateAndPlaceTokenDefinition}
           onPatch={tokenActions.onPatchTokenDefinition}
           onReplaceControllers={tokenActions.onReplaceTokenControllers}
           onOpenCharacters={() => {
@@ -314,6 +315,7 @@ export function TokenDefinitionEditor({
   onGenerateTokenImage,
   onCancel,
   onCreate,
+  onCreateAndPlace,
   onPatch,
   onReplaceControllers,
   onOpenCharacters,
@@ -325,6 +327,7 @@ export function TokenDefinitionEditor({
   onGenerateTokenImage: AssetActions["generateTokenImage"];
   onCancel: () => void;
   onCreate: TokenDefinitionActions["onCreateTokenDefinition"];
+  onCreateAndPlace: TokenDefinitionActions["onCreateAndPlaceTokenDefinition"];
   onPatch: TokenDefinitionActions["onPatchTokenDefinition"];
   onReplaceControllers: TokenDefinitionActions["onReplaceTokenControllers"];
   onOpenCharacters: () => void;
@@ -359,6 +362,9 @@ export function TokenDefinitionEditor({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
+    const createAndPlace = submitter?.value === "create-and-place";
     // Имя обязательно, только когда наследовать не от кого.
     if (!name.trim() && !characterId)
       return setError("Укажите название токена или выберите персонажа.");
@@ -387,7 +393,8 @@ export function TokenDefinitionEditor({
         defaultHeight: Math.round(height * gridSize),
         controllerMembershipIds: controllers,
       };
-      if (!definition) await onCreate(input);
+      if (!definition && createAndPlace) await onCreateAndPlace(input);
+      else if (!definition) await onCreate(input);
       else {
         await onPatch(definition.id, definition.revision, input);
         await onReplaceControllers(
@@ -575,6 +582,16 @@ export function TokenDefinitionEditor({
           <Button type="submit" view="action" loading={saving}>
             Сохранить
           </Button>
+          {!definition && activeScene ? (
+            <Button
+              type="submit"
+              name="token-submit-mode"
+              value="create-and-place"
+              loading={saving}
+            >
+              Создать и поставить
+            </Button>
+          ) : null}
           <Button type="button" onClick={onCancel} disabled={saving}>
             Отмена
           </Button>
