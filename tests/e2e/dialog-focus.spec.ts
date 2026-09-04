@@ -30,6 +30,7 @@ const TAB_PRESSES = 20;
 test("модальный диалог держит Tab внутри себя", async ({ page, gmToken }) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
+  await page.getByLabel("Меню сеанса", { exact: true }).click();
 
   await page
     .getByRole("button", { name: "Переименовать кампанию", exact: true })
@@ -64,6 +65,7 @@ test("закрытый диалог возвращает фокус тому, к
    */
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
+  await page.getByLabel("Меню сеанса", { exact: true }).click();
 
   const opener = page.getByRole("button", {
     name: "Переименовать кампанию",
@@ -74,7 +76,7 @@ test("закрытый диалог возвращает фокус тому, к
 
   await page.keyboard.press("Escape");
   await expect(page.locator('[role="dialog"]')).toHaveCount(0);
-  await expect(opener).toBeFocused();
+  await expect(page.getByLabel("Меню сеанса", { exact: true })).toBeFocused();
 });
 
 test("первым табом со страницы игры доступен переход к карте", async ({
@@ -92,6 +94,7 @@ test("первым табом со страницы игры доступен п
    */
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
+  await page.getByLabel("Меню сеанса", { exact: true }).click();
 
   await page.keyboard.press("Tab");
   const skipLink = page.getByRole("link", { name: "Перейти к карте" });
