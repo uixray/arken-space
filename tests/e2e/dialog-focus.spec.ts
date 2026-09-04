@@ -94,7 +94,6 @@ test("первым табом со страницы игры доступен п
    */
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await page.getByLabel("Меню сеанса", { exact: true }).click();
 
   await page.keyboard.press("Tab");
   const skipLink = page.getByRole("link", { name: "Перейти к карте" });

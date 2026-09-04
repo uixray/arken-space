@@ -177,8 +177,10 @@ test("nickname link exchanges a public beta player session", async ({
   );
   await page.goto("/play/archinamon");
   await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page.getByText(baseSnapshot.campaign.name)).toBeVisible();
   await expect(page).toHaveURL("/");
+  await expect(
+    page.getByRole("region", { name: "Интерактивная карта сцены" }),
+  ).toBeVisible();
 });
 
 test("a player can safely hand off a shared computer to the player chooser", async ({
