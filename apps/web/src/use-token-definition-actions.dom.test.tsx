@@ -24,7 +24,12 @@ const { useTokenDefinitionActions } =
  */
 const scene = { id: "сцена-1" } as SceneDto;
 
-const actions = (snapshot: GameSnapshot | null = null) => {
+const actions = (
+  snapshot: GameSnapshot | null = null,
+  placeOptimistically?: (
+    request: import("./optimistic-token-mutations").TokenPlacementRequest,
+  ) => void,
+) => {
   const run = vi.fn(async (action: () => Promise<unknown>) => {
     await action();
   });
@@ -34,6 +39,7 @@ const actions = (snapshot: GameSnapshot | null = null) => {
       run: run as never,
       snapshotRef: { current: snapshot },
       activeSceneRef: { current: scene },
+      placeOptimistically,
     });
     return null;
   }
@@ -52,6 +58,29 @@ beforeEach(() => {
 });
 
 describe("тело запроса определения токена", () => {
+  it("размещение и создание передают запрос optimistic контуру без ожидания сети", async () => {
+    const place = vi.fn();
+    const commands = actions(null, place);
+    await commands.onPlaceTokenDefinition("definition-1");
+    await commands.onCreateAndPlaceTokenDefinition({
+      name: "Страж",
+      characterId: null,
+      defaultAssetId: "asset-1",
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+    });
+    expect(place).toHaveBeenCalledTimes(2);
+    expect(place.mock.calls[0]?.[0]).toMatchObject({
+      path: "/api/token-definitions/definition-1/placements",
+      body: { definitionId: "definition-1", sceneId: scene.id },
+    });
+    expect(place.mock.calls[1]?.[0]).toMatchObject({
+      path: "/api/tokens",
+      body: { name: "Страж", assetId: "asset-1", width: 64, height: 64 },
+    });
+    expect(apiMock).not.toHaveBeenCalled();
+  });
   it("создание везёт все поля, которые задал мастер", async () => {
     // Каждое поле здесь — то, что человек выставил в редакторе. Потерянное по
     // дороге выглядит как «сохранил, а не применилось», и найти это можно

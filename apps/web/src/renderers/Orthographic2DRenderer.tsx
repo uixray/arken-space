@@ -829,13 +829,17 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     props.membershipId,
   ]);
 
-  const selectableObjects = selectMapObjects(props.tokens, props.drawings, {
-    role: props.role,
-    membershipId: props.membershipId,
-    fogReveals: orderedFogReveals,
-    world: worldDraft,
-    showGmLayer,
-  });
+  const selectableObjects = selectMapObjects(
+    props.tokens.filter((token) => !token.id.startsWith("pending:")),
+    props.drawings,
+    {
+      role: props.role,
+      membershipId: props.membershipId,
+      fogReveals: orderedFogReveals,
+      world: worldDraft,
+      showGmLayer,
+    },
+  );
   const movableTargets = useMemo<MapMoveTarget[]>(
     () => [
       ...selectableObjects.tokens
@@ -1007,7 +1011,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       zoomAtCenter(scale * 1.1);
     else if (event.key === "-") zoomAtCenter(scale / 1.1);
     else if (event.key === "0" || event.key.toLowerCase() === "f") fitMap();
-    else if (resolveMapToolShortcut(event.key, event.shiftKey, props.role))
+    else if (
+      resolveMapToolShortcut(event.key, event.shiftKey, props.role) &&
+      !["BATTLE_ZONE", "SCENE_REGION"].includes(
+        resolveMapToolShortcut(event.key, event.shiftKey, props.role)!,
+      )
+    )
       dispatchInteraction({
         type: "select-tool",
         tool: resolveMapToolShortcut(event.key, event.shiftKey, props.role)!,
@@ -1222,8 +1231,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     setRegionDraft(null);
   };
 
-  const handleClick = () => {
-    if (props.tool !== "PING") return;
+  const handleClick = (event: Konva.KonvaEventObject<MouseEvent>) => {
+    if (event.evt.button !== 0 || (props.tool !== "PING" && !event.evt.ctrlKey))
+      return;
     const point = pointerInWorld();
     if (point) props.onPing(point);
   };
@@ -1254,6 +1264,25 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       // starting a camera pan.
       event.evt.preventDefault();
       cancelPolygonDraft();
+      return;
+    }
+    if (event.evt.button === 0 && event.evt.ctrlKey) return;
+    if (event.evt.button === 0 && targetIsCanvas && props.tool === "PAN") {
+      const point = pointerInWorld();
+      if (point)
+        setMarquee({
+          startX: point.x,
+          startY: point.y,
+          x: point.x,
+          y: point.y,
+          width: 0,
+          height: 0,
+        });
+      setSelectedTokenIds([]);
+      setSelectedDrawingIds([]);
+      setSelectedDrawingId(null);
+      dispatchInteraction({ type: "clear-selection" });
+      setTokenMenu(null);
       return;
     }
     if (shouldBeginMapPan(event.evt.button, props.tool, targetIsCanvas)) {
@@ -1405,6 +1434,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         props.tokens
           .filter(
             (token) =>
+              !token.id.startsWith("pending:") &&
+              canSelectToken(token, {
+                role: props.role,
+                membershipId: props.membershipId,
+                fogReveals: orderedFogReveals,
+                world: worldDraft,
+                showGmLayer,
+              }) &&
               token.layer !== "MAP" &&
               !token.locked &&
               (props.role === "GM" ||
@@ -1763,13 +1800,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const token = resizeDrafts[sourceToken.id]
       ? { ...sourceToken, ...resizeDrafts[sourceToken.id] }
       : sourceToken;
-    const canMove = canMoveMapToken({
-      tool: props.tool,
-      role: props.role,
-      locked: token.locked,
-      membershipId: props.membershipId,
-      controllerMembershipIds: token.controllerMembershipIds,
-    });
+    const canMove =
+      !token.id.startsWith("pending:") &&
+      canMoveMapToken({
+        tool: props.tool,
+        role: props.role,
+        locked: token.locked,
+        membershipId: props.membershipId,
+        controllerMembershipIds: token.controllerMembershipIds,
+      });
     const url = assetUrl(token.assetId);
     const dragPosition = dragPositions[token.id];
     const tokenStack =
@@ -1863,7 +1902,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onMouseLeave={() => setHoveredTokenId(null)}
         onClick={(event) => {
           if (
+            token.id.startsWith("pending:") ||
             event.evt.button !== 0 ||
+            event.evt.ctrlKey ||
             !canSelectToken(token, {
               role: props.role,
               membershipId: props.membershipId,
@@ -1884,7 +1925,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           event.cancelBubble = true;
           // Right drag pans only from empty canvas; on a token it
           // consistently opens the contextual actions.
-          if (props.role !== "GM") return;
+          if (props.role !== "GM" || token.id.startsWith("pending:")) return;
           const rect = containerRef.current?.getBoundingClientRect();
           if (!rect) return;
           setTokenMenu({
@@ -1971,7 +2012,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         )}
         {/* UIX-471: состояния — ряд цветных точек над фигурой. Портрет ими не
             закрывается: по нему узнают, кто это. Названия приходят подписью
-            при наведении, вместе с именем. */}
+            при наведении, отдельными компактными строками. */}
         {token.conditions.length > 0 &&
           (() => {
             const layout = conditionBadgeLayout(
@@ -2013,22 +2054,29 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           y={token.height + 5}
           width={token.width + 32}
           align="center"
-          text={`${token.name}${
-            isStackRepresentative ? ` +${tokenStack!.count - 1}` : ""
-          }${
-            // Состояния читаются словами там же, где имя: отдельная всплывающая
-            // подсказка на канвасе жила бы своей жизнью и перекрывала фигуры.
-            token.conditions.length > 0 && hoveredTokenId === token.id
-              ? ` — ${conditionsHint(token.conditions)}`
-              : ""
-          }`}
+          text={`${token.name}${isStackRepresentative ? ` +${tokenStack!.count - 1}` : ""}`}
           fill={visual.color.tokenName}
-          fontSize={13}
+          fontSize={13 / scale}
+          wrap="none"
           listening={false}
           visible={
             hoveredTokenId === token.id || canMove || isStackRepresentative
           }
         />
+        {hoveredTokenId === token.id && token.conditions.length > 0 && (
+          <Text
+            x={(token.width - 160 / scale) / 2}
+            y={token.height + 24 / scale}
+            width={160 / scale}
+            text={conditionsHint(token.conditions)}
+            align="center"
+            wrap="none"
+            lineHeight={1.25}
+            fontSize={11 / scale}
+            fill={visual.color.tokenName}
+            listening={false}
+          />
+        )}
         {props.role === "GM" &&
           props.tool === "PAN" &&
           selectedTokenIds.length === 1 &&

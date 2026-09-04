@@ -158,7 +158,9 @@ describe("окно времени кампании", () => {
     renderClock();
 
     expect(screen.getByText("День 7")).toBeInTheDocument();
-    expect(screen.getByText(/завершено боёв: 3/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/боёв|столкновение|идёт бой/),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Начать бой")).not.toBeInTheDocument();
     expect(screen.queryByText("Завершить бой")).not.toBeInTheDocument();
 
@@ -215,7 +217,12 @@ describe("окно времени кампании", () => {
     expect(
       screen.getByRole("button", { name: "Сбросить время" }),
     ).toBeDisabled();
-    expect(screen.getByText(/после завершения активного/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Сброс недоступен для сохранённого состояния кампании/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/столкновени|завершите бой/),
+    ).not.toBeInTheDocument();
 
     rerender(
       <CampaignClockDialog

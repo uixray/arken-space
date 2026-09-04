@@ -88,7 +88,6 @@ function createDefaultProps(
     viewSnapshot: snapshot,
     previewSnapshot: null,
     activeScene: snapshot.scenes[0],
-    activeEncounter: null,
     activeCanvasVersion: "v1",
     cursorPreference: cursorPreferenceDefault("GM"),
     onCursorPreferenceChange: vi.fn(),
@@ -96,9 +95,6 @@ function createDefaultProps(
     onFogBrushRadiusChange: vi.fn(),
     canvasEditMode: null,
     onCanvasEditModeChange: vi.fn(),
-    onStartEncounter: vi.fn(),
-    onEndEncounter: vi.fn(),
-    onToggleBattleZone: vi.fn(),
     onGridPreview: vi.fn(),
     onGridSave: vi.fn().mockResolvedValue(undefined),
     gmFogOpacity: 0.35,
@@ -142,7 +138,7 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     ).not.toBeInTheDocument();
   });
 
-  it("рендерит полный инструментарий для роли GM: туман, бой, сетка", () => {
+  it("рендерит инструменты GM без отключённого боя (UIX-621)", () => {
     const props = createDefaultProps();
     renderComponent(<MapToolbar {...props} />);
 
@@ -164,11 +160,11 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(screen.getByRole("button", { name: "Линейка" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Пинг" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Обвести зону боя" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Обвести зону боя" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Начать бой" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Начать бой" }),
+    ).not.toBeInTheDocument();
   });
 
   it("вызывает onToolSelect при клике на инструмент", async () => {
@@ -196,12 +192,15 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(collapseButton).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("вызывает onStartEncounter при клике 'Начать бой'", async () => {
-    const onStartEncounter = vi.fn();
-    const props = createDefaultProps({ onStartEncounter });
+  it("не возвращает боевые кнопки при сохранённом активном столкновении", () => {
+    const props = createDefaultProps();
+    props.snapshot.campaign.battleActive = true;
     renderComponent(<MapToolbar {...props} />);
-
-    await userEvent.click(screen.getByRole("button", { name: "Начать бой" }));
-    expect(onStartEncounter).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: "Завершить бой" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Начать бой" }),
+    ).not.toBeInTheDocument();
   });
 });

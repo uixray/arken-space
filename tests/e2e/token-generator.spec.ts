@@ -406,19 +406,26 @@ test("UIX-272 empty character select opens above token editor with guidance and 
 
   const menu = page.locator(".arken-form-select-popup");
   await expect(menu).toBeVisible();
-  await expect(menu.getByText("Персонажей пока нет")).toBeVisible();
-  await expect(
-    menu.getByText("Создать персонажа", { exact: true }),
-  ).toBeVisible();
-  const layers = await page.evaluate(() => {
-    const modal = document.querySelector(".g-modal");
-    const popup = document.querySelector(".arken-form-select-popup");
-    return {
-      modal: Number.parseInt(getComputedStyle(modal!).zIndex, 10),
-      popup: Number.parseInt(getComputedStyle(popup!).zIndex, 10),
-    };
-  });
-  expect(layers.popup).toBeGreaterThan(layers.modal);
+  const guidance = menu.getByText("Персонажей пока нет");
+  const create = menu.getByText("Создать персонажа", { exact: true });
+  for (const item of [guidance, create]) {
+    await expect(item).toBeVisible();
+    await expect
+      .poll(() =>
+        item.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          );
+          return element.contains(hit);
+        }),
+      )
+      .toBe(true);
+  }
+  await create.click();
+  await expect(menu).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Подготовка" })).toBeVisible();
 });
 
 test("UIX-613 GM creates and places token on active scene in one action", async ({

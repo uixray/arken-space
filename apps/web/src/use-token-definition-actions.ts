@@ -2,6 +2,7 @@ import { useMemo, type MutableRefObject } from "react";
 import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import { api } from "./api";
 import { characterTokenPlacementRequest } from "./token-placement";
+import type { TokenPlacementRequest } from "./optimistic-token-mutations";
 
 /**
  * UIX-398 — token-definition commands.
@@ -72,13 +73,27 @@ export function useTokenDefinitionActions(dependencies: {
   run: (action: () => Promise<unknown>, refresh?: boolean) => Promise<void>;
   snapshotRef: MutableRefObject<GameSnapshot | null>;
   activeSceneRef: MutableRefObject<SceneDto | undefined>;
+  /** Paints immediately and reports asynchronous failures through shared UI. */
+  placeOptimistically?: (request: TokenPlacementRequest) => void;
 }): TokenDefinitionActions {
-  const { run, snapshotRef, activeSceneRef } = dependencies;
+  const { run, snapshotRef, activeSceneRef, placeOptimistically } =
+    dependencies;
 
   return useMemo<TokenDefinitionActions>(
     () => ({
-      onPlaceTokenDefinition: (definitionId) =>
-        run(() =>
+      onPlaceTokenDefinition: (definitionId) => {
+        if (placeOptimistically) {
+          placeOptimistically({
+            path: `/api/token-definitions/${definitionId}/placements`,
+            body: {
+              actionId: crypto.randomUUID(),
+              definitionId,
+              sceneId: activeSceneRef.current?.id,
+            },
+          });
+          return Promise.resolve();
+        }
+        return run(() =>
           api(`/api/token-definitions/${definitionId}/placements`, {
             method: "POST",
             body: withAction({
@@ -86,7 +101,8 @@ export function useTokenDefinitionActions(dependencies: {
               sceneId: activeSceneRef.current?.id,
             }),
           }),
-        ),
+        );
+      },
 
       onDeleteTokenDefinition: (definitionId, revision) =>
         run(() =>
@@ -120,6 +136,24 @@ export function useTokenDefinitionActions(dependencies: {
       onCreateAndPlaceTokenDefinition: async (input) => {
         const scene = activeSceneRef.current;
         if (!scene) return;
+        if (placeOptimistically) {
+          placeOptimistically({
+            path: "/api/tokens",
+            body: {
+              actionId: crypto.randomUUID(),
+              sceneId: scene.id,
+              characterId: input.characterId,
+              assetId: input.defaultAssetId,
+              name: input.name ?? undefined,
+              x: scene.width / 2 - input.defaultWidth / 2,
+              y: scene.height / 2 - input.defaultHeight / 2,
+              width: input.defaultWidth,
+              height: input.defaultHeight,
+              controllerMembershipIds: input.controllerMembershipIds,
+            },
+          });
+          return;
+        }
         await run(
           () =>
             api("/api/tokens", {
@@ -168,6 +202,10 @@ export function useTokenDefinitionActions(dependencies: {
           crypto.randomUUID(),
         );
         if (!request) return;
+        if (placeOptimistically) {
+          placeOptimistically(request);
+          return;
+        }
         await run(
           () =>
             api(request.path, {
@@ -178,6 +216,6 @@ export function useTokenDefinitionActions(dependencies: {
         );
       },
     }),
-    [run, snapshotRef, activeSceneRef],
+    [run, snapshotRef, activeSceneRef, placeOptimistically],
   );
 }

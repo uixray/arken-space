@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { EncounterDto, GameSnapshot, SceneDto } from "@arken/contracts";
+import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import type { MapTool } from "./renderers/map-interaction";
 import { shortcutLabel } from "./renderers/map-tool-shortcuts";
 import {
@@ -27,7 +27,6 @@ export interface MapToolbarProps {
   viewSnapshot: GameSnapshot;
   previewSnapshot: GameSnapshot | null;
   activeScene: SceneDto | null | undefined;
-  activeEncounter?: EncounterDto | null;
   activeCanvasVersion: string;
   cursorPreference: CursorPreference;
   onCursorPreferenceChange: (preference: CursorPreference) => void;
@@ -35,9 +34,6 @@ export interface MapToolbarProps {
   onFogBrushRadiusChange: (radius: number) => void;
   canvasEditMode: "BACKGROUND" | "WORLD" | null;
   onCanvasEditModeChange: (mode: "BACKGROUND" | "WORLD" | null) => void;
-  onStartEncounter: () => void;
-  onEndEncounter: () => void;
-  onToggleBattleZone: () => void;
   onGridPreview: (grid: SceneDto["grid"] | null) => void;
   onGridSave: (grid: SceneDto["grid"]) => Promise<void>;
   gmFogOpacity: number;
@@ -56,7 +52,6 @@ export function MapToolbar({
   viewSnapshot,
   previewSnapshot,
   activeScene,
-  activeEncounter,
   activeCanvasVersion,
   cursorPreference,
   onCursorPreferenceChange,
@@ -64,9 +59,6 @@ export function MapToolbar({
   onFogBrushRadiusChange,
   canvasEditMode,
   onCanvasEditModeChange,
-  onStartEncounter,
-  onEndEncounter,
-  onToggleBattleZone,
   onGridPreview,
   onGridSave,
   gmFogOpacity,
@@ -303,50 +295,6 @@ export function MapToolbar({
             >
               Пинг
             </button>
-
-            <div className="toolbar-group__title">Прочее</div>
-            <button
-              aria-label={
-                viewSnapshot.campaign.battleZone
-                  ? "Снять зону боя"
-                  : "Обвести зону боя"
-              }
-              title={
-                viewSnapshot.campaign.battleZone
-                  ? `Снять зону боя · ${shortcutLabel("BATTLE_ZONE")}`
-                  : `Обвести поле боя: из него собирается очередь ходов · ${shortcutLabel("BATTLE_ZONE")}`
-              }
-              className="map-tool"
-              data-tool="BATTLE_ZONE"
-              disabled={!activeScene}
-              aria-pressed={tool === "BATTLE_ZONE"}
-              onClick={onToggleBattleZone}
-            >
-              {viewSnapshot.campaign.battleZone ? "Снять зону" : "Зона боя"}
-            </button>
-
-            {activeEncounter ? (
-              <button
-                aria-label="Завершить бой"
-                title="Завершить текущий бой"
-                className="map-tool"
-                data-tool="ENCOUNTER_END"
-                onClick={onEndEncounter}
-              >
-                Завершить бой
-              </button>
-            ) : (
-              <button
-                aria-label="Начать бой"
-                title="Начать бой из области сцены или связанной локации"
-                className="map-tool"
-                data-tool="ENCOUNTER_START"
-                disabled={!activeScene}
-                onClick={onStartEncounter}
-              >
-                Начать бой
-              </button>
-            )}
           </>
         )}
 

@@ -1099,6 +1099,7 @@ export const sceneViewSchema = z
 
 export const createTokenSchema = z.object({
   actionId: actionIdSchema,
+  placementId: z.string().uuid().optional(),
   definitionId: z.string().uuid().optional(),
   sceneId: z.string().uuid(),
   characterId: z.string().uuid().nullable().optional(),
@@ -1157,6 +1158,7 @@ export const replaceCharacterControllersSchema = z.object({
 });
 export const placeTokenDefinitionSchema = z.object({
   actionId: actionIdSchema,
+  placementId: z.string().uuid().optional(),
   definitionId: z.string().uuid(),
   sceneId: z.string().uuid().optional(),
   x: z.number().finite().optional(),

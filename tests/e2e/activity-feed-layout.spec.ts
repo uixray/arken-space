@@ -13,7 +13,8 @@ import { expect, test } from "./campaign-fixture";
  * схлопывалась в ноль. Высоту строк считает движок вёрстки — в jsdom её нет,
  * и проверять там нечего.
  *
- * Поэтому бой здесь включается обязательно: без него раскладка сходится сама
+ * UIX-621: бой удалён из UI, но сохранённые боевые данные не должны возвращать панель.
+ * Поэтому legacy-бой здесь по-прежнему включается: без него раскладка сходится сама
  * собой и тест проходит даже на сломанном CSS.
  */
 
@@ -101,7 +102,7 @@ async function worstOverlap(page: Page) {
   });
 }
 
-test.describe("лента журнала во время боя", () => {
+test.describe("лента журнала с сохранённым legacy-состоянием боя", () => {
   test("полоса журнала не перекрывает карточки ни при какой ширине панели", async ({
     page,
     gmToken,
@@ -113,7 +114,7 @@ test.describe("лента журнала во время боя", () => {
     await setBattle(page, "START_BATTLE");
 
     try {
-      await expect(page.locator(".initiative-panel")).toBeVisible();
+      await expect(page.locator(".initiative-panel")).toHaveCount(0);
       await expect(page.locator(".activity-log-toolbar")).toBeVisible();
 
       for (const width of SIDEBAR_WIDTHS) {
@@ -134,7 +135,7 @@ test.describe("лента журнала во время боя", () => {
     }
   });
 
-  test("поле ввода сообщения остаётся на экране при открытой очереди", async ({
+  test("поле ввода остаётся на экране, legacy-бой не возвращает очередь", async ({
     page,
     gmToken,
   }) => {
@@ -151,7 +152,7 @@ test.describe("лента журнала во время боя", () => {
 
     await setBattle(page, "START_BATTLE");
     try {
-      await expect(page.locator(".initiative-panel")).toBeVisible();
+      await expect(page.locator(".initiative-panel")).toHaveCount(0);
       const fits = await page.evaluate(() => {
         const composer = document.querySelector(".chat-compose");
         const feed = document.querySelector(".activity-feed");
