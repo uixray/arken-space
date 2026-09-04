@@ -355,7 +355,9 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
   await page.goto("/");
 
   await expect(page.locator(".workspace-nav")).toBeVisible();
-  await expect(page.locator(".campaign-name-button__icon")).toBeVisible();
+  await expect(page.locator(".brand")).not.toContainText(
+    snapshot.campaign.name,
+  );
   await expect(page.locator(".scene-token-count")).toBeHidden();
   for (const tool of ["PAN", "FOG", "COVER", "DRAW", "RULER", "PING"]) {
     await expect(
