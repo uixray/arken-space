@@ -142,6 +142,71 @@ async function installCanvasRoutes(page: Page) {
   return { portraitRequestCount: () => portraitRequests };
 }
 
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 390]) {
+    test(`UIX-584 pause blocks canvas but not sidebar (${role}, ${width})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 850 });
+      await installCanvasRoutes(page);
+      const current: GameSnapshot = structuredClone(snapshot);
+      current.me.role = role;
+      current.campaign.paused = role === "PLAYER";
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({ json: current }),
+      );
+      const commands: boolean[] = [];
+      await page.route("**/api/campaign/pause", async (route) => {
+        expect(role).toBe("GM");
+        const body = route.request().postDataJSON();
+        expect(body.revision).toBe(current.campaign.revision);
+        expect(body.actionId).toMatch(/^[0-9a-f-]{36}$/i);
+        commands.push(body.paused);
+        current.campaign.paused = body.paused;
+        current.campaign.revision += 1;
+        await route.fulfill({
+          json: { paused: body.paused, revision: current.campaign.revision },
+        });
+      });
+      await page.goto("/");
+      if (role === "GM")
+        await page.getByRole("button", { name: "Начать перерыв" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Перерыв", exact: true }),
+      ).toBeVisible();
+      await expect(page.locator(".map-viewport")).toHaveAttribute("inert", "");
+      await expect(page.locator(".map-toolbar")).toHaveCount(0);
+      expect(
+        await page
+          .locator("#activity-sidebar")
+          .evaluate((node) => node.closest("[inert]") !== null),
+      ).toBe(false);
+      const box = await page.locator(".game-pause-overlay").boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeLessThanOrEqual(width);
+      await page.keyboard.press("Control+z");
+      await page.reload();
+      await expect(
+        page.getByRole("heading", { name: "Перерыв", exact: true }),
+      ).toBeVisible();
+      if (role === "GM") {
+        await page.getByRole("button", { name: "Продолжить игру" }).click();
+        await expect(page.locator(".game-pause-overlay")).toHaveCount(0);
+        await expect(page.locator(".map-viewport")).not.toHaveAttribute(
+          "inert",
+          "",
+        );
+        expect(commands).toEqual([true, false]);
+      } else {
+        await expect(
+          page.getByRole("button", { name: "Продолжить игру" }),
+        ).toHaveCount(0);
+        expect(commands).toEqual([]);
+      }
+    });
+  }
+}
+
 test("UIX-471 GM changes condition sets through the token menu and keeps server state on rejection", async ({
   page,
 }) => {

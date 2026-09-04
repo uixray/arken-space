@@ -393,6 +393,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const [drawingStrokeWidth, setDrawingStrokeWidth] = useState<number>(3);
   const drawingColorUpdateTimeoutRef = useRef<number | null>(null);
   const drawingWidthUpdateTimeoutRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (drawingColorUpdateTimeoutRef.current !== null)
+        window.clearTimeout(drawingColorUpdateTimeoutRef.current);
+      if (drawingWidthUpdateTimeoutRef.current !== null)
+        window.clearTimeout(drawingWidthUpdateTimeoutRef.current);
+    },
+    [],
+  );
   const [backgroundDraft, setBackgroundDraft] = useState(
     props.scene.backgroundFrame,
   );
@@ -2094,6 +2103,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       data-token-image-states={tokenImageStateAttribute}
       {...(resizeHandleData ?? {})}
       ref={containerRef}
+      inert={props.paused}
+      aria-hidden={props.paused || undefined}
       tabIndex={0}
       role="region"
       aria-label="Интерактивная карта сцены"

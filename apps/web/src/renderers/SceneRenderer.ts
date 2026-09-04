@@ -15,6 +15,7 @@ import type { MapMoveAck, MapMoveTarget } from "./map-move-queue";
 import type { MapTool } from "./map-interaction";
 
 export interface SceneRendererProps {
+  paused?: boolean;
   scene: SceneDto;
   tokens: TokenDto[];
   fogReveals: FogRevealDto[];
