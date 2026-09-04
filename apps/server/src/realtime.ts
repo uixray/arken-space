@@ -43,6 +43,12 @@ import { cookieValue } from "./security.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import { normalizeTokenConditions } from "./token-conditions.js";
 import { effectiveAudioPosition, ensureAudioDuration } from "./audio-state.js";
+import {
+  isCampaignCanvasGuardError,
+  runCampaignCanvasMutation,
+  runCampaignCanvasRelay,
+  type CampaignCanvasDb,
+} from "./campaign-pause-guard.js";
 
 /** UIX-382: hard cap on concurrently active tracks in the mixer. */
 const MAX_AUDIO_TRACKS = 4;
@@ -54,6 +60,49 @@ const campaignRoom = (campaignId: string) => `campaign:${campaignId}`;
 const gmRoom = (campaignId: string) => `campaign:${campaignId}:gm`;
 const memberRoom = (membershipId: string) => `member:${membershipId}`;
 const sessionRoom = (sessionId: string) => `session:${sessionId}`;
+
+/**
+ * Removes client-held Canvas ephemera inside the authoritative pause
+ * transition. Relay guards keep a shared campaign-row lock through their emit,
+ * so this cleanup runs after every pre-pause relay and before commit can admit
+ * any later relay.
+ */
+export async function clearCampaignCanvasEphemera(
+  io: RealtimeServer,
+  campaignId: string,
+) {
+  const sockets = await io.in(campaignRoom(campaignId)).fetchSockets();
+  const clearedRulers = new Set<string>();
+  const clearedCursors = new Set<string>();
+  for (const socket of sockets) {
+    const auth = socket.data.auth;
+    const ephemera = socket.data.canvasEphemera;
+    if (!ephemera) continue;
+    if (ephemera.rulerSceneId) {
+      const key = `${auth.membershipId}:${ephemera.rulerSceneId}`;
+      if (!clearedRulers.has(key)) {
+        clearedRulers.add(key);
+        io.to(campaignRoom(campaignId)).emit("ruler:cleared", {
+          sceneId: ephemera.rulerSceneId,
+          membershipId: auth.membershipId,
+        });
+      }
+      ephemera.rulerSceneId = undefined;
+    }
+    if (ephemera.cursorActive) {
+      const audience =
+        auth.role === "GM" && !ephemera.cursorShared ? "gm" : "campaign";
+      const key = `${auth.membershipId}:${audience}`;
+      if (!clearedCursors.has(key)) {
+        clearedCursors.add(key);
+        io.to(
+          audience === "gm" ? gmRoom(campaignId) : campaignRoom(campaignId),
+        ).emit("cursor:gone", { membershipId: auth.membershipId });
+      }
+      ephemera.cursorActive = false;
+    }
+  }
+}
 
 type EditableToken = Omit<typeof tokens.$inferSelect, "name"> & {
   /** UIX-400: разрешённое имя — своё либо унаследованное от персонажа. */
@@ -114,7 +163,7 @@ function envelope<T>(
  * definition after commit instead of publishing the pre-transaction snapshot.
  */
 async function projectedToken(
-  db: Database,
+  db: CampaignCanvasDb,
   campaignId: string,
   tokenId: string,
 ) {
@@ -195,7 +244,7 @@ type FogRowsByScene = Map<string, (typeof fogReveals.$inferSelect)[]>;
  * ones. Read only the token scenes and preserve that canonical sequence.
  */
 async function fogRowsForTokens(
-  db: Database,
+  db: CampaignCanvasDb,
   tokenRows: readonly EditableToken[],
 ): Promise<FogRowsByScene> {
   const sceneIds = [...new Set(tokenRows.map((token) => token.sceneId))];
@@ -243,7 +292,7 @@ type TokenDelivery = {
  * whether a player who controls none of the token rows can see all of them.
  */
 async function tokenDelivery(
-  db: Database,
+  db: CampaignCanvasDb,
   campaignId: string,
   tokenRows: readonly EditableToken[],
   activeSceneId: string | null,
@@ -335,6 +384,7 @@ export function registerRealtime(
 
   io.on("connection", async (socket) => {
     const auth = socket.data.auth;
+    const canvasEphemera = (socket.data.canvasEphemera ??= {});
     // Room-based disconnects handle normal logout. This guard also rejects an
     // event that was queued while connection setup raced with session removal.
     socket.use((_event, next) => {
@@ -572,29 +622,32 @@ export function registerRealtime(
     socket.on("token:moving", async (input) => {
       const parsed = moveTokenSchema.safeParse(input);
       if (!parsed.success) return;
-      const projection = await projectedToken(
-        db,
-        auth.campaignId,
-        parsed.data.tokenId,
-      );
-      if (!canEditProjectedToken(auth, projection) || !projection) return;
-      const previewToken = {
-        ...projection.token,
-        x: parsed.data.x,
-        y: parsed.data.y,
-        z: parsed.data.z,
-        levelId: parsed.data.levelId,
-      } satisfies EditableToken;
-      // Check both current and preview coordinates. Either side being covered
-      // makes a campaign-wide preview an information leak.
-      const delivery = await tokenDelivery(
-        db,
-        auth.campaignId,
-        [projection.token, previewToken],
-        projection.activeSceneId,
-        projection.token.controllerMembershipIds,
-      );
-      socket.to(delivery.rooms).emit("token:moving", parsed.data);
+      await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
+        const projection = await projectedToken(
+          tx,
+          auth.campaignId,
+          parsed.data.tokenId,
+        );
+        if (!canEditProjectedToken(auth, projection) || !projection) return;
+        const previewToken = {
+          ...projection.token,
+          x: parsed.data.x,
+          y: parsed.data.y,
+          z: parsed.data.z,
+          levelId: parsed.data.levelId,
+        } satisfies EditableToken;
+        // Check both current and preview coordinates. Either side being covered
+        // makes a campaign-wide preview an information leak.
+        const delivery = await tokenDelivery(
+          tx,
+          auth.campaignId,
+          [projection.token, previewToken],
+          projection.activeSceneId,
+          projection.token.controllerMembershipIds,
+        );
+        if (!socket.connected) return;
+        socket.to(delivery.rooms).emit("token:moving", parsed.data);
+      });
     });
 
     socket.on("token:moved", async (input, ack) => {
@@ -652,71 +705,88 @@ export function registerRealtime(
         });
       }
 
-      const result = await db.transaction(async (tx) => {
-        await invalidateRedoBranch(tx, auth, current.sceneId);
-        const [updated] = await tx
-          .update(tokens)
-          .set({
-            x: command.x,
-            y: command.y,
-            z: command.z,
-            levelId: command.levelId,
-            revision: current.revision + 1,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(tokens.id, current.id),
-              eq(tokens.revision, current.revision),
-            ),
-          )
-          .returning();
-        if (!updated) return null;
-        const [event] = await tx
-          .insert(gameEvents)
-          .values({
+      const result = await runCampaignCanvasMutation(
+        db,
+        auth.campaignId,
+        async (tx) => {
+          await invalidateRedoBranch(tx, auth, current.sceneId);
+          const [updated] = await tx
+            .update(tokens)
+            .set({
+              x: command.x,
+              y: command.y,
+              z: command.z,
+              levelId: command.levelId,
+              revision: current.revision + 1,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(tokens.id, current.id),
+                eq(tokens.revision, current.revision),
+              ),
+            )
+            .returning();
+          if (!updated) return null;
+          const [event] = await tx
+            .insert(gameEvents)
+            .values({
+              campaignId: auth.campaignId,
+              actionId: command.actionId,
+              membershipId: auth.membershipId,
+              type: "TOKEN_MOVED",
+              entityType: "TOKEN",
+              entityId: updated.id,
+              entityRevision: updated.revision,
+              payload: {
+                x: updated.x,
+                y: updated.y,
+                z: updated.z,
+                levelId: updated.levelId,
+              },
+            })
+            .returning();
+          await tx.insert(actionJournal).values({
             campaignId: auth.campaignId,
+            sceneId: current.sceneId,
+            actorMembershipId: auth.membershipId,
             actionId: command.actionId,
-            membershipId: auth.membershipId,
-            type: "TOKEN_MOVED",
-            entityType: "TOKEN",
-            entityId: updated.id,
-            entityRevision: updated.revision,
-            payload: {
+            scope: current.layer === "GM" ? "GM" : "PUBLIC",
+            type: "TOKEN_MOVE",
+            targetType: "TOKEN",
+            targetId: current.id,
+            before: {
+              x: current.x,
+              y: current.y,
+              z: current.z,
+              levelId: current.levelId,
+            },
+            after: {
               x: updated.x,
               y: updated.y,
               z: updated.z,
               levelId: updated.levelId,
             },
-          })
-          .returning();
-        await tx.insert(actionJournal).values({
-          campaignId: auth.campaignId,
-          sceneId: current.sceneId,
-          actorMembershipId: auth.membershipId,
-          actionId: command.actionId,
-          scope: current.layer === "GM" ? "GM" : "PUBLIC",
-          type: "TOKEN_MOVE",
-          targetType: "TOKEN",
-          targetId: current.id,
-          before: {
-            x: current.x,
-            y: current.y,
-            z: current.z,
-            levelId: current.levelId,
-          },
-          after: {
-            x: updated.x,
-            y: updated.y,
-            z: updated.z,
-            levelId: updated.levelId,
-          },
-          beforeRevision: current.revision,
-          afterRevision: updated.revision,
-          currentRevision: updated.revision,
-        });
-        return event ? { event, updated } : null;
+            beforeRevision: current.revision,
+            afterRevision: updated.revision,
+            currentRevision: updated.revision,
+          });
+          return event ? { event, updated } : null;
+        },
+      ).catch((error: unknown) => {
+        if (isCampaignCanvasGuardError(error))
+          return { guardError: error.code } as const;
+        return Promise.reject(error);
       });
+
+      if (result && "guardError" in result) {
+        return ack?.({
+          ok: false,
+          status:
+            result.guardError === "CAMPAIGN_PAUSED" ? "CONFLICT" : "FORBIDDEN",
+          reason: result.guardError,
+        });
+      }
 
       if (!result) {
         const latest = await editableToken(db, auth, command.tokenId);
@@ -1414,25 +1484,29 @@ export function registerRealtime(
       rulerQueue = rulerQueue.then(async () => {
         const parsed = rulerUpdateSchema.safeParse(input);
         if (!parsed.success) return;
-        const [scene] = await db
-          .select({ id: scenes.id, grid: scenes.grid })
-          .from(scenes)
-          .where(
-            and(
-              eq(scenes.id, parsed.data.sceneId),
-              eq(scenes.campaignId, auth.campaignId),
+        await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
+          const [scene] = await tx
+            .select({ id: scenes.id, grid: scenes.grid })
+            .from(scenes)
+            .where(
+              and(
+                eq(scenes.id, parsed.data.sceneId),
+                eq(scenes.campaignId, auth.campaignId),
+              ),
+            )
+            .limit(1);
+          if (!scene) return;
+          if (!socket.connected) return;
+          canvasEphemera.rulerSceneId = scene.id;
+          io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
+            ...parsed.data,
+            membershipId: auth.membershipId,
+            displayName: auth.displayName,
+            distance: rulerPolylineDistance(
+              parsed.data.points,
+              scene.grid.enabled ? scene.grid.size : 1,
             ),
-          )
-          .limit(1);
-        if (!scene) return;
-        io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
-          ...parsed.data,
-          membershipId: auth.membershipId,
-          displayName: auth.displayName,
-          distance: rulerPolylineDistance(
-            parsed.data.points,
-            scene.grid.enabled ? scene.grid.size : 1,
-          ),
+          });
         });
       });
     });
@@ -1443,20 +1517,24 @@ export function registerRealtime(
           .object({ sceneId: z.string().uuid() })
           .safeParse(input);
         if (!parsed.success) return;
-        const [scene] = await db
-          .select({ id: scenes.id })
-          .from(scenes)
-          .where(
-            and(
-              eq(scenes.id, parsed.data.sceneId),
-              eq(scenes.campaignId, auth.campaignId),
-            ),
-          )
-          .limit(1);
-        if (!scene) return;
-        io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
-          sceneId: scene.id,
-          membershipId: auth.membershipId,
+        if (canvasEphemera.rulerSceneId !== parsed.data.sceneId) return;
+        await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
+          const [scene] = await tx
+            .select({ id: scenes.id })
+            .from(scenes)
+            .where(
+              and(
+                eq(scenes.id, parsed.data.sceneId),
+                eq(scenes.campaignId, auth.campaignId),
+              ),
+            )
+            .limit(1);
+          if (!scene) return;
+          canvasEphemera.rulerSceneId = undefined;
+          io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
+            sceneId: scene.id,
+            membershipId: auth.membershipId,
+          });
         });
       });
     });
@@ -1464,45 +1542,57 @@ export function registerRealtime(
     socket.on("map:ping", async (input, ack) => {
       if (!Number.isFinite(input.x) || !Number.isFinite(input.y))
         return ack?.({ ok: false, reason: "INVALID_PING" });
-      const [scene] = await db
-        .select({ sceneId: scenes.id, activeSceneId: campaigns.activeSceneId })
-        .from(scenes)
-        .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
-        .where(
-          and(
-            eq(scenes.id, input.sceneId),
-            eq(scenes.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      if (!scene) return ack?.({ ok: false, reason: "SCENE_NOT_FOUND" });
-      const isPlayerScene = scene.sceneId === scene.activeSceneId;
-      if (auth.role === "PLAYER" && !isPlayerScene)
-        return ack?.({ ok: false, reason: "SCENE_NOT_ACTIVE" });
-      const recipients = isPlayerScene
-        ? (await io.in(campaignRoom(auth.campaignId)).fetchSockets())
-            .filter((candidate) => candidate.data.auth.role === "PLAYER")
-            .map((candidate) => candidate.data.auth.membershipId)
-        : [];
-      const uniqueRecipients = [...new Set(recipients)];
-      const ping = {
-        sceneId: scene.sceneId,
-        membershipId: auth.membershipId,
-        displayName: auth.displayName,
-        x: input.x,
-        y: input.y,
-        createdAt: new Date().toISOString(),
-      };
-      // GMs always receive their own ping; an empty player audience is still
-      // reported explicitly so it cannot be mistaken for a delivery failure.
-      if (auth.role === "GM" && uniqueRecipients.length === 0) {
-        io.to(gmRoom(auth.campaignId)).emit("map:ping", ping);
-        return ack?.({ ok: false, reason: "NO_VISIBLE_PLAYERS" });
-      }
-      for (const membershipId of uniqueRecipients)
-        io.to(memberRoom(membershipId)).emit("map:ping", ping);
-      io.to(gmRoom(auth.campaignId)).emit("map:ping", ping);
-      ack?.({ ok: true });
+      const result = await runCampaignCanvasRelay(
+        db,
+        auth.campaignId,
+        async (tx) => {
+          const [scene] = await tx
+            .select({
+              sceneId: scenes.id,
+              activeSceneId: campaigns.activeSceneId,
+            })
+            .from(scenes)
+            .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
+            .where(
+              and(
+                eq(scenes.id, input.sceneId),
+                eq(scenes.campaignId, auth.campaignId),
+              ),
+            )
+            .limit(1);
+          if (!scene) return ack?.({ ok: false, reason: "SCENE_NOT_FOUND" });
+          const isPlayerScene = scene.sceneId === scene.activeSceneId;
+          if (auth.role === "PLAYER" && !isPlayerScene)
+            return ack?.({ ok: false, reason: "SCENE_NOT_ACTIVE" });
+          const recipients = isPlayerScene
+            ? (await io.in(campaignRoom(auth.campaignId)).fetchSockets())
+                .filter((candidate) => candidate.data.auth.role === "PLAYER")
+                .map((candidate) => candidate.data.auth.membershipId)
+            : [];
+          const uniqueRecipients = [...new Set(recipients)];
+          const ping = {
+            sceneId: scene.sceneId,
+            membershipId: auth.membershipId,
+            displayName: auth.displayName,
+            x: input.x,
+            y: input.y,
+            createdAt: new Date().toISOString(),
+          };
+          // GMs always receive their own ping; an empty player audience is
+          // still reported explicitly so it cannot be mistaken for a delivery
+          // failure.
+          if (auth.role === "GM" && uniqueRecipients.length === 0) {
+            io.to(gmRoom(auth.campaignId)).emit("map:ping", ping);
+            return ack?.({ ok: false, reason: "NO_VISIBLE_PLAYERS" });
+          }
+          for (const membershipId of uniqueRecipients)
+            io.to(memberRoom(membershipId)).emit("map:ping", ping);
+          io.to(gmRoom(auth.campaignId)).emit("map:ping", ping);
+          ack?.({ ok: true });
+        },
+      );
+      if (result.kind === "BLOCKED")
+        return ack?.({ ok: false, reason: result.reason });
     });
 
     // UIX-392: ephemeral cursor presence. Deliberately NOT following the
@@ -1519,10 +1609,6 @@ export function registerRealtime(
     // does not need to be tight: it exists to cap a misbehaving or hostile
     // client, not to shape normal traffic.
     const CURSOR_MOVE_MIN_INTERVAL_MS = 40;
-    // Only a socket that has actually broadcast a cursor position needs a
-    // cursor:gone on disconnect; sockets that never used the feature would
-    // otherwise generate pure noise for every other client.
-    let hasBroadcastCursor = false;
 
     // UIX-403: a GM's cursor reaches players only when that GM asks for it on
     // the event itself. Keeping the choice on each message rather than in
@@ -1532,60 +1618,63 @@ export function registerRealtime(
       auth.role === "GM" && !shared
         ? gmRoom(auth.campaignId)
         : campaignRoom(auth.campaignId);
-    // Which audience the last position went to, so `cursor:gone` can be sent
-    // to that same audience. Telling the campaign room to forget a cursor it
-    // never saw is harmless; failing to tell it leaves the GM's last position
-    // frozen on every player's screen — precisely the frame they were hiding.
-    let lastCursorShared = false;
-
     socket.on("cursor:move", async (input) => {
       const parsed = cursorMoveSchema.safeParse(input);
       if (!parsed.success) return;
       const now = Date.now();
       if (now - lastCursorMoveAt < CURSOR_MOVE_MIN_INTERVAL_MS) return;
       lastCursorMoveAt = now;
-      const [scene] = await db
-        .select({ id: scenes.id })
-        .from(scenes)
-        .where(
-          and(
-            eq(scenes.id, parsed.data.sceneId),
-            eq(scenes.campaignId, auth.campaignId),
-          ),
+      await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
+        const [scene] = await tx
+          .select({ id: scenes.id })
+          .from(scenes)
+          .where(
+            and(
+              eq(scenes.id, parsed.data.sceneId),
+              eq(scenes.campaignId, auth.campaignId),
+            ),
+          )
+          .limit(1);
+        if (!scene) return;
+        if (!socket.connected) return;
+        const shared = parsed.data.shared === true;
+        // Moving from shared to private has to retract the old position from
+        // the players, or it simply stops updating and stays where it was.
+        if (
+          canvasEphemera.cursorActive &&
+          canvasEphemera.cursorShared &&
+          !shared
         )
-        .limit(1);
-      if (!scene) return;
-      hasBroadcastCursor = true;
-      const shared = parsed.data.shared === true;
-      // Moving from shared to private has to retract the old position from the
-      // players, or it simply stops updating and stays where it was.
-      if (lastCursorShared && !shared)
-        io.to(campaignRoom(auth.campaignId)).emit("cursor:gone", {
+          io.to(campaignRoom(auth.campaignId)).emit("cursor:gone", {
+            membershipId: auth.membershipId,
+          });
+        canvasEphemera.cursorActive = true;
+        canvasEphemera.cursorShared = shared;
+        // Fog-safety split (UIX-392): a GM can see everything, so any
+        // coordinate their cursor visits could disclose something hidden if
+        // shown to a player — the GM room is the default audience, and only
+        // the GM themselves can widen it (UIX-403). A player's own cursor never
+        // exceeds what that player can already see on their own fog-limited
+        // view (this app's fog is role-uniform, not per-player secret), so it is
+        // always safe to broadcast to the full campaign room.
+        io.to(cursorRoom(shared)).emit("cursor:moved", {
           membershipId: auth.membershipId,
+          displayName: auth.displayName,
+          role: auth.role,
+          sceneId: scene.id,
+          x: parsed.data.x,
+          y: parsed.data.y,
         });
-      lastCursorShared = shared;
-      // Fog-safety split (UIX-392): a GM can see everything, so any
-      // coordinate their cursor visits could disclose something hidden if
-      // shown to a player — the GM room is the default audience, and only the
-      // GM themselves can widen it (UIX-403). A player's own cursor never
-      // exceeds what that player can already see on their own fog-limited
-      // view (this app's fog is role-uniform, not per-player secret), so it is
-      // always safe to broadcast to the full campaign room.
-      io.to(cursorRoom(shared)).emit("cursor:moved", {
-        membershipId: auth.membershipId,
-        displayName: auth.displayName,
-        role: auth.role,
-        sceneId: scene.id,
-        x: parsed.data.x,
-        y: parsed.data.y,
       });
     });
 
-    socket.on("cursor:gone", () => {
-      if (!hasBroadcastCursor) return;
-      hasBroadcastCursor = false;
-      io.to(cursorRoom(lastCursorShared)).emit("cursor:gone", {
-        membershipId: auth.membershipId,
+    socket.on("cursor:gone", async () => {
+      if (!canvasEphemera.cursorActive) return;
+      await runCampaignCanvasRelay(db, auth.campaignId, async () => {
+        canvasEphemera.cursorActive = false;
+        io.to(cursorRoom(canvasEphemera.cursorShared)).emit("cursor:gone", {
+          membershipId: auth.membershipId,
+        });
       });
     });
 
@@ -1602,10 +1691,19 @@ export function registerRealtime(
       // cursor presence — a client-side scene switch/blur/inactivity signal
       // (cursor:gone above) covers the graceful cases, but a dropped
       // connection never gets to emit that, so it must be handled here too.
-      if (hasBroadcastCursor)
-        io.to(cursorRoom(lastCursorShared)).emit("cursor:gone", {
+      if (canvasEphemera.rulerSceneId) {
+        io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
+          sceneId: canvasEphemera.rulerSceneId,
           membershipId: auth.membershipId,
         });
+        canvasEphemera.rulerSceneId = undefined;
+      }
+      if (canvasEphemera.cursorActive) {
+        canvasEphemera.cursorActive = false;
+        io.to(cursorRoom(canvasEphemera.cursorShared)).emit("cursor:gone", {
+          membershipId: auth.membershipId,
+        });
+      }
       const key = presenceKey(auth.campaignId, auth.membershipId);
       const previous = pendingPresence.get(key);
       if (previous) clearTimeout(previous);
@@ -1629,6 +1727,12 @@ export function registerRealtime(
 declare module "socket.io" {
   interface SocketData {
     auth: SessionAuthContext;
+    /** UIX-583: only enough metadata to retract already relayed ephemera. */
+    canvasEphemera?: {
+      rulerSceneId?: string;
+      cursorActive?: boolean;
+      cursorShared?: boolean;
+    };
     /**
      * UIX-408: сцена, которую мастер рассматривает, не переключая игроков.
      * Живёт на сокете, а не в базе: это состояние взгляда, а не кампании, и

@@ -13,6 +13,7 @@ import {
   isGameEventActionConflict,
   registerCampaignPauseRoutes,
 } from "./campaign-pause.js";
+import { broadcastCampaignPauseSnapshot } from "./routes.js";
 
 describe("isGameEventActionConflict", () => {
   const relevant = {
@@ -44,6 +45,11 @@ let database: PGlite;
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 let broadcasts: string[] = [];
+let transitions: Array<{
+  campaignId: string;
+  paused: boolean;
+  revision: number;
+}> = [];
 let failNextBroadcast = false;
 
 const ids = {
@@ -140,18 +146,30 @@ beforeAll(async () => {
 
   app = Fastify();
   await app.register(cookie);
-  registerCampaignPauseRoutes(app, db as never, async (campaignId) => {
-    if (failNextBroadcast) {
-      failNextBroadcast = false;
-      throw new Error("TEST_BROADCAST_FAILED");
-    }
-    broadcasts.push(campaignId);
-  });
+  registerCampaignPauseRoutes(
+    app,
+    db as never,
+    async (campaignId) => {
+      if (failNextBroadcast) {
+        failNextBroadcast = false;
+        throw new Error("TEST_BROADCAST_FAILED");
+      }
+      broadcasts.push(campaignId);
+    },
+    async (campaignId, state) => {
+      transitions.push({
+        campaignId,
+        paused: state.paused,
+        revision: state.revision,
+      });
+    },
+  );
   await app.ready();
 });
 
 beforeEach(async () => {
   broadcasts = [];
+  transitions = [];
   failNextBroadcast = false;
   await db.delete(schema.gameEvents);
   await db
@@ -303,6 +321,60 @@ describe("сервер-авторитетная пауза кампании", ()
     expect(await storedCampaign()).toMatchObject({ paused: true, revision: 1 });
     expect(await db.select().from(schema.gameEvents)).toHaveLength(1);
     expect(broadcasts).toEqual([ids.campaign, ids.campaign]);
+  });
+
+  it("не повторяет transition cleanup старой pause-команды после resume", async () => {
+    const pausedBody = {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      paused: true,
+    };
+    expect((await command(secrets.gm, pausedBody)).statusCode).toBe(200);
+    expect(
+      (
+        await command(secrets.gm, {
+          revision: 1,
+          paused: false,
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const replayed = await command(secrets.gm, pausedBody);
+
+    expect(replayed.statusCode).toBe(200);
+    expect(await storedCampaign()).toMatchObject({
+      paused: false,
+      revision: 2,
+    });
+    expect(transitions).toEqual([
+      { campaignId: ids.campaign, paused: true, revision: 1 },
+      { campaignId: ids.campaign, paused: false, revision: 2 },
+    ]);
+    expect(broadcasts).toEqual([ids.campaign, ids.campaign, ids.campaign]);
+
+    let snapshotFetches = 0;
+    const io = {
+      in: () => ({
+        fetchSockets: async () => {
+          snapshotFetches += 1;
+          return [];
+        },
+      }),
+    };
+    await expect(
+      broadcastCampaignPauseSnapshot(io as never, db as never, ids.campaign, {
+        paused: true,
+        revision: 1,
+      }),
+    ).resolves.toBe(false);
+    expect(snapshotFetches).toBe(0);
+    await expect(
+      broadcastCampaignPauseSnapshot(io as never, db as never, ids.campaign, {
+        paused: false,
+        revision: 2,
+      }),
+    ).resolves.toBe(true);
+    expect(snapshotFetches).toBe(1);
   });
 
   it("повторяет snapshot broadcast после ошибки рассылки зафиксированной команды", async () => {

@@ -14,7 +14,15 @@ import { requireAuth } from "./auth.js";
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type PauseDb = Database | Transaction;
-type Broadcast = (campaignId: string) => Promise<void>;
+type Transition = (
+  campaignId: string,
+  state: CampaignPauseState,
+  tx: Transaction,
+) => Promise<void>;
+type Broadcast = (
+  campaignId: string,
+  state: CampaignPauseState,
+) => Promise<void>;
 
 type PauseReceiptPayload = {
   commandHash: string;
@@ -124,6 +132,7 @@ async function executePause(
   auth: AuthContext,
   body: CampaignPauseCommand,
   hash: string,
+  transition: Transition,
 ): Promise<PauseResult> {
   return db.transaction(async (tx) => {
     // Граница UIX-582/583: каждый переход паузы сериализуется на строке
@@ -182,6 +191,9 @@ async function executePause(
       entityRevision: response.revision,
       payload: { commandHash: hash, response } satisfies PauseReceiptPayload,
     });
+    // UIX-583: transition-side ephemeral cleanup stays under the same
+    // campaign FOR UPDATE lock. Resume and later relays cannot overtake it.
+    await transition(auth.campaignId, response, tx);
     return { kind: "UPDATED", response };
   });
 }
@@ -212,6 +224,7 @@ export function registerCampaignPauseRoutes(
   app: FastifyInstance,
   db: Database,
   broadcast: Broadcast,
+  transition: Transition = async () => undefined,
 ) {
   app.post("/api/campaign/pause", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
@@ -222,7 +235,7 @@ export function registerCampaignPauseRoutes(
     const hash = commandHash(auth.campaignId, body);
     let result: PauseResult;
     try {
-      result = await executePause(db, auth, body, hash);
+      result = await executePause(db, auth, body, hash, transition);
     } catch (error) {
       if (!isGameEventActionConflict(error)) throw error;
       const raced = await replay(db, auth, body.actionId, hash);
@@ -235,7 +248,7 @@ export function registerCampaignPauseRoutes(
     // Повторная рассылка на REPLAY восстанавливает клиентов, если транзакция
     // уже зафиксировалась, а первая рассылка завершилась ошибкой или частично.
     if (result.kind === "UPDATED" || result.kind === "REPLAY")
-      await broadcast(auth.campaignId);
+      await broadcast(auth.campaignId, result.response);
     return sendResult(reply, result);
   });
 }

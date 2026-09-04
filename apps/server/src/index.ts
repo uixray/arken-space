@@ -15,6 +15,7 @@ import { registerRealtime } from "./realtime.js";
 import { registerRoutes } from "./routes.js";
 import { ensureSeed } from "./seed.js";
 import { requestActionId } from "./telemetry.js";
+import { isCampaignCanvasGuardError } from "./campaign-pause-guard.js";
 
 const app = Fastify({
   logger: { level: env.NODE_ENV === "production" ? "info" : "debug" },
@@ -83,6 +84,8 @@ app.setErrorHandler((error, request, reply) => {
   if (statusCode >= 500)
     request.log.error(details, "request.unexpected_failure");
   else request.log.warn(details, "request.rejected");
+  if (isCampaignCanvasGuardError(error))
+    return reply.code(error.statusCode).send({ error: error.code });
   if (isValidationError)
     return reply.code(400).send({
       error: "VALIDATION_ERROR",
