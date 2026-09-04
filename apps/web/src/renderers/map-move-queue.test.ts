@@ -51,6 +51,22 @@ describe("MapMoveQueue", () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it("reports a terminal failure exactly once with the failed request", async () => {
+    const reason = new Error("STALE_REVISION");
+    const onFailure = vi.fn();
+    const queue = new MapMoveQueue(
+      vi.fn().mockRejectedValue(reason),
+      onFailure,
+    );
+    queue.reset("scene:TOKEN:t1", token());
+    queue.enqueue(token(), { x: 3, y: 4 });
+    await vi.waitFor(() => expect(onFailure).toHaveBeenCalledTimes(1));
+    expect(onFailure).toHaveBeenCalledWith(reason, {
+      targets: token(),
+      delta: { x: 3, y: 4 },
+    });
+  });
+
   it("drops pending work when scene or selection scope changes", async () => {
     const first = deferred<ReturnType<typeof ack>>();
     const execute = vi.fn().mockReturnValueOnce(first.promise);

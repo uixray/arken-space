@@ -29,6 +29,12 @@ import { fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
+  pruneSelectionIds,
+  rectanglesIntersect,
+  selectionSummary,
+  toggleSelectionId,
+} from "./map-selection";
+import {
   appendRulerWaypoint,
   canMoveMapToken,
   clearSettledTokenResizeDraft,
@@ -195,8 +201,13 @@ function TokenImage({
 }
 
 export function Orthographic2DRenderer(props: SceneRendererProps) {
-  const { canvasEditMode, onCanvasEditCancel, onBulkMove, onToolSelect } =
-    props;
+  const {
+    canvasEditMode,
+    onCanvasEditCancel,
+    onBulkMove,
+    onBulkMoveFailure,
+    onToolSelect,
+  } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const objectListRef = useRef<HTMLDivElement>(null);
   const objectListTriggerRef = useRef<HTMLButtonElement>(null);
@@ -206,6 +217,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     undefined,
     createInitialMapInteractionState,
   );
+  const [moveRecoveryEpoch, setMoveRecoveryEpoch] = useState(0);
   const moveQueue = useMemo(
     () =>
       new MapMoveQueue(async () => {
@@ -219,6 +231,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       return onBulkMove(targets, delta);
     });
   }, [moveQueue, onBulkMove]);
+  useEffect(() => {
+    moveQueue.setFailureHandler(async (reason) => {
+      await onBulkMoveFailure?.(reason);
+      setMoveRecoveryEpoch((epoch) => epoch + 1);
+    });
+  }, [moveQueue, onBulkMoveFailure]);
   const fogMaskRef = useRef<Konva.Group>(null);
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   const [scale, setScale] = useState(1);
@@ -241,6 +259,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     onSelectionChangeRef.current?.(selectedTokenIds);
   }, [selectedTokenIds, onSelectionChangeRef]);
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([]);
+  const [bulkDeleteRequested, setBulkDeleteRequested] = useState(false);
+  useEffect(() => {
+    if (selectedTokenIds.length + selectedDrawingIds.length === 0)
+      setBulkDeleteRequested(false);
+  }, [selectedTokenIds.length, selectedDrawingIds.length]);
   const [marquee, setMarquee] = useState<{
     startX: number;
     startY: number;
@@ -846,6 +869,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         .filter(
           (token) =>
             selectedTokenIds.includes(token.id) &&
+            token.layer !== "MAP" &&
             !token.locked &&
             (props.role === "GM" ||
               token.controllerMembershipIds.includes(props.membershipId)),
@@ -878,7 +902,17 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   }, [moveQueue, moveScope, movableTargets]);
   const enqueueMove = (delta: { x: number; y: number }) =>
     moveQueue.enqueue(movableTargets, delta);
-  const selectObject = (ref: MapObjectRef) => {
+  const selectObject = (ref: MapObjectRef, additive = false) => {
+    if (additive) {
+      dispatchInteraction({ type: "clear-selection" });
+      if (ref.kind === "token")
+        setSelectedTokenIds((ids) => toggleSelectionId(ids, ref.objectId));
+      else {
+        setSelectedDrawingIds((ids) => toggleSelectionId(ids, ref.objectId));
+        setSelectedDrawingId(null);
+      }
+      return;
+    }
     dispatchInteraction({ type: "select", ref });
     setSelectedTokenIds(ref.kind === "token" ? [ref.objectId] : []);
     setSelectedDrawingIds(ref.kind === "drawing" ? [ref.objectId] : []);
@@ -901,7 +935,28 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     else dispatchInteraction({ type: "clear-selection" });
   };
   const requestSelectedDelete = () => {
-    if (interaction.selectedObject) requestDelete(interaction.selectedObject);
+    if (selectedTokenIds.length + selectedDrawingIds.length > 1) {
+      setBulkDeleteRequested(true);
+    } else if (interaction.selectedObject)
+      requestDelete(interaction.selectedObject);
+    else if (selectedTokenIds.length + selectedDrawingIds.length === 1)
+      setBulkDeleteRequested(true);
+  };
+  const confirmBulkDelete = async () => {
+    if (!props.onBulkDelete) return;
+    try {
+      await props.onBulkDelete({
+        tokenIds: selectedTokenIds,
+        drawingIds: selectedDrawingIds,
+      });
+      setBulkDeleteRequested(false);
+      setSelectedTokenIds([]);
+      setSelectedDrawingIds([]);
+      setSelectedDrawingId(null);
+    } catch {
+      // The app presents the mutation error. Preserve both confirmation and
+      // selection so the user can retry or cancel without losing context.
+    }
   };
   useLayoutEffect(() => {
     if (!tokenMenu) return;
@@ -1067,6 +1122,33 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     selectableObjects.tokens,
     selectableObjects.drawings,
   ]);
+  const editableTokenSelectionKey = selectableObjects.tokens
+    .filter(
+      (token) =>
+        token.layer !== "MAP" &&
+        !token.locked &&
+        (props.role === "GM" ||
+          token.controllerMembershipIds.includes(props.membershipId)),
+    )
+    .map((token) => token.id)
+    .join("\u0000");
+  const editableDrawingSelectionKey = selectableObjects.drawings
+    .map((drawing) => drawing.id)
+    .join("\u0000");
+  useEffect(() => {
+    const tokenIds = new Set(
+      editableTokenSelectionKey
+        ? editableTokenSelectionKey.split("\u0000")
+        : [],
+    );
+    const drawingIds = new Set(
+      editableDrawingSelectionKey
+        ? editableDrawingSelectionKey.split("\u0000")
+        : [],
+    );
+    setSelectedTokenIds((ids) => pruneSelectionIds(ids, tokenIds));
+    setSelectedDrawingIds((ids) => pruneSelectionIds(ids, drawingIds));
+  }, [editableTokenSelectionKey, editableDrawingSelectionKey]);
 
   const { onDrawingDelete, onTokenDelete } = props;
   useEffect(() => {
@@ -1267,7 +1349,12 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       return;
     }
     if (event.evt.button === 0 && event.evt.ctrlKey) return;
-    if (event.evt.button === 0 && targetIsCanvas && props.tool === "PAN") {
+    if (
+      event.evt.button === 0 &&
+      event.evt.shiftKey &&
+      targetIsCanvas &&
+      props.tool === "PAN"
+    ) {
       const point = pointerInWorld();
       if (point)
         setMarquee({
@@ -1420,47 +1507,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const handlePointerUp = async () => {
     panStartRef.current = null;
     if (marquee) {
-      const intersects = (rect: {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      }) =>
-        rect.x < marquee.x + marquee.width &&
-        rect.x + rect.width > marquee.x &&
-        rect.y < marquee.y + marquee.height &&
-        rect.y + rect.height > marquee.y;
       setSelectedTokenIds(
-        props.tokens
+        selectableObjects.tokens
           .filter(
             (token) =>
-              !token.id.startsWith("pending:") &&
-              canSelectToken(token, {
-                role: props.role,
-                membershipId: props.membershipId,
-                fogReveals: orderedFogReveals,
-                world: worldDraft,
-                showGmLayer,
-              }) &&
               token.layer !== "MAP" &&
               !token.locked &&
               (props.role === "GM" ||
                 token.controllerMembershipIds.includes(props.membershipId)),
           )
-          .filter((token) => intersects(token))
+          .filter((token) => rectanglesIntersect(marquee, token))
           .map((token) => token.id),
       );
       setSelectedDrawingIds(
-        props.drawings
-          .filter(
-            (drawing) =>
-              props.role === "GM" ||
-              drawing.authorMembershipId === props.membershipId,
-          )
+        selectableObjects.drawings
           .filter((drawing) => {
             const xs = drawing.points.filter((_, index) => index % 2 === 0);
             const ys = drawing.points.filter((_, index) => index % 2 === 1);
-            return intersects({
+            return rectanglesIntersect(marquee, {
               x: drawing.x + Math.min(...xs),
               y: drawing.y + Math.min(...ys),
               width: Math.max(...xs) - Math.min(...xs),
@@ -1914,11 +1978,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             })
           )
             return;
-          selectObject({
-            kind: "token",
-            objectId: token.id,
-            revision: token.revision,
-          });
+          selectObject(
+            { kind: "token", objectId: token.id, revision: token.revision },
+            event.evt.shiftKey,
+          );
         }}
         onContextMenu={(event) => {
           event.evt.preventDefault();
@@ -2386,6 +2449,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         </div>
       )}
       <Stage
+        key={moveRecoveryEpoch}
         ref={stageRef}
         width={viewport.width}
         height={viewport.height}
@@ -2731,12 +2795,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 shadowBlur={
                   selectedDrawingIds.includes(drawing.id) ? 10 / scale : 0
                 }
-                onClick={() => {
-                  selectObject({
-                    kind: "drawing",
-                    objectId: drawing.id,
-                    revision: drawing.revision,
-                  });
+                onClick={(event) => {
+                  selectObject(
+                    {
+                      kind: "drawing",
+                      objectId: drawing.id,
+                      revision: drawing.revision,
+                    },
+                    event.evt.shiftKey,
+                  );
                 }}
                 onDragEnd={(event) => {
                   if (
@@ -3132,6 +3199,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onClose={() => dispatchInteraction({ type: "cancel-delete" })}
         onConfirm={() => dispatchInteraction({ type: "confirm-delete" })}
       />
+      <ConfirmDialog
+        open={bulkDeleteRequested}
+        title="Удалить выбранные объекты?"
+        message={selectionSummary({
+          tokenIds: selectedTokenIds,
+          drawingIds: selectedDrawingIds,
+        })}
+        onClose={() => setBulkDeleteRequested(false)}
+        onConfirm={() => void confirmBulkDelete()}
+      />
       {props.canvasEditMode === "BACKGROUND" && (
         <label className="aspect-lock">
           <input
@@ -3331,18 +3408,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             GM
           </label>
         )}
+        {selectedTokenIds.length + selectedDrawingIds.length > 0 && (
+          <output aria-label="Выбрано объектов">
+            {selectionSummary({
+              tokenIds: selectedTokenIds,
+              drawingIds: selectedDrawingIds,
+            })}
+          </output>
+        )}
         {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
-          <button
-            onClick={() => {
-              void props.onBulkDelete?.({
-                tokenIds: selectedTokenIds,
-                drawingIds: selectedDrawingIds,
-              });
-              setSelectedTokenIds([]);
-              setSelectedDrawingIds([]);
-              setSelectedDrawingId(null);
-            }}
-          >
+          <button onClick={() => setBulkDeleteRequested(true)}>
             Удалить выбранное
           </button>
         )}

@@ -13,6 +13,10 @@ export type MapMoveAck = {
 };
 export type MapMoveRequest = { targets: MapMoveTarget[]; delta: MapMoveDelta };
 export type MapMoveExecutor = (request: MapMoveRequest) => Promise<MapMoveAck>;
+export type MapMoveFailureHandler = (
+  reason: unknown,
+  request: MapMoveRequest,
+) => void | Promise<void>;
 
 const selectionKey = (targets: readonly MapMoveTarget[]) =>
   [...targets]
@@ -29,10 +33,17 @@ export class MapMoveQueue {
   private revisions = new Map<string, number>();
   private latestScopeRevisions = new Map<string, number>();
 
-  constructor(private execute: MapMoveExecutor) {}
+  constructor(
+    private execute: MapMoveExecutor,
+    private onFailure?: MapMoveFailureHandler,
+  ) {}
 
   setExecutor(execute: MapMoveExecutor) {
     this.execute = execute;
+  }
+
+  setFailureHandler(onFailure?: MapMoveFailureHandler) {
+    this.onFailure = onFailure;
   }
 
   reset(scope: string, targets: readonly MapMoveTarget[]) {
@@ -94,11 +105,12 @@ export class MapMoveQueue {
             this.revisions.get(`${target.targetType}:${target.targetId}`) ??
             target.revision,
         }));
-    } catch {
+    } catch (reason) {
       // Conflicts and other failures are terminal for this gesture: never retry.
       if (generation === this.generation) {
         this.pending = null;
         this.revisions = new Map(this.latestScopeRevisions);
+        await this.onFailure?.(reason, request);
       }
     } finally {
       this.inFlight = false;
