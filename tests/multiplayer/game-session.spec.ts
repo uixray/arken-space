@@ -7,6 +7,11 @@ import {
   type Page,
 } from "@playwright/test";
 import { io, type Socket } from "socket.io-client";
+import { eq } from "drizzle-orm";
+import {
+  createDatabase,
+  tokens as tokenRows,
+} from "../../packages/db/src/index.js";
 import type {
   AssetDto,
   ClientToServerEvents,
@@ -178,6 +183,7 @@ async function uploadImage(
   request: APIRequestContext,
   kind: "MAP" | "TOKEN",
   name: string,
+  buffer = imageBuffer,
 ) {
   const response = await expectOk(
     await request.post(baseUrl + "/api/assets?kind=" + kind, {
@@ -186,12 +192,49 @@ async function uploadImage(
         file: {
           name,
           mimeType: "image/png",
-          buffer: imageBuffer,
+          buffer,
         },
       },
     }),
   );
   return (await response.json()) as AssetDto;
+}
+
+function solidImage(red: number, green: number, blue: number) {
+  const cyan =
+    "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAARSURBVBhXY2D4//8/CiZdAABCVi/RzV1YtQAAAABJRU5ErkJggg==";
+  const magenta =
+    "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAASSURBVBhXY/jP8P8/MmYgXQAAUkYv0QSe4rkAAAAASUVORK5CYII=";
+  return Buffer.from(
+    red === 0 && green === 255 && blue === 255 ? cyan : magenta,
+    "base64",
+  );
+}
+async function coloredPixels(page: Page, color: "CYAN" | "MAGENTA") {
+  return page.locator(".map-viewport").evaluate((viewport, expected) => {
+    let count = 0;
+    for (const canvas of viewport.querySelectorAll("canvas")) {
+      const context = canvas.getContext("2d");
+      if (!context) continue;
+      const pixels = context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      ).data;
+      for (let offset = 0; offset < pixels.length; offset += 4) {
+        const red = pixels[offset]!;
+        const green = pixels[offset + 1]!;
+        const blue = pixels[offset + 2]!;
+        if (
+          (expected === "CYAN" && red < 35 && green > 220 && blue > 220) ||
+          (expected === "MAGENTA" && red > 220 && green < 35 && blue > 220)
+        )
+          count += 1;
+      }
+    }
+    return count;
+  }, color);
 }
 
 async function activateScene(
@@ -567,6 +610,248 @@ test("GM and six isolated players recover authoritative state without security l
     connections.push(gmConnection);
     for (let index = 0; index < 5; index += 1)
       connections.push(await connectSocket(players[index]));
+
+    // UIX-491: the definition image is canonical across both movement paths.
+    // Use saturated generated colors so this proves the live canvas, not only
+    // another pair of matching JSON payloads.
+    const imageA = await uploadImage(
+      gm.request,
+      "TOKEN",
+      "uix491-magenta.png",
+      await solidImage(255, 0, 255),
+    );
+    const imageB = await uploadImage(
+      gm.request,
+      "TOKEN",
+      "uix491-cyan.png",
+      await solidImage(0, 255, 255),
+    );
+    const imagePlacementResponse = await expectOk(
+      await gm.request.post(baseUrl + "/api/tokens", {
+        data: {
+          actionId: actionId(),
+          sceneId: initialScene.id,
+          characterId: characters[0]!.id,
+          name: runTag + " UIX-491 image continuity",
+          x: 640,
+          y: 512,
+        },
+      }),
+    );
+    let imageToken = (await imagePlacementResponse.json()) as TokenDto;
+    const imageDefinitionId = imageToken.definitionId;
+    const replaceImage = async (assetId: string) => {
+      const gmNext = waitForSnapshot(connections[0]!.socket, (candidate) =>
+        candidate.tokens.some(
+          (token) => token.id === imageToken.id && token.assetId === assetId,
+        ),
+      );
+      const playerNext = waitForSnapshot(connections[1]!.socket, (candidate) =>
+        candidate.tokens.some(
+          (token) => token.id === imageToken.id && token.assetId === assetId,
+        ),
+      );
+      const currentDefinition = (await bootstrap(gm)).tokenDefinitions?.find(
+        (definition) => definition.id === imageDefinitionId,
+      );
+      if (!currentDefinition) throw new Error("UIX-491 definition disappeared");
+      const response = await expectOk(
+        await gm.request.patch(
+          baseUrl + "/api/token-definitions/" + imageDefinitionId,
+          {
+            data: {
+              actionId: actionId(),
+              revision: currentDefinition.revision,
+              defaultAssetId: assetId,
+            },
+          },
+        ),
+      );
+      const [gmSnapshot, playerSnapshot] = await Promise.all([
+        gmNext,
+        playerNext,
+      ]);
+      imageToken = gmSnapshot.tokens.find(
+        (token) => token.id === imageToken.id,
+      )!;
+      const playerToken = playerSnapshot.tokens.find(
+        (token) => token.id === imageToken.id,
+      )!;
+      expect(imageToken).toMatchObject({
+        assetId,
+        definitionRevision: currentDefinition.revision + 1,
+      });
+      expect(playerToken).toMatchObject({
+        assetId,
+        definitionRevision: currentDefinition.revision + 1,
+      });
+      expect((await response.json()) as { revision: number }).toMatchObject({
+        revision: currentDefinition.revision + 1,
+      });
+      return { gmSnapshot, playerSnapshot };
+    };
+    await replaceImage(imageA.id);
+    await expect
+      .poll(() => coloredPixels(gmPage, "MAGENTA"))
+      .toBeGreaterThan(100);
+    await expect
+      .poll(() => coloredPixels(pages[0]!, "MAGENTA"))
+      .toBeGreaterThan(100);
+    const afterReplace = await replaceImage(imageB.id);
+    // GM legitimately retains A through the media library. A player may only
+    // receive assets reachable from their projected token definition.
+    expect(
+      afterReplace.playerSnapshot.assets.map((asset) => asset.id),
+    ).not.toContain(imageA.id);
+    await expect.poll(() => coloredPixels(gmPage, "CYAN")).toBeGreaterThan(100);
+    await expect
+      .poll(() => coloredPixels(pages[0]!, "CYAN"))
+      .toBeGreaterThan(100);
+
+    // Reproduce the legacy split reported by the GM: definition B is
+    // canonical while an old placement snapshot still contains A. There is
+    // intentionally no public API for creating this historical divergence.
+    const databaseUrl =
+      process.env.DATABASE_URL ??
+      "postgres://arken:arken-e2e-password@postgres:5432/arken";
+    const legacyDb = createDatabase(databaseUrl);
+    try {
+      await legacyDb.db
+        .update(tokenRows)
+        .set({ assetId: imageA.id })
+        .where(eq(tokenRows.id, imageToken.id));
+    } finally {
+      await legacyDb.client.end();
+    }
+    const canonicalDefinitionRevision = imageToken.definitionRevision;
+
+    // Actual browser drag, then the explicit bulk path.
+    const imageMap = pages[0]!.locator(".map-viewport");
+    const imageMapBounds = await imageMap.boundingBox();
+    if (!imageMapBounds) throw new Error("UIX-491 map not visible");
+    await pages[0]!.mouse.move(
+      imageMapBounds.x + imageToken.x + imageToken.width / 2,
+      imageMapBounds.y + imageToken.y + imageToken.height / 2,
+    );
+    await pages[0]!.mouse.down();
+    await pages[0]!.mouse.move(
+      imageMapBounds.x + imageToken.x + imageToken.width / 2 + 32,
+      imageMapBounds.y + imageToken.y + imageToken.height / 2 + 16,
+      { steps: 5 },
+    );
+    await pages[0]!.mouse.up();
+    await expect
+      .poll(async () => {
+        const token = (await bootstrap(gm)).tokens.find(
+          (candidate) => candidate.id === imageToken.id,
+        );
+        return token?.revision ?? imageToken.revision;
+      })
+      .toBeGreaterThan(imageToken.revision);
+    imageToken = (await bootstrap(gm)).tokens.find(
+      (token) => token.id === imageToken.id,
+    )!;
+    for (const context of [gm, players[0]!]) {
+      expect(
+        (await bootstrap(context)).tokens.find(
+          (token) => token.id === imageToken.id,
+        ),
+      ).toMatchObject({
+        assetId: imageB.id,
+        definitionRevision: canonicalDefinitionRevision,
+      });
+    }
+    await expect.poll(() => coloredPixels(gmPage, "CYAN")).toBeGreaterThan(100);
+    await expect
+      .poll(() => coloredPixels(pages[0]!, "CYAN"))
+      .toBeGreaterThan(100);
+
+    const bulkAction = actionId();
+    const bulkPayload = {
+      actionId: bulkAction,
+      sceneId: initialScene.id,
+      operation: "MOVE",
+      deltaX: 24,
+      deltaY: 12,
+      targets: [
+        {
+          targetType: "TOKEN",
+          targetId: imageToken.id,
+          revision: imageToken.revision,
+        },
+      ],
+    };
+    await expectOk(
+      await players[0]!.request.post(baseUrl + "/api/canvas/bulk", {
+        data: bulkPayload,
+      }),
+    );
+    const replay = await expectOk(
+      await players[0]!.request.post(baseUrl + "/api/canvas/bulk", {
+        data: bulkPayload,
+      }),
+    );
+    expect(await replay.json()).toMatchObject({ duplicate: true });
+    const stale = await players[0]!.request.post(baseUrl + "/api/canvas/bulk", {
+      data: { ...bulkPayload, actionId: actionId() },
+    });
+    expect(stale.status()).toBe(409);
+    imageToken = (await bootstrap(gm)).tokens.find(
+      (token) => token.id === imageToken.id,
+    )!;
+    expect(imageToken).toMatchObject({
+      assetId: imageB.id,
+      definitionRevision: canonicalDefinitionRevision,
+      revision: bulkPayload.targets[0]!.revision + 1,
+    });
+
+    const gmResync = waitForSnapshot(connections[0]!.socket, (snapshot) =>
+      snapshot.tokens.some(
+        (token) => token.id === imageToken.id && token.assetId === imageB.id,
+      ),
+    );
+    const playerResync = waitForSnapshot(connections[1]!.socket, (snapshot) =>
+      snapshot.tokens.some(
+        (token) => token.id === imageToken.id && token.assetId === imageB.id,
+      ),
+    );
+    connections[0]!.socket.emit("game:resync", 0);
+    connections[1]!.socket.emit("game:resync", 0);
+    const resyncSnapshots = await Promise.all([gmResync, playerResync]);
+    for (const snapshot of resyncSnapshots) {
+      expect(
+        snapshot.tokens.find((token) => token.id === imageToken.id),
+      ).toMatchObject({
+        assetId: imageB.id,
+        definitionRevision: canonicalDefinitionRevision,
+      });
+    }
+    expect(resyncSnapshots[1]!.assets.map((asset) => asset.id)).not.toContain(
+      imageA.id,
+    );
+    await pages[0]!.reload();
+    expect(
+      (await bootstrap(players[0]!)).tokens.find(
+        (token) => token.id === imageToken.id,
+      ),
+    ).toMatchObject({
+      assetId: imageB.id,
+      definitionRevision: canonicalDefinitionRevision,
+    });
+    await expect
+      .poll(() => coloredPixels(pages[0]!, "CYAN"))
+      .toBeGreaterThan(100);
+    await expectOk(
+      await gm.request.delete(
+        baseUrl + "/api/token-definitions/" + imageDefinitionId,
+        {
+          data: {
+            actionId: actionId(),
+            revision: canonicalDefinitionRevision,
+          },
+        },
+      ),
+    );
 
     await openWorkspaceSection(gmPage, "Подготовка");
     const setupDialog = gmPage.getByRole("dialog", { name: "Подготовка" });
