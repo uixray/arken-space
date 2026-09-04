@@ -2,6 +2,25 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { parseSkillCard, SkillChatCard, type SkillCard } from "./SkillCards";
+import { CampaignStatLabelsProvider } from "./campaign-stat-labels-context";
+
+function renderCard(card: SkillCard) {
+  return renderToStaticMarkup(
+    createElement(CampaignStatLabelsProvider, {
+      layout: [
+        {
+          id: "stats",
+          label: "Характеристики",
+          rows: [
+            { key: "agility", label: "Ловкость", source: "STAT" },
+            { key: "strength", label: "Сила", source: "STAT" },
+          ],
+        },
+      ],
+      children: createElement(SkillChatCard, { card }),
+    }),
+  );
+}
 
 const dice = {
   total: 17,
@@ -110,22 +129,16 @@ describe("SkillChatCard (UIX-389 formula humanization)", () => {
   };
 
   it("never renders the raw stat key from the formula", () => {
-    const html = renderToStaticMarkup(
-      createElement(SkillChatCard, { card: baseCard }),
-    );
+    const html = renderCard(baseCard);
     expect(html).toContain("Ловкость");
     expect(html).not.toContain("agility");
   });
 
   it("humanizes every stat token for a multi-stat formula", () => {
-    const html = renderToStaticMarkup(
-      createElement(SkillChatCard, {
-        card: {
-          ...baseCard,
-          action: { ...baseCard.action!, formula: "1d20 + strength + agility" },
-        },
-      }),
-    );
+    const html = renderCard({
+      ...baseCard,
+      action: { ...baseCard.action!, formula: "1d20 + strength + agility" },
+    });
     expect(html).toContain("Сила");
     expect(html).toContain("Ловкость");
     expect(html).not.toContain("strength");

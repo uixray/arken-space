@@ -12,6 +12,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
@@ -481,7 +482,15 @@ describe("UIX-474 asset content", () => {
     ).toMatchObject({ defaultAssetId: replacementAssetId, revision: 1 });
     expect(
       storedPlacements.find((token) => token.id === placementId),
-    ).toMatchObject({ assetId: ids.token });
+    ).toMatchObject({ assetId: replacementAssetId });
+
+    // The current writer cascades the canonical asset (UIX-614). Recreate a
+    // legacy row explicitly so the snapshot ACL regression remains independent
+    // of that writer and still protects previously persisted placements.
+    await db
+      .update(schema.tokens)
+      .set({ assetId: ids.token })
+      .where(eq(schema.tokens.id, placementId));
 
     const playerBootstrap = await app.inject({
       method: "GET",
