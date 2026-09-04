@@ -13,6 +13,41 @@ export type MapTool = MapToolId;
 
 export type Point = Readonly<{ x: number; y: number }>;
 
+export function resolveTokenMoveKey(input: {
+  key: string;
+  repeat: boolean;
+  tool: MapTool;
+  hasSelectedToken: boolean;
+  gridEnabled: boolean;
+  gridSize: number;
+  shiftKey: boolean;
+}): { delta: Point | null } | null {
+  const key = input.key.toLowerCase();
+  if (
+    input.tool !== "PAN" ||
+    !input.hasSelectedToken ||
+    !["w", "a", "s", "d"].includes(key)
+  )
+    return null;
+  if (input.repeat) return { delta: null };
+  const step =
+    (input.gridEnabled ? input.gridSize : 8) * (input.shiftKey ? 5 : 1);
+  return {
+    delta: {
+      x: key === "a" ? -step : key === "d" ? step : 0,
+      y: key === "w" ? -step : key === "s" ? step : 0,
+    },
+  };
+}
+
+export function shouldSuppressCtrlPing(input: {
+  tool: MapTool;
+  ctrlKey: boolean;
+  waypointCommitted: boolean;
+}) {
+  return input.tool === "RULER" && input.ctrlKey && input.waypointCommitted;
+}
+
 export function shouldBeginMapPan(
   button: number,
   tool: MapTool,

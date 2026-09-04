@@ -39,6 +39,8 @@ import {
   resolveMapToolShortcut,
   resolveMapWheelGesture,
   rulerDraftPoints,
+  resolveTokenMoveKey,
+  shouldSuppressCtrlPing,
   shouldBeginMapPan,
   startRulerDraft,
   type MapObjectRef,
@@ -417,6 +419,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   // drives the actual redraw.
   const [rulerDraft, setRulerDraft] = useState<RulerDraft | null>(null);
   const rulerDraftRef = useRef<RulerDraft | null>(null);
+  const suppressCtrlPingRef = useRef(false);
   const setRulerDraftState = (next: RulerDraft | null) => {
     rulerDraftRef.current = next;
     setRulerDraft(next);
@@ -449,6 +452,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       if (!current) return;
       const next = appendRulerWaypoint(current);
       if (next === current) return;
+      suppressCtrlPingRef.current = true;
       setRulerDraftState(next);
       props.socket?.emit("ruler:update", {
         sceneId: props.scene.id,
@@ -457,7 +461,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       event.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Control") suppressCtrlPingRef.current = false;
+    };
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [props.tool, props.socket, props.scene.id]);
   const [mapImage] = useImage(
     props.assets.find((asset) => asset.id === props.scene.mapAssetId)?.url ??
@@ -872,6 +883,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       props.membershipId,
     ],
   );
+  const keyboardTokenTargets = movableTargets.filter(
+    (target) => target.targetType === "TOKEN",
+  );
   const moveScope = mapMoveSelectionKey(props.scene.id, movableTargets);
   useEffect(() => {
     moveQueue.reset(moveScope, movableTargets);
@@ -949,11 +963,23 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     )
       return;
     const step = 48;
+    const tokenMove = resolveTokenMoveKey({
+      key: event.key,
+      repeat: event.repeat,
+      tool: props.tool,
+      hasSelectedToken: keyboardTokenTargets.length > 0,
+      gridEnabled: props.scene.grid.enabled,
+      gridSize: props.scene.grid.size,
+      shiftKey: event.shiftKey,
+    });
     const escapeIntent = resolveMapEscapeIntent({
       key: event.key,
       objectListOpen: interaction.objectListOpen,
     });
-    if (escapeIntent === "close-object-list") {
+    if (tokenMove) {
+      if (tokenMove.delta)
+        moveQueue.enqueue(keyboardTokenTargets, tokenMove.delta);
+    } else if (escapeIntent === "close-object-list") {
       // The list is the top-most map layer. Let the reducer close only that
       // layer; clearing the renderer's parallel selection arrays here would
       // make the first Escape skip straight through to the selected object.
@@ -1232,6 +1258,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
 
   const handleClick = (event: Konva.KonvaEventObject<MouseEvent>) => {
+    if (
+      shouldSuppressCtrlPing({
+        tool: props.tool,
+        ctrlKey: event.evt.ctrlKey,
+        waypointCommitted: suppressCtrlPingRef.current,
+      })
+    ) {
+      suppressCtrlPingRef.current = false;
+      return;
+    }
     if (event.evt.button !== 0 || (props.tool !== "PING" && !event.evt.ctrlKey))
       return;
     const point = pointerInWorld();
