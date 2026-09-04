@@ -146,7 +146,7 @@ for (const role of ["GM", "PLAYER"] as const) {
   for (const width of [1280, 390]) {
     test(`UIX-584 pause blocks canvas but not sidebar (${role}, ${width})`, async ({
       page,
-    }) => {
+    }, testInfo) => {
       await page.setViewportSize({ width, height: 850 });
       await installCanvasRoutes(page);
       const current: GameSnapshot = structuredClone(snapshot);
@@ -184,6 +184,16 @@ for (const role of ["GM", "PLAYER"] as const) {
       const box = await page.locator(".game-pause-overlay").boundingBox();
       expect(box).not.toBeNull();
       expect(box!.width).toBeLessThanOrEqual(width);
+      const artwork = page.locator(".game-pause-artwork");
+      await expect(artwork).toBeVisible();
+      await expect
+        .poll(() =>
+          artwork.evaluate((node) => (node as HTMLImageElement).naturalWidth),
+        )
+        .toBe(1672);
+      await expect(artwork).toHaveCSS("object-fit", "contain");
+      await expect(artwork).toHaveAttribute("alt", "");
+      await page.screenshot({ path: testInfo.outputPath("pause-artwork.png") });
       await page.keyboard.press("Control+z");
       await page.reload();
       await expect(

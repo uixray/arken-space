@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import pauseArtwork from "./assets/game-pause-rest.webp";
 
 export function GamePauseOverlay({
   paused,
   isGm,
   onToggle,
-  artwork,
+  artwork = pauseArtwork,
 }: {
   paused: boolean;
   isGm: boolean;
