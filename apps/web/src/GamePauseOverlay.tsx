@@ -55,8 +55,21 @@ export function GamePauseOverlay({
         </>
       )}
       {isGm && (
-        <button type="button" disabled={pending} onClick={() => void toggle()}>
-          {paused ? "Продолжить игру" : "Начать перерыв"}
+        <button
+          type="button"
+          aria-label={paused ? "Продолжить игру" : "Начать перерыв"}
+          title={paused ? "Продолжить игру" : "Начать перерыв"}
+          disabled={pending}
+          onClick={() => void toggle()}
+        >
+          {!paused && (
+            <span className="game-pause-control__icon" aria-hidden="true">
+              Ⅱ
+            </span>
+          )}
+          <span className="game-pause-control__label">
+            {paused ? "Продолжить игру" : "Начать перерыв"}
+          </span>
         </button>
       )}
       {error && <p role="alert">{error}</p>}

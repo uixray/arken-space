@@ -743,6 +743,19 @@ export function App() {
    */
   const { run, runResult, runWorldMapMutation, recoverFromCanvasMutation } =
     useMutationRunners({ load, setError });
+  const toggleCampaignPause = () => {
+    if (!snapshot) return Promise.resolve();
+    return runWorldMapMutation(() =>
+      api("/api/campaign/pause", {
+        method: "POST",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          revision: snapshot.campaign.revision,
+          paused: !snapshot.campaign.paused,
+        }),
+      }),
+    );
+  };
 
   // UIX-398 step A1: the scene domain, now a single stable object instead of
   // six inline arrows rebuilt on every render.
@@ -1709,24 +1722,24 @@ export function App() {
             className={`map-shell${workspaceHidden ? " is-workspace-hidden" : ""}`}
             aria-hidden={workspaceHidden}
           >
-            <GamePauseOverlay
-              paused={snapshot.campaign.paused}
-              isGm={snapshot.me.role === "GM"}
-              onToggle={() =>
-                runWorldMapMutation(() =>
-                  api("/api/campaign/pause", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      revision: snapshot.campaign.revision,
-                      paused: !snapshot.campaign.paused,
-                    }),
-                  }),
-                )
-              }
-            />
+            {snapshot.campaign.paused && (
+              <GamePauseOverlay
+                paused={snapshot.campaign.paused}
+                isGm={snapshot.me.role === "GM"}
+                onToggle={toggleCampaignPause}
+              />
+            )}
             {!snapshot.campaign.paused && (
               <MapToolbar
+                pauseControl={
+                  snapshot.me.role === "GM" && !previewSnapshot ? (
+                    <GamePauseOverlay
+                      paused={false}
+                      isGm
+                      onToggle={toggleCampaignPause}
+                    />
+                  ) : undefined
+                }
                 tool={tool}
                 onToolSelect={setTool}
                 snapshot={snapshot}

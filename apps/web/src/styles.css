@@ -593,10 +593,7 @@ code {
   overflow: visible;
 }
 .game-pause-control {
-  position: absolute;
-  z-index: 25;
-  left: 12px;
-  bottom: 48px;
+  display: grid;
 }
 .game-pause-overlay {
   position: absolute;
@@ -5037,4 +5034,14 @@ code {
 }
 .skip-link:focus-visible {
   transform: translateY(0);
+}
+
+.game-pause-control__icon {
+  display: none;
+}
+.map-toolbar.is-collapsed .game-pause-control__icon {
+  display: inline;
+}
+.map-toolbar.is-collapsed .game-pause-control__label {
+  display: none;
 }

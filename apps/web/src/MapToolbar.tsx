@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import type { EncounterDto, GameSnapshot, SceneDto } from "@arken/contracts";
 import type { MapTool } from "./renderers/map-interaction";
@@ -19,6 +20,7 @@ import { GridSettings } from "./renderers/GridSettings";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 
 export interface MapToolbarProps {
+  pauseControl?: ReactNode;
   tool: MapTool;
   onToolSelect: (tool: MapTool) => void;
   snapshot: GameSnapshot;
@@ -47,6 +49,7 @@ export interface MapToolbarProps {
 }
 
 export function MapToolbar({
+  pauseControl,
   tool,
   onToolSelect,
   snapshot,
@@ -185,6 +188,7 @@ export function MapToolbar({
       </button>
 
       <div className="toolbar-group">
+        {pauseControl}
         <button
           aria-label="Перемещение"
           title={`Перемещение по карте (средняя кнопка мыши) · ${shortcutLabel("PAN")}`}
