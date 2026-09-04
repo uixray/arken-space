@@ -726,6 +726,87 @@ test("Escape leaves DRAW for PAN and clears the selected map object", async ({
   ).toHaveAttribute("aria-pressed", "false");
 });
 
+test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats", async ({
+  page,
+}) => {
+  await installCanvasRoutes(page);
+  await page.route("**/api/canvas/history**", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  const moves: Array<Record<string, unknown>> = [];
+  let revision = 0;
+  await page.route("**/api/canvas/bulk", async (route) => {
+    moves.push(route.request().postDataJSON());
+    revision += 1;
+    await route.fulfill({
+      json: {
+        revisions: { tokens: { [tokenId]: revision }, drawings: {} },
+      },
+    });
+  });
+  await page.goto("/");
+
+  const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+  await page
+    .getByRole("button", { name: "Объекты карты", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Selected token", exact: true })
+    .click();
+  await map.focus();
+  await page.keyboard.press("Escape");
+
+  for (const [key, delta] of [
+    ["w", { x: 0, y: -64 }],
+    ["a", { x: -64, y: 0 }],
+    ["s", { x: 0, y: 64 }],
+    ["d", { x: 64, y: 0 }],
+  ] as const) {
+    const expectedCount = moves.length + 1;
+    await page.keyboard.press(key);
+    await expect.poll(() => moves.length).toBe(expectedCount);
+    expect(moves.at(-1)).toMatchObject({
+      sceneId,
+      operation: "MOVE",
+      deltaX: delta.x,
+      deltaY: delta.y,
+      targets: [{ targetType: "TOKEN", targetId: tokenId }],
+    });
+  }
+
+  const beforeHeldKey = moves.length;
+  await map.dispatchEvent("keydown", { key: "w", code: "KeyW" });
+  for (let index = 0; index < 8; index += 1)
+    await map.dispatchEvent("keydown", {
+      key: "w",
+      code: "KeyW",
+      repeat: true,
+    });
+  await expect.poll(() => moves.length).toBe(beforeHeldKey + 1);
+  await page.waitForTimeout(50);
+  expect(moves).toHaveLength(beforeHeldKey + 1);
+
+  // Without a movable selection, D keeps its established tool shortcut.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("d");
+  await expect(page.getByRole("button", { name: "Рисование" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(moves).toHaveLength(beforeHeldKey + 1);
+
+  // Editable descendants own their keys and never leak WASD to the map.
+  await map.evaluate((element) => {
+    const input = document.createElement("input");
+    input.setAttribute("aria-label", "Проверка ввода на карте");
+    element.append(input);
+  });
+  const input = page.getByRole("textbox", { name: "Проверка ввода на карте" });
+  await input.fill("wasd");
+  await expect(input).toHaveValue("wasd");
+  expect(moves).toHaveLength(beforeHeldKey + 1);
+});
+
 test("Ctrl+Z and Ctrl+Shift+Z call authoritative undo and redo once", async ({
   page,
 }) => {
