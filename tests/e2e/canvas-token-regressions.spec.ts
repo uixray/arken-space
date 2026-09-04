@@ -142,6 +142,85 @@ async function installCanvasRoutes(page: Page) {
   return { portraitRequestCount: () => portraitRequests };
 }
 
+test("UIX-471 GM changes condition sets through the token menu and keeps server state on rejection", async ({
+  page,
+}) => {
+  await installCanvasRoutes(page);
+  const current: GameSnapshot = structuredClone(snapshot);
+  const commands: Array<{
+    revision: number;
+    conditions: string[];
+    actionId: string;
+  }> = [];
+  let reject = false;
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({ json: current }),
+  );
+  await page.route(`**/api/tokens/${tokenId}/conditions`, async (route) => {
+    expect(route.request().method()).toBe("PATCH");
+    const body = route.request().postDataJSON();
+    commands.push(body);
+    expect(body.actionId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(body.revision).toBe(current.tokens[0].revision);
+    if (reject) {
+      await route.fulfill({ status: 409, json: { error: "CAMPAIGN_PAUSED" } });
+      return;
+    }
+    current.tokens[0].conditions = body.conditions;
+    current.tokens[0].revision += 1;
+    await route.fulfill({ json: current.tokens[0] });
+  });
+  await page.goto("/");
+  const map = page.locator(".map-viewport");
+  const openMenu = async () => {
+    const trigger = map.locator(".map-object-list-trigger");
+    await trigger.click();
+    await map
+      .locator(".map-object-list")
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await trigger.click();
+    await map.press("Enter");
+    await expect(
+      page.getByRole("group", { name: "Состояния токена" }),
+    ).toBeVisible();
+  };
+  await openMenu();
+  await page
+    .getByRole("menuitemcheckbox", { name: "Отравлен", exact: true })
+    .click();
+  await expect.poll(() => commands.length).toBe(1);
+  await openMenu();
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: /Отравлен/ }),
+  ).toHaveAttribute("aria-checked", "true");
+  await page
+    .getByRole("menuitemcheckbox", { name: "Обездвижен", exact: true })
+    .click();
+  await expect.poll(() => commands.length).toBe(2);
+  await openMenu();
+  await page.getByRole("menuitemcheckbox", { name: /Отравлен/ }).click();
+  await expect.poll(() => commands.length).toBe(3);
+  expect(commands.map((command) => command.conditions)).toEqual([
+    ["POISONED"],
+    ["POISONED", "RESTRAINED"],
+    ["RESTRAINED"],
+  ]);
+  reject = true;
+  await openMenu();
+  await page
+    .getByRole("menuitemcheckbox", { name: "Распластан", exact: true })
+    .click();
+  await expect.poll(() => commands.length).toBe(4);
+  await openMenu();
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Распластан", exact: true }),
+  ).toHaveAttribute("aria-checked", "false");
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: /Обездвижен/ }),
+  ).toHaveAttribute("aria-checked", "true");
+});
+
 async function selectTokenAndResizeFromObservableHandle(
   page: Page,
   delta = 48,

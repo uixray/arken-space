@@ -9,7 +9,7 @@ function renderCard(card: SkillCard) {
     createElement(CampaignStatLabelsProvider, {
       layout: [
         {
-          id: "stats",
+          id: "characteristics",
           label: "Характеристики",
           rows: [
             { key: "agility", label: "Ловкость", source: "STAT" },

@@ -1949,6 +1949,20 @@ export function App() {
                       }),
                     )
                   }
+                  onTokenConditionsChange={(tokenId, revision, conditions) =>
+                    run(
+                      () =>
+                        api(`/api/tokens/${tokenId}/conditions`, {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            actionId: crypto.randomUUID(),
+                            revision,
+                            conditions,
+                          }),
+                        }),
+                      true,
+                    )
+                  }
                   onTokenDelete={(tokenId, revision) =>
                     run(() =>
                       api(`/api/tokens/${tokenId}`, {

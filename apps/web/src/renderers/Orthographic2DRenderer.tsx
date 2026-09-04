@@ -20,6 +20,7 @@ import {
 } from "react-konva";
 import useImage from "use-image";
 import Konva from "konva";
+import { TokenConditionMenu } from "./TokenConditionMenu";
 import type { SceneRendererProps } from "./SceneRenderer";
 import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
@@ -2947,6 +2948,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           onPointerDown={(event) => event.stopPropagation()}
         >
           <strong>{tokenMenu.token.name}</strong>
+          {props.tokens.find((token) => token.id === tokenMenu.token.id) && (
+            <TokenConditionMenu
+              token={props.tokens.find(
+                (token) => token.id === tokenMenu.token.id,
+              )!}
+              role={props.role}
+              onChange={props.onTokenConditionsChange}
+              onClose={() => setTokenMenu(null)}
+            />
+          )}
           {tokenMenu.token.characterId && props.onOpenCharacter && (
             <button
               role="menuitem"

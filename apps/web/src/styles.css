@@ -940,6 +940,9 @@ code {
   padding: 6px 8px;
   color: var(--muted);
 }
+.token-condition-menu {
+  display: grid;
+}
 .token-context-menu button {
   border: 0;
   background: transparent;
