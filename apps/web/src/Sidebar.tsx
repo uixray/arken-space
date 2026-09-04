@@ -51,6 +51,7 @@ import { PalettePanel } from "./sidebar/TokenPalette";
 import { SetupPanel } from "./sidebar/SetupPanel";
 import { MediaPanel } from "./sidebar/MediaPanel";
 import type { CharacterCounterMutationIntent } from "./character-counter-mutation";
+import { CampaignStatLabelsProvider } from "./campaign-stat-labels-context";
 
 type SidebarFeed = "ACTIVITY" | ChatStream;
 
@@ -178,6 +179,14 @@ export type Props = {
 };
 
 export function Sidebar(props: Props) {
+  return (
+    <CampaignStatLabelsProvider layout={props.snapshot.campaign.statLayout}>
+      <SidebarContent {...props} />
+    </CampaignStatLabelsProvider>
+  );
+}
+
+function SidebarContent(props: Props) {
   // UIX-398 step B: scene commands arrive by context rather than as six props
   // threaded through every layer. See campaign-actions-context.tsx.
   const {

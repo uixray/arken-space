@@ -1436,7 +1436,7 @@ export function CharacterPanel({
                         void submitCharacterRoll(spell.formula!, spell.name)
                       }
                     >
-                      Бросить {humanizeFormula(spell.formula)}
+                      Бросить {humanizeFormula(spell.formula, statLabels)}
                     </Button>
                   )}
                 </div>
