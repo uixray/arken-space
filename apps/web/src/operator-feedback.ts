@@ -1,6 +1,19 @@
 import { api } from "./api";
 export type FeedbackStatus =
   "NEW" | "ACKNOWLEDGED" | "LINKED" | "RESOLVED" | "DISMISSED";
+export const OPERATOR_FEEDBACK_TITLE = "Обратная связь";
+export const FEEDBACK_STATUS_LABELS: Record<FeedbackStatus, string> = {
+  NEW: "Новое",
+  ACKNOWLEDGED: "Принято",
+  LINKED: "Связано с задачей",
+  RESOLVED: "Решено",
+  DISMISSED: "Отклонено",
+};
+export const FEEDBACK_KIND_LABELS = {
+  SUGGESTION: "Предложение",
+  BUG: "Ошибка",
+  IDEA: "Идея",
+} satisfies Record<FeedbackListItem["kind"], string>;
 export type FeedbackListItem = {
   id: string;
   kind: "SUGGESTION" | "BUG" | "IDEA";

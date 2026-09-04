@@ -7,6 +7,15 @@ export type WalletDelta = Partial<Record<WalletKey, number>>;
 
 export const EMPTY_WALLET: Wallet = { gold: 0, silver: 0, copper: 0, sp: 0 };
 
+export const WALLET_LABELS = {
+  gold: "Золото",
+  silver: "Серебро",
+  copper: "Медь",
+  sp: "Очки прокачки",
+} satisfies Record<WalletKey, string>;
+
+export const WALLET_KEYS = Object.keys(WALLET_LABELS) as WalletKey[];
+
 /** Wallet and quick resources use one interaction pause for rapid +/- series. */
 export const WALLET_ADJUST_DELAY_MS = RESOURCE_ADJUST_DELAY_MS;
 

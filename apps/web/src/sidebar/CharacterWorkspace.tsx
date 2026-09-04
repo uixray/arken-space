@@ -45,6 +45,8 @@ import {
   normalizeWallet,
   normalizeWalletValue,
   WALLET_ADJUST_DELAY_MS,
+  WALLET_KEYS,
+  WALLET_LABELS,
   walletDeltaIsEmpty,
   type Wallet,
   type WalletDelta,
@@ -1789,9 +1791,9 @@ export function CharacterPanel({
       <label className="field">
         Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не
         нормализуются)
-        {(["gold", "silver", "copper", "sp"] as const).map((key) => (
+        {WALLET_KEYS.map((key) => (
           <span className="inline-fields" key={key}>
-            <b>{key}</b>
+            <b>{WALLET_LABELS[key]}</b>
             <Button
               disabled={!editable || walletDraft[key] === 0}
               onPointerDown={(event) => event.preventDefault()}
