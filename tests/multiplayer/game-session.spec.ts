@@ -988,6 +988,56 @@ test("GM and six isolated players recover authoritative state without security l
       expect(snapshot.campaign.paused).toBe(true);
     expect((await bootstrap(players[0])).campaign.paused).toBe(true);
 
+    // UIX-584: проверяем реальный UI, не только отдельные контрольные sockets.
+    const assertPauseUi = async () => {
+      for (const page of [gmPage, ...pages]) {
+        await expect(
+          page.getByRole("heading", { name: "Перерыв", exact: true }),
+        ).toBeVisible();
+        await expect(page.locator(".map-viewport")).toHaveAttribute(
+          "inert",
+          "",
+        );
+        await expect(page.locator(".map-toolbar")).toHaveCount(0);
+      }
+      await expect(
+        gmPage.getByRole("button", { name: "Продолжить игру" }),
+      ).toBeEnabled();
+      for (const page of pages)
+        await expect(
+          page.getByRole("button", { name: "Продолжить игру" }),
+        ).toHaveCount(0);
+    };
+    const assertPauseCommunication = async (phase: string) => {
+      for (const [index, context] of [gm, players[0]].entries()) {
+        const page = index === 0 ? gmPage : pages[0];
+        const chat = `${runTag}-pause-${phase}-chat-${index}`;
+        const roll = `${runTag}-pause-${phase}-roll-${index}`;
+        await page.locator(".chat-compose textarea").fill(chat);
+        await page.getByRole("button", { name: /^Отправить\./ }).click();
+        await expectOk(
+          await context.request.post(baseUrl + "/api/dice", {
+            data: {
+              actionId: actionId(),
+              formula: "1d20",
+              label: roll,
+              visibility: "PUBLIC",
+            },
+          }),
+        );
+        await expect
+          .poll(async () => {
+            const state = await bootstrap(players[0]);
+            return [chat, roll].every((marker) =>
+              state.messages.some((message) => message.body === marker),
+            );
+          })
+          .toBe(true);
+      }
+    };
+    await assertPauseUi();
+    await assertPauseCommunication("before-restart");
+
     const recoveryPromises = connections.map(({ socket }) =>
       waitForRecovery(socket),
     );
@@ -1023,6 +1073,9 @@ test("GM and six isolated players recover authoritative state without security l
     for (const snapshot of resynced)
       expect(snapshot.campaign.paused).toBe(true);
 
+    await assertPauseUi();
+    await assertPauseCommunication("after-restart");
+
     const pauseRevision = resynced[0]!.campaign.revision;
     const resumedPromises = connections.map(({ socket }) =>
       waitForSnapshot(
@@ -1046,6 +1099,13 @@ test("GM and six isolated players recover authoritative state without security l
       expect(snapshot.campaign.paused).toBe(false);
     expect((await bootstrap(gm)).campaign.paused).toBe(false);
     expect((await bootstrap(players[0])).campaign.paused).toBe(false);
+    for (const page of [gmPage, ...pages]) {
+      await expect(page.locator(".game-pause-overlay")).toHaveCount(0);
+      await expect(page.locator(".map-viewport")).not.toHaveAttribute(
+        "inert",
+        "",
+      );
+    }
 
     const authoritativeGm = resynced[0];
     expect(authoritativeGm.campaign).toMatchObject({

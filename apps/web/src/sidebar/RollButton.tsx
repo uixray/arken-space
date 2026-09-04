@@ -1,5 +1,6 @@
 import { Button } from "@gravity-ui/uikit";
 import { humanizeFormula } from "../formula-display";
+import { useCampaignStatLabels } from "../campaign-stat-labels-context";
 
 /**
  * UIX-389: shared two-line presentation for a rollable characteristic/skill —
@@ -15,16 +16,21 @@ export function RollButton({
   formula,
   disabled,
   onClick,
+  statLabels,
 }: {
   name: string;
   formula: string;
   disabled?: boolean;
   onClick: () => void;
+  statLabels?: Readonly<Record<string, string>>;
 }) {
+  const campaignStatLabels = useCampaignStatLabels();
   return (
     <Button className="roll-button" disabled={disabled} onClick={onClick}>
       <span className="roll-button__name">{name}</span>
-      <code className="roll-button__formula">{humanizeFormula(formula)}</code>
+      <code className="roll-button__formula">
+        {humanizeFormula(formula, statLabels ?? campaignStatLabels)}
+      </code>
     </Button>
   );
 }

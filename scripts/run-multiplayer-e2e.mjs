@@ -432,6 +432,27 @@ try {
     );
   record("spell-projection-postgresql-probe", "passed");
 
+  const campaignPauseGuardProbe = run(
+    docker,
+    [
+      ...compose,
+      "exec",
+      "--no-TTY",
+      "server",
+      "pnpm",
+      "exec",
+      "tsx",
+      "apps/server/src/campaign-pause-guard.pg-probe.ts",
+    ],
+    { env: environment },
+  );
+  report.campaignPauseGuardProbeExitCode = campaignPauseGuardProbe;
+  if (campaignPauseGuardProbe !== 0)
+    throw new Error(
+      "Campaign-pause guard PostgreSQL probe exited " + campaignPauseGuardProbe,
+    );
+  record("campaign-pause-guard-postgresql-probe", "passed");
+
   const playwright = await runPlaywrightWithRestart(environment);
   report.playwrightExitCode = playwright;
   if (playwright !== 0) throw new Error("Playwright exited " + playwright);

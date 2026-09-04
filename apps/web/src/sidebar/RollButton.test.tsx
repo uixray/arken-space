@@ -24,7 +24,9 @@ vi.mock("@gravity-ui/uikit", () => ({
   ),
 }));
 
-const { RollButton } = await import("./CharacterWorkspace");
+const { RollButton } = await import("./RollButton");
+const { CampaignStatLabelsProvider } =
+  await import("../campaign-stat-labels-context");
 
 describe("RollButton (UIX-389 shared two-line roll presentation)", () => {
   it("shows the name and a humanized formula, never the raw stat key", () => {
@@ -32,6 +34,7 @@ describe("RollButton (UIX-389 shared two-line roll presentation)", () => {
       <RollButton
         name="Реакция"
         formula="1d20 + reaction"
+        statLabels={{ reaction: "Реакция" }}
         onClick={() => {}}
       />,
     );
@@ -45,6 +48,7 @@ describe("RollButton (UIX-389 shared two-line roll presentation)", () => {
       <RollButton
         name="Удар ближним оружием"
         formula="1d20 + strength + agility"
+        statLabels={{ strength: "Сила", agility: "Ловкость" }}
         onClick={() => {}}
       />,
     );
@@ -61,9 +65,38 @@ describe("RollButton (UIX-389 shared two-line roll presentation)", () => {
         // UIX-424: «Удача» стала характеристикой, и подставлять её сюда как
         // неизвестный токен больше нельзя. `endurance` снята с бросков совсем.
         formula="1d20 + endurance"
+        statLabels={{}}
         onClick={() => {}}
       />,
     );
     expect(html).toContain("endurance");
+  });
+
+  it("renders a custom campaign stat label instead of its key", () => {
+    const html = renderToStaticMarkup(
+      <CampaignStatLabelsProvider
+        layout={[
+          {
+            id: "characteristics",
+            label: "Характеристики",
+            rows: [
+              {
+                key: "vnimatelnost",
+                label: "Внимательность",
+                source: "STAT",
+              },
+            ],
+          },
+        ]}
+      >
+        <RollButton
+          name="Наблюдение"
+          formula="1d20 + vnimatelnost"
+          onClick={() => {}}
+        />
+      </CampaignStatLabelsProvider>,
+    );
+    expect(html).toContain("Внимательность");
+    expect(html).not.toContain("vnimatelnost");
   });
 });

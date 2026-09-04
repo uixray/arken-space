@@ -574,6 +574,47 @@ describe("encounter and campaign clock lifecycle", () => {
 });
 
 describe("atomic LINKED_SCENE start", () => {
+  it("rejects the hidden token-transfer path while the campaign is paused", async () => {
+    await db
+      .update(schema.campaigns)
+      .set({ paused: true })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const [beforeToken] = await db
+      .select()
+      .from(schema.tokens)
+      .where(eq(schema.tokens.id, ids.token));
+    const beforeEvents = await db
+      .select({ sequence: schema.gameEvents.sequence })
+      .from(schema.gameEvents);
+
+    const response = await startLinked(secrets.gm, {
+      locationId: ids.location,
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json()).toMatchObject({ code: "CAMPAIGN_PAUSED" });
+    const [afterToken] = await db
+      .select()
+      .from(schema.tokens)
+      .where(eq(schema.tokens.id, ids.token));
+    const afterEvents = await db
+      .select({ sequence: schema.gameEvents.sequence })
+      .from(schema.gameEvents);
+    const active = await db
+      .select({ id: schema.encounters.id })
+      .from(schema.encounters)
+      .where(eq(schema.encounters.status, "ACTIVE"));
+    expect(afterToken).toEqual(beforeToken);
+    expect(afterEvents).toEqual(beforeEvents);
+    expect(active).toEqual([]);
+    expect(broadcastCount).toBe(0);
+
+    await db
+      .update(schema.campaigns)
+      .set({ paused: false })
+      .where(eq(schema.campaigns.id, ids.campaign));
+  });
+
   it("activates the destination scene and transfers only PLAYER-layer tokens by relative position, in one broadcast", async () => {
     const response = await startLinked(secrets.gm, {
       locationId: ids.location,

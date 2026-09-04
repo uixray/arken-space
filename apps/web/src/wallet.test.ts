@@ -6,10 +6,22 @@ import {
   mergeWalletDelta,
   normalizeWallet,
   normalizeWalletValue,
+  WALLET_KEYS,
+  WALLET_LABELS,
   walletDeltaIsEmpty,
 } from "./wallet.js";
 
 describe("wallet numeric input", () => {
+  it("keeps a Russian label for every wallet field in display order", () => {
+    expect(WALLET_KEYS).toEqual(Object.keys(EMPTY_WALLET));
+    expect(WALLET_KEYS.map((key) => WALLET_LABELS[key])).toEqual([
+      "Золото",
+      "Серебро",
+      "Медь",
+      "Очки прокачки",
+    ]);
+  });
+
   it("normalizes intermediate and invalid number input without NaN", () => {
     expect(normalizeWalletValue("")).toBe(0);
     expect(normalizeWalletValue("-")).toBe(0);

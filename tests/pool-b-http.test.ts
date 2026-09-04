@@ -2985,6 +2985,84 @@ describe("Pool B HTTP boundaries", () => {
     });
   });
 
+  it("rejects a Canvas write while paused without creating drawing history", async () => {
+    await db
+      .update(schema.campaigns)
+      .set({ paused: true })
+      .where(eq(schema.campaigns.id, ids.campaign));
+
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        points: [0, 0, 16, 16],
+        color: "#ff0000",
+      },
+    });
+
+    expect(rejected.statusCode, rejected.body).toBe(409);
+    expect(rejected.json()).toMatchObject({ code: "CAMPAIGN_PAUSED" });
+    const counts = await database.query<{
+      drawings: number;
+      events: number;
+      journal: number;
+    }>(`
+      select
+        (select count(*) from drawings) drawings,
+        (select count(*) from game_events) events,
+        (select count(*) from action_journal) journal
+    `);
+    expect(counts.rows[0]).toEqual({ drawings: 0, events: 0, journal: 0 });
+
+    for (const [secret, actor] of [
+      [secrets.player, "player"],
+      [secrets.gm, "gm"],
+    ] as const) {
+      const chat = await app.inject({
+        method: "POST",
+        url: "/api/chat",
+        headers: headers(secret),
+        payload: {
+          actionId: crypto.randomUUID(),
+          body: `pause chat control: ${actor}`,
+        },
+      });
+      expect(chat.statusCode, chat.body).toBe(201);
+      const dice = await app.inject({
+        method: "POST",
+        url: "/api/dice",
+        headers: headers(secret),
+        payload: {
+          actionId: crypto.randomUUID(),
+          formula: "1d20",
+          visibility: "PUBLIC",
+          characterId: ids.character,
+        },
+      });
+      expect(dice.statusCode, dice.body).toBe(201);
+    }
+
+    await db
+      .update(schema.campaigns)
+      .set({ paused: false })
+      .where(eq(schema.campaigns.id, ids.campaign));
+    const allowed = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        points: [0, 0, 16, 16],
+        color: "#ff0000",
+      },
+    });
+    expect(allowed.statusCode, allowed.body).toBe(201);
+  });
+
   it("persists ordered fog, drawing history, layers and scene canvas with authoritative permissions", async () => {
     const drawingAction = crypto.randomUUID();
     const created = await app.inject({

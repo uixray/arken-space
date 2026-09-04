@@ -3,6 +3,7 @@ import { useId, useRef, useState } from "react";
 import type { CharacterCatalogEntryDto } from "@arken/contracts";
 import type { DiceCritical } from "./dice-critical";
 import { humanizeFormula } from "./formula-display";
+import { useCampaignStatLabels } from "./campaign-stat-labels-context";
 
 type RollAction = NonNullable<
   CharacterCatalogEntryDto["data"]["rollActions"]
@@ -296,6 +297,7 @@ export function SkillChatCard({
   sourceRemoved?: boolean;
   critical?: DiceCritical | null;
 }) {
+  const statLabels = useCampaignStatLabels();
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -330,7 +332,9 @@ export function SkillChatCard({
           <span>
             <b>{card.action?.label}</b>
             <code>
-              {card.action?.formula ? humanizeFormula(card.action.formula) : ""}
+              {card.action?.formula
+                ? humanizeFormula(card.action.formula, statLabels)
+                : ""}
             </code>
             {critical && (
               <span className="roll-critical-label">{critical.label}</span>

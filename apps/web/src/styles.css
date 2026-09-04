@@ -592,6 +592,39 @@ code {
   min-width: 0;
   overflow: visible;
 }
+.game-pause-control {
+  display: grid;
+}
+.game-pause-overlay {
+  position: absolute;
+  inset: 0;
+  max-width: 100vw;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  overflow: auto;
+  text-align: center;
+  background: #11110fdd;
+  touch-action: none;
+}
+.game-pause-overlay h2,
+.game-pause-overlay p {
+  margin: 0;
+}
+.game-pause-overlay button,
+.game-pause-control button {
+  min-height: 44px;
+}
+.game-pause-artwork {
+  display: block;
+  width: min(100%, 640px);
+  max-height: 45%;
+  object-fit: contain;
+}
 .toolbar-group {
   display: flex;
   flex-direction: column;
@@ -939,6 +972,9 @@ code {
 .token-context-menu strong {
   padding: 6px 8px;
   color: var(--muted);
+}
+.token-condition-menu {
+  display: grid;
 }
 .token-context-menu button {
   border: 0;
@@ -4998,4 +5034,14 @@ code {
 }
 .skip-link:focus-visible {
   transform: translateY(0);
+}
+
+.game-pause-control__icon {
+  display: none;
+}
+.map-toolbar.is-collapsed .game-pause-control__icon {
+  display: inline;
+}
+.map-toolbar.is-collapsed .game-pause-control__label {
+  display: none;
 }

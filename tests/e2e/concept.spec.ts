@@ -2506,7 +2506,7 @@ test("wallet batches rapid mutations and ignores unchanged blur", async ({
   await openWorkspaceSection(page, "Персонажи");
   const goldRow = page
     .locator(".character-workspace .inline-fields")
-    .filter({ hasText: /^gold/ });
+    .filter({ hasText: /^Золото/ });
   const input = goldRow.locator('input[type="number"]');
 
   await input.focus();
@@ -2573,7 +2573,7 @@ test("wallet batches rapid mutations and ignores unchanged blur", async ({
 
   const spRow = page
     .locator(".character-workspace .inline-fields")
-    .filter({ hasText: /^sp/ });
+    .filter({ hasText: /^Очки прокачки/ });
   const spRequestsBefore = submittedSp.length;
   for (let index = 0; index < 25; index += 1)
     await spRow.locator("button").last().click();
@@ -3001,7 +3001,7 @@ test("wallet refreshes and safely reapplies a delta after a stale revision", asy
   await openWorkspaceSection(page, "Персонажи");
   const goldRow = page
     .locator(".character-workspace .inline-fields")
-    .filter({ hasText: /^gold/ });
+    .filter({ hasText: /^Золото/ });
   await goldRow.locator("button").last().click();
 
   await expect

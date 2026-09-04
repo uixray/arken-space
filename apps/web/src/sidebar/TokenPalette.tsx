@@ -50,19 +50,22 @@ export function PalettePanel(props: Props) {
         </Button>
       )}
       <p className="muted">
-        Нажмите, чтобы поставить токен в центр карты, или перетащите его на
-        нужное место.
+        {props.snapshot.campaign.paused
+          ? "Размещение токенов недоступно во время перерыва."
+          : "Нажмите, чтобы поставить токен в центр карты, или перетащите его на нужное место."}
       </p>
       <div className="palette-grid">
         {definitions.map((definition) => {
           const asset = props.snapshot.assets.find(
             (item) => item.id === definition.defaultAssetId,
           );
-          const canPlace = canPlaceTokenDefinition({
-            role: props.snapshot.me.role,
-            membershipId: props.snapshot.me.id,
-            controllerMembershipIds: definition.controllerMembershipIds,
-          });
+          const canPlace =
+            !props.snapshot.campaign.paused &&
+            canPlaceTokenDefinition({
+              role: props.snapshot.me.role,
+              membershipId: props.snapshot.me.id,
+              controllerMembershipIds: definition.controllerMembershipIds,
+            });
           return (
             <article
               className="palette-card"
@@ -82,6 +85,7 @@ export function PalettePanel(props: Props) {
             >
               <Button
                 className="palette-place"
+                disabled={props.snapshot.campaign.paused}
                 onClick={() =>
                   tokenActions.onPlaceTokenDefinition(definition.id)
                 }

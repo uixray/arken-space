@@ -12,6 +12,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
@@ -405,5 +406,154 @@ describe("UIX-474 asset content", () => {
     });
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: "ASSET_NOT_FOUND" });
+  });
+
+  it("UIX-587 follows the current definition asset without retaining the legacy placement asset", async () => {
+    const replacementAssetId = crypto.randomUUID();
+    const definitionId = crypto.randomUUID();
+    const placementId = crypto.randomUUID();
+    const unknownAssetId = crypto.randomUUID();
+    const foreignSecret = "f".repeat(40);
+    const replacementStorageKey = "uix587-current.webp";
+    const replacementContent = await readFile(join(mediaRoot, "token.webp"));
+    await writeFile(join(mediaRoot, replacementStorageKey), replacementContent);
+    await db.insert(schema.sessions).values({
+      membershipId: ids.foreignGm,
+      tokenHash: hashToken(foreignSecret),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await db.insert(schema.assets).values({
+      id: replacementAssetId,
+      campaignId: ids.campaign,
+      uploadedByMembershipId: ids.gm,
+      kind: "TOKEN",
+      name: "Current token",
+      storageKey: replacementStorageKey,
+      mimeType: "image/webp",
+      sizeBytes: replacementContent.length,
+      width: 900,
+      height: 600,
+    });
+    await db.insert(schema.tokenDefinitions).values({
+      id: definitionId,
+      campaignId: ids.campaign,
+      defaultAssetId: ids.token,
+      name: "Visible stranger",
+    });
+    await db.insert(schema.tokens).values({
+      id: placementId,
+      definitionId,
+      sceneId: ids.scene,
+      ownerMembershipId: ids.gm,
+      assetId: ids.token,
+      layer: "PLAYER",
+      name: "Visible stranger",
+      x: 64,
+      y: 64,
+      visible: true,
+    });
+    const revealedArea = { x: 0, y: 0, width: 256, height: 256 };
+    await db.insert(schema.fogReveals).values({
+      sceneId: ids.scene,
+      ...revealedArea,
+      operation: "REVEAL",
+      shape: "RECT",
+      geometry: { type: "RECT", ...revealedArea },
+      bbox: revealedArea,
+      sequence: 1,
+    });
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${definitionId}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        defaultAssetId: replacementAssetId,
+      },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+
+    const storedDefinitions = await db.select().from(schema.tokenDefinitions);
+    const storedPlacements = await db.select().from(schema.tokens);
+    expect(
+      storedDefinitions.find((definition) => definition.id === definitionId),
+    ).toMatchObject({ defaultAssetId: replacementAssetId, revision: 1 });
+    expect(
+      storedPlacements.find((token) => token.id === placementId),
+    ).toMatchObject({ assetId: replacementAssetId });
+
+    // The current writer cascades the canonical asset (UIX-614). Recreate a
+    // legacy row explicitly so the snapshot ACL regression remains independent
+    // of that writer and still protects previously persisted placements.
+    await db
+      .update(schema.tokens)
+      .set({ assetId: ids.token })
+      .where(eq(schema.tokens.id, placementId));
+
+    const playerBootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(playerBootstrap.statusCode, playerBootstrap.body).toBe(200);
+    const playerSnapshot = playerBootstrap.json() as {
+      tokens: { id: string; assetId: string | null }[];
+      assets: { id: string }[];
+    };
+    expect(
+      playerSnapshot.tokens.find((token) => token.id === placementId),
+    ).toMatchObject({ assetId: replacementAssetId });
+    expect(playerSnapshot.assets.map((asset) => asset.id)).toContain(
+      replacementAssetId,
+    );
+    expect(playerSnapshot.assets.map((asset) => asset.id)).not.toContain(
+      ids.token,
+    );
+
+    const playerCurrent = await app.inject({
+      method: "GET",
+      url: contentUrl(replacementAssetId),
+      headers: headers(secrets.player),
+    });
+    expect(playerCurrent.statusCode, playerCurrent.body).toBe(200);
+    expect(playerCurrent.headers["content-type"]).toBe("image/webp");
+
+    const safeNotFound = { error: "ASSET_NOT_FOUND" };
+    const playerLegacy = await app.inject({
+      method: "GET",
+      url: contentUrl(ids.token),
+      headers: headers(secrets.player),
+    });
+    expect(playerLegacy.statusCode).toBe(404);
+    expect(playerLegacy.json()).toEqual(safeNotFound);
+
+    for (const assetId of [ids.token, replacementAssetId]) {
+      const gmResponse = await app.inject({
+        method: "GET",
+        url: contentUrl(assetId),
+        headers: headers(secrets.gm),
+      });
+      expect(gmResponse.statusCode, gmResponse.body).toBe(200);
+
+      const foreignResponse = await app.inject({
+        method: "GET",
+        url: contentUrl(assetId),
+        headers: headers(foreignSecret),
+      });
+      expect(foreignResponse.statusCode).toBe(404);
+      expect(foreignResponse.json()).toEqual(safeNotFound);
+    }
+
+    for (const secret of [secrets.gm, secrets.player]) {
+      const unknownResponse = await app.inject({
+        method: "GET",
+        url: contentUrl(unknownAssetId),
+        headers: headers(secret),
+      });
+      expect(unknownResponse.statusCode).toBe(404);
+      expect(unknownResponse.json()).toEqual(safeNotFound);
+    }
   });
 });

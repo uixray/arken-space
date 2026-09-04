@@ -130,4 +130,39 @@ describe("порядок в run-multiplayer-e2e", () => {
     expect(source).toContain("safe projection leaked");
     expect(source).toContain("OPEN import warning reached ACTIVE lifecycle");
   });
+
+  it("проверяет сериализацию паузы и Canvas до браузерного сценария", async () => {
+    const source = await readFile(
+      new URL(
+        "../apps/server/src/campaign-pause-guard.pg-probe.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const projectionProbe = script.indexOf(
+      'record("spell-projection-postgresql-probe"',
+    );
+    const pauseGuardProbe = script.indexOf(
+      'record("campaign-pause-guard-postgresql-probe"',
+    );
+    const playwright = script.indexOf(
+      "const playwright = await runPlaywrightWithRestart(environment)",
+      pauseGuardProbe,
+    );
+
+    expect(pauseGuardProbe).toBeGreaterThan(projectionProbe);
+    expect(playwright).toBeGreaterThan(pauseGuardProbe);
+    expect(script).toContain(
+      '"apps/server/src/campaign-pause-guard.pg-probe.ts"',
+    );
+    expect(script).toContain("report.campaignPauseGuardProbeExitCode");
+    expect(source).toContain("registerCampaignPauseRoutes");
+    expect(source).toContain("runCampaignCanvasMutation");
+    expect(source).toContain("runCampaignCanvasRelay");
+    expect(source).toContain("pg_blocking_pids");
+    expect(source).toContain("pause-first Canvas mutation");
+    expect(source).toContain(
+      "ephemeral relay escaped behind an accepted pause",
+    );
+  });
 });

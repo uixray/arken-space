@@ -124,6 +124,7 @@ export function CatalogEntryPicker({
                 key={entry.id}
                 name={entry.name}
                 formula={previewFormula(entry)}
+                statLabels={statLabels}
                 disabled={assigningId !== null}
                 onClick={() => void assign(entry.id)}
               />

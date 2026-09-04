@@ -55,6 +55,7 @@ import { useInitiativeActions } from "./use-initiative-actions";
 import { WorkspaceNav } from "./WorkspaceNav";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { MapToolbar } from "./MapToolbar";
+import { GamePauseOverlay } from "./GamePauseOverlay";
 import { workspaceNavItems } from "./workspace-nav";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
@@ -742,6 +743,19 @@ export function App() {
    */
   const { run, runResult, runWorldMapMutation, recoverFromCanvasMutation } =
     useMutationRunners({ load, setError });
+  const toggleCampaignPause = () => {
+    if (!snapshot) return Promise.resolve();
+    return runWorldMapMutation(() =>
+      api("/api/campaign/pause", {
+        method: "POST",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          revision: snapshot.campaign.revision,
+          paused: !snapshot.campaign.paused,
+        }),
+      }),
+    );
+  };
 
   // UIX-398 step A1: the scene domain, now a single stable object instead of
   // six inline arrows rebuilt on every render.
@@ -1153,6 +1167,17 @@ export function App() {
    * выделено» разошёлся бы с подсветкой на карте при первом же клике.
    */
   const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
+  useEffect(() => {
+    setPings([]);
+    setRulers([]);
+    setCursors([]);
+    if (!snapshot?.campaign.paused) return;
+    setTool("PAN");
+    setSelectedTokenIds([]);
+    setGridPreview(null);
+    setCanvasEditMode(null);
+    setEncounterDraft(null);
+  }, [snapshot?.campaign.paused]);
   const initiativeActions = useInitiativeActions({ load });
   const chatHistoryActions = useChatHistoryActions({
     setSnapshot,
@@ -1697,75 +1722,95 @@ export function App() {
             className={`map-shell${workspaceHidden ? " is-workspace-hidden" : ""}`}
             aria-hidden={workspaceHidden}
           >
-            <MapToolbar
-              tool={tool}
-              onToolSelect={setTool}
-              snapshot={snapshot}
-              viewSnapshot={viewSnapshot}
-              previewSnapshot={previewSnapshot}
-              activeScene={activeScene}
-              activeEncounter={activeEncounter}
-              activeCanvasVersion={activeCanvasVersion}
-              cursorPreference={cursorPreference}
-              onCursorPreferenceChange={updateCursorPreference}
-              fogBrushRadius={fogBrushRadius}
-              onFogBrushRadiusChange={setFogBrushRadius}
-              canvasEditMode={canvasEditMode}
-              onCanvasEditModeChange={setCanvasEditMode}
-              onStartEncounter={() => setEncounterMenuOpen(true)}
-              onEndEncounter={() => {
-                if (!activeEncounter) return;
-                void run(() =>
-                  endEncounter(activeEncounter.id, activeEncounter.revision),
-                );
-              }}
-              onToggleBattleZone={() => {
-                if (viewSnapshot.campaign.battleZone) {
-                  setTool("PAN");
-                  void run(() =>
-                    initiativeActions.onSetBattleZone(
-                      null,
-                      viewSnapshot.campaign.revision,
-                    ),
-                  );
-                  return;
+            {snapshot.campaign.paused && (
+              <GamePauseOverlay
+                paused={snapshot.campaign.paused}
+                isGm={snapshot.me.role === "GM"}
+                onToggle={toggleCampaignPause}
+              />
+            )}
+            {!snapshot.campaign.paused && (
+              <MapToolbar
+                pauseControl={
+                  snapshot.me.role === "GM" && !previewSnapshot ? (
+                    <GamePauseOverlay
+                      paused={false}
+                      isGm
+                      onToggle={toggleCampaignPause}
+                    />
+                  ) : undefined
                 }
-                setTool("BATTLE_ZONE");
-              }}
-              onGridPreview={setGridPreview}
-              onGridSave={(grid) => {
-                if (!activeScene) return Promise.resolve();
-                return run(
-                  () =>
-                    api(`/api/scenes/${activeScene.id}/canvas`, {
-                      method: "PATCH",
-                      body: JSON.stringify({
-                        actionId: crypto.randomUUID(),
-                        revision: activeScene.revision ?? 0,
-                        grid,
+                tool={tool}
+                onToolSelect={setTool}
+                snapshot={snapshot}
+                viewSnapshot={viewSnapshot}
+                previewSnapshot={previewSnapshot}
+                activeScene={activeScene}
+                activeEncounter={activeEncounter}
+                activeCanvasVersion={activeCanvasVersion}
+                cursorPreference={cursorPreference}
+                onCursorPreferenceChange={updateCursorPreference}
+                fogBrushRadius={fogBrushRadius}
+                onFogBrushRadiusChange={setFogBrushRadius}
+                canvasEditMode={canvasEditMode}
+                onCanvasEditModeChange={setCanvasEditMode}
+                onStartEncounter={() => setEncounterMenuOpen(true)}
+                onEndEncounter={() => {
+                  if (!activeEncounter) return;
+                  void run(() =>
+                    endEncounter(activeEncounter.id, activeEncounter.revision),
+                  );
+                }}
+                onToggleBattleZone={() => {
+                  if (viewSnapshot.campaign.battleZone) {
+                    setTool("PAN");
+                    void run(() =>
+                      initiativeActions.onSetBattleZone(
+                        null,
+                        viewSnapshot.campaign.revision,
+                      ),
+                    );
+                    return;
+                  }
+                  setTool("BATTLE_ZONE");
+                }}
+                onGridPreview={setGridPreview}
+                onGridSave={(grid) => {
+                  if (!activeScene) return Promise.resolve();
+                  return run(
+                    () =>
+                      api(`/api/scenes/${activeScene.id}/canvas`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                          actionId: crypto.randomUUID(),
+                          revision: activeScene.revision ?? 0,
+                          grid,
+                        }),
                       }),
-                    }),
-                  true,
-                );
-              }}
-              gmFogOpacity={gmFogOpacity}
-              onGmFogOpacityChange={(value) => {
-                setGmFogOpacity(value);
-                localStorage.setItem("arken.gmFogOpacity", String(value));
-              }}
-              gmFogVisible={gmFogVisible}
-              onGmFogVisibleChange={setGmFogVisible}
-              gmGridVisible={gmGridVisible}
-              onGmGridVisibleChange={(visible) => {
-                setGmGridVisible(visible);
-                localStorage.setItem("arken.gmGridVisible", String(visible));
-              }}
-            />
+                    true,
+                  );
+                }}
+                gmFogOpacity={gmFogOpacity}
+                onGmFogOpacityChange={(value) => {
+                  setGmFogOpacity(value);
+                  localStorage.setItem("arken.gmFogOpacity", String(value));
+                }}
+                gmFogVisible={gmFogVisible}
+                onGmFogVisibleChange={setGmFogVisible}
+                gmGridVisible={gmGridVisible}
+                onGmGridVisibleChange={(visible) => {
+                  setGmGridVisible(visible);
+                  localStorage.setItem("arken.gmGridVisible", String(visible));
+                }}
+              />
+            )}
             {activeScene ? (
               <Suspense
                 fallback={<div className="empty-map">Загружаем карту…</div>}
               >
                 <Orthographic2DRenderer
+                  key={`${activeScene.id}:${snapshot.campaign.paused}`}
+                  paused={snapshot.campaign.paused}
                   scene={
                     gridPreview
                       ? { ...activeScene, grid: gridPreview }
@@ -1785,8 +1830,8 @@ export function App() {
                   }}
                   membershipId={viewSnapshot.me.id}
                   onSelectionChange={setSelectedTokenIds}
-                  socket={socket}
-                  tool={tool}
+                  socket={snapshot.campaign.paused ? null : socket}
+                  tool={snapshot.campaign.paused ? "PAN" : tool}
                   onToolSelect={setTool}
                   pings={pings.filter(
                     (ping) => ping.sceneId === activeScene.id,
@@ -1947,6 +1992,20 @@ export function App() {
                           layer,
                         }),
                       }),
+                    )
+                  }
+                  onTokenConditionsChange={(tokenId, revision, conditions) =>
+                    run(
+                      () =>
+                        api(`/api/tokens/${tokenId}/conditions`, {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            actionId: crypto.randomUUID(),
+                            revision,
+                            conditions,
+                          }),
+                        }),
+                      true,
                     )
                   }
                   onTokenDelete={(tokenId, revision) =>

@@ -24,6 +24,7 @@ import { requireAuth } from "./auth.js";
 import { recruitFromBattleZone } from "./battle-initiative.js";
 import { rechargeCampaignCatalogEntries } from "./campaign-clock.js";
 import { transferRelativePosition } from "./encounter-transform.js";
+import { runCampaignCanvasMutation } from "./campaign-pause-guard.js";
 
 /**
  * UIX-311 Stage 1: encounter data model + atomic server commands.
@@ -372,7 +373,18 @@ export function registerEncounterRoutes(
 
     let created: EncounterRow;
     try {
-      created = await db.transaction(async (tx) => {
+      const createEncounter = async (tx: Transaction) => {
+        // Both encounter modes take the campaign row before claiming the
+        // unique ACTIVE slot. LINKED_SCENE already holds this lock through the
+        // Canvas guard; the repeat is harmless and keeps SCENE_REGION on the
+        // same campaign -> encounter lock order instead of forming a cycle.
+        const [lockedCampaign] = await tx
+          .select({ id: campaigns.id })
+          .from(campaigns)
+          .where(eq(campaigns.id, auth.campaignId))
+          .limit(1)
+          .for("update");
+        if (!lockedCampaign) throw new Error("CAMPAIGN_CONFLICT");
         const [row] = await tx
           .insert(encounters)
           .values({
@@ -478,7 +490,15 @@ export function registerEncounterRoutes(
           },
         );
         return row;
-      });
+      };
+      created =
+        body.mode === "LINKED_SCENE"
+          ? await runCampaignCanvasMutation(
+              db,
+              auth.campaignId,
+              createEncounter,
+            )
+          : await db.transaction(createEncounter);
     } catch (error) {
       if (isUniqueViolation(error, "encounters_campaign_active_idx")) {
         const raced = await replay(

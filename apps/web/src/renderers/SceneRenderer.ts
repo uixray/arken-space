@@ -15,6 +15,7 @@ import type { MapMoveAck, MapMoveTarget } from "./map-move-queue";
 import type { MapTool } from "./map-interaction";
 
 export interface SceneRendererProps {
+  paused?: boolean;
   scene: SceneDto;
   tokens: TokenDto[];
   fogReveals: FogRevealDto[];
@@ -117,6 +118,11 @@ export interface SceneRendererProps {
     layer: TokenDto["layer"],
   ) => Promise<void>;
   onTokenDelete?: (tokenId: string, revision: number) => Promise<void>;
+  onTokenConditionsChange?: (
+    tokenId: string,
+    revision: number,
+    conditions: TokenDto["conditions"],
+  ) => Promise<void>;
   onOpenCharacter?: (characterId: string) => void;
   onTokenResize?: (
     tokenId: string,
