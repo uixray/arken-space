@@ -2393,6 +2393,13 @@ code {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.palette-card .inline-fields .danger-link {
+  width: auto;
+  max-width: 100%;
+  justify-self: start;
+  border-color: transparent;
+  text-align: left;
+}
 .danger-link {
   border-color: #73463c;
   color: #e8a18f;

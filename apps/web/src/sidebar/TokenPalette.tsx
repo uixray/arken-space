@@ -169,6 +169,8 @@ export function PalettePanel(props: Props) {
                   </Button>
                   <Button
                     className="danger-link"
+                    view="flat-danger"
+                    size="s"
                     onClick={() => setDeleteDefinition(definition)}
                   >
                     Удалить определение и все размещения
