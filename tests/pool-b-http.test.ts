@@ -4496,6 +4496,61 @@ describe("Pool B HTTP boundaries", () => {
     });
   });
 
+  it("UIX-470 restores a directly deleted drawing through canvas undo", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        points: [4, 8, 24, 32],
+        color: "#4ac7d9",
+        x: 12,
+        y: 18,
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const drawing = created.json();
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/drawings/${drawing.id}`,
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: drawing.revision },
+    });
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    const [missing] = await db
+      .select()
+      .from(schema.drawings)
+      .where(eq(schema.drawings.id, drawing.id));
+    expect(missing).toBeUndefined();
+
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undo.statusCode, undo.body).toBe(200);
+    expect(undo.json()).toMatchObject({ status: "UNDONE" });
+
+    const [restored] = await db
+      .select()
+      .from(schema.drawings)
+      .where(eq(schema.drawings.id, drawing.id));
+    expect(restored).toMatchObject({
+      id: drawing.id,
+      sceneId: ids.scene,
+      authorMembershipId: ids.player,
+      points: [4, 8, 24, 32],
+      color: "#4ac7d9",
+      x: 12,
+      y: 18,
+      revision: 1,
+    });
+  });
+
   it("scopes chat character attribution to the authenticated campaign and player", async () => {
     const otherPlayerId = crypto.randomUUID();
     const otherCharacterId = crypto.randomUUID();

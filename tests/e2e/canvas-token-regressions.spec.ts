@@ -971,6 +971,8 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
   await installCanvasRoutes(page);
   const playerId = "b5f46186-2ebc-4cf8-bce7-870097305a6b";
   const ownDrawingId = "c5f46186-2ebc-4cf8-bce7-870097305a6b";
+  const secondOwnDrawingId = "d5f46186-2ebc-4cf8-bce7-870097305a6b";
+  const hiddenOwnDrawingId = "e5f46186-2ebc-4cf8-bce7-870097305a6b";
   let accessEnabled = true;
   let playerMode = false;
   const playerSnapshot = () => ({
@@ -1045,9 +1047,31 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
         y: 400,
         revision: 0,
       },
+      {
+        id: secondOwnDrawingId,
+        sceneId,
+        authorMembershipId: playerId,
+        points: [0, 0, 64, 64],
+        color: "#3b82f6",
+        strokeWidth: 8,
+        x: 600,
+        y: 400,
+        revision: 0,
+      },
+      {
+        id: hiddenOwnDrawingId,
+        sceneId,
+        authorMembershipId: playerId,
+        points: [0, 0, 64, 64],
+        color: "#a855f7",
+        strokeWidth: 8,
+        x: 720,
+        y: 400,
+        revision: 0,
+      },
     ],
     fogReveals: [
-      { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+      { id: "reveal", sceneId, x: 0, y: 0, width: 700, height: 1000 },
     ],
   });
   await page.route("**/api/bootstrap", (route) =>
@@ -1063,7 +1087,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
       json: {
         revisions: {
           tokens: { [tokenId]: 1 },
-          drawings: { [ownDrawingId]: 1 },
+          drawings: { [ownDrawingId]: 1, [secondOwnDrawingId]: 1 },
         },
       },
     });
@@ -1091,8 +1115,11 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
     x: box.x + offsetX + x * scale,
     y: box.y + offsetY + y * scale,
   });
-  const marqueeStart = screenPoint(350, 285);
-  const marqueeEnd = screenPoint(700, 500);
+  // The rectangle contains two own revealed drawings, a foreign drawing and
+  // an own drawing hidden by fog. Only the two actionable drawings may enter
+  // the destructive group operation.
+  const marqueeStart = screenPoint(460, 360);
+  const marqueeEnd = screenPoint(800, 500);
   await page.keyboard.down("Shift");
   await page.mouse.move(marqueeStart.x, marqueeStart.y);
   await page.mouse.down();
@@ -1101,16 +1128,24 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
   await page.keyboard.up("Shift");
   const selection = page.getByRole("status", { name: "Выбрано объектов" });
   await expect(selection).toHaveText(
-    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+    "Выбрано объектов: 2. Токенов: 0. Рисунков: 2.",
   );
-  await map.focus();
-  await page.keyboard.press("ArrowRight");
+  await page.getByRole("button", { name: "Удалить выбранное" }).click();
+  const deleteDialog = page.getByRole("dialog", {
+    name: "Удалить выбранные объекты?",
+  });
+  await expect(deleteDialog).toContainText(
+    "Выбрано объектов: 2. Токенов: 0. Рисунков: 2.",
+  );
+  await deleteDialog
+    .getByRole("button", { name: "Удалить", exact: true })
+    .click();
   await expect.poll(() => requests.length).toBe(1);
   expect(requests[0]).toMatchObject({
-    operation: "MOVE",
+    operation: "DELETE",
     targets: [
-      { targetType: "TOKEN", targetId: tokenId },
       { targetType: "DRAWING", targetId: ownDrawingId },
+      { targetType: "DRAWING", targetId: secondOwnDrawingId },
     ],
   });
 
