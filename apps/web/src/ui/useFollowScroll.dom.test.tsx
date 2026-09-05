@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { act, useState } from "react";
-import { beforeEach, describe, expect, it } from "vitest";
-import { renderComponent, screen } from "../test-support/render";
+import { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderComponent, screen } from "../test-support/render";
 import { useFollowScroll } from "./useFollowScroll";
 
 /**
@@ -26,6 +26,8 @@ beforeEach(() => {
     value: (options: { top: number }) => scrolled.push(options.top),
   });
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 function measure(
   element: HTMLElement,
@@ -66,6 +68,73 @@ function Harness() {
 }
 
 describe("useFollowScroll", () => {
+  for (const hiddenScrollEvent of [false, true]) {
+    it(`restores a retained reader after hidden geometry (scroll event: ${hiddenScrollEvent})`, async () => {
+      let resize = () => {};
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(callback: () => void) {
+            resize = callback;
+          }
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      renderComponent(<Harness />);
+      const list = screen.getByTestId("list");
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+      scrolled.length = 0;
+
+      measure(list, { scrollHeight: 1000, scrollTop: 120, clientHeight: 300 });
+      await act(async () => {
+        list.dispatchEvent(new Event("scroll"));
+        resize();
+      });
+      expect(screen.getByTestId("at-bottom").textContent).toBe("false");
+      expect(scrolled).toEqual([]);
+
+      // Firefox may reset display:none scrollTop to zero. Neither the zero
+      // geometry nor an optional resulting scroll event represents the reader.
+      measure(list, { scrollHeight: 0, scrollTop: 0, clientHeight: 0 });
+      await act(async () => {
+        if (hiddenScrollEvent) list.dispatchEvent(new Event("scroll"));
+        resize();
+        screen.getByRole("button", { name: "append" }).click();
+      });
+      expect(screen.getByTestId("at-bottom").textContent).toBe("false");
+      expect(screen.getByTestId("new-count").textContent).toBe("1");
+
+      measure(list, { scrollHeight: 1100, scrollTop: 0, clientHeight: 300 });
+      await act(async () => {
+        // A visible scroll event can precede ResizeObserver on reopening.
+        list.dispatchEvent(new Event("scroll"));
+        resize();
+      });
+      expect(scrolled).toEqual([120]);
+      expect(screen.getByTestId("at-bottom").textContent).toBe("false");
+      expect(screen.getByTestId("new-count").textContent).toBe("1");
+
+      // Subsequent ordinary visible resizing must not replay the saved top.
+      scrolled.length = 0;
+      measure(list, { scrollHeight: 1400, scrollTop: 240, clientHeight: 300 });
+      await act(async () => {
+        list.dispatchEvent(new Event("scroll"));
+        resize();
+      });
+      expect(scrolled).toEqual([]);
+
+      measure(list, { scrollHeight: 0, scrollTop: 0, clientHeight: 0 });
+      await act(async () => resize());
+      measure(list, { scrollHeight: 1400, scrollTop: 0, clientHeight: 300 });
+      await act(async () => resize());
+      expect(scrolled).toEqual([240]);
+    });
+  }
+
   it("resumes following after the reader scrolls back to the bottom", async () => {
     renderComponent(<Harness />);
     const list = screen.getByTestId("list");

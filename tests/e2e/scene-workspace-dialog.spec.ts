@@ -344,10 +344,11 @@ test("grid settings keep a rejected draft open for correction or retry", async (
   await expect(save).toBeEnabled();
 });
 
-test("UIX-621 overflow navigation has clickable visible menu items", async ({
+test("UIX-621 desktop overflow navigation has clickable visible menu items", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 960, height: 800 });
+  // UIX-624: below 1024 the compact Sections dialog replaces this desktop menu.
+  await page.setViewportSize({ width: 1024, height: 800 });
   await mockBootstrap(page, snapshot);
   await page.goto("/");
   await page.getByLabel("Ещё разделы").click();

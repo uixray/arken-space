@@ -1,0 +1,599 @@
+/* UIX-624: compact presentation shares the desktop state and commands.
+ * Keep this boundary aligned with the compact-navigation media query. */
+.character-workspace[hidden] {
+  /* The cached portal also survives a return to the desktop layout. */
+  display: none !important;
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --compact-header-height: calc(64px + env(safe-area-inset-top, 0px));
+    --compact-nav-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  html,
+  body,
+  #root {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-shell--compact {
+    /* The document cannot scroll. Absolute preserves viewport geometry without
+     * a fixed stacking context trapping the header below the body character portal. */
+    position: absolute;
+    top: var(--compact-viewport-top, 0px);
+    right: 0;
+    left: 0;
+    height: 100vh;
+    height: var(--compact-viewport-height, 100dvh);
+    min-width: 0;
+    min-height: 0;
+    grid-template-rows: var(--compact-header-height) minmax(0, 1fr) var(
+        --compact-nav-height
+      );
+    overflow: hidden;
+  }
+
+  /* Native hidden must win over legacy grid/flex declarations. Hidden views
+   * remain mounted, but never occupy a track or receive a pointer. */
+  .app-shell--compact [hidden],
+  .character-workspace[data-compact="true"][hidden],
+  .character-workspace[data-compact="true"] [hidden] {
+    display: none !important;
+  }
+
+  .app-shell--compact .topbar {
+    min-width: 0;
+    gap: 8px;
+    padding: env(safe-area-inset-top, 0px)
+      max(8px, env(safe-area-inset-right, 0px)) 0
+      max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  .app-shell--compact
+    .topbar
+    :is(.brand, .scene-switcher, .workspace-nav, .music-topbar),
+  .app-shell--compact
+    :is(
+      .sidebar-resize-handle,
+      .sidebar-collapse-button,
+      .sidebar-restore-button
+    ) {
+    display: none;
+  }
+
+  .compact-session-caption {
+    display: grid;
+    flex: 1 1 auto;
+    gap: 2px;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+  .compact-session-caption :is(strong, span, small) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .compact-session-caption :is(span, small) {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .app-shell--compact .status-line {
+    flex: 0 0 auto;
+    min-width: 0;
+    margin: 0;
+    gap: 0;
+  }
+
+  .compact-sections-button,
+  .app-shell--compact .account-menu > summary {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    height: 44px;
+    padding-inline: 8px;
+  }
+
+  .app-shell--compact .account-menu > summary {
+    width: 44px;
+  }
+
+  .app-shell--compact .account-menu__content {
+    position: fixed;
+    top: calc(var(--compact-viewport-top, 0px) + var(--compact-header-height));
+    right: max(8px, env(safe-area-inset-right, 0px));
+    width: min(
+      340px,
+      calc(
+        100vw - max(8px, env(safe-area-inset-left, 0px)) -
+          max(8px, env(safe-area-inset-right, 0px))
+      )
+    );
+    min-width: 0;
+    max-height: calc(
+      var(--compact-viewport-height, 100dvh) - var(--compact-header-height) -
+        var(--compact-nav-height) - 8px
+    );
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .app-shell--compact .account-menu__content :is(button, .g-button) {
+    min-height: 44px;
+    height: auto;
+    white-space: normal;
+  }
+
+  .compact-sections-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .compact-sections-list button {
+    min-width: 0;
+    min-height: 44px;
+    height: auto;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .compact-desktop-note {
+    color: var(--muted);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .compact-navigation {
+    position: relative;
+    z-index: var(--arken-layer-popup, 1000);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 4px;
+    min-width: 0;
+    padding: 6px max(8px, env(safe-area-inset-right, 0px))
+      calc(6px + env(safe-area-inset-bottom, 0px))
+      max(8px, env(safe-area-inset-left, 0px));
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+
+  .compact-navigation button {
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .compact-navigation button[aria-current="page"],
+  .compact-navigation button[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: inset 0 -2px var(--accent);
+  }
+
+  .app-shell--compact .workbench,
+  .app-shell--compact .workbench.is-sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .app-shell--compact :is(#main-content, #activity-sidebar) {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    grid-area: 1 / 1;
+  }
+
+  .app-shell--compact #activity-sidebar {
+    grid-template-rows: 44px minmax(0, 1fr);
+    border-left: 0;
+    padding-inline: env(safe-area-inset-left, 0px)
+      env(safe-area-inset-right, 0px);
+  }
+
+  .app-shell--compact .sidebar .chat-stream-tabs {
+    min-width: 0;
+    padding-right: 0;
+  }
+
+  .app-shell--compact .chat-stream-tabs button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* A short visual viewport scrolls the controls, rather than clipping the
+   * composer behind the keyboard. The transcript keeps its own bounded log. */
+  .app-shell--compact .panel-scroll.chat-scroll {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .app-shell--compact .activity-feed {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .app-shell--compact .activity-feed > .activity-roll-controls {
+    flex: 0 0 auto;
+  }
+
+  .app-shell--compact .activity-feed > .message-list {
+    flex: 1 0 160px;
+    max-height: max(
+      160px,
+      calc(var(--compact-viewport-height, 100dvh) - 340px)
+    );
+  }
+
+  .app-shell--compact .activity-roll-controls__heading {
+    flex-wrap: wrap;
+  }
+
+  .app-shell--compact #activity-sidebar .activity-quick-rolls > .g-button,
+  .app-shell--compact #activity-sidebar .dice-tray-panel__toolbar button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .app-shell--compact #activity-sidebar .panel-resize-handle {
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .app-shell--compact #activity-sidebar .panel-resize-handle::after {
+    inset: 0;
+  }
+
+  .app-shell--compact
+    :is(
+      .quick-roll-panel__toggle,
+      .activity-log-toggle,
+      .resource-counters__summary,
+      .new-messages
+    ) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .app-shell--compact .resource-counters__item {
+    grid-template-columns: minmax(0, 1fr) 44px minmax(52px, 64px) auto 44px auto;
+  }
+
+  .app-shell--compact .resource-counters__item .g-button {
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: 4px;
+  }
+
+  .app-shell--compact .resource-counters__label {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .app-shell--compact .chat-compose {
+    position: sticky;
+    z-index: 3;
+    bottom: 0;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 8px;
+    background: var(--surface);
+  }
+
+  .app-shell--compact .chat-composer-actions .composer-icon {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .app-shell--compact .chat-composer-input textarea.g-text-area__control {
+    min-height: 68px;
+    padding-right: 144px;
+    font-size: 16px;
+  }
+
+  .character-workspace[data-compact="true"] {
+    top: calc(var(--compact-viewport-top, 0px) + var(--compact-header-height));
+    right: 0;
+    bottom: auto;
+    left: 0;
+    height: calc(
+      var(--compact-viewport-height, 100dvh) - var(--compact-header-height) -
+        var(--compact-nav-height)
+    );
+    max-width: 100%;
+    padding-inline: env(safe-area-inset-left, 0px)
+      env(safe-area-inset-right, 0px);
+    overflow: hidden;
+  }
+
+  .character-workspace[data-compact="true"] .character-workspace__header {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 8px;
+  }
+
+  .character-workspace[data-compact="true"] .character-workspace__header > div {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .character-workspace[data-compact="true"] .character-workspace__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .character-workspace[data-compact="true"] .character-rail {
+    max-height: min(144px, 25dvh);
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .character-workspace[data-compact="true"] .is-rail-collapsed .character-rail {
+    display: none;
+  }
+
+  .character-workspace[data-compact="true"]
+    .character-workspace__body.is-rail-collapsed {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .character-workspace[data-compact="true"] .character-sheet-deck {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: max-content;
+    align-content: start;
+    min-height: 0;
+    overscroll-behavior: contain;
+  }
+
+  .character-workspace[data-compact="true"] .character-sheet-card__body {
+    overflow: visible;
+  }
+
+  .character-workspace[data-compact="true"]
+    :is(
+      .stats-grid,
+      .character-controller-access__players,
+      .character-card-row
+    ) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .character-workspace[data-compact="true"]
+    :is(
+      .character-card,
+      .resource-card,
+      .character-controller-access,
+      .field,
+      .character-power-controls,
+      .character-resource-editor
+    ) {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .character-workspace[data-compact="true"]
+    :is(
+      .inline-fields,
+      .upload-row,
+      .section-heading,
+      .character-action-card__summary,
+      .character-action-card__action
+    ) {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .character-workspace[data-compact="true"] .inline-fields > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .character-workspace[data-compact="true"] :is(button, summary, .g-button) {
+    min-height: 44px;
+  }
+
+  .character-workspace[data-compact="true"] .g-checkbox,
+  .app-shell--compact .compact-check {
+    min-height: 44px;
+    align-items: center;
+    white-space: normal;
+  }
+
+  .character-workspace[data-compact="true"]
+    :is(
+      .character-rail-toggle,
+      .character-rail__close,
+      .character-rail__archive,
+      .stat-field__rename
+    ),
+  .character-workspace[data-compact="true"]
+    .character-workspace__header
+    > button,
+  .character-workspace[data-compact="true"]
+    .character-sheet-card__header
+    > button {
+    min-width: 44px;
+  }
+
+  /* Bound form wrappers as well as native controls: Gravity's own size
+   * selectors must not keep a 28px input inside a 44px touch surface. */
+  :is(
+      .app-shell--compact,
+      .character-workspace[data-compact="true"],
+      .landing-shell,
+      .g-dialog
+    )
+    :is(.g-select, .g-text-input, .g-text-area) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  :is(
+      .app-shell--compact,
+      .character-workspace[data-compact="true"],
+      .landing-shell,
+      .g-dialog
+    )
+    :is(.g-text-input, .g-select__control) {
+    min-height: 44px;
+  }
+
+  :is(
+      .app-shell--compact,
+      .character-workspace[data-compact="true"],
+      .landing-shell,
+      .g-dialog
+    )
+    :is(input.g-text-input__control, textarea.g-text-area__control, select) {
+    min-width: 0;
+    min-height: 44px;
+    max-width: 100%;
+    font-size: 16px;
+  }
+
+  .landing-shell {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .landing-shell
+    :is(.landing-header, .landing-hero, .landing-section, .landing-footer) {
+    width: calc(100% - 32px);
+    min-width: 0;
+  }
+
+  .landing-shell
+    :is(.landing-hero, .landing-roadmap, .feedback-section, .capability-grid) {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    gap: 24px;
+  }
+
+  .landing-shell .landing-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-block: 12px;
+  }
+
+  .landing-shell .landing-hero {
+    padding-block: 24px;
+  }
+
+  .landing-shell :is(.auth-panel, .feedback-form, .capability-card) {
+    min-width: 0;
+    padding: 16px;
+  }
+
+  .landing-shell :is(.landing-intro, .landing-note, .auth-panel) {
+    overflow-wrap: anywhere;
+  }
+
+  .landing-shell
+    :is(
+      input:not([type="checkbox"]):not([type="radio"]),
+      textarea,
+      select,
+      button
+    ) {
+    min-height: 44px;
+    max-width: 100%;
+    font-size: 16px;
+  }
+
+  /* Geometry only: keep Gravity's modal/workspace popup ownership layers. */
+  .g-modal {
+    --g-modal-margin: 8px;
+    top: var(--compact-viewport-top, 0px);
+    bottom: auto;
+    height: var(--compact-viewport-height, 100dvh);
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+
+  .g-modal .g-dialog {
+    --_--side-padding: 16px;
+    width: min(
+      720px,
+      calc(
+        100vw - env(safe-area-inset-left, 0px) -
+          env(safe-area-inset-right, 0px) - 16px
+      )
+    );
+    max-height: calc(
+      var(--compact-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - 16px
+    );
+  }
+
+  .g-modal .g-modal__content_has-scroll {
+    max-height: calc(
+      var(--compact-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - 16px
+    );
+  }
+
+  .g-modal :is(.g-dialog__footer, .g-dialog-footer) {
+    flex-wrap: wrap;
+  }
+
+  .g-modal :is(button, .g-button) {
+    min-height: 44px;
+  }
+
+  .arken-workspace-window,
+  .arken-workspace-window[data-positioned="true"] {
+    top: calc(
+      var(--compact-viewport-top, 0px) + var(--compact-header-height)
+    ) !important;
+    right: max(8px, env(safe-area-inset-right, 0px)) !important;
+    bottom: auto;
+    left: max(8px, env(safe-area-inset-left, 0px)) !important;
+    transform: none !important;
+    width: auto;
+    max-width: calc(100vw - 16px);
+    max-height: calc(
+      var(--compact-viewport-height, 100dvh) - var(--compact-header-height) -
+        var(--compact-nav-height)
+    );
+  }
+
+  .arken-workspace-window__drag-handle {
+    touch-action: auto;
+    cursor: default;
+  }
+
+  .arken-workspace-window
+    :is(.arken-workspace-window__header, .arken-workspace-window__footer) {
+    flex-wrap: wrap;
+  }
+
+  .arken-workspace-window button {
+    min-height: 44px;
+  }
+}

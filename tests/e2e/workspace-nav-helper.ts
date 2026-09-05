@@ -13,6 +13,25 @@ export async function openWorkspaceSection(
   page: Page,
   name: string,
 ): Promise<void> {
+  // UIX-624: компактный shell не использует скрытую desktop priority+ строку.
+  // Ждём одну из реально видимых навигаций и лишь затем выбираем путь: сразу
+  // после bootstrap обе ещё могут отсутствовать.
+  await expect(
+    page.locator(
+      '.workspace-nav:visible, nav[aria-label="Основные области"]:visible',
+    ),
+  ).toHaveCount(1);
+  if (
+    await page.getByRole("navigation", { name: "Основные области" }).isVisible()
+  ) {
+    await page.getByRole("button", { name: "Разделы", exact: true }).click();
+    const sections = page.getByRole("dialog", { name: "Разделы", exact: true });
+    await expect(sections).toBeVisible();
+    await sections.getByRole("button", { name, exact: true }).click();
+    await expect(sections).toBeHidden();
+    return;
+  }
+
   const nav = page.locator(".workspace-nav");
   await expect(nav).toBeVisible();
 

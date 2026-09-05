@@ -444,6 +444,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     // the lone modifier keydown stops it from opening a context menu.
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Control" || event.repeat) return;
+      if (containerRef.current?.closest("[hidden], [inert]")) return;
       if (shouldIgnoreGlobalShortcut(event)) return;
       const current = rulerDraftRef.current;
       if (!current) return;
@@ -589,6 +590,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   useEffect(() => {
     if (!canvasEditMode) return;
     const cancel = (event: KeyboardEvent) => {
+      if (containerRef.current?.closest("[hidden], [inert]")) return;
       if (!shouldCancelCanvasEdit(event)) return;
       setBackgroundDraft(props.scene.backgroundFrame);
       setWorldDraft({ width: props.scene.width, height: props.scene.height });
