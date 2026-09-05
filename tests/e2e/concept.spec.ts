@@ -1805,15 +1805,32 @@ test("GM prepares a scene locally before publishing it to players", async ({
   await openWorkspaceSection(page, "Сцены");
   const dialog = page.getByRole("dialog", { name: "Сцены" });
   await expect(dialog.getByText("Показана игрокам")).toBeVisible();
+  const activeCard = dialog.locator(".scene-manager-card", {
+    hasText: sceneSnapshot.scenes[0]!.name,
+  });
+  await expect(
+    activeCard.getByRole("button", { name: "Показать игрокам" }),
+  ).toHaveCount(0);
+  await expect(
+    activeCard.getByRole("button", { name: "Открыть для мастера" }),
+  ).toHaveClass(/g-button_view_action/);
   const secretCard = dialog.locator(".scene-manager-card", {
     hasText: "Тайная комната",
   });
-  await secretCard.getByRole("button", { name: "Открыть для мастера" }).click();
+  const safeOpen = secretCard.getByRole("button", {
+    name: "Открыть для мастера",
+  });
+  const publish = secretCard.getByRole("button", {
+    name: "Показать игрокам",
+  });
+  await expect(safeOpen).toHaveClass(/g-button_view_action/);
+  await expect(publish).not.toHaveClass(/g-button_view_action/);
+  await safeOpen.click();
   await expect(viewedScenePicker(page)).toContainText("Тайная комната");
   await expect(secretCard.getByText("Просматривается мастером")).toBeVisible();
   expect(publishedSceneId).toBe("");
 
-  await secretCard.getByRole("button", { name: "Показать игрокам" }).click();
+  await publish.click();
   await expect
     .poll(() => publishedSceneId)
     .toBe("8476b502-02f8-4cd6-9c55-3816d70d44dc");
@@ -1822,6 +1839,43 @@ test("GM prepares a scene locally before publishing it to players", async ({
   await expect(editor.getByLabel("Название")).toHaveValue("Тайная комната");
   await expect(editor.getByText("Игровая область")).toBeVisible();
   await expect(editor.getByText("Рамка изображения")).toBeVisible();
+});
+
+test("destructive token-definition action stays visually subordinate", async ({
+  page,
+}) => {
+  const tokenSnapshot = structuredClone(snapshot);
+  tokenSnapshot.tokenDefinitions = [
+    {
+      id: "9576b502-02f8-4cd6-9c55-3816d70d44dc",
+      characterId: null,
+      defaultAssetId: null,
+      name: "Разведчик",
+      defaultWidth: 64,
+      defaultHeight: 64,
+      ownName: null,
+      controllerMembershipIds: [],
+      revision: 0,
+    },
+  ];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({ json: tokenSnapshot }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.goto("/");
+  await openWorkspaceSection(page, "Токены");
+
+  const card = page.locator(".palette-card", { hasText: "Разведчик" });
+  const configure = card.getByRole("button", { name: "Настроить" });
+  const remove = card.getByRole("button", {
+    name: "Удалить определение и все размещения",
+  });
+  await expect(configure).not.toHaveClass(/g-button_view_flat-danger/);
+  await expect(remove).toHaveClass(/danger-link/);
+  await expect(remove).toHaveClass(/g-button_view_flat-danger/);
+  await expect(remove).toHaveClass(/g-button_size_s/);
 });
 
 for (const trayCase of [
