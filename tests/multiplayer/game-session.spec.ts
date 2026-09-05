@@ -751,6 +751,35 @@ test("GM and six isolated players recover authoritative state without security l
       coveredForeignToken.id,
     );
 
+    // UIX-621: go through real browser input, not a direct socket emit.
+    // A second authenticated client must receive the server-authoritative ping.
+    const gmMap = gmPage.locator(".map-viewport");
+    await gmMap.focus();
+    await gmPage.keyboard.press("Escape");
+    const gmMapBounds = await gmMap.boundingBox();
+    if (!gmMapBounds) throw new Error("GM map viewport is not visible");
+    const ctrlPing = waitForPing(
+      connections[2]!.socket,
+      (ping) =>
+        ping.sceneId === initialScene.id &&
+        ping.membershipId === gmInitialSnapshot.me.id,
+    );
+    await gmPage.keyboard.down("Control");
+    try {
+      await gmPage.mouse.click(
+        gmMapBounds.x + gmMapBounds.width / 2,
+        gmMapBounds.y + gmMapBounds.height / 2,
+      );
+    } finally {
+      await gmPage.keyboard.up("Control");
+    }
+    await expect(ctrlPing).resolves.toMatchObject({
+      sceneId: initialScene.id,
+      membershipId: gmInitialSnapshot.me.id,
+      x: expect.any(Number),
+      y: expect.any(Number),
+    });
+
     const playerTwoMap = pages[1]!.locator(".map-viewport");
     const beforePingOverlay = await playerTwoMap.screenshot();
     const receivedPing = waitForPing(

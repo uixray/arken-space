@@ -10,10 +10,6 @@ import type {
 } from "@arken/contracts";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import {
-  EncounterConfirmDialog,
-  type EncounterDraft,
-} from "./EncounterConfirmDialog";
-import {
   authorizedWorldMapBackground,
   locationSceneNames,
   locationsOnWorldMap,
@@ -128,13 +124,6 @@ export function WorldMapsWorkspace({
   const [editorError, setEditorError] = useState("");
   const [mapEditorError, setMapEditorError] = useState("");
   const [status, setStatus] = useState("");
-  // UIX-311 Stage 4: real "Начать бой" (LINKED_SCENE-only, decision #4)
-  // entry point for a location's linked scenes, replacing the Stage 3 temp
-  // preflight-preview block. The preflight fetch itself now lives inside
-  // EncounterConfirmDialog, shared with the tactical-canvas entry point.
-  const [encounterDraft, setEncounterDraft] = useState<EncounterDraft | null>(
-    null,
-  );
   const worldMaps = snapshot.worldMaps;
   const map = selectedWorldMap(worldMaps, mapId);
   const capabilities = worldMapCapabilities(map);
@@ -173,17 +162,6 @@ export function WorldMapsWorkspace({
         (location) => location.id === selectedLocation?.id,
       )?.gmNotes
     : undefined;
-  // UIX-311 Stage 4: encounters always launch from the campaign's currently
-  // active/broadcast scene (source of truth for what players actually see),
-  // never from whatever tactical scene the GM happens to be locally
-  // previewing elsewhere. `activeEncounter` gates the picker: only one
-  // encounter can be ACTIVE at a time (server-enforced).
-  const broadcastScene =
-    snapshot.scenes.find((scene) => scene.active) ?? snapshot.scenes[0];
-  const activeEncounter =
-    snapshot.encounters?.find((encounter) => encounter.status === "ACTIVE") ??
-    null;
-
   useEffect(() => {
     if (map && map.id !== mapId) setMapId(map.id);
   }, [map, mapId]);
@@ -634,57 +612,6 @@ export function WorldMapsWorkspace({
                         ))}
                       </div>
                     ) : null}
-                    {/*
-                      UIX-311 Stage 4: real GM "Начать бой" entry point for
-                      this location, replacing the Stage 3 temp
-                      preflight-preview block. World-map-triggered starts are
-                      LINKED_SCENE-only (decision #4) — SCENE_REGION is only
-                      offered from the tactical-canvas toolbar. Picking a
-                      scene here opens EncounterConfirmDialog (below), the
-                      same real confirm step used by the canvas entry point,
-                      which runs the Stage 3 preflight and only then fires
-                      POST /api/encounters/start.
-                    */}
-                    {isGm && linkedScenes.length ? (
-                      <div className="world-map-scene-links">
-                        <strong>Начать бой</strong>
-                        {activeEncounter ? (
-                          <p role="note">
-                            Бой уже идёт — сначала завершите текущий на карте
-                            боя.
-                          </p>
-                        ) : !broadcastScene ? (
-                          <p role="note">Нет активной сцены.</p>
-                        ) : (
-                          <div className="world-map-scene-link">
-                            <select
-                              value=""
-                              onChange={(event) => {
-                                const sceneId = event.target.value;
-                                const scene = linkedScenes.find(
-                                  (item) => item.id === sceneId,
-                                );
-                                if (scene && selectedLocation)
-                                  setEncounterDraft({
-                                    mode: "LINKED_SCENE",
-                                    sourceScene: broadcastScene,
-                                    targetSceneId: scene.id,
-                                    targetSceneName: scene.name,
-                                    locationId: selectedLocation.id,
-                                  });
-                              }}
-                            >
-                              <option value="">Выберите сцену для боя</option>
-                              {linkedScenes.map((scene) => (
-                                <option key={scene.id} value={scene.id}>
-                                  {scene.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
                     {isGm && isDraft ? (
                       <label className="world-map-scene-picker">
                         Связать с локальной сценой
@@ -914,15 +841,6 @@ export function WorldMapsWorkspace({
           </div>
         </form>
       </ArkenDialog>
-      <EncounterConfirmDialog
-        draft={encounterDraft}
-        snapshot={snapshot}
-        onClose={() => setEncounterDraft(null)}
-        onStarted={() => {
-          setEncounterDraft(null);
-          onClose();
-        }}
-      />
     </ArkenDialog>
   );
 }

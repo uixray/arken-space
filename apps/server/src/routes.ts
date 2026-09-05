@@ -2754,6 +2754,7 @@ export function registerRoutes(
     }
     const {
       actionId,
+      placementId,
       definitionId: _definitionId,
       controllerMembershipIds: explicitControllers,
       ...tokenInput
@@ -2793,6 +2794,15 @@ export function registerRoutes(
     // UIX-400: имя обязательно, когда наследовать не от кого.
     if (!body.name && !body.characterId)
       return reply.code(400).send({ error: "TOKEN_NAME_REQUIRED" });
+    if (placementId) {
+      const [occupied] = await db
+        .select({ id: tokens.id })
+        .from(tokens)
+        .where(eq(tokens.id, placementId))
+        .limit(1);
+      if (occupied)
+        return reply.code(409).send({ error: "PLACEMENT_ID_CONFLICT" });
+    }
     const guardedDb = canvasTx(auth.campaignId);
     const placement = await guardedDb.transaction(async (tx) => {
       await tx.execute(
@@ -2858,6 +2868,7 @@ export function registerRoutes(
         .insert(tokens)
         .values({
           ...tokenInput,
+          ...(placementId ? { id: placementId } : {}),
           // UIX-400: `tokens.name` только пишется и никогда не читается —
           // подпись всегда берётся из определения. Колонка `notNull`, поэтому
           // отсутствующее имя записывается пустой строкой, а не NULL.
@@ -3091,6 +3102,15 @@ export function registerRoutes(
       !controllers.some((item) => item.membershipId === auth.membershipId)
     )
       return reply.code(403).send({ error: "TOKEN_DEFINITION_FORBIDDEN" });
+    if (body.placementId) {
+      const [occupied] = await db
+        .select({ id: tokens.id })
+        .from(tokens)
+        .where(eq(tokens.id, body.placementId))
+        .limit(1);
+      if (occupied)
+        return reply.code(409).send({ error: "PLACEMENT_ID_CONFLICT" });
+    }
     const guardedDb = canvasTx(auth.campaignId);
     const placement = await guardedDb.transaction(async (tx) => {
       await tx.execute(
@@ -3160,6 +3180,7 @@ export function registerRoutes(
         .insert(tokens)
         .values({
           definitionId: lockedDefinition.id,
+          ...(body.placementId ? { id: body.placementId } : {}),
           sceneId: scene.id,
           characterId: lockedDefinition.characterId,
           assetId: lockedDefinition.defaultAssetId,

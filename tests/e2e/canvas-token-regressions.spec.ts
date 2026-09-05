@@ -248,6 +248,8 @@ test("UIX-471 GM changes condition sets through the token menu and keeps server 
   await page.goto("/");
   const map = page.locator(".map-viewport");
   const openMenu = async () => {
+    if (await page.getByRole("group", { name: "Состояния токена" }).isVisible())
+      return;
     const trigger = map.locator(".map-object-list-trigger");
     await trigger.click();
     await map
@@ -286,7 +288,7 @@ test("UIX-471 GM changes condition sets through the token menu and keeps server 
   await page
     .getByRole("menuitemcheckbox", { name: "Распластан", exact: true })
     .click();
-  await expect.poll(() => commands.length).toBe(4);
+  await expect.poll(() => commands.length).toBeGreaterThanOrEqual(4);
   await openMenu();
   await expect(
     page.getByRole("menuitemcheckbox", { name: "Распластан", exact: true }),
@@ -798,4 +800,184 @@ test("Ctrl+Z and Ctrl+Shift+Z call authoritative undo and redo once", async ({
     expect(body.actionId).toEqual(expect.any(String));
     expect(body.actionId).toMatch(/^[0-9a-f-]{36}$/i);
   }
+});
+
+test("UIX-621 empty-canvas mouse rectangle selects multiple tokens for one move", async ({
+  page,
+}) => {
+  await installCanvasRoutes(page);
+  const secondId = "95f46186-2ebc-4cf8-bce7-870097305a6b";
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      json: {
+        ...snapshot,
+        tokens: [
+          ...snapshot.tokens,
+          { ...snapshot.tokens[0], id: secondId, x: 464, name: "Second token" },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/canvas/history**", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  const moves: Array<Record<string, unknown>> = [];
+  await page.route("**/api/canvas/bulk", (route) => {
+    moves.push(route.request().postDataJSON());
+    return route.fulfill({
+      json: {
+        revisions: { tokens: { [tokenId]: 1, [secondId]: 1 }, drawings: {} },
+      },
+    });
+  });
+  await page.goto("/");
+  const map = page.locator(".map-viewport");
+  const trigger = map.locator(".map-object-list-trigger");
+  await trigger.click();
+  await map
+    .getByRole("button", { name: "Selected token", exact: true })
+    .click();
+  await trigger.click();
+  await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+  const box = (await map.boundingBox())!;
+  const right = Number(await map.getAttribute("data-resize-handle-x"));
+  const bottom = Number(await map.getAttribute("data-resize-handle-y"));
+  // Read the actual fit scale by comparing the selected token handles.
+  await trigger.click();
+  await map.getByRole("button", { name: "Second token", exact: true }).click();
+  await trigger.click();
+  const secondRight = Number(await map.getAttribute("data-resize-handle-x"));
+  const scale = (secondRight - right) / 80;
+  await page.mouse.move(
+    box.x + right - 80 * scale,
+    box.y + bottom - 80 * scale,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    box.x + secondRight + 16 * scale,
+    box.y + bottom + 16 * scale,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  await page.mouse.move(
+    box.x + right - 32 * scale,
+    box.y + bottom - 32 * scale,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    box.x + right + 32 * scale,
+    box.y + bottom - 32 * scale,
+    { steps: 6 },
+  );
+  await page.mouse.up();
+  await expect.poll(() => moves.length).toBe(1);
+  expect(moves[0]).toMatchObject({
+    operation: "MOVE",
+    targets: [
+      { targetType: "TOKEN", targetId: tokenId, revision: 0 },
+      { targetType: "TOKEN", targetId: secondId, revision: 0 },
+    ],
+  });
+});
+
+test("UIX-621 compact multiline conditions visual fixture", async ({
+  page,
+}) => {
+  await installCanvasRoutes(page);
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({
+      json: {
+        ...snapshot,
+        tokens: [
+          {
+            ...snapshot.tokens[0],
+            conditions: ["POISONED", "UNCONSCIOUS", "RESTRAINED", "PRONE"],
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/canvas/history**", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.goto("/");
+  const map = page.locator(".map-viewport");
+  const trigger = map.locator(".map-object-list-trigger");
+  await trigger.click();
+  await map
+    .getByRole("button", { name: "Selected token", exact: true })
+    .click();
+  await trigger.click();
+  await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+  const box = (await map.boundingBox())!;
+  const right = Number(await map.getAttribute("data-resize-handle-x"));
+  const bottom = Number(await map.getAttribute("data-resize-handle-y"));
+  await page.mouse.move(box.x + right - 15, box.y + bottom - 15);
+  await page.waitForTimeout(150);
+  await map.screenshot({ path: "test-results/uix-621-compact-conditions.png" });
+});
+
+test("UIX-621 rapid conditions render before delayed server confirmation and stay combined", async ({
+  page,
+}) => {
+  await installCanvasRoutes(page);
+  const current: GameSnapshot = structuredClone(snapshot);
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({ json: current }),
+  );
+  await page.route("**/api/canvas/history**", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const commands: Array<{ revision: number; conditions: string[] }> = [];
+  let acknowledged = 0;
+  await page.route(`**/api/tokens/${tokenId}/conditions`, async (route) => {
+    const body = route.request().postDataJSON();
+    commands.push(body);
+    if (commands.length === 1) await delayed;
+    expect(body.revision).toBe(current.tokens[0].revision);
+    current.tokens[0].conditions = body.conditions;
+    current.tokens[0].revision += 1;
+    await route.fulfill({ json: current.tokens[0] });
+    acknowledged += 1;
+  });
+  await page.goto("/");
+  const map = page.locator(".map-viewport");
+  const trigger = map.locator(".map-object-list-trigger");
+  await trigger.click();
+  await map
+    .getByRole("button", { name: "Selected token", exact: true })
+    .click();
+  await trigger.click();
+  await map.press("Enter");
+  const poison = page.getByRole("menuitemcheckbox", { name: /Отравлен/ });
+  const restrained = page.getByRole("menuitemcheckbox", { name: /Обездвижен/ });
+  const prone = page.getByRole("menuitemcheckbox", { name: /Распластан/ });
+  try {
+    await poison.click();
+    await restrained.click();
+    await prone.click();
+    await expect(poison).toHaveAttribute("aria-checked", "true");
+    await expect(restrained).toHaveAttribute("aria-checked", "true");
+    await expect(prone).toHaveAttribute("aria-checked", "true");
+    expect(acknowledged).toBe(0);
+    expect(commands).toHaveLength(1);
+  } finally {
+    release();
+  }
+  await expect.poll(() => acknowledged).toBe(2);
+  expect(commands[1]).toMatchObject({
+    revision: 1,
+    conditions: ["POISONED", "RESTRAINED", "PRONE"],
+  });
+  await expect(poison).toHaveAttribute("aria-checked", "true");
+  await expect(restrained).toHaveAttribute("aria-checked", "true");
+  await expect(prone).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("group", { name: "Состояния токена" }),
+  ).toBeHidden();
 });

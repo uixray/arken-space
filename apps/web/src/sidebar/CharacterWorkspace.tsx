@@ -163,10 +163,7 @@ export function CharacterWorkspace({
             title="Управление временем кампании"
             onClick={() => setCampaignClockOpen(true)}
           >
-            День {props.snapshot.campaign.day} ·{" "}
-            {props.snapshot.campaign.battleActive
-              ? `бой #${props.snapshot.campaign.battleCounter}`
-              : `боёв: ${props.snapshot.campaign.battleCounter}`}
+            День {props.snapshot.campaign.day}
           </Button>
         )}
         <button
