@@ -13,8 +13,10 @@ checkpoint-файлы в `docs/` объясняют историю решени�
   (`f1a66c8`, merge PR #57).
 - Основной подготовленный пул: ветка `codex/uix-621-core-gameplay`, ревизия
   `abd77c6ca564ccf279cecc448bbbefc1dcefb64f`, PR #58.
-- Следующая актуальная задача — восстановить E2E PR #63 / UIX-502. Нельзя
-  начинать новый backlog-код, пока этот release-tail красный.
+- Текущая задача — восстановить E2E PR #63 / UIX-502. Причина воспроизведена:
+  дробный workspace popup z-index вычислялся как `auto`. Минимальная правка
+  резервирует целочисленные слои `1998 < 1999 < 2000 < 2001`; до зелёного
+  GitHub gate новый backlog-код не начинается.
 - В production изменения текущего пула не развёртывались. Merge и публикация
   остаются отдельным решением владельца.
 
@@ -26,8 +28,9 @@ checkpoint-файлы в `docs/` объясняют историю решени�
 ### База
 
 - **PR #58 / UIX-621** — восстановление базового игрового контура: меню,
-  токены, броски и мгновенный UI. База `main`, CI полностью зелёный. Эта ветка
-  является базой большинства следующих PR.
+  токены, броски и мгновенный UI. База `main`; повторный CI после docs-only
+  коммита `34ccd8a` полностью зелёный (checks 5м11с, E2E 15м08с,
+  multiplayer 4м27с). Эта ветка является базой большинства следующих PR.
 
 ### Готовы по локальным и GitHub-гейтам
 
@@ -36,12 +39,16 @@ checkpoint-файлы в `docs/` объясняют историю решени�
   кодом нужно сверить checkpoint и перевести в `In Review`, если статус не был
   обновлён.
 - **PR #60 / UIX-491** — multiplayer-регрессия непрерывности изображения
-  токена при переносе; CI зелёный, Linear `In Review`.
+  токена при переносе; CI зелёный, Linear `In Review`. Этот PR основан
+  непосредственно на `main`, а не на PR #58.
 - **PR #61 / UIX-405** — WASD-перемещение выбранного токена и защита ping/ruler
   хоткеев; CI зелёный, Linear `In Review`.
 - **PR #62 / UIX-507** — Shift+click, Shift+marquee, каноническая фильтрация
   доступных объектов, bulk move/delete и rollback; CI зелёный, Linear
   `In Review`.
+- **PR #64 / UIX-418** (`4e59a8e`, база PR #58) и **PR #65 / UIX-470**
+  (`ed853d7`, база PR #62) — все три GitHub workflow зелёные по живой сверке
+  05.09.2026. Linear `In Review`; дополнительная реализация не требуется.
 
 ### Требуют завершения CI
 
@@ -54,47 +61,33 @@ checkpoint-файлы в `docs/` объясняют историю решени�
     `UIX-621 select portal receives pointer above token workspace`;
   - ожидание `elementFromPoint` получает `false` на строке 395;
   - новый modal-owned popup flow при этом локально прошёл 4/4 на desktop/narrow
-    в Chromium и Firefox.
-- **PR #64 / UIX-418**, ветка `codex/uix-418-dangerous-actions`, ревизия
-  `4e59a8e`, база PR #58: `checks` и `multiplayer` зелёные, E2E на момент
-  сверки выполнялся. Локальный Chromium-пакет 2/2 зелёный.
-- **PR #65 / UIX-470**, ветка `codex/uix-470-map-tools`, ревизия `ed853d7`,
-  база PR #62: `multiplayer` зелёный, `checks` и E2E на момент сверки
-  выполнялись. Production-код в этом PR не менялся — добавлены доказательства
-  brush preview, drawing DELETE→Undo и PLAYER bulk selection/delete.
+    в Chromium и Firefox;
+  - workspace regression воспроизведена локально; замер и минимальная правка
+    описаны в `docs/plans/uix-502-modal-popovers.md`. Новый GitHub gate
+    после push должен подтвердить итоговую ревизию;
+  - переход picker → «Подготовка» доказывает cleanup/смену workspace, но не
+    произвольную иерархию одновременно открытых nested modal/popups.
 
 Ни один из PR #58–#65 агент не мержит самостоятельно.
 
 ## Первая задача следующей сессии
 
-### UIX-502 — восстановить workspace popup, не сломав modal popup
+### UIX-502 — завершить проверку исправленного workspace popup
 
-1. Переключиться на `codex/uix-502-modal-popovers` и убедиться, что worktree
-   чистый.
-2. Адресно воспроизвести существующий тест:
-
-   ```powershell
-   pnpm exec playwright test tests/e2e/scene-workspace-dialog.spec.ts `
-     --grep "select portal receives pointer above token workspace" `
-     --project=chromium `
-     --workers=1 `
-     --retries=0 `
-     --output "$env:TEMP\arken502-workspace"
-   ```
-
-3. До правки измерить computed `z-index` popup wrapper и workspace, а также
-   фактический элемент из `document.elementFromPoint`.
-4. Проверить слой в `apps/web/src/ui/gravity-foundation.css` и owner-class,
-   который назначается через `overlay-owner.ts`/`GravityFormControls.tsx`.
-5. Сохранить явный порядок:
-   `base < workspace < workspace popup < modal < modal popup < nested dialog`.
-6. После исправления прогнать:
-   - workspace popup в Chromium и Firefox;
-   - UIX-502 token modal desktop/narrow в Chromium и Firefox;
-   - адресную диверсию workspace и modal слоёв;
-   - scoped lint/typecheck/format/diff-check.
-7. Создать новый коммит, не amend, push в ту же ветку PR #63 и дождаться
-   зелёного CI.
+1. Проверить последний checkpoint `docs/plans/uix-502-modal-popovers.md`,
+   `git status` и HEAD PR #63. Исходный FAIL и computed stacking уже измерены;
+   не повторять широкий аудит с нуля.
+2. Локальный связанный popup-пул Chromium+Firefox прошёл 8/8 без retries;
+   все три диверсии (дробный popup, workspace cap, modal popup) дали ожидаемый
+   FAIL, исходники восстановлены. Проверить итог полного quality/GitHub gate.
+3. Не называть PR готовым до зелёных `checks`, `e2e`, `multiplayer` на
+   последнем HEAD. В GitHub эти jobs не отмечены как protection-required,
+   но обязательны по правилам проекта.
+4. После зелёного CI зафиксировать review stage UIX-502/416 и готовый
+   release-tail; затем перейти к точному ResourceCounters flow UIX-475.
+5. Строгий порядок произвольных nested modal/popups пока не доказан:
+   существующий token→«Подготовка» тест проверяет замену workspace и cleanup.
+   Не скрывать это ограничение и не расширять архитектуру без воспроизведения.
 
 ## Очередь после восстановления release-tail
 

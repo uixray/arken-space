@@ -19,9 +19,9 @@
   --arken-layer-canvas: 10;
   --arken-layer-panel: 100;
   --arken-layer-popup: 1000;
-  /* Draggable workspaces cap at 1999; the popup stays above their owner while
-     remaining below the blocking dialog tier at 2000. */
-  --arken-layer-workspace-popup: 1999.5;
+  /* z-index requires integers. Reserve 1999 for workspace popups above the
+     workspace cap (1998) and below the blocking dialog tier (2000). */
+  --arken-layer-workspace-popup: 1999;
   --arken-layer-dialog: 2000;
   --arken-layer-toast: 3000;
 }
