@@ -19,6 +19,9 @@
   --arken-layer-canvas: 10;
   --arken-layer-panel: 100;
   --arken-layer-popup: 1000;
+  /* z-index requires integers. Reserve 1999 for workspace popups above the
+     workspace cap (1998) and below the blocking dialog tier (2000). */
+  --arken-layer-workspace-popup: 1999;
   --arken-layer-dialog: 2000;
   --arken-layer-toast: 3000;
 }
@@ -29,9 +32,14 @@
   z-index: var(--arken-layer-dialog);
 }
 
-/* Select renders its menu in a document-level portal. Keep menus opened from
- * modal forms above the modal layer instead of invisibly behind its backdrop. */
-[data-floating-ui-status]:has(> .g-select-popup) {
+/* Select renders its menu in a document-level portal. Lift only the popup
+ * owned by the corresponding layered surface; a select underneath a modal
+ * must never jump above that modal merely because it uses Gravity UI. */
+[data-floating-ui-status]:has(> .arken-select-popup--workspace) {
+  z-index: var(--arken-layer-workspace-popup) !important;
+}
+
+[data-floating-ui-status]:has(> .arken-select-popup--modal) {
   z-index: calc(var(--arken-layer-dialog) + 1) !important;
 }
 

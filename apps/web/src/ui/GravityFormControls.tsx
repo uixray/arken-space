@@ -15,6 +15,7 @@ import {
   buildFormSelectUtilityOptions,
   FORM_SELECT_CREATE_VALUE,
 } from "./formSelectOptions";
+import { useOverlayPopupClassName } from "./overlay-owner";
 
 export function FormInput({
   size: _size,
@@ -114,6 +115,7 @@ export function FormSelect({
   emptyMessage,
   createAction,
 }: FormSelectProps) {
+  const popupClassName = useOverlayPopupClassName("arken-form-select-popup");
   const childOptions = Children.toArray(children)
     .filter(
       (child): child is ReactElement<OptionProps> =>
@@ -137,7 +139,7 @@ export function FormSelect({
       name={name}
       aria-label={ariaLabel}
       disabled={disabled}
-      popupClassName="arken-form-select-popup"
+      popupClassName={popupClassName}
       options={options}
       value={[String(selected)]}
       onUpdate={(next) => {
