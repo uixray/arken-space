@@ -22,6 +22,7 @@ import { installPerformanceReporting } from "./performance-reporting";
 import "./design-system/tokens.generated.css";
 import "./ui/gravity-foundation.css";
 import "./styles.css";
+import "./mobile-foundation.css";
 
 configure({ lang: "ru" });
 installInputDiagnostics();

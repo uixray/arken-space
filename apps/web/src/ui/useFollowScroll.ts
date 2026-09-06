@@ -45,6 +45,8 @@ export function useFollowScroll(
 ) {
   const listRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
+  const lastVisibleScrollTopRef = useRef(0);
+  const hiddenGeometryRef = useRef(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [newItemCount, setNewItemCount] = useState(0);
 
@@ -96,7 +98,17 @@ export function useFollowScroll(
     const list = listRef.current;
     if (!list || typeof ResizeObserver === "undefined") return;
     const pinToBottom = () => {
+      if (list.clientHeight === 0) {
+        hiddenGeometryRef.current = true;
+        return;
+      }
+      const wasHidden = hiddenGeometryRef.current;
+      hiddenGeometryRef.current = false;
       if (followRef.current) list.scrollTo({ top: list.scrollHeight });
+      // display:none can reset scrollTop in Firefox. Restore a reader only
+      // when geometry returns, never on ordinary visible content resizing.
+      else if (wasHidden)
+        list.scrollTo({ top: lastVisibleScrollTopRef.current });
     };
     const sizes = new ResizeObserver(pinToBottom);
     sizes.observe(list);
@@ -135,6 +147,15 @@ export function useFollowScroll(
 
   const onScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
     const list = event.currentTarget;
+    if (list.clientHeight === 0) {
+      if (typeof ResizeObserver !== "undefined")
+        hiddenGeometryRef.current = true;
+      return;
+    }
+    // Reopening may emit a zero-position scroll before ResizeObserver has
+    // restored the reader. Do not overwrite the last visible position first.
+    if (hiddenGeometryRef.current) return;
+    lastVisibleScrollTopRef.current = list.scrollTop;
     const nextAtBottom = isNearListBottom(list);
     followRef.current = nextAtBottom;
     setIsAtBottom(nextAtBottom);

@@ -890,6 +890,7 @@ export function ActivityPanel({
 
 export function DirectChatPanel({
   snapshot,
+  visible = true,
   activeThreadId,
   onActiveThreadChange,
   onCreateThread,
@@ -899,6 +900,7 @@ export function DirectChatPanel({
   onMarkChatRead,
 }: {
   snapshot: GameSnapshot;
+  visible?: boolean;
   activeThreadId: string | null;
   onActiveThreadChange: (threadId: string | null) => void;
   onCreateThread: ChatActions["onCreateDirectThread"];
@@ -985,13 +987,13 @@ export function DirectChatPanel({
   }, [activeThreadId, onActiveThreadChange, selectedPeerId, snapshot]);
 
   useEffect(() => {
-    if (!activeThread || latestSequence === undefined) return;
+    if (!visible || !activeThread || latestSequence === undefined) return;
     const timer = window.setTimeout(
       () => void onMarkChatRead(activeThread.id, latestSequence),
       350,
     );
     return () => window.clearTimeout(timer);
-  }, [activeThread, latestSequence, onMarkChatRead]);
+  }, [activeThread, latestSequence, onMarkChatRead, visible]);
 
   async function attachFile(file: File) {
     setUploading(true);
@@ -1241,6 +1243,7 @@ export function DirectChatPanel({
 
 export function ChatPanel({
   snapshot,
+  visible = true,
   onChat,
   onSticker,
   onRoll,
@@ -1251,6 +1254,7 @@ export function ChatPanel({
   onOpenPlayerRequests,
 }: {
   snapshot: GameSnapshot;
+  visible?: boolean;
   onChat: ChatActions["onChat"];
   onSticker: ChatActions["onSticker"];
   onRoll: Props["onRoll"];
@@ -1329,12 +1333,13 @@ export function ChatPanel({
   };
 
   useEffect(() => {
-    if (!threadId || latestSequence === undefined || !isAtBottom) return;
+    if (!visible || !threadId || latestSequence === undefined || !isAtBottom)
+      return;
     const timer = window.setTimeout(() => {
       void onMarkChatRead(threadId, latestSequence);
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [threadId, latestSequence, isAtBottom, onMarkChatRead]);
+  }, [threadId, latestSequence, isAtBottom, onMarkChatRead, visible]);
 
   useEffect(() => {
     if (!focusedMessageId) return;

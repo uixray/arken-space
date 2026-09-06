@@ -61,6 +61,11 @@ import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
 import { useInitiativeActions } from "./use-initiative-actions";
 import { WorkspaceNav } from "./WorkspaceNav";
+import { CompactNavigation } from "./CompactNavigation";
+import {
+  useCompactNavigation,
+  type CompactSurface,
+} from "./ui/useCompactNavigation";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { MapToolbar } from "./MapToolbar";
 import { GamePauseOverlay } from "./GamePauseOverlay";
@@ -249,6 +254,33 @@ export function App() {
   const [playerHandoffPending, setPlayerHandoffPending] = useState(false);
   const [playerHandoffError, setPlayerHandoffError] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceDestination | null>(null);
+  const compactIdentity = snapshot
+    ? `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${previewSnapshot?.me.id ?? ""}`
+    : null;
+  const compactNavigation = useCompactNavigation(compactIdentity, workspace);
+  const {
+    compact,
+    surface: compactSurface,
+    selectSurface,
+    previousSurface,
+  } = compactNavigation;
+  const compactNavigationRef = useLatestRef({
+    compact,
+    selectSurface,
+    previousSurface,
+  });
+  const [compactSectionsOpen, setCompactSectionsOpen] = useState(false);
+  useEffect(() => {
+    setWorkspace(null);
+    setCompactSectionsOpen(false);
+  }, [compactIdentity]);
+  const selectCompactSurface = useCallback(
+    (surface: CompactSurface) => {
+      selectSurface(surface);
+      setWorkspace(surface === "character" ? "characters" : null);
+    },
+    [selectSurface],
+  );
   const [operatorFeedbackAllowed, setOperatorFeedbackAllowed] = useState(false);
   const [requestedCharacterId, setRequestedCharacterId] = useState<
     string | null
@@ -293,15 +325,28 @@ export function App() {
 
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
+      const { compact, selectSurface, previousSurface } =
+        compactNavigationRef.current;
+      if (compact) {
+        selectSurface(
+          nextWorkspace === "characters"
+            ? "character"
+            : nextWorkspace
+              ? "journal"
+              : previousSurface,
+          // Utility workspaces own their initial focus and Escape handling.
+          !nextWorkspace || nextWorkspace === "characters",
+        );
+      }
       setWorkspace(nextWorkspace);
       // UIX-472: закрывая раздел, возвращаем фокус на его кнопку в строке —
       // раньше он возвращался на выпадающий список, которого больше нет.
-      if (nextWorkspace === null)
+      if (nextWorkspace === null && !compact)
         requestAnimationFrame(() =>
           document.querySelector<HTMLElement>(".workspace-nav__item")?.focus(),
         );
     },
-    [],
+    [compactNavigationRef],
   );
 
   useEffect(() => {
@@ -1361,17 +1406,46 @@ export function App() {
   return (
     <CampaignActionsContext.Provider value={campaignActions}>
       <RollVisibilityContext.Provider value={mapRollVisibility}>
-        <div className="app-shell">
+        <div
+          className={`app-shell${compact ? " app-shell--compact" : ""}`}
+          data-compact-surface={compact ? compactSurface : undefined}
+        >
           {/* UIX-532: без этой ссылки путь с клавиатуры к карте проходит через
             всю верхнюю панель. Прячется, пока рабочая область открыта поверх
             карты: там карта помечена `aria-hidden`, и уводить фокус в
             скрытое — хуже, чем не предлагать переход вовсе. */}
-          {!workspaceHidden && (
+          {!workspaceHidden && (!compact || compactSurface === "map") && (
             <a className="skip-link" href="#main-content">
               Перейти к карте
             </a>
           )}
           <header className="topbar">
+            {compact && (
+              <>
+                <div className="compact-session-caption">
+                  <strong>{activeScene?.name ?? "Нет активной сцены"}</strong>
+                  <span role="status">
+                    {viewSnapshot.me.role === "GM"
+                      ? "Мастер"
+                      : viewSnapshot.me.displayName}{" "}
+                    ·{" "}
+                    {connection === "ONLINE"
+                      ? "в сети"
+                      : connection === "OFFLINE"
+                        ? "нет связи"
+                        : "подключаемся"}
+                  </span>
+                </div>
+                <button
+                  className="compact-sections-button"
+                  type="button"
+                  disabled={Boolean(previewSnapshot)}
+                  onClick={() => setCompactSectionsOpen(true)}
+                >
+                  Разделы
+                </button>
+              </>
+            )}
             <div className="brand">
               <strong>arken-space</strong>
             </div>
@@ -1618,6 +1692,34 @@ export function App() {
             </div>
           </header>
           <ArkenDialog
+            open={compact && compactSectionsOpen}
+            title="Разделы"
+            footer={false}
+            onClose={() => setCompactSectionsOpen(false)}
+          >
+            <div className="compact-sections-list">
+              {workspaceNavItems({
+                isGm: snapshot.me.role === "GM",
+                operatorFeedbackAllowed,
+              }).map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() => {
+                    setCompactSectionsOpen(false);
+                    handleWorkspaceChange(item.id);
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <p className="compact-desktop-note">
+              Подготовка мира и сложные редакторы рассчитаны на компьютер.
+              Мобильные инструменты появятся отдельными этапами.
+            </p>
+          </ArkenDialog>
+          <ArkenDialog
             open={playerHandoffOpen}
             title="Сменить игрока?"
             applyLabel="Сменить игрока"
@@ -1671,7 +1773,7 @@ export function App() {
           />
           <div
             className={`workbench${
-              sidebarCollapsed && !previewSnapshot
+              sidebarCollapsed && !previewSnapshot && !compact
                 ? " is-sidebar-collapsed"
                 : ""
             }`}
@@ -1681,7 +1783,7 @@ export function App() {
                 : undefined
             }
           >
-            {sidebarCollapsed && !previewSnapshot && (
+            {sidebarCollapsed && !previewSnapshot && !compact && (
               <button
                 type="button"
                 className="sidebar-restore-button"
@@ -1700,7 +1802,11 @@ export function App() {
               // не добавляет карту в обход табом — она и так первая за панелью.
               tabIndex={-1}
               className={`map-shell${workspaceHidden ? " is-workspace-hidden" : ""}`}
-              aria-hidden={workspaceHidden}
+              hidden={compact && compactSurface !== "map"}
+              inert={workspaceHidden || (compact && compactSurface !== "map")}
+              aria-hidden={
+                workspaceHidden || (compact && compactSurface !== "map")
+              }
             >
               {!previewSnapshot && (
                 <div className="map-dice-tray" aria-label="Броски на карте">
@@ -2157,7 +2263,8 @@ export function App() {
                       <button
                         className="roll-toast-open"
                         onClick={() => {
-                          handleSidebarCollapsedChange(false);
+                          if (compact) selectCompactSurface("journal");
+                          else handleSidebarCollapsedChange(false);
                           setRequestedChatMessageId(message.id);
                           setRollToasts((current) =>
                             removeRollToast(current, message.id),
@@ -2242,7 +2349,13 @@ export function App() {
               )}
             </main>
             {previewSnapshot ? (
-              <aside className="sidebar">
+              <aside
+                className="sidebar"
+                id="activity-sidebar"
+                tabIndex={-1}
+                hidden={compact && compactSurface !== "journal"}
+                inert={compact && compactSurface !== "journal"}
+              >
                 <div className="panel-scroll">
                   <section className="panel-section">
                     <span className="eyebrow">Режим мастера</span>
@@ -2259,6 +2372,14 @@ export function App() {
               </aside>
             ) : (
               <Sidebar
+                key={compactIdentity}
+                compact={compact}
+                chatVisible={
+                  compact ? compactSurface === "journal" : !sidebarCollapsed
+                }
+                keepCharacterWorkspaceMounted={
+                  compactNavigation.characterVisited
+                }
                 selectedTokenIds={selectedTokenIds}
                 onUpdateInitiative={initiativeActions.onUpdateInitiative}
                 onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
@@ -2282,7 +2403,7 @@ export function App() {
                 requestedChatMessageId={requestedChatMessageId}
                 onRequestedChatMessageHandled={handleRequestedChatMessage}
                 onChatVisibilityChange={handleChatVisibilityChange}
-                collapsed={sidebarCollapsed}
+                collapsed={compact ? false : sidebarCollapsed}
                 onCollapsedChange={handleSidebarCollapsedChange}
                 onResizeHandleDown={handleSidebarResizeStart}
                 onResizeHandleMove={handleSidebarResizeMove}
@@ -2336,6 +2457,14 @@ export function App() {
               />
             )}
           </div>
+          {compact && (
+            <CompactNavigation
+              active={compactSurface}
+              onSelect={selectCompactSurface}
+              characterVisited={compactNavigation.characterVisited}
+              characterAvailable={!previewSnapshot}
+            />
+          )}
           <TextPromptDialog
             open={createSceneOpen}
             title="Новая сцена"

@@ -142,6 +142,10 @@ export type Props = {
   onRequestedChatMessageHandled: () => void;
   onChatVisibilityChange: (visible: boolean) => void;
   collapsed: boolean;
+  /** Compact surfaces retain one mounted feed and one cached character portal. */
+  compact?: boolean;
+  chatVisible?: boolean;
+  keepCharacterWorkspaceMounted?: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   /** UIX-372: pointer handlers driving the sidebar's drag-to-resize width
    * handle. Left to the caller (App.tsx) since it owns the persisted width
@@ -220,12 +224,13 @@ function SidebarContent(props: Props) {
   // «Событиям», и панель не может отрисоваться без своей вкладки.
   const activeFeed = allowedSidebarFeed(selectedFeed, isGm);
   const [directMode, setDirectMode] = useState(false);
+  const chatVisible = props.chatVisible ?? !props.collapsed;
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
     string | null
   >(null);
   useEffect(
-    () => onChatVisibilityChange(!props.collapsed),
-    [onChatVisibilityChange, props.collapsed],
+    () => onChatVisibilityChange(chatVisible),
+    [onChatVisibilityChange, chatVisible],
   );
   // UIX-395: stable onClose for the self-fetching, React.memo-wrapped GM
   // workspace panels (OperatorFeedbackWorkspace, WorldContentWorkspace,
@@ -245,10 +250,11 @@ function SidebarContent(props: Props) {
       ? null
       : (threadForStream(props.snapshot, activeFeed)?.id ?? null);
   useEffect(() => {
-    onActiveChatThreadChange(activeThreadId);
-  }, [activeThreadId, onActiveChatThreadChange]);
+    onActiveChatThreadChange(chatVisible ? activeThreadId : null);
+  }, [activeThreadId, chatVisible, onActiveChatThreadChange]);
   useEffect(() => {
-    if (directMode || activeFeed !== "STORY" || !activeThreadId) return;
+    if (!chatVisible || directMode || activeFeed !== "STORY" || !activeThreadId)
+      return;
     const latestSequence = messagesForStream(
       snapshotMessages,
       "STORY",
@@ -265,13 +271,14 @@ function SidebarContent(props: Props) {
     activeDirectThreadId,
     activeFeed,
     activeThreadId,
+    chatVisible,
     directMode,
     onMarkChatRead,
     snapshotChatThreads,
     snapshotMessages,
   ]);
   useEffect(() => {
-    if (directMode || activeFeed !== "ACTIVITY") return;
+    if (!chatVisible || directMode || activeFeed !== "ACTIVITY") return;
     for (const target of activityReadTargets(props.snapshot, activityFilters)) {
       if (
         (readSequenceRef.current.get(target.threadId) ?? 0) >= target.sequence
@@ -284,7 +291,14 @@ function SidebarContent(props: Props) {
           readSequenceRef.current.delete(target.threadId);
       });
     }
-  }, [activeFeed, activityFilters, directMode, onMarkChatRead, props.snapshot]);
+  }, [
+    activeFeed,
+    activityFilters,
+    chatVisible,
+    directMode,
+    onMarkChatRead,
+    props.snapshot,
+  ]);
   useEffect(() => {
     if (!requestedChatMessageId) return;
     const requestedStream = streamForMessage(
@@ -311,10 +325,12 @@ function SidebarContent(props: Props) {
   return (
     <aside
       id="activity-sidebar"
+      tabIndex={-1}
+      aria-label="Журнал"
       className={`sidebar ${!isGm ? "player-sidebar" : ""}`}
-      hidden={props.collapsed}
-      inert={props.collapsed}
-      aria-hidden={props.collapsed}
+      hidden={!chatVisible}
+      inert={!chatVisible}
+      aria-hidden={!chatVisible}
     >
       <button
         type="button"
@@ -403,6 +419,7 @@ function SidebarContent(props: Props) {
         {directMode ? (
           <DirectChatPanel
             snapshot={props.snapshot}
+            visible={chatVisible}
             activeThreadId={activeDirectThreadId}
             onActiveThreadChange={setActiveDirectThreadId}
             onCreateThread={chatActions.onCreateDirectThread}
@@ -454,6 +471,7 @@ function SidebarContent(props: Props) {
         ) : (
           <ChatPanel
             snapshot={props.snapshot}
+            visible={chatVisible}
             onChat={chatActions.onChat}
             onSticker={chatActions.onSticker}
             onRoll={props.onRoll}
@@ -466,9 +484,11 @@ function SidebarContent(props: Props) {
             }
           />
         )}
-        {props.workspace === "characters" && (
+        {(props.workspace === "characters" ||
+          props.keepCharacterWorkspaceMounted) && (
           <CharacterWorkspace
             {...props}
+            active={props.workspace === "characters"}
             onClose={() => props.onWorkspaceChange(null)}
           />
         )}

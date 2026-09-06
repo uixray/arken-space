@@ -1927,7 +1927,12 @@ for (const trayCase of [
     const map = page.locator(".map-shell");
     const tray = page.locator(".token-tray");
     const summary = tray.locator("summary");
-    const quickRolls = page.locator(".activity-roll-controls");
+    const compact = trayCase.viewport.width < 1024;
+    // Compact has only one visible surface: compare against the actual map
+    // dice, not the hidden desktop journal's zero/null geometry.
+    const quickRolls = page.locator(
+      compact ? ".map-dice-tray" : ".activity-roll-controls",
+    );
     const collapsedSummaryBox = await summary.boundingBox();
     expect(collapsedSummaryBox).not.toBeNull();
 
@@ -1950,7 +1955,15 @@ for (const trayCase of [
       0,
     );
     expect(trayBox!.height).toBeLessThanOrEqual((mapBox!.height - 38) / 2 + 1);
-    expect(trayBox!.x + trayBox!.width).toBeLessThanOrEqual(rollBox!.x);
+    if (compact) {
+      expect(
+        trayBox!.x + trayBox!.width <= rollBox!.x ||
+          rollBox!.x + rollBox!.width <= trayBox!.x ||
+          trayBox!.y + trayBox!.height <= rollBox!.y ||
+          rollBox!.y + rollBox!.height <= trayBox!.y,
+        "Открытый лоток не перекрывает видимые кости карты",
+      ).toBe(true);
+    } else expect(trayBox!.x + trayBox!.width).toBeLessThanOrEqual(rollBox!.x);
 
     const listOverflow = await tray
       .locator(".token-tray-list")
@@ -1967,6 +1980,14 @@ for (const trayCase of [
     await page.keyboard.press("Enter");
     await expect(tray).not.toHaveAttribute("open", "");
     await expect(summary).toBeFocused();
+    if (compact) {
+      await page.locator("#compact-nav-journal").click();
+      await expect(page.locator(".activity-roll-controls")).toBeVisible();
+      await expect(tray).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(summary).toBeVisible();
+      await expect(tray).not.toHaveAttribute("open", "");
+    }
   });
 }
 
@@ -4175,6 +4196,7 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
   );
 
   await page.goto("/");
+  await page.locator("#compact-nav-journal").click();
   const rendered = page.getByRole("img", { name: "Cartographer waves hello" });
   await expect(rendered).toHaveAttribute(
     "src",
@@ -4189,6 +4211,7 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
   expect(box).not.toBeNull();
   expect(box!.width).toBeLessThanOrEqual(390);
   await page.reload();
+  await page.locator("#compact-nav-journal").click();
   await expect(
     page.getByRole("img", { name: "Cartographer waves hello" }),
   ).toHaveAttribute("src", "/api/stickers/" + stickerId + "/content");
@@ -4569,9 +4592,35 @@ for (const role of ["GM", "PLAYER"] as const) {
       ).toBe(true);
       await tray.getByRole("button", { name: "d20", exact: true }).click();
       await expect.poll(() => rolls).toBe(1);
+      if (width < 1024)
+        await page.setViewportSize({ width: 1440, height: 844 });
       await page
         .getByRole("button", { name: "Свернуть боковую панель", exact: true })
         .click();
+      if (width < 1024) {
+        // Collapse belongs to the desktop preference. Returning to compact
+        // must not hide the selected Journal or rewrite that preference.
+        const preference = () =>
+          page.evaluate(
+            ([campaignId, membershipId]) =>
+              localStorage.getItem(
+                `arken.sidebarCollapsed:${encodeURIComponent(campaignId)}:${encodeURIComponent(membershipId)}`,
+              ),
+            [fixture.campaign.id, fixture.me.id],
+          );
+        await expect.poll(preference).toBe("true");
+        await page.setViewportSize({ width, height: 844 });
+        await expect(tray).toBeVisible();
+        await expect(page.locator("#activity-sidebar")).toBeHidden();
+        await page.locator("#compact-nav-journal").click();
+        await expect(page.locator("#activity-sidebar")).toBeVisible();
+        await expect(page.locator("#activity-sidebar")).not.toHaveAttribute(
+          "inert",
+        );
+        await expect.poll(preference).toBe("true");
+        await page.locator("#compact-nav-map").click();
+        await expect.poll(preference).toBe("true");
+      }
       await expect(tray).toBeVisible();
       await tray.getByRole("button", { name: "d6", exact: true }).click();
       await expect.poll(() => rolls).toBe(2);

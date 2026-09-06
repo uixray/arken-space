@@ -71,8 +71,9 @@ type WalletBatch = {
 
 export function CharacterWorkspace({
   onClose,
+  active = true,
   ...props
-}: Props & { onClose: () => void }) {
+}: Props & { onClose: () => void; active?: boolean }) {
   // UIX-398 step B: archive/restore come from context, not through Sidebar.
   const { worldMap: worldMapActions } = useCampaignActions();
   const characters = useMemo(() => {
@@ -109,7 +110,9 @@ export function CharacterWorkspace({
   const [archiveTarget, setArchiveTarget] = useState<CharacterDto | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
 
-  useEffect(() => titleRef.current?.focus(), []);
+  useEffect(() => {
+    if (active) titleRef.current?.focus({ preventScroll: true });
+  }, [active]);
   useEffect(() => {
     dispatch({
       type: "SYNC",
@@ -122,14 +125,15 @@ export function CharacterWorkspace({
     dispatch({ type: "OPEN_EXCLUSIVE", id });
   }, [characters, props.requestedCharacterId]);
   useEffect(() => {
-    if (!state.activeId) return;
+    if (!active || !state.activeId) return;
     workspaceRef.current
       ?.querySelector<HTMLElement>(
         `[data-character-sheet-id="${CSS.escape(state.activeId)}"]`,
       )
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [state.activeId]);
+  }, [active, state.activeId]);
   useEffect(() => {
+    if (!active) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || isEditableEventTarget(event.target)) return;
       if (event.key !== "Escape") return;
@@ -138,12 +142,18 @@ export function CharacterWorkspace({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [active, onClose]);
 
   const openCount = state.openIds.length;
   return createPortal(
     <main
       ref={workspaceRef}
+      id="character-workspace"
+      tabIndex={-1}
+      data-compact={props.compact ? "true" : undefined}
+      hidden={!active}
+      inert={!active}
+      aria-hidden={!active}
       className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}`}
       aria-labelledby="character-workspace-title"
     >

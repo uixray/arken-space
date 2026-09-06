@@ -176,11 +176,37 @@ for (const role of ["GM", "PLAYER"] as const) {
       ).toBeVisible();
       await expect(page.locator(".map-viewport")).toHaveAttribute("inert", "");
       await expect(page.locator(".map-toolbar")).toHaveCount(0);
+      if (width < 1024) {
+        // UIX-624: inactive Journal is inert because it is not selected, not
+        // because the campaign is paused. The selected Journal stays usable.
+        await expect(page.locator("#activity-sidebar")).toBeHidden();
+        await expect(page.locator("#activity-sidebar")).toHaveAttribute(
+          "inert",
+          "",
+        );
+        await page.locator("#compact-nav-journal").click();
+        await expect(page.locator("#activity-sidebar")).toBeVisible();
+      }
       expect(
         await page
           .locator("#activity-sidebar")
           .evaluate((node) => node.closest("[inert]") !== null),
       ).toBe(false);
+      if (width < 1024) {
+        const composer = page.locator(
+          "#activity-sidebar .chat-compose textarea",
+        );
+        await composer.fill("Перерыв не блокирует журнал");
+        await expect(composer).toHaveValue("Перерыв не блокирует журнал");
+        await page.locator("#compact-nav-map").click();
+        await expect(
+          page.getByRole("heading", { name: "Перерыв", exact: true }),
+        ).toBeVisible();
+        await expect(page.locator(".map-viewport")).toHaveAttribute(
+          "inert",
+          "",
+        );
+      }
       const box = await page.locator(".game-pause-overlay").boundingBox();
       expect(box).not.toBeNull();
       expect(box!.width).toBeLessThanOrEqual(width);
