@@ -26,6 +26,20 @@
   представлен ровно один раз; проверяется фактический путь, GM обязательно
   проходит overflow/Enter/Escape. Результаты финального gate фиксируются в
   UIX-642 и GitHub checks без переписывания этого checkpoint на каждом шаге.
+- Финальный навигационный прогон: **10/10 PASS**, Chromium + Firefox. Локальные
+  format/lint/typecheck прошли (lint: 0 errors / 4 warnings); полный Vitest:
+  **227 файлов / 1817 тестов PASS**, exit 0, 739.53 s.
+- Для обязательного non-live media gate добавлен
+  `tests/multiplayer/media-smoke.spec.ts` и собственная synthetic Ogg/Opus fixture
+  `uix642-synthetic-tone.ogg` (440 Hz oscillator, без стороннего контента).
+  Existing disposable CI проверяет точную ревизию, upload/download/range,
+  image decode/audio playback, reload и сохранность после backend restart.
+  Production URL запрещён самим тестом; продукт/runner/workflow не менялись.
+  Локальный Docker недоступен, поэтому runtime evidence должен дать Linux CI.
+  Static tsc/prettier/eslint и discovery (3 tests / 2 files) прошли. Negative
+  guard diversion с `https://example.invalid` дала ожидаемый exit 1 до создания
+  context, health, database/auth/API writes. Это проверка изоляции, не замена
+  положительного media runtime gate.
 - Production пока не менялся. Перед выкладкой обязательны свежие host preflight,
   backup и restore rehearsal точного snapshot, non-live image/audio smoke,
   сохранённые rollback image IDs и двухфазный `infra/deploy/release.sh`.
