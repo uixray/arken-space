@@ -19,7 +19,6 @@ export function SelectionActions({
       role="toolbar"
       aria-label="Действия с выбранными объектами"
     >
-      <strong>Выбрано: {count}</strong>
       <Button view="normal" onClick={onMove}>
         <Icon data={ArrowRight} size={16} />
         Переместить

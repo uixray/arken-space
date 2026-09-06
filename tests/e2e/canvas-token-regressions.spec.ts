@@ -1,6 +1,7 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
+import { fitRect } from "../../apps/web/src/renderers/camera-fit";
 
 const sceneId = "7376b502-02f8-4cd6-9c55-3816d70d44dc";
 const tokenId = "35f46186-2ebc-4cf8-bce7-870097305a6b";
@@ -909,6 +910,246 @@ test("Ctrl+Z and Ctrl+Shift+Z call authoritative undo and redo once", async ({
   }
 });
 
+async function zoomBounds(page: Page) {
+  const zoom = page.locator(".map-scale");
+  await expect(zoom).toBeVisible();
+  const box = await zoom.boundingBox();
+  expect(box).not.toBeNull();
+  return box!;
+}
+
+async function expectStableSelectionChrome(
+  page: Page,
+  baseline: Awaited<ReturnType<typeof zoomBounds>>,
+) {
+  const current = await zoomBounds(page);
+  for (const key of ["x", "y", "width", "height"] as const)
+    expect(current[key], `selection must not change zoom ${key}`).toBeCloseTo(
+      baseline[key],
+      1,
+    );
+  await expect(
+    page.locator('.map-viewport output[aria-label="Выбрано объектов"]'),
+  ).toHaveCount(0);
+  await expect(page.locator(".map-scale")).not.toContainText(
+    /Выбрано|Токенов:|Рисунков:/,
+  );
+  const action = page.getByRole("button", {
+    name: "Удалить выбранное",
+    exact: true,
+  });
+  if (await action.count()) {
+    await expect(action).toBeVisible();
+    expect(
+      await action.evaluate((node) => node.closest(".map-scale") !== null),
+    ).toBe(false);
+    const bounds = (await action.boundingBox())!;
+    expect(
+      bounds.x + bounds.width <= current.x ||
+        bounds.x >= current.x + current.width ||
+        bounds.y + bounds.height <= current.y ||
+        bounds.y >= current.y + current.height,
+    ).toBe(true);
+  }
+}
+
+async function inspectBulkConfirmation(page: Page, text: string) {
+  const dialog = page.getByRole("dialog", {
+    name: "Удалить выбранные объекты?",
+  });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(text);
+  await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 390]) {
+    test(`UIX-644 selection never changes zoom geometry (${role}, ${width})`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 850 });
+      await installCanvasRoutes(page);
+      const current: GameSnapshot = structuredClone(snapshot);
+      current.me.role = role;
+      current.tokens = [780, 940].map((x, index) => ({
+        ...snapshot.tokens[0]!,
+        id: index ? stackAlphaId : tokenId,
+        x,
+        y: 350,
+        name: `Geometry token ${index + 1}`,
+        ownerMembershipId: current.me.id,
+        controllerMembershipIds: [current.me.id],
+      }));
+      current.drawings = [780, 940].map((x, index) => ({
+        id: index
+          ? "e5f46186-2ebc-4cf8-bce7-870097305a6b"
+          : "d5f46186-2ebc-4cf8-bce7-870097305a6b",
+        sceneId,
+        authorMembershipId: current.me.id,
+        points: [0, 0, 64, 64],
+        color: "#ef4444",
+        strokeWidth: 8,
+        x,
+        y: 520,
+        revision: 0,
+      }));
+      current.fogReveals = [
+        { id: "revealed", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+      ];
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({ json: current }),
+      );
+      await page.route("**/api/canvas/history**", (route) =>
+        route.fulfill({ json: [] }),
+      );
+      await page.route("**/api/story/posts?limit=50", (route) =>
+        route.fulfill({ json: { posts: [], nextCursor: null } }),
+      );
+      await page.route("**/api/operator/feedback/capability", (route) =>
+        route.fulfill({ status: 403, json: { message: "OPERATOR_REQUIRED" } }),
+      );
+      const requests: unknown[] = [];
+      await page.route("**/api/canvas/bulk", (route) => {
+        requests.push(route.request().postDataJSON());
+        return route.fulfill({
+          json: { revisions: { tokens: {}, drawings: {} } },
+        });
+      });
+      await page.route("**/api/drawings/*", (route) => {
+        requests.push({
+          method: route.request().method(),
+          url: route.request().url(),
+        });
+        return route.fulfill({ status: 204 });
+      });
+      await page.goto("/");
+      const map = page.locator(".map-viewport");
+      await map.getByRole("button", { name: "Вписать", exact: true }).click();
+      const zoom = map.locator(".map-scale");
+      const slider = zoom.getByRole("slider", { name: "Масштаб карты" });
+      const percentage = async () =>
+        Number((await zoom.innerText()).match(/(\d+)%/)?.[1]);
+      const initialScale = Number(await slider.inputValue());
+      const initialPercentage = await percentage();
+      await zoom
+        .getByRole("button", { name: "Увеличить масштаб", exact: true })
+        .click();
+      await expect
+        .poll(async () => Number(await slider.inputValue()))
+        .toBeGreaterThan(initialScale);
+      await expect.poll(percentage).toBeGreaterThan(initialPercentage);
+      const increasedScale = Number(await slider.inputValue());
+      const increasedPercentage = await percentage();
+      await zoom
+        .getByRole("button", { name: "Уменьшить масштаб", exact: true })
+        .click();
+      await expect
+        .poll(async () => Number(await slider.inputValue()))
+        .toBeLessThan(increasedScale);
+      await expect.poll(percentage).toBeLessThan(increasedPercentage);
+      await slider.focus();
+      await page.keyboard.press("End");
+      await expect(slider).toHaveValue("3");
+      await expect(zoom).toContainText("300%");
+      await zoom.getByRole("button", { name: "Вписать", exact: true }).click();
+      await expect
+        .poll(async () => Number(await slider.inputValue()))
+        .toBe(initialScale);
+      await expect.poll(percentage).toBe(initialPercentage);
+      const baseline = await zoomBounds(page);
+      await expectStableSelectionChrome(page, baseline);
+      const trigger = map.locator(".map-object-list-trigger");
+      const selectOne = async (name: string) => {
+        await trigger.click();
+        const object = map.getByRole("button", { name, exact: true });
+        await object.click();
+        await expect(object).toHaveAttribute("aria-pressed", "true");
+        await trigger.click();
+        await expectStableSelectionChrome(page, baseline);
+      };
+      const expectCleared = async () => {
+        await trigger.click();
+        await expect(
+          map.locator('.map-object-list button[aria-pressed="true"]'),
+        ).toHaveCount(0);
+        await trigger.click();
+        await expect(
+          page.getByRole("button", { name: "Удалить выбранное", exact: true }),
+        ).toHaveCount(0);
+        await map.focus();
+        await page.keyboard.press("Delete");
+        await expect(
+          page.getByRole("dialog", {
+            name: /Удалить выбранные объекты|Убрать токен с карты/,
+          }),
+        ).toHaveCount(0);
+        expect(requests).toHaveLength(0);
+        await expectStableSelectionChrome(page, baseline);
+      };
+      await selectOne("Geometry token 1");
+      await map.focus();
+      await page.keyboard.press("Escape");
+      await expectCleared();
+      await selectOne("Рисунок 1");
+      await expect(
+        page.getByRole("complementary", { name: "Панель параметров рисунка" }),
+      ).toBeVisible();
+      await map.focus();
+      await page.keyboard.press("Escape");
+      await expectCleared();
+
+      const box = (await map.boundingBox())!;
+      const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, box);
+      const point = (x: number, y: number) => ({
+        x: box.x + fitted.position.x + x * fitted.scale,
+        y: box.y + fitted.position.y + y * fitted.scale,
+      });
+      const marquee = async (top: number, bottom: number, message: string) => {
+        const start = point(760, top),
+          end = point(1040, bottom);
+        await page.keyboard.down("Shift");
+        await page.mouse.move(start.x, start.y);
+        await page.mouse.down();
+        await page.mouse.move(end.x, end.y, { steps: 8 });
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+        await expect(
+          page.getByRole("button", { name: "Удалить выбранное", exact: true }),
+        ).toBeVisible();
+        await expectStableSelectionChrome(page, baseline);
+        await page
+          .getByRole("button", { name: "Удалить выбранное", exact: true })
+          .click();
+        await inspectBulkConfirmation(page, message);
+        expect(requests).toHaveLength(0);
+        // Cancel preserves the group, not just the absence of its HUD counter.
+        await expect(
+          page.getByRole("button", { name: "Удалить выбранное", exact: true }),
+        ).toBeVisible();
+      };
+      await marquee(330, 440, "Выбрано объектов: 2. Токенов: 2. Рисунков: 0.");
+      const empty = point(1200, 650);
+      await page.mouse.click(empty.x, empty.y);
+      await expectCleared();
+      await marquee(500, 610, "Выбрано объектов: 2. Токенов: 0. Рисунков: 2.");
+      await map.focus();
+      await page.keyboard.press("Escape");
+      await expectCleared();
+      await marquee(330, 610, "Выбрано объектов: 4. Токенов: 2. Рисунков: 2.");
+      await page.screenshot({
+        path: testInfo.outputPath(
+          `selection-zoom-${role.toLowerCase()}-${width}.png`,
+        ),
+        fullPage: true,
+      });
+      await map.focus();
+      await page.keyboard.press("Escape");
+      await expectCleared();
+    });
+  }
+}
+
 test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", async ({
   page,
 }) => {
@@ -963,6 +1204,7 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   });
   await page.goto("/");
   const map = page.locator(".map-viewport");
+  const zoomBaseline = await zoomBounds(page);
   const trigger = map.locator(".map-object-list-trigger");
   await trigger.click();
   await map
@@ -970,6 +1212,7 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
     .click();
   await trigger.click();
   await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+  await expectStableSelectionChrome(page, zoomBaseline);
   const box = (await map.boundingBox())!;
   const right = Number(await map.getAttribute("data-resize-handle-x"));
   const bottom = Number(await map.getAttribute("data-resize-handle-y"));
@@ -990,9 +1233,8 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   await page.mouse.down();
   await page.mouse.move(panStart.x + 40, panStart.y, { steps: 4 });
   await page.mouse.up();
-  await expect(
-    page.getByRole("status", { name: "Выбрано объектов" }),
-  ).toHaveCount(0);
+  await expect(map).not.toHaveAttribute("data-resize-handle-x");
+  await expectStableSelectionChrome(page, zoomBaseline);
   await trigger.click();
   await map
     .getByRole("button", { name: "Selected token", exact: true })
@@ -1016,25 +1258,37 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
   await page.mouse.up();
   await page.keyboard.up("Shift");
-  const selection = page.getByRole("status", { name: "Выбрано объектов" });
-  await expect(selection).toHaveText(
+  await expectStableSelectionChrome(page, zoomBaseline);
+  await page.getByRole("button", { name: "Удалить выбранное" }).click();
+  await inspectBulkConfirmation(
+    page,
     "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
   );
+  expect(bulkRequests).toHaveLength(0);
 
   // Shift+click toggles one drawing without replacing the token selection.
   const drawingPoint = screenPoint(512, 352);
   await page.keyboard.down("Shift");
   await page.mouse.click(drawingPoint.x, drawingPoint.y);
   await page.keyboard.up("Shift");
-  await expect(selection).toHaveText(
+  await map.focus();
+  await page.keyboard.press("Delete");
+  await inspectBulkConfirmation(
+    page,
     "Выбрано объектов: 1. Токенов: 1. Рисунков: 0.",
   );
+  await expectStableSelectionChrome(page, zoomBaseline);
+  expect(bulkRequests).toHaveLength(0);
   await page.keyboard.down("Shift");
   await page.mouse.click(drawingPoint.x, drawingPoint.y);
   await page.keyboard.up("Shift");
-  await expect(selection).toHaveText(
+  await expectStableSelectionChrome(page, zoomBaseline);
+  await page.getByRole("button", { name: "Удалить выбранное" }).click();
+  await inspectBulkConfirmation(
+    page,
     "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
   );
+  expect(bulkRequests).toHaveLength(0);
 
   // Dragging either selected member uses the existing queued mixed bulk move.
   const tokenCenter = screenPoint(416, 352);
@@ -1052,6 +1306,7 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
       { targetType: "DRAWING", targetId: drawingId, revision: 0 },
     ],
   });
+  await expectStableSelectionChrome(page, zoomBaseline);
 
   await page.getByRole("button", { name: "Удалить выбранное" }).click();
   const dialog = page.getByRole("dialog", {
@@ -1217,6 +1472,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
 
   playerMode = true;
   await page.reload();
+  const zoomBaseline = await zoomBounds(page);
   const box = (await map.boundingBox())!;
   const screenPoint = (x: number, y: number) => ({
     x: box.x + offsetX + x * scale,
@@ -1233,10 +1489,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
   await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 10 });
   await page.mouse.up();
   await page.keyboard.up("Shift");
-  const selection = page.getByRole("status", { name: "Выбрано объектов" });
-  await expect(selection).toHaveText(
-    "Выбрано объектов: 2. Токенов: 0. Рисунков: 2.",
-  );
+  await expectStableSelectionChrome(page, zoomBaseline);
   await page.getByRole("button", { name: "Удалить выбранное" }).click();
   const deleteDialog = page.getByRole("dialog", {
     name: "Удалить выбранные объекты?",
@@ -1244,6 +1497,11 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
   await expect(deleteDialog).toContainText(
     "Выбрано объектов: 2. Токенов: 0. Рисунков: 2.",
   );
+  await deleteDialog
+    .getByRole("button", { name: "Отмена", exact: true })
+    .click();
+  expect(requests).toHaveLength(0);
+  await page.getByRole("button", { name: "Удалить выбранное" }).click();
   await deleteDialog
     .getByRole("button", { name: "Удалить", exact: true })
     .click();
@@ -1258,7 +1516,11 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
 
   accessEnabled = false;
   await page.reload();
-  await expect(selection).toHaveCount(0);
+  await expectStableSelectionChrome(page, zoomBaseline);
+  await map.focus();
+  await page.keyboard.press("Delete");
+  await expect(deleteDialog).toHaveCount(0);
+  expect(requests).toHaveLength(1);
   await expect(
     page.getByRole("button", { name: "Удалить выбранное" }),
   ).toHaveCount(0);
