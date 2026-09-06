@@ -352,7 +352,11 @@ test("UIX-621 desktop overflow navigation has clickable visible menu items", asy
   await mockBootstrap(page, snapshot);
   await page.goto("/");
   await page.getByLabel("Ещё разделы").click();
-  const item = page.locator(".workspace-nav__menu button").first();
+  // Characters is a root workspace, not a floating window. Exercise a named
+  // overflow item with a stable dialog contract instead of whichever is first.
+  const item = page.locator(
+    '.workspace-nav__menu button[data-workspace="tokens"]',
+  );
   await expect(item).toBeVisible();
   await expect
     .poll(() =>
@@ -368,7 +372,9 @@ test("UIX-621 desktop overflow navigation has clickable visible menu items", asy
     )
     .toBe(true);
   await item.click();
-  await expect(page.locator(".arken-workspace-window")).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Токены", exact: true }),
+  ).toBeVisible();
 });
 
 test("UIX-621 select portal receives pointer above token workspace", async ({

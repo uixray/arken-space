@@ -11,7 +11,7 @@
 - Автоматических конфликтов нет. Проверены стыки App/Renderer: WASD TOKEN-only,
   смешанный выбор для Arrow/drag, hidden/inert guards, rollback/recovery и
   account-menu rename сохранены.
-- Единственная дополнительная правка: `tests/e2e/navigation-completion.spec.ts`.
+- Первая дополнительная правка: `tests/e2e/navigation-completion.spec.ts`.
   При 390px проверяется compact shell, затем desktop priority+ assertions
   выполняются на границе 1024px; проверки клавиатуры и возврата к 2000px сохранены.
   Продуктовый код дополнительно не менялся.
@@ -49,6 +49,15 @@
   Sniff `audio/ogg`, music-metadata и реальный Firefox decode PASS.
   Product allowlist не менялся. После первого failed CI cleanup/leak-check PASS;
   новый runtime gate требуется на исправленной ревизии.
+- Следующий CI на `a3e049092dd2216999bd17fc93934ff204520935`: checks
+  **227/1817 PASS**, multiplayer **3/3 PASS** с реальным media receipt,
+  двумя backend restart и чистым cleanup. E2E: **306 passed / 2 failed / 4 skipped**.
+  Оба fail — один desktop overflow test в Chromium/Firefox: `.first()` выбирал
+  «Персонажи», которые успешно открывались как root `main`, тогда как тест
+  требовал floating workspace. Trace подтвердил успешные hit-test/click.
+  В `tests/e2e/scene-workspace-dialog.spec.ts` выбран конкретный overflow пункт
+  «Токены» и его semantic dialog; pointer/hit-test сохранён, продукт не менялся.
+  Смена игрока не затрагивалась. Полный gate требуется на новой ревизии.
 - Production пока не менялся. Перед выкладкой обязательны свежие host preflight,
   backup и restore rehearsal точного snapshot, non-live image/audio smoke,
   сохранённые rollback image IDs и двухфазный `infra/deploy/release.sh`.
