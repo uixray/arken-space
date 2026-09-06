@@ -30,7 +30,7 @@
   format/lint/typecheck прошли (lint: 0 errors / 4 warnings); полный Vitest:
   **227 файлов / 1817 тестов PASS**, exit 0, 739.53 s.
 - Для обязательного non-live media gate добавлен
-  `tests/multiplayer/media-smoke.spec.ts` и собственная synthetic Ogg/Opus fixture
+  `tests/multiplayer/media-smoke.spec.ts` и собственная synthetic Ogg/Vorbis fixture
   `uix642-synthetic-tone.ogg` (440 Hz oscillator, без стороннего контента).
   Existing disposable CI проверяет точную ревизию, upload/download/range,
   image decode/audio playback, reload и сохранность после backend restart.
@@ -40,6 +40,15 @@
   guard diversion с `https://example.invalid` дала ожидаемый exit 1 до создания
   context, health, database/auth/API writes. Это проверка изоляции, не замена
   положительного media runtime gate.
+- Первый CI multiplayer на `a79f3cdf602d948589b1fd1ed3d8dcb055adf4b2`:
+  existing 2 tests PASS, новый media test FAIL. PNG upload201, Ogg/Opus upload400
+  `UNSUPPORTED_AUDIO_TYPE`: sniff давал `audio/ogg; codecs=opus`, не входящий в
+  действующий allowlist. Исправлена только fixture на собственный Ogg/Vorbis:
+  6769 bytes, 0.7 s / 48 kHz stereo, SHA-256
+  `21777ec04536e1d079ec8c5c14253fff1a12944a1f1ac1191490029d570e2a73`.
+  Sniff `audio/ogg`, music-metadata и реальный Firefox decode PASS.
+  Product allowlist не менялся. После первого failed CI cleanup/leak-check PASS;
+  новый runtime gate требуется на исправленной ревизии.
 - Production пока не менялся. Перед выкладкой обязательны свежие host preflight,
   backup и restore rehearsal точного snapshot, non-live image/audio smoke,
   сохранённые rollback image IDs и двухфазный `infra/deploy/release.sh`.

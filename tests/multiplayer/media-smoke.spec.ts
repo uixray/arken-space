@@ -21,13 +21,14 @@ const image = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
-// Собственный 440 Hz oscillator, gain 0.05, Firefox MediaRecorder Ogg/Opus.
-// Без внешнего контента/прав: ~0.7 s, 48 kHz stereo; не mock с расширением .ogg.
+// Собственный 440 Hz sine, gain 0.05, soundfile 0.13.1 / libsndfile Ogg/Vorbis.
+// Без внешнего контента/прав: 0.7 s, 48 kHz stereo; не mock с расширением .ogg.
+// Vorbis sniff = audio/ogg; Opus MIME с codecs не входит в текущий allowlist.
 const audio = readFileSync(
   new URL("./uix642-synthetic-tone.ogg", import.meta.url),
 );
 const fixtureHash =
-  "639c1754949d7c4344435414589db57065a577ff318e355157a7b78c2fceba13";
+  "21777ec04536e1d079ec8c5c14253fff1a12944a1f1ac1191490029d570e2a73";
 const hash = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 
