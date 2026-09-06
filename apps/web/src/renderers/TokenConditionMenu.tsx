@@ -9,7 +9,6 @@ export function TokenConditionMenu({
   token,
   role,
   onChange,
-  onClose,
 }: {
   token: TokenDto;
   role: SceneRendererProps["role"];
@@ -32,7 +31,6 @@ export function TokenConditionMenu({
             role="menuitemcheckbox"
             aria-checked={checked}
             onClick={() => {
-              onClose();
               void onChange(
                 token.id,
                 token.revision,
@@ -40,8 +38,7 @@ export function TokenConditionMenu({
                   ? token.conditions.filter((value) => value !== condition)
                   : [...token.conditions, condition],
               ).catch(() => {
-                // The application mutation runner presents the server error.
-                // No optimistic state was applied, so nothing needs rollback.
+                // The application owns optimistic state, rollback and errors.
               });
             }}
           >

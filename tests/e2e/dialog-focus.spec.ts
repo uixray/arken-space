@@ -31,7 +31,9 @@ test("модальный диалог держит Tab внутри себя", a
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Формула", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Переименовать кампанию", exact: true })
+    .click();
   await expect(page.locator('[role="dialog"]').first()).toBeVisible();
 
   const escaped: string[] = [];
@@ -63,7 +65,10 @@ test("закрытый диалог возвращает фокус тому, к
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
 
-  const opener = page.getByRole("button", { name: "Формула", exact: true });
+  const opener = page.getByRole("button", {
+    name: "Переименовать кампанию",
+    exact: true,
+  });
   await opener.click();
   await expect(page.locator('[role="dialog"]').first()).toBeVisible();
 

@@ -54,5 +54,5 @@ export function conditionsHint(conditions: readonly TokenCondition[]): string {
   return tokenConditionSchema.options
     .filter((condition) => conditions.includes(condition))
     .map((condition) => TOKEN_CONDITION_LABEL[condition])
-    .join(", ");
+    .join("\n");
 }

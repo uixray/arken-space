@@ -2,20 +2,12 @@ import { useState } from "react";
 import type { MessageVisibility } from "@arken/contracts";
 import { RollModeControl, type RollMode } from "../RollModeControl";
 import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
-import { TextPromptDialog } from "../ui/TextPromptDialog";
 
 /**
- * Sidebar-resident physical dice tray (UIX-387). Corrects UIX-363, which
- * made the character-stat quick-roll panel draggable instead of relocating
- * this tray -- the d2/d4/.../d20/fx dice buttons, roll-mode control and
- * GM-only visibility toggle -- out of its canvas-bottom floating overlay
- * (`CanvasRollOverlay`, now removed). It renders as a normal document-flow
- * sidebar section.
- *
- * UIX-455: вертикальная ручка отсюда убрана. Кнопок здесь ровно семь костей,
- * режим броска и два переключателя — высота не меняется от содержимого, и
- * тянуть было нечего. Ручка переехала на панель быстрых бросков, где список
- * растёт вместе с раскладкой кампании.
+ * UIX-504: компактная строка костей и режимов. Это более позднее решение,
+ * чем две текстовые строки UIX-469: иконки сохраняют title и доступные имена.
+ * Своя формула доступна через /roll в редакторе сообщений; второй диалог не нужен.
+ * Высота списка характеристик регулируется отдельно в QuickRollPanel.
  */
 export function DiceTrayPanel({
   characterId,
@@ -42,24 +34,36 @@ export function DiceTrayPanel({
   ) => Promise<void>;
 }) {
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
-  const [customRollOpen, setCustomRollOpen] = useState(false);
+  const [pendingRolls, setPendingRolls] = useState(0);
+  const [rollError, setRollError] = useState("");
+  const sendRoll: typeof onRoll = async (...args) => {
+    setPendingRolls((count) => count + 1);
+    setRollError("");
+    try {
+      await onRoll(...args);
+    } catch (error) {
+      setRollError(
+        error instanceof Error ? error.message : "Не удалось отправить бросок",
+      );
+    } finally {
+      setPendingRolls((count) => count - 1);
+    }
+  };
 
   return (
     <section className="dice-tray-panel" aria-label="Физические кости">
-      {/* UIX-469: кости и режимы разведены по строкам. Всё стояло одной
-          строкой, и кости делили её с тремя значками — `↑`, `↓`, `◆` и `fx`
-          читались как украшение, а не как «преимущество», «помеха», «только
-          мастеру» и «своя формула». Кости — то, что нажимают чаще всего, и они
-          получают строку целиком; остальное подписано словами. */}
       <div className="dice-tray-panel__body">
-        <div className="canvas-roll-row canvas-roll-dice" aria-label="Кости">
+        <div
+          className="dice-tray-panel__toolbar"
+          aria-label="Кости и режим броска"
+        >
           {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
             <button
               key={sides}
               type="button"
               title={`Бросить d${sides} · ${ROLL_MODIFIER_HINT}`}
               onClick={(event) =>
-                void onRoll(
+                void sendRoll(
                   `1d${sides}`,
                   `d${sides}`,
                   visibility,
@@ -73,25 +77,18 @@ export function DiceTrayPanel({
               d{sides}
             </button>
           ))}
-        </div>
-        <div className="canvas-roll-row dice-tray-panel__modes">
+
           <RollModeControl
             value={rollMode}
             onChange={setRollMode}
             label="Режим броска"
+            iconOnly
           />
-          <button
-            type="button"
-            className="dice-tray-panel__action"
-            title="Бросок по своей формуле"
-            onClick={() => setCustomRollOpen(true)}
-          >
-            Формула
-          </button>
           <button
             type="button"
             className="dice-tray-panel__action canvas-roll-gm-toggle"
             title="Броски только мастеру (кости и характеристики)"
+            aria-label="Только мастеру"
             aria-pressed={visibility === "GM_ONLY"}
             onClick={() =>
               onVisibilityChange(
@@ -99,28 +96,12 @@ export function DiceTrayPanel({
               )
             }
           >
-            Только мастеру
+            <span aria-hidden="true">◆</span>
           </button>
         </div>
       </div>
-      <TextPromptDialog
-        open={customRollOpen}
-        title="Быстрый бросок"
-        label="Формула броска"
-        initialValue="1d20"
-        applyLabel="Бросить"
-        onClose={() => setCustomRollOpen(false)}
-        onApply={async (formula) => {
-          await onRoll(
-            formula,
-            "Быстрый бросок",
-            visibility,
-            characterId,
-            rollMode,
-          );
-          setCustomRollOpen(false);
-        }}
-      />
+      {pendingRolls > 0 && <p role="status">Бросаем… {pendingRolls}</p>}
+      {rollError && <p role="alert">{rollError}</p>}
     </section>
   );
 }

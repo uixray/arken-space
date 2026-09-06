@@ -1,5 +1,7 @@
+import { RollVisibilityContext } from "../roll-visibility-context";
 import {
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -31,7 +33,7 @@ import {
   statResourceRowsFromLayout,
   statRowsFromLayout,
 } from "../stat-keys";
-import { InitiativePanel } from "./InitiativePanel";
+
 import { useDismissibleDetails } from "../ui/dismissible-details";
 import {
   ACTIVITY_FILTERS,
@@ -82,7 +84,6 @@ import type { Props } from "../Sidebar";
 import type { ChatActions } from "../use-chat-actions";
 import { useFollowScroll } from "../ui/useFollowScroll";
 import { decideComposerKeydown } from "../composer-keyboard-intent";
-import { DiceTrayPanel } from "./DiceTrayPanel";
 import { ApiError } from "../api";
 import {
   shouldLoadOlderAfterScroll,
@@ -295,11 +296,6 @@ export function ActivityPanel({
   onMessageFocused,
   onOpenPlayerRequestCreate,
   onUpdateCounters,
-  selectedTokenIds,
-  onUpdateInitiative,
-  onSetOwnInitiative,
-  onRollInitiative,
-  onRecruitFromBattleZone,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -333,7 +329,6 @@ export function ActivityPanel({
   /** UIX-466 п. 3: подтянуть в очередь тех, кто в зоне боя. */
   onRecruitFromBattleZone?: () => void;
 }) {
-  const [initiativePending, setInitiativePending] = useState(false);
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
   const characterNameFor = useMemo(
     () => createRollCharacterNameSource(snapshot),
@@ -361,14 +356,7 @@ export function ActivityPanel({
   const filtersRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(filtersRef);
   const [quickRollPending, setQuickRollPending] = useState(false);
-  // UIX-388 follow-up: removing the composer's «Только мастеру» checkbox took
-  // the only private-roll affordance with it, leaving stat and skill rolls
-  // permanently public -- which quietly removes secret checks (perception,
-  // deception) from play. The dice tray already had its own GM-only toggle,
-  // so visibility is lifted here and shared with it: one toggle now governs
-  // every roll made from the sidebar, rather than two adjacent ones.
-  const [rollVisibility, setRollVisibility] =
-    useState<MessageVisibility>("PUBLIC");
+  const rollVisibility = useContext(RollVisibilityContext);
   // UIX-372: the roll/event log can get long and spammy with quick rolls, so
   // it can be collapsed to a compact "last N entries" view independently of
   // whole-sidebar collapse or width resize.
@@ -589,38 +577,6 @@ export function ActivityPanel({
       id="chat-panel-activity"
       aria-labelledby="chat-tab-activity"
     >
-      {snapshot.campaign.battleActive && (
-        <InitiativePanel
-          participants={snapshot.campaign.initiative}
-          isGm={snapshot.me.role === "GM"}
-          pending={initiativePending}
-          selectedTokenIds={selectedTokenIds}
-          onUpdate={(next) => {
-            setInitiativePending(true);
-            void onUpdateInitiative(next, snapshot.campaign.revision).finally(
-              () => setInitiativePending(false),
-            );
-          }}
-          onSetOwnInitiative={(participantId, value) => {
-            setInitiativePending(true);
-            void onSetOwnInitiative(
-              participantId,
-              value,
-              snapshot.campaign.revision,
-            ).finally(() => setInitiativePending(false));
-          }}
-          onRoll={(participant) => {
-            setInitiativePending(true);
-            void onRollInitiative(
-              snapshot.campaign.initiative,
-              participant,
-              snapshot.campaign.revision,
-              snapshot.me.role === "GM",
-            ).finally(() => setInitiativePending(false));
-          }}
-          onRecruitFromZone={onRecruitFromBattleZone}
-        />
-      )}
       <section className="activity-roll-controls" aria-label="Быстрые броски">
         <div className="activity-roll-controls__heading">
           <strong>Быстрые броски</strong>
@@ -656,12 +612,7 @@ export function ActivityPanel({
             Физические кубы
           </FormInput>
         </div>
-        <DiceTrayPanel
-          characterId={snapshot.me.characterId}
-          visibility={rollVisibility}
-          onVisibilityChange={setRollVisibility}
-          onRoll={onRoll}
-        />
+
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}

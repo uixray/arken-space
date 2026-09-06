@@ -343,3 +343,85 @@ test("grid settings keep a rejected draft open for correction or retry", async (
   await expect(size).toHaveValue("96");
   await expect(save).toBeEnabled();
 });
+
+test("UIX-621 overflow navigation has clickable visible menu items", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 960, height: 800 });
+  await mockBootstrap(page, snapshot);
+  await page.goto("/");
+  await page.getByLabel("Ещё разделы").click();
+  const item = page.locator(".workspace-nav__menu button").first();
+  await expect(item).toBeVisible();
+  await expect
+    .poll(() =>
+      item.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return el.contains(
+          document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          ),
+        );
+      }),
+    )
+    .toBe(true);
+  await item.click();
+  await expect(page.locator(".arken-workspace-window")).toBeVisible();
+});
+
+test("UIX-621 select portal receives pointer above token workspace", async ({
+  page,
+}) => {
+  await mockBootstrap(page, tokenSnapshot);
+  await page.goto("/");
+  await openWorkspaceSection(page, "Токены");
+  const workspace = page.getByRole("dialog", { name: "Токены" });
+  await workspace.locator(".g-select").first().click();
+  const option = page.getByRole("option").first();
+  await expect(option).toBeVisible();
+  await expect
+    .poll(() =>
+      option.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return el.contains(
+          document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          ),
+        );
+      }),
+    )
+    .toBe(true);
+  await option.click();
+});
+
+test("UIX-621 raw Gravity select receives pointer above feedback modal", async ({
+  page,
+}) => {
+  await mockBootstrap(page, snapshot);
+  await page.goto("/");
+  await page.getByLabel("Меню сеанса").click();
+  await page.getByRole("button", { name: "Сообщить", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Сообщить о проблеме или идее",
+  });
+  await dialog.locator(".g-select").click();
+  const option = page.getByRole("option", { name: "Идея", exact: true });
+  await expect(option).toBeVisible();
+  await expect
+    .poll(() =>
+      option.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return el.contains(
+          document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          ),
+        );
+      }),
+    )
+    .toBe(true);
+  await option.click();
+  await expect(dialog.locator(".g-select")).toContainText("Идея");
+});

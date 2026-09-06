@@ -76,14 +76,10 @@ export function CampaignClockDialog({
         onClose={close}
       >
         <p aria-live="polite">
-          <strong>День {campaign.day}</strong> ·{" "}
-          {campaign.battleActive
-            ? `идёт бой #${campaign.battleCounter}`
-            : `завершено боёв: ${campaign.battleCounter}`}
+          <strong>День {campaign.day}</strong>
         </p>
         <p className="muted">
-          Бой начинается и завершается через столкновение на карте. Здесь можно
-          перевести календарь и провести общий отдых.
+          Здесь можно перевести календарь и провести общий отдых.
         </p>
         {error && !resetConfirmationOpen ? (
           <p className="field-error" role="alert">
@@ -112,10 +108,10 @@ export function CampaignClockDialog({
             disabled={Boolean(pendingCommand) || resetDisabled}
             title={
               campaign.battleActive
-                ? "Сначала завершите бой через столкновение на карте"
+                ? "Сброс недоступен для сохранённого состояния кампании"
                 : resetAtBaseline
                   ? "Время уже находится в исходной точке"
-                  : "Вернуть день и счётчик завершённых боёв в исходную точку"
+                  : "Вернуть время кампании в исходную точку"
             }
             onClick={() => {
               setError("");
@@ -127,7 +123,7 @@ export function CampaignClockDialog({
         </div>
         {campaign.battleActive ? (
           <p className="muted">
-            Сброс станет доступен после завершения активного столкновения.
+            Сброс недоступен для сохранённого состояния кампании.
           </p>
         ) : resetAtBaseline ? (
           <p className="muted">Время уже находится в исходной точке.</p>
@@ -148,7 +144,7 @@ export function CampaignClockDialog({
         }}
       >
         <p className="arken-dialog-message">
-          День станет 1, а счётчик завершённых боёв — 0. Текущие значения
+          День станет 1, служебные счётчики времени сбросятся. Текущие значения
           ресурсов персонажей не изменятся.
         </p>
       </ArkenDialog>

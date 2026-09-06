@@ -106,15 +106,6 @@ export const canvasSections: GuideSection[] = [
     shortcuts: [...mapToolGuideShortcuts.filter((shortcut) => shortcut.fog)],
   },
   {
-    title: "Бой",
-    hint: "Только мастер.",
-    shortcuts: [
-      ...mapToolGuideShortcuts.filter(
-        (shortcut) => shortcut.gmOnly && !shortcut.fog,
-      ),
-    ],
-  },
-  {
     title: "Камера",
     shortcuts: [
       { keys: ["+"], action: "Приблизить" },
@@ -122,6 +113,11 @@ export const canvasSections: GuideSection[] = [
       { keys: ["0"], action: "Вписать карту в экран" },
       { keys: ["F"], action: "То же самое" },
       { keys: ["Колесо"], action: "Масштаб под курсором" },
+      {
+        keys: ["ПКМ / средняя кнопка", "перетаскивание"],
+        action: "Переместить карту",
+      },
+      { keys: ["Ctrl", "клик"], action: "Пинг — показать точку остальным" },
     ],
   },
   {
@@ -130,6 +126,10 @@ export const canvasSections: GuideSection[] = [
     shortcuts: [
       { keys: ["←", "→", "↑", "↓"], action: "Шаг на одну клетку сетки" },
       { keys: ["Shift", "стрелка"], action: "Шаг сразу на пять клеток" },
+      {
+        keys: ["ЛКМ", "перетаскивание по пустой карте"],
+        action: "Выделить несколько токенов рамкой",
+      },
       { keys: ["Enter"], action: "Открыть действия выделенного" },
       { keys: ["Delete"], action: "Удалить выделенное" },
     ],
