@@ -43,8 +43,6 @@ describe("map toolbar icon styles", () => {
         "COVER_BRUSH",
         "FOG_POLYGON",
         "COVER_POLYGON",
-        "ENCOUNTER_START",
-        "ENCOUNTER_END",
       ]),
     );
     expect(toolbarToolIds.length).toBeGreaterThan(6);

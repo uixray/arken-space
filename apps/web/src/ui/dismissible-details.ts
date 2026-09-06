@@ -30,6 +30,10 @@ export function useDismissibleDetails(
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && ref.current?.open) {
+        if (ref.current.closest("[hidden], [inert]")) {
+          close(false);
+          return;
+        }
         event.preventDefault();
         close(true);
       }

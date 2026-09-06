@@ -37,12 +37,9 @@ describe("landing guide", () => {
 
     expect(screen.getByText("Туман войны")).toBeInTheDocument();
     expect(screen.getByText("Перемещение и выделение")).toBeInTheDocument();
-    // UIX-466: мастерские инструменты — это шесть туманных плюс зона боя.
-    // Раньше «мастерский» и «туманный» совпадали, и раздел собирался по роли;
-    // теперь у боя свой раздел, а бейдж по-прежнему висит на всех семи: игрок,
-    // читающий эту страницу, должен понимать, почему клавиша ему не отвечает.
-    expect(screen.getByText("Бой")).toBeInTheDocument();
-    expect(screen.getAllByText("только мастер")).toHaveLength(7);
+    // UIX-621: бой отключён; доступны только шесть мастерских инструментов тумана.
+    expect(screen.queryByText("Бой")).not.toBeInTheDocument();
+    expect(screen.getAllByText("только мастер")).toHaveLength(6);
     expect(screen.getByText("/d20")).toBeInTheDocument();
   });
 

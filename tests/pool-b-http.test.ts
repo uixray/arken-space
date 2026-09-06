@@ -620,6 +620,97 @@ describe("Pool B HTTP boundaries", () => {
     expect(replay.json().id).toBe(placed.json().id);
   });
 
+  it("UIX-621 preserves client placement UUIDs and refuses cross-campaign collisions without overwrite", async () => {
+    const foreignScene = crypto.randomUUID();
+    const foreignDefinition = crypto.randomUUID();
+    const foreignToken = crypto.randomUUID();
+    await db.insert(schema.scenes).values({
+      id: foreignScene,
+      campaignId: ids.foreignCampaign,
+      name: "Foreign scene",
+      grid: {
+        enabled: true,
+        size: 64,
+        offsetX: 0,
+        offsetY: 0,
+        color: "#ffffff",
+        opacity: 0.2,
+      },
+    });
+    await db.insert(schema.tokenDefinitions).values({
+      id: foreignDefinition,
+      campaignId: ids.foreignCampaign,
+      name: "Foreign definition",
+    });
+    await db.insert(schema.tokens).values({
+      id: foreignToken,
+      definitionId: foreignDefinition,
+      sceneId: foreignScene,
+      name: "Do not overwrite",
+      x: 17,
+      y: 29,
+    });
+    for (const url of [
+      "/api/tokens",
+      `/api/token-definitions/${ids.definition}/placements`,
+    ]) {
+      const placementId = crypto.randomUUID();
+      const payload = {
+        actionId: crypto.randomUUID(),
+        placementId,
+        sceneId: ids.scene,
+        name: "Correlated token",
+        x: 768,
+        y: 768,
+      };
+      const created = await app.inject({
+        method: "POST",
+        url,
+        headers: headers(secrets.gm),
+        payload,
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json().id).toBe(placementId);
+      const collision = await app.inject({
+        method: "POST",
+        url,
+        headers: headers(secrets.gm),
+        payload: {
+          ...payload,
+          actionId: crypto.randomUUID(),
+          placementId: foreignToken,
+        },
+      });
+      expect(collision.statusCode).toBe(409);
+      expect(collision.json()).toMatchObject({
+        error: "PLACEMENT_ID_CONFLICT",
+      });
+      const [unchanged] = await db
+        .select()
+        .from(schema.tokens)
+        .where(eq(schema.tokens.id, foreignToken));
+      expect(unchanged).toMatchObject({
+        definitionId: foreignDefinition,
+        sceneId: foreignScene,
+        name: "Do not overwrite",
+        x: 17,
+        y: 29,
+      });
+      const invalid = await app.inject({
+        method: "POST",
+        url,
+        headers: headers(secrets.gm),
+        payload: {
+          ...payload,
+          actionId: crypto.randomUUID(),
+          placementId: "not-a-uuid",
+        },
+      });
+      // This route fixture deliberately omits the production Zod error mapper.
+      expect(invalid.statusCode).toBeGreaterThanOrEqual(400);
+    }
+  });
+
   it("keeps destructive definition deletion distinct and records non-undoable cascade semantics", async () => {
     const denied = await app.inject({
       method: "DELETE",
@@ -4402,6 +4493,61 @@ describe("Pool B HTTP boundaries", () => {
     expect(journals[0]).toMatchObject({
       targetType: "CANVAS_BULK",
       status: "APPLIED",
+    });
+  });
+
+  it("UIX-470 restores a directly deleted drawing through canvas undo", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/drawings",
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        sceneId: ids.scene,
+        points: [4, 8, 24, 32],
+        color: "#4ac7d9",
+        x: 12,
+        y: 18,
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const drawing = created.json();
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/drawings/${drawing.id}`,
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: drawing.revision },
+    });
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    const [missing] = await db
+      .select()
+      .from(schema.drawings)
+      .where(eq(schema.drawings.id, drawing.id));
+    expect(missing).toBeUndefined();
+
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undo.statusCode, undo.body).toBe(200);
+    expect(undo.json()).toMatchObject({ status: "UNDONE" });
+
+    const [restored] = await db
+      .select()
+      .from(schema.drawings)
+      .where(eq(schema.drawings.id, drawing.id));
+    expect(restored).toMatchObject({
+      id: drawing.id,
+      sceneId: ids.scene,
+      authorMembershipId: ids.player,
+      points: [4, 8, 24, 32],
+      color: "#4ac7d9",
+      x: 12,
+      y: 18,
+      revision: 1,
     });
   });
 

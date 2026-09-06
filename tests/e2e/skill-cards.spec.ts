@@ -387,6 +387,7 @@ test("sharing is passive and a deleted-source card remains keyboard-safe at 960p
   await expect(page.locator(".character-action-card__uses")).toHaveText("2/2");
 
   await page.getByRole("button", { name: "Закрыть персонажей" }).click();
+  await page.locator("#compact-nav-journal").click();
   await page.locator("#chat-tab-activity").click();
   const card = page
     .locator(".skill-chat-card")

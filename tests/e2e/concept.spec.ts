@@ -355,7 +355,9 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
   await page.goto("/");
 
   await expect(page.locator(".workspace-nav")).toBeVisible();
-  await expect(page.locator(".campaign-name-button__icon")).toBeVisible();
+  await expect(page.locator(".brand")).not.toContainText(
+    snapshot.campaign.name,
+  );
   await expect(page.locator(".scene-token-count")).toBeHidden();
   for (const tool of ["PAN", "FOG", "COVER", "DRAW", "RULER", "PING"]) {
     await expect(
@@ -452,13 +454,8 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
   expect(distinctGlyphs.every((glyph) => glyph.trim().length > 0)).toBe(true);
   expect(new Set(distinctGlyphs).size).toBe(distinctGlyphs.length);
 
-  const encounterStart = tool("ENCOUNTER_START");
-  await expect(encounterStart).toHaveAttribute("aria-label", "Начать бой");
-  await expect(encounterStart).toHaveAttribute(
-    "title",
-    "Начать бой из области сцены или связанной локации",
-  );
-  await expect(encounterStart).toBeDisabled();
+  await expect(tool("ENCOUNTER_START")).toHaveCount(0);
+  await expect(tool("BATTLE_ZONE")).toHaveCount(0);
 
   await tool("COVER").focus();
   await page.keyboard.press("Tab");
@@ -516,16 +513,6 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
   activeSnapshot.encounters = [];
   await page.reload();
 
-  const enabledStart = page
-    .getByRole("toolbar", { name: "Инструменты карты" })
-    .locator('[data-tool="ENCOUNTER_START"]');
-  await expect(enabledStart).toBeEnabled();
-  const startGlyph = await pseudoContent(enabledStart);
-  await enabledStart.click();
-  await expect(page.getByRole("dialog", { name: "Начать бой" })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Начать бой" })).toBeHidden();
-
   const now = "2026-08-21T08:00:00.000Z";
   activeSnapshot.encounters = [
     {
@@ -556,13 +543,10 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
   await expect(
     activeToolbar.locator('[data-tool="ENCOUNTER_START"]'),
   ).toHaveCount(0);
-  const encounterEnd = activeToolbar.locator('[data-tool="ENCOUNTER_END"]');
-  await expect(encounterEnd).toBeEnabled();
-  await expect(encounterEnd).toHaveAttribute("aria-label", "Завершить бой");
-  await expect(encounterEnd).toHaveAttribute("title", "Завершить текущий бой");
-  const endGlyph = await pseudoContent(encounterEnd);
-  expect(endGlyph.trim().length).toBeGreaterThan(0);
-  expect(endGlyph).not.toBe(startGlyph);
+  await expect(
+    activeToolbar.locator(' [data-tool="ENCOUNTER_END"]'),
+  ).toHaveCount(0);
+  await expect(page.locator(".initiative-panel")).toHaveCount(0);
 });
 
 test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
@@ -596,7 +580,7 @@ test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
     ["Перемещение и выделение", ["V"]],
     ["Рисование", ["D"]],
     ["Линейка — измерить расстояние", ["R"]],
-    ["Пинг — показать точку остальным", ["P"]],
+    ["Пинг — показать точку остальным", ["P", "Ctrl", "клик"]],
     ["Открыть туман областью", ["G"]],
     ["Закрыть туман областью", ["Shift", "G"]],
     ["Открыть туман кистью", ["B"]],
@@ -618,17 +602,17 @@ test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
   activeSnapshot.members = [{ ...activeSnapshot.me }];
   await page.reload();
   const playerDialog = await openShortcuts();
-  for (const [action, key] of [
-    ["Перемещение и выделение", "V"],
-    ["Рисование", "D"],
-    ["Линейка — измерить расстояние", "R"],
-    ["Пинг — показать точку остальным", "P"],
-    ["Бросок с преимуществом", "Ctrl"],
-    ["Бросок с помехой", "Alt"],
+  for (const [action, keys] of [
+    ["Перемещение и выделение", ["V"]],
+    ["Рисование", ["D"]],
+    ["Линейка — измерить расстояние", ["R"]],
+    ["Пинг — показать точку остальным", ["P", "Ctrl", "клик"]],
+    ["Бросок с преимуществом", ["Ctrl"]],
+    ["Бросок с помехой", ["Alt"]],
   ] as const) {
-    await expect(shortcutRow(playerDialog, action).locator("kbd")).toHaveText([
-      key,
-    ]);
+    await expect(shortcutRow(playerDialog, action).locator("kbd")).toHaveText(
+      keys,
+    );
   }
   for (const action of [
     "Открыть туман областью",
@@ -998,7 +982,8 @@ test("GM manages one campaign clock surface and confirms a reset", async ({
   const workspace = page.locator(".character-workspace");
   await expect(workspace).toBeVisible();
   const clockTrigger = workspace.getByRole("button", {
-    name: "День 7 · боёв: 3",
+    name: "День 7",
+    exact: true,
   });
   await expect(clockTrigger).toHaveCount(1);
   await clockTrigger.click();
@@ -1256,7 +1241,7 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
   });
   await page.goto("/");
 
-  const quickRolls = page.locator(".activity-roll-controls");
+  const quickRolls = page.locator(".map-dice-tray");
   await expect(quickRolls).toBeVisible();
   await quickRolls
     .locator(".roll-mode-control")
@@ -1327,26 +1312,14 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
   });
   expect(chatRequests).toHaveLength(2);
 
-  await quickRolls.locator(".canvas-roll-gm-toggle").click();
-  await quickRolls
-    .getByRole("button", { name: "Формула", exact: true })
-    .click();
-  const customFormulaDialog = page.getByRole("dialog", {
-    name: "Быстрый бросок",
-  });
-  await expect(customFormulaDialog).toBeVisible();
-  await customFormulaDialog
-    .getByRole("textbox", { name: "Формула броска" })
-    .fill("2d8 + 3");
-  await customFormulaDialog.getByRole("button", { name: "Бросить" }).click();
+  await composer.fill("/roll 2d8 + 3");
+  await composer.press("Control+Enter");
   await expect.poll(() => diceRequests.length).toBe(5);
   expect(diceRequests[4]).toMatchObject({
     formula: "2d8 + 3",
-    label: "Быстрый бросок",
     visibility: "GM_ONLY",
-    rollMode: "ADVANTAGE",
+    rollMode: "NORMAL",
   });
-  await expect(customFormulaDialog).toBeHidden();
 });
 
 test("UIX-422 compact layout keeps sidebar custom roll reachable at 390x844", async ({
@@ -1369,21 +1342,16 @@ test("UIX-422 compact layout keeps sidebar custom roll reachable at 390x844", as
   );
   await page.goto("/");
 
-  const customRoll = page
-    .locator(".activity-roll-controls")
-    .getByRole("button", { name: "Формула", exact: true });
-  await expect(customRoll).toBeVisible();
-  const box = await customRoll.boundingBox();
+  const composer = page.locator(".chat-compose textarea");
+  await expect(composer).toBeVisible();
+  const box = await composer.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.y).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(390);
   expect(box!.y + box!.height).toBeLessThanOrEqual(844);
-
-  await customRoll.click();
-  await expect(
-    page.getByRole("dialog", { name: "Быстрый бросок" }),
-  ).toBeVisible();
+  await composer.fill("/roll 2d8 + 3");
+  await expect(composer).toHaveValue("/roll 2d8 + 3");
 });
 
 test("UIX-274 activity reloads story posts and exposes empty states and slash action", async ({
@@ -1839,15 +1807,32 @@ test("GM prepares a scene locally before publishing it to players", async ({
   await openWorkspaceSection(page, "Сцены");
   const dialog = page.getByRole("dialog", { name: "Сцены" });
   await expect(dialog.getByText("Показана игрокам")).toBeVisible();
+  const activeCard = dialog.locator(".scene-manager-card", {
+    hasText: sceneSnapshot.scenes[0]!.name,
+  });
+  await expect(
+    activeCard.getByRole("button", { name: "Показать игрокам" }),
+  ).toHaveCount(0);
+  await expect(
+    activeCard.getByRole("button", { name: "Открыть для мастера" }),
+  ).toHaveClass(/g-button_view_action/);
   const secretCard = dialog.locator(".scene-manager-card", {
     hasText: "Тайная комната",
   });
-  await secretCard.getByRole("button", { name: "Открыть для мастера" }).click();
+  const safeOpen = secretCard.getByRole("button", {
+    name: "Открыть для мастера",
+  });
+  const publish = secretCard.getByRole("button", {
+    name: "Показать игрокам",
+  });
+  await expect(safeOpen).toHaveClass(/g-button_view_action/);
+  await expect(publish).not.toHaveClass(/g-button_view_action/);
+  await safeOpen.click();
   await expect(viewedScenePicker(page)).toContainText("Тайная комната");
   await expect(secretCard.getByText("Просматривается мастером")).toBeVisible();
   expect(publishedSceneId).toBe("");
 
-  await secretCard.getByRole("button", { name: "Показать игрокам" }).click();
+  await publish.click();
   await expect
     .poll(() => publishedSceneId)
     .toBe("8476b502-02f8-4cd6-9c55-3816d70d44dc");
@@ -1856,6 +1841,43 @@ test("GM prepares a scene locally before publishing it to players", async ({
   await expect(editor.getByLabel("Название")).toHaveValue("Тайная комната");
   await expect(editor.getByText("Игровая область")).toBeVisible();
   await expect(editor.getByText("Рамка изображения")).toBeVisible();
+});
+
+test("destructive token-definition action stays visually subordinate", async ({
+  page,
+}) => {
+  const tokenSnapshot = structuredClone(snapshot);
+  tokenSnapshot.tokenDefinitions = [
+    {
+      id: "9576b502-02f8-4cd6-9c55-3816d70d44dc",
+      characterId: null,
+      defaultAssetId: null,
+      name: "Разведчик",
+      defaultWidth: 64,
+      defaultHeight: 64,
+      ownName: null,
+      controllerMembershipIds: [],
+      revision: 0,
+    },
+  ];
+  await page.route("**/api/bootstrap", (route) =>
+    route.fulfill({ json: tokenSnapshot }),
+  );
+  await page.route("**/api/player-access", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.goto("/");
+  await openWorkspaceSection(page, "Токены");
+
+  const card = page.locator(".palette-card", { hasText: "Разведчик" });
+  const configure = card.getByRole("button", { name: "Настроить" });
+  const remove = card.getByRole("button", {
+    name: "Удалить определение и все размещения",
+  });
+  await expect(configure).not.toHaveClass(/g-button_view_flat-danger/);
+  await expect(remove).toHaveClass(/danger-link/);
+  await expect(remove).toHaveClass(/g-button_view_flat-danger/);
+  await expect(remove).toHaveClass(/g-button_size_s/);
 });
 
 for (const trayCase of [
@@ -1905,7 +1927,12 @@ for (const trayCase of [
     const map = page.locator(".map-shell");
     const tray = page.locator(".token-tray");
     const summary = tray.locator("summary");
-    const quickRolls = page.locator(".activity-roll-controls");
+    const compact = trayCase.viewport.width < 1024;
+    // Compact has only one visible surface: compare against the actual map
+    // dice, not the hidden desktop journal's zero/null geometry.
+    const quickRolls = page.locator(
+      compact ? ".map-dice-tray" : ".activity-roll-controls",
+    );
     const collapsedSummaryBox = await summary.boundingBox();
     expect(collapsedSummaryBox).not.toBeNull();
 
@@ -1928,7 +1955,15 @@ for (const trayCase of [
       0,
     );
     expect(trayBox!.height).toBeLessThanOrEqual((mapBox!.height - 38) / 2 + 1);
-    expect(trayBox!.x + trayBox!.width).toBeLessThanOrEqual(rollBox!.x);
+    if (compact) {
+      expect(
+        trayBox!.x + trayBox!.width <= rollBox!.x ||
+          rollBox!.x + rollBox!.width <= trayBox!.x ||
+          trayBox!.y + trayBox!.height <= rollBox!.y ||
+          rollBox!.y + rollBox!.height <= trayBox!.y,
+        "Открытый лоток не перекрывает видимые кости карты",
+      ).toBe(true);
+    } else expect(trayBox!.x + trayBox!.width).toBeLessThanOrEqual(rollBox!.x);
 
     const listOverflow = await tray
       .locator(".token-tray-list")
@@ -1945,6 +1980,14 @@ for (const trayCase of [
     await page.keyboard.press("Enter");
     await expect(tray).not.toHaveAttribute("open", "");
     await expect(summary).toBeFocused();
+    if (compact) {
+      await page.locator("#compact-nav-journal").click();
+      await expect(page.locator(".activity-roll-controls")).toBeVisible();
+      await expect(tray).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(summary).toBeVisible();
+      await expect(tray).not.toHaveAttribute("open", "");
+    }
   });
 }
 
@@ -4153,6 +4196,7 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
   );
 
   await page.goto("/");
+  await page.locator("#compact-nav-journal").click();
   const rendered = page.getByRole("img", { name: "Cartographer waves hello" });
   await expect(rendered).toHaveAttribute(
     "src",
@@ -4167,6 +4211,7 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
   expect(box).not.toBeNull();
   expect(box!.width).toBeLessThanOrEqual(390);
   await page.reload();
+  await page.locator("#compact-nav-journal").click();
   await expect(
     page.getByRole("img", { name: "Cartographer waves hello" }),
   ).toHaveAttribute("src", "/api/stickers/" + stickerId + "/content");
@@ -4485,3 +4530,100 @@ test("map controls float in opposite top corners without covering canvas UI", as
     await page.unroute("**/api/player-access");
   }
 });
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 800]) {
+    test(`UIX-406/504 map dice stay reachable for ${role} at ${width}px`, async ({
+      page,
+    }) => {
+      const fixture = structuredClone(snapshot);
+      fixture.me.role = role;
+      await page.setViewportSize({ width, height: 844 });
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fixture),
+        }),
+      );
+      await page.route("**/api/player-access", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "[]",
+        }),
+      );
+      let rolls = 0;
+      await page.route("**/api/dice", async (route) => {
+        rolls += 1;
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: "{}",
+        });
+      });
+      await page.goto("/");
+      const tray = page.locator(".map-dice-tray");
+      await expect(tray).toBeVisible();
+      await expect(page.locator(".dice-tray-panel")).toHaveCount(1);
+      await expect(
+        page.locator(".activity-roll-controls .dice-tray-panel"),
+      ).toHaveCount(0);
+      const tokenTray = page.locator(".token-tray");
+      await tokenTray.locator("summary").click();
+      await page.screenshot({
+        path: `${process.env.TEMP ?? "/tmp"}/arken621-map-dice-${role}-${width}.png`,
+      });
+      const tokenBox = await tokenTray.boundingBox();
+      const diceBox = await tray.boundingBox();
+      expect(
+        diceBox!.x >= tokenBox!.x + tokenBox!.width ||
+          diceBox!.y + diceBox!.height <= tokenBox!.y ||
+          diceBox!.y >= tokenBox!.y + tokenBox!.height,
+        "кости не перекрывают открытый лоток токенов",
+      ).toBe(true);
+      const box = await tray.boundingBox();
+      expect(box!.width).toBeLessThanOrEqual(420);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+      expect(
+        await tray.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth,
+        ),
+      ).toBe(true);
+      await tray.getByRole("button", { name: "d20", exact: true }).click();
+      await expect.poll(() => rolls).toBe(1);
+      if (width < 1024)
+        await page.setViewportSize({ width: 1440, height: 844 });
+      await page
+        .getByRole("button", { name: "Свернуть боковую панель", exact: true })
+        .click();
+      if (width < 1024) {
+        // Collapse belongs to the desktop preference. Returning to compact
+        // must not hide the selected Journal or rewrite that preference.
+        const preference = () =>
+          page.evaluate(
+            ([campaignId, membershipId]) =>
+              localStorage.getItem(
+                `arken.sidebarCollapsed:${encodeURIComponent(campaignId)}:${encodeURIComponent(membershipId)}`,
+              ),
+            [fixture.campaign.id, fixture.me.id],
+          );
+        await expect.poll(preference).toBe("true");
+        await page.setViewportSize({ width, height: 844 });
+        await expect(tray).toBeVisible();
+        await expect(page.locator("#activity-sidebar")).toBeHidden();
+        await page.locator("#compact-nav-journal").click();
+        await expect(page.locator("#activity-sidebar")).toBeVisible();
+        await expect(page.locator("#activity-sidebar")).not.toHaveAttribute(
+          "inert",
+        );
+        await expect.poll(preference).toBe("true");
+        await page.locator("#compact-nav-map").click();
+        await expect.poll(preference).toBe("true");
+      }
+      await expect(tray).toBeVisible();
+      await tray.getByRole("button", { name: "d6", exact: true }).click();
+      await expect.poll(() => rolls).toBe(2);
+    });
+  }
+}

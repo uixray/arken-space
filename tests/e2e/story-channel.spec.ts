@@ -196,6 +196,10 @@ async function mockApp(
 }
 
 async function openStory(page: Page) {
+  await expect(page.locator("#chat-tab-story")).toBeAttached();
+  if (await page.locator("#compact-nav-journal").isVisible()) {
+    await page.locator("#compact-nav-journal").click();
+  }
   await page.locator("#chat-tab-story").click();
   await expect(page.locator(".story-channel")).toBeVisible();
 }

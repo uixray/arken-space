@@ -343,3 +343,193 @@ test("grid settings keep a rejected draft open for correction or retry", async (
   await expect(size).toHaveValue("96");
   await expect(save).toBeEnabled();
 });
+
+test("UIX-621 desktop overflow navigation has clickable visible menu items", async ({
+  page,
+}) => {
+  // UIX-624: below 1024 the compact Sections dialog replaces this desktop menu.
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await mockBootstrap(page, snapshot);
+  await page.goto("/");
+  await page.getByLabel("Ещё разделы").click();
+  // Characters is a root workspace, not a floating window. Exercise a named
+  // overflow item with a stable dialog contract instead of whichever is first.
+  const item = page.locator(
+    '.workspace-nav__menu button[data-workspace="tokens"]',
+  );
+  await expect(item).toBeVisible();
+  await expect
+    .poll(() =>
+      item.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return el.contains(
+          document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          ),
+        );
+      }),
+    )
+    .toBe(true);
+  await item.click();
+  await expect(
+    page.getByRole("dialog", { name: "Токены", exact: true }),
+  ).toBeVisible();
+});
+
+test("UIX-621 select portal receives pointer above token workspace", async ({
+  page,
+}, testInfo) => {
+  await mockBootstrap(page, tokenSnapshot);
+  await page.goto("/");
+  await openWorkspaceSection(page, "Токены");
+  const workspace = page.getByRole("dialog", { name: "Токены" });
+  const select = workspace.locator(".g-select").first();
+  const option = page.getByRole("option").first();
+
+  for (const phase of ["normal", "saturated"] as const) {
+    await test.step(`${phase} workspace popup`, async () => {
+      if (phase === "saturated") {
+        // Exercise the real bringToFront handler until it stops allocating
+        // higher layers. Do not assign styles or hardcode the workspace cap:
+        // restoring the old cap must violate the popup ordering below.
+        const saturation = await workspace.evaluate(async (element) => {
+          const readLayer = () => Number(getComputedStyle(element).zIndex);
+          const initialLayer = readLayer();
+          const dialogLayer = Number(
+            getComputedStyle(element).getPropertyValue("--arken-layer-dialog"),
+          );
+          let previousLayer = initialLayer;
+          for (
+            let pointerDowns = 0;
+            pointerDowns < dialogLayer;
+            pointerDowns += 32
+          ) {
+            for (let index = 0; index < 32; index += 1) {
+              element.dispatchEvent(
+                new PointerEvent("pointerdown", { bubbles: true }),
+              );
+            }
+            await new Promise<void>((resolve) =>
+              requestAnimationFrame(() => resolve()),
+            );
+            const currentLayer = readLayer();
+            if (currentLayer === previousLayer) {
+              return {
+                initialLayer,
+                cappedLayer: currentLayer,
+                pointerDowns: pointerDowns + 32,
+              };
+            }
+            previousLayer = currentLayer;
+          }
+          throw new Error(
+            "Workspace layer did not saturate below the dialog tier",
+          );
+        });
+        await testInfo.attach("workspace-layer-saturation", {
+          body: JSON.stringify(saturation, null, 2),
+          contentType: "application/json",
+        });
+        expect(saturation.cappedLayer).toBeGreaterThan(saturation.initialLayer);
+      }
+
+      await select.click();
+      await expect(option).toBeVisible();
+      const diagnostics = await option.evaluate((element) => {
+        const describe = (node: Element | null) => {
+          if (!node) return null;
+          const style = getComputedStyle(node);
+          return {
+            tag: node.tagName,
+            className: node.getAttribute("class"),
+            zIndex: style.zIndex,
+            position: style.position,
+            transform: style.transform,
+            isolation: style.isolation,
+            opacity: style.opacity,
+            contain: style.contain,
+          };
+        };
+        const workspace = document.querySelector(".arken-workspace-window");
+        const workspaceAncestors = [];
+        for (let node = workspace; node; node = node.parentElement) {
+          workspaceAncestors.push(describe(node));
+        }
+        const box = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          box.x + box.width / 2,
+          box.y + box.height / 2,
+        );
+        const wrapper = element.closest("[data-floating-ui-status]");
+        const popupZIndex = wrapper ? getComputedStyle(wrapper).zIndex : "";
+        return {
+          wrapper: describe(wrapper),
+          workspaceAncestors,
+          hit: describe(hit),
+          receivesPointer: element.contains(hit),
+          popupLayerSupported: CSS.supports("z-index", popupZIndex),
+          fractionalZIndexSupported: CSS.supports("z-index", "1999.5"),
+          dialogLayer: Number(
+            getComputedStyle(element).getPropertyValue("--arken-layer-dialog"),
+          ),
+        };
+      });
+      await testInfo.attach(`workspace-popup-layers-${phase}`, {
+        body: JSON.stringify(diagnostics, null, 2),
+        contentType: "application/json",
+      });
+      const popupLayer = Number(diagnostics.wrapper?.zIndex);
+      const workspaceLayer = Number(diagnostics.workspaceAncestors[0]?.zIndex);
+      expect(diagnostics.popupLayerSupported).toBe(true);
+      expect(Number.isInteger(popupLayer)).toBe(true);
+      expect(popupLayer).toBeGreaterThan(workspaceLayer);
+      expect(popupLayer).toBeLessThan(diagnostics.dialogLayer);
+      await expect
+        .poll(() =>
+          option.evaluate((el) => {
+            const box = el.getBoundingClientRect();
+            return el.contains(
+              document.elementFromPoint(
+                box.x + box.width / 2,
+                box.y + box.height / 2,
+              ),
+            );
+          }),
+        )
+        .toBe(true);
+      await option.click();
+      await expect(option).toBeHidden();
+    });
+  }
+});
+
+test("UIX-621 raw Gravity select receives pointer above feedback modal", async ({
+  page,
+}) => {
+  await mockBootstrap(page, snapshot);
+  await page.goto("/");
+  await page.getByLabel("Меню сеанса").click();
+  await page.getByRole("button", { name: "Сообщить", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Сообщить о проблеме или идее",
+  });
+  await dialog.locator(".g-select").click();
+  const option = page.getByRole("option", { name: "Идея", exact: true });
+  await expect(option).toBeVisible();
+  await expect
+    .poll(() =>
+      option.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return el.contains(
+          document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          ),
+        );
+      }),
+    )
+    .toBe(true);
+  await option.click();
+  await expect(dialog.locator(".g-select")).toContainText("Идея");
+});

@@ -9,9 +9,9 @@ export const WORKSPACE_WINDOW_DESKTOP_BREAKPOINT = 768;
 export const WORKSPACE_WINDOW_VIEWPORT_GUTTER = 16;
 
 const WORKSPACE_WINDOW_BASE_Z_INDEX = 1200;
-// Gravity dialogs use 2000, so a workspace window can never cover a nested
-// blocking editor even after it has been focused repeatedly.
-const WORKSPACE_WINDOW_MAX_Z_INDEX = 1999;
+// Reserve 1999 for workspace-owned popups and 2000 for Gravity dialogs, even
+// after a workspace has been focused repeatedly.
+const WORKSPACE_WINDOW_MAX_Z_INDEX = 1998;
 
 let nextWorkspaceZIndex = WORKSPACE_WINDOW_BASE_Z_INDEX;
 

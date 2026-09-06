@@ -14,7 +14,7 @@ import {
  * все ради одного-двух лишних было платой не по адресу.
  *
  * Сколько поместится, решает измерение, а не заданное число пунктов: подписи
- * разной длины, а панель делит ширину с именем кампании, выбором сцены и
+ * разной длины, а панель делит ширину с выбором сцены и
  * музыкой. Пересчёт идёт на каждое изменение размеров окна и самой панели.
  */
 export function WorkspaceNav({
@@ -43,19 +43,37 @@ export function WorkspaceNav({
    * собственного расчёта, раскачивая раскладку от кадра к кадру.
    */
   useLayoutEffect(() => {
-    const measured = new Map<WorkspaceId, number>();
-    for (const node of measureRef.current?.children ?? []) {
-      const id = (node as HTMLElement).dataset.workspace as
-        WorkspaceId | undefined;
-      if (id) measured.set(id, node.getBoundingClientRect().width);
-    }
-    setWidths(measured);
-    const more = measureRef.current?.querySelector<HTMLElement>(
-      "[data-measure='more']",
-    );
-    if (more) setMoreWidth(more.getBoundingClientRect().width);
+    let disposed = false;
+    const measure = () => {
+      if (disposed) return;
+      const measured = new Map<WorkspaceId, number>();
+      for (const node of measureRef.current?.children ?? []) {
+        const id = (node as HTMLElement).dataset.workspace as
+          WorkspaceId | undefined;
+        if (id) measured.set(id, node.getBoundingClientRect().width);
+      }
+      setWidths(measured);
+      // Резерв зависит от набора пунктов, а не active/overflow: выбор раздела
+      // не двигает границу и не создаёт цикл измерение → переполнение.
+      const candidates =
+        measureRef.current?.querySelectorAll<HTMLElement>(
+          "[data-measure='more']",
+        ) ?? [];
+      const maximum = Math.max(
+        0,
+        ...Array.from(candidates, (node) => node.getBoundingClientRect().width),
+      );
+      if (maximum > 0) setMoreWidth(Math.min(180, maximum));
+    };
+    measure();
+    const fonts = document.fonts;
+    void fonts?.ready.then(measure);
+    fonts?.addEventListener("loadingdone", measure);
+    return () => {
+      disposed = true;
+      fonts?.removeEventListener("loadingdone", measure);
+    };
   }, [items]);
-
   /**
    * Доступная ширина снимается тремя путями сразу, и это не перестраховка.
    *
@@ -100,6 +118,8 @@ export function WorkspaceNav({
     gap,
   );
 
+  const activeOverflow = overflow.find((item) => item.id === active);
+
   const button = (item: WorkspaceNavItem, inMenu: boolean) => (
     <button
       key={item.id}
@@ -126,16 +146,34 @@ export function WorkspaceNav({
             {item.label}
           </span>
         ))}
-        <span data-measure="more">Ещё {items.length}</span>
+        {items.map((item) => (
+          <span key={`more-${item.id}`} data-measure="more">
+            Ещё {items.length} · {item.label}
+          </span>
+        ))}
       </div>
       {visible.map((item) => button(item, false))}
       {overflow.length > 0 && (
         <details className="workspace-nav__more" ref={moreRef}>
-          <summary aria-label="Ещё разделы">
+          <summary
+            aria-label="Ещё разделы"
+            data-active-workspace={activeOverflow?.id}
+            title={
+              activeOverflow
+                ? `Открыт раздел: ${activeOverflow.label}`
+                : "Ещё разделы"
+            }
+            style={{ width: Math.min(moreWidth, available || moreWidth) }}
+          >
             Ещё
             <span className="workspace-nav__count" aria-hidden="true">
               {overflow.length}
             </span>
+            {activeOverflow && (
+              <span className="workspace-nav__active">
+                {activeOverflow.label}
+              </span>
+            )}
           </summary>
           <div className="workspace-nav__menu">
             {overflow.map((item) => button(item, true))}

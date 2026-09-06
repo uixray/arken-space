@@ -5,6 +5,7 @@ import { createFeedbackDiagnostics } from "./feedback-diagnostics";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ImageUploadField } from "./ui/ImageUploadField";
 import { notify } from "./ui/notifications";
+import { useOverlayPopupClassName } from "./ui/overlay-owner";
 
 type Props = {
   buildVersion: string;
@@ -18,6 +19,28 @@ const initialDraft = {
   description: "",
   reproduction: "",
 };
+
+function FeedbackCategorySelect({
+  value,
+  onUpdate,
+}: {
+  value: string;
+  onUpdate: (value: string) => void;
+}) {
+  const popupClassName = useOverlayPopupClassName();
+  return (
+    <Select
+      label="Тип сообщения"
+      popupClassName={popupClassName}
+      value={[value]}
+      options={[
+        { value: "BUG", content: "Ошибка" },
+        { value: "IDEA", content: "Идея" },
+      ]}
+      onUpdate={(next) => onUpdate(next[0] ?? "BUG")}
+    />
+  );
+}
 
 async function captureVisibleInterface(): Promise<File> {
   const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -146,17 +169,12 @@ export function FeedbackReporter(props: Props) {
         onClose={() => !submitting && setOpen(false)}
       >
         <div className="feedback-report-form">
-          <Select
-            label="Тип сообщения"
-            value={[draft.category]}
-            options={[
-              { value: "BUG", content: "Ошибка" },
-              { value: "IDEA", content: "Идея" },
-            ]}
-            onUpdate={(value) =>
+          <FeedbackCategorySelect
+            value={draft.category}
+            onUpdate={(category) =>
               setDraft((current) => ({
                 ...current,
-                category: value[0] ?? "BUG",
+                category,
               }))
             }
           />

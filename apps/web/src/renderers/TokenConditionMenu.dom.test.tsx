@@ -33,8 +33,8 @@ describe("TokenConditionMenu", () => {
       "POISONED",
       "RESTRAINED",
     ]);
-    expect(onClose).toHaveBeenCalledTimes(1);
-    // Until a new snapshot arrives, the control does not invent saved state.
+    expect(onClose).not.toHaveBeenCalled();
+    // The parent projects optimistic state; the control reflects its props.
     expect(
       screen.getByRole("menuitemcheckbox", { name: "Обездвижен" }),
     ).toHaveAttribute("aria-checked", "false");

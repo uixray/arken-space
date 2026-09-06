@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Dialog } from "@gravity-ui/uikit";
 import { useWorkspaceWindow } from "./useWorkspaceWindow";
+import { OverlayOwnerContext } from "./overlay-owner";
 
 export interface ArkenDialogProps {
   open: boolean;
@@ -61,102 +62,106 @@ export function ArkenDialog({
   if (variant === "workspace") {
     if (!open) return null;
     return (
-      <section
-        ref={setWindowElement}
-        className={["arken-workspace-window", className]
-          .filter(Boolean)
-          .join(" ")}
-        role="dialog"
-        aria-labelledby={titleId}
-        data-positioned={position ? "true" : "false"}
-        style={{
-          ...(position ?? {}),
-          zIndex,
-        }}
-        onPointerDown={bringToFront}
-        onFocusCapture={bringToFront}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onClose();
-        }}
-      >
-        <header className="arken-workspace-window__header">
-          <div
-            className="arken-workspace-window__drag-handle"
-            role="group"
-            data-draggable={workspaceDraggable ? "true" : "false"}
-            aria-label={`Перетащить окно: ${title}`}
-            title="Перетащить окно"
-            onPointerDown={onDragStart}
-            onPointerMove={onDragMove}
-            onPointerUp={stopDragging}
-            onPointerCancel={stopDragging}
-          >
-            <h2 id={titleId}>{title}</h2>
-          </div>
-          {position ? (
-            <button
-              type="button"
-              className="arken-workspace-window__reset"
-              onClick={resetLayout}
-              aria-label="Сбросить расположение окна"
-              title="Сбросить расположение окна"
+      <OverlayOwnerContext.Provider value="workspace">
+        <section
+          ref={setWindowElement}
+          className={["arken-workspace-window", className]
+            .filter(Boolean)
+            .join(" ")}
+          role="dialog"
+          aria-labelledby={titleId}
+          data-positioned={position ? "true" : "false"}
+          style={{
+            ...(position ?? {}),
+            zIndex,
+          }}
+          onPointerDown={bringToFront}
+          onFocusCapture={bringToFront}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onClose();
+          }}
+        >
+          <header className="arken-workspace-window__header">
+            <div
+              className="arken-workspace-window__drag-handle"
+              role="group"
+              data-draggable={workspaceDraggable ? "true" : "false"}
+              aria-label={`Перетащить окно: ${title}`}
+              title="Перетащить окно"
+              onPointerDown={onDragStart}
+              onPointerMove={onDragMove}
+              onPointerUp={stopDragging}
+              onPointerCancel={stopDragging}
             >
-              ↺
-            </button>
-          ) : null}
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Закрыть окно"
-          >
-            ×
-          </button>
-        </header>
-        <div className="arken-workspace-window__body">{children}</div>
-        {footer ? (
-          <div className="arken-workspace-window__footer">
-            {error ? <div role="alert">{error}</div> : null}
-            <button type="button" onClick={onClose} disabled={loading}>
-              {cancelLabel}
-            </button>
-            {onApply ? (
-              <button type="button" onClick={onApply} disabled={loading}>
-                {loading ? "…" : applyLabel}
+              <h2 id={titleId}>{title}</h2>
+            </div>
+            {position ? (
+              <button
+                type="button"
+                className="arken-workspace-window__reset"
+                onClick={resetLayout}
+                aria-label="Сбросить расположение окна"
+                title="Сбросить расположение окна"
+              >
+                ↺
               </button>
             ) : null}
-          </div>
-        ) : null}
-      </section>
+            <button
+              ref={closeRef}
+              type="button"
+              onClick={onClose}
+              aria-label="Закрыть окно"
+            >
+              ×
+            </button>
+          </header>
+          <div className="arken-workspace-window__body">{children}</div>
+          {footer ? (
+            <div className="arken-workspace-window__footer">
+              {error ? <div role="alert">{error}</div> : null}
+              <button type="button" onClick={onClose} disabled={loading}>
+                {cancelLabel}
+              </button>
+              {onApply ? (
+                <button type="button" onClick={onApply} disabled={loading}>
+                  {loading ? "…" : applyLabel}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      </OverlayOwnerContext.Provider>
     );
   }
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) onClose();
-      }}
-      size="m"
-      initialFocus="cancel"
-      contentOverflow="auto"
-      aria-label={title}
-    >
-      <Dialog.Header caption={title} />
-      <Dialog.Body>{children}</Dialog.Body>
-      {footer ? (
-        <Dialog.Footer
-          preset={danger ? "danger" : "default"}
-          textButtonApply={applyLabel}
-          textButtonCancel={cancelLabel}
-          onClickButtonApply={onApply}
-          onClickButtonCancel={onClose}
-          loading={loading}
-          errorText={error}
-          showError={Boolean(error)}
-        />
-      ) : null}
-    </Dialog>
+    <OverlayOwnerContext.Provider value="modal">
+      <Dialog
+        open={open}
+        onClose={onClose}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) onClose();
+        }}
+        size="m"
+        initialFocus="cancel"
+        contentOverflow="auto"
+        aria-label={title}
+      >
+        <Dialog.Header caption={title} />
+        <Dialog.Body>{children}</Dialog.Body>
+        {footer ? (
+          <Dialog.Footer
+            preset={danger ? "danger" : "default"}
+            textButtonApply={applyLabel}
+            textButtonCancel={cancelLabel}
+            onClickButtonApply={onApply}
+            onClickButtonCancel={onClose}
+            loading={loading}
+            errorText={error}
+            showError={Boolean(error)}
+          />
+        ) : null}
+      </Dialog>
+    </OverlayOwnerContext.Provider>
   );
 }
