@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "scope": "apps/web/src/**/*.tsx; excludes test/spec/story files and tests/stories/test-support directories; static literal tags and roles only",
+  "sites": [
+    {
+      "file": "apps/web/src/App.tsx",
+      "kind": "role:listbox",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/App.tsx",
+      "kind": "tag:details",
+      "count": 3
+    },
+    {
+      "file": "apps/web/src/CatalogEntryForm.tsx",
+      "kind": "tag:FormSelect",
+      "count": 7
+    },
+    {
+      "file": "apps/web/src/FeedbackReporter.tsx",
+      "kind": "tag:Select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/MapToolbar.tsx",
+      "kind": "tag:details",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/MusicBar.tsx",
+      "kind": "tag:details",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 6
+    },
+    {
+      "file": "apps/web/src/StickerPicker.tsx",
+      "kind": "role:listbox",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/TokenImageGenerator.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/WorkspaceNav.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/WorldContentWorkspace.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/WorldContentWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 4
+    },
+    {
+      "file": "apps/web/src/WorldEncyclopediaWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/WorldMapsWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 7
+    },
+    {
+      "file": "apps/web/src/renderers/GridSettings.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "kind": "role:menu",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterMediaGallery.tsx",
+      "kind": "tag:FormSelect",
+      "count": 4
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "role:listbox",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/InitiativePanel.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/ResourceCounters.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/SetupPanel.tsx",
+      "kind": "tag:FormSelect",
+      "count": 6
+    },
+    {
+      "file": "apps/web/src/sidebar/TokenPalette.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/TokenPalette.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
+      "kind": "tag:Popup",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/ui/FuturePoolDialogs.tsx",
+      "kind": "tag:Select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/ui/GravityFormControls.tsx",
+      "kind": "tag:Select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
+      "kind": "tag:Popup",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
+      "kind": "tag:Select",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/ui/SceneManagerDialog.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1
+    }
+  ]
+}

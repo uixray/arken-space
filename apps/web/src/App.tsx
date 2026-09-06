@@ -297,7 +297,10 @@ export function App() {
    */
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
   const tokenTrayRef = useRef<HTMLDetailsElement>(null);
-  useDismissibleDetails(scenePickerRef);
+  useDismissibleDetails(scenePickerRef, undefined, {
+    listbox: true,
+    closeOnViewportChange: true,
+  });
   useDismissibleDetails(accountMenuRef);
   useDismissibleDetails(tokenTrayRef);
 
@@ -1455,6 +1458,7 @@ export function App() {
                   <summary
                     aria-label="Выбрать просматриваемую сцену"
                     aria-haspopup="listbox"
+                    aria-controls="scene-picker-options"
                   >
                     {activeScene?.mapAssetId &&
                     viewSnapshot.assets.find(
@@ -1479,6 +1483,7 @@ export function App() {
                   </summary>
                   <div
                     className="scene-picker__menu"
+                    id="scene-picker-options"
                     role="listbox"
                     aria-label="Сцены"
                   >
@@ -1500,6 +1505,9 @@ export function App() {
                             event.currentTarget
                               .closest("details")
                               ?.removeAttribute("open");
+                            scenePickerRef.current
+                              ?.querySelector("summary")
+                              ?.focus();
                           }}
                         >
                           {background ? (

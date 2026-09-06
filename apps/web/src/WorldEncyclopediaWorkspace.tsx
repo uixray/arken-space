@@ -9,6 +9,7 @@ import { Button } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { FormInput, FormSelect } from "./ui/GravityFormControls";
 import { ApiError, formatApiError } from "./api";
+import { WORLD_READER_TITLE } from "./world-workspace-labels";
 import {
   WORLD_CONTENT_TYPES,
   WORLD_CONTENT_TYPE_LABELS,
@@ -20,7 +21,7 @@ import {
 } from "./world-content-client";
 import "./WorldEncyclopediaWorkspace.css";
 
-const safeError = "Не удалось загрузить энциклопедию. Попробуйте ещё раз.";
+const safeError = "Не удалось загрузить справочник. Попробуйте ещё раз.";
 const notFoundError =
   "Эта статья недоступна — возможно, она ещё не опубликована или была скрыта.";
 
@@ -98,7 +99,7 @@ export const WorldEncyclopediaWorkspace = memo(
       <ArkenDialog
         open={open}
         footer={false}
-        title="Энциклопедия"
+        title={WORLD_READER_TITLE}
         variant="workspace"
         className="world-encyclopedia-workspace"
         workspaceDraggable={false}
