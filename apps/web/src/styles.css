@@ -796,6 +796,13 @@ code {
   min-height: 28px;
   padding: 3px;
 }
+.map-selection-action {
+  position: absolute;
+  top: 44px;
+  right: 80px;
+  z-index: 26;
+  max-width: calc(100% - 160px);
+}
 .drawing-color-panel {
   position: absolute;
   z-index: 25;
