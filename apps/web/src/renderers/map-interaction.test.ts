@@ -10,15 +10,75 @@ import {
   mapInteractionReducer,
   moveRulerDraft,
   resolveMapToolShortcut,
+  resolveTokenMoveKey,
   resolveMapWheelGesture,
   rulerDraftPoints,
   shouldBeginMapPan,
+  shouldSuppressCtrlPing,
   startRulerDraft,
   type MapInteractionAction,
   type MapInteractionState,
   type MapObjectRef,
   type RulerDraft,
 } from "./map-interaction";
+
+describe("keyboard token movement", () => {
+  const resolve = (
+    overrides: Partial<Parameters<typeof resolveTokenMoveKey>[0]> = {},
+  ) =>
+    resolveTokenMoveKey({
+      key: "w",
+      repeat: false,
+      tool: "PAN",
+      hasSelectedToken: true,
+      gridEnabled: true,
+      gridSize: 64,
+      shiftKey: false,
+      ...overrides,
+    });
+
+  it("maps WASD to grid and gridless movement, with Shift acceleration", () => {
+    expect(resolve()).toEqual({ delta: { x: 0, y: -64 } });
+    expect(resolve({ key: "d", shiftKey: true })).toEqual({
+      delta: { x: 320, y: 0 },
+    });
+    expect(resolve({ key: "s", gridEnabled: false })).toEqual({
+      delta: { x: 0, y: 8 },
+    });
+  });
+
+  it("does not steal D without a movable PAN token and consumes repeats", () => {
+    expect(resolve({ key: "d", tool: "DRAW" })).toBeNull();
+    expect(resolve({ key: "d", hasSelectedToken: false })).toBeNull();
+    expect(resolve({ key: "d", repeat: true })).toEqual({ delta: null });
+  });
+});
+
+describe("Ctrl click intent", () => {
+  it("suppresses only the click paired with a committed ruler waypoint", () => {
+    expect(
+      shouldSuppressCtrlPing({
+        tool: "RULER",
+        ctrlKey: true,
+        waypointCommitted: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSuppressCtrlPing({
+        tool: "PAN",
+        ctrlKey: true,
+        waypointCommitted: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldSuppressCtrlPing({
+        tool: "RULER",
+        ctrlKey: true,
+        waypointCommitted: false,
+      }),
+    ).toBe(false);
+  });
+});
 
 const token: MapObjectRef = { kind: "token", objectId: "token-1", revision: 3 };
 const drawing: MapObjectRef = {
