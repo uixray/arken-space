@@ -800,7 +800,7 @@ code {
   position: absolute;
   top: 44px;
   right: 80px;
-  z-index: 26;
+  z-index: 24;
   max-width: calc(100% - 160px);
 }
 .drawing-color-panel {

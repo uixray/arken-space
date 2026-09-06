@@ -1060,20 +1060,37 @@ for (const role of ["GM", "PLAYER"] as const) {
       const baseline = await zoomBounds(page);
       await expectStableSelectionChrome(page, baseline);
       const trigger = map.locator(".map-object-list-trigger");
-      const selectOne = async (name: string) => {
+      const objectList = map.getByRole("region", {
+        name: "Объекты карты",
+        exact: true,
+      });
+      const openObjectList = async () => {
+        await expect(objectList).toBeHidden();
         await trigger.click();
-        const object = map.getByRole("button", { name, exact: true });
+        await expect(trigger).toHaveAttribute("aria-expanded", "true");
+        await expect(objectList).toBeVisible();
+      };
+      const closeObjectList = async () => {
+        await expect(objectList).toBeVisible();
+        // The trigger opens, it does not toggle. Escape dismisses only this layer.
+        await trigger.press("Escape");
+        await expect(trigger).toHaveAttribute("aria-expanded", "false");
+        await expect(objectList).toBeHidden();
+      };
+      const selectOne = async (name: string) => {
+        await openObjectList();
+        const object = objectList.getByRole("button", { name, exact: true });
         await object.click();
         await expect(object).toHaveAttribute("aria-pressed", "true");
-        await trigger.click();
+        await closeObjectList();
         await expectStableSelectionChrome(page, baseline);
       };
       const expectCleared = async () => {
-        await trigger.click();
+        await openObjectList();
         await expect(
-          map.locator('.map-object-list button[aria-pressed="true"]'),
+          objectList.locator('button[aria-pressed="true"]'),
         ).toHaveCount(0);
-        await trigger.click();
+        await closeObjectList();
         await expect(
           page.getByRole("button", { name: "Удалить выбранное", exact: true }),
         ).toHaveCount(0);
@@ -1143,6 +1160,67 @@ for (const role of ["GM", "PLAYER"] as const) {
         ),
         fullPage: true,
       });
+      const bulkAction = page.getByRole("button", {
+        name: "Удалить выбранное",
+        exact: true,
+      });
+      await openObjectList();
+      await expect(bulkAction).toHaveCount(1);
+      await closeObjectList();
+      // First Escape only closes the list; the mixed group is still actionable.
+      await bulkAction.click();
+      await inspectBulkConfirmation(
+        page,
+        "Выбрано объектов: 4. Токенов: 2. Рисунков: 2.",
+      );
+      expect(requests).toHaveLength(0);
+      await openObjectList();
+      const firstObject = objectList.getByRole("button", {
+        name: "Geometry token 1",
+        exact: true,
+      });
+      const objectBounds = (await firstObject.boundingBox())!;
+      const actionBounds = (await bulkAction.boundingBox())!;
+      const overlap = {
+        left: Math.max(objectBounds.x, actionBounds.x),
+        right: Math.min(
+          objectBounds.x + objectBounds.width,
+          actionBounds.x + actionBounds.width,
+        ),
+        top: Math.max(objectBounds.y, actionBounds.y),
+        bottom: Math.min(
+          objectBounds.y + objectBounds.height,
+          actionBounds.y + actionBounds.height,
+        ),
+      };
+      // Exercise the contested pixels, not an unobstructed corner of the row.
+      expect(overlap.right).toBeGreaterThan(overlap.left);
+      expect(overlap.bottom).toBeGreaterThan(overlap.top);
+      const hitPoint = {
+        x: (overlap.left + overlap.right) / 2,
+        y: (overlap.top + overlap.bottom) / 2,
+      };
+      expect(
+        await firstObject.evaluate(
+          (node, point) =>
+            node.contains(document.elementFromPoint(point.x, point.y)),
+          hitPoint,
+        ),
+      ).toBe(true);
+      await firstObject.click({
+        position: {
+          x: hitPoint.x - objectBounds.x,
+          y: hitPoint.y - objectBounds.y,
+        },
+      });
+      await expect(firstObject).toHaveAttribute("aria-pressed", "true");
+      await expect(bulkAction).toHaveCount(0);
+      await expect(
+        page.getByRole("dialog", { name: "Удалить выбранные объекты?" }),
+      ).toHaveCount(0);
+      expect(requests).toHaveLength(0);
+      await closeObjectList();
+      await expectStableSelectionChrome(page, baseline);
       await map.focus();
       await page.keyboard.press("Escape");
       await expectCleared();
