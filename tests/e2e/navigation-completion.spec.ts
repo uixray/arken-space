@@ -133,34 +133,42 @@ for (const role of ["GM", "PLAYER"] as const) {
       nav.locator(":scope > button[data-workspace='tokens']"),
     ).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
-    if (role === "PLAYER") {
-      const directActive = nav.locator(
-        ":scope > button[data-workspace='tokens']",
+    await expect(nav).toBeHidden();
+    await expect(
+      page.getByRole("navigation", { name: "Основные области" }),
+    ).toBeVisible();
+    // UIX-642: P1 uses compact sections below 1024px; priority+ overflow
+    // remains a desktop contract. Keep both sides of the breakpoint covered.
+    await page.setViewportSize({ width: 1024, height: 844 });
+    await expect(nav).toBeVisible();
+    const directActive = nav.locator(
+      ":scope > button[data-workspace='tokens']",
+    );
+    const more = nav.locator("summary");
+    await expect(
+      nav.locator(
+        ":scope > button[data-workspace='tokens'][aria-pressed='true'], summary[data-active-workspace='tokens']",
+      ),
+    ).toHaveCount(1);
+    // Font metrics can place PLAYER tokens in either location at 1024px.
+    // GM must still exercise the overflow keyboard contract.
+    if (role === "GM" || (await directActive.count()) === 0) {
+      await expect(more).toHaveAttribute("data-active-workspace", "tokens");
+      await expect(more).toContainText("Токены");
+      await more.focus();
+      await page.keyboard.press("Enter");
+      const option = nav.locator(
+        ".workspace-nav__menu [data-workspace='tokens']",
       );
+      await expect(option).toBeVisible();
+      await expect(option).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Escape");
+      await expect(option).toBeHidden();
+      await expect(more).toBeFocused();
+    } else {
       await expect(directActive).toBeVisible();
       await expect(directActive).toHaveAttribute("aria-pressed", "true");
-      await expect(nav.locator("summary")).toHaveCount(0);
-      await page.setViewportSize({ width: 2000, height: 900 });
-      await expect(directActive).toBeVisible();
-      await page.getByLabel("Меню сеанса").click();
-      await expect(
-        page.getByRole("button", { name: "Переименовать кампанию" }),
-      ).toHaveCount(0);
-      return;
     }
-    const more = nav.locator("summary");
-    await expect(more).toHaveAttribute("data-active-workspace", "tokens");
-    await expect(more).toContainText("Токены");
-    await more.focus();
-    await page.keyboard.press("Enter");
-    const option = nav.locator(
-      ".workspace-nav__menu [data-workspace='tokens']",
-    );
-    await expect(option).toBeVisible();
-    await expect(option).toHaveAttribute("aria-pressed", "true");
-    await page.keyboard.press("Escape");
-    await expect(option).toBeHidden();
-    await expect(more).toBeFocused();
     await page.setViewportSize({ width: 2000, height: 900 });
     await expect(
       nav.locator(":scope > button[data-workspace='tokens']"),
@@ -171,6 +179,12 @@ for (const role of ["GM", "PLAYER"] as const) {
     await expect(page.locator(".brand")).not.toContainText(
       current.campaign.name,
     );
+    if (role === "PLAYER") {
+      await page.getByLabel("Меню сеанса").click();
+      await expect(
+        page.getByRole("button", { name: "Переименовать кампанию" }),
+      ).toHaveCount(0);
+    }
   });
 }
 
