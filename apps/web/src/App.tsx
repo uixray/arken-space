@@ -1374,24 +1374,6 @@ export function App() {
           <header className="topbar">
             <div className="brand">
               <strong>arken-space</strong>
-              {snapshot.me.role === "GM" && !previewSnapshot ? (
-                <button
-                  type="button"
-                  className="campaign-name-button"
-                  aria-label="Переименовать кампанию"
-                  onClick={() => setCampaignRenameOpen(true)}
-                >
-                  {viewSnapshot.campaign.name}
-                  <span
-                    className="campaign-name-button__icon"
-                    aria-hidden="true"
-                  >
-                    &#x270e;
-                  </span>
-                </button>
-              ) : (
-                <span>{viewSnapshot.campaign.name}</span>
-              )}
             </div>
             <div className="scene-switcher">
               {snapshot.me.role === "GM" && !previewSnapshot ? (
@@ -1584,6 +1566,22 @@ export function App() {
                     v{snapshot.snapshotVersion} ·{" "}
                     {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
                   </span>
+                  {snapshot.me.role === "GM" && !previewSnapshot && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Вернуть фокус на видимый вход в меню, а не на скрытую кнопку.
+                        const menu = accountMenuRef.current;
+                        if (menu) {
+                          menu.open = false;
+                          menu.querySelector<HTMLElement>("summary")?.focus();
+                        }
+                        setCampaignRenameOpen(true);
+                      }}
+                    >
+                      Переименовать кампанию
+                    </button>
+                  )}
                   {/* UIX-462: шпаргалка рядом с выходом — сюда лезут, когда ищут
                     «что-то про программу, а не про игру». */}
                   <button onClick={() => setShortcutsOpen(true)}>
