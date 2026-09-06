@@ -206,7 +206,8 @@ code {
   min-width: 0;
 }
 .scene-switcher {
-  overflow: hidden;
+  /* Clip the label, not the overlay owner: its listbox extends below the header. */
+  overflow: visible;
 }
 .workspace-nav {
   overflow: visible;
@@ -4450,7 +4451,15 @@ code {
 
 .scene-picker {
   position: relative;
-  min-width: min(300px, 30vw);
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 300px;
+}
+.scene-picker > summary > span:not([aria-hidden]) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .scene-picker > summary,
 .scene-picker--readonly {
@@ -4484,8 +4493,8 @@ code {
   top: calc(100% + 4px);
   left: 0;
   display: grid;
-  width: min(360px, 80vw);
-  max-height: 360px;
+  width: min(360px, 80vw, var(--details-popup-max-width, 360px));
+  max-height: min(360px, var(--details-popup-max-height, 360px));
   overflow-y: auto;
   padding: var(--space-xs);
   border: 1px solid var(--line);
