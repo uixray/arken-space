@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "apps/web/src/**/*.tsx; excludes test/spec/story files and tests/stories/test-support directories; static literal tags and roles only",
+  "scope": "apps/web/src/**/*.tsx; исключены файлы test/spec/story и директории tests/stories/test-support; только статические теги и роли с литеральными значениями",
   "sites": [
     {
       "file": "apps/web/src/App.tsx",
