@@ -381,38 +381,85 @@ test("UIX-255 player palette does not expose GM token generator controls", async
   await expect(page.locator(".token-palette > button")).toHaveCount(0);
 });
 
-test("UIX-272 empty character select opens above token editor with guidance and create action", async ({
-  page,
-}) => {
-  await mockBootstrap(page, "GM");
-  const emptySnapshot = structuredClone(snapshot);
-  emptySnapshot.characters = [];
-  emptySnapshot.tokens = [];
-  emptySnapshot.assets = [];
-  await page.route("**/api/bootstrap", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(emptySnapshot),
-    }),
-  );
+for (const viewport of [
+  { name: "desktop", width: 1280, height: 900 },
+  { name: "narrow", width: 390, height: 844 },
+]) {
+  test(`UIX-272 UIX-502 token modal select owns its popup at ${viewport.name} viewport`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await mockBootstrap(page, "GM");
+    const emptySnapshot = structuredClone(snapshot);
+    emptySnapshot.characters = [];
+    emptySnapshot.tokens = [];
+    emptySnapshot.assets = [];
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(emptySnapshot),
+      }),
+    );
 
-  await page.goto("/");
-  await openWorkspaceSection(page, "Токены");
-  await page.locator(".token-palette > button").click();
+    await page.goto("/");
+    await openWorkspaceSection(page, "Токены");
+    await page.locator(".token-palette > button").click();
 
-  const editor = page.locator(".g-modal").last();
-  await editor.locator(".g-select").first().click();
+    const editor = page.getByRole("dialog", { name: "Новый токен" });
+    const select = editor.locator(".g-select").first();
+    const trigger = select.locator('[role="combobox"]');
+    const nameInput = editor.getByLabel("Название");
+    const menu = page.locator(".arken-form-select-popup");
+    await trigger.click();
 
-  const menu = page.locator(".arken-form-select-popup");
-  await expect(menu).toBeVisible();
-  const guidance = menu.getByText("Персонажей пока нет");
-  const create = menu.getByText("Создать персонажа", { exact: true });
-  for (const item of [guidance, create]) {
-    await expect(item).toBeVisible();
+    await expect(menu).toBeVisible();
+    const guidance = menu.getByText("Персонажей пока нет");
+    const create = menu.getByText("Создать персонажа", { exact: true });
+    for (const item of [guidance, create]) {
+      await expect(item).toBeVisible();
+      await expect
+        .poll(() =>
+          item.evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            const hit = document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            );
+            return element.contains(hit);
+          }),
+        )
+        .toBe(true);
+    }
+    const menuBox = await menu.boundingBox();
+    expect(menuBox).not.toBeNull();
+    expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport.width + 1);
+    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(
+      viewport.height + 1,
+    );
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(editor).toBeVisible();
+    await expect(trigger).toBeFocused();
+
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    await nameInput.click();
+    await expect(menu).toBeHidden();
+    await expect(editor).toBeVisible();
+
+    await trigger.click();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeHidden();
+    const nestedDialog = page.getByRole("dialog", { name: "Подготовка" });
+    await expect(nestedDialog).toBeVisible();
     await expect
       .poll(() =>
-        item.evaluate((element) => {
+        nestedDialog.evaluate((element) => {
           const box = element.getBoundingClientRect();
           const hit = document.elementFromPoint(
             box.x + box.width / 2,
@@ -422,11 +469,8 @@ test("UIX-272 empty character select opens above token editor with guidance and 
         }),
       )
       .toBe(true);
-  }
-  await create.click();
-  await expect(menu).toBeHidden();
-  await expect(page.getByRole("dialog", { name: "Подготовка" })).toBeVisible();
-});
+  });
+}
 
 test("UIX-613 GM creates and places token on active scene in one action", async ({
   page,
