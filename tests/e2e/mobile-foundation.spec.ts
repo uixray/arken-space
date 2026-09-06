@@ -8,6 +8,7 @@ import {
 import { type GameSnapshot } from "@arken/contracts";
 import { expect, test } from "./campaign-fixture";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { assertModalFocusCycle } from "./modal-focus";
 
 /**
  * UIX-624 / P1: четыре настоящих GM/PLAYER × viewport journey, по одному
@@ -135,15 +136,7 @@ async function assertTabExcludesHiddenRoots(page: Page, surface: Surface) {
 }
 
 async function assertModalOwnsFocus(page: Page, dialog: Locator) {
-  await expect(dialog).toBeVisible();
-  for (let index = 0; index < 8; index += 1) {
-    await page.keyboard.press("Tab");
-    expect(
-      await dialog.evaluate((element) =>
-        element.contains(document.activeElement),
-      ),
-    ).toBe(true);
-  }
+  await assertModalFocusCycle(page, dialog);
   // Не force-click: реальный pointer action должен быть недоступен под модалом.
   await expect(
     page.locator("#compact-nav-map").click({ trial: true, timeout: 600 }),
