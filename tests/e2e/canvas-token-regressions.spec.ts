@@ -1021,7 +1021,9 @@ for (const role of ["GM", "PLAYER"] as const) {
           method: route.request().method(),
           url: route.request().url(),
         });
-        return route.fulfill({ status: 204 });
+        // This scenario must never mutate a drawing. In particular, do not
+        // fake a successful PATCH with 204: the real route returns DrawingDto.
+        return route.abort("failed");
       });
       await page.goto("/");
       const map = page.locator(".map-viewport");
@@ -1123,7 +1125,9 @@ for (const role of ["GM", "PLAYER"] as const) {
         y: box.y + fitted.position.y + y * fitted.scale,
       });
       const marquee = async (top: number, bottom: number, message: string) => {
-        const start = point(760, top),
+        // Keep the start outside the drawing's minimum screen-space hit band,
+        // including the compact fit scale of 0.25.
+        const start = point(700, top),
           end = point(1040, bottom);
         await page.keyboard.down("Shift");
         await page.mouse.move(start.x, start.y);
@@ -1131,6 +1135,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         await page.mouse.move(end.x, end.y, { steps: 8 });
         await page.mouse.up();
         await page.keyboard.up("Shift");
+        expect(requests).toHaveLength(0);
         await expect(
           page.getByRole("button", { name: "Удалить выбранное", exact: true }),
         ).toBeVisible();
