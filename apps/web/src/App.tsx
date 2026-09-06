@@ -2099,6 +2099,7 @@ export function App() {
                       );
                       return acknowledgement;
                     }}
+                    onBulkMoveFailure={recoverFromCanvasMutation}
                     onBulkDelete={(selection) =>
                       run(() =>
                         api("/api/canvas/bulk", {
