@@ -69,7 +69,6 @@ export function SceneManagerDialog({
   variant?: "modal" | "workspace";
 }) {
   const [editing, setEditing] = useState<SceneDto | "NEW" | null>(null);
-  const broadcast = snapshot.scenes.find((scene) => scene.active);
   const placementCount = (sceneId: string) =>
     snapshot.tokens.filter((token) => token.sceneId === sceneId).length;
 
@@ -104,16 +103,18 @@ export function SceneManagerDialog({
                 )}
               </div>
               <div className="dialog-actions">
-                <Button onClick={() => onView(scene.id)} disabled={viewed}>
-                  Открыть для мастера
-                </Button>
                 <Button
                   view="action"
-                  onClick={() => void onPublish(scene.id)}
-                  aria-pressed={scene.id === broadcast?.id}
+                  onClick={() => onView(scene.id)}
+                  disabled={viewed}
                 >
-                  Показать игрокам
+                  Открыть для мастера
                 </Button>
+                {!scene.active && (
+                  <Button onClick={() => void onPublish(scene.id)}>
+                    Показать игрокам
+                  </Button>
+                )}
                 <Button onClick={() => setEditing(scene)}>Настроить</Button>
               </div>
             </article>
