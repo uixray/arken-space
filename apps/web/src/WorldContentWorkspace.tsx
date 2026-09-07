@@ -12,6 +12,7 @@ import { ArkenDialog } from "./ui/ArkenDialog";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { AssetPicker } from "./ui/AssetPicker";
 import { ApiError, formatApiError } from "./api";
+import { WORLD_EDITOR_TITLE } from "./world-workspace-labels";
 import {
   WORLD_CONTENT_LIFECYCLE_LABELS,
   WORLD_CONTENT_LIFECYCLES,
@@ -138,7 +139,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
     <ArkenDialog
       open={open}
       footer={false}
-      title="Энциклопедия мира"
+      title={WORLD_EDITOR_TITLE}
       variant="workspace"
       className="world-content-workspace"
       workspaceDraggable={false}

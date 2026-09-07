@@ -3,6 +3,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "./test-support/render";
 import { useSceneActions, type SceneActions } from "./use-scene-actions";
+import type { MutationRunners } from "./use-mutation-runners";
 
 /**
  * UIX-398 step A1. Same guarantee as the mutation runners: what matters is
@@ -15,7 +16,7 @@ function Harness({
   run = async () => {},
 }: {
   onActions: (actions: SceneActions) => void;
-  run?: (action: () => Promise<unknown>, refresh?: boolean) => Promise<void>;
+  run?: MutationRunners["run"];
 }) {
   const [tick, setTick] = useState(0);
   const [, setViewedSceneId] = useState<string | null>(null);
@@ -51,9 +52,7 @@ describe("useSceneActions identity", () => {
 });
 
 describe("useSceneActions behaviour", () => {
-  const capture = (
-    run: (action: () => Promise<unknown>, refresh?: boolean) => Promise<void>,
-  ) => {
+  const capture = (run: MutationRunners["run"]) => {
     let actions: SceneActions | undefined;
     renderComponent(
       <Harness
@@ -84,6 +83,8 @@ describe("useSceneActions behaviour", () => {
     await actions.onRenameScene("scene-1", 3, "Cellar");
 
     expect(calls).toEqual([true, true, undefined, undefined]);
+    for (const args of run.mock.calls)
+      expect(args).toHaveLength(args[1] === undefined ? 1 : 2);
   });
 
   it("creates a scene when given none, and patches the existing one otherwise", async () => {
@@ -100,5 +101,11 @@ describe("useSceneActions behaviour", () => {
     );
 
     expect(performed).toHaveLength(2);
+    expect(run).toHaveBeenNthCalledWith(1, expect.any(Function), true, {
+      errorOwner: "caller",
+    });
+    expect(run).toHaveBeenNthCalledWith(2, expect.any(Function), true, {
+      errorOwner: "caller",
+    });
   });
 });
