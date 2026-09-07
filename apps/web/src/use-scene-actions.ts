@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import { api } from "./api";
 import type { SceneDraft } from "./ui/SceneManagerDialog";
+import type { MutationRunners } from "./use-mutation-runners";
 
 /**
  * UIX-398 step A1 — scene commands, extracted from `App.tsx` as the pilot
@@ -54,7 +55,7 @@ const sceneFrame = (draft: SceneDraft) => ({
 
 export function useSceneActions(dependencies: {
   /** Stable — see `use-mutation-runners.ts`. */
-  run: (action: () => Promise<unknown>, refresh?: boolean) => Promise<void>;
+  run: MutationRunners["run"];
   /** A `useState` setter, stable by React's contract. */
   setViewedSceneId: (sceneId: string) => void;
 }): SceneActions {
@@ -70,21 +71,25 @@ export function useSceneActions(dependencies: {
 
       onSaveScene: async (scene, draft) => {
         if (!scene) {
-          await run(async () => {
-            const created = await api<SceneDto>("/api/scenes", {
-              method: "POST",
-              body: JSON.stringify({
-                actionId: crypto.randomUUID(),
-                name: draft.name,
-                mapAssetId: draft.mapAssetId,
-                width: draft.width,
-                height: draft.height,
-                grid: sceneGrid(draft),
-                backgroundFrame: sceneFrame(draft),
-              }),
-            });
-            setViewedSceneId(created.id);
-          }, true);
+          await run(
+            async () => {
+              const created = await api<SceneDto>("/api/scenes", {
+                method: "POST",
+                body: JSON.stringify({
+                  actionId: crypto.randomUUID(),
+                  name: draft.name,
+                  mapAssetId: draft.mapAssetId,
+                  width: draft.width,
+                  height: draft.height,
+                  grid: sceneGrid(draft),
+                  backgroundFrame: sceneFrame(draft),
+                }),
+              });
+              setViewedSceneId(created.id);
+            },
+            true,
+            { errorOwner: "caller" },
+          );
           return;
         }
         await run(
@@ -102,6 +107,7 @@ export function useSceneActions(dependencies: {
               }),
             }),
           true,
+          { errorOwner: "caller" },
         );
       },
 

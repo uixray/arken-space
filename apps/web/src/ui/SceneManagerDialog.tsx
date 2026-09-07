@@ -3,6 +3,7 @@ import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
 import { Button, Label } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ArkenDialog";
 import { ImageUploadField } from "./ImageUploadField";
+import { SceneGridPreview } from "./SceneGridPreview";
 import { FormInput, FormSelect } from "./GravityFormControls";
 import { useEntityForm } from "./useEntityForm";
 import { EntityConflictError } from "./useEntityForm";
@@ -380,13 +381,6 @@ function SceneEditor({
             ))}
           </FormSelect>
         </label>
-        {selectedMap?.url && (
-          <img
-            className="scene-map-preview"
-            src={selectedMap.url}
-            alt={`Предпросмотр карты ${selectedMap.name}`}
-          />
-        )}
         <ImageUploadField
           label="Загрузить новую карту"
           value={uploadFile}
@@ -449,8 +443,22 @@ function SceneEditor({
             )}
           </div>
         </fieldset>
+        <SceneGridPreview
+          draft={form.state.draft}
+          map={selectedMap}
+          invalidReason={
+            uploadFile
+              ? "Новая карта ещё не сохранена. Сохраните сцену или удалите выбранный файл, чтобы увидеть карту и сетку."
+              : (Object.keys(numericFields) as NumericField[])
+                  .filter((key) => errors[key])
+                  .map((key) => numericFields[key].label)
+                  .join(", ")
+          }
+        />
         {form.state.error && (
-          <div className="field-error">{form.state.error}</div>
+          <div className="field-error" role="alert">
+            {form.state.error}
+          </div>
         )}
         {form.state.status === "conflict" && (
           <div className="field-error">

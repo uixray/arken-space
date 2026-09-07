@@ -4128,10 +4128,22 @@ code {
 /* UIX-311 Stage 4: "Начать бой" / "Завершить бой" — a labeled text button
    next to the icon-only .map-tool buttons, not a selectable MapTool. */
 .map-toolbar .map-tool-text {
-  height: 30px;
-  padding: 0 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 4px;
+  width: 120px;
+  padding: 4px;
   border-radius: var(--radius-sm, 6px);
   white-space: nowrap;
+}
+.map-toolbar .map-tool-text input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.map-toolbar.is-collapsed .map-tool-text {
+  width: 88px;
 }
 .encounter-menu,
 .encounter-scene-picker {

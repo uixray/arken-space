@@ -1609,42 +1609,262 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
   ).toHaveCount(0);
 });
 
-test("UIX-621 compact multiline conditions visual fixture", async ({
-  page,
-}) => {
+async function installCanvasReviewRoutes(page: Page) {
   await installCanvasRoutes(page);
-  await page.route("**/api/bootstrap", (route) =>
-    route.fulfill({
-      json: {
-        ...snapshot,
-        tokens: [
-          {
-            ...snapshot.tokens[0],
-            conditions: ["POISONED", "UNCONSCIOUS", "RESTRAINED", "PRONE"],
-          },
-        ],
-      },
-    }),
+  await page.route("**/api/story/posts?limit=50", (route) =>
+    route.fulfill({ json: { posts: [], nextCursor: null } }),
   );
-  await page.route("**/api/canvas/history**", (route) =>
-    route.fulfill({ json: [] }),
+  await page.route("**/api/operator/feedback/capability", (route) =>
+    route.fulfill({ status: 403, json: { message: "OPERATOR_REQUIRED" } }),
   );
-  await page.goto("/");
-  const map = page.locator(".map-viewport");
-  const trigger = map.locator(".map-object-list-trigger");
-  await trigger.click();
-  await map
-    .getByRole("button", { name: "Selected token", exact: true })
-    .click();
-  await trigger.click();
-  await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
-  const box = (await map.boundingBox())!;
-  const right = Number(await map.getAttribute("data-resize-handle-x"));
-  const bottom = Number(await map.getAttribute("data-resize-handle-y"));
-  await page.mouse.move(box.x + right - 15, box.y + bottom - 15);
-  await page.waitForTimeout(150);
-  await map.screenshot({ path: "test-results/uix-621-compact-conditions.png" });
-});
+}
+
+for (const width of [1280, 390]) {
+  test(`UIX-621 multiline conditions and dismissed object list (${width})`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    await installCanvasReviewRoutes(page);
+    const mutations: string[] = [];
+    page.on("request", (request) => {
+      if (
+        request.url().includes("/api/") &&
+        !["GET", "HEAD"].includes(request.method())
+      )
+        mutations.push(
+          `${request.method()} ${new URL(request.url()).pathname}`,
+        );
+    });
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({
+        json: {
+          ...snapshot,
+          tokens: [
+            {
+              ...snapshot.tokens[0],
+              x: 768,
+              y: 468,
+              conditions: ["POISONED", "UNCONSCIOUS", "RESTRAINED", "PRONE"],
+            },
+          ],
+        },
+      }),
+    );
+    await page.route("**/api/canvas/history**", (route) =>
+      route.fulfill({ json: [] }),
+    );
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    const zoom = map.locator(".map-scale");
+    await zoom.getByRole("button", { name: "Вписать", exact: true }).click();
+    const slider = zoom.getByRole("slider", { name: "Масштаб карты" });
+    await slider.focus();
+    await page.keyboard.press("Home");
+    // This range is vertical: use its axis, including Firefox's native keys.
+    for (let step = 0; step < 15; step += 1)
+      await page.keyboard.press("ArrowUp");
+    await expect(slider).toHaveValue("1");
+    const trigger = map.locator(".map-object-list-trigger");
+    await trigger.click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    // The trigger opens; it is not a toggle. Explicitly dismiss the transient
+    // list before interpreting selection/zoom geometry or condition screenshots.
+    await page.keyboard.press("Escape");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(map.locator(".map-object-list-popover")).toBeHidden();
+    await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+    const box = (await map.boundingBox())!;
+    const right = Number(await map.getAttribute("data-resize-handle-x"));
+    const bottom = Number(await map.getAttribute("data-resize-handle-y"));
+    await page.mouse.move(box.x + right - 15, box.y + bottom - 15);
+    await page.waitForTimeout(150);
+    await map.screenshot({
+      path: testInfo.outputPath(`uix-621-conditions-${width}.png`),
+    });
+
+    const plus = zoom.getByRole("button", {
+      name: "Увеличить масштаб",
+      exact: true,
+    });
+    await expect
+      .poll(() =>
+        plus.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return element.contains(
+            document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            ),
+          );
+        }),
+      )
+      .toBe(true);
+    await plus.click();
+    await expect(slider).toHaveValue("1.1");
+    await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+
+    // Open-list overlap is transient. An outside pointer must dismiss it without
+    // accidentally hitting its duplicate/delete row.
+    await trigger.click();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await page.mouse.click(box.x + 20, box.y + box.height - 30);
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await plus.click();
+    await expect(slider).toHaveValue("1.2");
+    expect(mutations).toEqual([]);
+  });
+}
+
+for (const width of [1280, 390]) {
+  test(`UIX-470 brush hover paints its radius and clears on leave or tool change (${width})`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: { ...snapshot, tokens: [] } }),
+    );
+    await page.route("**/api/canvas/history**", (route) =>
+      route.fulfill({ json: [] }),
+    );
+    const mutations: string[] = [];
+    page.on("request", (request) => {
+      if (
+        request.url().includes("/api/") &&
+        !["GET", "HEAD"].includes(request.method())
+      )
+        mutations.push(
+          `${request.method()} ${new URL(request.url()).pathname}`,
+        );
+    });
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    const zoom = map.getByRole("slider", { name: "Масштаб карты" });
+    await zoom.focus();
+    await page.keyboard.press("Home");
+    for (let step = 0; step < 15; step += 1)
+      await page.keyboard.press("ArrowUp");
+    await expect(zoom).toHaveValue("1");
+    const toolbar = page.getByRole("toolbar", { name: "Инструменты карты" });
+    for (const tool of ["FOG_BRUSH", "COVER_BRUSH"]) {
+      await toolbar.locator(`[data-tool="${tool}"]`).click();
+      await expect(
+        page.getByRole("slider", { name: "Радиус кисти тумана" }),
+      ).toHaveValue("40");
+      const radius = page.getByRole("slider", { name: "Радиус кисти тумана" });
+      const assertContainedRadius = async () => {
+        const bounds = (await toolbar.boundingBox())!;
+        const control = (await radius.boundingBox())!;
+        expect(
+          control.x,
+          "radius starts inside its toolbar",
+        ).toBeGreaterThanOrEqual(bounds.x);
+        expect(
+          control.x + control.width,
+          "radius ends inside its toolbar",
+        ).toBeLessThanOrEqual(bounds.x + bounds.width);
+      };
+      await assertContainedRadius();
+      if (tool === "FOG_BRUSH") {
+        await toolbar.screenshot({
+          path: testInfo.outputPath(`uix-470-toolbar-expanded-${width}.png`),
+        });
+        if (width < 1024) {
+          await toolbar
+            .getByRole("button", { name: "Свернуть панель до значков" })
+            .click();
+        }
+      }
+      await assertContainedRadius();
+      const box = (await map.boundingBox())!;
+      const point = {
+        x: Math.round(box.width / 2),
+        y: Math.round(box.height * 0.6),
+      };
+      // Read the actual composited Canvas pixels, not source text or React props.
+      // The fixed crop surrounds an empty map point and includes the whole brush.
+      const pixels = () =>
+        map.evaluate((element, point) => {
+          const mapBox = element.getBoundingClientRect();
+          const composite = document.createElement("canvas");
+          composite.width = composite.height = 100;
+          const context = composite.getContext("2d")!;
+          for (const canvas of element.querySelectorAll("canvas")) {
+            const rect = canvas.getBoundingClientRect();
+            context.drawImage(
+              canvas,
+              rect.x - mapBox.x - point.x + 50,
+              rect.y - mapBox.y - point.y + 50,
+              rect.width,
+              rect.height,
+            );
+          }
+          return Array.from(context.getImageData(0, 0, 100, 100).data);
+        }, point);
+      const before = await pixels();
+      const changedPixels = async () => {
+        const after = await pixels();
+        const distances: number[] = [];
+        for (let index = 0; index < after.length; index += 4) {
+          if (
+            after
+              .slice(index, index + 4)
+              .reduce(
+                (sum, value, channel) =>
+                  sum + Math.abs(value - before[index + channel]!),
+                0,
+              ) > 20
+          ) {
+            const pixel = index / 4;
+            distances.push(
+              Math.hypot(
+                (pixel % 100) + 0.5 - 50,
+                Math.floor(pixel / 100) + 0.5 - 50,
+              ),
+            );
+          }
+        }
+        return distances;
+      };
+      expect(
+        await page.evaluate(
+          ({ x, y }) => document.elementFromPoint(x, y)?.tagName,
+          { x: box.x + point.x, y: box.y + point.y },
+        ),
+        "hover point must target Canvas, not the expanded toolbar",
+      ).toBe("CANVAS");
+      await page.mouse.move(box.x + point.x, box.y + point.y);
+      await expect
+        .poll(async () => (await changedPixels()).length)
+        .toBeGreaterThan(25);
+      const distances = await changedPixels();
+      expect(Math.min(...distances)).toBeGreaterThan(37);
+      expect(Math.max(...distances)).toBeLessThan(43);
+      await page.screenshot({
+        path: testInfo.outputPath(`uix-470-${tool.toLowerCase()}-${width}.png`),
+      });
+      await page.mouse.move(0, 0);
+      await expect.poll(async () => (await changedPixels()).length).toBe(0);
+      await page.mouse.move(box.x + point.x, box.y + point.y);
+      await expect
+        .poll(async () => (await changedPixels()).length)
+        .toBeGreaterThan(25);
+      // Keyboard activation leaves the pointer over Canvas: this independently
+      // tests tool change rather than accidentally relying on pointerleave.
+      const pan = toolbar.locator('[data-tool="PAN"]');
+      await pan.focus();
+      await expect
+        .poll(async () => (await changedPixels()).length)
+        .toBeGreaterThan(25);
+      await pan.press("Enter");
+      await expect(pan).toHaveAttribute("aria-pressed", "true");
+      await expect.poll(async () => (await changedPixels()).length).toBe(0);
+    }
+    expect(mutations).toEqual([]);
+  });
+}
 
 test("UIX-621 rapid conditions render before delayed server confirmation and stay combined", async ({
   page,

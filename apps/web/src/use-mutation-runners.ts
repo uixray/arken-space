@@ -19,8 +19,16 @@ import { ApiError, formatApiError } from "./api";
  * the caller, so the identities here are stable for the component's lifetime.
  */
 export interface MutationRunners {
-  /** Runs an action, surfacing failures; optionally refetches the snapshot. */
-  run: (action: () => Promise<unknown>, refresh?: boolean) => Promise<void>;
+  /**
+   * Runs an action and optionally refetches the snapshot. A form may own its
+   * action error inline; reconciliation failures always remain global.
+   * Failures are rethrown regardless of their notification owner.
+   */
+  run: (
+    action: () => Promise<unknown>,
+    refresh?: boolean,
+    options?: { errorOwner: "global" | "caller" },
+  ) => Promise<void>;
   /** Runs an action and returns its result, surfacing failures. */
   runResult: <T>(action: () => Promise<T>) => Promise<T>;
   /**
@@ -47,16 +55,20 @@ export function useMutationRunners(dependencies: {
 }): MutationRunners {
   const { load, setError } = dependencies;
 
-  const run = useCallback(
-    async (action: () => Promise<unknown>, refresh = false) => {
+  const run = useCallback<MutationRunners["run"]>(
+    async (action, refresh = false, options) => {
+      const callerOwnsActionError = options?.errorOwner === "caller";
+      let actionSucceeded = false;
       try {
-        setError("");
+        if (!callerOwnsActionError) setError("");
         await action();
+        actionSucceeded = true;
         if (refresh) await load();
       } catch (reason) {
-        setError(
-          reason instanceof Error ? reason.message : "Операция не выполнена",
-        );
+        if (!callerOwnsActionError || actionSucceeded)
+          setError(
+            reason instanceof Error ? reason.message : "Операция не выполнена",
+          );
         throw reason;
       }
     },

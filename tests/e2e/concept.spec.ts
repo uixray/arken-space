@@ -1766,7 +1766,7 @@ test("GM shell keeps essential controls accessible across desktop widths", async
 
 test("GM prepares a scene locally before publishing it to players", async ({
   page,
-}) => {
+}, testInfo) => {
   const sceneSnapshot = structuredClone(snapshot);
   sceneSnapshot.scenes[0]!.revision = 2;
   sceneSnapshot.scenes[0]!.backgroundFrame = {
@@ -1827,6 +1827,12 @@ test("GM prepares a scene locally before publishing it to players", async ({
   });
   await expect(safeOpen).toHaveClass(/g-button_view_action/);
   await expect(publish).not.toHaveClass(/g-button_view_action/);
+  await activeCard.screenshot({
+    path: testInfo.outputPath("uix-418-scene-active-card.png"),
+  });
+  await secretCard.screenshot({
+    path: testInfo.outputPath("uix-418-scene-unpublished-card.png"),
+  });
   await safeOpen.click();
   await expect(viewedScenePicker(page)).toContainText("Тайная комната");
   await expect(secretCard.getByText("Просматривается мастером")).toBeVisible();
@@ -1845,7 +1851,7 @@ test("GM prepares a scene locally before publishing it to players", async ({
 
 test("destructive token-definition action stays visually subordinate", async ({
   page,
-}) => {
+}, testInfo) => {
   const tokenSnapshot = structuredClone(snapshot);
   tokenSnapshot.tokenDefinitions = [
     {
@@ -1878,6 +1884,9 @@ test("destructive token-definition action stays visually subordinate", async ({
   await expect(remove).toHaveClass(/danger-link/);
   await expect(remove).toHaveClass(/g-button_view_flat-danger/);
   await expect(remove).toHaveClass(/g-button_size_s/);
+  await card.screenshot({
+    path: testInfo.outputPath("uix-418-token-action-hierarchy.png"),
+  });
 });
 
 for (const trayCase of [
