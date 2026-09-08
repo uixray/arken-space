@@ -375,7 +375,10 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
       mimeType: "image/png",
       buffer: aBytes,
     });
-    const source = editor.getByLabel("Исходное изображение", { exact: true });
+    const source = editor.getByRole("combobox", {
+      name: "Исходное изображение",
+      exact: true,
+    });
     await expect(source).toHaveValue(a.id);
     const preview = editor.locator(".token-image-preview");
     const previewImage = preview.locator("img");
