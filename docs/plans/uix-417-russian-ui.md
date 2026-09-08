@@ -201,3 +201,62 @@
 - Ключи `ONLINE`, `OFFLINE`, роли и другие enum внутри условий, пользовательские
   Latin-названия и форматные примеры не превращались в задачи. Переведены только
   подтверждённые места отображения, без изменения ключей данных.
+
+## Checkpoint — 2026-09-08 (narrow editor layout, подготовлено)
+
+- **Baseline / ревизия:** browser gate на runtime `d68f8ed` (следующий
+  integration `acd28a1` добавил только документацию) выявил независимый от
+  перевода дефект: при ширине 390px выбранная сущность редактора мира находится
+  за правым краем `overflow: hidden` grid. Скриншот просмотрен; это не проблема
+  текста подписи «Версия» и не подтверждение готовности всех narrow-состояний.
+- **Решение:** до 767px, как у существующей compact workspace оболочки, список
+  и detail расположены вертикально в исходном DOM-порядке. Их высота естественна,
+  scroll принадлежит штатному workspace body, а не вложенным pane. На desktop
+  остаются две колонки; `minmax(0, 1fr)` / `min-width: 0` позволяют detail
+  сжиматься. Header переносится, длинное имя не растягивает track.
+- **Изменено:** только `WorldContentWorkspace.css` и этот checkpoint. Общие
+  размеры оболочки, палитра, шрифты, JSX, данные и действия не менялись.
+- **Проверка / дальше:** подготовлен один CSS-пул; restored browser, responsive
+  geometry и общий quality gate ещё не выполнялись. Root проверяет 390px и
+  desktop в Chrome/Firefox; до этого исправление не считается принятым.
+
+### Продолжение gate — validation popup
+
+- Root browser r3: 5 PASS / 3 FAIL; narrow detail уже доступен, но следующий
+  сценарий выявил реальное обрезание длинного submit error идентификатора на
+  390px. Это отдельный Gravity footer popup с `width: max-content`, а не
+  короткая inline-подсказка `.field-error` и не ошибка русской формулировки.
+- Один marker-class на существующем label в `CreateEntityDialog` ограничивает
+  CSS только этим диалогом: footer error имеет viewport-relative max-width с
+  запасом 64px и переносы. Полный текст, popup, действия, shared `ArkenDialog`
+  и остальные формы сохранены; global override не добавлен.
+- Изменено дополнительно только это локальное className в
+  `WorldContentWorkspace.tsx` и scoped правило в его CSS. Повторный browser
+  gate ещё не запускался; оставшиеся Firefox geometry-oracle исправления
+  находятся в отдельной ownership root и не заявляются продуктовым дефектом.
+
+## Checkpoint — 2026-09-08 (browser acceptance локального copy-пула)
+
+- **Ревизия:** runtime copy-base `d68f8ed`, integration docs `4826474`,
+  затем локальные CSS/marker/test изменения этого пула. Новый релиз не заявлен.
+- **Изменено:** `WorldContentWorkspace.css`, marker в `WorldContentWorkspace.tsx`,
+  новый `tests/e2e/russian-world-copy.spec.ts` и этот checkpoint.
+- **Проверка:** 8 browser cases PASS в Chrome/Firefox на 1280 и 390px;
+  настоящий App, навигация, формы и generator, изолированные mock API ответы.
+  Проверены видимость, clipping, hit testing, сохранение Latin-имён автора,
+  русские типы карт, identifier/validation и подписи generator. Root просмотрел
+  narrow entity detail и полный перенесённый текст footer error.
+- **Диверсия:** production placeholder временно возвращён на английский —
+  4 точных FAIL по отсутствующей русской подписи; тесты неизменны. Исходник
+  восстановлен byte-for-byte, затем тот же полный browser-пул снова 8/8 PASS.
+- **Quality:** build, format:check, lint, typecheck и исключение тестового
+  modal-owner fixture из production build — PASS. Полный Vitest 238/1889 PASS
+  относится к исходному `d68f8ed`; после CSS/marker правки здесь не повторялся.
+- **Границы:** первые прогоны сохранили ошибки нового geometry harness и два
+  настоящих narrow-дефекта. Исправлен учёт fixed containing blocks и внутреннего
+  native input scrollport; реальные ancestor clips, text fit и hit testing
+  сохранены. Backend authorization, persistence, генерация изображения,
+  Safari/физические устройства и перевод всех экранов этим mock-API gate
+  не доказываются. Исторический авторский контент не переписан.
+- **Дальше:** локальная фиксация и общий release gate связанного пула.
+  UIX-417 остаётся In Progress: этот срез не закрывает весь English-error audit.

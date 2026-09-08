@@ -355,7 +355,7 @@ function CreateEntityDialog({
       onApply={() => void submit()}
       onClose={onClose}
     >
-      <label className="field">
+      <label className="field world-content-workspace__create-name">
         Название
         <FormInput
           value={name}
