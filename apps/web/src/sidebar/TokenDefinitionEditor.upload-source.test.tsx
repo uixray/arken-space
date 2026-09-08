@@ -7,11 +7,18 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import type { ButtonButtonProps } from "@gravity-ui/uikit";
-import type { AssetDto, GameSnapshot } from "@arken/contracts";
+import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "../api";
+import {
+  api,
+  flushClientEventBuffer,
+  resetClientEventBufferForTest,
+} from "../api";
 import { useAssetActions } from "../use-asset-actions";
+import { useLatestRef } from "../use-latest-ref";
+import { useMutationRunners } from "../use-mutation-runners";
+import { useTokenDefinitionActions } from "../use-token-definition-actions";
 import { gmSnapshot } from "../test-support/game-snapshot-fixtures";
 import {
   act,
@@ -123,6 +130,7 @@ const objectUrlDescriptors = {
   revokeObjectURL: Object.getOwnPropertyDescriptor(URL, "revokeObjectURL"),
 };
 beforeEach(() => {
+  resetClientEventBufferForTest();
   Object.defineProperty(URL, "createObjectURL", {
     configurable: true,
     value: vi.fn(() => "blob:synthetic-source-preview"),
@@ -132,10 +140,12 @@ beforeEach(() => {
     value: vi.fn(),
   });
 });
-afterEach(() => {
+afterEach(async () => {
   // Always unmount ImageUploadField before restoring its object-URL boundary,
   // including when the intended source-selection baseline assertion fails.
   cleanup();
+  await flushClientEventBuffer();
+  resetClientEventBufferForTest();
   vi.unstubAllGlobals();
   for (const key of ["createObjectURL", "revokeObjectURL"] as const) {
     const original = objectUrlDescriptors[key];
@@ -149,6 +159,261 @@ const jsonResponse = (data: unknown, status = 200) =>
     status,
     headers: { "content-type": "application/json" },
   });
+
+const activeScene: SceneDto = {
+  id: "negative-control-scene",
+  name: "Сцена проверки",
+  projection: "ORTHOGRAPHIC_2D",
+  mapAssetId: null,
+  width: 1024,
+  height: 768,
+  backgroundFrame: { x: 0, y: 0, width: 1024, height: 768 },
+  grid: {
+    enabled: true,
+    size: 64,
+    offsetX: 0,
+    offsetY: 0,
+    color: "#c8b78b",
+    opacity: 0.22,
+  },
+  active: true,
+};
+const derivativeRequired =
+  "Обрежьте исходное изображение и создайте из него изображение токена.";
+const uploadRefused = "Сервер отклонил загрузку исходника.";
+const generationRefused = "Сервер отклонил создание изображения токена.";
+
+function setupNegativeControl(failure?: "upload" | "generation") {
+  let serverAssets = [sourceB, ready];
+  const requests: Array<{ path: string; method: string; body?: unknown }> = [];
+  const unexpectedRequests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const method = init?.method ?? "GET";
+      requests.push({ path, method, body: init?.body });
+      if (path === "/api/assets?kind=IMAGE" && method === "POST") {
+        if (failure === "upload")
+          return jsonResponse(
+            { error: "UPLOAD_REJECTED", message: uploadRefused },
+            403,
+          );
+        serverAssets = [sourceA, ...serverAssets];
+        return jsonResponse(sourceA, 201);
+      }
+      if (path === "/api/bootstrap" && method === "GET")
+        return jsonResponse(
+          gmSnapshot({ scenes: [activeScene], assets: serverAssets }),
+        );
+      if (path === "/api/assets/source-a/token" && method === "POST") {
+        if (failure === "generation")
+          return jsonResponse(
+            { error: "TOKEN_GENERATION_REJECTED", message: generationRefused },
+            422,
+          );
+        serverAssets = [generated, ...serverAssets];
+        return jsonResponse(generated, 201);
+      }
+      // A broken submit guard must reach a recorded creation endpoint, not be
+      // hidden by a rejecting callback or an unrecognised-route exception.
+      if (
+        method === "POST" &&
+        (path === "/api/token-definitions" || path === "/api/tokens")
+      )
+        return jsonResponse({ id: "unexpected-created-token" }, 201);
+      // Real api() reports an upload refusal; this is not a creation request.
+      if (path === "/api/client-logs" && method === "POST")
+        return jsonResponse({ accepted: true }, 202);
+      unexpectedRequests.push(`${method} ${path}`);
+      throw new Error(`Unexpected negative-control request: ${method} ${path}`);
+    }),
+  );
+
+  function Harness() {
+    const [snapshot, setSnapshot] = useState(() =>
+      gmSnapshot({ scenes: [activeScene], assets: [sourceB, ready] }),
+    );
+    const [open, setOpen] = useState(true);
+    const [sharedError, setSharedError] = useState("");
+    const load = useCallback(async () => {
+      setSnapshot(await api<GameSnapshot>("/api/bootstrap"));
+    }, []);
+    const assets = useAssetActions({ load });
+    const { run } = useMutationRunners({ load, setError: setSharedError });
+    const actions = useTokenDefinitionActions({
+      run,
+      snapshotRef: useLatestRef(snapshot),
+      activeSceneRef: useLatestRef(snapshot.scenes.find((scene) => scene.active)),
+    });
+    return (
+      <>
+        {sharedError && <div role="alert">{sharedError}</div>}
+        {open ? (
+          <TokenDefinitionEditor
+            snapshot={snapshot}
+            onUpload={assets.uploadAsset}
+            onGenerateTokenImage={assets.generateTokenImage}
+            onCreate={actions.onCreateTokenDefinition}
+            onCreateAndPlace={actions.onCreateAndPlaceTokenDefinition}
+            onCancel={() => setOpen(false)}
+            onPatch={actions.onPatchTokenDefinition}
+            onReplaceControllers={actions.onReplaceTokenControllers}
+            onOpenCharacters={vi.fn()}
+            onOpenMedia={vi.fn()}
+          />
+        ) : (
+          <p role="status">Редактор закрыт</p>
+        )}
+      </>
+    );
+  }
+  renderComponent(<Harness />);
+
+  return {
+    requests,
+    async uploadLandscape() {
+      await userEvent.type(screen.getByLabelText("Название"), "Страж исходника");
+      expect(
+        screen.getByRole("button", { name: "Создать и поставить" }),
+      ).toBeEnabled();
+      const file = new File(["synthetic landscape boundary bytes"], sourceA.name, {
+        type: "image/png",
+      });
+      await userEvent.upload(
+        screen.getByLabelText("Загрузить новое изображение"),
+        file,
+      );
+      await waitFor(() =>
+        expect(
+          requests.filter((request) => request.path === "/api/assets?kind=IMAGE"),
+        ).toHaveLength(1),
+      );
+      const upload = requests.find(
+        (request) => request.path === "/api/assets?kind=IMAGE",
+      );
+      if (!upload) throw new Error("Expected the landscape upload request");
+      expect((upload.body as FormData).get("file")).toBe(file);
+    },
+    expectNoCreation() {
+      for (const path of ["/api/token-definitions", "/api/tokens"])
+        expect(
+          requests.filter(
+            (request) => request.method === "POST" && request.path === path,
+          ),
+        ).toEqual([]);
+      expect(unexpectedRequests).toEqual([]);
+    },
+  };
+}
+
+async function expectUploadedLandscape() {
+  await waitFor(() =>
+    expect(screen.getByLabelText("Исходное изображение")).toHaveValue(sourceA.id),
+  );
+  expect(sourceA.width).toBeGreaterThan(sourceA.height);
+  const preview = screen.getByRole("group", {
+    name: /^Интерактивный предпросмотр токена/,
+  });
+  expect(preview.querySelector("img")).toHaveAttribute("src", sourceA.url);
+  const picker = screen.getByRole("group", {
+    name: "Изображение токена из файлов",
+  });
+  expect(
+    within(picker).getByRole("button", { name: "Без изображения" }),
+  ).toHaveAttribute("aria-pressed", "true");
+}
+
+async function attemptSubmitWithoutDerivative(name: string) {
+  // Each intent gets a fresh harness, so a previous submit's error cannot
+  // satisfy this assertion before the current submit actually reaches its guard.
+  expect(screen.queryByText(derivativeRequired)).not.toBeInTheDocument();
+  const submit = screen.getByRole("button", { name, exact: true });
+  await waitFor(() => expect(submit).toBeEnabled());
+  await userEvent.click(submit);
+  expect(await screen.findByText(derivativeRequired)).toBeInTheDocument();
+  await waitFor(() => expect(submit).toBeEnabled());
+  expect(screen.getByLabelText("Название")).toHaveValue("Страж исходника");
+  expect(screen.queryByText("Редактор закрыт")).not.toBeInTheDocument();
+}
+
+describe("UIX-611 real-chain negative creation controls", () => {
+  const submitIntents = ["Сохранить", "Создать и поставить"];
+
+  it.each(submitIntents)(
+    "refuses an uploaded landscape IMAGE without generation via %s",
+    async (submitName) => {
+      const control = setupNegativeControl();
+      await control.uploadLandscape();
+      await expectUploadedLandscape();
+      await attemptSubmitWithoutDerivative(submitName);
+      expect(
+        control.requests.map(({ method, path }) => `${method} ${path}`),
+      ).toEqual(["POST /api/assets?kind=IMAGE", "GET /api/bootstrap"]);
+      control.expectNoCreation();
+    },
+  );
+
+  it.each(submitIntents)(
+    "observes a real HTTP upload refusal before refusing submit via %s",
+    async (submitName) => {
+      const control = setupNegativeControl("upload");
+      await control.uploadLandscape();
+      expect(await screen.findByText(uploadRefused)).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: sourceA.name }),
+      ).not.toBeInTheDocument();
+      await attemptSubmitWithoutDerivative(submitName);
+      expect(
+        control.requests.some((request) => request.path === "/api/bootstrap"),
+      ).toBe(false);
+      control.expectNoCreation();
+    },
+  );
+
+  it.each(submitIntents)(
+    "observes the actual generator's HTTP refusal before refusing submit via %s",
+    async (submitName) => {
+      const control = setupNegativeControl("generation");
+      await control.uploadLandscape();
+      await expectUploadedLandscape();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Создать изображение токена" }),
+      );
+      expect(await screen.findByText(generationRefused)).toBeInTheDocument();
+      expect(
+        control.requests.filter(
+          (request) => request.path === "/api/assets/source-a/token",
+        ),
+      ).toHaveLength(1);
+      expect(
+        screen.queryByRole("button", { name: generated.name }),
+      ).not.toBeInTheDocument();
+      await attemptSubmitWithoutDerivative(submitName);
+      control.expectNoCreation();
+    },
+  );
+
+  it("cancels the uploaded-source draft before submit without creating a definition or placement", async () => {
+    const control = setupNegativeControl();
+    await control.uploadLandscape();
+    await expectUploadedLandscape();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Отмена", exact: true }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Редактор закрыт");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      control.requests.map(({ method, path }) => `${method} ${path}`),
+    ).toEqual(["POST /api/assets?kind=IMAGE", "GET /api/bootstrap"]);
+    control.expectNoCreation();
+  });
+});
 
 describe("UIX-611 real editor uploaded-source selection", () => {
   it("automatically selects uploaded portrait B and resets A's edited crop before generating a TOKEN", async () => {

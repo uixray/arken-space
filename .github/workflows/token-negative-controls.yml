@@ -1,0 +1,173 @@
+name: Token negative controls
+
+on:
+  push:
+    branches: [codex/uix-611-613-negative-controls]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: token-negative-controls-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      NODE_OPTIONS: --max-old-space-size=2048
+      NO_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Record every raw exit; formatting/lint/type errors must not prevent the
+      # meaningful regression attempt. The always-run validator is the gate.
+      - name: Run one connected two-file pool
+        shell: bash
+        run: |
+          set +e
+          export OUT="$RUNNER_TEMP/token-negative-controls"
+          mkdir -p "$OUT" || exit 1
+          run_stage() {
+            local name="$1" seconds="$2"
+            shift 2
+            timeout --signal=TERM --kill-after=10s "${seconds}s" "$@" > "$OUT/$name.log" 2>&1
+            local code=$?
+            printf '%s\n' "$code" > "$OUT/$name.exit"
+            printf '\n--- %s: exit %s ---\n' "$name" "$code"
+            cat "$OUT/$name.log"
+          }
+          files=(
+            apps/web/src/sidebar/TokenDefinitionEditor.test.tsx
+            apps/web/src/sidebar/TokenDefinitionEditor.upload-source.test.tsx
+          )
+          run_stage source-freeze 20 node --input-type=module - <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          const base = '394c934f57840b62332083eb8c7d7a1448c658dd';
+          const approved = [
+            '.github/workflows/token-negative-controls.yml',
+            'apps/web/src/sidebar/TokenDefinitionEditor.test.tsx',
+            'apps/web/src/sidebar/TokenDefinitionEditor.upload-source.test.tsx',
+          ];
+          const tracked = [...approved, 'pnpm-lock.yaml', 'vitest.config.ts'];
+          const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+          const changed = git('diff', '--name-only', base, 'HEAD').split('\n').filter(Boolean).sort();
+          if (JSON.stringify(changed) !== JSON.stringify(approved) || git('status', '--porcelain', '--untracked-files=no'))
+            throw new Error('SOURCE_SCOPE_MISMATCH');
+          const head = git('rev-parse', 'HEAD');
+          if (head !== process.env.GITHUB_SHA || !/^v22\./.test(process.version))
+            throw new Error('REVISION_OR_NODE_MISMATCH');
+          writeFileSync(`${process.env.OUT}/source-before.json`, JSON.stringify({
+            base, head, runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            node: process.version, changed, files: tracked.map((file) => ({ file, sha256: sha256(file) })),
+          }, null, 2));
+          NODE
+          if [[ "$(cat "$OUT/source-freeze.exit")" != 0 ]]; then exit 0; fi
+          run_stage install 240 pnpm install --frozen-lockfile
+          run_stage contracts 70 pnpm --filter @arken/contracts build
+          run_stage system 45 pnpm --filter @arken/system build
+          run_stage format 40 pnpm exec prettier --check "${files[@]}"
+          run_stage lint 60 pnpm exec eslint "${files[@]}"
+          run_stage web-types 75 pnpm --filter @arken/web typecheck
+          run_stage vitest 180 pnpm exec vitest run "${files[@]}" \
+            --maxWorkers=1 --retry=0 --dangerouslyIgnoreUnhandledErrors=false \
+            --reporter=verbose --reporter=json --outputFile.json="$OUT/vitest.json"
+          exit 0
+
+      - name: Require exact inventory, immutable inputs and every stage exit
+        if: always()
+        shell: bash
+        run: |
+          export OUT="$RUNNER_TEMP/token-negative-controls"
+          mkdir -p "$OUT"
+          node --input-type=module - <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+          import path from 'node:path';
+          const out = process.env.OUT;
+          const stages = ['source-freeze', 'install', 'contracts', 'system', 'format', 'lint', 'web-types', 'vitest'];
+          const exits = Object.fromEntries(stages.map((stage) => {
+            const file = `${out}/${stage}.exit`;
+            const raw = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+            return [stage, /^\d{1,3}$/.test(raw) ? Number(raw) : null];
+          }));
+          const errors = stages.filter((stage) => exits[stage] !== 0).map((stage) => `STAGE_NOT_PASSED:${stage}`);
+          const expected = new Map([
+            ['apps/web/src/sidebar/TokenDefinitionEditor.test.tsx', 7],
+            ['apps/web/src/sidebar/TokenDefinitionEditor.upload-source.test.tsx', 8],
+          ]);
+          let inventory = [], counts = null, source = null;
+          try {
+            source = JSON.parse(readFileSync(`${out}/source-before.json`, 'utf8'));
+            if (source.head !== process.env.GITHUB_SHA || source.files.length !== 5)
+              throw new Error('SOURCE_IDENTITY');
+            for (const entry of source.files) {
+              const after = createHash('sha256').update(readFileSync(entry.file)).digest('hex');
+              if (entry.sha256 !== after) errors.push(`SOURCE_CHANGED:${entry.file}`);
+            }
+          } catch { errors.push('SOURCE_MISSING_INVALID_OR_CHANGED'); }
+          try {
+            const report = JSON.parse(readFileSync(`${out}/vitest.json`, 'utf8'));
+            counts = Object.fromEntries(['numTotalTests', 'numPassedTests', 'numFailedTests', 'numPendingTests',
+              'numTodoTests', 'numFailedTestSuites', 'numPendingTestSuites'].map((key) => [key, report[key]]));
+            if (report.success !== true || counts.numTotalTests !== 15 || counts.numPassedTests !== 15 ||
+                ['numFailedTests', 'numPendingTests', 'numTodoTests', 'numFailedTestSuites', 'numPendingTestSuites']
+                  .some((key) => counts[key] !== 0) || report.testResults.length !== 2)
+              errors.push('NOT_FIFTEEN_CLEAN_TESTS');
+            const seen = new Set();
+            for (const file of report.testResults) {
+              const name = path.relative(process.cwd(), file.name).split(path.sep).join('/');
+              const tests = file.assertionResults;
+              if (seen.has(name) || !expected.has(name) || tests.length !== expected.get(name) ||
+                  file.status !== 'passed' || file.message !== '' ||
+                  tests.some((test) => test.status !== 'passed' || test.failureMessages.length !== 0) ||
+                  new Set(tests.map((test) => test.fullName)).size !== tests.length)
+                errors.push(`INVALID_FILE_INVENTORY:${name}`);
+              seen.add(name);
+              inventory.push({ file: name, tests: tests.map((test) => ({ name: test.fullName, status: test.status })) });
+            }
+            if ([...expected.keys()].some((file) => !seen.has(file))) errors.push('MISSING_EXPECTED_FILE');
+          } catch { errors.push('VITEST_REPORT_MISSING_OR_INVALID'); }
+          // Vitest 4.1 JSON success omits unhandled errors. The raw exit above is
+          // mandatory with dangerouslyIgnoreUnhandledErrors=false; retries are 0.
+          const status = errors.length ? 'FAILED_OR_INCOMPLETE' : 'FIFTEEN_CLEAN_TESTS_AND_CHECKS';
+          writeFileSync(`${out}/gate-summary.json`, JSON.stringify({
+            status, head: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT, exits, counts, inventory, errors,
+            sourceVerified: source !== null && !errors.some((error) => error.startsWith('SOURCE_')),
+            unhandledErrorGate: 'Vitest exit 0 with dangerouslyIgnoreUnhandledErrors=false',
+          }, null, 2));
+          const summary = `${status}\n${stages.map((stage) => `${stage}: ${exits[stage] ?? 'not recorded'}`).join('\n')}\n` +
+            `Expected: 2 files / 15 tests / no skips, todo, failures or unhandled errors.\n${errors.join('\n')}\n`;
+          writeFileSync(`${out}/summary.txt`, summary);
+          console.log(summary);
+          process.exitCode = errors.length ? 1 : 0;
+          NODE
+
+      - name: Retain targeted JSON and compact summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: token-negative-controls-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/token-negative-controls/source-before.json
+            ${{ runner.temp }}/token-negative-controls/vitest.json
+            ${{ runner.temp }}/token-negative-controls/gate-summary.json
+            ${{ runner.temp }}/token-negative-controls/summary.txt
+          retention-days: 7
+          if-no-files-found: error
