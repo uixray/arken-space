@@ -17,7 +17,6 @@ jobs:
     timeout-minutes: 20
     env:
       E2E_PORT: "5173"
-      PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/uix502-playwright-raw.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +46,8 @@ jobs:
       - name: Run twenty unchanged 390 px cases
         id: baseline
         shell: bash
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/uix502-playwright-raw.json
         run: |
           set +e
           pnpm exec playwright test tests/e2e/modal-owner-contract.spec.ts \
