@@ -343,7 +343,9 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
   await preview.press("ArrowRight");
   await preview.press("ArrowDown");
   await editor.locator('input[type="radio"][value="BRONZE"]').check();
-  await editor.locator(".token-image-generator__actions button").last().click();
+  await editor
+    .getByRole("button", { name: "Создать изображение токена" })
+    .click();
 
   await expect.poll(() => generationRequests.length).toBe(1);
   expect(generationRequests[0]).toEqual({
@@ -610,7 +612,9 @@ test("UIX-613 GM creates and places token on active scene in one action", async 
   const editor = page.locator(".g-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
 
-  await editor.locator(".token-image-generator__actions button").last().click();
+  await editor
+    .getByRole("button", { name: "Создать изображение токена" })
+    .click();
   await editor.locator("form input").first().fill("Ranger");
   const createAndPlaceButton = editor.locator(
     'button[value="create-and-place"]',

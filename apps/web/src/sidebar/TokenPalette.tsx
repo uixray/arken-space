@@ -385,7 +385,9 @@ export function TokenDefinitionEditor({
         .concat(uploadedSource ?? [])
         .find((asset) => asset.id === selectedAssetId);
       if (selectedAsset?.kind === "IMAGE" || (image && !selectedAssetId)) {
-        setError("Обрежьте исходное изображение и создайте TOKEN.");
+        setError(
+          "Обрежьте исходное изображение и создайте из него изображение токена.",
+        );
         return;
       }
       const input = {
