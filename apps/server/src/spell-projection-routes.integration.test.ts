@@ -805,7 +805,9 @@ describe("UIX-262 archived spell projection routes", () => {
           mechanicsText: "UIX262_ASSIGNED_A_OLD_MECHANICS",
         }),
       );
-      expect(response.body).not.toContain("UIX262_ARCHIVED_A_CURRENT_MECHANICS");
+      expect(response.body).not.toContain(
+        "UIX262_ARCHIVED_A_CURRENT_MECHANICS",
+      );
       expect(response.body).not.toContain("UIX262_ARCHIVE_PRIVATE_REVISION");
       expect(projection.edges).toContainEqual({
         sourceNodeId: archivedNodeId,
