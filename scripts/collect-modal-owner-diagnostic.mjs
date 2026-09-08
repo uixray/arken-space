@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { Buffer } from "node:buffer";
+import console from "node:console";
+import process from "node:process";
 import {
   copyFileSync,
   lstatSync,
