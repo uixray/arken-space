@@ -86,3 +86,29 @@ spy. Browser доказывает видимый toast на REVISION_CONFLICT, �
 pnpm exec vitest run apps/web/src/api.test.ts apps/web/src/MusicBar.test.ts --maxWorkers=1 --reporter=verbose
 pnpm exec playwright test tests/e2e/russian-error-copy.spec.ts --workers=1 --retries=0
 ```
+
+## Checkpoint — production display-copy после actual unit FAIL
+
+- Root baseline на integration `f6d4699` (test-source `3e715dc`): два unit-файла,
+  40 tests, 11 intended FAIL / 29 PASS. Падают три native network TypeError
+  формулировки и семь известных + один неизвестный ACK reason. Cancellation,
+  missing reason и прежние HTTP/correlation/control tests проходят.
+- Разрешённый source fix подготовлен в `codex/uix-417-error-copy` на базе
+  `3e715dc`: только `api.ts`, `MusicBar.tsx` и этот checkpoint. Tests/oracles
+  не меняются. Root browser baseline на старом integration source завершён:
+  восемь intended FAIL — четыре native fetch сообщения (Chrome/Firefox) и
+  четыре реальных toast с REVISION_CONFLICT. Fixture-only FAIL не заявлен.
+- Network boundary: catch охватывает только вызов fetch. Отменённый signal или
+  AbortError пробрасывается тем же объектом; HTTP parsing/ApiError остаются вне
+  catch с исходными status/code/message/correlation. Новый plain Error имеет
+  русское сообщение и cause со ссылкой на оригинал, не изменяет его message и
+  не придумывает HTTP status либо wire code. URL/тело запроса в UI не добавлены.
+- Audio: локальный readonly Map сопоставляет только семь известных protocol
+  reason с русским display text. Неизвестное/отсутствующее значение получает
+  прежний нейтральный fallback; prototype-key lookup исключён. Command/ACK
+  объекты, server logic/ACL, действия, имена файлов и data enums не меняются.
+- Source подготовлен без запуска tests/install/server/type/lint; форматирование
+  трёх файлов и `git diff --check` PASS, тестовые файлы не изменены. Следующий
+  gate принадлежит root: интегрировать source, выполнить restored unit/browser
+  и общий quality.
+  Этот небольшой срез не закрывает автоматически весь широкий AC UIX-417.

@@ -12,6 +12,20 @@ import { useDismissibleDetails } from "./ui/dismissible-details";
 
 const ENABLED_KEY = "arken.audio.enabled";
 const VOLUME_KEY = "arken.audio.volume";
+// ACK reasons are protocol strings, not display text. Map only known reasons;
+// an unknown value (including an object-prototype key) gets a safe fallback.
+const audioCommandErrors: ReadonlyMap<string, string> = new Map([
+  ["GM_REQUIRED", "Управлять музыкой может только ведущий."],
+  ["INVALID_COMMAND", "Некорректная команда управления музыкой."],
+  ["ASSET_NOT_FOUND", "Аудиофайл не найден. Выберите другой трек."],
+  ["REVISION_CONFLICT", "Состояние музыки изменилось. Повторите команду."],
+  ["AUDIO_NOT_SELECTED", "Трек не выбран или его длительность недоступна."],
+  [
+    "AUDIO_END_NOT_APPLICABLE",
+    "Сейчас нельзя завершить воспроизведение трека.",
+  ],
+  ["AUDIO_UPDATE_FAILED", "Не удалось обновить музыку. Повторите команду."],
+]);
 const formatTime = (value: number) => {
   const seconds = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -133,7 +147,9 @@ export function MusicBar({
         if (!result.ok)
           notify({
             title: "Не удалось изменить музыку",
-            message: result.reason ?? "Сервер отклонил команду",
+            message:
+              audioCommandErrors.get(result.reason ?? "") ??
+              "Сервер отклонил команду",
             tone: "danger",
           });
       },

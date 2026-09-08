@@ -108,12 +108,28 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (mutationMethods.has(method) && !headers.has("x-action-id"))
     headers.set("x-action-id", createActionId());
 
-  const response = await fetch(path, {
-    ...init,
-    method,
-    headers,
-    credentials: "include",
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      method,
+      headers,
+      credentials: "include",
+    });
+  } catch (reason) {
+    // Cancellation belongs to its caller, including custom abort reasons.
+    // Only transport rejection is translated; HTTP errors below retain their
+    // server status/code/message/correlation. Never mutate the original error.
+    if (
+      init?.signal?.aborted ||
+      (reason instanceof Error && reason.name === "AbortError")
+    )
+      throw reason;
+    throw new Error(
+      "Не удалось связаться с сервером. Проверьте подключение и повторите попытку.",
+      { cause: reason },
+    );
+  }
   const data = (await response
     .json()
     .catch(() => null)) as ApiResponseError | null;
