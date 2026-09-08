@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,6 +6,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import { PGlite } from "@electric-sql/pglite";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import type { AssetUsageDto } from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -39,19 +41,58 @@ const tinyPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
-const multipartImage = (content = tinyPng) => {
+const multipartFile = (
+  content = tinyPng,
+  filename = "replacement.png",
+  mimeType = "image/png",
+) => {
   const boundary = `arken-uix609-${crypto.randomUUID()}`;
   return {
     contentType: `multipart/form-data; boundary=${boundary}`,
     body: Buffer.concat([
       Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="replacement.png"\r\nContent-Type: image/png\r\n\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`,
       ),
       content,
       Buffer.from(`\r\n--${boundary}--\r\n`),
     ]),
   };
 };
+const hash = (bytes: Buffer) =>
+  createHash("sha256").update(bytes).digest("hex");
+const fileInventory = async () =>
+  Promise.all(
+    (await readdir(mediaRoot)).sort().map(async (name) => ({
+      name,
+      sha256: hash(await readFile(join(mediaRoot, name))),
+    })),
+  );
+const assetRow = async (id: string) => {
+  const [asset] = await db
+    .select()
+    .from(schema.assets)
+    .where(eq(schema.assets.id, id));
+  expect(asset).toBeDefined();
+  return asset!;
+};
+const assetIdentity = (asset: typeof schema.assets.$inferSelect) => ({
+  id: asset.id,
+  campaignId: asset.campaignId,
+  uploadedByMembershipId: asset.uploadedByMembershipId,
+  kind: asset.kind,
+  name: asset.name,
+  createdAt: asset.createdAt,
+});
+const actionReceipts = (actionId: string) =>
+  db
+    .select()
+    .from(schema.gameEvents)
+    .where(
+      and(
+        eq(schema.gameEvents.campaignId, ids.campaign),
+        eq(schema.gameEvents.actionId, actionId),
+      ),
+    );
 
 beforeEach(async () => {
   mediaRoot = await mkdtemp(join(tmpdir(), "arken-asset-lifecycle-"));
@@ -583,17 +624,344 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("atomically replaces content, revalidates cache, and protects replay/version intent", async () => {
+  it("replaces referenced MAP, TOKEN, PORTRAIT, IMAGE, and AUDIO without changing their relation rows or content URLs", async () => {
+    // Existing self-authored Vorbis fixture, also used by media-smoke.spec.ts.
+    const audio = await readFile(
+      new URL("./multiplayer/uix642-synthetic-tone.ogg", import.meta.url),
+    );
+    expect(hash(audio)).toBe(
+      "21777ec04536e1d079ec8c5c14253fff1a12944a1f1ac1191490029d570e2a73",
+    );
+    const assetIds = {
+      MAP: crypto.randomUUID(),
+      TOKEN: crypto.randomUUID(),
+      PORTRAIT: crypto.randomUUID(),
+      IMAGE: crypto.randomUUID(),
+      AUDIO: crypto.randomUUID(),
+    };
+    const kinds = ["MAP", "TOKEN", "PORTRAIT", "IMAGE", "AUDIO"] as const;
+    for (const kind of kinds) {
+      const isAudio = kind === "AUDIO";
+      const content = isAudio ? audio : tinyPng;
+      const storageKey = `referenced-${kind}.${isAudio ? "ogg" : "png"}`;
+      await writeFile(join(mediaRoot, storageKey), content);
+      await db.insert(schema.assets).values({
+        id: assetIds[kind],
+        campaignId: ids.campaign,
+        uploadedByMembershipId: ids.gm,
+        kind,
+        name: `Referenced ${kind}`,
+        storageKey,
+        mimeType: isAudio ? "audio/ogg" : "image/png",
+        sizeBytes: content.length,
+        width: isAudio ? null : 1,
+        height: isAudio ? null : 1,
+        durationSeconds: isAudio ? 0.7 : null,
+      });
+    }
+    const [scene] = await db
+      .insert(schema.scenes)
+      .values({
+        campaignId: ids.campaign,
+        name: "Referenced map scene",
+        mapAssetId: assetIds.MAP,
+        grid: {
+          enabled: true,
+          size: 64,
+          offsetX: 0,
+          offsetY: 0,
+          color: "#fff",
+          opacity: 0.2,
+        },
+      })
+      .returning();
+    await db.insert(schema.worldMaps).values({
+      campaignId: ids.campaign,
+      name: "Referenced world map",
+      backgroundAssetId: assetIds.MAP,
+    });
+    const [character] = await db
+      .insert(schema.characters)
+      .values({
+        campaignId: ids.campaign,
+        name: "Referenced portrait character",
+        ownerMembershipId: ids.player,
+        portraitAssetId: assetIds.PORTRAIT,
+      })
+      .returning();
+    const [definition] = await db
+      .insert(schema.tokenDefinitions)
+      .values({
+        campaignId: ids.campaign,
+        characterId: character!.id,
+        name: "Referenced token",
+        defaultAssetId: assetIds.TOKEN,
+      })
+      .returning();
+    await db.insert(schema.tokens).values({
+      definitionId: definition!.id,
+      sceneId: scene!.id,
+      characterId: character!.id,
+      assetId: assetIds.TOKEN,
+      name: "Placed referenced token",
+      x: 64,
+      y: 128,
+    });
+    await db.insert(schema.characterMedia).values({
+      campaignId: ids.campaign,
+      characterId: character!.id,
+      assetId: assetIds.IMAGE,
+      category: "CHARACTER_ART",
+      uploadedByMembershipId: ids.gm,
+      caption: "Referenced gallery image",
+    });
+    const [content] = await db
+      .insert(schema.worldContent)
+      .values({
+        slug: "referenced-location",
+        type: "LOCATION",
+        name: "Referenced location",
+        coverAssetId: assetIds.IMAGE,
+      })
+      .returning();
+    await db.insert(schema.worldContentMedia).values({
+      worldContentId: content!.id,
+      assetId: assetIds.IMAGE,
+      caption: "Referenced location image",
+    });
+    await db.insert(schema.campaignAudioTracks).values({
+      campaignId: ids.campaign,
+      assetId: assetIds.AUDIO,
+      slotOrder: 2,
+      mixVolume: 0.25,
+      loop: true,
+    });
+    // Read actual relational rows, including their IDs, revisions and timestamps.
+    const referenceRows = async () => ({
+      scenes: await db.select().from(schema.scenes).orderBy(schema.scenes.id),
+      worldMaps: await db
+        .select()
+        .from(schema.worldMaps)
+        .orderBy(schema.worldMaps.id),
+      characters: await db
+        .select()
+        .from(schema.characters)
+        .orderBy(schema.characters.id),
+      definitions: await db
+        .select()
+        .from(schema.tokenDefinitions)
+        .orderBy(schema.tokenDefinitions.id),
+      tokens: await db.select().from(schema.tokens).orderBy(schema.tokens.id),
+      characterMedia: await db
+        .select()
+        .from(schema.characterMedia)
+        .orderBy(schema.characterMedia.id),
+      worldContent: await db
+        .select()
+        .from(schema.worldContent)
+        .orderBy(schema.worldContent.id),
+      worldContentMedia: await db
+        .select()
+        .from(schema.worldContentMedia)
+        .orderBy(schema.worldContentMedia.id),
+      audioTracks: await db
+        .select()
+        .from(schema.campaignAudioTracks)
+        .orderBy(schema.campaignAudioTracks.id),
+    });
+    const relationsBefore = await referenceRows();
+    for (const kind of kinds) {
+      const id = assetIds[kind];
+      const beforeRow = await assetRow(id);
+      const contentUrl = `/api/assets/${id}/content`;
+      const before = await app.inject({
+        method: "GET",
+        url: contentUrl,
+        headers: headers(secrets.gm),
+      });
+      expect(before.statusCode, before.body).toBe(200);
+      const form =
+        kind === "AUDIO"
+          ? multipartFile(audio, "replacement.ogg", "audio/ogg")
+          : multipartFile();
+      const actionId = crypto.randomUUID();
+      const replaced = await app.inject({
+        method: "PUT",
+        url: contentUrl,
+        headers: {
+          ...headers(secrets.gm),
+          "x-action-id": actionId,
+          "if-match": before.headers.etag!,
+          "content-type": form.contentType,
+        },
+        payload: form.body,
+      });
+      expect(replaced.statusCode, replaced.body).toBe(200);
+      expect(replaced.json()).toMatchObject({
+        asset: { id, kind, name: beforeRow.name, url: contentUrl },
+        oldBlobCleanupPending: false,
+        replayed: false,
+      });
+      const afterRow = await assetRow(id);
+      expect(assetIdentity(afterRow)).toEqual(assetIdentity(beforeRow));
+      expect(afterRow.storageKey).not.toBe(beforeRow.storageKey);
+      expect(replaced.json().version).not.toBe(before.headers.etag);
+      const refreshed = await app.inject({
+        method: "GET",
+        url: contentUrl,
+        headers: headers(secrets.gm),
+      });
+      expect(refreshed.statusCode, refreshed.body).toBe(200);
+      expect(refreshed.headers.etag).toBe(replaced.json().version);
+      expect(refreshed.rawPayload).toEqual(
+        await readFile(join(mediaRoot, afterRow.storageKey)),
+      );
+      expect(afterRow.sizeBytes).toBe(refreshed.rawPayload.length);
+      if (kind === "AUDIO") {
+        // Re-upload the one valid fixture unchanged: real parsing/storage, not
+        // proof of a different song or audible playback in a browser.
+        expect(refreshed.rawPayload).toEqual(audio);
+        expect(afterRow.mimeType).toBe("audio/ogg");
+        expect(afterRow.width).toBeNull();
+        expect(afterRow.height).toBeNull();
+        expect(afterRow.durationSeconds).toBeGreaterThan(0);
+        expect(afterRow.durationSeconds).toBeCloseTo(0.7, 1);
+      } else {
+        expect(refreshed.rawPayload).not.toEqual(before.rawPayload);
+        expect(afterRow).toMatchObject({
+          mimeType: "image/webp",
+          width: 1,
+          height: 1,
+          durationSeconds: null,
+        });
+      }
+      await expect(
+        readFile(join(mediaRoot, beforeRow.storageKey)),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await actionReceipts(actionId)).toHaveLength(1);
+      expect(await referenceRows()).toEqual(relationsBefore);
+    }
+  });
+
+  it("rolls back the asset and removes the new blob after a real audit insert failure, then accepts the same actionId", async () => {
+    const beforeRow = await assetRow(ids.unused);
+    const contentUrl = `/api/assets/${ids.unused}/content`;
     const before = await app.inject({
       method: "GET",
-      url: `/api/assets/${ids.unused}/content`,
+      url: contentUrl,
+      headers: headers(secrets.gm),
+    });
+    expect(before.statusCode, before.body).toBe(200);
+    const beforeBytes = await readFile(join(mediaRoot, beforeRow.storageKey));
+    const inventoryBefore = await fileInventory();
+    const actionId = crypto.randomUUID();
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const sequence = `uix609_reached_${suffix}`;
+    const rejectAudit = `uix609_reject_${suffix}`;
+    const sqlLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
+    try {
+      await database.exec(`
+        CREATE SEQUENCE ${sequence};
+        CREATE FUNCTION ${rejectAudit}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.type = 'asset.replaced' AND NEW.action_id = TG_ARGV[0]::uuid THEN
+            IF NOT EXISTS (
+              SELECT 1 FROM assets
+              WHERE id = NEW.entity_id AND storage_key <> TG_ARGV[1]
+            ) THEN
+              RAISE EXCEPTION 'UIX609_WRONG_FAILURE_SEAM';
+            END IF;
+            PERFORM nextval('${sequence}');
+            RAISE EXCEPTION 'UIX609_INJECTED_AUDIT_FAILURE';
+          END IF;
+          RETURN NEW;
+        END;
+        $$;
+        CREATE TRIGGER ${rejectAudit} BEFORE INSERT ON game_events
+          FOR EACH ROW EXECUTE FUNCTION ${rejectAudit}(
+            ${sqlLiteral(actionId)}, ${sqlLiteral(beforeRow.storageKey)}
+          );
+      `);
+      const form = multipartFile();
+      const failed = await app.inject({
+        method: "PUT",
+        url: contentUrl,
+        headers: {
+          ...headers(secrets.gm),
+          "x-action-id": actionId,
+          "if-match": before.headers.etag!,
+          "content-type": form.contentType,
+        },
+        payload: form.body,
+      });
+      expect(failed.statusCode).toBe(500);
+      // Sequence state survives rollback and advances only after the real asset
+      // UPDATE. This excludes a failure before upload or at an unrelated seam.
+      const reached = await database.query<{ is_called: boolean }>(
+        `SELECT is_called FROM ${sequence}`,
+      );
+      expect(reached.rows).toEqual([{ is_called: true }]);
+      expect(await assetRow(ids.unused)).toEqual(beforeRow);
+      expect(await readFile(join(mediaRoot, beforeRow.storageKey))).toEqual(
+        beforeBytes,
+      );
+      expect(await fileInventory()).toEqual(inventoryBefore);
+      expect(await actionReceipts(actionId)).toEqual([]);
+      const restored = await app.inject({
+        method: "GET",
+        url: contentUrl,
+        headers: headers(secrets.gm),
+      });
+      expect(restored.statusCode, restored.body).toBe(200);
+      expect(restored.headers.etag).toBe(before.headers.etag);
+      expect(restored.rawPayload).toEqual(before.rawPayload);
+      expect(restored.rawPayload).toEqual(beforeBytes);
+    } finally {
+      await database.exec(`
+        DROP TRIGGER IF EXISTS ${rejectAudit} ON game_events;
+        DROP FUNCTION IF EXISTS ${rejectAudit}();
+        DROP SEQUENCE IF EXISTS ${sequence};
+      `);
+    }
+
+    const retryForm = multipartFile();
+    const retry = await app.inject({
+      method: "PUT",
+      url: contentUrl,
+      headers: {
+        ...headers(secrets.gm),
+        "x-action-id": actionId,
+        "if-match": before.headers.etag!,
+        "content-type": retryForm.contentType,
+      },
+      payload: retryForm.body,
+    });
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.json()).toMatchObject({
+      asset: { id: ids.unused, url: contentUrl },
+      replayed: false,
+      oldBlobCleanupPending: false,
+    });
+    expect(retry.json().version).not.toBe(before.headers.etag);
+    expect(await actionReceipts(actionId)).toHaveLength(1);
+    await expect(
+      readFile(join(mediaRoot, beforeRow.storageKey)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("atomically replaces content, revalidates cache, and protects replay/version intent", async () => {
+    const beforeRow = await assetRow(ids.unused);
+    const contentUrl = `/api/assets/${ids.unused}/content`;
+    const before = await app.inject({
+      method: "GET",
+      url: contentUrl,
       headers: headers(secrets.gm),
     });
     expect(before.statusCode, before.body).toBe(200);
     const beforeVersion = before.headers.etag;
     expect(beforeVersion).toMatch(/^"[a-f0-9]{64}"$/);
 
-    const deniedForm = multipartImage();
+    const deniedForm = multipartFile();
     const denied = await app.inject({
       method: "PUT",
       url: `/api/assets/${ids.unused}/content`,
@@ -608,7 +976,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(denied.statusCode).toBe(403);
 
     const actionId = crypto.randomUUID();
-    const form = multipartImage();
+    const form = multipartFile();
     const replaced = await app.inject({
       method: "PUT",
       url: `/api/assets/${ids.unused}/content`,
@@ -622,25 +990,73 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     });
     expect(replaced.statusCode, replaced.body).toBe(200);
     expect(replaced.json()).toMatchObject({
-      asset: { id: ids.unused, mimeType: "image/webp" },
+      asset: {
+        id: beforeRow.id,
+        kind: beforeRow.kind,
+        name: beforeRow.name,
+        createdAt: beforeRow.createdAt.toISOString(),
+        url: contentUrl,
+        mimeType: "image/webp",
+        width: 1,
+        height: 1,
+        durationSeconds: null,
+      },
       oldBlobCleanupPending: false,
       replayed: false,
     });
     const afterVersion = replaced.json().version as string;
     expect(afterVersion).not.toBe(beforeVersion);
+    const afterRow = await assetRow(ids.unused);
+    expect(assetIdentity(afterRow)).toEqual(assetIdentity(beforeRow));
+    expect(afterRow.storageKey).not.toBe(beforeRow.storageKey);
+    const storedBytes = await readFile(join(mediaRoot, afterRow.storageKey));
+    expect(afterRow.sizeBytes).toBe(storedBytes.length);
+    const receipts = await actionReceipts(actionId);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+      campaignId: ids.campaign,
+      actionId,
+      membershipId: ids.gm,
+      type: "asset.replaced",
+      entityType: "asset",
+      entityId: ids.unused,
+    });
+    expect(receipts[0]!.payload).toEqual({
+      assetId: ids.unused,
+      beforeVersion,
+      afterVersion,
+      contentSha256: hash(tinyPng),
+      mimeType: "image/webp",
+      sizeBytes: storedBytes.length,
+      width: 1,
+      height: 1,
+      durationSeconds: null,
+    });
+    // The audit hashes the upload, not the normalized WebP written to disk.
+    expect(hash(storedBytes)).not.toBe(hash(tinyPng));
+    for (const privateValue of [
+      beforeRow.storageKey,
+      afterRow.storageKey,
+      mediaRoot,
+    ]) {
+      const serializedValue = JSON.stringify(privateValue).slice(1, -1);
+      expect(JSON.stringify(receipts)).not.toContain(serializedValue);
+      expect(replaced.body).not.toContain(serializedValue);
+    }
     await expect(
       readFile(join(mediaRoot, "unused.webp")),
     ).rejects.toMatchObject({ code: "ENOENT" });
 
     const refreshed = await app.inject({
       method: "GET",
-      url: `/api/assets/${ids.unused}/content`,
+      url: contentUrl,
       headers: headers(secrets.gm),
     });
     expect(refreshed.statusCode, refreshed.body).toBe(200);
     expect(refreshed.headers.etag).toBe(afterVersion);
     expect(refreshed.headers["cache-control"]).toBe("private, no-cache");
     expect(refreshed.rawPayload.equals(before.rawPayload)).toBe(false);
+    expect(refreshed.rawPayload).toEqual(storedBytes);
     const notModified = await app.inject({
       method: "GET",
       url: `/api/assets/${ids.unused}/content`,
@@ -648,7 +1064,8 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     });
     expect(notModified.statusCode).toBe(304);
 
-    const replayForm = multipartImage();
+    const inventoryAfterReplacement = await fileInventory();
+    const replayForm = multipartFile();
     const replay = await app.inject({
       method: "PUT",
       url: `/api/assets/${ids.unused}/content`,
@@ -664,9 +1081,13 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(replay.json()).toMatchObject({
       replayed: true,
       version: afterVersion,
+      asset: replaced.json().asset,
     });
+    expect(await actionReceipts(actionId)).toEqual(receipts);
+    expect(await assetRow(ids.unused)).toEqual(afterRow);
+    expect(await fileInventory()).toEqual(inventoryAfterReplacement);
 
-    const reusedForm = multipartImage(
+    const reusedForm = multipartFile(
       Buffer.concat([tinyPng, Buffer.from("x")]),
     );
     const reused = await app.inject({
@@ -683,7 +1104,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(reused.statusCode).toBe(409);
     expect(reused.json()).toEqual({ error: "ACTION_ID_REUSED" });
 
-    const staleForm = multipartImage();
+    const staleForm = multipartFile();
     const stale = await app.inject({
       method: "PUT",
       url: `/api/assets/${ids.unused}/content`,
@@ -701,7 +1122,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       currentVersion: afterVersion,
     });
 
-    const foreignForm = multipartImage();
+    const foreignForm = multipartFile();
     const foreign = await app.inject({
       method: "PUT",
       url: `/api/assets/${ids.foreign}/content`,
@@ -714,5 +1135,8 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       payload: foreignForm.body,
     });
     expect(foreign.statusCode).toBe(404);
+    expect(await actionReceipts(actionId)).toEqual(receipts);
+    expect(await assetRow(ids.unused)).toEqual(afterRow);
+    expect(await fileInventory()).toEqual(inventoryAfterReplacement);
   });
 });
