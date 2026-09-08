@@ -5,7 +5,7 @@ name: e2e
 # `checks.yml` намеренно оставил Playwright за бортом («их место в CI —
 # отдельное решение, а не довесок к первому же workflow»). Пока его не было,
 # принять задачу с UI-изменениями без локального компьютера было нельзя:
-# Chromium + Firefox идут около двадцати минут.
+# Chromium + Firefox теперь идут отдельными заданиями с независимыми backend.
 #
 # Мультиплеерный gate (`pnpm test:multiplayer`) сюда по-прежнему не входит: он
 # поднимает свой Docker Compose и требует отдельного решения.
@@ -22,11 +22,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e:
+  browser:
+    name: e2e (${{ matrix.project }})
     runs-on: ubuntu-latest
-    # Локально полный прогон Chromium + Firefox занимает около 18 минут.
-    # Запас взят на более медленный раннер и установку браузеров.
+    # Общий последовательный прогон подошёл к 45 минутам. Делим по браузеру,
+    # не увеличивая лимит, число Playwright workers или retries.
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - project: chromium
+            installBrowser: chrome
+          - project: firefox
+            installBrowser: firefox
 
     services:
       postgres:
@@ -78,8 +88,10 @@ jobs:
 
       - run: pnpm db:migrate
 
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium firefox
+      # Chromium project в неизменённом config использует channel: "chrome".
+      # Устанавливаем только браузер этого задания, без смены channel.
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps ${{ matrix.installBrowser }}
 
       # Playwright поднимает только web (`webServer` в playwright.config.ts);
       # API-сервер нужно завести самим. Он же применяет seed, то есть создаёт
@@ -102,7 +114,7 @@ jobs:
           tail -40 /tmp/server.log
           exit 1
 
-      - run: pnpm test:e2e
+      - run: pnpm test:e2e --project=${{ matrix.project }} --workers=1 --fail-on-flaky-tests
 
       # Компактные доказательства синтетического acceptance-пула нужны и при
       # успехе. Только PNG и именованные JSON receipts этих пяти spec-файлов;
@@ -111,7 +123,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: synthetic-acceptance-receipts
+          name: synthetic-acceptance-receipts-${{ matrix.project }}
           path: |
             test-results/russian-error-copy-*/*.png
             test-results/russian-error-copy-*/error-copy-receipt.json
@@ -126,12 +138,38 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      # Retry-success и отмена не должны терять уже записанные modal receipts.
+      # Только именованные синтетические JSON/PNG; suffix включает retry-папки.
+      # При принудительном завершении runner загрузка остаётся best-effort.
+      - name: Upload modal-owner receipts from every attempt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modal-owner-receipts-${{ matrix.project }}
+          path: |
+            test-results/modal-owner-contract-*/modal-owner-diagnostics.json
+            test-results/modal-owner-contract-*/a-popup-before-completion.png
+            test-results/modal-owner-contract-*/b-over-old-popup-area.png
+            test-results/modal-owner-contract-*/b-owned-popup.png
+            test-results/modal-owner-contract-*/final-state.png
+            test-results/modal-owner-close-lifecycl*/natural-close-sibling.json
+            test-results/modal-owner-close-lifecycl*/natural-close-sibling.png
+            test-results/modal-owner-close-lifecycl*/natural-close-sibling-observer-final.json
+            test-results/modal-owner-close-lifecycl*/natural-close-nested.json
+            test-results/modal-owner-close-lifecycl*/natural-close-nested.png
+            test-results/modal-owner-close-lifecycl*/natural-close-nested-observer-final.json
+            test-results/modal-owner-close-lifecycl*/held-close-css-contract.json
+            test-results/modal-owner-close-lifecycl*/held-close-css-contract.png
+            test-results/modal-owner-close-lifecycl*/held-close-css-contract-observer-final.json
+          retention-days: 7
+          if-no-files-found: error
+
       # Без трасс разбирать падение в CI нечем: локально его может не быть.
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts
+          name: playwright-artifacts-${{ matrix.project }}
           path: |
             test-results/
             playwright-report/
@@ -142,7 +180,21 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: server-log
+          name: server-log-${{ matrix.project }}
           path: /tmp/server.log
           retention-days: 7
           if-no-files-found: ignore
+
+  # Сохраняем существующее имя required check: success только когда оба
+  # matrix-задания успешны; failure/cancelled/skipped не превращаются в PASS.
+  e2e:
+    name: e2e
+    needs: browser
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require every browser job to succeed
+        env:
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: test "$BROWSER_RESULT" = success

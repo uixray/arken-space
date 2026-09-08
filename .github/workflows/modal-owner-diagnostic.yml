@@ -1,0 +1,131 @@
+name: UIX-502 targeted ownership verification
+
+on:
+  push:
+    branches: [codex/uix-502-main-flaky]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uix-502-main-flaky
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      E2E_PORT: "5173"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Vite owns the synthetic fixture. No API, PostgreSQL, seed or full build.
+      - name: Build frontend workspace exports
+        run: |
+          pnpm --filter @arken/contracts build
+          pnpm --filter @arken/system build
+
+      # The existing Chromium project uses channel=chrome, not bundled Chromium.
+      # Record/gate the hosted runner's installed Chrome; never substitute channels.
+      - name: Verify frozen source and record installed dependencies
+        id: preflight
+        run: node scripts/collect-modal-owner-diagnostic.mjs before
+
+      - name: Run twenty unchanged 390 px cases
+        id: baseline
+        shell: bash
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/uix502-playwright-raw.json
+        run: |
+          set +e
+          pnpm exec playwright test tests/e2e/modal-owner-contract.spec.ts \
+            --project=chromium \
+            --grep 'UIX-502 modal-owner contract (sibling|nested) at 390px$' \
+            --repeat-each=10 --workers=1 \
+            --output=test-results/uix502-main-baseline --reporter=line,json
+          code=$?
+          set -e
+          printf '%s\n' "$code" > "$RUNNER_TEMP/uix502-playwright.exit"
+          # Collection and upload must run before the final gate propagates failure.
+          exit 0
+
+      - name: Verify real close lifecycle and held-state CSS contract
+        id: lifecycle
+        if: always() && steps.preflight.conclusion == 'success'
+        shell: bash
+        run: |
+          set +e
+          pnpm exec playwright test tests/e2e/modal-owner-close-lifecycle.spec.ts \
+            --project=chromium --workers=1 --fail-on-flaky-tests --reporter=line \
+            --output=test-results/uix502-close-lifecycle
+          code=$?
+          set -e
+          printf 'code=%s\n' "$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Collect every attempt and reject recovered failures
+        id: receipts
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          node scripts/collect-modal-owner-diagnostic.mjs collect
+          code=$?
+          set -e
+          printf 'code=%s\n' "$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Retain named close-lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uix502-close-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/uix502-close-lifecycle/*/natural-close-sibling.json
+            test-results/uix502-close-lifecycle/*/natural-close-sibling.png
+            test-results/uix502-close-lifecycle/*/natural-close-sibling-observer-final.json
+            test-results/uix502-close-lifecycle/*/natural-close-nested.json
+            test-results/uix502-close-lifecycle/*/natural-close-nested.png
+            test-results/uix502-close-lifecycle/*/natural-close-nested-observer-final.json
+            test-results/uix502-close-lifecycle/*/held-close-css-contract.json
+            test-results/uix502-close-lifecycle/*/held-close-css-contract.png
+            test-results/uix502-close-lifecycle/*/held-close-css-contract-observer-final.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Retain only named synthetic JSON and PNG receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uix502-main-baseline-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/uix502-main-receipts/modal-owner-run-manifest.json
+            test-results/uix502-main-receipts/modal-owner-run-summary.json
+            test-results/uix502-main-receipts/case-*/retry-*/modal-owner-attempt.json
+            test-results/uix502-main-receipts/case-*/retry-*/modal-owner-diagnostics.json
+            test-results/uix502-main-receipts/case-*/retry-*/a-popup-before-completion.png
+            test-results/uix502-main-receipts/case-*/retry-*/b-over-old-popup-area.png
+            test-results/uix502-main-receipts/case-*/retry-*/b-owned-popup.png
+            test-results/uix502-main-receipts/case-*/retry-*/final-state.png
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Enforce clean first-attempt baseline
+        if: always()
+        env:
+          RECEIPT_EXIT: ${{ steps.receipts.outputs.code }}
+          LIFECYCLE_EXIT: ${{ steps.lifecycle.outputs.code }}
+        run: test "$RECEIPT_EXIT" = 0 && test "$LIFECYCLE_EXIT" = 0
