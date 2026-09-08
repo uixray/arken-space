@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { AssetDto, GameSnapshot } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { TokenImageGenerator } from "../TokenImageGenerator";
@@ -365,6 +365,15 @@ export function TokenDefinitionEditor({
   const uploadSourcePromise = useRef<Promise<AssetDto> | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // This ref belongs to one mounted editor instance. PalettePanel can reopen
+  // another "NEW" editor while this instance's server request is still pending.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -411,15 +420,16 @@ export function TokenDefinitionEditor({
           controllers,
         );
       }
-      onCancel();
+      if (mounted.current) onCancel();
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Не удалось сохранить токен.",
-      );
+      if (mounted.current)
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Не удалось сохранить токен.",
+        );
     } finally {
-      setSaving(false);
+      if (mounted.current) setSaving(false);
     }
   };
 
