@@ -13,6 +13,7 @@ import * as schema from "@arken/db";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { registerSpellPackRoutes } from "./spell-pack-routes.js";
+import { registerSpellAssignmentRoutes } from "./spell-assignment-routes.js";
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -217,6 +218,7 @@ beforeAll(async () => {
   app = Fastify();
   await app.register(cookie);
   registerSpellPackRoutes(app, db as never);
+  registerSpellAssignmentRoutes(app, db as never);
   await app.ready();
 }, 30_000);
 
@@ -226,6 +228,218 @@ afterAll(async () => {
 });
 
 describe("UIX-580 spell-pack GM API", () => {
+  it("UIX-262 preserves an individually archived node through publication and assignment", async () => {
+    const packId = id();
+    const initialVersionId = id();
+    const firstActiveVersionId = id();
+    const reviewedVersionId = id();
+    const nextActiveVersionId = id();
+    const historyCharacterId = id();
+    const freshCharacterId = id();
+    await db.insert(schema.characters).values([
+      {
+        id: historyCharacterId,
+        campaignId: ids.campaign.own,
+        name: "Keeps the original spell assignment",
+      },
+      {
+        id: freshCharacterId,
+        campaignId: ids.campaign.own,
+        name: "Receives only currently assignable spells",
+      },
+    ]);
+
+    // Two independent nodes: A will be archived, B is the ordinary control.
+    // No prerequisite failure or duplicate target may mask the lifecycle bug.
+    const initial = unresolvedGraph(packId, initialVersionId);
+    initial.title = "UIX-262 individual node lifecycle";
+    initial.requirementGroups = [];
+    initial.edges = [];
+    const schoolId = initial.schools[0]!.id;
+    const archivedNodeId = initial.nodes[0]!.id;
+    const ordinaryNodeId = initial.nodes[1]!.id;
+    const created = await createPack(ownGmHeaders, initial);
+    expect(created.statusCode, created.body).toBe(201);
+
+    const firstPublished = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/lifecycle`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        expectedVersion: 1,
+        versionId: firstActiveVersionId,
+        lifecycle: "ACTIVE",
+      },
+    });
+    expect(firstPublished.statusCode, firstPublished.body).toBe(201);
+    const firstGraph = firstPublished.json().graph as SpellProgressionGraph;
+    expect(firstGraph.nodes.map((node) => node.lifecycle)).toEqual([
+      "ACTIVE",
+      "ACTIVE",
+    ]);
+
+    const assignmentPayload = (
+      nodeId: string,
+      packVersionId: string,
+      actionId = id(),
+    ) => ({
+      actionId,
+      assignmentId: id(),
+      assignmentVersionId: id(),
+      expectedVersion: 0,
+      packId,
+      packVersionId,
+      target: { kind: "NODE", schoolId, nodeId, rank: 1 },
+    });
+    const originalPayload = assignmentPayload(
+      archivedNodeId,
+      firstActiveVersionId,
+    );
+    const originalAssignment = await app.inject({
+      method: "POST",
+      url: `/api/characters/${historyCharacterId}/spell-assignments`,
+      headers: ownGmHeaders,
+      payload: originalPayload,
+    });
+    expect(originalAssignment.statusCode, originalAssignment.body).toBe(201);
+    const immutableSnapshot = originalAssignment.json().snapshot;
+    expect(immutableSnapshot).toMatchObject({
+      packVersionId: firstActiveVersionId,
+      node: { id: archivedNodeId, lifecycle: "ACTIVE" },
+    });
+
+    // Review is a real next DRAFT version submitted through the GM route.
+    // The historical assignment must retain its previous rules/provenance.
+    const reviewedGraph: SpellProgressionGraph = {
+      ...firstGraph,
+      versionId: reviewedVersionId,
+      version: 3,
+      lifecycle: "DRAFT",
+      provenance: {
+        ...firstGraph.provenance,
+        sourceLabel: "UIX-262 reviewed node retirement",
+      },
+      schools: firstGraph.schools.map((school) => ({
+        ...school,
+        packVersionId: reviewedVersionId,
+      })),
+      nodes: firstGraph.nodes.map((node) => ({
+        ...node,
+        packVersionId: reviewedVersionId,
+        lifecycle: node.id === archivedNodeId ? "ARCHIVED" : "DRAFT",
+        mechanicsText: `${node.mechanicsText} / reviewed v3`,
+        revision: node.revision + 1,
+      })),
+    };
+    const reviewed = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/versions`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        expectedVersion: 2,
+        graph: reviewedGraph,
+      },
+    });
+    expect(reviewed.statusCode, reviewed.body).toBe(201);
+    expect(
+      (reviewed.json().graph as SpellProgressionGraph).nodes.find(
+        (node) => node.id === archivedNodeId,
+      )?.lifecycle,
+    ).toBe("ARCHIVED");
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/lifecycle`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        expectedVersion: 3,
+        versionId: nextActiveVersionId,
+        lifecycle: "ACTIVE",
+      },
+    });
+    expect(published.statusCode, published.body).toBe(201);
+    const publishedGraph = published.json().graph as SpellProgressionGraph;
+    expect(publishedGraph).toMatchObject({ version: 4, lifecycle: "ACTIVE" });
+
+    const rejectedActionId = id();
+    const archivedAssignment = await app.inject({
+      method: "POST",
+      url: `/api/characters/${freshCharacterId}/spell-assignments`,
+      headers: ownGmHeaders,
+      payload: assignmentPayload(
+        archivedNodeId,
+        nextActiveVersionId,
+        rejectedActionId,
+      ),
+    });
+    const ordinaryAssignment = await app.inject({
+      method: "POST",
+      url: `/api/characters/${freshCharacterId}/spell-assignments`,
+      headers: ownGmHeaders,
+      payload: assignmentPayload(ordinaryNodeId, nextActiveVersionId),
+    });
+    expect(ordinaryAssignment.statusCode, ordinaryAssignment.body).toBe(201);
+    expect(ordinaryAssignment.json().snapshot).toMatchObject({
+      packVersionId: nextActiveVersionId,
+      node: { id: ordinaryNodeId, lifecycle: "ACTIVE" },
+    });
+
+    const history = await db
+      .select()
+      .from(schema.characterSpellAssignmentVersions)
+      .where(
+        eq(
+          schema.characterSpellAssignmentVersions.assignmentId,
+          originalPayload.assignmentId,
+        ),
+      );
+    expect(history).toHaveLength(1);
+    expect(history[0]!.snapshot).toEqual(immutableSnapshot);
+    expect(history[0]!.id).toBe(originalPayload.assignmentVersionId);
+
+    const versions = await versionsForPack(ids.campaign.own, packId);
+    expect(versions.map((version) => version.version)).toEqual([1, 2, 3, 4]);
+    expect(versions[2]!.graph).toEqual(reviewedGraph);
+    expect(versions[3]!.graph).toEqual(publishedGraph);
+
+    // Baseline oracle: package-level promotion currently overwrites A with
+    // ACTIVE and permits its new assignment. Keep all three assertions tied
+    // to the actual response/DB path rather than mocking cloneGraphVersion.
+    expect({
+      archivedLifecycle: publishedGraph.nodes.find(
+        (node) => node.id === archivedNodeId,
+      )?.lifecycle,
+      assignmentStatus: archivedAssignment.statusCode,
+      assignmentError: archivedAssignment.json().error,
+    }).toEqual({
+      archivedLifecycle: "ARCHIVED",
+      assignmentStatus: 422,
+      assignmentError: "SPELL_NODE_NOT_ACTIVE",
+    });
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, rejectedActionId)),
+    ).toHaveLength(0);
+    const freshAssignments = await db
+      .select()
+      .from(schema.characterSpellAssignmentVersions)
+      .where(
+        eq(
+          schema.characterSpellAssignmentVersions.characterId,
+          freshCharacterId,
+        ),
+      );
+    expect(freshAssignments).toHaveLength(1);
+    expect(freshAssignments[0]!.snapshot).toEqual(
+      ordinaryAssignment.json().snapshot,
+    );
+  });
+
   it("keeps the 2024 import in review until warnings are resolved", async () => {
     const source = JSON.parse(
       await readFile(
@@ -827,5 +1041,89 @@ describe("UIX-580 spell-pack GM API", () => {
     expect(await eventsForPack(ids.campaign.own, foreignPackId)).toHaveLength(
       0,
     );
+  });
+});
+
+describe("UIX-262 archived node lifecycle controls", () => {
+  it("preserves a node archive through REFERENCE and ACTIVE before archiving the whole pack", async () => {
+    const packId = id();
+    const draft = unresolvedGraph(packId, id());
+    draft.requirementGroups = [];
+    draft.edges = [];
+    draft.nodes[0]!.lifecycle = "ARCHIVED";
+    const archivedNodeId = draft.nodes[0]!.id;
+    const ordinaryNodeId = draft.nodes[1]!.id;
+    const created = await createPack(ownGmHeaders, draft);
+    expect(created.statusCode).toBe(201);
+    expect(created.json().graph).toEqual(draft);
+
+    const promotedGraphs: SpellProgressionGraph[] = [];
+    for (const [lifecycle, expectedVersion] of [
+      ["REFERENCE", 1],
+      ["ACTIVE", 2],
+    ] as const) {
+      const versionId = id();
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/spell-packs/${packId}/lifecycle`,
+        headers: ownGmHeaders,
+        payload: { actionId: id(), expectedVersion, versionId, lifecycle },
+      });
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).toMatchObject({
+        version: expectedVersion + 1,
+        versionId,
+        lifecycle,
+      });
+      const promoted = response.json().graph as SpellProgressionGraph;
+      expect(
+        promoted.nodes.map((node) => [
+          node.id,
+          node.lifecycle,
+          node.packVersionId,
+        ]),
+      ).toEqual([
+        [archivedNodeId, "ARCHIVED", versionId],
+        [ordinaryNodeId, lifecycle, versionId],
+      ]);
+      promotedGraphs.push(promoted);
+    }
+
+    const archivedVersionId = id();
+    const archived = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/archive`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        expectedVersion: 3,
+        versionId: archivedVersionId,
+      },
+    });
+    expect(archived.statusCode).toBe(201);
+    expect(archived.json()).toMatchObject({
+      version: 4,
+      versionId: archivedVersionId,
+      lifecycle: "ARCHIVED",
+    });
+    const versions = await versionsForPack(ids.campaign.own, packId);
+    expect(versions).toHaveLength(4);
+    expect(versions[0]!.graph).toEqual(draft);
+    expect(versions.slice(1, 3).map((version) => version.graph)).toEqual(
+      promotedGraphs,
+    );
+    expect(versions[3]!.graph).toEqual(archived.json().graph);
+    expect(
+      versions.map((version) =>
+        (version.graph as SpellProgressionGraph).nodes.map(
+          (node) => node.lifecycle,
+        ),
+      ),
+    ).toEqual([
+      ["ARCHIVED", "DRAFT"],
+      ["ARCHIVED", "REFERENCE"],
+      ["ARCHIVED", "ACTIVE"],
+      ["ARCHIVED", "ARCHIVED"],
+    ]);
   });
 });

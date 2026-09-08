@@ -43,6 +43,15 @@
   z-index: calc(var(--arken-layer-dialog) + 1) !important;
 }
 
+/* UIKit retains dismissed popups during its exit transition. A closed modal
+ * menu must not remain visible or take input above the next dialog. Include
+ * descendants: the open popup and selected tick explicitly set visibility. */
+[data-floating-ui-status="close"]:has(> .arken-select-popup--modal),
+[data-floating-ui-status="close"]:has(> .arken-select-popup--modal) * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 .gravity-preview {
   min-height: 100%;
   padding: 32px;

@@ -134,6 +134,7 @@ function schoolIsPlayerVisible(
 
 function nodeState(
   school: SpellSchool,
+  nodeLifecycle: SpellNode["lifecycle"],
   assignedSchoolIds: ReadonlySet<string>,
   branchGrantedSchoolIds: ReadonlySet<string>,
   assignedNode: CurrentSpellAssignmentVersion | undefined,
@@ -141,6 +142,7 @@ function nodeState(
 ): SpellProjectionNodeState {
   if (!schoolIsPlayerVisible(school, assignedSchoolIds)) return "HIDDEN";
   if (assignedNode) return "DISCOVERED";
+  if (nodeLifecycle !== "ACTIVE") return "HIDDEN";
   if (
     branchGrantedSchoolIds.has(school.id) &&
     prerequisiteFailures.length === 0
@@ -227,6 +229,7 @@ function buildProjectedNodes(
         assignment?.snapshot.kind === "NODE" ? assignment.snapshot.node : node,
       state: nodeState(
         school,
+        node.lifecycle,
         assignedSchoolIds,
         branchGrantedSchoolIds,
         assignment,
