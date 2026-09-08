@@ -139,7 +139,7 @@ export const WorldEncyclopediaWorkspace = memo(
                 Теги (через запятую)
                 <FormInput
                   value={filterTags}
-                  placeholder="fraction, port"
+                  placeholder="фракция, порт"
                   onChange={(event) => setFilterTags(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") void load();

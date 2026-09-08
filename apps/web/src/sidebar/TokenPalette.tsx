@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { AssetDto, GameSnapshot } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { TokenImageGenerator } from "../TokenImageGenerator";
@@ -365,6 +365,15 @@ export function TokenDefinitionEditor({
   const uploadSourcePromise = useRef<Promise<AssetDto> | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // This ref belongs to one mounted editor instance. PalettePanel can reopen
+  // another "NEW" editor while this instance's server request is still pending.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -385,7 +394,9 @@ export function TokenDefinitionEditor({
         .concat(uploadedSource ?? [])
         .find((asset) => asset.id === selectedAssetId);
       if (selectedAsset?.kind === "IMAGE" || (image && !selectedAssetId)) {
-        setError("Обрежьте исходное изображение и создайте TOKEN.");
+        setError(
+          "Обрежьте исходное изображение и создайте из него изображение токена.",
+        );
         return;
       }
       const input = {
@@ -409,15 +420,16 @@ export function TokenDefinitionEditor({
           controllers,
         );
       }
-      onCancel();
+      if (mounted.current) onCancel();
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Не удалось сохранить токен.",
-      );
+      if (mounted.current)
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Не удалось сохранить токен.",
+        );
     } finally {
-      setSaving(false);
+      if (mounted.current) setSaving(false);
     }
   };
 
@@ -479,6 +491,7 @@ export function TokenDefinitionEditor({
           imageAssets={tokenGeneratorSources(
             mergeAssets(snapshot.assets, uploadedSource),
           )}
+          uploadedSourceId={uploadedSource?.id}
           disabled={saving}
           onGenerate={onGenerateTokenImage}
           onGenerated={(asset) => setAssetId(asset.id)}

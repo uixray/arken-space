@@ -999,7 +999,7 @@ export function registerStoryRoutes(
               authorMembershipId: auth.membershipId,
               body: record.body,
               gmNotes:
-                "Imported Telegram record: review rights and media before publishing.",
+                "Запись импортирована из Telegram: проверьте права и вложения перед публикацией.",
               entityLinks: [],
               createdAt: now,
               updatedAt: now,

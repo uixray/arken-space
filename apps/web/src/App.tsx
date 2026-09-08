@@ -50,11 +50,11 @@ import { useSceneActions } from "./use-scene-actions";
 import { useWorldMapActions } from "./use-world-map-actions";
 import { useLatestRef } from "./use-latest-ref";
 import { useTokenDefinitionActions } from "./use-token-definition-actions";
+import { OptimisticTokenMutations } from "./optimistic-token-mutations";
 import {
-  OptimisticTokenMutations,
-  optimisticPlacementToken,
-  type TokenPlacementRequest,
-} from "./optimistic-token-mutations";
+  createOptimisticTokenPlacer,
+  type OptimisticTokenPlacer,
+} from "./optimistic-token-placement";
 import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
@@ -953,24 +953,13 @@ export function App() {
     tokenMutations.reset();
     return () => tokenMutations.reset();
   }, [tokenMutations, snapshot?.campaign.id, snapshot?.me.id]);
-  const placeOptimistically = useCallback(
-    (request: TokenPlacementRequest) => {
-      const current = snapshotRef.current;
-      if (!current || current.campaign.paused) return;
-      request = {
-        ...request,
-        body: { ...request.body, placementId: request.body.actionId },
-      };
-      const temporary = optimisticPlacementToken(current, request);
-      if (!temporary) return;
-      setError("");
-      tokenMutations.place(temporary, () =>
-        api(request.path, {
-          method: "POST",
-          body: JSON.stringify(request.body),
-        }),
-      );
-    },
+  const placeOptimistically = useCallback<OptimisticTokenPlacer>(
+    (request, options) =>
+      createOptimisticTokenPlacer({
+        readSnapshot: () => snapshotRef.current,
+        tokenMutations,
+        clearError: () => setError(""),
+      })(request, options),
     [snapshotRef, tokenMutations],
   );
 
@@ -2024,8 +2013,8 @@ export function App() {
                         },
                       );
                     }}
-                    onPlaceTokenDefinition={async (definitionId, point) =>
-                      placeOptimistically({
+                    onPlaceTokenDefinition={async (definitionId, point) => {
+                      void placeOptimistically({
                         path: `/api/token-definitions/${definitionId}/placements`,
                         body: {
                           actionId: crypto.randomUUID(),
@@ -2033,8 +2022,8 @@ export function App() {
                           sceneId: activeScene.id,
                           ...point,
                         },
-                      })
-                    }
+                      });
+                    }}
                     onTokenLayerChange={(tokenId, revision, layer) =>
                       run(() =>
                         api(`/api/tokens/${tokenId}/layer`, {
@@ -2329,17 +2318,17 @@ export function App() {
                               definition.id,
                             )
                           }
-                          onClick={() =>
-                            activeScene &&
-                            placeOptimistically({
+                          onClick={() => {
+                            if (!activeScene) return;
+                            void placeOptimistically({
                               path: `/api/token-definitions/${definition.id}/placements`,
                               body: {
                                 actionId: crypto.randomUUID(),
                                 definitionId: definition.id,
                                 sceneId: activeScene.id,
                               },
-                            })
-                          }
+                            });
+                          }}
                         >
                           {asset ? (
                             <img src={asset.url} alt="" />
