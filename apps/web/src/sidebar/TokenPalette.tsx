@@ -491,6 +491,7 @@ export function TokenDefinitionEditor({
           imageAssets={tokenGeneratorSources(
             mergeAssets(snapshot.assets, uploadedSource),
           )}
+          uploadedSourceId={uploadedSource?.id}
           disabled={saving}
           onGenerate={onGenerateTokenImage}
           onGenerated={(asset) => setAssetId(asset.id)}

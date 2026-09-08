@@ -47,6 +47,7 @@ const frameLabels: Record<TokenFramePreset, string> = {
 
 type Props = {
   imageAssets: AssetDto[];
+  uploadedSourceId?: string;
   disabled?: boolean;
   onGenerate: (input: {
     sourceAssetId: string;
@@ -111,6 +112,7 @@ function TokenFramePreview({ frame }: { frame: TokenFramePreset }) {
 
 export function TokenImageGenerator({
   imageAssets,
+  uploadedSourceId,
   disabled = false,
   onGenerate,
   onGenerated,
@@ -122,10 +124,24 @@ export function TokenImageGenerator({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const consumedUploadId = useRef<string | undefined>(undefined);
   const source =
     imageAssets.find((asset) => asset.id === sourceAssetId) ?? null;
 
   useEffect(() => {
+    if (!uploadedSourceId) consumedUploadId.current = undefined;
+    if (
+      uploadedSourceId &&
+      consumedUploadId.current !== uploadedSourceId &&
+      imageAssets.some((asset) => asset.id === uploadedSourceId)
+    ) {
+      // Consume upload intent once; subsequent manual choices and bootstrap
+      // refreshes must not reselect this asset or reset the edited transform.
+      consumedUploadId.current = uploadedSourceId;
+      setSourceAssetId(uploadedSourceId);
+      setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
+      return;
+    }
     if (
       sourceAssetId &&
       imageAssets.some((asset) => asset.id === sourceAssetId)
@@ -133,7 +149,7 @@ export function TokenImageGenerator({
       return;
     setSourceAssetId(imageAssets[0]?.id ?? "");
     setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
-  }, [imageAssets, sourceAssetId]);
+  }, [imageAssets, sourceAssetId, uploadedSourceId]);
 
   const updateTransform = (next: TokenImageTransform) =>
     setTransform(clampTokenImageTransform(next));
