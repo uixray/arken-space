@@ -498,7 +498,7 @@ describe("UIX-262 node lifecycle visibility controls", () => {
     "hides unassigned %s nodes after school privacy and immutable discoveries",
     (lifecycle) => {
       const input = fixture();
-      const nonActiveIds = new Set([
+      const nonActiveIds = new Set<SpellNode["id"]>([
         input.nodeIds.available,
         input.nodeIds.publicNoGrant,
         input.nodeIds.source,
