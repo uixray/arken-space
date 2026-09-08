@@ -83,15 +83,15 @@ coordinate-boundary.
 
 ## 3. Устойчивые термины
 
-| Термин                                          | Значение                                                                                                                                                                         |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tactical scene / тактическая сцена**          | Существующий серверный агрегат с одной локальной системой координат, map asset, grid, tokens, fog и drawings.                                                                    |
-| **Scene workspace / рабочее пространство сцен** | Новый campaign-scoped GM aggregate, который композиционно размещает ссылки на несколько существующих tactical scenes. Это не новая система координат для игровых entities.       |
-| **Workspace item / плитка карты**               | Ссылка workspace → tactical scene плюс GM-only transform в координатах рабочего пространства.                                                                                    |
-| **Effective scene / назначенная сцена игрока**  | Единственная tactical scene, которую сервер разрешает membership сейчас. При отсутствии активного назначения это `campaign.activeSceneId`.                                       |
-| **Player assignment / назначение игрока**       | Server-authoritative, revisioned связь membership → workspace item. Несколько membership можно назначить одной атомарной командой; отдельная сущность «группа» для MVP не нужна. |
-| **Workspace camera**                            | Локальная камера GM над композицией плиток. Не попадает игрокам и не влияет на scene entities.                                                                                   |
-| **Scene camera**                                | Локальная камера конкретного клиента внутри tactical scene. Не хранится как общие экранные пиксели.                                                                              |
+| Термин                                          | Значение                                                                                                                                                                                                                    |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tactical scene / тактическая сцена**          | Существующий серверный агрегат с одной локальной системой координат, map asset, grid, tokens, fog и drawings.                                                                                                               |
+| **Scene workspace / рабочее пространство сцен** | Новый campaign-scoped GM aggregate, который композиционно размещает ссылки на несколько существующих tactical scenes. Это не новая система координат для игровых entities.                                                  |
+| **Workspace item / плитка карты**               | Ссылка workspace → tactical scene плюс GM-only transform в координатах рабочего пространства.                                                                                                                               |
+| **Effective scene / назначенная сцена игрока**  | Единственная разрешённая сервером tactical scene: legacy `campaign.activeSceneId` только при отсутствии READY workspace текущего anchor; иначе — valid explicit assignment либо пустая `WAITING_FOR_ASSIGNMENT` projection. |
+| **Player assignment / назначение игрока**       | Server-authoritative, revisioned связь membership → workspace item. Несколько membership можно назначить одной атомарной командой; отдельная сущность «группа» для MVP не нужна.                                            |
+| **Workspace camera**                            | Локальная камера GM над композицией плиток. Не попадает игрокам и не влияет на scene entities.                                                                                                                              |
+| **Scene camera**                                | Локальная камера конкретного клиента внутри tactical scene. Не хранится как общие экранные пиксели.                                                                                                                         |
 
 Слово **submap** допустимо в продуктовой копии, но не как отдельный persistence
 aggregate: в выбранной модели submap — это workspace item, указывающий на scene.
@@ -336,6 +336,47 @@ scene заново вычисляется из БД.
   placement transform/spawn и preflight. Она инвалидирует затронутые redo
   branches и пишет один auditable action.
 
+### 9.1 Undo/restore композиции workspace
+
+Это контракт будущей реализации, не описание уже работающего undo. История
+GM layout отделена от scene-local Canvas history и не отменяет назначения
+игроков, игровые ходы или изменения token/fog/drawing.
+
+- Undo/redo и restore — явные GM-only компенсирующие команды с новым
+  `actionId`, текущими workspace/item revisions и общим lock order из §6.
+  Ревизии возрастают, а не возвращаются к историческим значениям. Exact retry
+  повторяет один receipt; stale revision или нарушенный preflight дают `409`
+  без частичной записи. Новая правка инвалидирует затронутую redo-ветку.
+- Одна завершённая transform-операция записывает bounded before/after layout:
+  item ID, scene reference, x/y/scale/rotation/zIndex. Undo восстанавливает
+  предыдущий transform только для того же существующего item, redo — следующий.
+  Scene-local entities, scene revisions и камеры клиентов не меняются. Если
+  item уже отсоединён, workspace архивирован либо item изменён после ожидаемой ревизии,
+  автоматического overwrite нет: `409` и refresh текущего layout.
+- Detach удаляет только workspace-связь, не scene и не её содержимое; при
+  assignments на item возвращает `409`. Для отмены сохраняется GM-only
+  before-image связи с исходным item ID и transform. Restore восстанавливает
+  эту связь с тем же ID и новой ревизией, но **не восстанавливает assignments**.
+  Перед записью проверяются существование scene в той же campaign, доступный
+  lifecycle workspace (`DRAFT` или `READY`), уникальность ссылки и лимит items. Если scene удалена,
+  workspace архивирован или ссылка уже занята, restore даёт `409`: нельзя
+  создавать новую scene, дублировать item или молча менять его destination.
+- Archive workspace сохраняет layout/items для восстановления и не удаляет
+  scenes. В MVP он отклоняется, пока workspace является READY для текущего
+  anchor либо содержит действующие assignments: сначала нужна отдельная явная
+  команда перехода/переназначения, а не скрытый переход игроков на legacy
+  fallback. Restore архивированного workspace проверяет все scene references,
+  campaign ownership, уникальность anchor и лимиты, затем атомарно возвращает
+  его только в `DRAFT`. Старые assignments и состояние `READY` не оживают.
+  Повторная активация — отдельная revisioned команда с preflight и созданием
+  assignments по §5; неуспех любого restore оставляет архив неизменным.
+- Before-images и история layout доступны только GM. В player-visible audit
+  не попадают hidden scene/item IDs, названия, transforms или payload undo;
+  content ACL по-прежнему выводится из текущей effective scene. Restore не
+  является обходом assignment authority и не возвращает старые asset grants.
+- Архивация самой tactical scene остаётся отдельным продуктовым решением из
+  §16. Undo detach/archive workspace никогда не выполняет её cascade restore.
+
 ## 10. Scope общих функций
 
 | Функция                  | Scope после UIX-319                                                                                                                                          |
@@ -354,19 +395,21 @@ projection; видимость campaign-global факта боя и initiative �
 
 ## 11. Сценарии
 
-| Сценарий                                 | Ожидаемое поведение                                                                                         |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Один игрок / READY workspace отсутствует | Полностью старое поведение через `activeSceneId`.                                                           |
-| Несколько игроков на одной карте         | Несколько assignment rows указывают на один item; snapshot строится персонально, canvas audience совпадает. |
-| Split party                              | У membership разные effective scenes; ни один snapshot/asset/event не содержит соседнюю карту.              |
-| Нет assignment в READY workspace         | Нейтральный waiting screen без scene/entity/asset IDs; GM получает диагностику.                             |
-| Reassignment                             | Старый canvas очищается, показывается loading, затем атомарно заменяется новой projection.                  |
-| Reconnect / late join                    | Assignment восстанавливается из БД; клиент не выбирает scene.                                               |
-| GM reload                                | READY workspace/layout/assignments восстанавливаются; workspace camera может сброситься локально.           |
-| Удаление item                            | `409`, пока есть assignments; сначала переназначить/очистить. Scene не удаляется cascade.                   |
-| Удаление populated scene                 | Отказ при workspace/world-map/encounter/assignment references; отдельный archive/remediation flow.          |
-| Перемещение item                         | Меняется только GM transform; scene entities не двигаются.                                                  |
-| Перекрывающиеся items                    | Разрешены только как GM layout, но UI предупреждает и даёт z-order; privacy не меняется.                    |
+| Сценарий                                 | Ожидаемое поведение                                                                                             |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Один игрок / READY workspace отсутствует | Полностью старое поведение через `activeSceneId`.                                                               |
+| Несколько игроков на одной карте         | Несколько assignment rows указывают на один item; snapshot строится персонально, canvas audience совпадает.     |
+| Split party                              | У membership разные effective scenes; ни один snapshot/asset/event не содержит соседнюю карту.                  |
+| Нет assignment в READY workspace         | Нейтральный waiting screen без scene/entity/asset IDs; GM получает диагностику.                                 |
+| Reassignment                             | Старый canvas очищается, показывается loading, затем атомарно заменяется новой projection.                      |
+| Reconnect / late join                    | Assignment восстанавливается из БД; клиент не выбирает scene.                                                   |
+| GM reload                                | READY workspace/layout/assignments восстанавливаются; workspace camera может сброситься локально.               |
+| Удаление item                            | `409`, пока есть assignments; сначала переназначить/очистить. Scene не удаляется cascade.                       |
+| Удаление populated scene                 | Отказ при workspace/world-map/encounter/assignment references; отдельный archive/remediation flow.              |
+| Перемещение item                         | Меняется только GM transform; scene entities не двигаются.                                                      |
+| Перекрывающиеся items                    | Разрешены только как GM layout, но UI предупреждает и даёт z-order; privacy не меняется.                        |
+| Undo transform / restore detach          | Явная revisioned GM-команда; прежний layout/связь восстанавливаются без отката scene entities или assignments.  |
+| Archive / restore workspace              | Активный или назначенный workspace защищён от archive; restore возвращает проверенный layout в DRAFT, не READY. |
 
 ## 12. Совместимость и миграция
 
@@ -435,6 +478,9 @@ task больше 100 ms при reassignment. Эти thresholds валидиру
 - strict bounds, UUID, finite transforms, max batch/items;
 - effective-scene projector не принимает player-provided scene ID;
 - layout transform не меняет local token/fog/drawing coordinates;
+- undo/redo transform сохраняет scene-local coordinates и camera state;
+- READY без valid assignment всегда даёт waiting, legacy fallback допустим
+  только без READY workspace текущего anchor;
 - monotonic assignment revision и stale snapshot rejection.
 
 ### PostgreSQL / integration
@@ -445,6 +491,15 @@ task больше 100 ms при reassignment. Эти thresholds валидиру
 - lock races assignment ↔ player token mutation и assignment ↔ ephemeral relay;
 - batch assignment all-or-nothing;
 - remove item / archive workspace / delete scene safeguards;
+- transform undo/redo: revision CAS, exact retry, stale overwrite rejection и
+  invalidation redo после новой правки;
+- detach/restore: тот же item ID, scene reference и transform, без изменения
+  scene entities и восстановления assignments; populated scene не удаляется;
+- restore с missing/foreign scene, занятым item/anchor или превышением лимита
+  отклоняется атомарно, без частичных rows, нового receipt или asset grants;
+- archive текущего READY workspace или workspace с assignments отклоняется;
+  restore допустимого архива даёт DRAFT, повторный READY требует отдельной
+  команды, transaction failure сохраняет прежнее состояние архива;
 - migration from populated single-map fixture without data rewrite.
 
 ### Projection / privacy
@@ -454,6 +509,8 @@ task больше 100 ms при reassignment. Эти thresholds валидиру
 - GM видит layout, PLAYER — нет;
 - direct asset content denies old/foreign/unassigned scene;
 - player search/a11y fixture не содержит hidden names/counts;
+- GM undo before-images и archived/detached items не появляются в PLAYER
+  snapshot/audit/asset ACL; restore не возрождает историческое назначение;
 - world-map links и UIX-311 encounter не расширяют assignment projection.
 
 ### Realtime / multiplayer
@@ -472,6 +529,8 @@ task больше 100 ms при reassignment. Эти thresholds валидиру
 - GM composition с 1/2/4 картами, pan/zoom/culling и keyboard focus;
 - player transition на разных viewport sizes;
 - отсутствие скрытых DOM nodes, image requests и accessible labels;
+- undo transform и restore detach не двигают entities; конфликт показывает
+  refresh без overwrite, restore archive не переключает карту игрока;
 - overlap warning, populated deletion block и explicit token transfer preflight.
 
 Новый privacy-тест проходит обязательную диверсию: временно добавить hidden

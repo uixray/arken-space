@@ -66,3 +66,23 @@
   projection + asset ACL, realtime assignment, GM workspace projection, GM UI,
   player transition UX и release gate.
 - Push, PR, merge и production в этом пуле не выполняются.
+
+## Контрольная точка AC — 2026-09-08
+
+- Revision: рабочие изменения поверх `bd54c64`; новый commit не создавался.
+- Changed files: только архитектурный план и этот checkpoint.
+- Decisions: термин effective scene согласован с §5 — fallback только без
+  READY workspace текущего anchor, иначе assignment либо fail-closed waiting.
+  В §9.1 описаны будущие revisioned GM undo/redo transform, restore detach и
+  restore workspace в DRAFT без оживления assignments или удаления scenes.
+  Сценарии и regression matrix дополнены соответствующими negative cases.
+- Verification: вручную сопоставлены термины, алгоритм authority, lifecycle,
+  rollback и privacy-ограничения; это проверка документационной согласованности,
+  не runtime proof. Schema, API, UI и тесты реализации не менялись/не запускались.
+  Scoped Prettier check двух Markdown и `git diff --check` — PASS; зависимости
+  не устанавливались, использован имеющийся formatter соседнего worktree.
+- Blockers: два обнаруженных документационных пробела закрыты. Три продуктовых
+  решения §16 остаются отдельным gate перед будущей production implementation;
+  в этом пуле они не приняты и реализация не разрешена.
+- Next action: root review документационного AC; новые карточки, публикация,
+  merge и production в этом пуле не выполнялись.
