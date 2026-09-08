@@ -385,15 +385,24 @@ for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
   { name: "narrow", width: 390, height: 844 },
 ]) {
-  test(`UIX-272 UIX-502 token modal select owns its popup at ${viewport.name} viewport`, async ({
+  test(`UIX-272 UIX-502 token modal character popup and inline image picker at ${viewport.name} viewport`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.setViewportSize(viewport);
     await mockBootstrap(page, "GM");
+    const apiWrites: string[] = [];
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.route("**/api/**", async (route) => {
+      const request = route.request();
+      if (["GET", "HEAD"].includes(request.method())) return route.fallback();
+      apiWrites.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      await route.abort("blockedbyclient");
+    });
     const emptySnapshot = structuredClone(snapshot);
     emptySnapshot.characters = [];
     emptySnapshot.tokens = [];
-    emptySnapshot.assets = [];
+    emptySnapshot.assets = [{ ...sourceAsset, kind: "TOKEN" }];
     await page.route("**/api/bootstrap", (route) =>
       route.fulfill({
         status: 200,
@@ -407,7 +416,46 @@ for (const viewport of [
     await page.locator(".token-palette > button").click();
 
     const editor = page.getByRole("dialog", { name: "Новый токен" });
-    const select = editor.locator(".g-select").first();
+    // The image field is the real inline AssetPicker, not a second popup.
+    const images = editor.getByRole("group", {
+      name: "Изображение токена из файлов",
+    });
+    const image = images.getByRole("button", { name: sourceAsset.name });
+    const noImage = images.getByRole("button", { name: "Без изображения" });
+    await image.scrollIntoViewIfNeeded();
+    await expect(image).toBeVisible();
+    await expect
+      .poll(() =>
+        image.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return element.contains(
+            document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            ),
+          );
+        }),
+      )
+      .toBe(true);
+    const imageBox = await image.boundingBox();
+    expect(imageBox).not.toBeNull();
+    expect(imageBox!.x).toBeGreaterThanOrEqual(0);
+    expect(imageBox!.y).toBeGreaterThanOrEqual(0);
+    expect(imageBox!.x + imageBox!.width).toBeLessThanOrEqual(viewport.width);
+    expect(imageBox!.y + imageBox!.height).toBeLessThanOrEqual(viewport.height);
+    await image.click();
+    await expect(image).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".arken-form-select-popup")).toBeHidden();
+    await page.keyboard.press("ArrowLeft");
+    await expect(noImage).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(noImage).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("ArrowRight");
+    await expect(image).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(image).toHaveAttribute("aria-pressed", "true");
+    // Only the character field uses FormSelect; keep its empty-state case.
+    const select = editor.locator("label").filter({ hasText: /^\s*Персонаж/ });
     const trigger = select.locator('[role="combobox"]');
     const nameInput = editor.getByLabel("Название");
     const menu = page.locator(".arken-form-select-popup");
@@ -439,11 +487,20 @@ for (const viewport of [
     expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(
       viewport.height + 1,
     );
+    const screenshotPath = testInfo.outputPath(
+      "token-modal-character-popup.png",
+    );
+    await page.screenshot({ path: screenshotPath });
+    await testInfo.attach("token-modal-character-popup", {
+      path: screenshotPath,
+      contentType: "image/png",
+    });
 
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(editor).toBeVisible();
     await expect(trigger).toBeFocused();
+    await expect(image).toHaveAttribute("aria-pressed", "true");
 
     await trigger.click();
     await expect(menu).toBeVisible();
@@ -455,11 +512,13 @@ for (const viewport of [
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await expect(menu).toBeHidden();
-    const nestedDialog = page.getByRole("dialog", { name: "Подготовка" });
-    await expect(nestedDialog).toBeVisible();
+    // This is a workspace transition after the editor closes, not nesting.
+    const workspaceDialog = page.getByRole("dialog", { name: "Подготовка" });
+    await expect(workspaceDialog).toBeVisible();
+    await expect(editor).toBeHidden();
     await expect
       .poll(() =>
-        nestedDialog.evaluate((element) => {
+        workspaceDialog.evaluate((element) => {
           const box = element.getBoundingClientRect();
           const hit = document.elementFromPoint(
             box.x + box.width / 2,
@@ -469,6 +528,18 @@ for (const viewport of [
         }),
       )
       .toBe(true);
+    await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+    // App may mark the visible chat as read during bootstrap. That POST was
+    // blocked too: no request may reach a real backend from this UI fixture.
+    // It is not a token/editor mutation and must not mask any other write.
+    expect(
+      apiWrites.filter((write) => write !== "POST /api/chat/read"),
+    ).toEqual([]);
+    await testInfo.attach("blocked-api-writes", {
+      body: JSON.stringify(apiWrites),
+      contentType: "application/json",
+    });
   });
 }
 
