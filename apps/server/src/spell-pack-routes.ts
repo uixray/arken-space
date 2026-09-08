@@ -337,7 +337,7 @@ function cloneGraphVersion(
     nodes: graph.nodes.map((node) => ({
       ...node,
       packVersionId: versionId,
-      lifecycle,
+      lifecycle: node.lifecycle === "ARCHIVED" ? "ARCHIVED" : lifecycle,
     })),
     requirementGroups: graph.requirementGroups.map((group) => ({
       ...group,
