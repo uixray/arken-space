@@ -112,3 +112,23 @@ pnpm exec playwright test tests/e2e/russian-error-copy.spec.ts --workers=1 --ret
   gate принадлежит root: интегрировать source, выполнить restored unit/browser
   и общий quality.
   Этот небольшой срез не закрывает автоматически весь широкий AC UIX-417.
+
+## Checkpoint — диагностика geometry harness после общего browser gate
+
+- Первый общий пул: 34 PASS / 2 Chrome audio geometry FAIL (1280 и 390).
+  Firefox audio проходит; русские строки уже отображаются. В обоих Chrome
+  traces измерение выполнено при `g-toast-animation-desktop_enter_active`.
+  Gravity entrance длится 600 мс и меняет height/padding от нуля, сохраняя
+  opacity 0 в первой половине. `toBeVisible` не доказывает завершённую геометрию.
+- Range всего toast дополнительно включает декоративные вложенные SVG. Старый
+  receipt хранил только booleans, поэтому конкретный «плохой SVG rect» из него
+  не установлен; steady-state overflow этим прогоном тоже не доказан.
+- Test-only исправление: текст фиксируется сразу; ожидание ограничено только
+  named entrance animation самого наблюдаемого toast, без ожидания progress
+  или auto-dismiss. Title/content измеряются отдельно по непустым Text nodes.
+  Сохраняются проверки собственного box, внешнего toast clipping-box и viewport,
+  точные русские/native-baseline строки и исходный wire contract.
+- Полные координаты text rects, контейнеров, viewport и entrance timing
+  сохраняются в JSON receipt; PNG делается до assertions. Production CSS,
+  source, timers, timeouts/retries не меняются. Изменены только новый spec
+  и этот checkpoint; повторный общий 36-case gate принадлежит root.

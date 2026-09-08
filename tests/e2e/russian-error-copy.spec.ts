@@ -55,6 +55,7 @@ async function installErrorFixture(page: Page, initiallyOffline: boolean) {
     unexpectedSocketEvents: [] as string[],
     pageErrors: [] as string[],
     commands: [] as CommandReceipt[],
+    geometry: [] as Array<{ phase: string; details: unknown }>,
     acknowledgementsSent: 0,
     releaseAudioAcknowledgements(): void {
       for (const send of pendingAcknowledgements.splice(0)) send();
@@ -153,43 +154,134 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string) {
   await testInfo.attach(name, { path, contentType: "image/png" });
 }
 
-async function expectTextFits(target: Locator) {
+async function textGeometry(target: Locator) {
   await expect(target).toBeVisible();
-  const geometry = await target.evaluate((element) => {
+  return target.evaluate((element) => {
     const box = element.getBoundingClientRect();
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const text = [...range.getClientRects()];
-    const inside = (rect: DOMRect) =>
-      rect.left >= -1 &&
-      rect.top >= -1 &&
-      rect.right <= innerWidth + 1 &&
-      rect.bottom <= innerHeight + 1;
+    const outer = element.closest(".g-toast") ?? element;
+    const outerBox = outer.getBoundingClientRect();
+    const serialize = (rect: DOMRect) => ({
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    });
+    const viewport = {
+      left: 0,
+      top: 0,
+      right: innerWidth,
+      bottom: innerHeight,
+    };
+    const inside = (
+      rect: Pick<DOMRect, "left" | "top" | "right" | "bottom">,
+      bounds: typeof viewport,
+    ) =>
+      rect.left >= bounds.left - 1 &&
+      rect.top >= bounds.top - 1 &&
+      rect.right <= bounds.right + 1 &&
+      rect.bottom <= bounds.bottom + 1;
+    // Only actual nonempty text nodes in this text slot, never sibling status
+    // SVGs or the close button's nested SVG/layout rectangles.
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const text: Array<{
+      value: string;
+      rects: ReturnType<typeof serialize>[];
+    }> = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent?.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      text.push({
+        value: node.textContent,
+        rects: [...range.getClientRects()].map(serialize),
+      });
+    }
+    const rects = text.flatMap((node) => node.rects);
+    const hasText =
+      text.length > 0 && text.every((node) => node.rects.length > 0);
     return {
-      boxVisible: inside(box),
-      textVisible: text.length > 0 && text.every(inside),
-      textFits: text.every(
-        (rect) =>
-          rect.left >= box.left - 1 &&
-          rect.right <= box.right + 1 &&
-          rect.top >= box.top - 1 &&
-          rect.bottom <= box.bottom + 1,
-      ),
+      target: element.className,
+      outer: outer.className,
+      box: serialize(box),
+      outerBox: serialize(outerBox),
+      viewport,
+      text,
+      checks: {
+        boxVisible: inside(box, viewport),
+        outerBoxVisible: inside(outerBox, viewport),
+        boxWithinOuter: inside(box, outerBox),
+        hasText,
+        textVisible:
+          hasText &&
+          rects.every(
+            (rect) =>
+              rect.width > 0 && rect.height > 0 && inside(rect, viewport),
+          ),
+        textFits: hasText && rects.every((rect) => inside(rect, box)),
+        textWithinOuter:
+          hasText && rects.every((rect) => inside(rect, outerBox)),
+      },
     };
   });
-  expect(geometry).toEqual({
+}
+
+function expectTextFits(geometry: Awaited<ReturnType<typeof textGeometry>>) {
+  expect(geometry.checks).toEqual({
     boxVisible: true,
+    outerBoxVisible: true,
+    boxWithinOuter: true,
+    hasText: true,
     textVisible: true,
     textFits: true,
+    textWithinOuter: true,
   });
+}
+
+async function settleToastEntrance(toast: Locator) {
+  return toast.evaluate(async (element) => {
+    const entranceNames = new Set([
+      "g-toast-enter-desktop",
+      "g-toast-enter-mobile",
+      "g-toast-enter-reduced-motion",
+    ]);
+    // Only the observed toast ancestor's own named entrance animation. Do not
+    // wait for arbitrary descendant progress or auto-dismiss animations.
+    const entrances = element
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation instanceof CSSAnimation &&
+          entranceNames.has(animation.animationName),
+      );
+    const receipt = entrances.map((animation) => ({
+      name: (animation as CSSAnimation).animationName,
+      currentTime: animation.currentTime,
+      playState: animation.playState,
+      duration: animation.effect?.getTiming().duration,
+    }));
+    await Promise.all(
+      entrances.map((animation) => animation.finished.catch(() => undefined)),
+    );
+    return receipt;
+  });
+}
+
+async function saveReceipt(
+  testInfo: TestInfo,
+  state: Awaited<ReturnType<typeof installErrorFixture>>,
+) {
+  const path = testInfo.outputPath("error-copy-receipt.json");
+  await writeFile(path, JSON.stringify(state, null, 2));
+  return path;
 }
 
 async function attachReceipt(
   testInfo: TestInfo,
   state: Awaited<ReturnType<typeof installErrorFixture>>,
 ) {
-  const path = testInfo.outputPath("error-copy-receipt.json");
-  await writeFile(path, JSON.stringify(state, null, 2));
+  const path = await saveReceipt(testInfo, state);
   await testInfo.attach("error-copy-receipt", {
     path,
     contentType: "application/json",
@@ -227,11 +319,14 @@ for (const width of [1280, 390]) {
       await expect
         .poll(() => fixture.failedBootstrapRequests)
         .toBeGreaterThan(0);
+      const geometry = await textGeometry(description);
+      fixture.geometry.push({ phase: "network-error", details: geometry });
+      await saveReceipt(testInfo, fixture);
       await screenshot(page, testInfo, `network-error-${width}`);
       // Intended baseline FAIL: browser's native fetch rejection reaches the
       // actual App ErrorState in English. Do not replace this with a regex.
       expect(await description.innerText()).toBe(networkMessage);
-      await expectTextFits(description);
+      expectTextFits(geometry);
       const attemptsBeforeRetry = fixture.bootstrapAttempts;
       fixture.rejectBootstrap = false;
       await retry.click();
@@ -279,11 +374,24 @@ for (const width of [1280, 390]) {
         .filter({ hasText: "Не удалось изменить музыку" });
       await expect(toast).toBeVisible();
       const toastText = await toast.innerText();
-      await expectTextFits(toast);
+      const entrances = await settleToastEntrance(toast);
+      const titleGeometry = await textGeometry(
+        toast.locator(".g-toast__title"),
+      );
+      const contentGeometry = await textGeometry(
+        toast.locator(".g-toast__content"),
+      );
+      fixture.geometry.push({
+        phase: "audio-error",
+        details: { entrances, title: titleGeometry, content: contentGeometry },
+      });
+      await saveReceipt(testInfo, fixture);
       await screenshot(page, testInfo, `audio-error-${width}`);
       // Intended baseline FAIL: the actual ACK callback exposes the raw code.
       expect(toastText).toContain(audioMessage);
       expect(toastText).not.toContain("REVISION_CONFLICT");
+      expectTextFits(titleGeometry);
+      expectTextFits(contentGeometry);
       expect(fixture.commands[0]).toEqual({
         event: "audio:set",
         command: {

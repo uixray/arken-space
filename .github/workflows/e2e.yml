@@ -14,6 +14,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
@@ -50,6 +53,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
 
@@ -98,6 +103,28 @@ jobs:
           exit 1
 
       - run: pnpm test:e2e
+
+      # Компактные доказательства синтетического acceptance-пула нужны и при
+      # успехе. Только PNG и именованные JSON receipts этих пяти spec-файлов;
+      # трассы, логи и прочие данные остаются в failure-only артефактах ниже.
+      - name: Upload synthetic acceptance receipts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-acceptance-receipts
+          path: |
+            test-results/russian-error-copy-*/*.png
+            test-results/russian-error-copy-*/error-copy-receipt.json
+            test-results/russian-world-copy-*/*.png
+            test-results/russian-world-copy-*/copy-receipts.json
+            test-results/token-create-place-outcome-*/*.png
+            test-results/token-create-place-outcome-*/token-outcome-receipt.json
+            test-results/token-upload-source-select-*/*.png
+            test-results/token-upload-source-select-*/upload-source-receipt.json
+            test-results/follow-scroll-resize-*/*.png
+            test-results/follow-scroll-resize-*/resize-follow-receipts.json
+          retention-days: 7
+          if-no-files-found: error
 
       # Без трасс разбирать падение в CI нечем: локально его может не быть.
       - name: Upload Playwright artifacts
