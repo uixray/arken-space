@@ -11,13 +11,21 @@ import {
 import path from "node:path";
 
 const BASE = "768bf10c1b44badd90d2a0706c192f96343b328e";
+const VARIANT = "dismissed-modal-popup-candidate";
 const ROOT = process.cwd();
 const OUTPUT = path.join(ROOT, "test-results/uix502-main-baseline");
 const RECEIPTS = path.join(ROOT, "test-results/uix502-main-receipts");
 const SPEC = "tests/e2e/modal-owner-contract.spec.ts";
 const APPROVED = [
+  ".github/workflows/e2e.yml",
   ".github/workflows/modal-owner-diagnostic.yml",
+  "apps/web/src/ui/gravity-foundation.css",
   "scripts/collect-modal-owner-diagnostic.mjs",
+  "tests/e2e/modal-owner-close-lifecycle.spec.ts",
+];
+const CANDIDATE_CHANGES = [
+  "apps/web/src/ui/gravity-foundation.css",
+  "tests/e2e/modal-owner-close-lifecycle.spec.ts",
 ];
 const FROZEN = [
   "apps/web",
@@ -67,8 +75,15 @@ function snapshot() {
     JSON.stringify(changed) === JSON.stringify(APPROVED),
     "UNAPPROVED_SOURCE_DIFF",
   );
-  git("diff", "--exit-code", BASE, "--", ...FROZEN);
-  const paths = git("ls-files", "-z", "--", ...FROZEN)
+  git(
+    "diff",
+    "--exit-code",
+    BASE,
+    "--",
+    ...FROZEN,
+    ...CANDIDATE_CHANGES.map((file) => `:(exclude)${file}`),
+  );
+  const paths = git("ls-files", "-z", "--", ...FROZEN, ...APPROVED)
     .split("\0")
     .filter(Boolean)
     .sort();
@@ -121,8 +136,11 @@ function before() {
   writeJson(path.join(RECEIPTS, "modal-owner-run-manifest.json"), {
     productBase: BASE,
     diagnosticHead,
+    variant: VARIANT,
+    unchangedMainBaselineRun: "34267730181",
+    candidateChanges: CANDIDATE_CHANGES,
     contract:
-      "Product, fixture, spec and Playwright config unchanged from productBase; only runner and collector differ.",
+      "Only the named modal-popup CSS, new close-lifecycle spec and CI files differ from productBase. The original twenty-case spec, fixture, Playwright config and dependencies remain unchanged. All tracked files in the declared frontend/test and approved CI scope are hashed before and after execution.",
     runId: process.env.GITHUB_RUN_ID,
     runAttempt: process.env.GITHUB_RUN_ATTEMPT,
     runnerImage: process.env.ImageOS,
@@ -157,6 +175,7 @@ function collect() {
     const value = json(path.join(RECEIPTS, "modal-owner-run-manifest.json"));
     check(
       value.productBase === BASE &&
+        value.variant === VARIANT &&
         value.diagnosticHead === git("rev-parse", "HEAD"),
       "MANIFEST_IDENTITY",
     );
@@ -368,9 +387,10 @@ function collect() {
     ? "INFRASTRUCTURE_OR_EVIDENCE_FAILURE"
     : clean
       ? "TWENTY_CLEAN_FIRST_ATTEMPTS"
-      : "BASELINE_NOT_CLEAN";
+      : "CANDIDATE_NOT_CLEAN";
   writeJson(path.join(RECEIPTS, "modal-owner-run-summary.json"), {
     productBase: BASE,
+    variant: VARIANT,
     diagnosticHead: manifest?.diagnosticHead ?? null,
     classification,
     rawExit,
