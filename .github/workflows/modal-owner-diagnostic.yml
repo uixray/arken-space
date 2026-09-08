@@ -94,15 +94,15 @@ jobs:
         with:
           name: uix502-close-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/natural-close-sibling.json
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/natural-close-sibling.png
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/natural-close-sibling-observer-final.json
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/natural-close-nested.json
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/natural-close-nested.png
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/natural-close-nested-observer-final.json
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/held-close-css-contract.json
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/held-close-css-contract.png
-            test-results/uix502-close-lifecycle/modal-owner-close-lifecycle-*/held-close-css-contract-observer-final.json
+            test-results/uix502-close-lifecycle/*/natural-close-sibling.json
+            test-results/uix502-close-lifecycle/*/natural-close-sibling.png
+            test-results/uix502-close-lifecycle/*/natural-close-sibling-observer-final.json
+            test-results/uix502-close-lifecycle/*/natural-close-nested.json
+            test-results/uix502-close-lifecycle/*/natural-close-nested.png
+            test-results/uix502-close-lifecycle/*/natural-close-nested-observer-final.json
+            test-results/uix502-close-lifecycle/*/held-close-css-contract.json
+            test-results/uix502-close-lifecycle/*/held-close-css-contract.png
+            test-results/uix502-close-lifecycle/*/held-close-css-contract-observer-final.json
           retention-days: 7
           if-no-files-found: error
 

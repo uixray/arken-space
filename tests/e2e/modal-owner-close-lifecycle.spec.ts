@@ -78,8 +78,10 @@ async function watchPopup(wrapper: Locator) {
       const describe = (node: Element) =>
         `${node.tagName}.${node.getAttribute("class") ?? ""}`;
       const options = [...element.querySelectorAll('[role="option"]')];
-      const selectedTicks = [
-        ...element.querySelectorAll(".g-select-list__tick-icon_shown"),
+      // UIKit 7.43 renders tick icons only for multiple Select. This fixture
+      // uses single Select: ListItem marks its selected row with aria-selected.
+      const selectedOptions = [
+        ...element.querySelectorAll('[role="option"][aria-selected="true"]'),
       ];
       const b = document.querySelector(
         '[role="dialog"][aria-label="Второе окно"]',
@@ -117,7 +119,8 @@ async function watchPopup(wrapper: Locator) {
         pointerEnabledNodes: nodes
           .filter((node) => getComputedStyle(node).pointerEvents !== "none")
           .map(describe),
-        selectedTicks: selectedTicks.map((node) => ({
+        selectedOptions: selectedOptions.map((node) => ({
+          label: node.textContent?.trim(),
           visibility: getComputedStyle(node).visibility,
           pointerEvents: getComputedStyle(node).pointerEvents,
         })),
@@ -198,10 +201,9 @@ for (const topology of ["sibling", "nested"] as const) {
       const before = await observer.evaluate((log) => log.snapshot());
       expect(before.status).toBe("open");
       expect(before.popupVisibility).toBe("visible");
-      expect(before.selectedTicks.length).toBeGreaterThan(0);
-      expect(
-        before.selectedTicks.every((tick) => tick.visibility === "visible"),
-      ).toBe(true);
+      expect(before.selectedOptions).toEqual([
+        { label: "A — первый", visibility: "visible", pointerEvents: "auto" },
+      ]);
       expect(before.optionHits).toBeGreaterThan(0);
 
       // Natural path only: no attribute changes, animation overrides or forced
@@ -222,7 +224,9 @@ for (const topology of ["sibling", "nested"] as const) {
       expect(close.bExists).toBe(true);
       expect(close.nodeCount).toBeGreaterThan(1);
       expect(close.optionCount).toBe(6);
-      expect(close.selectedTicks.length).toBeGreaterThan(0);
+      expect(close.selectedOptions).toEqual([
+        { label: "A — первый", visibility: "hidden", pointerEvents: "none" },
+      ]);
       expect(close.visibleNodes).toEqual([]);
       expect(close.pointerEnabledNodes).toEqual([]);
       expect(close.optionHits).toBe(0);
@@ -285,10 +289,9 @@ test("UIX-502 held close attribute CSS contract hides the complete modal popup t
     expect(before.status).toBe("open");
     expect(before.popupVisibility).toBe("visible");
     expect(before.optionHits).toBeGreaterThan(0);
-    expect(before.selectedTicks.length).toBeGreaterThan(0);
-    expect(
-      before.selectedTicks.every((tick) => tick.visibility === "visible"),
-    ).toBe(true);
+    expect(before.selectedOptions).toEqual([
+      { label: "B — первый", visibility: "visible", pointerEvents: "auto" },
+    ]);
 
     // Explicit CSS-state contract, NOT natural lifecycle proof: UIKit remains
     // internally open so the exact close attribute can be held for geometry
@@ -306,7 +309,9 @@ test("UIX-502 held close attribute CSS contract hides the complete modal popup t
     expect(close.status).toBe("close");
     expect(close.connected).toBe(true);
     expect(close.optionCount).toBe(3);
-    expect(close.selectedTicks.length).toBeGreaterThan(0);
+    expect(close.selectedOptions).toEqual([
+      { label: "B — первый", visibility: "hidden", pointerEvents: "none" },
+    ]);
     expect(close.visibleNodes).toEqual([]);
     expect(close.pointerEnabledNodes).toEqual([]);
     expect(close.optionHits).toBe(0);
