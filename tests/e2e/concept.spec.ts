@@ -759,7 +759,7 @@ test("GM checks usage and deletes an unused media asset", async ({ page }) => {
   await openWorkspaceSection(page, "Файлы");
   const filesDialog = page.getByRole("dialog", { name: "Файлы" });
   await expect(filesDialog.getByText("Замок.webp")).toBeVisible();
-  await expect(filesDialog.getByText("IMAGE · 1.0 МБ")).toBeVisible();
+  await expect(filesDialog.getByText("Изображение · 1.0 МБ")).toBeVisible();
 
   await filesDialog.getByText("Проверить использование").click();
   await expect(filesDialog.getByText("Не используется")).toBeVisible();
@@ -767,6 +767,290 @@ test("GM checks usage and deletes an unused media asset", async ({ page }) => {
   await filesDialog.getByText("Удалить файл").click();
   await expect(filesDialog.getByText("Замок.webp")).toHaveCount(0);
 });
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`UIX-417 Files ${role === "GM" ? "uses Russian asset types" : "stays absent from navigation"} for ${role} at ${viewport.width}px without writes`, async ({
+      page,
+    }, testInfo) => {
+      const examples = [
+        ["MAP", "Карта", "North Gate.webp"],
+        ["TOKEN", "Изображение токена", "ranger-token.webp"],
+        ["PORTRAIT", "Портрет персонажа", "Elena.webp"],
+        ["IMAGE", "Изображение", "Замок.webp"],
+        ["AUDIO", "Аудиофайл", "Moonlight.ogg"],
+      ] as const;
+      const fixture = structuredClone(snapshot);
+      fixture.assets = examples.map(([kind, , name], index) => ({
+        id: `00000000-0000-4000-8000-0000000006${index + 20}`,
+        kind,
+        name,
+        mimeType: kind === "AUDIO" ? "audio/ogg" : "image/png",
+        sizeBytes: 1024 * 1024,
+        width: kind === "AUDIO" ? null : 48,
+        height: kind === "AUDIO" ? null : 48,
+        durationSeconds: kind === "AUDIO" ? 30 : null,
+        url: `/api/assets/00000000-0000-4000-8000-0000000006${index + 20}/content`,
+        createdAt: new Date(0).toISOString(),
+      }));
+      fixture.me = {
+        ...fixture.me,
+        role,
+        displayName: role === "GM" ? "Мастер" : "Игрок",
+        characterId: role === "PLAYER" ? fixture.characters[0].id : null,
+      };
+      fixture.members = [{ ...fixture.me }];
+      const [mapAsset, tokenAsset, portraitAsset, imageAsset, audioAsset] =
+        fixture.assets;
+      // Model already-shared references accepted by snapshot.ts, not a leak of
+      // all GM uploads into PLAYER data. This tests UI role gating, not server ACL.
+      fixture.scenes[0].mapAssetId = mapAsset.id;
+      fixture.characters[0].portraitAssetId = portraitAsset.id;
+      fixture.characters[0].ownerMembershipId = fixture.me.id;
+      fixture.tokens[0].assetId = tokenAsset.id;
+      fixture.tokens.push({
+        ...fixture.tokens[0],
+        id: "00000000-0000-4000-8000-000000000629",
+        definitionId: "00000000-0000-4000-8000-000000000628",
+        characterId: null,
+        assetId: imageAsset.id,
+        name: "Замок",
+        x: 512,
+      });
+      fixture.audioTracks = [
+        {
+          ...fixture.audio,
+          id: "00000000-0000-4000-8000-000000000627",
+          assetId: audioAsset.id,
+          mixVolume: 0,
+          slotOrder: 0,
+        },
+      ];
+      // No unread chat is needed for this read-only media scenario.
+      fixture.messages = [];
+      fixture.chatThreadStates = fixture.chatThreadStates.map((state) => ({
+        ...state,
+        lastReadSequence: 0,
+        latestSequence: 0,
+        unreadCount: 0,
+      }));
+      const unexpectedWrites: string[] = [];
+      const usageReads: string[] = [];
+      const pageErrors: string[] = [];
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+      await page.route("**/api/**", async (route) => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) {
+          unexpectedWrites.push(`${request.method()} ${path}`);
+          await route.abort("blockedbyclient");
+          return;
+        }
+        if (path === "/api/bootstrap") {
+          await route.fulfill({ json: fixture });
+        } else if (path === "/api/player-access") {
+          await route.fulfill({ json: [] });
+        } else if (path === `/api/assets/${mapAsset.id}/usage`) {
+          usageReads.push(mapAsset.id);
+          await route.fulfill({
+            json: {
+              asset: mapAsset,
+              inUse: true,
+              usages: [
+                {
+                  kind: "SCENE_BACKGROUND",
+                  entityId: fixture.scenes[0].id,
+                  label: fixture.scenes[0].name,
+                  location: "Сцена",
+                  visibility: "GM_ONLY",
+                  deletionPolicy: "BLOCK",
+                },
+              ],
+              hiddenUsageCount: 0,
+              canDelete: false,
+              deletionBlockedReason: "ASSET_IN_USE",
+            },
+          });
+        } else if (/^\/api\/assets\/[^/]+\/content$/.test(path)) {
+          await route.fulfill({
+            contentType: "image/png",
+            body: Buffer.from(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+              "base64",
+            ),
+          });
+        } else {
+          await route.fallback();
+        }
+      });
+      await page.setViewportSize(viewport);
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const files = page.getByRole("dialog", { name: "Файлы", exact: true });
+      if (role === "PLAYER") {
+        // workspaceNavItems deliberately hides the preparation workspace from
+        // PLAYER navigation. Do not force a hidden route or expand permissions
+        // just to render MediaPanel: its PLAYER labels have component coverage.
+        await expect(
+          page.locator(
+            '.workspace-nav:visible, nav[aria-label="Основные области"]:visible',
+          ),
+        ).toHaveCount(1);
+        let navigation: Locator;
+        if (viewport.width < 1024) {
+          await page
+            .getByRole("button", { name: "Разделы", exact: true })
+            .click();
+          navigation = page.getByRole("dialog", {
+            name: "Разделы",
+            exact: true,
+          });
+        } else {
+          navigation = page.locator(".workspace-nav");
+          const more = navigation.getByLabel("Ещё разделы", { exact: true });
+          if (await more.isVisible()) await more.click();
+        }
+        await expect(navigation).toBeVisible();
+        await expect(
+          navigation.getByRole("button", { name: "Мои заявки", exact: true }),
+        ).toBeVisible();
+        await expect(
+          navigation.getByRole("button", {
+            name: "Файлы",
+            exact: true,
+            includeHidden: true,
+          }),
+        ).toHaveCount(0);
+        await expect(files).toHaveCount(0);
+        const screenshotPath = testInfo.outputPath(
+          `files-${role}-${viewport.width}-navigation.png`,
+        );
+        await page.screenshot({ path: screenshotPath });
+        await testInfo.attach(`files-${role}-${viewport.width}-navigation`, {
+          path: screenshotPath,
+          contentType: "image/png",
+        });
+        // A real permitted navigation action prevents absence assertions from
+        // passing on an unbootstrapped/empty application.
+        await navigation
+          .getByRole("button", { name: "Токены", exact: true })
+          .click();
+        const tokens = page.getByRole("dialog", {
+          name: "Токены",
+          exact: true,
+        });
+        await expect(tokens).toBeVisible();
+        await expect(files).toHaveCount(0);
+        await tokens
+          .getByRole("button", { name: "Закрыть окно", exact: true })
+          .click();
+        await expect(tokens).toBeHidden();
+        expect(usageReads).toEqual([]);
+        expect(unexpectedWrites).toEqual([]);
+        expect(pageErrors).toEqual([]);
+        await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+        return;
+      }
+      await openWorkspaceSection(page, "Файлы");
+      await expect(files).toBeVisible();
+      await expect(files.locator(".asset-row")).toHaveCount(5);
+      await expect(
+        files.getByRole("button", { name: "Загрузить", exact: true }),
+      ).toHaveCount(5);
+      for (const name of ["Карты", "Другие изображения", "Музыка и звуки"]) {
+        await expect(files.getByText(name, { exact: true })).toHaveCount(1);
+      }
+      for (const name of ["Изображения токенов", "Портреты персонажей"]) {
+        await expect(files.getByText(name, { exact: true })).toBeVisible();
+      }
+      await expect(
+        files.getByRole("button", {
+          name: "Проверить использование",
+          exact: true,
+        }),
+      ).toHaveCount(5);
+      await expect(
+        files.getByRole("button", { name: "Удалить файл", exact: true }),
+      ).toHaveCount(0);
+      for (const [kind, label, name] of examples) {
+        const row = files
+          .locator(".asset-row")
+          .filter({ has: page.getByText(name, { exact: true }) });
+        await row.scrollIntoViewIfNeeded();
+        await expect(row.locator("strong")).toHaveText(name);
+        const metadata = row.locator("small").first();
+        await expect(metadata).toHaveText(`${label} · 1.0 МБ`);
+        await expect(metadata).toBeVisible();
+        await expect(
+          row.getByText(`${kind} · 1.0 МБ`, { exact: true }),
+        ).toHaveCount(0);
+        const bounds = await metadata.boundingBox();
+        const bodyBounds = await files
+          .locator(".arken-workspace-window__body")
+          .boundingBox();
+        expect(bounds).not.toBeNull();
+        expect(bodyBounds).not.toBeNull();
+        expect(bounds!.x).toBeGreaterThanOrEqual(bodyBounds!.x);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(
+          bodyBounds!.x + bodyBounds!.width,
+        );
+        expect(bounds!.y).toBeGreaterThanOrEqual(bodyBounds!.y);
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(
+          bodyBounds!.y + bodyBounds!.height,
+        );
+        expect(
+          await metadata.evaluate(
+            (node) => node.scrollWidth <= node.clientWidth,
+          ),
+        ).toBe(true);
+      }
+      const audioPlaceholder = files.locator(
+        '.asset-row > span[aria-label="Аудиофайл"]',
+      );
+      await expect(audioPlaceholder).toHaveText("Аудиофайл");
+      await expect(audioPlaceholder).toBeVisible();
+      expect(
+        await audioPlaceholder.evaluate(
+          (node) => node.scrollWidth <= node.clientWidth,
+        ),
+      ).toBe(true);
+      expect(
+        await files.evaluate((node) => node.scrollWidth <= node.clientWidth),
+      ).toBe(true);
+      const screenshotPath = testInfo.outputPath(
+        `files-${role}-${viewport.width}.png`,
+      );
+      await page.screenshot({ path: screenshotPath });
+      await testInfo.attach(`files-${role}-${viewport.width}`, {
+        path: screenshotPath,
+        contentType: "image/png",
+      });
+
+      const mapRow = files
+        .locator(".asset-row")
+        .filter({ has: page.getByText(mapAsset.name, { exact: true }) });
+      await mapRow
+        .getByRole("button", { name: "Проверить использование", exact: true })
+        .click();
+      await expect(
+        mapRow.getByText("Используется: 1", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        mapRow.getByText("Удаление заблокировано: файл используется."),
+      ).toBeVisible();
+      expect(usageReads).toEqual([mapAsset.id]);
+      await files
+        .getByRole("button", { name: "Закрыть окно", exact: true })
+        .click();
+      await expect(files).toBeHidden();
+      expect(unexpectedWrites).toEqual([]);
+      expect(pageErrors).toEqual([]);
+      await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+    });
+  }
+}
 
 test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
   const workspaceSnapshot = structuredClone(snapshot);

@@ -7,6 +7,7 @@ import {
   screen,
   userEvent,
   waitFor,
+  within,
 } from "../test-support/render";
 import {
   gmSnapshot,
@@ -97,6 +98,66 @@ const defaultActions = () => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe("MediaPanel upload sections by role", () => {
+  it.each(["GM", "PLAYER"] as const)(
+    "renders Russian types for all five visible asset kinds for %s without changing names or actions",
+    (role) => {
+      const examples = [
+        ["MAP", "Карта", "North Gate.webp"],
+        ["TOKEN", "Изображение токена", "ranger-token.webp"],
+        ["PORTRAIT", "Портрет персонажа", "Elena.webp"],
+        ["IMAGE", "Изображение", "Замок.webp"],
+        ["AUDIO", "Аудиофайл", "Moonlight.ogg"],
+      ] as const;
+      // These DTOs represent already-visible shared assets, not a claim that
+      // PLAYER can see every asset stored by the GM. Server filtering is unchanged.
+      const visibleAssets: AssetDto[] = examples.map(
+        ([kind, , name], index) => ({
+          ...asset,
+          id: `00000000-0000-4000-8000-0000000006${index + 20}`,
+          kind,
+          name,
+          mimeType: kind === "AUDIO" ? "audio/ogg" : "image/webp",
+          width: kind === "AUDIO" ? null : asset.width,
+          height: kind === "AUDIO" ? null : asset.height,
+          durationSeconds: kind === "AUDIO" ? 30 : null,
+        }),
+      );
+      const actions = defaultActions();
+      const buildSnapshot = role === "GM" ? gmSnapshot : playerSnapshot;
+      renderComponent(
+        <MediaPanel
+          snapshot={buildSnapshot({ assets: visibleAssets })}
+          {...actions}
+        />,
+      );
+
+      for (const [kind, label, name] of examples) {
+        const row = screen.getByText(name).closest(".asset-row");
+        expect(row).not.toBeNull();
+        expect(
+          within(row as HTMLElement).getByText(`${label} · 1.0 МБ`),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(`${kind} · 1.0 МБ`)).not.toBeInTheDocument();
+        if (kind !== "AUDIO")
+          expect(screen.getByAltText(`Превью: ${name}`)).toBeInTheDocument();
+      }
+      expect(screen.getByLabelText("Аудиофайл")).toHaveTextContent("Аудиофайл");
+      expect(screen.queryByText("AUDIO")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Загрузить" })).toHaveLength(
+        role === "GM" ? 5 : 2,
+      );
+      expect(
+        screen.queryAllByRole("button", { name: "Проверить использование" }),
+      ).toHaveLength(role === "GM" ? 5 : 0);
+      expect(
+        screen.queryByRole("button", { name: "Удалить файл" }),
+      ).not.toBeInTheDocument();
+      expect(actions.onUpload).not.toHaveBeenCalled();
+      expect(actions.onGetUsage).not.toHaveBeenCalled();
+      expect(actions.onDelete).not.toHaveBeenCalled();
+    },
+  );
+
   it("offers all five asset kinds -- including GM-only MAP and AUDIO -- to a GM", () => {
     renderComponent(
       <MediaPanel snapshot={gmSnapshot()} {...defaultActions()} />,
@@ -129,7 +190,7 @@ describe("MediaPanel upload sections by role", () => {
     );
 
     expect(screen.getByAltText("Превью: Замок.webp")).toBeInTheDocument();
-    expect(screen.getByText("IMAGE · 1.0 МБ")).toBeInTheDocument();
+    expect(screen.getByText("Изображение · 1.0 МБ")).toBeInTheDocument();
     await userEvent.click(screen.getByText("Проверить использование"));
     expect(await screen.findByText("Не используется")).toBeInTheDocument();
 
@@ -151,7 +212,7 @@ describe("MediaPanel upload sections by role", () => {
           kind: "SCENE_BACKGROUND",
           entityId: "scene-1",
           label: "Подземелье",
-          location: "Scene",
+          location: "Сцена",
           visibility: "GM_ONLY",
           deletionPolicy: "BLOCK",
         },
@@ -165,7 +226,7 @@ describe("MediaPanel upload sections by role", () => {
 
     await userEvent.click(screen.getByText("Проверить использование"));
     expect(await screen.findByText("Используется: 1")).toBeInTheDocument();
-    expect(screen.getByText("Подземелье · Scene")).toBeInTheDocument();
+    expect(screen.getByText("Подземелье · Сцена")).toBeInTheDocument();
     expect(
       screen.getByText("Удаление заблокировано: файл используется."),
     ).toBeInTheDocument();

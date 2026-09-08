@@ -6,6 +6,7 @@ import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import type { AssetUsageDto } from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
@@ -175,6 +176,348 @@ afterEach(async () => {
 });
 
 describe("UIX-293 asset lifecycle HTTP", () => {
+  it("localizes resolved usage details without translating names or changing access and deletion policy", async () => {
+    const tokenAssetId = crypto.randomUUID();
+    const portraitAssetId = crypto.randomUUID();
+    const audioAssetId = crypto.randomUUID();
+    await db.insert(schema.assets).values(
+      [
+        { id: tokenAssetId, kind: "TOKEN", name: "Guardian Token" },
+        { id: portraitAssetId, kind: "PORTRAIT", name: "Elminster Portrait" },
+        { id: audioAssetId, kind: "AUDIO", name: "Baldur's Gate Theme" },
+      ].map((asset) => ({
+        ...asset,
+        kind: asset.kind as "TOKEN" | "PORTRAIT" | "AUDIO",
+        campaignId: ids.campaign,
+        uploadedByMembershipId: ids.gm,
+        storageKey: `${asset.id}.media`,
+        mimeType: asset.kind === "AUDIO" ? "audio/mpeg" : "image/webp",
+        sizeBytes: 10,
+      })),
+    );
+    const [character] = await db
+      .insert(schema.characters)
+      .values({
+        campaignId: ids.campaign,
+        name: "Elminster Aumar",
+        ownerMembershipId: ids.player,
+        portraitAssetId,
+      })
+      .returning();
+    const [namedToken, inheritedToken] = await db
+      .insert(schema.tokenDefinitions)
+      .values([
+        {
+          campaignId: ids.campaign,
+          defaultAssetId: tokenAssetId,
+          name: "Storm Guard",
+        },
+        {
+          campaignId: ids.campaign,
+          defaultAssetId: tokenAssetId,
+          characterId: character!.id,
+          name: null,
+        },
+      ])
+      .returning();
+    const [captionedMedia, inheritedMedia] = await db
+      .insert(schema.characterMedia)
+      .values(
+        ["North Gate", null].map((caption, ordering) => ({
+          campaignId: ids.campaign,
+          characterId: character!.id,
+          assetId: ids.unused,
+          category: "CHARACTER_ART" as const,
+          uploadedByMembershipId: ids.gm,
+          caption,
+          ordering,
+        })),
+      )
+      .returning();
+    const [map] = await db
+      .insert(schema.worldMaps)
+      .values({
+        campaignId: ids.campaign,
+        name: "Neverwinter",
+        backgroundAssetId: ids.used,
+        lifecycle: "PUBLISHED",
+        visibility: "CAMPAIGN",
+        backgroundAssetApprovedByMembershipId: ids.gm,
+        backgroundAssetApprovedAt: new Date(),
+        publishedAt: new Date(),
+      })
+      .returning();
+    const [audio] = await db
+      .insert(schema.campaignAudioTracks)
+      .values({ campaignId: ids.campaign, assetId: audioAssetId, slotOrder: 2 })
+      .returning();
+    const [content, otherContent] = await db
+      .insert(schema.worldContent)
+      .values([
+        {
+          slug: "waterdeep",
+          type: "LOCATION",
+          name: "Waterdeep",
+          coverAssetId: ids.unused,
+        },
+        {
+          slug: "neverwinter-chronicle",
+          type: "ARTICLE",
+          name: "Neverwinter Chronicle",
+        },
+      ])
+      .returning();
+    const [captionedContentMedia, inheritedContentMedia] = await db
+      .insert(schema.worldContentMedia)
+      .values([
+        {
+          worldContentId: content!.id,
+          assetId: ids.unused,
+          caption: "The Yawning Portal",
+        },
+        { worldContentId: otherContent!.id, assetId: ids.unused },
+      ])
+      .returning();
+    const [provenance] = await db
+      .insert(schema.gameEvents)
+      .values({
+        campaignId: ids.campaign,
+        actionId: crypto.randomUUID(),
+        membershipId: ids.gm,
+        type: "asset.created",
+        entityType: "asset",
+        entityId: tokenAssetId,
+        payload: { sourceAssetId: ids.unused },
+      })
+      .returning();
+
+    const usage = (
+      kind: AssetUsageDto["kind"],
+      entityId: string,
+      label: string,
+      location: string,
+      visibility: AssetUsageDto["visibility"] = "GM_ONLY",
+      deletionPolicy: AssetUsageDto["deletionPolicy"] = "BLOCK",
+    ): AssetUsageDto => ({
+      kind,
+      entityId,
+      label,
+      location,
+      visibility,
+      deletionPolicy,
+    });
+    const cases = [
+      {
+        assetId: ids.used,
+        kind: "MAP",
+        name: "Used",
+        usages: [
+          usage("SCENE_BACKGROUND", ids.scene, "Secret scene", "Сцена"),
+          usage(
+            "WORLD_MAP_BACKGROUND",
+            map!.id,
+            "Neverwinter",
+            "Карта мира",
+            "PUBLIC",
+          ),
+        ],
+      },
+      {
+        assetId: tokenAssetId,
+        kind: "TOKEN",
+        name: "Guardian Token",
+        usages: [
+          usage(
+            "TOKEN_DEFINITION",
+            namedToken!.id,
+            "Storm Guard",
+            "Каталог токенов",
+          ),
+          usage(
+            "TOKEN_DEFINITION",
+            inheritedToken!.id,
+            "Elminster Aumar",
+            "Каталог токенов",
+          ),
+        ],
+      },
+      {
+        assetId: portraitAssetId,
+        kind: "PORTRAIT",
+        name: "Elminster Portrait",
+        usages: [
+          usage(
+            "CHARACTER_PORTRAIT",
+            character!.id,
+            "Elminster Aumar",
+            "Персонаж",
+            "PARTICIPANT",
+          ),
+        ],
+      },
+      {
+        assetId: audioAssetId,
+        kind: "AUDIO",
+        name: "Baldur's Gate Theme",
+        usages: [
+          usage("AUDIO_TRACK", audio!.id, "Аудиодорожка 3", "Музыка", "PUBLIC"),
+        ],
+      },
+      {
+        assetId: ids.unused,
+        kind: "IMAGE",
+        name: "Unused",
+        usages: [
+          usage(
+            "CHARACTER_MEDIA",
+            captionedMedia!.id,
+            "North Gate",
+            "Галерея персонажа",
+          ),
+          usage(
+            "CHARACTER_MEDIA",
+            inheritedMedia!.id,
+            "Elminster Aumar",
+            "Галерея персонажа",
+          ),
+          usage(
+            "WORLD_CONTENT_COVER",
+            content!.id,
+            "Waterdeep",
+            "Обложка материала мира",
+          ),
+          usage(
+            "WORLD_CONTENT_MEDIA",
+            captionedContentMedia!.id,
+            "The Yawning Portal",
+            "Файлы материала мира",
+          ),
+          usage(
+            "WORLD_CONTENT_MEDIA",
+            inheritedContentMedia!.id,
+            "Neverwinter Chronicle",
+            "Файлы материала мира",
+          ),
+          usage(
+            "GENERATED_TOKEN_SOURCE",
+            String(provenance!.sequence),
+            "Источник созданного токена",
+            "История изменений",
+            "GM_ONLY",
+            "RETAIN_HISTORY",
+          ),
+        ],
+      },
+    ];
+    for (const expected of cases) {
+      const resolved = await app.inject({
+        method: "GET",
+        url: `/api/assets/${expected.assetId}/usage`,
+        headers: headers(secrets.gm),
+      });
+      expect(resolved.statusCode, resolved.body).toBe(200);
+      expect(resolved.json()).toMatchObject({
+        asset: {
+          id: expected.assetId,
+          kind: expected.kind,
+          name: expected.name,
+        },
+        inUse: true,
+        canDelete: false,
+        deletionBlockedReason: "ASSET_IN_USE",
+        hiddenUsageCount: 0,
+      });
+      expect(resolved.json().usages).toHaveLength(expected.usages.length);
+      expect(resolved.json().usages).toEqual(
+        expect.arrayContaining(expected.usages),
+      );
+      const blocked = await app.inject({
+        method: "DELETE",
+        url: `/api/assets/${expected.assetId}`,
+        headers: headers(secrets.gm),
+      });
+      expect(blocked.statusCode, blocked.body).toBe(409);
+      expect(blocked.json()).toEqual({
+        error: "ASSET_IN_USE",
+        usageCount: expected.usages.length,
+        usages: expect.arrayContaining(expected.usages),
+      });
+    }
+    // Even visible public/participant assets must not disclose usage names to players.
+    for (const assetId of [ids.used, portraitAssetId, audioAssetId]) {
+      const visible = cases.find((entry) => entry.assetId === assetId)!;
+      const playerUsage = await app.inject({
+        method: "GET",
+        url: `/api/assets/${assetId}/usage`,
+        headers: headers(secrets.player),
+      });
+      expect(playerUsage.statusCode, playerUsage.body).toBe(200);
+      expect(playerUsage.json()).toMatchObject({
+        usages: [],
+        hiddenUsageCount: visible.usages.length,
+        inUse: true,
+        canDelete: false,
+        deletionBlockedReason: "GM_REQUIRED",
+      });
+      const denied = await app.inject({
+        method: "DELETE",
+        url: `/api/assets/${assetId}`,
+        headers: headers(secrets.player),
+      });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json()).toEqual({ error: "GM_REQUIRED" });
+    }
+  });
+
+  it("keeps translated provenance as non-blocking history after source deletion", async () => {
+    const [event] = await db
+      .insert(schema.gameEvents)
+      .values({
+        campaignId: ids.campaign,
+        actionId: crypto.randomUUID(),
+        membershipId: ids.gm,
+        type: "asset.created",
+        entityType: "asset",
+        entityId: crypto.randomUUID(),
+        payload: { sourceAssetId: ids.unused },
+      })
+      .returning();
+    const usage = await app.inject({
+      method: "GET",
+      url: `/api/assets/${ids.unused}/usage`,
+      headers: headers(secrets.gm),
+    });
+    expect(usage.statusCode, usage.body).toBe(200);
+    expect(usage.json()).toMatchObject({
+      inUse: true,
+      canDelete: true,
+      deletionBlockedReason: null,
+      usages: [
+        {
+          kind: "GENERATED_TOKEN_SOURCE",
+          entityId: String(event!.sequence),
+          label: "Источник созданного токена",
+          location: "История изменений",
+          visibility: "GM_ONLY",
+          deletionPolicy: "RETAIN_HISTORY",
+        },
+      ],
+    });
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/assets/${ids.unused}`,
+      headers: headers(secrets.gm),
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(deleted.json()).toMatchObject({
+      assetId: ids.unused,
+      deleted: true,
+    });
+    expect(await db.select().from(schema.gameEvents)).toEqual(
+      expect.arrayContaining([event]),
+    );
+  });
+
   it("returns GM usage, hides foreign assets, and rejects player deletion", async () => {
     const usage = await app.inject({
       method: "GET",
