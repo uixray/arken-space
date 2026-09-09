@@ -1,0 +1,93 @@
+name: Character role guards
+
+on:
+  push:
+    branches: [codex/uix-414-character-role-guards]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: character-role-guards-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      NODE_OPTIONS: --max-old-space-size=2048
+      NO_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Run one immutable component and source-diversion pool
+        shell: bash
+        run: |
+          set +e
+          export OUT="$RUNNER_TEMP/character-role-guards"
+          mkdir -p "$OUT" || exit 1
+          run_stage() {
+            local name="$1" seconds="$2"
+            timeout --signal=TERM --kill-after=5s "$((seconds + 10))s" \
+              node scripts/check-character-role-guards.mjs capture "$name"
+            local code=$?
+            printf '%s\n' "$code" > "$OUT/$name.capture.exit"
+            printf '\n--- %s: capture exit %s (raw child exit retained separately) ---\n' "$name" "$code"
+          }
+          run_stage source-freeze 20
+          if [[ "$(cat "$OUT/source-freeze.capture.exit")" != 0 ]]; then exit 0; fi
+          run_stage install 200
+          if [[ "$(cat "$OUT/install.capture.exit")" != 0 ]]; then exit 0; fi
+          run_stage contracts 60
+          run_stage system 35
+          if [[ "$(cat "$OUT/contracts.capture.exit")" != 0 || "$(cat "$OUT/system.capture.exit")" != 0 ]]; then exit 0; fi
+          run_stage format 30
+          run_stage lint 35
+          run_stage web-types 65
+          # Quality failures remain failures, but do not hide meaningful tests.
+          run_stage pool 300
+          exit 0
+
+      - name: Restore source and require every raw exit and semantic receipt
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          export OUT="$RUNNER_TEMP/character-role-guards"
+          mkdir -p "$OUT" || exit 1
+          timeout --signal=TERM --kill-after=5s 30s \
+            node scripts/check-character-role-guards.mjs capture restore
+          code=$?
+          printf '%s\n' "$code" > "$OUT/restore.capture.exit"
+          timeout --signal=TERM --kill-after=5s 20s \
+            node scripts/check-character-role-guards.mjs verify
+
+      - name: Bound retained artifacts and fail on any truncation
+        if: always()
+        shell: bash
+        run: |
+          export OUT="$RUNNER_TEMP/character-role-guards"
+          timeout --signal=TERM --kill-after=5s 20s \
+            node scripts/check-character-role-guards.mjs retain
+
+      - name: Retain only named component gate receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: character-role-guards-${{ github.run_id }}-${{ github.run_attempt }}
+          # Only retain()'s explicit file allowlist reaches this fresh directory.
+          path: ${{ runner.temp }}/character-role-guards/artifacts/
+          retention-days: 7
+          if-no-files-found: error
