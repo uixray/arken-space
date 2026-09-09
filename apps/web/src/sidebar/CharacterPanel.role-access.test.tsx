@@ -219,7 +219,7 @@ function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
     backstory: "Начальная предыстория",
     inventory: ["Компас"],
     resources: {},
-    wallet: { gold: 0, silver: 0, copper: 0 },
+    wallet: { gold: 0, silver: 0, copper: 0, sp: 0 },
     entries: [],
     revision: 17,
     lifecycle: "ACTIVE",
