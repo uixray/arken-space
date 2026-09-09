@@ -249,7 +249,9 @@ function setupNegativeControl(failure?: "upload" | "generation") {
     const actions = useTokenDefinitionActions({
       run,
       snapshotRef: useLatestRef(snapshot),
-      activeSceneRef: useLatestRef(snapshot.scenes.find((scene) => scene.active)),
+      activeSceneRef: useLatestRef(
+        snapshot.scenes.find((scene) => scene.active),
+      ),
     });
     return (
       <>
@@ -278,20 +280,29 @@ function setupNegativeControl(failure?: "upload" | "generation") {
   return {
     requests,
     async uploadLandscape() {
-      await userEvent.type(screen.getByLabelText("Название"), "Страж исходника");
+      await userEvent.type(
+        screen.getByLabelText("Название"),
+        "Страж исходника",
+      );
       expect(
         screen.getByRole("button", { name: "Создать и поставить" }),
       ).toBeEnabled();
-      const file = new File(["synthetic landscape boundary bytes"], sourceA.name, {
-        type: "image/png",
-      });
+      const file = new File(
+        ["synthetic landscape boundary bytes"],
+        sourceA.name,
+        {
+          type: "image/png",
+        },
+      );
       await userEvent.upload(
         screen.getByLabelText("Загрузить новое изображение"),
         file,
       );
       await waitFor(() =>
         expect(
-          requests.filter((request) => request.path === "/api/assets?kind=IMAGE"),
+          requests.filter(
+            (request) => request.path === "/api/assets?kind=IMAGE",
+          ),
         ).toHaveLength(1),
       );
       const upload = requests.find(
@@ -314,9 +325,14 @@ function setupNegativeControl(failure?: "upload" | "generation") {
 
 async function expectUploadedLandscape() {
   await waitFor(() =>
-    expect(screen.getByLabelText("Исходное изображение")).toHaveValue(sourceA.id),
+    expect(screen.getByLabelText("Исходное изображение")).toHaveValue(
+      sourceA.id,
+    ),
   );
-  expect(sourceA.width).toBeGreaterThan(sourceA.height);
+  const { width, height } = sourceA;
+  if (width === null || height === null)
+    throw new Error("Landscape fixture must declare width and height");
+  expect(width).toBeGreaterThan(height);
   const preview = screen.getByRole("group", {
     name: /^Интерактивный предпросмотр токена/,
   });
@@ -333,7 +349,7 @@ async function attemptSubmitWithoutDerivative(name: string) {
   // Each intent gets a fresh harness, so a previous submit's error cannot
   // satisfy this assertion before the current submit actually reaches its guard.
   expect(screen.queryByText(derivativeRequired)).not.toBeInTheDocument();
-  const submit = screen.getByRole("button", { name, exact: true });
+  const submit = screen.getByRole("button", { name });
   await waitFor(() => expect(submit).toBeEnabled());
   await userEvent.click(submit);
   expect(await screen.findByText(derivativeRequired)).toBeInTheDocument();
@@ -403,10 +419,10 @@ describe("UIX-611 real-chain negative creation controls", () => {
     const control = setupNegativeControl();
     await control.uploadLandscape();
     await expectUploadedLandscape();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Отмена", exact: true }),
+    await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Редактор закрыт",
     );
-    expect(await screen.findByRole("status")).toHaveTextContent("Редактор закрыт");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(
       control.requests.map(({ method, path }) => `${method} ${path}`),
