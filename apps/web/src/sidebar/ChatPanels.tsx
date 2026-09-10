@@ -335,6 +335,7 @@ export function ActivityPanel({
     [snapshot],
   );
   const [composer, setComposer] = useState("");
+  const composerEditRevision = useRef(0);
   const [composerError, setComposerError] = useState("");
   const [composerInvalid, setComposerInvalid] = useState(false);
   const [quickRollError, setQuickRollError] = useState("");
@@ -387,6 +388,7 @@ export function ActivityPanel({
   const executeActivitySuggestion = (insertion: string) => {
     const intent = parseComposerInput(insertion, characterStats, statLabels);
     setSlashHelpOpen(false);
+    composerEditRevision.current += 1;
     if (intent.kind !== "ROLL") {
       setComposer(insertion);
       return;
@@ -414,6 +416,7 @@ export function ActivityPanel({
   // below call this with an explicit visibility rather than reading it from
   // component state.
   const submitComposer = async (visibility: MessageVisibility) => {
+    const submittedEditRevision = composerEditRevision.current;
     const intent = parseComposerInput(composer, characterStats, statLabels);
     if (intent.kind === "INVALID") {
       setComposerError(intent.message);
@@ -432,7 +435,11 @@ export function ActivityPanel({
           "NORMAL",
         );
       else await onChat(intent.body, visibility, "TABLE");
-      setComposer("");
+      // Completing an earlier send must not erase text entered while it waited,
+      // even when the user cleared and retyped the same message.
+      if (composerEditRevision.current === submittedEditRevision) {
+        setComposer("");
+      }
     } catch (reason) {
       setComposerError(
         reason instanceof Error && reason.message
@@ -608,7 +615,11 @@ export function ActivityPanel({
     >
       <section className="activity-roll-controls" aria-label="Быстрые броски">
         <div className="activity-roll-controls__heading">
-          <strong>Быстрые броски</strong>
+          <strong>
+            {snapshot.me.role === "PLAYER" && rollCharacter
+              ? `Броски и ресурсы · ${rollCharacter.name}`
+              : "Быстрые броски"}
+          </strong>
           {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
             <FormSelect
               aria-label="Персонаж для броска"
@@ -642,9 +653,6 @@ export function ActivityPanel({
           </FormInput>
         </div>
 
-        {rollCharacter && (
-          <p className="muted">Броски и ресурсы · {rollCharacter.name}</p>
-        )}
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}
@@ -859,7 +867,6 @@ export function ActivityPanel({
                 ? "activity-composer-hint activity-composer-error"
                 : "activity-composer-hint"
             }
-            aria-expanded={slashSuggestions.length > 0}
             aria-controls={
               slashSuggestions.length > 0
                 ? "activity-slash-suggestions"
@@ -869,6 +876,7 @@ export function ActivityPanel({
             value={composer}
             onChange={(event) => {
               setSlashHelpOpen(false);
+              composerEditRevision.current += 1;
               setComposer(event.target.value);
               setComposerError("");
               setComposerInvalid(false);
@@ -1561,7 +1569,6 @@ export function ChatPanel({
                     : "Сообщение или бросок"
                 }
                 aria-describedby="chat-composer-hint"
-                aria-expanded={slashSuggestions.length > 0}
                 aria-controls={
                   slashSuggestions.length > 0
                     ? "chat-slash-suggestions"

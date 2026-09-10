@@ -179,7 +179,11 @@ describe("ActivityPanel action context (UIX-621)", () => {
     const current = snapshot();
     current.characters = [
       a,
-      { ...b, ownerMembershipId: "another-member", controllerMembershipIds: [] },
+      {
+        ...b,
+        ownerMembershipId: "another-member",
+        controllerMembershipIds: [],
+      },
     ];
     const { props } = renderActivity(current);
     expect(resourceInput()).toHaveValue(7);
@@ -332,7 +336,9 @@ describe("ActivityPanel action context (UIX-621)", () => {
     const { props, rerender } = renderActivity(snapshot(a.id, "GM"));
     fireEvent.click(screen.getByLabelText("Персонаж для броска"));
     fireEvent.click(screen.getByRole("option", { name: "Бета" }));
-    expect(screen.getByText("Броски и ресурсы · Бета")).toBeVisible();
+    expect(screen.getByLabelText("Персонаж для броска")).toHaveTextContent(
+      "Бета",
+    );
     const next = snapshot(a.id, "GM");
     next.characters = [a, { ...b, revision: 19 }];
     rerender(next);
@@ -365,7 +371,9 @@ describe("ActivityPanel action context (UIX-621)", () => {
   it("links only composer validation to its field; quick-roll and resource errors stay at their surfaces", async () => {
     renderActivity(snapshot(), {
       onRoll: vi.fn().mockRejectedValue(new Error("Нет доступа к броску")),
-      onUpdateCounters: vi.fn().mockRejectedValue(new Error("Ресурс недоступен")),
+      onUpdateCounters: vi
+        .fn()
+        .mockRejectedValue(new Error("Ресурс недоступен")),
     });
     fireEvent.change(composerInput(), { target: { value: "/roll" } });
     submit();
@@ -388,10 +396,9 @@ describe("ActivityPanel action context (UIX-621)", () => {
     expect(within(quickSurface).getByRole("alert")).toHaveTextContent(
       "Бета · Ловкость: Нет доступа к броску",
     );
-    expect(screen.getByText("Бета · Ресурсы: Ресурс недоступен")).toHaveAttribute(
-      "role",
-      "alert",
-    );
+    expect(
+      screen.getByText("Бета · Ресурсы: Ресурс недоступен"),
+    ).toHaveAttribute("role", "alert");
     expect(validation).toHaveTextContent("Укажите формулу после /roll");
     expect(composerInput()).toHaveAttribute("aria-invalid", "true");
     fireEvent.change(composerInput(), { target: { value: "Привет" } });
@@ -420,4 +427,67 @@ describe("ActivityPanel action context (UIX-621)", () => {
     });
     expect(screen.getByRole("alert")).toHaveTextContent("Соединение закрыто");
   });
+
+  it("keeps disclosure state on the command button, not the native multiline textbox", () => {
+    renderActivity();
+    const input = composerInput();
+    const disclosure = screen.getByRole("button", { name: "Быстрые команды" });
+    expect(input).not.toHaveAttribute("aria-expanded");
+    expect(input).not.toHaveAttribute("aria-controls");
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(disclosure);
+    const suggestions = screen.getByRole("listbox", { name: "Команды чата" });
+    expect(suggestions).toBeVisible();
+    expect(input).not.toHaveAttribute("aria-expanded");
+    expect(input).toHaveAttribute("aria-controls", suggestions.id);
+    expect(document.getElementById(input.getAttribute("aria-controls")!)).toBe(
+      suggestions,
+    );
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(input).not.toHaveAttribute("aria-expanded");
+    expect(input).not.toHaveAttribute("aria-controls");
+  });
+
+  it.each([
+    { name: "a different draft", nextDraft: "Сообщение только мастеру" },
+    {
+      name: "the same text cleared and retyped",
+      nextDraft: "Первое сообщение",
+    },
+  ])(
+    "preserves $name after an earlier send resolves, then sends it GM-only",
+    async ({ nextDraft }) => {
+      const first = deferred();
+      const onChat = vi
+        .fn()
+        .mockImplementationOnce(() => first.promise)
+        .mockResolvedValue(undefined);
+      renderActivity(snapshot(), { onChat });
+      const input = composerInput();
+      fireEvent.change(input, { target: { value: "Первое сообщение" } });
+      submit();
+      expect(onChat).toHaveBeenCalledExactlyOnceWith(
+        "Первое сообщение",
+        "PUBLIC",
+        "TABLE",
+      );
+      // Both are real edits while the first response is held. Comparing only
+      // text equality would still erase the explicitly retyped identical draft.
+      fireEvent.change(input, { target: { value: "" } });
+      fireEvent.change(input, { target: { value: nextDraft } });
+      await act(async () => first.resolve());
+      expect(input).toHaveValue(nextDraft);
+      expect(onChat).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+      });
+      expect(onChat).toHaveBeenCalledTimes(2);
+      expect(onChat).toHaveBeenNthCalledWith(2, nextDraft, "GM_ONLY", "TABLE");
+      expect(input).toHaveValue("");
+      expect(input).not.toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById("activity-composer-error")).toBeNull();
+    },
+  );
 });

@@ -158,7 +158,6 @@ it("forwards textarea identity, validation, descriptions and native callbacks to
         aria-label="Сообщение или бросок"
         aria-invalid
         aria-describedby="composer-error"
-        aria-expanded
         aria-controls="composer-options"
         maxLength={500}
         defaultValue="/roll"
@@ -166,13 +165,16 @@ it("forwards textarea identity, validation, descriptions and native callbacks to
         onKeyDown={keyed}
         onPaste={pasted}
       />
+      <div id="composer-options">Команды</div>
     </>,
   );
   const input = screen.getByRole("textbox", { name: "Сообщение или бросок" });
   expect(ref.current).toBe(input);
   expect(input).toHaveAttribute("aria-invalid", "true");
   expect(input).toHaveAccessibleDescription("Укажите формулу.");
-  expect(input).toHaveAttribute("aria-expanded", "true");
+  // A multiline textbox is not a disclosure/combobox; the command button
+  // owns aria-expanded, while the textarea may reference the controlled list.
+  expect(input).not.toHaveAttribute("aria-expanded");
   expect(input).toHaveAttribute("aria-controls", "composer-options");
   expect(input).toHaveAttribute("maxlength", "500");
   fireEvent.change(input, { target: { value: "/roll 1d20" } });
@@ -189,7 +191,9 @@ it("forwards textarea identity, validation, descriptions and native callbacks to
       aria-invalid={false}
     />,
   );
-  const validInput = screen.getByRole("textbox", { name: "Сообщение или бросок" });
+  const validInput = screen.getByRole("textbox", {
+    name: "Сообщение или бросок",
+  });
   expect(validInput).not.toHaveAttribute("aria-invalid", "true");
   expect(validInput).not.toHaveAttribute("aria-describedby");
 });

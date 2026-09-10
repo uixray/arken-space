@@ -3,14 +3,15 @@
 ## Current stage
 
 Source implementation, starting from `main@58991cc` on
-`codex/uix-621-core-action-feedback`. No new tests or browser checks have run.
+`codex/uix-621-core-action-feedback`. The first hosted PR gate found
+regressions; the correction pool below still requires hosted verification.
 This is a connected UX correction, not completion of either broad issue or the
 owner's requested visual redesign.
 
 The owner's 2026-09-10 priority is the basic playable UX and a crafted UI based
-on the supplied dark-fantasy reference. The reference inspection and visual
-brief remain pending; this pool does not invent a palette, change the layout or
-replace the design work with infrastructure work.
+on the supplied dark-fantasy reference. Read-only inspection is complete and
+the proposed main-screen direction awaits alignment. This correction pool
+does not implement that visual redesign or replace it with infrastructure work.
 
 ## Source-confirmed problems
 
@@ -121,12 +122,42 @@ failures and canonical reload after conflict. Its backend is mocked: it does
 not establish SQL, authorization, live-campaign behavior or a UI path to create
 the several-owned-rows fixture. Its held response is released in `finally`.
 
-All new test cases, formatting, type checking, builds and browser execution are
-**UNRUN**. No dependencies, CI framework, server process or local test runner
-were added or started. Publication and production deployment have not been
-performed for this branch. The previous read-API PR is not a dependency of this
-UX implementation.
+At that source checkpoint all new test cases, formatting, type checking,
+builds and browser execution were **UNRUN**. No dependencies, CI framework,
+server process or local test runner were added or started. The previous
+read-API PR is not a dependency of this UX implementation.
 
-Next: approved read-only visual-reference inspection and the main-screen brief,
-then verification of the connected implementation off the laptop. Retain the
-entire original acceptance scope rather than treating source readiness as Done.
+## First hosted gate and connected correction
+
+The owner authorized the public branch and [PR #75](https://github.com/uixray/arken-space/pull/75),
+not merge or production deployment. On `7095bd3`, build, typecheck and lint
+passed. Formatting failed in three test files, so the full Vitest step was
+skipped. Multiplayer passed, including its isolated cleanup checks.
+
+Both browsers rejected invalid `aria-expanded` on the real textarea and the
+26px loss of journal space in the calibrated follow-scroll scenario. Chromium
+also reported one flaky second-send assertion; a recovered retry is not a pass
+under the existing fail-on-flaky gate. Both browser teardowns completed.
+
+Corrections are kept together:
+
+- Remove unsupported expansion state from the two textarea callers, not from
+  the generic adapter. The actual disclosure buttons retain their expansion
+  state, and the textareas retain descriptions, validation and controls links.
+- Show PLAYER context in the existing heading; GM already has a visible named
+  selector. Remove the redundant extra paragraph instead of changing the
+  calibrated journal-height or follow-scroll oracle.
+- Guard composer clearing by its edit revision. Completion of an earlier send
+  must not erase a newer draft, even after clearing and retyping identical text.
+  The original keyboard/visibility requests and E2E assertion are unchanged.
+- Correct source formatting and exercise the real caller with a held first
+  response, a new draft and a second Control+Enter submission.
+
+The asynchronous draft-erasure path is source-confirmed; the exact interleaving
+of the flaky browser attempt was not traced. These changes do not claim that
+all flakes, accessibility states or broader UI acceptance are resolved.
+
+Next: verify this whole correction pool off the laptop, then continue the
+approved main-screen design direction. Required targeted source diversions
+remain a separate gate; the shared PR workflows do not execute them. Retain
+the entire original acceptance scope rather than treating a PR as Done.

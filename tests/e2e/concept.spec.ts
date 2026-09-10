@@ -3295,7 +3295,9 @@ test("UIX-621 activity actions follow snapshot character B and keep failures at 
     "aria-describedby",
     "activity-composer-hint",
   );
-  await expect(activityPanel.locator("#activity-composer-error")).toHaveCount(0);
+  await expect(activityPanel.locator("#activity-composer-error")).toHaveCount(
+    0,
+  );
 
   // A deliberate SET has no automatic DELTA retry. The canonical bootstrap
   // after conflict must restore B, without silently changing A or the target.
@@ -3333,7 +3335,9 @@ test("UIX-621 activity actions follow snapshot character B and keep failures at 
     "aria-describedby",
     "activity-composer-hint",
   );
-  await expect(activityPanel.locator("#activity-composer-error")).toHaveCount(0);
+  await expect(activityPanel.locator("#activity-composer-error")).toHaveCount(
+    0,
+  );
   expect(counterRequests).toHaveLength(1);
   expect(diceRequests).toHaveLength(1);
 });
