@@ -15,6 +15,8 @@ export const SUBROUTER_CAMPAIGN_PROBE_KEYS = [
   "GET /api/player-requests/:id",
   "PATCH /api/player-requests/:id",
   "POST /api/player-requests/:id/actions",
+  "GET /api/spell-packs/:id/versions",
+  "GET /api/spell-packs/:id/versions/:versionId",
   "POST /api/spell-packs/:id/archive",
   "POST /api/spell-packs/:id/lifecycle",
   "POST /api/spell-packs/:id/versions",

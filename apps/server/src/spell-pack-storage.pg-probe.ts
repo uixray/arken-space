@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
   campaigns,
   createDatabase,
@@ -11,7 +11,12 @@ import {
   spellPackVersions,
   spellPacks,
 } from "@arken/db";
-import type { SpellProgressionGraph } from "@arken/contracts";
+import {
+  spellPackInventoryResponseSchema,
+  spellPackVersionHistoryResponseSchema,
+  spellPackVersionResponseSchema,
+  type SpellProgressionGraph,
+} from "@arken/contracts";
 import {
   appendSpellPackVersion,
   createSpellPack,
@@ -425,7 +430,191 @@ try {
     assert(!serialized.includes("mechanics"), "audit payload leaked mechanics");
   }
 
-  console.log("[spell-pack-probe] storage and API passed");
+  // UIX-262: exercise the actual read SQL on PostgreSQL, not a query mock.
+  const archiveVersionId = randomUUID();
+  const archivedForRead = await apiApp.inject({
+    method: "POST",
+    url: `/api/spell-packs/${apiPackId}/archive`,
+    headers: authHeaders(apiGmSecret),
+    payload: {
+      actionId: randomUUID(),
+      expectedVersion: 2,
+      versionId: archiveVersionId,
+    },
+  });
+  assert(archivedForRead.statusCode === 201, "read archive fixture failed");
+  const secondReadGraph = {
+    ...graphFor(randomUUID(), 1, randomUUID(), "REFERENCE"),
+    edition: "Read probe edition",
+  };
+  const secondReadPack = await apiApp.inject({
+    method: "POST",
+    url: "/api/spell-packs",
+    headers: authHeaders(apiGmSecret),
+    payload: {
+      actionId: randomUUID(),
+      expectedVersion: 0,
+      graph: secondReadGraph,
+    },
+  });
+  assert(secondReadPack.statusCode === 201, "second read fixture failed");
+
+  await db.transaction(async (tx) => {
+    // PostgreSQL rejects writes AND SELECT FOR UPDATE here. All handlers,
+    // including authentication, are connected to this same real transaction.
+    await tx.execute(sql`set transaction read only`);
+    const readApp = Fastify();
+    try {
+      await readApp.register(cookie);
+      registerSpellPackRoutes(readApp, tx as never);
+      await readApp.ready();
+      const read = (
+        url: string,
+        headers: Record<string, string> = authHeaders(apiGmSecret),
+      ) => readApp.inject({ method: "GET", url, headers });
+      const firstPage = await read("/api/spell-packs?limit=1");
+      assert(firstPage.statusCode === 200, "PostgreSQL inventory failed");
+      assert(
+        firstPage.headers["cache-control"] === "private, no-store",
+        "inventory cache policy missing",
+      );
+      const first = spellPackInventoryResponseSchema.parse(firstPage.json());
+      assert(
+        first.items.length === 1 && first.nextCursor,
+        "inventory is not bounded",
+      );
+      const secondPage = await read(
+        `/api/spell-packs?limit=1&cursor=${first.nextCursor}`,
+      );
+      assert(secondPage.statusCode === 200, "PostgreSQL continuation failed");
+      const second = spellPackInventoryResponseSchema.parse(secondPage.json());
+      assert(
+        second.items.length === 1 && second.nextCursor === null,
+        "bad inventory end",
+      );
+      const items = [...first.items, ...second.items];
+      assert(
+        JSON.stringify(items.map((item) => item.packId)) ===
+          JSON.stringify([apiPackId, secondReadGraph.packId].sort()),
+        "inventory keyset crossed campaign, duplicated or misordered a pack",
+      );
+      const archivedSummary = items.find(
+        (item) => item.packId === apiPackId,
+      )?.latestVersion;
+      assert(
+        archivedSummary?.versionId === archiveVersionId &&
+          archivedSummary.version === 3 &&
+          archivedSummary.lifecycle === "ARCHIVED",
+        "inventory did not select the latest archived summary",
+      );
+      assert(
+        items.find((item) => item.packId === secondReadGraph.packId)
+          ?.latestVersion.edition === secondReadGraph.edition,
+        "JSONB edition summary was lost",
+      );
+      assert(
+        !JSON.stringify(items).includes("Private probe mechanics"),
+        "inventory leaked full graph",
+      );
+
+      const historyResponse = await read(
+        `/api/spell-packs/${apiPackId}/versions?limit=2`,
+      );
+      assert(historyResponse.statusCode === 200, "PostgreSQL history failed");
+      const history = spellPackVersionHistoryResponseSchema.parse(
+        historyResponse.json(),
+      );
+      assert(
+        JSON.stringify(history.items.map((item) => item.version)) === "[3,2]" &&
+          history.nextCursor === "2",
+        "history keyset is not newest-first and bounded",
+      );
+      const continuation = await read(
+        `/api/spell-packs/${apiPackId}/versions?limit=2&cursor=2`,
+      );
+      assert(
+        continuation.statusCode === 200,
+        "PostgreSQL history continuation failed",
+      );
+      const rest = spellPackVersionHistoryResponseSchema.parse(
+        continuation.json(),
+      );
+      assert(
+        rest.items.length === 1 &&
+          rest.items[0]?.version === 1 &&
+          rest.nextCursor === null,
+        "history continuation skipped or repeated a version",
+      );
+      const exactPath = `/api/spell-packs/${apiPackId}/versions/${apiCreatePayload.graph.versionId}`;
+      const exact = await read(exactPath);
+      assert(
+        exact.statusCode === 200,
+        "PostgreSQL exact old-version read failed",
+      );
+      assert(
+        JSON.stringify(spellPackVersionResponseSchema.parse(exact.json())) ===
+          JSON.stringify(
+            spellPackVersionResponseSchema.parse(apiCreated.json()),
+          ),
+        "old DRAFT read was rewritten or substituted with latest/ACTIVE",
+      );
+
+      for (const url of [
+        "/api/spell-packs",
+        `/api/spell-packs/${apiPackId}/versions`,
+        exactPath,
+      ]) {
+        const player = await read(url, authHeaders(apiPlayerSecret));
+        const unauthenticated = await read(url, {});
+        assert(
+          player.statusCode === 403 && player.json().error === "GM_REQUIRED",
+          "PLAYER reached GM read",
+        );
+        assert(
+          unauthenticated.statusCode === 401,
+          "unauthenticated read succeeded",
+        );
+        assert(
+          player.headers["cache-control"] === "private, no-store",
+          "read denial is cacheable",
+        );
+      }
+      for (const [foreignUrl, missingUrl] of [
+        [
+          `/api/spell-packs/${apiForeignPackId}/versions`,
+          `/api/spell-packs/${randomUUID()}/versions`,
+        ],
+        [
+          `/api/spell-packs/${apiForeignPackId}/versions/${foreignCreated.json().versionId}`,
+          `/api/spell-packs/${apiPackId}/versions/${randomUUID()}`,
+        ],
+      ]) {
+        const foreign = await read(foreignUrl!);
+        const missing = await read(missingUrl!);
+        assert(
+          foreign.statusCode === 404 &&
+            missing.statusCode === 404 &&
+            foreign.body === missing.body,
+          "PostgreSQL read disclosed foreign-vs-missing identity",
+        );
+      }
+      for (const url of [
+        "/api/spell-packs?limit=51",
+        `/api/spell-packs/${apiPackId}/versions?cursor=2147483648`,
+        `${exactPath}?latest=true`,
+      ])
+        assert(
+          (await read(url)).statusCode === 400,
+          "unbounded/overridden read accepted",
+        );
+    } finally {
+      await readApp.close();
+    }
+  });
+
+  console.log(
+    "[spell-pack-probe] storage, commands and read-only GM API passed",
+  );
 } finally {
   if (apiApp) await apiApp.close();
   await db.delete(campaigns).where(eq(campaigns.id, campaignId));
