@@ -336,6 +336,9 @@ export function ActivityPanel({
   );
   const [composer, setComposer] = useState("");
   const [composerError, setComposerError] = useState("");
+  const [composerInvalid, setComposerInvalid] = useState(false);
+  const [quickRollError, setQuickRollError] = useState("");
+  const [resourceError, setResourceError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const availableRollCharacters = useMemo(
     () => charactersAvailableForActivityRolls(snapshot),
@@ -355,7 +358,12 @@ export function ActivityPanel({
   );
   const filtersRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(filtersRef);
-  const [quickRollPending, setQuickRollPending] = useState(false);
+  const [pendingQuickRoll, setPendingQuickRoll] = useState<{
+    characterName: string;
+    label: string;
+  } | null>(null);
+  // The ref closes the same-render double-click gap; state is for feedback.
+  const quickRollInFlight = useRef(false);
   const rollVisibility = useContext(RollVisibilityContext);
   // UIX-372: the roll/event log can get long and spammy with quick rolls, so
   // it can be collapsed to a compact "last N entries" view independently of
@@ -385,14 +393,19 @@ export function ActivityPanel({
     }
     setComposer("");
     setComposerError("");
+    setComposerInvalid(false);
     void onRoll(
       intent.formula,
       intent.label,
       "PUBLIC",
       snapshot.me.characterId,
       "NORMAL",
-    ).catch(() =>
-      setComposerError("Не удалось выполнить бросок. Повторите попытку."),
+    ).catch((reason) =>
+      setComposerError(
+        reason instanceof Error && reason.message
+          ? reason.message
+          : "Не удалось выполнить бросок. Повторите попытку.",
+      ),
     );
   };
   // UIX-388: a direct submit with the chosen visibility, not a mode toggle --
@@ -404,9 +417,11 @@ export function ActivityPanel({
     const intent = parseComposerInput(composer, characterStats, statLabels);
     if (intent.kind === "INVALID") {
       setComposerError(intent.message);
+      setComposerInvalid(true);
       return;
     }
     setComposerError("");
+    setComposerInvalid(false);
     try {
       if (intent.kind === "ROLL")
         await onRoll(
@@ -418,11 +433,13 @@ export function ActivityPanel({
         );
       else await onChat(intent.body, visibility, "TABLE");
       setComposer("");
-    } catch {
+    } catch (reason) {
       setComposerError(
-        intent.kind === "ROLL"
-          ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
-          : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+        reason instanceof Error && reason.message
+          ? reason.message
+          : intent.kind === "ROLL"
+            ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
+            : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
       );
     }
   };
@@ -472,21 +489,24 @@ export function ActivityPanel({
    */
   const spendResource = (
     characterId: string,
+    characterName: string,
     revision: number,
     intent: ResourceCounterIntent,
   ) => {
-    setComposerError("");
+    setResourceError("");
     return onUpdateCounters(
       characterId,
       revision,
       {},
       { resource: intent },
     ).catch((reason) => {
-      setComposerError(
+      const message =
         reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
           ? "Ресурсы уже изменены в другой сессии. Повторите действие."
-          : "Не удалось изменить очки. Проверьте соединение.",
-      );
+          : reason instanceof Error && reason.message
+            ? reason.message
+            : "Не удалось изменить очки. Проверьте соединение.";
+      setResourceError(`${characterName} · Ресурсы: ${message}`);
       // Пробрасывается дальше: счётчики отличают отказ от успеха только так.
       throw reason;
     });
@@ -502,9 +522,13 @@ export function ActivityPanel({
      */
     mode: RollMode = "NORMAL",
   ) => {
-    if (!rollCharacter) return;
-    setQuickRollPending(true);
-    setComposerError("");
+    if (!rollCharacter || quickRollInFlight.current) return;
+    quickRollInFlight.current = true;
+    // Keep the initiating identity even if the active/GM-selected character
+    // changes before the server responds. Never label A's result as B's.
+    const characterName = rollCharacter.name;
+    setPendingQuickRoll({ characterName, label });
+    setQuickRollError("");
     try {
       if (physicalDice) {
         const request = physicalRollChatRequest(
@@ -522,10 +546,15 @@ export function ActivityPanel({
       } else {
         await onRoll(formula, label, rollVisibility, rollCharacter.id, mode);
       }
-    } catch {
-      setComposerError("Не удалось выполнить бросок. Повторите попытку.");
+    } catch (reason) {
+      const message =
+        reason instanceof Error && reason.message
+          ? reason.message
+          : "Не удалось выполнить бросок. Повторите попытку.";
+      setQuickRollError(`${characterName} · ${label}: ${message}`);
     } finally {
-      setQuickRollPending(false);
+      quickRollInFlight.current = false;
+      setPendingQuickRoll(null);
     }
   };
   const timeline = useMemo(
@@ -613,6 +642,9 @@ export function ActivityPanel({
           </FormInput>
         </div>
 
+        {rollCharacter && (
+          <p className="muted">Броски и ресурсы · {rollCharacter.name}</p>
+        )}
         {rollCharacter ? (
           <QuickRollPanel
             rollCharacter={rollCharacter}
@@ -621,7 +653,7 @@ export function ActivityPanel({
             rows={rollableStatRows(
               statRowsFromLayout(snapshot.campaign.statLayout),
             )}
-            quickRollPending={quickRollPending}
+            quickRollPending={pendingQuickRoll !== null}
             gmOnly={rollVisibility === "GM_ONLY"}
             onQuickRoll={(formula, label, bonus, mode) =>
               void submitQuickRoll(formula, label, bonus, mode)
@@ -629,6 +661,16 @@ export function ActivityPanel({
           />
         ) : (
           <p className="muted">Нет доступного персонажа для броска.</p>
+        )}
+        {pendingQuickRoll && (
+          <p role="status">
+            Бросаем… {pendingQuickRoll.characterName} · {pendingQuickRoll.label}
+          </p>
+        )}
+        {quickRollError && (
+          <p className="composer-error" role="alert">
+            {quickRollError}
+          </p>
         )}
       </section>
       {rollCharacter && (
@@ -639,9 +681,19 @@ export function ActivityPanel({
           stats={rollCharacter.stats}
           editable={canSpendResources}
           onSpend={(intent) =>
-            spendResource(rollCharacter.id, rollCharacter.revision, intent)
+            spendResource(
+              rollCharacter.id,
+              rollCharacter.name,
+              rollCharacter.revision,
+              intent,
+            )
           }
         />
+      )}
+      {resourceError && (
+        <p className="composer-error" role="alert">
+          {resourceError}
+        </p>
       )}
       <div className="activity-log-toolbar">
         <span className="eyebrow">Журнал</span>
@@ -801,7 +853,12 @@ export function ActivityPanel({
         <div className="chat-composer-input">
           <FormTextArea
             aria-label="Сообщение или бросок"
-            aria-describedby="activity-composer-hint"
+            aria-invalid={composerInvalid || undefined}
+            aria-describedby={
+              composerError
+                ? "activity-composer-hint activity-composer-error"
+                : "activity-composer-hint"
+            }
             aria-expanded={slashSuggestions.length > 0}
             aria-controls={
               slashSuggestions.length > 0
@@ -813,6 +870,8 @@ export function ActivityPanel({
             onChange={(event) => {
               setSlashHelpOpen(false);
               setComposer(event.target.value);
+              setComposerError("");
+              setComposerInvalid(false);
             }}
             onKeyDown={onComposerKeyDown}
             rows={3}
@@ -880,7 +939,7 @@ export function ActivityPanel({
         </p>
       </form>
       {composerError && (
-        <p className="composer-error" role="alert">
+        <p className="composer-error" role="alert" id="activity-composer-error">
           {composerError}
         </p>
       )}

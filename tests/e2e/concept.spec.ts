@@ -3140,6 +3140,204 @@ test("UIX-468 resource counters batch, rebase and roll back conflicts", async ({
   expect(rollRequests).toEqual([]);
 });
 
+test("UIX-621 activity actions follow snapshot character B and keep failures at their initiating controls", async ({
+  page,
+}) => {
+  // This is a synthetic persisted snapshot shape, not a player-selection API
+  // or proof that ordinary UI steps create several owned characters. The
+  // browser must use the server-provided me.characterId, not array order.
+  const playerSnapshot = structuredClone(snapshot);
+  const characterA = playerSnapshot.characters[0]!;
+  const characterB = structuredClone(characterA);
+  characterB.id = "72668dba-d385-434a-a76c-b9e2f8e84de9";
+  playerSnapshot.me = {
+    id: "f53f4618-2ebc-4cf8-bce7-870097305a6b",
+    role: "PLAYER",
+    displayName: "Player",
+    characterId: characterB.id,
+  };
+  playerSnapshot.members = [playerSnapshot.me];
+  characterA.name = "Альфа";
+  characterA.revision = 3;
+  characterA.resources = {
+    physicalPower: { current: 2, maximum: 4, recoverable: true },
+  };
+  characterB.name = "Бета";
+  characterB.revision = 7;
+  characterB.resources = {
+    physicalPower: { current: 7, maximum: 12, recoverable: true },
+    magicPower: { current: 1, maximum: 5, recoverable: true },
+  };
+  for (const character of [characterA, characterB]) {
+    character.ownerMembershipId = playerSnapshot.me.id;
+    character.controllerMembershipIds = [playerSnapshot.me.id];
+  }
+  playerSnapshot.characters = [characterA, characterB];
+
+  type CapturedAction = {
+    pathname: string;
+    method: string;
+    body: unknown;
+  };
+  const diceRequests: CapturedAction[] = [];
+  const counterRequests: CapturedAction[] = [];
+  let bootstrapRequests = 0;
+  let releaseRollResponse!: () => void;
+  const rollResponseGate = new Promise<void>((resolve) => {
+    releaseRollResponse = resolve;
+  });
+  const actionId = expect.stringMatching(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+  const expectedResourcePatch = structuredClone(characterB.resources);
+  expectedResourcePatch.physicalPower!.current = 6;
+
+  await page.route("**/api/bootstrap", (route) => {
+    bootstrapRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(playerSnapshot),
+    });
+  });
+  await page.route("**/api/dice", async (route) => {
+    const request = route.request();
+    diceRequests.push({
+      pathname: new URL(request.url()).pathname,
+      method: request.method(),
+      body: request.postDataJSON(),
+    });
+    await rollResponseGate;
+    return route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "INVALID_DICE_FORMULA",
+        message: "Проверка отклонена сервером",
+      }),
+    });
+  });
+  await page.route("**/api/characters/*/counters", async (route) => {
+    const request = route.request();
+    counterRequests.push({
+      pathname: new URL(request.url()).pathname,
+      method: request.method(),
+      body: request.postDataJSON(),
+    });
+    characterB.resources.physicalPower!.current = 11;
+    characterB.revision = 8;
+    return route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "CHARACTER_CONFLICT",
+        revision: characterB.revision,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const activityPanel = page.locator("#chat-panel-activity");
+  const quickRolls = activityPanel.getByRole("region", {
+    name: "Быстрые броски",
+    exact: true,
+  });
+  const quickRoll = quickRolls.getByRole("button", {
+    name: "Ловкость",
+    exact: true,
+  });
+  const counters = activityPanel.locator("details.resource-counters");
+  const physicalInput = counters.getByRole("spinbutton", {
+    name: "Очки: Выносливость",
+  });
+  const composer = activityPanel.getByRole("textbox", {
+    name: "Сообщение или бросок",
+  });
+  await expect(quickRolls.getByText("Броски и ресурсы · Бета")).toBeVisible();
+  await expect(quickRolls.getByLabel("Персонаж для броска")).toHaveCount(0);
+  await expect(physicalInput).toHaveValue("7");
+  try {
+    await quickRoll.click();
+    await expect.poll(() => diceRequests.length).toBe(1);
+    expect(diceRequests).toEqual([
+      {
+        pathname: "/api/dice",
+        method: "POST",
+        body: {
+          actionId,
+          formula: "1d20 + agility",
+          label: "Ловкость",
+          visibility: "PUBLIC",
+          characterId: characterB.id,
+          rollMode: "NORMAL",
+        },
+      },
+    ]);
+    await expect(quickRoll).toBeDisabled();
+    await expect(quickRolls.locator(".activity-quick-rolls")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    await expect(quickRolls.getByRole("status")).toHaveText(
+      "Бросаем… Бета · Ловкость",
+    );
+  } finally {
+    // Never leave the intercepted request held if a preceding assertion fails.
+    releaseRollResponse();
+  }
+  await expect(quickRoll).toBeEnabled();
+  await expect(quickRolls.getByRole("status")).toHaveCount(0);
+  await expect(quickRolls.getByRole("alert")).toHaveText(
+    "Бета · Ловкость: Проверка отклонена сервером",
+  );
+  await expect(composer).not.toHaveAttribute("aria-invalid", "true");
+  await expect(composer).toHaveAttribute(
+    "aria-describedby",
+    "activity-composer-hint",
+  );
+  await expect(activityPanel.locator("#activity-composer-error")).toHaveCount(0);
+
+  // A deliberate SET has no automatic DELTA retry. The canonical bootstrap
+  // after conflict must restore B, without silently changing A or the target.
+  const bootstrapsBeforeConflict = bootstrapRequests;
+  await physicalInput.fill("6");
+  await physicalInput.press("Enter");
+  await expect.poll(() => counterRequests.length).toBe(1);
+  expect(counterRequests).toEqual([
+    {
+      pathname: `/api/characters/${characterB.id}/counters`,
+      method: "PATCH",
+      body: { resources: expectedResourcePatch, actionId, revision: 7 },
+    },
+  ]);
+  await expect
+    .poll(() => bootstrapRequests)
+    .toBeGreaterThan(bootstrapsBeforeConflict);
+  await expect(physicalInput).toHaveValue("11");
+  const resourceError = activityPanel.getByRole("alert").filter({
+    hasText: /^Бета · Ресурсы:/,
+  });
+  await expect(resourceError).toHaveText(
+    "Бета · Ресурсы: Ресурсы уже изменены в другой сессии. Повторите действие.",
+  );
+  expect(
+    await resourceError.evaluate((element) =>
+      element.previousElementSibling?.matches("details.resource-counters"),
+    ),
+  ).toBe(true);
+  await expect(quickRolls.getByRole("alert")).toHaveText(
+    "Бета · Ловкость: Проверка отклонена сервером",
+  );
+  await expect(composer).not.toHaveAttribute("aria-invalid", "true");
+  await expect(composer).toHaveAttribute(
+    "aria-describedby",
+    "activity-composer-hint",
+  );
+  await expect(activityPanel.locator("#activity-composer-error")).toHaveCount(0);
+  expect(counterRequests).toHaveLength(1);
+  expect(diceRequests).toHaveLength(1);
+});
+
 test("structured resources persist and short rest uses the authoritative counter route", async ({
   page,
 }) => {
