@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
 import {
   statKeyFromLabel,
   moveStatRow,
@@ -703,7 +703,9 @@ function CharacterControllerAccess({
   );
   const [draft, setDraft] = useState(canonical);
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
   const [error, setError] = useState("");
+  const saveDescriptionId = useId();
   const dirty =
     JSON.stringify([...draft].sort()) !== JSON.stringify([...canonical].sort());
 
@@ -719,6 +721,9 @@ function CharacterControllerAccess({
         Игроки, которые могут видеть и управлять этим персонажем.
       </p>
       <div className="character-controller-access__players">
+        {players.length === 0 && (
+          <p className="muted">В кампании пока нет игроков.</p>
+        )}
         {players.map((member) => {
           const owner = member.id === character.ownerMembershipId;
           const checked = owner || draft.includes(member.id);
@@ -750,18 +755,34 @@ function CharacterControllerAccess({
           {error}
         </p>
       )}
+      <p id={saveDescriptionId} className="muted" role="status">
+        {pending
+          ? "Сохраняем доступ к персонажу…"
+          : dirty
+            ? "Изменения доступа ещё не сохранены."
+            : "Изменений доступа нет."}
+      </p>
       <Button
         disabled={!dirty || pending}
+        aria-describedby={saveDescriptionId}
+        aria-busy={pending}
         onClick={() => {
+          if (pendingRef.current) return;
+          pendingRef.current = true;
           setPending(true);
           setError("");
-          void onSave(character.id, character.revision, draft)
-            .catch(() =>
+          void (async () => {
+            try {
+              await onSave(character.id, character.revision, draft);
+            } catch {
               setError(
                 "Не удалось сохранить доступ. Данные обновлены — проверьте список и повторите попытку.",
-              ),
-            )
-            .finally(() => setPending(false));
+              );
+            } finally {
+              pendingRef.current = false;
+              setPending(false);
+            }
+          })();
         }}
       >
         {pending ? "Сохранение…" : "Сохранить доступ"}
@@ -933,6 +954,9 @@ export function CharacterPanel({
   >(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [portraitUpload, setPortraitUpload] = useState<File>();
+  const [portraitUploadPending, setPortraitUploadPending] = useState(false);
+  const portraitUploadPendingRef = useRef(false);
+  const portraitUploadDescriptionId = useId();
   const [walletDraft, setWalletDraft] = useState(() =>
     normalizeWallet(character?.wallet ?? EMPTY_WALLET),
   );
@@ -1254,12 +1278,24 @@ export function CharacterPanel({
         label="Загрузить портрет для персонажа"
         value={portraitUpload}
         onUpdate={setPortraitUpload}
+        disabled={portraitUploadPending}
       />
+      <p id={portraitUploadDescriptionId} className="muted" role="status">
+        {portraitUploadPending
+          ? "Загружаем и назначаем портрет…"
+          : portraitUpload
+            ? "Файл выбран. Загрузите его, чтобы назначить портрет."
+            : "Сначала выберите изображение портрета."}
+      </p>
       <Button
-        disabled={!portraitUpload}
-        onClick={() =>
+        disabled={!portraitUpload || portraitUploadPending}
+        aria-describedby={portraitUploadDescriptionId}
+        aria-busy={portraitUploadPending}
+        onClick={() => {
+          if (!portraitUpload || portraitUploadPendingRef.current) return;
+          portraitUploadPendingRef.current = true;
+          setPortraitUploadPending(true);
           void runCharacterMutation(async () => {
-            if (!portraitUpload) return;
             const asset = await assetActions.uploadAsset(
               portraitUpload,
               "PORTRAIT",
@@ -1269,10 +1305,13 @@ export function CharacterPanel({
               revision: character.revision,
             });
             setPortraitUpload(undefined);
-          })
-        }
+          }).finally(() => {
+            portraitUploadPendingRef.current = false;
+            setPortraitUploadPending(false);
+          });
+        }}
       >
-        Загрузить и назначить
+        {portraitUploadPending ? "Загрузка…" : "Загрузить и назначить"}
       </Button>
       <h3 className="character-block-heading">Галерея</h3>
       <CharacterMediaGallery

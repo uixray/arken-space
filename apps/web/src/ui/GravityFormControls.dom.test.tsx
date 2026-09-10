@@ -8,7 +8,7 @@ import {
   renderComponent as renderBase,
   screen,
 } from "../test-support/render";
-import { FormInput } from "./GravityFormControls";
+import { FormInput, FormTextArea } from "./GravityFormControls";
 
 // Real production provider; only the browser API missing from jsdom is shimmed.
 beforeEach(() => {
@@ -143,4 +143,57 @@ it("preserves checkbox label/change and native file selection", () => {
   const file = new File(["fixture"], "map.png", { type: "image/png" });
   fireEvent.change(input, { target: { files: [file] } });
   expect(uploaded.mock.lastCall?.[0]?.target.files[0]).toBe(file);
+});
+
+it("forwards textarea identity, validation, descriptions and native callbacks to the real control", () => {
+  const ref = createRef<HTMLTextAreaElement>();
+  const changed = vi.fn();
+  const keyed = vi.fn();
+  const pasted = vi.fn();
+  const { rerender } = renderComponent(
+    <>
+      <p id="composer-error">Укажите формулу.</p>
+      <FormTextArea
+        controlRef={ref}
+        aria-label="Сообщение или бросок"
+        aria-invalid
+        aria-describedby="composer-error"
+        aria-controls="composer-options"
+        maxLength={500}
+        defaultValue="/roll"
+        onChange={changed}
+        onKeyDown={keyed}
+        onPaste={pasted}
+      />
+      <div id="composer-options">Команды</div>
+    </>,
+  );
+  const input = screen.getByRole("textbox", { name: "Сообщение или бросок" });
+  expect(ref.current).toBe(input);
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  expect(input).toHaveAccessibleDescription("Укажите формулу.");
+  // A multiline textbox is not a disclosure/combobox; the command button
+  // owns aria-expanded, while the textarea may reference the controlled list.
+  expect(input).not.toHaveAttribute("aria-expanded");
+  expect(input).toHaveAttribute("aria-controls", "composer-options");
+  expect(input).toHaveAttribute("maxlength", "500");
+  fireEvent.change(input, { target: { value: "/roll 1d20" } });
+  expect(changed.mock.lastCall?.[0]?.target).toBe(input);
+  expect(input).toHaveValue("/roll 1d20");
+  fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+  expect(keyed.mock.lastCall?.[0]?.ctrlKey).toBe(true);
+  fireEvent.paste(input);
+  expect(pasted).toHaveBeenCalledTimes(1);
+  rerender(
+    <FormTextArea
+      controlRef={ref}
+      aria-label="Сообщение или бросок"
+      aria-invalid={false}
+    />,
+  );
+  const validInput = screen.getByRole("textbox", {
+    name: "Сообщение или бросок",
+  });
+  expect(validInput).not.toHaveAttribute("aria-invalid", "true");
+  expect(validInput).not.toHaveAttribute("aria-describedby");
 });

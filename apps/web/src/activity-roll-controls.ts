@@ -9,10 +9,10 @@ export function charactersAvailableForActivityRolls(
   snapshot: GameSnapshot,
 ): CharacterDto[] {
   if (snapshot.me.role === "GM") return snapshot.characters;
+  // Ownership is not selection: a player may own several characters, but
+  // these controls must follow the active character just like the composer.
   return snapshot.characters.filter(
-    (character) =>
-      character.id === snapshot.me.characterId ||
-      character.ownerMembershipId === snapshot.me.id,
+    (character) => character.id === snapshot.me.characterId,
   );
 }
 
