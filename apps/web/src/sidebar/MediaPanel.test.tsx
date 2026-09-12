@@ -26,14 +26,13 @@ import type { ImageUploadFieldProps } from "../ui/ImageUploadField";
 //
 // Mocking notes (typed against the real prop contracts, per the AC's
 // concern about mocks that don't typecheck):
-// - `@gravity-ui/uikit`'s `Button` ships CSS this repo's Vitest transform
-//   can't handle (same constraint as the existing `renderToStaticMarkup`
-//   tests, e.g. RollButton.test.tsx) -- swapped for a plain <button>
-//   restricted to the props MediaPanel/ImageUploadField actually pass.
+// - This historical role-focused suite keeps a plain Button double restricted
+//   to the props it needs. Current vitest.config.ts supports real Gravity CSS;
+//   MediaPanel.audio.test.tsx deliberately uses real controls and upload fields.
 // - `ImageUploadField` is swapped for a minimal stub typed against its own
 //   exported `ImageUploadFieldProps`, so this file stays focused on
-//   MediaPanel's role gating rather than file-input/object-URL plumbing
-//   (which is that component's own concern, untouched here).
+//   MediaPanel's role gating rather than file-input/object-URL plumbing.
+//   This double must not be used as proof that actual MIME intake works.
 vi.mock("@gravity-ui/uikit", () => ({
   Button: ({
     disabled,

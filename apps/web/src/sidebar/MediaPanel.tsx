@@ -8,6 +8,7 @@ import { Button } from "@gravity-ui/uikit";
 import { ApiError, formatApiError } from "../api";
 import { ASSET_KIND_LABELS } from "../asset-labels";
 import { ImageUploadField } from "../ui/ImageUploadField";
+import { AudioUploadField } from "../ui/AudioUploadField";
 import type { AssetActions } from "../use-asset-actions";
 
 export function MediaPanel({
@@ -109,20 +110,28 @@ export function MediaPanel({
                   : "Сначала выберите файл.";
           return (
             <section className="upload-section" key={kind}>
-              <ImageUploadField
-                label={labels[kind]}
-                value={drafts[kind]}
-                accept={
-                  kind === "AUDIO"
-                    ? ".mp3,.ogg,audio/mpeg,audio/ogg"
-                    : ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-                }
-                hint={kind === "AUDIO" ? "MP3 или OGG" : "PNG, JPEG или WebP"}
-                disabled={uploading !== null}
-                onUpdate={(file) =>
-                  setDrafts((current) => ({ ...current, [kind]: file }))
-                }
-              />
+              {kind === "AUDIO" ? (
+                <AudioUploadField
+                  label={labels[kind]}
+                  value={drafts[kind]}
+                  hint="MP3 или OGG"
+                  disabled={uploading !== null}
+                  onUpdate={(file) =>
+                    setDrafts((current) => ({ ...current, [kind]: file }))
+                  }
+                />
+              ) : (
+                <ImageUploadField
+                  label={labels[kind]}
+                  value={drafts[kind]}
+                  accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                  hint="PNG, JPEG или WebP"
+                  disabled={uploading !== null}
+                  onUpdate={(file) =>
+                    setDrafts((current) => ({ ...current, [kind]: file }))
+                  }
+                />
+              )}
               <Button
                 view="action"
                 disabled={!drafts[kind] || uploading !== null}

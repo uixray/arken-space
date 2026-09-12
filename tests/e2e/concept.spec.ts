@@ -1016,6 +1016,35 @@ for (const role of ["GM", "PLAYER"] as const) {
         name: "Загрузить", exact: true,
       })).toBeDisabled();
       expect(unexpectedWrites).toEqual([]);
+      // Audio intake must reach a local AUDIO draft without an image decoder.
+      // These bytes test client selection only; server media validation is separate.
+      const audioInput = files.getByLabel("Музыка и звуки", { exact: true });
+      const audioSection = files.locator(".upload-section").filter({
+        has: page.getByLabel("Музыка и звуки", { exact: true }),
+      });
+      for (const [name, mimeType] of [
+        ["selected-audio.mp3", "audio/mpeg"],
+        ["selected-audio.ogg", "application/ogg"],
+      ]) {
+        await audioInput.setInputFiles({
+          name,
+          mimeType,
+          buffer: Buffer.from("client intake candidate only", "utf8"),
+        });
+        await expect(audioInput).toHaveValue("");
+        await expect(audioSection.getByRole("button", {
+          name: "Загрузить", exact: true,
+        })).toBeEnabled();
+        await expect(audioSection.getByText(name, { exact: true })).toBeVisible();
+        await expect(audioSection.locator("img, audio, video")).toHaveCount(0);
+        await audioSection.getByRole("button", {
+          name: `Удалить ${name}`, exact: true,
+        }).click();
+        await expect(audioSection.getByRole("button", {
+          name: "Загрузить", exact: true,
+        })).toBeDisabled();
+      }
+      expect(unexpectedWrites).toEqual([]);
       await expect(
         files.getByRole("button", { name: "Загрузить", exact: true }),
       ).toHaveCount(5);
