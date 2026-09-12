@@ -13,6 +13,8 @@ import { Button, Popup } from "@gravity-ui/uikit";
 import { api } from "./api";
 import { filterStickerPacks } from "./sticker-picker-state";
 import { useOverlayPopupClassName } from "./ui/overlay-owner";
+import { AppIcon } from "./ui/AppIcon";
+import { StickerPickerIcon } from "./ui/icons";
 
 const categories = [
   ["COMMON", "Общие"],
@@ -158,7 +160,7 @@ export function StickerPicker({
         aria-haspopup="dialog"
         onClick={() => changeOpen(!openRef.current)}
       >
-        {iconOnly ? <span aria-hidden="true">{"\u263A"}</span> : "Стикеры"}
+        {iconOnly ? <AppIcon icon={StickerPickerIcon} /> : "Стикеры"}
       </Button>
       <Popup
         open={open && !disabled}

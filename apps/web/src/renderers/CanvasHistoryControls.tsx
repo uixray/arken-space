@@ -7,6 +7,8 @@ import {
   nextHistoryEntry,
   type CanvasHistoryEntry,
 } from "../canvas-history-label";
+import { AppIcon } from "../ui/AppIcon";
+import { RedoIcon, UndoIcon } from "../ui/icons";
 
 export interface CanvasHistoryControlsProps {
   sceneId?: string;
@@ -109,7 +111,7 @@ export function CanvasHistoryControls({
         disabled={disabled || !canUndo}
         onClick={() => void act("undo")}
       >
-        <span aria-hidden="true">&#x21b6;</span>
+        <AppIcon icon={UndoIcon} />
       </button>
       <button
         className="map-tool"
@@ -119,7 +121,7 @@ export function CanvasHistoryControls({
         disabled={disabled || !canRedo}
         onClick={() => void act("redo")}
       >
-        <span aria-hidden="true">&#x21b7;</span>
+        <AppIcon icon={RedoIcon} />
       </button>
     </>
   );

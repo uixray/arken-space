@@ -61,6 +61,14 @@ import {
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
 import { CampaignClockDialog } from "./CampaignClockDialog";
+import { AppIcon } from "../ui/AppIcon";
+import {
+  AddIcon,
+  CharacterArchiveIcon,
+  CloseIcon,
+  CollapseCharacterRailIcon,
+  ExpandCharacterRailIcon,
+} from "../ui/icons";
 
 // UIX-389/UIX-391: re-exported for backward compatibility — RollButton now
 // lives in its own module (./RollButton) so CatalogEntryPicker can import it
@@ -199,7 +207,13 @@ export function CharacterWorkspace({
           }
           onClick={() => setRailCollapsed((current) => !current)}
         >
-          <span aria-hidden="true">{railCollapsed ? ">" : "<"}</span>
+          <AppIcon
+            icon={
+              railCollapsed
+                ? ExpandCharacterRailIcon
+                : CollapseCharacterRailIcon
+            }
+          />
         </button>
         <button
           type="button"
@@ -207,7 +221,7 @@ export function CharacterWorkspace({
           title="Закрыть рабочее пространство персонажей"
           onClick={onClose}
         >
-          <span aria-hidden="true">×</span>
+          <AppIcon icon={CloseIcon} />
         </button>
       </header>
       <div
@@ -220,7 +234,7 @@ export function CharacterWorkspace({
               className="character-rail__create"
               onClick={() => setCreateCharacterOpen(true)}
             >
-              <span aria-hidden="true">＋</span>
+              <AppIcon icon={AddIcon} />
               Создать персонажа
             </button>
           )}
@@ -230,7 +244,7 @@ export function CharacterWorkspace({
               className="character-rail__restore-archived"
               onClick={() => setRestoreDialogOpen(true)}
             >
-              <span aria-hidden="true">🗄</span>
+              <AppIcon icon={CharacterArchiveIcon} />
               Архив персонажей
             </button>
           )}
@@ -283,7 +297,7 @@ export function CharacterWorkspace({
                         dispatch({ type: "CLOSE", id: character.id })
                       }
                     >
-                      ×
+                      <AppIcon icon={CloseIcon} />
                     </button>
                   )}
                   {props.snapshot.me.role === "GM" && (

@@ -19,6 +19,8 @@ import type { GameSocket } from "./realtime";
 import { useCampaignActions } from "./campaign-actions-context";
 import type { CharacterTemplateFields } from "./character-workspace-state";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { AppIcon } from "./ui/AppIcon";
+import { SidebarCollapseIcon } from "./ui/icons";
 import { SceneManagerDialog } from "./ui/SceneManagerDialog";
 import { StoryChannel } from "./StoryChannel";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
@@ -351,7 +353,7 @@ function SidebarContent(props: Props) {
         title="Свернуть боковую панель"
         onClick={() => props.onCollapsedChange(true)}
       >
-        <span aria-hidden="true">&#x203a;</span>
+        <AppIcon icon={SidebarCollapseIcon} />
       </button>
       <nav
         className="tabs chat-stream-tabs"

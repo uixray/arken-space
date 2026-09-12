@@ -35,6 +35,8 @@ import {
 } from "../stat-keys";
 
 import { useDismissibleDetails } from "../ui/dismissible-details";
+import { AppIcon } from "../ui/AppIcon";
+import { MoreIcon, SendIcon } from "../ui/icons";
 import {
   ACTIVITY_FILTERS,
   ACTIVITY_FILTER_LABEL,
@@ -668,7 +670,7 @@ export function ActivityPanel({
             aria-label={activityFilterSummaryTitle(activityFilters)}
             title={activityFilterSummaryTitle(activityFilters)}
           >
-            <span aria-hidden="true">⋯</span>
+            <AppIcon icon={MoreIcon} />
             <span className="activity-filters-summary__label">Показывать</span>
             {hiddenActivityStreamCount(activityFilters) > 0 && (
               <span className="activity-filters-badge" aria-hidden="true">
@@ -863,7 +865,7 @@ export function ActivityPanel({
               aria-label={`Отправить. ${SEND_TOOLTIP}`}
               title={SEND_TOOLTIP}
             >
-              <span aria-hidden="true">{"➤"}</span>
+              <AppIcon icon={SendIcon} />
             </Button>
           </div>
           {slashSuggestions.length > 0 && (
@@ -1607,7 +1609,7 @@ export function ChatPanel({
                   aria-label={`Отправить. ${SEND_TOOLTIP}`}
                   title={SEND_TOOLTIP}
                 >
-                  <span aria-hidden="true">{"➤"}</span>
+                  <AppIcon icon={SendIcon} />
                 </Button>
               </div>
               {slashSuggestions.length > 0 && (

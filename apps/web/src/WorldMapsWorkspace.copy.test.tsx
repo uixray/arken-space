@@ -82,12 +82,16 @@ function maps(lifecycle: "DRAFT" | "PUBLISHED"): WorldMapsSnapshotDto {
     partyPosition: null,
   };
 }
-function setup(role: "GM" | "PLAYER", lifecycle: "DRAFT" | "PUBLISHED") {
+function setup(
+  role: "GM" | "PLAYER",
+  lifecycle: "DRAFT" | "PUBLISHED",
+  partyPosition: WorldMapsSnapshotDto["partyPosition"] = null,
+) {
   const onCreateLocation = vi.fn().mockResolvedValue(undefined);
   const props: ComponentProps<typeof WorldMapsWorkspace> = {
     open: true,
     snapshot: buildGameSnapshot(role, {
-      worldMaps: maps(lifecycle),
+      worldMaps: { ...maps(lifecycle), partyPosition },
       assets:
         lifecycle === "PUBLISHED"
           ? [
@@ -125,6 +129,38 @@ function setup(role: "GM" | "PLAYER", lifecycle: "DRAFT" | "PUBLISHED") {
 }
 
 describe("world map localized display copy", () => {
+  it.each(["GM", "PLAYER"] as const)(
+    "keeps named, distinct location and party markers for %s",
+    (role) => {
+      setup(role, "PUBLISHED", {
+        mapId: "map",
+        locationId: "place-1",
+        revision: 1,
+        updatedAt: "2026-09-12T00:00:00.000Z",
+      });
+      const location = screen.getByRole("button", {
+        name: "Локация: Neverwinter 1",
+      });
+      const party = screen.getByRole("img", {
+        name: "Текущая позиция группы",
+      });
+      const locationIcon = location.querySelector("svg.arken-icon");
+      const partyIcon = party.querySelector("svg.arken-icon");
+      expect(locationIcon, "UIX645_WORLD_LOCATION_ICON").toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      expect(partyIcon, "UIX645_WORLD_PARTY_ICON").toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      expect(partyIcon).toHaveAttribute("width", "24");
+      expect(partyIcon?.innerHTML).not.toBe(locationIcon?.innerHTML);
+      expect(location).toHaveStyle({ left: "10%", top: "30%" });
+      expect(party).toHaveStyle({ left: "10%", top: "30%" });
+    },
+  );
+
   it.each(["GM", "PLAYER"] as const)(
     "shows all four kinds in the real %s list and selected card without translating names",
     async (role) => {

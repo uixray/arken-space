@@ -18,6 +18,23 @@ import type { CursorPreference } from "./cursor-preference";
 import { CanvasHistoryControls } from "./renderers/CanvasHistoryControls";
 import { GridSettings } from "./renderers/GridSettings";
 import { useDismissibleDetails } from "./ui/dismissible-details";
+import { AppIcon } from "./ui/AppIcon";
+import {
+  CollapseToolbarIcon,
+  CoverBrushIcon,
+  CoverFogIcon,
+  CoverPolygonIcon,
+  DrawIcon,
+  ExpandToolbarIcon,
+  FogBrushIcon,
+  FogPolygonIcon,
+  MoreToolsIcon,
+  PanIcon,
+  PingIcon,
+  ResizeMapIcon,
+  RevealFogIcon,
+  RulerIcon,
+} from "./ui/icons";
 
 export interface MapToolbarProps {
   pauseControl?: ReactNode;
@@ -176,7 +193,9 @@ export function MapToolbar({
         }
         onClick={toggleCollapsed}
       >
-        <span aria-hidden="true">{toolbarCollapsed ? "»" : "«"}</span>
+        <AppIcon
+          icon={toolbarCollapsed ? ExpandToolbarIcon : CollapseToolbarIcon}
+        />
       </button>
 
       <div className="toolbar-group">
@@ -189,7 +208,8 @@ export function MapToolbar({
           aria-pressed={tool === "PAN"}
           onClick={() => onToolSelect("PAN")}
         >
-          Двигать
+          <AppIcon icon={PanIcon} />
+          <span className="map-tool__label">Двигать</span>
         </button>
 
         {!previewSnapshot && snapshot.me.role === "GM" && (
@@ -203,7 +223,8 @@ export function MapToolbar({
               aria-pressed={tool === "FOG"}
               onClick={() => onToolSelect("FOG")}
             >
-              Открыть
+              <AppIcon icon={RevealFogIcon} />
+              <span className="map-tool__label">Открыть</span>
             </button>
             <button
               aria-label="Закрыть туман"
@@ -213,7 +234,8 @@ export function MapToolbar({
               aria-pressed={tool === "COVER"}
               onClick={() => onToolSelect("COVER")}
             >
-              Закрыть
+              <AppIcon icon={CoverFogIcon} />
+              <span className="map-tool__label">Закрыть</span>
             </button>
             <button
               aria-label="Открыть туман кистью"
@@ -223,7 +245,8 @@ export function MapToolbar({
               aria-pressed={tool === "FOG_BRUSH"}
               onClick={() => onToolSelect("FOG_BRUSH")}
             >
-              Кисть
+              <AppIcon icon={FogBrushIcon} />
+              <span className="map-tool__label">Кисть</span>
             </button>
             <button
               aria-label="Закрыть туман кистью"
@@ -233,7 +256,8 @@ export function MapToolbar({
               aria-pressed={tool === "COVER_BRUSH"}
               onClick={() => onToolSelect("COVER_BRUSH")}
             >
-              Кисть закр.
+              <AppIcon icon={CoverBrushIcon} />
+              <span className="map-tool__label">Кисть закр.</span>
             </button>
             {(tool === "FOG_BRUSH" || tool === "COVER_BRUSH") && (
               <label className="map-tool-text" title="Радиус кисти тумана">
@@ -260,7 +284,8 @@ export function MapToolbar({
               aria-pressed={tool === "FOG_POLYGON"}
               onClick={() => onToolSelect("FOG_POLYGON")}
             >
-              Полигон
+              <AppIcon icon={FogPolygonIcon} />
+              <span className="map-tool__label">Полигон</span>
             </button>
             <button
               aria-label="Закрыть туман полигоном"
@@ -270,7 +295,8 @@ export function MapToolbar({
               aria-pressed={tool === "COVER_POLYGON"}
               onClick={() => onToolSelect("COVER_POLYGON")}
             >
-              Полигон закр.
+              <AppIcon icon={CoverPolygonIcon} />
+              <span className="map-tool__label">Полигон закр.</span>
             </button>
 
             <div className="toolbar-group__title">Метки</div>
@@ -282,7 +308,8 @@ export function MapToolbar({
               aria-pressed={tool === "RULER"}
               onClick={() => onToolSelect("RULER")}
             >
-              Линейка
+              <AppIcon icon={RulerIcon} />
+              <span className="map-tool__label">Линейка</span>
             </button>
             <button
               aria-label="Пинг"
@@ -292,7 +319,8 @@ export function MapToolbar({
               aria-pressed={tool === "PING"}
               onClick={() => onToolSelect("PING")}
             >
-              Пинг
+              <AppIcon icon={PingIcon} />
+              <span className="map-tool__label">Пинг</span>
             </button>
           </>
         )}
@@ -305,7 +333,8 @@ export function MapToolbar({
           aria-pressed={tool === "DRAW"}
           onClick={() => onToolSelect("DRAW")}
         >
-          Рисовать
+          <AppIcon icon={DrawIcon} />
+          <span className="map-tool__label">Рисовать</span>
         </button>
 
         {(previewSnapshot || snapshot.me.role !== "GM") && (
@@ -318,7 +347,8 @@ export function MapToolbar({
               aria-pressed={tool === "RULER"}
               onClick={() => onToolSelect("RULER")}
             >
-              Линейка
+              <AppIcon icon={RulerIcon} />
+              <span className="map-tool__label">Линейка</span>
             </button>
             <button
               aria-label="Пинг"
@@ -328,7 +358,8 @@ export function MapToolbar({
               aria-pressed={tool === "PING"}
               onClick={() => onToolSelect("PING")}
             >
-              Пинг
+              <AppIcon icon={PingIcon} />
+              <span className="map-tool__label">Пинг</span>
             </button>
           </>
         )}
@@ -353,7 +384,8 @@ export function MapToolbar({
                 className="toolbar-detail-trigger"
                 data-tool="RESIZE"
               >
-                Размер
+                <AppIcon icon={ResizeMapIcon} />
+                <span className="map-tool__label">Размер</span>
               </summary>
               <div className="resize-settings-popover">
                 <button
@@ -410,7 +442,7 @@ export function MapToolbar({
             aria-label="Дополнительные инструменты"
             title="Дополнительные инструменты карты"
           >
-            •••
+            <AppIcon icon={MoreToolsIcon} />
           </summary>
           <div className="toolbar-overflow-menu">{overflowTools}</div>
         </details>

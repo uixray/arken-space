@@ -50,7 +50,9 @@ describe("cursor presence control", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Курсоры" });
+    const button = screen.getByRole("button", {
+      name: "Скрыть курсоры остальных",
+    });
     expect(button).toHaveAttribute("aria-pressed", "true");
     // No menu: a popup holding one switch is two clicks for a one-click job.
     expect(button).not.toHaveAttribute("aria-haspopup");
@@ -69,7 +71,9 @@ describe("cursor presence control", () => {
         onChange={vi.fn()}
       />,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Курсоры" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Скрыть курсоры остальных" }),
+    );
     // Even after clicking: there is nothing to open.
     expect(screen.queryByText(/Показывать мой курсор/)).not.toBeInTheDocument();
   });
@@ -83,7 +87,9 @@ describe("cursor presence control", () => {
       />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Курсоры" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Настроить видимость курсоров" }),
+    );
     expect(screen.getByText("Показывать чужие курсоры")).toBeInTheDocument();
     expect(
       screen.getByText("Показывать мой курсор игрокам"),

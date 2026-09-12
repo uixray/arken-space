@@ -5,8 +5,9 @@ import {
   type DragEvent,
   type ClipboardEvent,
 } from "react";
-import { Button, Icon } from "@gravity-ui/uikit";
-import { TrashBin } from "@gravity-ui/icons";
+import { Button } from "@gravity-ui/uikit";
+import { AppIcon } from "./AppIcon";
+import { DeleteIcon } from "./icons";
 
 export interface ImageUploadFieldProps {
   label: string;
@@ -172,7 +173,7 @@ export function ImageUploadField({
               disabled={disabled}
               onClick={removeFile}
             >
-              <Icon data={TrashBin} size={16} />
+              <AppIcon icon={DeleteIcon} />
             </Button>
           </figcaption>
         </figure>

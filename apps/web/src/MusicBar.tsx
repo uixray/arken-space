@@ -9,6 +9,8 @@ import { isAudioConsentError } from "./audio-playback";
 import { volumeSliderToGain } from "./audio-volume";
 import { resolvePlaybackAction } from "./music-playback";
 import { useDismissibleDetails } from "./ui/dismissible-details";
+import { AppIcon } from "./ui/AppIcon";
+import { MoreIcon, PauseIcon, PlayIcon, VolumeIcon } from "./ui/icons";
 
 const ENABLED_KEY = "arken.audio.enabled";
 const VOLUME_KEY = "arken.audio.volume";
@@ -202,11 +204,11 @@ export function MusicBar({
           disabled={role !== "GM" || !current}
           onClick={togglePlayback}
         >
-          <span aria-hidden="true">{audio.playing ? "⏸" : "▶"}</span>
+          <AppIcon icon={audio.playing ? PauseIcon : PlayIcon} />
         </button>
         <details className="music-volume-control" ref={volumeRef}>
           <summary aria-label="Громкость" title="Громкость">
-            <span aria-hidden="true">&#x1f50a;</span>
+            <AppIcon icon={VolumeIcon} />
           </summary>
           <div className="music-volume-popover">
             <label>
@@ -235,7 +237,7 @@ export function MusicBar({
         {role === "GM" ? (
           <details className="music-overflow" ref={overflowRef}>
             <summary aria-label="Меню музыки" title="Меню музыки">
-              <span aria-hidden="true">&#x22ef;</span>
+              <AppIcon icon={MoreIcon} />
             </summary>
             <div className="music-overflow__menu">
               <span className="music-overflow__now-playing">

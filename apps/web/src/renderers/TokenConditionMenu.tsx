@@ -4,6 +4,8 @@ import {
   type TokenDto,
 } from "@arken/contracts";
 import type { SceneRendererProps } from "./SceneRenderer";
+import { AppIcon } from "../ui/AppIcon";
+import { SelectedOptionIcon } from "../ui/icons";
 
 export function TokenConditionMenu({
   token,
@@ -42,7 +44,7 @@ export function TokenConditionMenu({
               });
             }}
           >
-            {checked ? "✓ " : ""}
+            {checked && <AppIcon icon={SelectedOptionIcon} />}
             {TOKEN_CONDITION_LABEL[condition]}
           </button>
         );

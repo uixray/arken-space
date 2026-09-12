@@ -13,6 +13,8 @@ import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { AssetPicker } from "./ui/AssetPicker";
 import { ApiError, formatApiError } from "./api";
 import { WORLD_EDITOR_TITLE } from "./world-workspace-labels";
+import { AppIcon } from "./ui/AppIcon";
+import { MoveDownIcon, MoveUpIcon } from "./ui/icons";
 import {
   WORLD_CONTENT_LIFECYCLE_LABELS,
   WORLD_CONTENT_LIFECYCLES,
@@ -961,16 +963,18 @@ function MediaSection({
                 <Button
                   size="s"
                   disabled={busy || index === 0}
+                  aria-label="Переместить выше"
                   onClick={() => void reorder(item.id, "up")}
                 >
-                  ↑
+                  <AppIcon icon={MoveUpIcon} />
                 </Button>
                 <Button
                   size="s"
                   disabled={busy || index === sorted.length - 1}
+                  aria-label="Переместить ниже"
                   onClick={() => void reorder(item.id, "down")}
                 >
-                  ↓
+                  <AppIcon icon={MoveDownIcon} />
                 </Button>
                 <Button
                   size="s"

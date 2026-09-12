@@ -8,6 +8,8 @@ import {
   resourceRegenAmount,
 } from "../resource-regen";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
+import { AppIcon } from "../ui/AppIcon";
+import { AddIcon, DecreaseIcon } from "../ui/icons";
 
 type OptimisticValue = { value: number; generation: number };
 
@@ -321,7 +323,7 @@ export function ResourceCounters({
                 title="Потратить одно очко"
                 onClick={() => change(-1)}
               >
-                <span aria-hidden="true">−</span>
+                <AppIcon icon={DecreaseIcon} />
               </Button>
               {/* Ввод числом: поставить 3 из 17 щелчками по единице — это
                   четырнадцать нажатий ради одного решения. */}
@@ -383,7 +385,7 @@ export function ResourceCounters({
                 title="Вернуть одно очко"
                 onClick={() => change(1)}
               >
-                <span aria-hidden="true">+</span>
+                <AppIcon icon={AddIcon} />
               </Button>
               {/* Кнопка восстановления есть только там, где системе известна
                   величина регена. У прочих ресурсов её не из чего взять. */}
