@@ -198,18 +198,13 @@ const faults = [
   },
   {
     id: "pending-upload-target-ignored",
-    replacements: [
-      ["    character?.id,\n    editable,", "    editable,"],
-    ],
+    replacements: [["    character?.id,\n    editable,", "    editable,"]],
     failures: Object.fromEntries([pendingCases[2]]),
   },
   {
     id: "pending-upload-actor-ignored",
     replacements: [
-      [
-        "    snapshot.me.id,\n    snapshot.me.role,",
-        "    snapshot.me.role,",
-      ],
+      ["    snapshot.me.id,\n    snapshot.me.role,", "    snapshot.me.role,"],
     ],
     failures: Object.fromEntries([pendingCases[3]]),
   },
