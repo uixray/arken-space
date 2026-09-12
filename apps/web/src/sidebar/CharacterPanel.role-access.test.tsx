@@ -446,7 +446,9 @@ describe("CharacterPanel identity and portrait role wiring", () => {
         });
       });
 
-      await user.click(screen.getByRole("button", { name: portraitAsset.name }));
+      await user.click(
+        screen.getByRole("button", { name: portraitAsset.name }),
+      );
       await waitFor(() => {
         expect(calls.onPatch).toHaveBeenCalledTimes(2);
         expect(
@@ -458,7 +460,9 @@ describe("CharacterPanel identity and portrait role wiring", () => {
         });
       });
 
-      const file = new File(["portrait"], "portrait.png", { type: "image/png" });
+      const file = new File(["portrait"], "portrait.png", {
+        type: "image/png",
+      });
       await user.upload(screen.getByLabelText("Upload portrait file"), file);
       expect(calls.uploadAsset).not.toHaveBeenCalled();
       await user.click(
@@ -494,10 +498,15 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     await user.click(rename);
     await user.click(picker);
     await user.upload(upload, new File(["portrait"], "portrait.png"));
-    const assign = screen.getByRole("button", { name: "Загрузить и назначить" });
+    const assign = screen.getByRole("button", {
+      name: "Загрузить и назначить",
+    });
     expect(assign).toBeDisabled();
     await user.click(assign);
-    expect(calls.onPatch, "UIX414_IDENTITY_UNRELATED_PATCH_0").not.toHaveBeenCalled();
+    expect(
+      calls.onPatch,
+      "UIX414_IDENTITY_UNRELATED_PATCH_0",
+    ).not.toHaveBeenCalled();
     expect(
       calls.uploadAsset,
       "UIX414_IDENTITY_UNRELATED_UPLOAD_0",
@@ -534,6 +543,9 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       </CampaignActionsContext.Provider>,
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
-    expect(calls.onPatch, "UIX414_IDENTITY_RECHECK_NO_PATCH").not.toHaveBeenCalled();
+    expect(
+      calls.onPatch,
+      "UIX414_IDENTITY_RECHECK_NO_PATCH",
+    ).not.toHaveBeenCalled();
   });
 });

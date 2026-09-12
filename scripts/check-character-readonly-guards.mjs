@@ -50,7 +50,8 @@ const positive = ["GM", "OWNER", "CONTROLLER"].map(
     " can rename, choose a portrait, and upload with the character target",
 );
 const unrelated =
-  suite + " disables rename, picker and portrait upload for an unrelated player";
+  suite +
+  " disables rename, picker and portrait upload for an unrelated player";
 const revoked =
   suite +
   " rechecks edit permission before submitting an already-open rename dialog";
@@ -72,8 +73,8 @@ const faults = [
     id: "rename-enabled",
     replacements: [
       [
-        '<Button disabled={!editable} onClick={() => setRenameOpen(true)}>',
-        '<Button onClick={() => setRenameOpen(true)}>',
+        "<Button disabled={!editable} onClick={() => setRenameOpen(true)}>",
+        "<Button onClick={() => setRenameOpen(true)}>",
       ],
     ],
     failures: { [unrelated]: "UIX414_IDENTITY_RENAME_DISABLED" },
@@ -219,7 +220,9 @@ function run(id, expectedFailures = {}) {
         .join("\n")
         .includes(expectedFailures[assertion.fullName])
     ) {
-      throw new Error(`${id}: wrong semantic failure for ${assertion.fullName}`);
+      throw new Error(
+        `${id}: wrong semantic failure for ${assertion.fullName}`,
+      );
     }
   }
   if (
@@ -228,12 +231,14 @@ function run(id, expectedFailures = {}) {
   ) {
     throw new Error(`${id}: test inventory drift`);
   }
-  if (sha256(readFileSync(test)) !== frozenTest) throw new Error("Tests changed");
+  if (sha256(readFileSync(test)) !== frozenTest)
+    throw new Error("Tests changed");
   console.log(JSON.stringify(record));
 }
 
 try {
-  if (!faults.length) throw new Error("No reviewed negative controls configured");
+  if (!faults.length)
+    throw new Error("No reviewed negative controls configured");
   run("baseline");
   for (const fault of faults) {
     let mutated = source;
@@ -262,6 +267,9 @@ try {
     receipt.success = false;
     process.exitCode = 1;
   }
-  writeFileSync(path.join(out, "receipt.json"), JSON.stringify(receipt, null, 2));
+  writeFileSync(
+    path.join(out, "receipt.json"),
+    JSON.stringify(receipt, null, 2),
+  );
   console.log(JSON.stringify(receipt));
 }
