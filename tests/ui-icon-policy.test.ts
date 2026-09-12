@@ -29,6 +29,8 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/RollModeControl.tsx",
       "apps/web/src/sidebar/QuickRollPanel.tsx",
       "apps/web/src/sidebar/DiceTrayPanel.tsx",
+      "apps/web/src/sidebar/ResourceCounters.tsx",
+      "apps/web/src/sidebar/SetupPanel.tsx",
       "apps/web/src/ui/CursorPresenceMenu.tsx",
       "apps/web/src/renderers/GridSettings.tsx",
       "apps/web/src/renderers/CanvasHistoryControls.tsx",
@@ -51,6 +53,7 @@ describe("UIX-645 icon source policy", () => {
   it.each([
     ["apps/web/src/sidebar/StatLayoutCard.tsx", "RenameIcon", "✎"],
     ["apps/web/src/sidebar/DiceTrayPanel.tsx", "SecretRollIcon", "◆"],
+    ["apps/web/src/sidebar/ResourceCounters.tsx", "AddIcon", "+"],
   ])("detects a glyph restored in %s", (file, icon, glyph) => {
     const source = readFileSync(path.join(process.cwd(), file), "utf8");
     const anchor = `<AppIcon icon={${icon}} />`;
@@ -61,6 +64,8 @@ describe("UIX-645 icon source policy", () => {
   });
 
   it("rejects literal JSX glyphs, HTML entities, config literals, and templates", () => {
+    expectFinding("const v = <button><span>+</span></button>;", "text glyph");
+    expectFinding('const v = <Button>{"-"}</Button>;', "literal glyph");
     expect(scanUiSource("const view = <button>→</button>;").join("\n")).toContain(
       "text glyph",
     );
@@ -173,6 +178,9 @@ describe("UIX-645 icon source policy", () => {
       [],
     );
     expect(scanUiSource('const separator = " · ";')).toEqual([]);
+    expect(scanUiSource('const operator = "+"; const math = <p>+</p>;')).toEqual(
+      [],
+    );
     expect(scanUiSource('const text = "&#x110000;";')).toEqual([]);
     expect(decodeCssHexEscapes("\\110000 ")).toBe("\\110000 ");
     expectFinding("const = ;", "invalid TypeScript/TSX syntax");

@@ -20,6 +20,8 @@ export const protectedSourceFiles = [
   "apps/web/src/RollModeControl.tsx",
   "apps/web/src/sidebar/QuickRollPanel.tsx",
   "apps/web/src/sidebar/DiceTrayPanel.tsx",
+  "apps/web/src/sidebar/ResourceCounters.tsx",
+  "apps/web/src/sidebar/SetupPanel.tsx",
   "apps/web/src/ui/CursorPresenceMenu.tsx",
   "apps/web/src/renderers/GridSettings.tsx",
   "apps/web/src/renderers/CanvasHistoryControls.tsx",
@@ -114,6 +116,20 @@ function hasCatalogBinding(bindings) {
   ) ?? false;
 }
 
+// Standalone operators are icons inside buttons, not in ordinary formula text.
+function isControlOperator(value, node) {
+  if (!/^[+-]$/.test(decodeHtmlEntities(value).trim())) return false;
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (
+      ts.isJsxElement(parent) &&
+      /^(?:button|Button)$/.test(parent.openingElement.tagName.getText())
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Scan TSX source AST; comments are not AST nodes and are intentionally ignored. */
 export function scanUiSource(source, file = "<inline>.tsx") {
   const tree = ts.createSourceFile(
@@ -129,7 +145,11 @@ export function scanUiSource(source, file = "<inline>.tsx") {
     return findings;
   }
   const visit = (node) => {
-    if (ts.isJsxText(node) && isStandaloneUiGlyph(node.getText(tree))) {
+    if (
+      ts.isJsxText(node) &&
+      (isStandaloneUiGlyph(node.getText(tree)) ||
+        isControlOperator(node.getText(tree), node))
+    ) {
       findings.push(
         finding(
           file,
@@ -141,7 +161,10 @@ export function scanUiSource(source, file = "<inline>.tsx") {
       );
     }
     const value = literalValue(node);
-    if (value !== null && isStandaloneUiGlyph(value)) {
+    if (
+      value !== null &&
+      (isStandaloneUiGlyph(value) || isControlOperator(value, node))
+    ) {
       findings.push(
         finding(
           file,

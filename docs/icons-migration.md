@@ -26,6 +26,7 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 | Персонажи: rail / close / add / archive | glyphs и emoji | PanelLeftClose / PanelLeftOpen / X / Plus / Archive | scoped source guard; browser не выполнен |
 | Характеристики: reorder / rename / delete / add | glyphs | ArrowUp / ArrowDown / Pencil / Trash / Plus | существующий StatLayoutCard DOM дополнен; negative source fixture |
 | Режимы бросков / приватность / disclosure | стрелки, круг, diamond | ArrowUp / ArrowDown / Circle / EyeOff / ChevronRight / ChevronDown | новые DiceTray DOM-кейсы; shared secret icon; source guard |
+| Ресурсы / статус участников | отдельные −/+ и ●/○ | Minus / Plus / CircleDot / Circle | ResourceCounters DOM дополнен; hidden online/offline text; source guard |
 
 Ни одна строка не означает PASS нового runtime. Старые foundation-результаты
 отделены в [checkpoint](./plans/uix-645-lucide-foundation.md).
@@ -49,8 +50,9 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
       GM-only marker. Source подготовлен: EyeOff означает приватность, не
       сам бросок; прежние названия d2–d20 и формулы оставлены. Runtime QA ожидается.
 - [ ] `sidebar/ResourceCounters.tsx`: отдельные кнопки −/+; числовое значение,
-      дробь и математический текст не заменять.
-- [ ] `sidebar/SetupPanel.tsx`: status dots; сохранить нецветовое обозначение.
+      дробь и математический текст не заменять. Source и focused test подготовлены.
+- [ ] `sidebar/SetupPanel.tsx`: status dots; добавлено нецветовое доступное
+      обозначение. Source подготовлен, browser/DOM QA остаётся.
 - [ ] `WorldMapsWorkspace.tsx`: location/group-position markers; игровую
       позицию/геометрию не менять вместе с декоративным SVG.
 - [ ] `WorldContentWorkspace.tsx`, `sidebar/CharacterMediaGallery.tsx`:

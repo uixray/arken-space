@@ -15,6 +15,8 @@ import { ArkenDialog } from "../ui/ArkenDialog";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 import type { Props } from "../Sidebar";
+import { AppIcon } from "../ui/AppIcon";
+import { OfflineStatusIcon, OnlineStatusIcon } from "../ui/icons";
 
 export function SetupPanel(props: Props) {
   // UIX-398 step B: scene commands come from context, not through Sidebar.
@@ -100,7 +102,13 @@ export function SetupPanel(props: Props) {
               )?.online;
               return (
                 <Button key={member.id} onClick={() => setRenameMember(member)}>
-                  {online ? "●" : "○"} {member.displayName}
+                  <AppIcon
+                    icon={online ? OnlineStatusIcon : OfflineStatusIcon}
+                  />
+                  <span className="visually-hidden">
+                    {online ? "Онлайн:" : "Не в сети:"}
+                  </span>{" "}
+                  {member.displayName}
                 </Button>
               );
             })}

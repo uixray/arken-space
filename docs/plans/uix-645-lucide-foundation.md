@@ -1,5 +1,21 @@
 # UIX-645 — Lucide foundation checkpoint, 2026-09-06
 
+## Продолжение 2026-09-12 — ресурсы и статус участников
+
+После локального `2e38364` подготовлены ResourceCounters (кнопки Minus/Plus) и
+SetupPanel (CircleDot/Circle вместо status glyphs, скрытый доступный текст
+«Онлайн»/«Не в сети»). Права, обработчики, значения и регенерация не менялись.
+Дополнен существующий ResourceCounters DOM-тест; большого Setup mock harness
+не создавали, настоящий browser gate статуса пока не выполнен.
+
+Guard/test inventory расширен до **18 source-файлов**, ASCII +/− в кнопках
+отличаются от обычного текста/формул. Negative fixture восстанавливает настоящий
+старый ASCII-plus в копии ResourceCounters; обычный оператор вне кнопки допустим.
+Новый AST-helper проверен только source review; runtime/formatter/types ещё нет.
+Изменены два компонента, один DOM-test, registry, guard/test и три документа.
+Next: оставшаяся медиа/карта/selection миграция, без скрытого battle и без
+ChatPanels до UIX-624 integration. Публикация UIX-645 по-прежнему не разрешена.
+
 ## Продолжение 2026-09-12 — персонажи и режимы бросков
 
 База этого пула — локальный shell-коммит `90c03ce`; разделы ниже исторические.
