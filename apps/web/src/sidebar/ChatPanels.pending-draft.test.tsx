@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ReactNode, TextareaHTMLAttributes } from "react";
+import type { ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DirectChatThreadDto, GameSnapshot } from "@arken/contracts";
 import { CampaignActionsContext } from "../campaign-actions-context";
@@ -26,8 +26,22 @@ vi.mock("@gravity-ui/uikit", () => ({
     "aria-label"?: string;
     title?: string;
   }) => <button {...props}>{children}</button>,
-  TextArea: (props: TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-    <textarea {...props} />
+  TextArea: ({
+    controlProps,
+    controlRef,
+    validationState,
+    ...props
+  }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+    controlProps?: TextareaHTMLAttributes<HTMLTextAreaElement>;
+    controlRef?: Ref<HTMLTextAreaElement>;
+    validationState?: "invalid";
+  }) => (
+    <textarea
+      {...props}
+      {...controlProps}
+      ref={controlRef}
+      aria-invalid={validationState === "invalid" || undefined}
+    />
   ),
   TextInput: () => null,
   Checkbox: () => null,

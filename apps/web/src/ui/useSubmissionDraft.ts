@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 export type SubmissionDraftToken = Readonly<{
   generation: number;
   scope: string;
+  scopeEpoch: number;
 }>;
 
 /**
@@ -16,11 +17,13 @@ export function useSubmissionDraft(scope: string) {
   const valueRef = useRef(value);
   const generationRef = useRef(0);
   const scopeRef = useRef(scope);
+  const scopeEpochRef = useRef(0);
   const mountedRef = useRef(true);
 
   useLayoutEffect(() => {
     if (scopeRef.current === scope) return;
     scopeRef.current = scope;
+    scopeEpochRef.current += 1;
     generationRef.current += 1;
   }, [scope]);
 
@@ -28,6 +31,7 @@ export function useSubmissionDraft(scope: string) {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      scopeEpochRef.current += 1;
       generationRef.current += 1;
     };
   }, []);
@@ -43,6 +47,7 @@ export function useSubmissionDraft(scope: string) {
     return {
       generation: generationRef.current,
       scope: scopeRef.current,
+      scopeEpoch: scopeEpochRef.current,
     } satisfies SubmissionDraftToken;
   };
 
@@ -51,6 +56,7 @@ export function useSubmissionDraft(scope: string) {
     const token = {
       generation: generationRef.current + 1,
       scope: scopeRef.current,
+      scopeEpoch: scopeEpochRef.current,
     };
     generationRef.current = token.generation;
     valueRef.current = "";
@@ -65,7 +71,9 @@ export function useSubmissionDraft(scope: string) {
     valueRef.current === "";
 
   const isCurrentScope = (token: SubmissionDraftToken) =>
-    mountedRef.current && scopeRef.current === token.scope;
+    mountedRef.current &&
+    scopeRef.current === token.scope &&
+    scopeEpochRef.current === token.scopeEpoch;
 
   const restore = (token: SubmissionDraftToken, consumed: string) => {
     if (!isUntouched(token)) return false;

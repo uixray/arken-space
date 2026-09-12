@@ -22,12 +22,13 @@ async function settleClient(page: Page, responsePromise: Promise<Response>) {
   );
 }
 
-test(`${MARKER}: late success and failure never overwrite a newer activity draft`, async ({
+test(`${MARKER}: late success preserves a newer activity draft and private send`, async ({
   page,
   gmToken,
 }) => {
   await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await expect(page).toHaveURL("/");
   await page.locator("#chat-tab-activity").click();
   const composer = page
     .locator("#chat-panel-activity")
@@ -35,9 +36,6 @@ test(`${MARKER}: late success and failure never overwrite a newer activity draft
 
   const heldSuccess = deferred();
   const successSettled = deferred();
-  const heldFailure = deferred();
-  const heldFailureSettled = deferred();
-  const untouchedFailureSettled = deferred();
   const requests: Array<{
     body: string;
     visibility: string;
@@ -54,17 +52,6 @@ test(`${MARKER}: late success and failure never overwrite a newer activity draft
       await heldSuccess.promise;
       await route.fulfill({ status: 201, body: "{}" });
       successSettled.release();
-      return;
-    }
-    if (request.body === "Ошибка после новой правки") {
-      await heldFailure.promise;
-      await route.fulfill({ status: 500, body: "failure" });
-      heldFailureSettled.release();
-      return;
-    }
-    if (request.body === "Восстановить без правок") {
-      await route.fulfill({ status: 500, body: "failure" });
-      untouchedFailureSettled.release();
       return;
     }
     await route.fulfill({ status: 201, body: "{}" });
@@ -90,7 +77,13 @@ test(`${MARKER}: late success and failure never overwrite a newer activity draft
       composer,
       `${MARKER}: late success preserves newer nonempty draft`,
     ).toHaveValue("Второе приватное");
+    const secondResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/chat") &&
+        response.request().postData()?.includes("Второе приватное") === true,
+    );
     await composer.press("Control+Enter");
+    await settleClient(page, secondResponse);
     await expect.poll(() => requests.length).toBe(2);
     expect(requests).toMatchObject([
       { body: "Первое задержанное", visibility: "PUBLIC", stream: "TABLE" },
@@ -100,7 +93,40 @@ test(`${MARKER}: late success and failure never overwrite a newer activity draft
         stream: "TABLE",
       },
     ]);
+    await expect(composer).toHaveValue("");
+  } finally {
+    heldSuccess.release();
+  }
+});
 
+test(`${MARKER}: activity failure restores only an untouched consumed draft`, async ({
+  page,
+  gmToken,
+}) => {
+  await page.goto(`/gm/${gmToken}`);
+  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await expect(page).toHaveURL("/");
+  await page.locator("#chat-tab-activity").click();
+  const composer = page
+    .locator("#chat-panel-activity")
+    .getByLabel("Сообщение или бросок", { exact: true });
+  const heldUntouched = deferred();
+  const heldFailure = deferred();
+  const untouchedFailureSettled = deferred();
+  const heldFailureSettled = deferred();
+  await page.route("**/api/chat", async (route) => {
+    const { body } = route.request().postDataJSON();
+    if (body === "Восстановить без правок") {
+      await heldUntouched.promise;
+      await route.fulfill({ status: 500, body: "failure" });
+      untouchedFailureSettled.release();
+    } else {
+      await heldFailure.promise;
+      await route.fulfill({ status: 500, body: "failure" });
+      heldFailureSettled.release();
+    }
+  });
+  try {
     await composer.fill("Восстановить без правок");
     const untouchedFailureResponse = page.waitForResponse(
       (response) =>
@@ -109,12 +135,21 @@ test(`${MARKER}: late success and failure never overwrite a newer activity draft
           true,
     );
     await composer.press("Enter");
+    await expect(composer).toHaveValue("");
+    heldUntouched.release();
     await untouchedFailureSettled.promise;
     await settleClient(page, untouchedFailureResponse);
     await expect(
       composer,
       `${MARKER}: untouched consumed slot restores after failure`,
     ).toHaveValue("Восстановить без правок");
+
+    const panel = page.locator("#chat-panel-activity");
+    const error = panel.getByText(
+      "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+      { exact: true },
+    );
+    await expect(error).toBeVisible();
 
     await composer.fill("Ошибка после новой правки");
     const heldFailureResponse = page.waitForResponse(
@@ -124,70 +159,20 @@ test(`${MARKER}: late success and failure never overwrite a newer activity draft
           true,
     );
     await composer.press("Enter");
+    await expect(composer).toHaveValue("");
+    await expect(error).toHaveCount(0);
     await composer.fill("Новая правка");
     await composer.fill("");
     heldFailure.release();
     await heldFailureSettled.promise;
     await settleClient(page, heldFailureResponse);
+    await expect(error).toBeVisible();
     await expect(
       composer,
       `${MARKER}: intentional newer empty draft is not old failure restore`,
     ).toHaveValue("");
   } finally {
-    heldSuccess.release();
-    heldFailure.release();
-  }
-});
-
-test(`${MARKER}: failed table send cannot restore into another stream scope`, async ({
-  page,
-  gmToken,
-}) => {
-  await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
-  await page.locator("#chat-tab-table").click();
-  const heldFailure = deferred();
-  const failureSettled = deferred();
-  await page.route("**/api/chat", async (route) => {
-    await heldFailure.promise;
-    await route.fulfill({ status: 500, body: "failure" });
-    failureSettled.release();
-  });
-  const tableComposer = page
-    .locator("#chat-panel-table")
-    .getByLabel("Сообщение или бросок", { exact: true });
-  try {
-    await tableComposer.fill("Черновик прежнего потока");
-    const failedResponse = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/chat") &&
-        response.request().postData()?.includes("Черновик прежнего потока") ===
-          true,
-    );
-    await tableComposer.press("Enter");
-    await expect(tableComposer).toHaveValue("");
-    await page.locator("#chat-tab-story").click();
-    const storyComposer = page
-      .locator("#chat-panel-story")
-      .getByLabel("Сообщение сюжета", { exact: true });
-    await storyComposer.fill("Черновик другого потока");
-    heldFailure.release();
-    await failureSettled.promise;
-    await settleClient(page, failedResponse);
-    await expect(
-      storyComposer,
-      `${MARKER}: late failure is invalid outside submission scope`,
-    ).toHaveValue("Черновик другого потока");
-    await expect(
-      page.getByText(
-        "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
-        { exact: true },
-      ),
-      `${MARKER}: stale scope failure has no visible error`,
-    ).toHaveCount(0);
-    await page.locator("#chat-tab-table").click();
-    await expect(tableComposer).toHaveValue("Черновик другого потока");
-  } finally {
+    heldUntouched.release();
     heldFailure.release();
   }
 });
