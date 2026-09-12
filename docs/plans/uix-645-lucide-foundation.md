@@ -4,6 +4,14 @@
 
 Этот раздел актуальнее исторического foundation-отчёта ниже.
 
+После сохранения первого пула в `b9882ad` подготовлен следующий shell-пул:
+шесть контролов App (выбор/показ/создание сцены, меню сеанса, раскрытие Sidebar,
+закрытие roll toast). Изменены только изображения иконок; исходные publication
+branch, ARIA и handlers сохранены. Guard расширен до 11 source-файлов и
+negative fixture возврата fullwidth-plus на копии фактического App source в
+памяти теста. Это доказывает intent теста guard, не browser-поведение App:
+сам fixture ещё не запущен. Локальная подготовка, без публикации и runtime.
+
 Дополнение текущего пула: локально подготовлен также MusicBar (Play/Pause,
 Volume2, Ellipsis) и GamePauseOverlay (Pause), с двумя focused DOM-кейсами.
 Добавлены `docs/icons-migration.md`, `scripts/ui-icon-policy.mjs` и

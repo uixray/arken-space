@@ -22,6 +22,7 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 | Sidebar collapse | HTML entity | PanelRightClose | scoped source gate; browser ещё не выполнен |
 | Music play / pause / volume / menu | glyphs и entities | Play / Pause / Volume2 / Ellipsis | реальные SVG и разные формы play/pause |
 | Game pause action | Ⅱ | Pause | прежнее доступное действие + SVG |
+| Shell: сцены / публикация / create / session / sidebar / toast | glyphs и entities | ChevronDown / Cast, ScreenShare / Plus / Menu / PanelRightOpen / X | source guard и negative source fixture; browser не выполнен |
 
 Ни одна строка не означает PASS нового runtime. Старые foundation-результаты
 отделены в [checkpoint](./plans/uix-645-lucide-foundation.md).
@@ -29,7 +30,8 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 ## Оставшиеся области по source inventory
 
 - [ ] `App.tsx`: scene disclosure, publication state/action, create scene,
-      account menu, expand Sidebar, notification close.
+      account menu, expand Sidebar, notification close. Source подготовлен;
+      исходные publication branch и обработчики сохранены, runtime QA остаётся.
 - [ ] `MusicBar.tsx`, `GamePauseOverlay.tsx`: play/pause, volume, overflow,
       pause action. Исходник подготовлен, ожидаются QA и приёмка.
 - [ ] `RollModeControl.tsx`: normal/advantage/disadvantage.

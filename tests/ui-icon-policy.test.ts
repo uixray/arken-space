@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import process from "node:process";
 import { describe, expect, it } from "vitest";
 import {
   decodeCssHexEscapes,
@@ -15,6 +18,7 @@ function expectFinding(source: string, expected: string, file?: string) {
 describe("UIX-645 icon source policy", () => {
   it("guards the exact migrated sources and scoped CSS selectors", () => {
     expect(protectedSourceFiles).toEqual([
+      "apps/web/src/App.tsx",
       "apps/web/src/ui/ArkenDialog.tsx",
       "apps/web/src/Sidebar.tsx",
       "apps/web/src/MapToolbar.tsx",
@@ -27,6 +31,16 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/ui/AppIcon.tsx",
     ]);
     expect(scanProtectedSources()).toEqual([]);
+  });
+
+  it("UIX645_APP_SHELL_GLYPH_RETURN detects a diversion of the actual source", () => {
+    const file = "apps/web/src/App.tsx";
+    const source = readFileSync(path.join(process.cwd(), file), "utf8");
+    const anchor = "<AppIcon icon={AddIcon} />";
+    expect(source.split(anchor)).toHaveLength(2);
+    expect(scanUiSource(source, file)).toEqual([]);
+    const diverted = source.replace(anchor, "<span>＋</span>");
+    expect(scanUiSource(diverted, file).join("\n")).toContain("text glyph");
   });
 
   it("rejects literal JSX glyphs, HTML entities, config literals, and templates", () => {

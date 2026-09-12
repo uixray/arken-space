@@ -9,6 +9,7 @@ import process from "node:process";
 import ts from "typescript";
 
 export const protectedSourceFiles = [
+  "apps/web/src/App.tsx",
   "apps/web/src/ui/ArkenDialog.tsx",
   "apps/web/src/Sidebar.tsx",
   "apps/web/src/MapToolbar.tsx",
@@ -43,7 +44,7 @@ const namedEntities = new Map([
 // Symbol-only values are UI-icon candidates.  Embedded symbols remain prose
 // or math (for example "2×3"), which this scoped guard deliberately ignores.
 const glyphOnly =
-  /^[\s›‹«»•×Ⅱ\u2190-\u2BFF\u{1F000}-\u{1FAFF}\u200D\uFE0E\uFE0F]+$/u;
+  /^[\s›‹«»•×Ⅱ\uFF0B\u2190-\u2BFF\u{1F000}-\u{1FAFF}\u200D\uFE0E\uFE0F]+$/u;
 
 function codePointOr(value, fallback) {
   return Number.isInteger(value) && value >= 0 && value <= 0x10ffff
