@@ -1,5 +1,21 @@
 # UIX-645 — Lucide foundation checkpoint, 2026-09-06
 
+## Продолжение 2026-09-12 — интеграция main и иконки чата
+
+После отдельного успешного exact-main gate `9393593` интегрирован в прежнее
+чистое рабочее дерево без конфликтов, merge `a484e2e`. Проверенные изменения
+UIX-624 (native TextArea, scope epochs, pending draft/attachment guards) сохранены.
+Только затем фильтр и две send-кнопки ChatPanels заменены на Ellipsis/Send.
+`/` — буквальная slash-команда, не псевдоиконка; Direct send остаётся текстом.
+
+Guard/test inventory **28 файлов**, actual-source filter glyph negative fixture.
+Никаких handlers, состояний, ARIA-ownership или draft tests ради иконок не меняли.
+Существующий Direct pending-draft harness не покрывает эти два send render-path,
+поэтому SVG-проверки в него не подмешивали. Browser/quality gate UIX-645 остаётся
+невыполненным. Main PASS относится к main, не к новым локальным SVG-пулам.
+Далее: финальный glyph/coverage аудит и общий разрешённый hosted/browser gate.
+Публикации UIX-645 нет; скрытый Initiative не возвращать.
+
 ## Продолжение 2026-09-12 — escaped glyph в выборе стикеров
 
 После `128c87d` текущий source-аудит обнаружил ещё `\u263A` в компактном

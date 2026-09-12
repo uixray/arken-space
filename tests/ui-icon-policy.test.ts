@@ -40,6 +40,7 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/ui/ImageUploadField.tsx",
       "apps/web/src/ui/GravityFoundationPreview.tsx",
       "apps/web/src/StickerPicker.tsx",
+      "apps/web/src/sidebar/ChatPanels.tsx",
       "apps/web/src/ui/CursorPresenceMenu.tsx",
       "apps/web/src/renderers/GridSettings.tsx",
       "apps/web/src/renderers/CanvasHistoryControls.tsx",
@@ -70,6 +71,7 @@ describe("UIX-645 icon source policy", () => {
     ["apps/web/src/ui/SelectionActions.tsx", "CloseIcon", "×"],
     ["apps/web/src/ui/ImageUploadField.tsx", "DeleteIcon", "×"],
     ["apps/web/src/StickerPicker.tsx", "StickerPickerIcon", "☺"],
+    ["apps/web/src/sidebar/ChatPanels.tsx", "MoreIcon", "⋯"],
   ])("detects a glyph restored in %s", (file, icon, glyph) => {
     const source = readFileSync(path.join(process.cwd(), file), "utf8");
     const anchor = `<AppIcon icon={${icon}} />`;

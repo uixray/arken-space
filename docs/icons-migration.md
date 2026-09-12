@@ -31,6 +31,7 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 | World map / token selection / zoom | markers / checkmark / −/+ | MapPin / UsersRound / Check / Minus / Plus | WorldMaps GM/PLAYER marker и TokenCondition DOM дополнены; layer/zoom source-only |
 | Upload / selection / foundation preview | Gravity SVG | Trash / ArrowRight / X / Plus / Settings | upload/selection DOM дополнены; прямой импорт прежнего пака запрещён scoped guard |
 | StickerPicker compact trigger | escaped Unicode smile | Sticker | named/disabled trigger DOM подготовлен; escaped literal guard fixture |
+| Chat filter / Activity and legacy chat send | ⋯ / ➤ | Ellipsis / Send | scoped source guard; runtime pending after integration with draft repair |
 
 Ни одна строка не означает PASS нового runtime. Старые foundation-результаты
 отделены в [checkpoint](./plans/uix-645-lucide-foundation.md).
@@ -45,7 +46,9 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 - [ ] `RollModeControl.tsx`: normal/advantage/disadvantage. Source подготовлен;
       клавиатурная логика и radio semantics сохранены, QA ожидается.
 - [ ] `sidebar/ChatPanels.tsx`: фильтры и send; миграцию совместить с
-      интегрированным UIX-624, не затереть его pending-draft repair.
+      интегрированным UIX-624, не затереть его pending-draft repair. Source теперь
+      подготовлен после интеграции проверенного main9393593. Буквальная `/`
+      команда не заменяется; Direct send остаётся текстовой кнопкой.
 - [ ] `StickerPicker.tsx`: escaped `\u263A` найден дополнительным аудитом;
       trigger мигрирован на Sticker, текстовый режим сохранён. Lifecycle и
       browser matrix — отдельные оставшиеся критерии UIX-644, не решены иконкой.

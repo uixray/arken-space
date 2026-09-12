@@ -47,6 +47,7 @@ export {
   RotateCcw as ResetWindowIcon,
   Ruler as RulerIcon,
   ScreenShare as PublishSceneIcon,
+  Send as SendIcon,
   Settings as SettingsIcon,
   Sticker as StickerPickerIcon,
   Trash as DeleteIcon,
