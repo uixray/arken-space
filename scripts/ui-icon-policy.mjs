@@ -27,6 +27,9 @@ export const protectedSourceFiles = [
   "apps/web/src/sidebar/CharacterMediaGallery.tsx",
   "apps/web/src/renderers/TokenConditionMenu.tsx",
   "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+  "apps/web/src/ui/SelectionActions.tsx",
+  "apps/web/src/ui/ImageUploadField.tsx",
+  "apps/web/src/ui/GravityFoundationPreview.tsx",
   "apps/web/src/ui/CursorPresenceMenu.tsx",
   "apps/web/src/renderers/GridSettings.tsx",
   "apps/web/src/renderers/CanvasHistoryControls.tsx",
@@ -199,6 +202,9 @@ export function scanUiSource(source, file = "<inline>.tsx") {
         ? node.moduleSpecifier.text
         : "";
       const clause = node.importClause;
+      if (moduleName === "@gravity-ui/icons") {
+        findings.push(finding(file, "migrated UI must use the Lucide pack", node));
+      }
       if (moduleName.startsWith("lucide-react/")) {
         findings.push(finding(file, "Lucide subpath import is not allowed", node));
       }

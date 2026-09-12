@@ -29,6 +29,7 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 | Ресурсы / статус участников | отдельные −/+ и ●/○ | Minus / Plus / CircleDot / Circle | ResourceCounters DOM дополнен; hidden online/offline text; source guard |
 | World/character media | reorder / pagination arrows | ArrowUp / ArrowDown / ArrowLeft / ArrowRight | source guard; явные доступные имена; runtime gate остаётся |
 | World map / token selection / zoom | markers / checkmark / −/+ | MapPin / UsersRound / Check / Minus / Plus | WorldMaps GM/PLAYER marker и TokenCondition DOM дополнены; layer/zoom source-only |
+| Upload / selection / foundation preview | Gravity SVG | Trash / ArrowRight / X / Plus / Settings | upload/selection DOM дополнены; прямой импорт прежнего пака запрещён scoped guard |
 
 Ни одна строка не означает PASS нового runtime. Старые foundation-результаты
 отделены в [checkpoint](./plans/uix-645-lucide-foundation.md).
@@ -67,7 +68,8 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
       сохранённый исходник; не возвращать скрытый боевой функционал в продукт.
 - [ ] Остаточные потребители `@gravity-ui/icons`: `GravityFoundationPreview`,
       `ImageUploadField`, `SelectionActions`; официальный SVG другого пака —
-      отдельная миграция, не Unicode. Не удалять пакет до последнего потребителя.
+      отдельная миграция, не Unicode. Source подготовлен. Не удалять пакет
+      без dependency/bundle-аудита; внутренние иконки UIKit — другая граница.
 - [ ] Расширить scoped guard на завершённые области, затем полный повторный
       source inventory и bundle check на отсутствие полного каталога/CDN.
 - [ ] Общий hosted quality + negative/restored + browser GM/PLAYER,

@@ -1,5 +1,22 @@
 # UIX-645 — Lucide foundation checkpoint, 2026-09-06
 
+## Продолжение 2026-09-12 — оставшиеся авторские Gravity SVG
+
+База локального пула `6a2727e`: SelectionActions, ImageUploadField и
+GravityFoundationPreview используют AppIcon вместо Gravity Icon/data. Имена
+кнопок, handlers, disabled и controlled upload lifecycle сохранены. Пакеты,
+lockfile и внутренние иконки UIKit не менялись.
+
+Подготовлены SVG/name проверки в существующих selection/upload DOM-тестах;
+upload case проверяет controlled onUpdate(undefined) и снимает временный URL
+stub после unmount. Никаких загрузок или пользовательских файлов в тесте.
+Guard теперь перечисляет **26 source-файлов**, запрещает прямой импорт прежнего
+пака в пройденных областях; negative fixtures используют настоящие исходники.
+Проверки только source/diff/inventory, runtime/formatter/types/browser/bundle
+не выполнены. Обязательный общий gate всё ещё впереди, UIX-645 не опубликован.
+Next: интегрировать проверенную main после её отдельного gate, затем ChatPanels,
+финальный реестр оставшихся glyphs и bundle/UI QA. Hidden Initiative не включать.
+
 ## Продолжение 2026-09-12 — медиа, карта и выбранность
 
 База `e219729`: WorldContentWorkspace и CharacterMediaGallery переведены на

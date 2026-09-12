@@ -8,9 +8,7 @@ vi.mock("@gravity-ui/uikit", () => ({
   Button: ({ children, ...props }: { children?: ReactNode }) => (
     <button {...props}>{children}</button>
   ),
-  Icon: () => null,
 }));
-vi.mock("@gravity-ui/icons", () => ({ TrashBin: {} }));
 
 function transfer(file: File) {
   return {
@@ -33,6 +31,40 @@ function setup(disabled = false) {
 }
 
 describe("UIX-612 — единый intake изображения", () => {
+  it("keeps a named decorative delete icon and the controlled removal callback", () => {
+    const OriginalURL = URL;
+    vi.stubGlobal(
+      "URL",
+      class extends OriginalURL {
+        static createObjectURL = vi.fn(() => "blob:icon-test");
+        static revokeObjectURL = vi.fn();
+      },
+    );
+    let view: ReturnType<typeof renderComponent> | undefined;
+    try {
+      const onUpdate = vi.fn();
+      view = renderComponent(
+        <ImageUploadField
+          label="Исходник"
+          value={new File(["image"], "portrait.png", { type: "image/png" })}
+          onUpdate={onUpdate}
+        />,
+      );
+      const remove = screen.getByRole("button", {
+        name: "Удалить portrait.png",
+      });
+      expect(
+        remove.querySelector("svg.arken-icon"),
+        "UIX645_UPLOAD_DELETE_ICON",
+      ).toHaveAttribute("aria-hidden", "true");
+      fireEvent.click(remove);
+      expect(onUpdate).toHaveBeenCalledExactlyOnceWith(undefined);
+    } finally {
+      view?.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("проводит picker через тот же validation/update путь", () => {
     const { onUpdate } = setup();
     const file = new File(["image"], "picker.png", { type: "image/png" });

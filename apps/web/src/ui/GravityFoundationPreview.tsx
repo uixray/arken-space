@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Button,
   Checkbox,
-  Icon,
   Label,
   Popup,
   Select,
@@ -10,7 +9,8 @@ import {
   TextArea,
   TextInput,
 } from "@gravity-ui/uikit";
-import { Gear, Plus, TrashBin } from "@gravity-ui/icons";
+import { AppIcon } from "./AppIcon";
+import { AddIcon, DeleteIcon, SettingsIcon } from "./icons";
 import { ArkenDialog } from "./ArkenDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { EmptyState } from "./EntityState";
@@ -51,7 +51,7 @@ export function GravityFoundationPreview() {
         </div>
         <div className="gravity-preview__actions">
           <Button view="action" size="l" onClick={() => setFormOpen(true)}>
-            <Icon data={Plus} size={16} />
+            <AppIcon icon={AddIcon} />
             Создать сцену
           </Button>
           <Button
@@ -60,7 +60,7 @@ export function GravityFoundationPreview() {
             size="l"
             onClick={() => setPopupOpen((value) => !value)}
           >
-            <Icon data={Gear} size={16} />
+            <AppIcon icon={SettingsIcon} />
             Параметры
           </Button>
           <Popup
@@ -79,7 +79,7 @@ export function GravityFoundationPreview() {
             size="l"
             onClick={() => setConfirmOpen(true)}
           >
-            <Icon data={TrashBin} size={16} />
+            <AppIcon icon={DeleteIcon} />
             Удалить
           </Button>
           <Button

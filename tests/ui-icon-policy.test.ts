@@ -36,6 +36,9 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/sidebar/CharacterMediaGallery.tsx",
       "apps/web/src/renderers/TokenConditionMenu.tsx",
       "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "apps/web/src/ui/SelectionActions.tsx",
+      "apps/web/src/ui/ImageUploadField.tsx",
+      "apps/web/src/ui/GravityFoundationPreview.tsx",
       "apps/web/src/ui/CursorPresenceMenu.tsx",
       "apps/web/src/renderers/GridSettings.tsx",
       "apps/web/src/renderers/CanvasHistoryControls.tsx",
@@ -63,6 +66,8 @@ describe("UIX-645 icon source policy", () => {
     ["apps/web/src/WorldMapsWorkspace.tsx", "WorldLocationIcon", "●"],
     ["apps/web/src/renderers/TokenConditionMenu.tsx", "SelectedOptionIcon", "✓"],
     ["apps/web/src/renderers/Orthographic2DRenderer.tsx", "DecreaseIcon", "−"],
+    ["apps/web/src/ui/SelectionActions.tsx", "CloseIcon", "×"],
+    ["apps/web/src/ui/ImageUploadField.tsx", "DeleteIcon", "×"],
   ])("detects a glyph restored in %s", (file, icon, glyph) => {
     const source = readFileSync(path.join(process.cwd(), file), "utf8");
     const anchor = `<AppIcon icon={${icon}} />`;
@@ -73,6 +78,10 @@ describe("UIX-645 icon source policy", () => {
   });
 
   it("rejects literal JSX glyphs, HTML entities, config literals, and templates", () => {
+    expectFinding(
+      'import { TrashBin } from "@gravity-ui/icons";',
+      "must use the Lucide pack",
+    );
     expectFinding("const v = <button><span>+</span></button>;", "text glyph");
     expectFinding('const v = <Button>{"-"}</Button>;', "literal glyph");
     expect(scanUiSource("const view = <button>→</button>;").join("\n")).toContain(
