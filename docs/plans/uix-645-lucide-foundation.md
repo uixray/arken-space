@@ -1,5 +1,25 @@
 # UIX-645 — Lucide foundation checkpoint, 2026-09-06
 
+## Продолжение 2026-09-12 — медиа, карта и выбранность
+
+База `e219729`: WorldContentWorkspace и CharacterMediaGallery переведены на
+named reorder/pagination SVG; у world icon-only кнопок появились явные имена,
+иначе удаление glyph лишило бы их имени. Relation arrows в содержимом сохранены.
+WorldMaps: MapPin для локации, UsersRound 24px для группы, прежние координаты,
+roles/labels и pointer policy. CSS accent selector теперь адресует SVG, тень
+группы поддержана SVG drop-shadow без новых анимаций или assets.
+TokenConditionMenu/Orthographic renderer: Check вместо ✓, Plus/Minus для zoom,
+прежние aria-checked, условия, handlers и Konva primitives сохранены.
+
+Guard/test inventory теперь **23 source-файла**. Подготовлены новые негативные
+actual-source fixtures, GM/PLAYER WorldMap marker DOM-кейсы и выбранная/пустая
+condition SVG-проверка. Не запускались. Media reorder/viewer и canvas layer/zoom
+пока source-only; крупные mock harnesses не создавались.
+Проверки текущего пула: только source review, declarations, anchors и diff;
+никаких текущих runtime/browser/bundle/contrast PASS. Публикации UIX-645 нет.
+Next: оставшиеся Gravity consumers и ChatPanels после UIX-624 integration;
+скрытый Initiative не возвращать. Затем общий разрешённый hosted/browser gate.
+
 ## Продолжение 2026-09-12 — ресурсы и статус участников
 
 После локального `2e38364` подготовлены ResourceCounters (кнопки Minus/Plus) и

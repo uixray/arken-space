@@ -3,9 +3,12 @@
 export {
   Archive as CharacterArchiveIcon,
   ArrowDown as MoveDownIcon,
+  ArrowLeft as PreviousPageIcon,
+  ArrowRight as NextPageIcon,
   ArrowUp as MoveUpIcon,
   Brush as FogBrushIcon,
   Cast as PublishedSceneIcon,
+  Check as SelectedOptionIcon,
   ChevronDown as ScenePickerIcon,
   ChevronDown as CollapseSectionIcon,
   ChevronRight as ExpandSectionIcon,
@@ -22,6 +25,7 @@ export {
   Hand as PanIcon,
   Hexagon as CoverPolygonIcon,
   MapPin as PingIcon,
+  MapPin as WorldLocationIcon,
   Maximize2 as ResizeMapIcon,
   Ellipsis as MoreToolsIcon,
   Ellipsis as MoreIcon,
@@ -44,6 +48,7 @@ export {
   ScreenShare as PublishSceneIcon,
   Trash as DeleteIcon,
   Undo2 as UndoIcon,
+  UsersRound as PartyLocationIcon,
   Volume2 as VolumeIcon,
   X as CloseIcon,
 } from "lucide-react";

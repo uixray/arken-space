@@ -23,9 +23,17 @@ describe("TokenConditionMenu", () => {
         onClose={onClose}
       />,
     );
+    const selected = screen.getByRole("menuitemcheckbox", { name: "Отравлен" });
+    expect(selected).toHaveAttribute("aria-checked", "true");
     expect(
-      screen.getByRole("menuitemcheckbox", { name: /Отравлен/ }),
-    ).toHaveAttribute("aria-checked", "true");
+      selected.querySelector("svg.arken-icon"),
+      "UIX645_SELECTED_CONDITION_ICON",
+    ).toHaveAttribute("aria-hidden", "true");
+    expect(
+      screen
+        .getByRole("menuitemcheckbox", { name: "Обездвижен" })
+        .querySelector("svg.arken-icon"),
+    ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("menuitemcheckbox", { name: "Обездвижен" }),
     );

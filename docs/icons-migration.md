@@ -27,6 +27,8 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 | Характеристики: reorder / rename / delete / add | glyphs | ArrowUp / ArrowDown / Pencil / Trash / Plus | существующий StatLayoutCard DOM дополнен; negative source fixture |
 | Режимы бросков / приватность / disclosure | стрелки, круг, diamond | ArrowUp / ArrowDown / Circle / EyeOff / ChevronRight / ChevronDown | новые DiceTray DOM-кейсы; shared secret icon; source guard |
 | Ресурсы / статус участников | отдельные −/+ и ●/○ | Minus / Plus / CircleDot / Circle | ResourceCounters DOM дополнен; hidden online/offline text; source guard |
+| World/character media | reorder / pagination arrows | ArrowUp / ArrowDown / ArrowLeft / ArrowRight | source guard; явные доступные имена; runtime gate остаётся |
+| World map / token selection / zoom | markers / checkmark / −/+ | MapPin / UsersRound / Check / Minus / Plus | WorldMaps GM/PLAYER marker и TokenCondition DOM дополнены; layer/zoom source-only |
 
 Ни одна строка не означает PASS нового runtime. Старые foundation-результаты
 отделены в [checkpoint](./plans/uix-645-lucide-foundation.md).
@@ -54,11 +56,13 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 - [ ] `sidebar/SetupPanel.tsx`: status dots; добавлено нецветовое доступное
       обозначение. Source подготовлен, browser/DOM QA остаётся.
 - [ ] `WorldMapsWorkspace.tsx`: location/group-position markers; игровую
-      позицию/геометрию не менять вместе с декоративным SVG.
+      позицию/геометрию не менять вместе с декоративным SVG. Source и marker
+      DOM-кейсы подготовлены, currentColor/размеры/тени требуют visual gate.
 - [ ] `WorldContentWorkspace.tsx`, `sidebar/CharacterMediaGallery.tsx`:
-      reorder и pagination.
+      reorder и pagination. Source подготовлен, actual browser QA ожидается.
 - [ ] `renderers/TokenConditionMenu.tsx`, `Orthographic2DRenderer.tsx`:
-      selected condition/layer и zoom. Выбранность остаётся семантической.
+      selected condition/layer и zoom. Source подготовлен, выбранность остаётся
+      семантической; TokenCondition DOM дополнен, canvas runtime не проверен.
 - [ ] `sidebar/InitiativePanel.tsx`: pin, reorder, roll, remove. Только
       сохранённый исходник; не возвращать скрытый боевой функционал в продукт.
 - [ ] Остаточные потребители `@gravity-ui/icons`: `GravityFoundationPreview`,

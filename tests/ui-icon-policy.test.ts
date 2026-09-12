@@ -31,6 +31,11 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/sidebar/DiceTrayPanel.tsx",
       "apps/web/src/sidebar/ResourceCounters.tsx",
       "apps/web/src/sidebar/SetupPanel.tsx",
+      "apps/web/src/WorldMapsWorkspace.tsx",
+      "apps/web/src/WorldContentWorkspace.tsx",
+      "apps/web/src/sidebar/CharacterMediaGallery.tsx",
+      "apps/web/src/renderers/TokenConditionMenu.tsx",
+      "apps/web/src/renderers/Orthographic2DRenderer.tsx",
       "apps/web/src/ui/CursorPresenceMenu.tsx",
       "apps/web/src/renderers/GridSettings.tsx",
       "apps/web/src/renderers/CanvasHistoryControls.tsx",
@@ -54,6 +59,10 @@ describe("UIX-645 icon source policy", () => {
     ["apps/web/src/sidebar/StatLayoutCard.tsx", "RenameIcon", "✎"],
     ["apps/web/src/sidebar/DiceTrayPanel.tsx", "SecretRollIcon", "◆"],
     ["apps/web/src/sidebar/ResourceCounters.tsx", "AddIcon", "+"],
+    ["apps/web/src/WorldContentWorkspace.tsx", "MoveUpIcon", "↑"],
+    ["apps/web/src/WorldMapsWorkspace.tsx", "WorldLocationIcon", "●"],
+    ["apps/web/src/renderers/TokenConditionMenu.tsx", "SelectedOptionIcon", "✓"],
+    ["apps/web/src/renderers/Orthographic2DRenderer.tsx", "DecreaseIcon", "−"],
   ])("detects a glyph restored in %s", (file, icon, glyph) => {
     const source = readFileSync(path.join(process.cwd(), file), "utf8");
     const anchor = `<AppIcon icon={${icon}} />`;

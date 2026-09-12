@@ -28,6 +28,8 @@ import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { AppIcon } from "../ui/AppIcon";
+import { AddIcon, DecreaseIcon, SelectedOptionIcon } from "../ui/icons";
 import {
   pruneSelectionIds,
   rectanglesIntersect,
@@ -3154,7 +3156,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 setTokenMenu(null);
               }}
             >
-              {tokenMenu.token.layer === layer ? "✓ " : ""}
+              {tokenMenu.token.layer === layer && (
+                <AppIcon icon={SelectedOptionIcon} />
+              )}
               {label}
             </button>
           ))}
@@ -3416,7 +3420,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           aria-label="Увеличить масштаб"
           onClick={() => zoomAtCenter(scale + 0.1)}
         >
-          +
+          <AppIcon icon={AddIcon} />
         </button>
         <input
           aria-label="Масштаб карты"
@@ -3431,7 +3435,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           aria-label="Уменьшить масштаб"
           onClick={() => zoomAtCenter(scale - 0.1)}
         >
-          −
+          <AppIcon icon={DecreaseIcon} />
         </button>
         {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
         {props.role === "GM" && (
