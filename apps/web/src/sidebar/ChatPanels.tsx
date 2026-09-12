@@ -92,6 +92,7 @@ import {
 import { QuickRollPanel } from "./QuickRollPanel";
 import { ResourceCounters } from "./ResourceCounters";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
+import { useSubmissionDraft } from "../ui/useSubmissionDraft";
 
 /**
  * UIX-388: shared tooltip/label text for the composer's send icon so
@@ -334,7 +335,11 @@ export function ActivityPanel({
     () => createRollCharacterNameSource(snapshot),
     [snapshot],
   );
-  const [composer, setComposer] = useState("");
+  const activityDraft = useSubmissionDraft(
+    `${snapshot.campaign.id}:${snapshot.me.id}:activity`,
+  );
+  const composer = activityDraft.value;
+  const setComposer = activityDraft.setValue;
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const availableRollCharacters = useMemo(
@@ -406,6 +411,7 @@ export function ActivityPanel({
       setComposerError(intent.message);
       return;
     }
+    const consumed = activityDraft.consume();
     setComposerError("");
     try {
       if (intent.kind === "ROLL")
@@ -417,13 +423,14 @@ export function ActivityPanel({
           "NORMAL",
         );
       else await onChat(intent.body, visibility, "TABLE");
-      setComposer("");
     } catch {
-      setComposerError(
-        intent.kind === "ROLL"
-          ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
-          : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
-      );
+      activityDraft.restore(consumed.token, consumed.value);
+      if (activityDraft.isCurrentScope(consumed.token))
+        setComposerError(
+          intent.kind === "ROLL"
+            ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
+            : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+        );
     }
   };
   const submit = (event: FormEvent) => {
@@ -927,7 +934,11 @@ export function DirectChatPanel({
       "",
   );
   const [selectingPeer, setSelectingPeer] = useState(false);
-  const [composer, setComposer] = useState("");
+  const directDraft = useSubmissionDraft(
+    `${snapshot.campaign.id}:${snapshot.me.id}:${activeThread?.id ?? "none"}`,
+  );
+  const composer = directDraft.value;
+  const setComposer = directDraft.setValue;
   const [attachment, setAttachment] = useState<ChatAttachmentMetadata | null>(
     null,
   );
@@ -1009,6 +1020,7 @@ export function DirectChatPanel({
     try {
       const previewUrl = URL.createObjectURL(file);
       try {
+        directDraft.touch();
         setAttachment(await onUploadAttachment(file));
         if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
         setAttachmentPreviewUrl(previewUrl);
@@ -1069,19 +1081,25 @@ export function DirectChatPanel({
     event.preventDefault();
     const body = composer.trim();
     if (!activeThread || (!body && !attachment)) return;
+    const consumed = directDraft.consume();
+    const sentAttachment = attachment;
+    const sentPreviewUrl = attachmentPreviewUrl;
     setError("");
     try {
       await onDirectChat(
         activeThread.id,
         body || "Изображение",
-        attachment ? [attachment.contentId] : [],
+        sentAttachment ? [sentAttachment.contentId] : [],
       );
-      setComposer("");
-      setAttachment(null);
-      if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
-      setAttachmentPreviewUrl("");
+      if (directDraft.isUntouched(consumed.token)) {
+        setAttachment(null);
+        if (sentPreviewUrl) URL.revokeObjectURL(sentPreviewUrl);
+        setAttachmentPreviewUrl("");
+      }
     } catch {
-      setError("Не удалось отправить личное сообщение.");
+      directDraft.restore(consumed.token, consumed.value);
+      if (directDraft.isCurrentScope(consumed.token))
+        setError("Не удалось отправить личное сообщение.");
     }
   }
 
@@ -1200,6 +1218,7 @@ export function DirectChatPanel({
                   view="flat"
                   type="button"
                   onClick={() => {
+                    directDraft.touch();
                     setAttachment(null);
                     if (attachmentPreviewUrl)
                       URL.revokeObjectURL(attachmentPreviewUrl);
@@ -1272,7 +1291,11 @@ export function ChatPanel({
   onMessageFocused: () => void;
   onOpenPlayerRequests: () => void;
 }) {
-  const [composer, setComposer] = useState("");
+  const chatDraft = useSubmissionDraft(
+    `${snapshot.campaign.id}:${snapshot.me.id}:${activeStream}`,
+  );
+  const composer = chatDraft.value;
+  const setComposer = chatDraft.setValue;
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const messages = useMemo(
@@ -1372,18 +1395,28 @@ export function ChatPanel({
       setComposerError(intent.message);
       return;
     }
+    const consumed = chatDraft.consume();
     setComposerError("");
-    if (intent.kind === "ROLL" && activeStream === "TABLE")
-      await onRoll(
-        intent.formula,
-        undefined,
-        visibility,
-        snapshot.me.characterId,
-        "NORMAL",
-      );
-    else if (intent.kind === "TEXT")
-      await onChat(intent.body, visibility, activeStream);
-    setComposer("");
+    try {
+      if (intent.kind === "ROLL" && activeStream === "TABLE")
+        await onRoll(
+          intent.formula,
+          undefined,
+          visibility,
+          snapshot.me.characterId,
+          "NORMAL",
+        );
+      else if (intent.kind === "TEXT")
+        await onChat(intent.body, visibility, activeStream);
+    } catch {
+      chatDraft.restore(consumed.token, consumed.value);
+      if (chatDraft.isCurrentScope(consumed.token))
+        setComposerError(
+          intent.kind === "ROLL"
+            ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
+            : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+        );
+    }
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();

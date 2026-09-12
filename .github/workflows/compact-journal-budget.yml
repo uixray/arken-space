@@ -14,7 +14,7 @@ concurrency:
 jobs:
   targeted:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17-alpine
@@ -49,14 +49,14 @@ jobs:
       - name: Changed-file quality
         shell: bash
         run: |
-          files=(apps/web/src/sidebar/ChatPanels.tsx apps/web/src/styles.css apps/web/src/mobile-foundation.css tests/e2e/compact-journal-budget.spec.ts tests/e2e/activity-feed-layout.spec.ts scripts/check-compact-journal-budget.mjs .github/workflows/compact-journal-budget.yml)
+          files=(apps/web/src/sidebar/ChatPanels.tsx apps/web/src/sidebar/ChatPanels.pending-draft.test.tsx apps/web/src/ui/useSubmissionDraft.ts apps/web/src/styles.css apps/web/src/mobile-foundation.css tests/e2e/compact-journal-budget.spec.ts tests/e2e/activity-feed-layout.spec.ts tests/e2e/composer-pending-draft.spec.ts tests/e2e/dialog-focus.spec.ts tests/e2e/modal-focus.ts scripts/check-compact-journal-budget.mjs scripts/check-composer-drafts.mjs .github/workflows/compact-journal-budget.yml)
           if ! pnpm exec prettier --check "${files[@]}"; then
             for file in "${files[@]}"; do
               pnpm exec prettier "$file" | diff -u "$file" - || true
             done
             exit 1
           fi
-          pnpm exec eslint apps/web/src/sidebar/ChatPanels.tsx tests/e2e/compact-journal-budget.spec.ts tests/e2e/activity-feed-layout.spec.ts scripts/check-compact-journal-budget.mjs
+          pnpm exec eslint apps/web/src/sidebar/ChatPanels.tsx apps/web/src/sidebar/ChatPanels.pending-draft.test.tsx apps/web/src/ui/useSubmissionDraft.ts tests/e2e/compact-journal-budget.spec.ts tests/e2e/activity-feed-layout.spec.ts tests/e2e/composer-pending-draft.spec.ts tests/e2e/dialog-focus.spec.ts tests/e2e/modal-focus.ts scripts/check-compact-journal-budget.mjs scripts/check-composer-drafts.mjs
       - run: pnpm build
       - run: pnpm typecheck
       - name: Prepare isolated test database
@@ -78,11 +78,14 @@ jobs:
           done
           test "$ready" = 1
           node scripts/check-compact-journal-budget.mjs
+          node scripts/check-composer-drafts.mjs
       - name: Compact synthetic receipt only
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: compact-journal-budget
-          path: ${{ runner.temp }}/compact-journal-budget/receipt.json
+          path: |
+            ${{ runner.temp }}/compact-journal-budget/receipt.json
+            ${{ runner.temp }}/composer-drafts/receipt.json
           retention-days: 7
           if-no-files-found: warn

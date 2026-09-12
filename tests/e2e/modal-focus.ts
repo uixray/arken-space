@@ -5,6 +5,7 @@ export async function assertModalFocusCycle(
   page: Page,
   dialog: Locator,
   key: "Tab" | "Shift+Tab" = "Tab",
+  presses = 8,
 ) {
   await expect(dialog).toBeVisible();
   const recorder = await dialog.evaluateHandle((element) => {
@@ -43,7 +44,7 @@ export async function assertModalFocusCycle(
   try {
     await assertInside();
     await assertNoEscape();
-    for (let index = 0; index < 8; index += 1) {
+    for (let index = 0; index < presses; index += 1) {
       await page.keyboard.press(key);
       // A background focus hop is a failure even if the trap later recovers.
       await assertNoEscape();
