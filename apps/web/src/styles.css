@@ -60,7 +60,7 @@
  *      (`--arken-layer-popup`, 1000), `.arken-workspace-window` (1200,
  *      explicitly kept below Gravity's modal dialog layer).
  *   5. Dialogs -- modal dialogs and their backdrops sit above everything
- *      else, e.g. `.sticker-picker` (1250).
+ *      else. Sticker popups use the popup tier of their owning surface.
  * Dropdown/popover visibility must not depend on source DOM order -- always
  * reach for this tier list (or `--arken-layer-popup`) instead of an
  * ad-hoc/arbitrary z-index when adding a new overlay.
@@ -3023,35 +3023,32 @@ code {
 /* Sticker picker */
 .sticker-picker {
   position: relative;
-  z-index: 1250;
-  isolation: isolate;
 }
-/* The message list owns scrolling, so opening a picker may safely escape the
-   chat shell without putting the entire sidebar above workspace windows. */
-.panel-scroll.chat-scroll:has(.sticker-picker-panel),
-.chat-panel:has(.sticker-picker-panel),
-.chat-compose:has(.sticker-picker-panel) {
-  overflow: visible;
+.sticker-picker-popup {
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--radius-md);
 }
-.chat-compose:has(.sticker-picker-panel) {
-  position: relative;
-  z-index: 1250;
+/* No interactive exit frame above another owner, even before portal unmount. */
+[data-floating-ui-status="close"]:has(> .sticker-picker-popup),
+[data-floating-ui-status="close"]:has(> .sticker-picker-popup) * {
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 .sticker-picker-panel {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + var(--space-xs));
-  z-index: 1250;
   pointer-events: auto;
   width: min(340px, calc(100vw - 2rem));
   max-height: min(520px, 70vh);
+  max-height: min(520px, 70dvh);
   overflow: auto;
+  overscroll-behavior: contain;
   display: grid;
   gap: var(--space-sm);
   padding: var(--space-sm);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #211f1c;
+  background: var(--surface-2);
+  color: var(--text);
   box-shadow: var(--shadow-lg);
 }
 .sticker-picker-panel > input {
@@ -3139,10 +3136,8 @@ code {
 }
 @media (max-width: 520px) {
   .sticker-picker-panel {
-    position: fixed;
-    inset: auto var(--space-sm) var(--space-sm);
-    width: auto;
     max-height: 60vh;
+    max-height: 60dvh;
   }
   .direct-compose {
     grid-template-columns: minmax(0, 1fr) auto;

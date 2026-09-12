@@ -1,5 +1,17 @@
 # UIX-644 — реестр меню, popup и picker
 
+## 2026-09-12 — StickerPicker и нативные поля заявок, подготовка к проверке
+
+- База: `93935933738c78f459b8a0fa1c4d13747f82c8e3` (M77). Ниже сохранён исторический реестр 6 сентября, не текущая приёмка всех строк.
+- StickerPicker переведён с локального absolute/fixed блока и произвольного `1250` на существующий Gravity Popup: portal, owner class, fixed anchor positioning, initial search focus, Escape/outside/focus-out, возврат фокуса средствами библиотеки. Убрано размыкание overflow у всего chat shell. Цвет поверхности берётся из темы.
+- Hidden/inert владельца и disabled закрывают picker; observer работает только пока тот открыт и отключается при cleanup. Поздний ответ отправки не закрывает повторно открытый picker и не переносит старую ошибку в новую сессию. До завершения отправки повторная отправка заблокирована.
+- Реестр исходных точек дополнен `StickerPicker.tsx / tag:Popup / 1`. Это изменение инвентаризации, не доказательство runtime PASS.
+- Подготовлены `StickerPicker.dom.test.tsx` (реальный Popup и ArkenDialog workspace/modal, delayed resolve/reject, retry, disabled/hidden owner), `sticker-picker-lifecycle.spec.ts` (реальная Activity UI, синтетические read-only API fixtures, GM/PLAYER, 1280/390 → 360×480, hit-testing/scroll/Escape/outside focus/owner), `player-requests-controls.spec.ts` (реальная изолированная campaign fixture, invite/login/API, 3 PLAYER draft selects и 3 GM/PLAYER filters). Старый concept picker test теперь ищет portal dialog, а не потомка trigger.
+- **Текущий пул: source review + diff check только. Formatter, types, lint, Vitest и Chromium/Firefox ещё НЕ запущены. Публикации и production deploy нет. UIX-644 остаётся In Progress.** Синтетические browser fixtures не доказывают серверную авторизацию; viewport resize не доказывает настоящий browser zoom или экранную клавиатуру.
+- Browser-проверка picker внутри настоящего modal/workspace и смена чужого modal owner остаются открытыми: в текущем приложении нет подтверждённого доступного пользовательского маршрута для такого picker. Не создавать скрытые Direct/Story tabs ради тестов. DOM-покрытие не заменяет этот gate.
+- Не повторять уже интегрированные modal-stack исправления `7ab672e`, `222c1b8`, `72d5df1` и selection/zoom geometry: актуальные регрессии находятся в `modal-owner-contract`, `modal-owner-close-lifecycle`, `scene-workspace-dialog`, `canvas-token-regressions`. Исторические утверждения ниже об отсутствии этих проверок устарели.
+- Следующий gate: разрешённая удалённая валидация точной ревизии пула, затем обновление результатов отдельных строк. Полная матрица всего реестра, WorldMaps native selects, browser zoom и ручные/device AC этим пулом не закрываются. Интеграция отдельного локального UIX-645 должна сохранить его Sticker AppIcon.
+
 ## Контрольная точка — статический срез 2026-09-06
 
 - **База:** `8dadb9ae295560c6f225cce5de5be522683393ab`. Номера строк ниже относятся к этой базе, а не к параллельной правке scene picker.
