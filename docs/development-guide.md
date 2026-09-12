@@ -6,6 +6,10 @@ production-процедуры — в [operations.md](./operations.md).
 
 ## Требования
 
+**UI-иконки:** только Lucide через общий entrypoint и `AppIcon`.
+Символы/emoji вместо иконок запрещены. Контракт, доступность и границы миграции:
+[Иконки интерфейса](./icons.md), UIX-645.
+
 - Node.js `>=20.19.0`; production images используют Node 20.
 - pnpm `10.12.1`, зафиксированный полем `packageManager`.
 - Docker Engine/Compose для PostgreSQL, full-stack multiplayer и restore tests.

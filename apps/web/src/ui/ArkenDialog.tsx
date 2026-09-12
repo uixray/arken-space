@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Dialog } from "@gravity-ui/uikit";
 import { useWorkspaceWindow } from "./useWorkspaceWindow";
 import { OverlayOwnerContext } from "./overlay-owner";
+import { AppIcon } from "./AppIcon";
+import { CloseIcon, ResetWindowIcon } from "./icons";
 
 export interface ArkenDialogProps {
   open: boolean;
@@ -103,7 +105,7 @@ export function ArkenDialog({
                 aria-label="Сбросить расположение окна"
                 title="Сбросить расположение окна"
               >
-                ↺
+                <AppIcon icon={ResetWindowIcon} />
               </button>
             ) : null}
             <button
@@ -112,7 +114,7 @@ export function ArkenDialog({
               onClick={onClose}
               aria-label="Закрыть окно"
             >
-              ×
+              <AppIcon icon={CloseIcon} />
             </button>
           </header>
           <div className="arken-workspace-window__body">{children}</div>

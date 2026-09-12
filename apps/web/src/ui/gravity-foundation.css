@@ -266,6 +266,12 @@
   border: 0;
 }
 
+.arken-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
 .arken-selection-actions {
   display: flex;
   align-items: center;

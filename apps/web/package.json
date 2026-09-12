@@ -16,6 +16,7 @@
     "@gravity-ui/icons": "2.20.0",
     "@gravity-ui/uikit": "7.43.0",
     "konva": "10.3.0",
+    "lucide-react": "1.41.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-konva": "19.2.5",
