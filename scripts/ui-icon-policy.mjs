@@ -29,6 +29,7 @@ export const protectedSourceFiles = [
   "apps/web/src/renderers/Orthographic2DRenderer.tsx",
   "apps/web/src/ui/SelectionActions.tsx",
   "apps/web/src/ui/ImageUploadField.tsx",
+  "apps/web/src/ui/AudioUploadField.tsx",
   "apps/web/src/ui/GravityFoundationPreview.tsx",
   "apps/web/src/StickerPicker.tsx",
   "apps/web/src/sidebar/ChatPanels.tsx",

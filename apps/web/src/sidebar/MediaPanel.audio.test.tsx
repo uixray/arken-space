@@ -63,11 +63,14 @@ it.each([
   expect(upload).toBeEnabled();
   expect(upload).toHaveAccessibleDescription("Файл готов к загрузке.");
   expect(section.querySelector("img, audio, video")).toBeNull();
+  const remove = within(section).getByRole("button", { name: `Удалить ${name}` });
+  expect(remove.querySelector("svg.arken-icon")).toHaveAttribute("aria-hidden", "true");
   expect(onUpload).not.toHaveBeenCalled();
   await user.click(upload);
   expect(onUpload).toHaveBeenCalledTimes(1);
   expect(onUpload).toHaveBeenCalledWith(file, "AUDIO");
   expect(input).toBeDisabled();
+  expect(remove).toBeDisabled();
   expect(upload).toBeDisabled();
   expect(upload).toHaveAccessibleDescription("Файл загружается.");
   resolve({ ...asset, name, mimeType: type });

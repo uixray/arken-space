@@ -1,5 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { Button } from "@gravity-ui/uikit";
+import { AppIcon } from "./AppIcon";
+import { DeleteIcon } from "./icons";
 
 export interface AudioUploadFieldProps {
   label: string;
@@ -102,7 +104,7 @@ export function AudioUploadField({
               aria-label={`Удалить ${value.name}`}
               onClick={removeFile}
             >
-              Удалить
+              <AppIcon icon={DeleteIcon} />
             </Button>
           </figcaption>
         </figure>
