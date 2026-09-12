@@ -47,11 +47,13 @@ const ids = {
     action: pair(),
   },
   spellPack: {
+    reads: pair(),
     versions: pair(),
     lifecycle: pair(),
     archive: pair(),
   },
   spellPackVersion: {
+    reads: pair(),
     versions: pair(),
     lifecycle: pair(),
     archive: pair(),
@@ -1123,6 +1125,58 @@ describe("UIX-413 campaign isolation: world map sub-router", () => {
 });
 
 describe("UIX-580 campaign isolation: spell-pack sub-router", () => {
+  it.each([
+    {
+      key: "GET /api/spell-packs/:id/versions" as const,
+      suffix: () => "/versions?limit=1",
+      error: "SPELL_PACK_NOT_FOUND",
+    },
+    {
+      key: "GET /api/spell-packs/:id/versions/:versionId" as const,
+      suffix: (versionId: string) => `/versions/${versionId}`,
+      error: "SPELL_PACK_VERSION_NOT_FOUND",
+    },
+  ])("reads own and hides foreign targets for $key", async (probe) => {
+    const before = await db
+      .select()
+      .from(schema.spellPackVersions)
+      .orderBy(schema.spellPackVersions.id);
+    const own = await app.inject({
+      method: "GET",
+      url: `/api/spell-packs/${ids.spellPack.reads.own}${probe.suffix(ids.spellPackVersion.reads.own)}`,
+      headers: ownGmHeaders,
+    });
+    expect(own.statusCode, `${probe.key} own control`).toBe(200);
+    expect(own.headers["cache-control"]).toBe("private, no-store");
+    const result = own.json();
+    expect(result.items?.[0] ?? result).toMatchObject({
+      packId: ids.spellPack.reads.own,
+      versionId: ids.spellPackVersion.reads.own,
+    });
+    await expectForeignNotFound(
+      probe.key,
+      {
+        method: "GET",
+        url: `/api/spell-packs/${ids.spellPack.reads.foreign}${probe.suffix(ids.spellPackVersion.reads.foreign)}`,
+        headers: ownGmHeaders,
+      },
+      probe.error,
+    );
+    const missing = await app.inject({
+      method: "GET",
+      url: `/api/spell-packs/${uuid()}${probe.suffix(uuid())}`,
+      headers: ownGmHeaders,
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ error: probe.error });
+    expect(
+      await db
+        .select()
+        .from(schema.spellPackVersions)
+        .orderBy(schema.spellPackVersions.id),
+    ).toEqual(before);
+  });
+
   const cases = [
     {
       key: "POST /api/spell-packs/:id/versions" as const,

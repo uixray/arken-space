@@ -7,6 +7,9 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS,
+  spellPackInventoryResponseSchema,
+  spellPackVersionHistoryResponseSchema,
+  spellPackVersionResponseSchema,
   type SpellProgressionGraph,
 } from "@arken/contracts";
 import * as schema from "@arken/db";
@@ -18,6 +21,7 @@ import { registerSpellAssignmentRoutes } from "./spell-assignment-routes.js";
 let database: PGlite;
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
+let capturedReadQueries: string[] | null = null;
 
 const id = () => crypto.randomUUID();
 const ids = {
@@ -178,7 +182,14 @@ beforeAll(async () => {
         "",
       ),
     );
-  db = drizzle(database, { schema });
+  db = drizzle(database, {
+    schema,
+    logger: {
+      logQuery(query) {
+        capturedReadQueries?.push(query);
+      },
+    },
+  });
 
   await db.insert(schema.campaigns).values([
     { id: ids.campaign.own, name: "Own spell API campaign" },
@@ -225,6 +236,492 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close();
   await database.close();
+});
+
+describe("UIX-262 campaign-scoped GM spell-pack reads", () => {
+  const read = (
+    url: string,
+    requestHeaders: Record<string, string> = ownGmHeaders,
+  ) => app.inject({ method: "GET", url, headers: requestHeaders });
+
+  it("paginates stable inventory IDs with the latest summary and archives", async () => {
+    // Same timestamps and duplicate titles must not make ordering ambiguous.
+    const createdAt = new Date("2026-09-10T00:00:00.000Z");
+    const fixtures = Array.from({ length: 52 }, (_, index) => {
+      const suffix = String(index + 1).padStart(12, "0");
+      const packId = `fffffff0-0000-4000-8000-${suffix}`;
+      const versionId = `fffffff1-0000-4000-8000-${suffix}`;
+      return graph(packId, versionId, { title: "Same inventory title" });
+    });
+    await db.insert(schema.spellPacks).values(
+      fixtures.map((candidate) => ({
+        id: candidate.packId,
+        campaignId: ids.campaign.own,
+        createdAt,
+      })),
+    );
+    await db.insert(schema.spellPackVersions).values(
+      fixtures.map((candidate) => ({
+        id: candidate.versionId,
+        campaignId: ids.campaign.own,
+        packId: candidate.packId,
+        version: candidate.version,
+        lifecycle: candidate.lifecycle,
+        graph: candidate,
+        createdAt,
+      })),
+    );
+    const archivedVersionId = id();
+    const archived = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${fixtures[0]!.packId}/archive`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        expectedVersion: 1,
+        versionId: archivedVersionId,
+      },
+    });
+    expect(archived.statusCode, archived.body).toBe(201);
+    const foreignGraph = graph(id(), id(), { title: "Foreign private title" });
+    expect((await createPack(foreignGmHeaders, foreignGraph)).statusCode).toBe(
+      201,
+    );
+
+    const expected = await db
+      .select({ packId: schema.spellPacks.id })
+      .from(schema.spellPacks)
+      .where(eq(schema.spellPacks.campaignId, ids.campaign.own))
+      .orderBy(asc(schema.spellPacks.id));
+    const defaultPage = await read("/api/spell-packs");
+    expect(defaultPage.statusCode, defaultPage.body).toBe(200);
+    expect(defaultPage.headers["cache-control"]).toBe("private, no-store");
+    const defaults = spellPackInventoryResponseSchema.parse(defaultPage.json());
+    expect(defaults.items.map((item) => item.packId)).toEqual(
+      expected.slice(0, 20).map((item) => item.packId),
+    );
+    expect(defaults.nextCursor).toBe(expected[19]!.packId);
+
+    const received: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const url: string = `/api/spell-packs?limit=50${
+        cursor === null ? "" : `&cursor=${cursor}`
+      }`;
+      const response = await read(url);
+      expect(response.statusCode, response.body).toBe(200);
+      const page = spellPackInventoryResponseSchema.parse(response.json());
+      expect(page.items.length).toBeLessThanOrEqual(50);
+      received.push(...page.items.map((item) => item.packId));
+      expect(received.length).toBeLessThanOrEqual(expected.length);
+      for (const item of page.items) {
+        expect(item.latestVersion.packId).toBe(item.packId);
+        expect(item.latestVersion).not.toHaveProperty("graph");
+        expect(item.latestVersion).not.toHaveProperty("warnings");
+      }
+      const archive = page.items.find(
+        (item) => item.packId === fixtures[0]!.packId,
+      );
+      if (archive)
+        expect(archive.latestVersion).toMatchObject({
+          versionId: archivedVersionId,
+          version: 2,
+          lifecycle: "ARCHIVED",
+          edition: null,
+        });
+      expect(response.body).not.toContain("Private mechanics source text");
+      expect(response.body).not.toContain(foreignGraph.packId);
+      if (page.nextCursor !== null)
+        expect(page.nextCursor).toBe(page.items[page.items.length - 1]!.packId);
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+    expect(received).toEqual(expected.map((item) => item.packId));
+    expect(new Set(received).size).toBe(received.length);
+    const exhausted = await read(
+      `/api/spell-packs?cursor=${received[received.length - 1]}`,
+    );
+    expect(exhausted.json()).toEqual({ items: [], nextCursor: null });
+
+    const foreignInventory = await read("/api/spell-packs", foreignGmHeaders);
+    expect(foreignInventory.statusCode).toBe(200);
+    expect(foreignInventory.body).toContain(foreignGraph.packId);
+    expect(foreignInventory.body).not.toContain(fixtures[0]!.packId);
+  });
+
+  it("bounds real history pages with identical version timestamps", async () => {
+    const packId = id();
+    const createdAt = new Date("2026-09-10T00:00:00.000Z");
+    const fixtures = Array.from({ length: 52 }, (_, index) =>
+      graph(packId, id(), { version: index + 1 }),
+    );
+    await db.insert(schema.spellPacks).values({
+      id: packId,
+      campaignId: ids.campaign.own,
+      createdAt,
+    });
+    await db.insert(schema.spellPackVersions).values(
+      fixtures.map((candidate) => ({
+        id: candidate.versionId,
+        campaignId: ids.campaign.own,
+        packId,
+        version: candidate.version,
+        lifecycle: candidate.lifecycle,
+        graph: candidate,
+        createdAt,
+      })),
+    );
+    const defaults = await read(`/api/spell-packs/${packId}/versions`);
+    expect(defaults.statusCode, defaults.body).toBe(200);
+    expect(defaults.json().items).toHaveLength(20);
+    expect(defaults.json().nextCursor).toBe("33");
+    const response = await read(`/api/spell-packs/${packId}/versions?limit=50`);
+    expect(response.statusCode, response.body).toBe(200);
+    const first = spellPackVersionHistoryResponseSchema.parse(response.json());
+    expect(first.items.map((item) => item.version)).toEqual(
+      Array.from({ length: 50 }, (_, index) => 52 - index),
+    );
+    expect(first.nextCursor).toBe("3");
+    const continuation = await read(
+      `/api/spell-packs/${packId}/versions?limit=50&cursor=${first.nextCursor}`,
+    );
+    expect(continuation.statusCode).toBe(200);
+    const rest = spellPackVersionHistoryResponseSchema.parse(
+      continuation.json(),
+    );
+    expect(rest.items.map((item) => item.version)).toEqual([2, 1]);
+    expect(rest.nextCursor).toBeNull();
+  });
+
+  it("reopens old snapshots and continues history after a later draft", async () => {
+    const packId = id();
+    const initial = unresolvedGraph(packId, id());
+    initial.requirementGroups = [];
+    initial.edges = [];
+    initial.nodes[0]!.lifecycle = "ARCHIVED";
+    const created = await createPack(ownGmHeaders, initial);
+    expect(created.statusCode, created.body).toBe(201);
+    const saved = [spellPackVersionResponseSchema.parse(created.json())];
+    const oldBefore = await read(
+      `/api/spell-packs/${packId}/versions/${initial.versionId}`,
+    );
+    expect(oldBefore.statusCode).toBe(200);
+    expect(oldBefore.json()).toEqual(saved[0]);
+    for (const lifecycle of ["REFERENCE", "ACTIVE"] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/spell-packs/${packId}/lifecycle`,
+        headers: ownGmHeaders,
+        payload: {
+          actionId: id(),
+          expectedVersion: saved.length,
+          versionId: id(),
+          lifecycle,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      saved.push(spellPackVersionResponseSchema.parse(response.json()));
+    }
+    const firstHistory = await read(
+      `/api/spell-packs/${packId}/versions?limit=2`,
+    );
+    expect(firstHistory.statusCode, firstHistory.body).toBe(200);
+    const first = spellPackVersionHistoryResponseSchema.parse(
+      firstHistory.json(),
+    );
+    expect(first.items.map((item) => item.version)).toEqual([3, 2]);
+    expect(first.nextCursor).toBe("2");
+
+    const draftVersionId = id();
+    const draft: SpellProgressionGraph = {
+      ...initial,
+      versionId: draftVersionId,
+      version: 4,
+      title: "Edited later title",
+      edition: "Second review",
+      schools: initial.schools.map((school) => ({
+        ...school,
+        packVersionId: draftVersionId,
+      })),
+      nodes: initial.nodes.map((node) => ({
+        ...node,
+        packVersionId: draftVersionId,
+        mechanicsText: `${node.mechanicsText} / later draft`,
+      })),
+    };
+    const appended = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/versions`,
+      headers: ownGmHeaders,
+      payload: { actionId: id(), expectedVersion: 3, graph: draft },
+    });
+    expect(appended.statusCode, appended.body).toBe(201);
+    saved.push(spellPackVersionResponseSchema.parse(appended.json()));
+    const archived = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${packId}/archive`,
+      headers: ownGmHeaders,
+      payload: { actionId: id(), expectedVersion: 4, versionId: id() },
+    });
+    expect(archived.statusCode, archived.body).toBe(201);
+    saved.push(spellPackVersionResponseSchema.parse(archived.json()));
+
+    const continuation = await read(
+      `/api/spell-packs/${packId}/versions?limit=2&cursor=${first.nextCursor}`,
+    );
+    expect(continuation.statusCode).toBe(200);
+    const next = spellPackVersionHistoryResponseSchema.parse(
+      continuation.json(),
+    );
+    expect(next.items.map((item) => item.versionId)).toEqual([
+      initial.versionId,
+    ]);
+    expect(next.nextCursor).toBeNull();
+    const exhausted = await read(
+      `/api/spell-packs/${packId}/versions?cursor=1`,
+    );
+    expect(exhausted.json()).toEqual({ items: [], nextCursor: null });
+
+    const latestHistory = await read(`/api/spell-packs/${packId}/versions`);
+    const history = spellPackVersionHistoryResponseSchema.parse(
+      latestHistory.json(),
+    );
+    expect(history.items.map((item) => item.versionId)).toEqual(
+      saved.map((item) => item.versionId).reverse(),
+    );
+    expect(history.items.map((item) => item.lifecycle)).toEqual([
+      "ARCHIVED",
+      "DRAFT",
+      "ACTIVE",
+      "REFERENCE",
+      "DRAFT",
+    ]);
+    expect(history.items[0]).toMatchObject({
+      title: draft.title,
+      edition: draft.edition,
+    });
+    expect(latestHistory.body).not.toContain("secret mechanics");
+    expect(latestHistory.body).not.toContain("rawSourceText");
+    for (const version of saved) {
+      const response = await read(
+        `/api/spell-packs/${packId}/versions/${version.versionId}`,
+      );
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.headers["cache-control"]).toBe("private, no-store");
+      expect(spellPackVersionResponseSchema.parse(response.json())).toEqual(
+        version,
+      );
+      expect(response.json().graph.nodes[0].lifecycle).toBe("ARCHIVED");
+    }
+    const oldAfter = await read(
+      `/api/spell-packs/${packId}/versions/${initial.versionId}`,
+    );
+    expect(oldAfter.json()).toEqual(oldBefore.json());
+    expect((await versionsForPack(ids.campaign.own, packId))[0]!.graph).toEqual(
+      initial,
+    );
+  });
+
+  it("denies auth/PLAYER first and hides missing/foreign identities equally", async () => {
+    const own = graph(id(), id());
+    const foreign = graph(id(), id());
+    const otherOwn = graph(id(), id());
+    for (const [candidate, requestHeaders] of [
+      [own, ownGmHeaders],
+      [foreign, foreignGmHeaders],
+      [otherOwn, ownGmHeaders],
+    ] as const)
+      expect((await createPack(requestHeaders, candidate)).statusCode).toBe(
+        201,
+      );
+    for (const url of [
+      "/api/spell-packs",
+      `/api/spell-packs/${own.packId}/versions`,
+      `/api/spell-packs/${own.packId}/versions/${own.versionId}`,
+    ]) {
+      const control = await read(url);
+      expect(control.statusCode, control.body).toBe(200);
+      for (const suffix of ["", "?campaignId=invalid"]) {
+        const unauthenticated = await read(`${url}${suffix}`, {});
+        expect(unauthenticated.statusCode).toBe(401);
+        expect(unauthenticated.json().error).toBe("AUTH_REQUIRED");
+        expect(unauthenticated.headers["cache-control"]).toBe(
+          "private, no-store",
+        );
+        const player = await read(`${url}${suffix}`, playerHeaders);
+        expect(player.statusCode).toBe(403);
+        expect(player.json()).toEqual({ error: "GM_REQUIRED" });
+        expect(player.headers["cache-control"]).toBe("private, no-store");
+      }
+    }
+    for (const [foreignUrl, missingUrl, error] of [
+      [
+        `/api/spell-packs/${foreign.packId}/versions`,
+        `/api/spell-packs/${id()}/versions`,
+        "SPELL_PACK_NOT_FOUND",
+      ],
+      [
+        `/api/spell-packs/${foreign.packId}/versions/${foreign.versionId}`,
+        `/api/spell-packs/${id()}/versions/${id()}`,
+        "SPELL_PACK_VERSION_NOT_FOUND",
+      ],
+    ]) {
+      const denied = await read(foreignUrl!);
+      const missing = await read(missingUrl!);
+      expect(denied.statusCode).toBe(404);
+      expect(missing.statusCode).toBe(404);
+      expect(denied.json()).toEqual({ error });
+      expect(denied.json()).toEqual(missing.json());
+      expect(denied.headers["cache-control"]).toBe("private, no-store");
+    }
+    for (const [packId, versionId] of [
+      [own.packId, foreign.versionId],
+      [own.packId, otherOwn.versionId],
+      [foreign.packId, own.versionId],
+      [own.packId, id()],
+    ]) {
+      const denied = await read(
+        `/api/spell-packs/${packId}/versions/${versionId}`,
+      );
+      expect(denied.statusCode).toBe(404);
+      expect(denied.json()).toEqual({ error: "SPELL_PACK_VERSION_NOT_FOUND" });
+    }
+  });
+
+  it("rejects HTTP query injection, repeated values and unbounded cursors", async () => {
+    const candidate = graph(id(), id());
+    expect((await createPack(ownGmHeaders, candidate)).statusCode).toBe(201);
+    for (const base of [
+      "/api/spell-packs",
+      `/api/spell-packs/${candidate.packId}/versions`,
+    ])
+      for (const query of [
+        "limit=0",
+        "limit=51",
+        "limit=-1",
+        "limit=1.5",
+        "limit=01",
+        "limit=1e1",
+        "limit=",
+        "limit=1&limit=2",
+        "cursor=",
+        "cursor=1&cursor=2",
+        "offset=1",
+        "role=GM",
+        "lifecycle=ACTIVE",
+        `campaignId=${ids.campaign.foreign}`,
+        `cursor=${"9".repeat(100)}`,
+      ]) {
+        const response = await read(`${base}?${query}`);
+        expect(response.statusCode, `${base}?${query}`).toBe(400);
+        expect(response.json()).toEqual({ error: "INVALID_REQUEST" });
+        expect(response.headers["cache-control"]).toBe("private, no-store");
+      }
+    for (const url of [
+      "/api/spell-packs?cursor=1",
+      `/api/spell-packs/${candidate.packId}/versions?cursor=2147483648`,
+      `/api/spell-packs/${candidate.packId}/versions?cursor=${id()}`,
+      "/api/spell-packs/not-a-uuid/versions",
+      `/api/spell-packs/${candidate.packId}/versions/latest`,
+      `/api/spell-packs/${candidate.packId}/versions/ACTIVE`,
+      `/api/spell-packs/${candidate.packId}/versions/${candidate.versionId}?latest=true`,
+      `/api/spell-packs/${candidate.packId}/versions/${candidate.versionId}?limit=1`,
+    ]) {
+      const response = await read(url);
+      expect(response.statusCode, url).toBe(400);
+      expect(response.json()).toEqual({ error: "INVALID_REQUEST" });
+    }
+  });
+
+  it("performs unlocked SELECTs without event, assignment or session writes", async () => {
+    const candidate = unresolvedGraph(id(), id());
+    candidate.requirementGroups = [];
+    candidate.edges = [];
+    expect((await createPack(ownGmHeaders, candidate)).statusCode).toBe(201);
+    const activeVersionId = id();
+    const active = await app.inject({
+      method: "POST",
+      url: `/api/spell-packs/${candidate.packId}/lifecycle`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        expectedVersion: 1,
+        versionId: activeVersionId,
+        lifecycle: "ACTIVE",
+      },
+    });
+    expect(active.statusCode, active.body).toBe(201);
+    const characterId = id();
+    await db.insert(schema.characters).values({
+      id: characterId,
+      campaignId: ids.campaign.own,
+      name: "Read side-effect control",
+    });
+    const assignment = await app.inject({
+      method: "POST",
+      url: `/api/characters/${characterId}/spell-assignments`,
+      headers: ownGmHeaders,
+      payload: {
+        actionId: id(),
+        assignmentId: id(),
+        assignmentVersionId: id(),
+        expectedVersion: 0,
+        packId: candidate.packId,
+        packVersionId: activeVersionId,
+        target: { kind: "SCHOOL", schoolId: candidate.schools[0]!.id },
+      },
+    });
+    expect(assignment.statusCode, assignment.body).toBe(201);
+    const state = async () => ({
+      packs: await db
+        .select()
+        .from(schema.spellPacks)
+        .orderBy(asc(schema.spellPacks.id)),
+      versions: await db
+        .select()
+        .from(schema.spellPackVersions)
+        .orderBy(asc(schema.spellPackVersions.id)),
+      events: await db
+        .select()
+        .from(schema.gameEvents)
+        .orderBy(asc(schema.gameEvents.sequence)),
+      assignments: await db
+        .select()
+        .from(schema.characterSpellAssignments)
+        .orderBy(asc(schema.characterSpellAssignments.id)),
+      assignmentVersions: await db
+        .select()
+        .from(schema.characterSpellAssignmentVersions)
+        .orderBy(asc(schema.characterSpellAssignmentVersions.id)),
+      sessions: await db
+        .select()
+        .from(schema.sessions)
+        .orderBy(asc(schema.sessions.id)),
+    });
+    const before = await state();
+    capturedReadQueries = [];
+    try {
+      for (const url of [
+        "/api/spell-packs?limit=1",
+        `/api/spell-packs/${candidate.packId}/versions?limit=1`,
+        `/api/spell-packs/${candidate.packId}/versions/${candidate.versionId}`,
+        `/api/spell-packs/${id()}/versions`,
+        `/api/spell-packs/${candidate.packId}/versions/${id()}`,
+      ]) {
+        const response = await read(url);
+        expect([200, 404]).toContain(response.statusCode);
+      }
+      expect(capturedReadQueries.length).toBeGreaterThan(5);
+      for (const query of capturedReadQueries) {
+        expect(query).toMatch(/^select\b/i);
+        expect(query).not.toMatch(
+          /\bfor\s+(?:no\s+key\s+|key\s+)?(?:update|share)\b/i,
+        );
+      }
+    } finally {
+      capturedReadQueries = null;
+    }
+    expect(await state()).toEqual(before);
+  });
 });
 
 describe("UIX-580 spell-pack GM API", () => {

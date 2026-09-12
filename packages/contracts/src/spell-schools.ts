@@ -928,16 +928,126 @@ export type SpellReferenceImportPreviewResponse = z.infer<
   typeof spellReferenceImportPreviewResponseSchema
 >;
 
-/** Full mechanics are intentionally a GM-only HTTP response, never a player projection. */
-export interface SpellPackVersionDto {
-  packId: string;
-  versionId: string;
-  version: number;
-  lifecycle: SpellPackLifecycle;
-  graph: SpellProgressionGraph;
-  warnings: SpellGraphValidationIssue[];
-  createdAt: string;
-}
+export const SPELL_PACK_READ_DEFAULT_LIMIT = 20;
+export const SPELL_PACK_READ_MAX_LIMIT = 50;
+const spellPackVersionNumberSchema = z
+  .number()
+  .int()
+  .positive()
+  .max(2_147_483_647);
+const spellPackReadLimitSchema = z
+  .string()
+  .max(2)
+  .regex(/^[1-9]\d?$/)
+  .default(String(SPELL_PACK_READ_DEFAULT_LIMIT))
+  .transform(Number)
+  .pipe(z.number().int().min(1).max(SPELL_PACK_READ_MAX_LIMIT));
+
+/** Exclusive UUID keyset ordered by stable pack ID ascending, not title. */
+export const spellPackInventoryQuerySchema = z
+  .object({
+    limit: spellPackReadLimitSchema,
+    cursor: spellIdSchema.optional(),
+  })
+  .strict();
+export type SpellPackInventoryQuery = z.infer<
+  typeof spellPackInventoryQuerySchema
+>;
+
+/** Newest-first exclusive version keyset; later appends do not shift a page. */
+export const spellPackVersionHistoryCursorSchema = z
+  .string()
+  .max(10)
+  .regex(/^[1-9]\d*$/)
+  .refine((value) => Number(value) <= 2_147_483_647);
+export const spellPackVersionHistoryQuerySchema = z
+  .object({
+    limit: spellPackReadLimitSchema,
+    cursor: spellPackVersionHistoryCursorSchema.optional(),
+  })
+  .strict();
+export type SpellPackVersionHistoryQuery = z.infer<
+  typeof spellPackVersionHistoryQuerySchema
+>;
+
+export const spellPackReadParamsSchema = z
+  .object({ id: spellIdSchema })
+  .strict();
+export const spellPackVersionReadParamsSchema = z
+  .object({ id: spellIdSchema, versionId: spellIdSchema })
+  .strict();
+/** Exact reads accept no latest/ACTIVE selectors or other query overrides. */
+export const spellPackVersionReadQuerySchema = z.object({}).strict();
+
+const spellPackVersionDtoFields = {
+  packId: spellIdSchema,
+  versionId: spellIdSchema,
+  version: spellPackVersionNumberSchema,
+  lifecycle: spellPackLifecycleSchema,
+  createdAt: z.string().datetime(),
+};
+
+/** Summaries omit graph, mechanics, provenance and validation details. */
+export const spellPackVersionSummarySchema = z
+  .object({
+    ...spellPackVersionDtoFields,
+    title: spellLabelSchema,
+    edition: z.string().trim().min(1).max(240).nullable(),
+  })
+  .strict();
+export type SpellPackVersionSummary = z.infer<
+  typeof spellPackVersionSummarySchema
+>;
+export const spellPackInventoryItemSchema = z
+  .object({
+    packId: spellIdSchema,
+    createdAt: z.string().datetime(),
+    latestVersion: spellPackVersionSummarySchema,
+  })
+  .strict()
+  .refine((item) => item.packId === item.latestVersion.packId, {
+    message: "Latest version must belong to the listed pack",
+  });
+export const spellPackInventoryResponseSchema = z
+  .object({
+    items: z.array(spellPackInventoryItemSchema).max(SPELL_PACK_READ_MAX_LIMIT),
+    nextCursor: spellIdSchema.nullable(),
+  })
+  .strict();
+export type SpellPackInventoryResponse = z.infer<
+  typeof spellPackInventoryResponseSchema
+>;
+export const spellPackVersionHistoryResponseSchema = z
+  .object({
+    items: z
+      .array(spellPackVersionSummarySchema)
+      .max(SPELL_PACK_READ_MAX_LIMIT),
+    nextCursor: spellPackVersionHistoryCursorSchema.nullable(),
+  })
+  .strict();
+export type SpellPackVersionHistoryResponse = z.infer<
+  typeof spellPackVersionHistoryResponseSchema
+>;
+
+/** One full immutable snapshot is GM-only, never a player projection. */
+export const spellPackVersionResponseSchema = z
+  .object({
+    ...spellPackVersionDtoFields,
+    graph: spellProgressionGraphSchema,
+    warnings: z.array(spellGraphValidationIssueSchema),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.packId === value.graph.packId &&
+      value.versionId === value.graph.versionId &&
+      value.version === value.graph.version &&
+      value.lifecycle === value.graph.lifecycle,
+    { message: "Version metadata must match its immutable graph" },
+  );
+export type SpellPackVersionDto = z.infer<
+  typeof spellPackVersionResponseSchema
+>;
 
 export const spellAssignmentKindSchema = z.enum(["SCHOOL", "NODE"]);
 export type SpellAssignmentKind = z.infer<typeof spellAssignmentKindSchema>;
