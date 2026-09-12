@@ -1,4 +1,8 @@
 import type { DiceResult } from "@arken/contracts";
+import {
+  normalizeDiceFrameReference,
+  parseDiceSemanticOutcome,
+} from "./dice-outcome";
 
 const finiteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -27,22 +31,15 @@ export function normalizeClientDiceResult(value: unknown): DiceResult | null {
         !dice.poolTotals.every(finiteNumber))) ||
     (dice.selectedPool !== undefined &&
       dice.selectedPool !== 0 &&
-      dice.selectedPool !== 1) ||
-    (dice.semanticOutcome !== undefined &&
-      (!dice.semanticOutcome ||
-        typeof dice.semanticOutcome !== "object" ||
-        !["NORMAL", "CRITICAL_FAILURE", "CRITICAL_SUCCESS"].includes(
-          String((dice.semanticOutcome as Record<string, unknown>).kind),
-        ))) ||
-    (dice.frame !== undefined &&
-      dice.frame !== null &&
-      (typeof dice.frame !== "object" ||
-        (dice.frame as Record<string, unknown>).setKey !==
-          "ARKEN_CRITICAL_V1" ||
-        !["critical-failure", "critical-success"].includes(
-          String((dice.frame as Record<string, unknown>).frameKey),
-        )))
+      dice.selectedPool !== 1)
   )
+    return null;
+
+  const semanticOutcome =
+    dice.semanticOutcome === undefined
+      ? undefined
+      : parseDiceSemanticOutcome(dice.semanticOutcome);
+  if (dice.semanticOutcome !== undefined && semanticOutcome === null)
     return null;
 
   const terms = dice.terms.every((term) => {
@@ -64,7 +61,16 @@ export function normalizeClientDiceResult(value: unknown): DiceResult | null {
       boundedString(candidate.source, 160) && finiteNumber(candidate.value)
     );
   });
-  return terms && modifiers ? (dice as unknown as DiceResult) : null;
+  if (!terms || !modifiers) return null;
+  const normalized: Record<string, unknown> = { ...dice };
+  if (semanticOutcome !== undefined)
+    normalized.semanticOutcome = semanticOutcome;
+  if (dice.frame !== undefined)
+    normalized.frame = normalizeDiceFrameReference(
+      dice.frame,
+      semanticOutcome ?? null,
+    );
+  return normalized as unknown as DiceResult;
 }
 
 export function formatDiceBreakdown(value: unknown) {

@@ -87,4 +87,59 @@ describe("getDiceCritical", () => {
       }),
     ).toBeNull();
   });
+
+  it.each([
+    ["opposite success", { kind: "CRITICAL_SUCCESS", keptNaturalD20: 1 }],
+    ["opposite failure", { kind: "CRITICAL_FAILURE", keptNaturalD20: 20 }],
+    ["missing natural", { kind: "CRITICAL_SUCCESS" }],
+    ["string natural", { kind: "CRITICAL_FAILURE", keptNaturalD20: "1" }],
+    ["out of range", { kind: "NORMAL", keptNaturalD20: 21 }],
+    ["unknown kind", { kind: "OTHER", keptNaturalD20: 1 }],
+    ["null", null],
+    ["array", []],
+  ])("does not infer a critical from malformed semantic: %s", (_, semantic) => {
+    for (const natural of [1, 20]) {
+      expect(
+        getDiceCritical({
+          ...result([{ notation: "1d20", rolls: [natural], subtotal: natural }]),
+          semanticOutcome: semantic as DiceResult["semanticOutcome"],
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it.each([null, 1, 12, 20])(
+    "keeps an explicit NORMAL override with kept natural %s",
+    (keptNaturalD20) => {
+      expect(
+        getDiceCritical({
+          ...result([{ notation: "1d20", rolls: [20], subtotal: 20 }]),
+          semanticOutcome: { kind: "NORMAL", keptNaturalD20 },
+        }),
+      ).toBeNull();
+    },
+  );
+
+  it("keeps natural semantics when frames are unavailable", () => {
+    const dice = {
+      ...result([{ notation: "1d20", rolls: [20], subtotal: 20 }], 1),
+      semanticOutcome: {
+        kind: "CRITICAL_SUCCESS",
+        keptNaturalD20: 20,
+      },
+    } satisfies DiceResult;
+    for (const frame of [
+      undefined,
+      null,
+      { setKey: "UNKNOWN", frameKey: "not-published" },
+    ]) {
+      expect(
+        getDiceCritical({ ...dice, frame: frame as DiceResult["frame"] }),
+      ).toEqual({
+        kind: "success",
+        natural: 20,
+        label: "Критический успех",
+      });
+    }
+  });
 });
