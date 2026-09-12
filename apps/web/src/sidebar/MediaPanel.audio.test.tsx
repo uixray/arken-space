@@ -80,7 +80,7 @@ it.each([
     const input = screen.getByLabelText<HTMLInputElement>("Музыка и звуки");
     const section = input.closest(".upload-section") as HTMLElement;
     const upload = within(section).getByRole("button", {
-        name: "Загрузить",
+      name: "Загрузить",
     });
     const file = new File(["synthetic audio candidate"], name, { type });
     await user.upload(input, file);
@@ -121,7 +121,7 @@ it("keeps the audio candidate for retry after a server rejection", async () => {
   const input = screen.getByLabelText<HTMLInputElement>("Музыка и звуки");
   const section = input.closest(".upload-section") as HTMLElement;
   const upload = within(section).getByRole("button", {
-      name: "Загрузить",
+    name: "Загрузить",
   });
   const file = new File(["candidate"], "retry.mp3", { type: "audio/mpeg" });
   await user.upload(input, file);
