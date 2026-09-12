@@ -1,5 +1,31 @@
 # UIX-645 — Lucide foundation checkpoint, 2026-09-06
 
+## Продолжение 2026-09-12 — персонажи и режимы бросков
+
+База этого пула — локальный shell-коммит `90c03ce`; разделы ниже исторические.
+Без runtime и публикации подготовлены CharacterWorkspace (rail/close/create/
+archive), StatLayoutCard (reorder/rename/delete/add), RollModeControl, disclosure
+QuickRollPanel и GM-only control DiceTrayPanel. Настоящий смысл diamond оказался
+приватностью броска, поэтому в обоих местах используется один EyeOff, а не
+иконка кости. Текстовые d2–d20 и формулы сохранены. Normal/advantage/disadvantage
+различаются Circle/ArrowUp/ArrowDown; radio/pressed labels и handlers не менялись.
+
+- Изменены пять компонентов, registry, scoped guard/test, StatLayoutCard test,
+  новый DiceTrayPanel.icons test, CSS удаляет только осиротевший span-override
+  в collapsed character create; три документа миграции.
+- Guard теперь перечисляет **16 source-файлов**. Новые negative fixtures
+  восстанавливают glyph в in-memory копиях реальных StatLayoutCard/DiceTray
+  исходников. Это пока намерение проверки, а не её успешный запуск.
+- Подготовлены DOM-проверки пяти stat-actions и двух dice cases: разные
+  декоративные SVG/selected radio; GM-only name/pressed state/точный payload.
+  Никто не запускал их в этом пуле; это не доказательство browser acceptance.
+- Проверка: source review и `git diff --check`; без Node/npm/Docker/build/
+  форматтера. Обязательны будущие hosted quality, SVG guard с negative/restored,
+  browser GM/PLAYER, темы и compact rail alignment.
+- Блокер публикации UIX-645 не изменился: отдельного разрешения нет. Не
+  публиковать и не закрывать карточку. Next: оставшиеся checklist-области,
+  затем единый разрешённый gate; ChatPanels только после интеграции UIX-624.
+
 ## Продолжение 2026-09-12 — карта и навигация, локальный пул
 
 Этот раздел актуальнее исторического foundation-отчёта ниже.

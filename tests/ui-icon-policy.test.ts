@@ -24,6 +24,11 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/MapToolbar.tsx",
       "apps/web/src/MusicBar.tsx",
       "apps/web/src/GamePauseOverlay.tsx",
+      "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "apps/web/src/sidebar/StatLayoutCard.tsx",
+      "apps/web/src/RollModeControl.tsx",
+      "apps/web/src/sidebar/QuickRollPanel.tsx",
+      "apps/web/src/sidebar/DiceTrayPanel.tsx",
       "apps/web/src/ui/CursorPresenceMenu.tsx",
       "apps/web/src/renderers/GridSettings.tsx",
       "apps/web/src/renderers/CanvasHistoryControls.tsx",
@@ -40,6 +45,18 @@ describe("UIX-645 icon source policy", () => {
     expect(source.split(anchor)).toHaveLength(2);
     expect(scanUiSource(source, file)).toEqual([]);
     const diverted = source.replace(anchor, "<span>＋</span>");
+    expect(scanUiSource(diverted, file).join("\n")).toContain("text glyph");
+  });
+
+  it.each([
+    ["apps/web/src/sidebar/StatLayoutCard.tsx", "RenameIcon", "✎"],
+    ["apps/web/src/sidebar/DiceTrayPanel.tsx", "SecretRollIcon", "◆"],
+  ])("detects a glyph restored in %s", (file, icon, glyph) => {
+    const source = readFileSync(path.join(process.cwd(), file), "utf8");
+    const anchor = `<AppIcon icon={${icon}} />`;
+    expect(source.split(anchor)).toHaveLength(2);
+    expect(scanUiSource(source, file)).toEqual([]);
+    const diverted = source.replace(anchor, `<span>${glyph}</span>`);
     expect(scanUiSource(diverted, file).join("\n")).toContain("text glyph");
   });
 

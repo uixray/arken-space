@@ -1945,9 +1945,6 @@ code {
   padding-inline: 0;
   font-size: 0;
 }
-.character-workspace__body.is-rail-collapsed .character-rail__create span {
-  font-size: 1rem;
-}
 .character-workspace__body.is-rail-collapsed .character-rail__item {
   grid-template-columns: 1fr;
 }

@@ -10,6 +10,12 @@ import {
 } from "../quick-rolls-preference";
 import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
 import type { RollMode } from "../roll-mode";
+import { AppIcon } from "../ui/AppIcon";
+import {
+  CollapseSectionIcon,
+  ExpandSectionIcon,
+  SecretRollIcon,
+} from "../ui/icons";
 
 /**
  * Plain, non-draggable character-stat quick-roll panel (UIX-387). Previously
@@ -92,7 +98,7 @@ export function QuickRollPanel({
           writeQuickRollsCollapsed(window.localStorage, membershipId, next);
         }}
       >
-        <span aria-hidden="true">{collapsed ? "▸" : "▾"}</span>
+        <AppIcon icon={collapsed ? ExpandSectionIcon : CollapseSectionIcon} />
         Броски характеристик
       </button>
       {/* Прокручивается содержимое, а не панель целиком: иначе ручка уезжает
@@ -100,7 +106,7 @@ export function QuickRollPanel({
       <div className="quick-roll-panel__body" hidden={collapsed}>
         {gmOnly && (
           <p className="quick-roll-panel__gm-only" role="status">
-            <span aria-hidden="true">◆</span> Броски уйдут только мастеру
+            <AppIcon icon={SecretRollIcon} /> Броски уйдут только мастеру
           </p>
         )}
         <div className="activity-quick-rolls">

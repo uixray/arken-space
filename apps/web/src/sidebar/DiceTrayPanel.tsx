@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { MessageVisibility } from "@arken/contracts";
 import { RollModeControl, type RollMode } from "../RollModeControl";
 import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
+import { AppIcon } from "../ui/AppIcon";
+import { SecretRollIcon } from "../ui/icons";
 
 /**
  * UIX-504: компактная строка костей и режимов. Это более позднее решение,
@@ -96,7 +98,7 @@ export function DiceTrayPanel({
               )
             }
           >
-            <span aria-hidden="true">◆</span>
+            <AppIcon icon={SecretRollIcon} />
           </button>
         </div>
       </div>

@@ -23,6 +23,9 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 | Music play / pause / volume / menu | glyphs и entities | Play / Pause / Volume2 / Ellipsis | реальные SVG и разные формы play/pause |
 | Game pause action | Ⅱ | Pause | прежнее доступное действие + SVG |
 | Shell: сцены / публикация / create / session / sidebar / toast | glyphs и entities | ChevronDown / Cast, ScreenShare / Plus / Menu / PanelRightOpen / X | source guard и negative source fixture; browser не выполнен |
+| Персонажи: rail / close / add / archive | glyphs и emoji | PanelLeftClose / PanelLeftOpen / X / Plus / Archive | scoped source guard; browser не выполнен |
+| Характеристики: reorder / rename / delete / add | glyphs | ArrowUp / ArrowDown / Pencil / Trash / Plus | существующий StatLayoutCard DOM дополнен; negative source fixture |
+| Режимы бросков / приватность / disclosure | стрелки, круг, diamond | ArrowUp / ArrowDown / Circle / EyeOff / ChevronRight / ChevronDown | новые DiceTray DOM-кейсы; shared secret icon; source guard |
 
 Ни одна строка не означает PASS нового runtime. Старые foundation-результаты
 отделены в [checkpoint](./plans/uix-645-lucide-foundation.md).
@@ -34,13 +37,17 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
       исходные publication branch и обработчики сохранены, runtime QA остаётся.
 - [ ] `MusicBar.tsx`, `GamePauseOverlay.tsx`: play/pause, volume, overflow,
       pause action. Исходник подготовлен, ожидаются QA и приёмка.
-- [ ] `RollModeControl.tsx`: normal/advantage/disadvantage.
+- [ ] `RollModeControl.tsx`: normal/advantage/disadvantage. Source подготовлен;
+      клавиатурная логика и radio semantics сохранены, QA ожидается.
 - [ ] `sidebar/ChatPanels.tsx`: фильтры и send; миграцию совместить с
       интегрированным UIX-624, не затереть его pending-draft repair.
 - [ ] `sidebar/CharacterWorkspace.tsx`: rail, close, add/archive controls.
-- [ ] `sidebar/StatLayoutCard.tsx`: reorder, rename, delete, add.
+      Source подготовлен; compact alignment и browser QA ожидаются.
+- [ ] `sidebar/StatLayoutCard.tsx`: reorder, rename, delete, add. Source и
+      узкие регрессионные тесты подготовлены, не запускались.
 - [ ] `sidebar/QuickRollPanel.tsx`, `DiceTrayPanel.tsx`: disclosure / roll /
-      GM-only marker. Выбирать форму по действию и доступному имени.
+      GM-only marker. Source подготовлен: EyeOff означает приватность, не
+      сам бросок; прежние названия d2–d20 и формулы оставлены. Runtime QA ожидается.
 - [ ] `sidebar/ResourceCounters.tsx`: отдельные кнопки −/+; числовое значение,
       дробь и математический текст не заменять.
 - [ ] `sidebar/SetupPanel.tsx`: status dots; сохранить нецветовое обозначение.

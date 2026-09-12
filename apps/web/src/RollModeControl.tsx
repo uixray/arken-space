@@ -1,5 +1,7 @@
 import { useId, useRef, type KeyboardEvent } from "react";
 import { nextRollMode, rollModeOptions, type RollMode } from "./roll-mode";
+import { AppIcon } from "./ui/AppIcon";
+import { MoveDownIcon, MoveUpIcon, NormalRollIcon } from "./ui/icons";
 export type { RollMode } from "./roll-mode";
 
 export function RollModeControl({
@@ -61,13 +63,19 @@ export function RollModeControl({
             onClick={() => onChange(option.value)}
             onKeyDown={selectFromKeyboard}
           >
-            {iconOnly
-              ? option.value === "ADVANTAGE"
-                ? "↑"
-                : option.value === "DISADVANTAGE"
-                  ? "↓"
-                  : "●"
-              : option.label}
+            {iconOnly ? (
+              <AppIcon
+                icon={
+                  option.value === "ADVANTAGE"
+                    ? MoveUpIcon
+                    : option.value === "DISADVANTAGE"
+                      ? MoveDownIcon
+                      : NormalRollIcon
+                }
+              />
+            ) : (
+              option.label
+            )}
           </button>
         ))}
       </div>
