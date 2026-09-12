@@ -61,7 +61,9 @@ jobs:
       - run: pnpm typecheck
       - name: Prepare isolated test database
         run: |
-          echo "GM_ACCESS_TOKEN=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          token=$(openssl rand -hex 24)
+          echo "::add-mask::$token"
+          echo "GM_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
           pnpm db:migrate
       - run: pnpm exec playwright install --with-deps chrome
       - name: Real browser baseline, source fault and restoration

@@ -20,6 +20,9 @@ async function bootstrap(page: Page): Promise<GameSnapshot> {
 async function enterAsPlayer(page: Page, gmToken: string) {
   await page.goto(`/gm/${gmToken}`);
   await page.getByRole("button", { name: "Войти", exact: true }).click();
+  // A click finishing does not mean the async login has installed its cookie.
+  await expect(page).toHaveURL("/");
+  await expect(page.locator("canvas").first()).toBeVisible();
   const character = (await bootstrap(page)).characters[0];
   expect(character).toBeTruthy();
   const response = await page.request.post("/api/invites", {
