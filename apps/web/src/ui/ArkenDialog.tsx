@@ -78,7 +78,31 @@ export function ArkenDialog({
           onPointerDown={bringToFront}
           onFocusCapture={bringToFront}
           onKeyDown={(event) => {
-            if (event.key === "Escape") onClose();
+            if (event.key !== "Escape" || event.defaultPrevented) return;
+
+            const target = event.target;
+            // React events from portalled children (Select popups, nested
+            // dialogs) still bubble through this component even though their
+            // DOM belongs to another overlay. That child owns its Escape.
+            if (
+              !(target instanceof Node) ||
+              !event.currentTarget.contains(target)
+            )
+              return;
+
+            // Let an open Select consume the first Escape. Its handler runs
+            // before this ancestor and closes the list; the next Escape, with
+            // aria-expanded=false, remains the workspace's close command.
+            const targetElement =
+              target instanceof Element ? target : target.parentElement;
+            if (targetElement?.closest('[role="dialog"]') !== event.currentTarget)
+              return;
+            if (
+              targetElement?.closest('[role="combobox"][aria-expanded="true"]')
+            )
+              return;
+
+            onClose();
           }}
         >
           <header className="arken-workspace-window__header">
