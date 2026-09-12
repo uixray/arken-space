@@ -40,23 +40,36 @@ vi.mock("@gravity-ui/uikit", () => ({
     loading,
     onClick,
     children,
+    "aria-describedby": describedBy,
   }: {
     disabled?: boolean;
     loading?: boolean;
     onClick?: () => void;
     children?: ReactNode;
+    "aria-describedby"?: string;
   }) => (
-    <button disabled={disabled} aria-busy={loading} onClick={onClick}>
+    <button
+      disabled={disabled}
+      aria-busy={loading}
+      aria-describedby={describedBy}
+      onClick={onClick}
+    >
       {children}
     </button>
   ),
 }));
 
 vi.mock("../ui/ImageUploadField", () => ({
-  ImageUploadField: ({ label, disabled }: ImageUploadFieldProps) => (
+  ImageUploadField: ({ label, disabled, onUpdate }: ImageUploadFieldProps) => (
     <div>
       <span>{label}</span>
-      <input type="file" aria-label={label} disabled={disabled} readOnly />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onUpdate(new File(["file"], `${label}.png`))}
+      >
+        Выбрать файл: {label}
+      </button>
     </div>
   ),
 }));
@@ -180,6 +193,50 @@ describe("MediaPanel upload sections by role", () => {
     expect(screen.queryByText("Карты")).not.toBeInTheDocument();
     expect(screen.queryByText("Другие изображения")).not.toBeInTheDocument();
     expect(screen.queryByText("Музыка и звуки")).not.toBeInTheDocument();
+  });
+
+  it("объясняет состояния недоступной загрузки видимым текстом", async () => {
+    let finishUpload!: (uploaded: AssetDto) => void;
+    const onUpload = vi.fn(
+      () =>
+        new Promise<AssetDto>((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    renderComponent(
+      <MediaPanel
+        snapshot={playerSnapshot()}
+        {...defaultActions()}
+        onUpload={onUpload}
+      />,
+    );
+    const tokenUpload = screen.getAllByRole("button", {
+      name: "Загрузить",
+    })[0]!;
+    expect(tokenUpload).toBeDisabled();
+    expect(tokenUpload).toHaveAccessibleDescription("Сначала выберите файл.");
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Выбрать файл: Изображения токенов",
+      }),
+    );
+    expect(tokenUpload).toBeEnabled();
+    expect(tokenUpload).toHaveAccessibleDescription("Файл готов к загрузке.");
+
+    await userEvent.click(tokenUpload);
+    expect(tokenUpload).toBeDisabled();
+    expect(tokenUpload).toHaveAccessibleDescription("Файл загружается.");
+    expect(
+      screen.getAllByRole("button", { name: "Загрузить" })[1],
+    ).toHaveAccessibleDescription("Дождитесь завершения другой загрузки.");
+    finishUpload(asset);
+    await waitFor(() =>
+      expect(tokenUpload).toHaveAccessibleDescription(
+        "Сначала выберите файл.",
+      ),
+    );
+    expect(tokenUpload).toBeDisabled();
   });
 
   it("checks usage and deletes an unused asset after confirmation", async () => {

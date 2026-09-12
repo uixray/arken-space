@@ -28,13 +28,20 @@ vi.mock("@gravity-ui/uikit", () => ({
     loading,
     onClick,
     children,
+    "aria-describedby": describedBy,
   }: {
     disabled?: boolean;
     loading?: boolean;
     onClick?: () => void;
     children?: ReactNode;
+    "aria-describedby"?: string;
   }) => (
-    <button disabled={disabled} aria-busy={loading} onClick={onClick}>
+    <button
+      disabled={disabled}
+      aria-busy={loading}
+      aria-describedby={describedBy}
+      onClick={onClick}
+    >
       {children}
     </button>
   ),
@@ -93,6 +100,33 @@ async function chooseFileAndAssign() {
 }
 
 describe("UIX-491 — назначение изображения токену сообщает об успехе", () => {
+  it("объясняет состояния недоступной кнопки до и во время назначения", async () => {
+    let finishUpload!: (asset: { id: string }) => void;
+    setup(
+      () =>
+        new Promise<{ id: string }>((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    const assign = screen.getByRole("button", {
+      name: "Загрузить и назначить",
+    });
+    expect(assign).toBeDisabled();
+    expect(assign).toHaveAccessibleDescription("Сначала выберите файл.");
+
+    await userEvent.click(screen.getByRole("button", { name: /Выбрать файл/ }));
+    expect(assign).toBeEnabled();
+    expect(assign).toHaveAccessibleDescription("Файл готов к загрузке.");
+
+    await userEvent.click(assign);
+    expect(assign).toBeDisabled();
+    expect(assign).toHaveAccessibleDescription(
+      "Файл загружается и назначается.",
+    );
+    finishUpload({ id: "asset-pending" });
+    await screen.findByRole("status");
+  });
+
   it("называет успех словами, а не только очищает поле файла", async () => {
     const { patch } = setup(() => Promise.resolve({ id: "asset-1" }));
 

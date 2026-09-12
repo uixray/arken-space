@@ -628,14 +628,22 @@ for (const width of [1280, 390]) {
         "world-create-draft",
         create.getByText("Создаётся как черновик.", { exact: true }),
       );
-      await create
-        .getByRole("textbox", { name: "Название", exact: true })
-        .fill("Baldur's Gate");
-      // The associated help text joins the field's accessible name only while invalid.
-      const slug = create
-        .locator("label")
-        .filter({ hasText: /^\s*Идентификатор/ })
-        .getByRole("textbox");
+      const name = create.getByRole("textbox", {
+        name: "Название",
+        exact: true,
+      });
+      await create.getByRole("button", { name: "Создать", exact: true }).click();
+      await expect(name).toBeFocused();
+      await expect(name).toHaveAttribute("aria-invalid", "true");
+      await expect(name).toHaveAccessibleDescription("Укажите название.");
+      expect(mock.writes).toEqual([]);
+      await name.fill("Baldur's Gate");
+      await expect(name).not.toHaveAttribute("aria-invalid", "true");
+      // Error copy is an associated description, never part of the field name.
+      const slug = create.getByRole("textbox", {
+        name: "Идентификатор",
+        exact: true,
+      });
       await capture(
         "world-create-identifier",
         slug.locator("xpath=ancestor::label[1]"),
@@ -644,6 +652,11 @@ for (const width of [1280, 390]) {
       await create
         .getByRole("button", { name: "Создать", exact: true })
         .click();
+      await expect(slug).toBeFocused();
+      await expect(slug).toHaveAttribute("aria-invalid", "true");
+      await expect(slug).toHaveAccessibleDescription(
+        "Только строчные латинские буквы, цифры и дефисы.",
+      );
       await expect(
         create.getByText(
           "Идентификатор должен содержать строчные латинские буквы, цифры и дефисы между словами.",
@@ -659,6 +672,8 @@ for (const width of [1280, 390]) {
       );
       expect(mock.writes).toEqual([]);
       await slug.fill("baldurs-gate");
+      await expect(slug).not.toHaveAttribute("aria-invalid", "true");
+      await expect(slug).not.toHaveAttribute("aria-describedby");
       await create
         .getByRole("button", { name: "Создать", exact: true })
         .click();

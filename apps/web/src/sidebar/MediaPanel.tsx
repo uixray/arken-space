@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type {
   AssetKind,
   AssetUsageResponseDto,
@@ -21,6 +21,7 @@ export function MediaPanel({
   onGetUsage: AssetActions["getAssetUsage"];
   onDelete: AssetActions["deleteAsset"];
 }) {
+  const uploadStatusPrefix = useId();
   const [drafts, setDrafts] = useState<Partial<Record<AssetKind, File>>>({});
   const [uploading, setUploading] = useState<AssetKind | null>(null);
   const [error, setError] = useState("");
@@ -96,32 +97,47 @@ export function MediaPanel({
         <span className="revision">{snapshot.assets.length}</span>
       </div>
       <div className="upload-sections">
-        {allowed.map((kind) => (
-          <section className="upload-section" key={kind}>
-            <ImageUploadField
-              label={labels[kind]}
-              value={drafts[kind]}
-              accept={
-                kind === "AUDIO"
-                  ? ".mp3,.ogg,audio/mpeg,audio/ogg"
-                  : ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-              }
-              hint={kind === "AUDIO" ? "MP3 или OGG" : "PNG, JPEG или WebP"}
-              disabled={uploading !== null}
-              onUpdate={(file) =>
-                setDrafts((current) => ({ ...current, [kind]: file }))
-              }
-            />
-            <Button
-              view="action"
-              disabled={!drafts[kind] || uploading !== null}
-              loading={uploading === kind}
-              onClick={() => void upload(kind)}
-            >
-              Загрузить
-            </Button>
-          </section>
-        ))}
+        {allowed.map((kind) => {
+          const statusId = `${uploadStatusPrefix}-${kind.toLowerCase()}`;
+          const status =
+            uploading === kind
+              ? "Файл загружается."
+              : uploading !== null
+                ? "Дождитесь завершения другой загрузки."
+                : drafts[kind]
+                  ? "Файл готов к загрузке."
+                  : "Сначала выберите файл.";
+          return (
+            <section className="upload-section" key={kind}>
+              <ImageUploadField
+                label={labels[kind]}
+                value={drafts[kind]}
+                accept={
+                  kind === "AUDIO"
+                    ? ".mp3,.ogg,audio/mpeg,audio/ogg"
+                    : ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                }
+                hint={kind === "AUDIO" ? "MP3 или OGG" : "PNG, JPEG или WebP"}
+                disabled={uploading !== null}
+                onUpdate={(file) =>
+                  setDrafts((current) => ({ ...current, [kind]: file }))
+                }
+              />
+              <Button
+                view="action"
+                disabled={!drafts[kind] || uploading !== null}
+                loading={uploading === kind}
+                aria-describedby={statusId}
+                onClick={() => void upload(kind)}
+              >
+                Загрузить
+              </Button>
+              <p className="muted" id={statusId}>
+                {status}
+              </p>
+            </section>
+          );
+        })}
       </div>
       {error && <div className="field-error">{error}</div>}
       <div className="asset-list">

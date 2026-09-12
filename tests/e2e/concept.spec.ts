@@ -956,6 +956,19 @@ for (const role of ["GM", "PLAYER"] as const) {
       await openWorkspaceSection(page, "Файлы");
       await expect(files).toBeVisible();
       await expect(files.locator(".asset-row")).toHaveCount(5);
+      const uploads = files.getByRole("button", {
+        name: "Загрузить",
+        exact: true,
+      });
+      for (let index = 0; index < 5; index += 1) {
+        await expect(uploads.nth(index)).toBeDisabled();
+        await expect(uploads.nth(index)).toHaveAccessibleDescription(
+          "Сначала выберите файл.",
+        );
+      }
+      await expect(
+        files.getByText("Сначала выберите файл.", { exact: true }),
+      ).toHaveCount(5);
       await expect(
         files.getByRole("button", { name: "Загрузить", exact: true }),
       ).toHaveCount(5);
