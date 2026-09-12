@@ -17,13 +17,15 @@ import { ApiError } from "./api";
 function Harness({
   onRunners,
   load = async () => {},
+  onError,
 }: {
   onRunners: (runners: MutationRunners) => void;
   load?: () => Promise<void>;
+  onError?: (message: string) => void;
 }) {
   const [, setError] = useState("");
   const [tick, setTick] = useState(0);
-  const runners = useMutationRunners({ load, setError });
+  const runners = useMutationRunners({ load, setError: onError ?? setError });
   onRunners(runners);
   return (
     <button type="button" onClick={() => setTick(tick + 1)}>
@@ -59,11 +61,13 @@ describe("useMutationRunners identity", () => {
 describe("useMutationRunners behaviour", () => {
   const collect = async (
     load: () => Promise<void>,
+    onError?: (message: string) => void,
   ): Promise<MutationRunners> => {
     let captured: MutationRunners | undefined;
     renderComponent(
       <Harness
         load={load}
+        onError={onError}
         onRunners={(runners) => {
           captured = runners;
         }}
@@ -109,5 +113,59 @@ describe("useMutationRunners behaviour", () => {
         throw new Error("nope");
       }),
     ).rejects.toThrow("nope");
+  });
+
+  it("reports default action failures globally and always rethrows", async () => {
+    const setError = vi.fn();
+    const load = vi.fn(async () => {});
+    const runners = await collect(load, setError);
+    const failure = new Error("mutation failed");
+    await expect(
+      runners.run(async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(setError.mock.calls).toEqual([[""], ["mutation failed"]]);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("rethrows caller-owned action failures without clearing or creating global errors", async () => {
+    const setError = vi.fn();
+    const load = vi.fn(async () => {});
+    const runners = await collect(load, setError);
+    const failure = new Error("form mutation failed");
+    await expect(
+      runners.run(
+        async () => {
+          throw failure;
+        },
+        true,
+        { errorOwner: "caller" },
+      ),
+    ).rejects.toBe(failure);
+    expect(setError).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("still reconciles caller-owned successful actions and reports load failures globally", async () => {
+    const setError = vi.fn();
+    const failure = new Error("snapshot refresh failed");
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(failure);
+    const action = vi.fn().mockResolvedValue(undefined);
+    const runners = await collect(load, setError);
+    await expect(
+      runners.run(action, true, { errorOwner: "caller" }),
+    ).resolves.toBeUndefined();
+    expect(load).toHaveBeenCalledOnce();
+    expect(setError).not.toHaveBeenCalled();
+    await expect(
+      runners.run(action, true, { errorOwner: "caller" }),
+    ).rejects.toBe(failure);
+    expect(action).toHaveBeenCalledTimes(2);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(setError.mock.calls).toEqual([["snapshot refresh failed"]]);
   });
 });

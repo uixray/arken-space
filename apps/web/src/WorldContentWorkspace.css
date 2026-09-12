@@ -4,7 +4,7 @@
 }
 .world-content-workspace__grid {
   display: grid;
-  grid-template-columns: minmax(320px, 420px) 1fr;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
   gap: 16px;
   height: 100%;
   overflow: hidden;
@@ -13,6 +13,7 @@
 .world-content-workspace__detail-pane {
   overflow: auto;
   min-height: 0;
+  min-width: 0;
 }
 .world-content-workspace__filters {
   display: flex;
@@ -32,7 +33,7 @@
 }
 .world-content-workspace__row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 4px 8px;
   width: 100%;
   padding: 8px 10px;
@@ -45,6 +46,8 @@
 .world-content-workspace__row-name {
   font-weight: 600;
   grid-column: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .world-content-workspace__row-type {
   grid-column: 3;
@@ -85,11 +88,25 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .world-content-workspace__detail-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+}
+.world-content-workspace__detail-header h2 {
+  min-width: 0;
+}
+/* Only this creation dialog: Gravity's footer popup otherwise uses max-content
+   width, so a complete validation message can extend beyond a compact dialog. */
+.g-dialog:has(.world-content-workspace__create-name) .g-dialog-footer__error {
+  box-sizing: border-box;
+  max-width: calc(100vw - 64px);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .world-content-workspace__lifecycle-actions {
   display: flex;
@@ -150,4 +167,18 @@
   display: flex;
   gap: 4px;
   margin-top: 4px;
+}
+
+/* Match the compact workspace shell; do not keep two desktop-sized panes
+   inside a phone-width clipping grid. The existing workspace body owns scroll. */
+@media (max-width: 767px) {
+  .world-content-workspace__grid {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    overflow: visible;
+  }
+  .world-content-workspace__list-pane,
+  .world-content-workspace__detail-pane {
+    overflow: visible;
+  }
 }

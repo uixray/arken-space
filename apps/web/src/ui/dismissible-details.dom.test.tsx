@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, renderComponent } from "../test-support/render";
+import { fireEvent, renderComponent, screen } from "../test-support/render";
 import { useDismissibleDetails } from "./dismissible-details";
 
 /**
@@ -80,5 +80,76 @@ describe("механизм закрытия поповера", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(onDismiss).not.toHaveBeenCalled();
+  });
+});
+
+function Listbox({ visible = true }: { visible?: boolean }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useDismissibleDetails(ref, undefined, {
+    listbox: true,
+    closeOnViewportChange: true,
+  });
+  return visible ? (
+    <details ref={ref}>
+      <summary>Сцена</summary>
+      <div role="listbox" aria-label="Сцены">
+        <button role="option" aria-selected={false}>
+          Первая
+        </button>
+        <button role="option" aria-selected={true}>
+          Вторая
+        </button>
+        <button role="option" aria-selected={false}>
+          Третья
+        </button>
+      </div>
+    </details>
+  ) : null;
+}
+
+describe("UIX-644 opt-in details listbox", () => {
+  it("binds after delayed bootstrap and navigates the selected option", () => {
+    const view = renderComponent(<Listbox visible={false} />);
+    view.rerender(<Listbox />);
+    const trigger = screen.getByText("Сцена");
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    expect(document.querySelector("details")?.open).toBe(true);
+    expect(screen.getByRole("option", { name: "Вторая" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(screen.getByRole("option", { name: "Третья" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(screen.getByRole("option", { name: "Первая" })).toHaveFocus();
+    fireEvent(document.querySelector("details")!, new Event("toggle"));
+    expect(screen.getByRole("option", { name: "Первая" })).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(screen.getByRole("option", { name: "Третья" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(document.querySelector("details")?.open).toBe(false);
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes on resize and focus leaving, but permits internal scrolling", () => {
+    renderComponent(<Listbox />);
+    const trigger = screen.getByText("Сцена");
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    fireEvent.scroll(screen.getByRole("listbox"));
+    expect(document.querySelector("details")?.open).toBe(true);
+    const sibling = document.createElement("div");
+    document.querySelector("details")!.after(sibling);
+    fireEvent.scroll(sibling);
+    expect(document.querySelector("details")?.open).toBe(true);
+    sibling.remove();
+    fireEvent.scroll(document.querySelector("details")!.parentElement!);
+    expect(document.querySelector("details")?.open).toBe(false);
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    fireEvent(window, new Event("resize"));
+    expect(document.querySelector("details")?.open).toBe(false);
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    fireEvent.focusIn(document.body);
+    expect(document.querySelector("details")?.open).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import { ArkenDialog } from "./ui/ArkenDialog";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { AssetPicker } from "./ui/AssetPicker";
 import { ApiError, formatApiError } from "./api";
+import { WORLD_EDITOR_TITLE } from "./world-workspace-labels";
 import {
   WORLD_CONTENT_LIFECYCLE_LABELS,
   WORLD_CONTENT_LIFECYCLES,
@@ -138,7 +139,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
     <ArkenDialog
       open={open}
       footer={false}
-      title="Энциклопедия мира"
+      title={WORLD_EDITOR_TITLE}
       variant="workspace"
       className="world-content-workspace"
       workspaceDraggable={false}
@@ -196,7 +197,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
               Теги (через запятую)
               <FormInput
                 value={filterTags}
-                placeholder="fraction, port"
+                placeholder="фракция, порт"
                 onChange={(event) => setFilterTags(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void load();
@@ -320,7 +321,7 @@ function CreateEntityDialog({
     }
     if (!slugValid) {
       setError(
-        "Slug должен быть в kebab-case (строчные латинские буквы, цифры, дефисы).",
+        "Идентификатор должен содержать строчные латинские буквы, цифры и дефисы между словами.",
       );
       return;
     }
@@ -354,7 +355,7 @@ function CreateEntityDialog({
       onApply={() => void submit()}
       onClose={onClose}
     >
-      <label className="field">
+      <label className="field world-content-workspace__create-name">
         Название
         <FormInput
           value={name}
@@ -363,7 +364,7 @@ function CreateEntityDialog({
         />
       </label>
       <label className="field">
-        Slug
+        Идентификатор
         <FormInput
           value={effectiveSlug}
           disabled={busy}
@@ -425,7 +426,7 @@ function CreateEntityDialog({
           onChange={(event) => setTags(event.target.value)}
         />
       </label>
-      <p className="muted">Создаётся как черновик (DRAFT).</p>
+      <p className="muted">Создаётся как черновик.</p>
     </ArkenDialog>
   );
 }
@@ -550,7 +551,7 @@ function EntityDetail({
         >
           {WORLD_CONTENT_LIFECYCLE_LABELS[entity.lifecycle]}
         </span>
-        <span className="muted">rev. {entity.revision}</span>
+        <span className="muted">Версия {entity.revision}</span>
       </header>
       <div className="world-content-workspace__lifecycle-actions">
         {legalWorldContentTransitions(entity.lifecycle).map((next) => (

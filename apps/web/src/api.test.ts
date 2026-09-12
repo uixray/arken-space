@@ -14,6 +14,50 @@ afterEach(() => {
   resetClientEventBufferForTest();
 });
 
+describe("UIX-417 network failure copy", () => {
+  it.each([
+    "Failed to fetch",
+    "NetworkError when attempting to fetch resource.",
+    "Load failed",
+  ])("replaces browser network wording with Russian: %s", async (message) => {
+    const original = new TypeError(message);
+    const fetchMock = vi.fn().mockRejectedValueOnce(original);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const failure = await api("/api/bootstrap").catch(
+      (reason: unknown) => reason,
+    );
+
+    // Baseline must fail on the actual fetch rejection, not on a replacement
+    // callback or a mocked formatter. HTTP messages/codes remain a separate
+    // existing contract below; no new status or wire reason is prescribed here.
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(
+      "Не удалось связаться с сервером. Проверьте подключение и повторите попытку.",
+    );
+    expect(original.message).toBe(message);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("preserves cancellation identity instead of describing it as a network failure", async () => {
+    const cancelled = new DOMException(
+      "The operation was aborted.",
+      "AbortError",
+    );
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockRejectedValueOnce(cancelled);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      api("/api/bootstrap", { signal: controller.signal }),
+    ).rejects.toBe(cancelled);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      signal: controller.signal,
+      credentials: "include",
+    });
+  });
+});
+
 describe("api telemetry and correlation", () => {
   it("adds only bounded safe correlation ids to API error messages", () => {
     expect(

@@ -26,6 +26,7 @@ export function FormInput({
   checked,
   defaultChecked,
   onChange,
+  controlRef,
   ...props
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
   size?: number;
@@ -61,7 +62,24 @@ export function FormInput({
       </Checkbox>
     );
   if (type === "file")
-    return <input {...props} type="file" onChange={onChange} />;
+    return (
+      <input {...props} ref={controlRef} type="file" onChange={onChange} />
+    );
+  // TextInput supports textual controls only: color must keep its native
+  // picker, value and real input ref/events rather than silently becoming text.
+  if (type === "color")
+    return (
+      <input
+        {...props}
+        ref={controlRef}
+        type="color"
+        // Global text-input padding would otherwise collapse the native swatch.
+        style={{ minHeight: 36, padding: 4, ...props.style }}
+        value={value}
+        defaultValue={defaultValue}
+        onChange={onChange}
+      />
+    );
   const gravityType =
     (
       ["number", "search", "url", "email", "password", "tel", "text"] as const
@@ -69,6 +87,15 @@ export function FormInput({
   return (
     <TextInput
       {...props}
+      controlRef={controlRef}
+      // Native constraints and ARIA descriptions are not top-level uikit props.
+      controlProps={{ ...props, className: undefined, style: undefined }}
+      // uikit overwrites controlProps['aria-invalid'] from validationState.
+      validationState={
+        props["aria-invalid"] && props["aria-invalid"] !== "false"
+          ? "invalid"
+          : undefined
+      }
       onChange={onChange}
       type={gravityType}
       value={value === undefined ? undefined : String(value)}

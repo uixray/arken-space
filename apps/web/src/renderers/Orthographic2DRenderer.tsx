@@ -3446,20 +3446,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             GM
           </label>
         )}
-        {selectedTokenIds.length + selectedDrawingIds.length > 0 && (
-          <output aria-label="Выбрано объектов">
-            {selectionSummary({
-              tokenIds: selectedTokenIds,
-              drawingIds: selectedDrawingIds,
-            })}
-          </output>
-        )}
-        {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
-          <button onClick={() => setBulkDeleteRequested(true)}>
-            Удалить выбранное
-          </button>
-        )}
       </div>
+      {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
+        <button
+          className="map-selection-action"
+          onClick={() => setBulkDeleteRequested(true)}
+        >
+          Удалить выбранное
+        </button>
+      )}
     </div>
   );
 }

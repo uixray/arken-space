@@ -1,3 +1,8 @@
+import {
+  WORLD_EDITOR_TITLE,
+  WORLD_READER_TITLE,
+} from "./world-workspace-labels";
+
 export type WorkspaceId =
   | "characters"
   | "tokens"
@@ -18,7 +23,7 @@ export interface WorkspaceNavItem {
 /**
  * UIX-472 — какие разделы показывать этому человеку.
  *
- * «Файлы», «Карты мира» и «Энциклопедия» у игрока скрыты: это мастерские
+ * «Файлы», «Карты мира» и «Справочник мира» у игрока скрыты: это мастерские
  * инструменты подготовки, и в списке они только удлиняли перебор. Скрытие
  * **только в интерфейсе** — так решил мастер, и это записано здесь, чтобы
  * следующий читатель не принял отсутствие серверной проверки за недосмотр.
@@ -37,9 +42,9 @@ export function workspaceNavItems(context: {
     items.push(
       { id: "scenes", label: "Сцены" },
       { id: "setup", label: "Подготовка" },
-      { id: "world-encyclopedia", label: "Энциклопедия мира" },
+      { id: "world-encyclopedia", label: WORLD_EDITOR_TITLE },
       { id: "world-maps", label: "Карты мира" },
-      { id: "world-codex", label: "Энциклопедия" },
+      { id: "world-codex", label: WORLD_READER_TITLE },
     );
   items.push({
     id: "player-requests",

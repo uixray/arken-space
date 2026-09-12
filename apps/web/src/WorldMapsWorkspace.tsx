@@ -9,6 +9,7 @@ import type {
   WorldMapVisibility,
 } from "@arken/contracts";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { WORLD_MAP_LOCATION_KIND_LABELS } from "./world-map-labels";
 import {
   authorizedWorldMapBackground,
   locationSceneNames,
@@ -361,7 +362,7 @@ export function WorldMapsWorkspace({
                 </label>
                 {!mapAssets.length ? (
                   <p className="muted">
-                    Сначала загрузите файл с типом MAP в «Файлы».
+                    Сначала загрузите карту в разделе «Файлы».
                   </p>
                 ) : null}
                 <button
@@ -442,7 +443,7 @@ export function WorldMapsWorkspace({
                   ) : (
                     <div className="world-map-stage__placeholder">
                       {isDraft
-                        ? "Выберите MAP-файл и подтвердите фон перед публикацией."
+                        ? "Выберите файл карты и подтвердите фон перед публикацией."
                         : "Одобренный фон карты пока не назначен."}
                     </div>
                   )}
@@ -504,7 +505,9 @@ export function WorldMapsWorkspace({
                         }}
                       >
                         <strong>{location.name}</strong>
-                        <span>{location.kind}</span>
+                        <span>
+                          {WORLD_MAP_LOCATION_KIND_LABELS[location.kind]}
+                        </span>
                       </button>
                     ))
                   ) : (
@@ -522,7 +525,9 @@ export function WorldMapsWorkspace({
                       <h3 id="world-map-location-title">
                         {selectedLocation.name}
                       </h3>
-                      <span>{selectedLocation.kind}</span>
+                      <span>
+                        {WORLD_MAP_LOCATION_KIND_LABELS[selectedLocation.kind]}
+                      </span>
                     </div>
                     {selectedLocation.summary ? (
                       <p>{selectedLocation.summary}</p>
@@ -757,10 +762,13 @@ export function WorldMapsWorkspace({
                 }))
               }
             >
-              <option value="SETTLEMENT">Поселение</option>
-              <option value="LANDMARK">Ориентир</option>
-              <option value="REGION">Регион</option>
-              <option value="OTHER">Другое</option>
+              {Object.entries(WORLD_MAP_LOCATION_KIND_LABELS).map(
+                ([kind, label]) => (
+                  <option key={kind} value={kind}>
+                    {label}
+                  </option>
+                ),
+              )}
             </select>
           </label>
           <label>

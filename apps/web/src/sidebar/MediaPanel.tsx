@@ -6,6 +6,7 @@ import type {
 } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { ApiError, formatApiError } from "../api";
+import { ASSET_KIND_LABELS } from "../asset-labels";
 import { ImageUploadField } from "../ui/ImageUploadField";
 import type { AssetActions } from "../use-asset-actions";
 
@@ -135,12 +136,15 @@ export function MediaPanel({
                   alt={`Превью: ${asset.name}`}
                 />
               ) : (
-                <span aria-label="Аудиофайл">AUDIO</span>
+                <span aria-label={ASSET_KIND_LABELS.AUDIO}>
+                  {ASSET_KIND_LABELS.AUDIO}
+                </span>
               )}
               <div>
                 <strong>{asset.name}</strong>
                 <small>
-                  {asset.kind} · {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
+                  {ASSET_KIND_LABELS[asset.kind]} ·{" "}
+                  {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
                 </small>
                 {snapshot.me.role === "GM" && (
                   <div>

@@ -2,7 +2,8 @@ import { useMemo, type MutableRefObject } from "react";
 import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import { api } from "./api";
 import { characterTokenPlacementRequest } from "./token-placement";
-import type { TokenPlacementRequest } from "./optimistic-token-mutations";
+import type { OptimisticTokenPlacer } from "./optimistic-token-placement";
+import type { MutationRunners } from "./use-mutation-runners";
 
 /**
  * UIX-398 — token-definition commands.
@@ -70,11 +71,11 @@ const withAction = (body: Record<string, unknown> = {}) =>
 
 export function useTokenDefinitionActions(dependencies: {
   /** Stable — see `use-mutation-runners.ts`. */
-  run: (action: () => Promise<unknown>, refresh?: boolean) => Promise<void>;
+  run: MutationRunners["run"];
   snapshotRef: MutableRefObject<GameSnapshot | null>;
   activeSceneRef: MutableRefObject<SceneDto | undefined>;
-  /** Paints immediately and reports asynchronous failures through shared UI. */
-  placeOptimistically?: (request: TokenPlacementRequest) => void;
+  /** Paints immediately; only create-and-place awaits its commit outcome. */
+  placeOptimistically?: OptimisticTokenPlacer;
 }): TokenDefinitionActions {
   const { run, snapshotRef, activeSceneRef, placeOptimistically } =
     dependencies;
@@ -83,7 +84,7 @@ export function useTokenDefinitionActions(dependencies: {
     () => ({
       onPlaceTokenDefinition: (definitionId) => {
         if (placeOptimistically) {
-          placeOptimistically({
+          void placeOptimistically({
             path: `/api/token-definitions/${definitionId}/placements`,
             body: {
               actionId: crypto.randomUUID(),
@@ -135,23 +136,42 @@ export function useTokenDefinitionActions(dependencies: {
 
       onCreateAndPlaceTokenDefinition: async (input) => {
         const scene = activeSceneRef.current;
-        if (!scene) return;
+        if (!scene)
+          throw new Error(
+            "Активная сцена недоступна. Выберите сцену и повторите попытку.",
+          );
         if (placeOptimistically) {
-          placeOptimistically({
-            path: "/api/tokens",
-            body: {
-              actionId: crypto.randomUUID(),
-              sceneId: scene.id,
-              characterId: input.characterId,
-              assetId: input.defaultAssetId,
-              name: input.name ?? undefined,
-              x: scene.width / 2 - input.defaultWidth / 2,
-              y: scene.height / 2 - input.defaultHeight / 2,
-              width: input.defaultWidth,
-              height: input.defaultHeight,
-              controllerMembershipIds: input.controllerMembershipIds,
+          const outcome = await placeOptimistically(
+            {
+              path: "/api/tokens",
+              body: {
+                actionId: crypto.randomUUID(),
+                sceneId: scene.id,
+                characterId: input.characterId,
+                assetId: input.defaultAssetId,
+                name: input.name ?? undefined,
+                x: scene.width / 2 - input.defaultWidth / 2,
+                y: scene.height / 2 - input.defaultHeight / 2,
+                width: input.defaultWidth,
+                height: input.defaultHeight,
+                controllerMembershipIds: input.controllerMembershipIds,
+              },
             },
-          });
+            { errorOwner: "caller" },
+          );
+          if (outcome.status === "failed") throw outcome.reason;
+          if (outcome.status === "cancelled")
+            throw new Error("Сессия изменилась. Создайте токен заново.");
+          if (outcome.status === "skipped") {
+            const messages = {
+              "not-ready": "Данные кампании ещё не загружены.",
+              paused:
+                "Игра приостановлена. Продолжите игру перед размещением токена.",
+              "missing-scene":
+                "Активная сцена недоступна. Выберите сцену и повторите попытку.",
+            };
+            throw new Error(messages[outcome.reason]);
+          }
           return;
         }
         await run(
@@ -171,6 +191,7 @@ export function useTokenDefinitionActions(dependencies: {
               }),
             }),
           true,
+          { errorOwner: "caller" },
         );
       },
 
@@ -203,7 +224,7 @@ export function useTokenDefinitionActions(dependencies: {
         );
         if (!request) return;
         if (placeOptimistically) {
-          placeOptimistically(request);
+          void placeOptimistically(request);
           return;
         }
         await run(

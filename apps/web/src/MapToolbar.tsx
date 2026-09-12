@@ -237,7 +237,8 @@ export function MapToolbar({
             </button>
             {(tool === "FOG_BRUSH" || tool === "COVER_BRUSH") && (
               <label className="map-tool-text" title="Радиус кисти тумана">
-                Радиус
+                <span>Радиус</span>
+                <span aria-hidden="true">{fogBrushRadius}</span>
                 <input
                   type="range"
                   min={8}
@@ -248,9 +249,7 @@ export function MapToolbar({
                     onFogBrushRadiusChange(Number(event.target.value))
                   }
                   aria-label="Радиус кисти тумана"
-                  style={{ verticalAlign: "middle", margin: "0 6px" }}
                 />
-                {fogBrushRadius}
               </label>
             )}
             <button

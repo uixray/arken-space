@@ -3,6 +3,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    // Real Gravity adapter DOM tests need Vite to handle uikit's CSS imports.
+    // Keep all other dependencies and per-file environments unchanged.
+    server: { deps: { inline: [/@gravity-ui\/uikit/] } },
     include: [
       "tests/**/*.test.ts",
       "apps/**/src/**/*.test.ts",

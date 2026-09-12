@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import { renderComponent, screen } from "./test-support/render";
+import { renderComponent, screen, userEvent } from "./test-support/render";
 import { WorkspaceNav } from "./WorkspaceNav";
-import type { WorkspaceNavItem } from "./workspace-nav";
+import { workspaceNavItems, type WorkspaceNavItem } from "./workspace-nav";
 
 const items: WorkspaceNavItem[] = [
   { id: "characters", label: "Персонажи" },
@@ -88,4 +88,23 @@ it("переизмеряет подписи после fonts.ready и loadingdon
   buttonWidth = 60;
   await act(async () => fonts.dispatchEvent(new Event("loadingdone")));
   expect(container.querySelectorAll(".workspace-nav__item")).toHaveLength(3);
+});
+
+it("UIX-423 выбирает редактор и справочник по различимым названиям без смены маршрутов", async () => {
+  dimensions(() => 100);
+  const user = userEvent.setup();
+  const onSelect = vi.fn();
+  renderComponent(
+    <WorkspaceNav
+      items={workspaceNavItems({ isGm: true, operatorFeedbackAllowed: false })}
+      active={null}
+      onSelect={onSelect}
+    />,
+  );
+  await user.click(screen.getByLabelText("Ещё разделы"));
+  await user.click(screen.getByRole("button", { name: "Редактор мира" }));
+  expect(onSelect).toHaveBeenNthCalledWith(1, "world-encyclopedia");
+  await user.click(screen.getByLabelText("Ещё разделы"));
+  await user.click(screen.getByRole("button", { name: "Справочник мира" }));
+  expect(onSelect).toHaveBeenNthCalledWith(2, "world-codex");
 });

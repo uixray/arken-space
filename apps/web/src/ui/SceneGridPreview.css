@@ -1,0 +1,43 @@
+.scene-grid-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.scene-grid-preview__image {
+  display: block;
+  width: 100%;
+  height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  pointer-events: none;
+}
+
+.scene-grid-preview__world {
+  fill: #101821;
+}
+
+.scene-grid-preview figcaption,
+.scene-grid-preview__invalid {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.scene-grid-preview__state {
+  display: block;
+}
+
+@media (max-width: 480px) {
+  .scene-grid-preview__image {
+    height: 180px;
+  }
+}

@@ -62,7 +62,7 @@ vi.mock("../TokenImageGenerator", () => ({
     onGenerated: (asset: AssetDto) => void;
   }) => (
     <button type="button" onClick={() => onGenerated(asset("token", "TOKEN"))}>
-      Создать TOKEN
+      Создать изображение токена
     </button>
   ),
 }));
@@ -131,7 +131,7 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(
       await screen.findByText(
-        "Обрежьте исходное изображение и создайте TOKEN.",
+        "Обрежьте исходное изображение и создайте из него изображение токена.",
       ),
     ).toBeInTheDocument();
     expect(onCreate).not.toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
       screen.getByRole("button", { name: "Загрузить портрет" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Создать TOKEN" }),
+      screen.getByRole("button", { name: "Создать изображение токена" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(onCreate).toHaveBeenCalledWith(
@@ -153,13 +153,17 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
   });
 
   it("по-прежнему сохраняет уже готовый квадратный TOKEN", async () => {
-    const { onCreate } = setup();
+    const { onCreate, onCreateAndPlace } = setup();
+    expect(
+      screen.queryByRole("button", { name: "Создать и поставить" }),
+    ).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Название"), "Страж");
     await userEvent.click(screen.getByText("Выбрать готовый TOKEN"));
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(onCreate).toHaveBeenCalledWith(
       expect.objectContaining({ defaultAssetId: "ready" }),
     );
+    expect(onCreateAndPlace).not.toHaveBeenCalled();
   });
 
   it("не создаёт определение, если загрузка исходника не удалась", async () => {

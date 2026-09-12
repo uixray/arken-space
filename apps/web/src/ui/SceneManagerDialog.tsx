@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
 import { Button, Label } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ArkenDialog";
 import { ImageUploadField } from "./ImageUploadField";
+import { SceneGridPreview } from "./SceneGridPreview";
 import { FormInput, FormSelect } from "./GravityFormControls";
 import { useEntityForm } from "./useEntityForm";
 import { EntityConflictError } from "./useEntityForm";
@@ -24,6 +25,43 @@ export type SceneDraft = {
   frameWidth: number;
   frameHeight: number;
 };
+
+const numericFields = {
+  width: { label: "Ширина (px)", min: 320, max: 16384, step: 1 },
+  height: { label: "Высота (px)", min: 320, max: 16384, step: 1 },
+  gridSize: { label: "Размер клетки (px)", min: 16, max: 256, step: 1 },
+  gridOffsetX: { label: "Смещение X (px)", step: "any" },
+  gridOffsetY: { label: "Смещение Y (px)", step: "any" },
+  gridOpacity: { label: "Непрозрачность (0–1)", min: 0, max: 1, step: "any" },
+  frameX: {
+    label: "Позиция X рамки (px)",
+    min: -16384,
+    max: 16384,
+    step: "any",
+  },
+  frameY: {
+    label: "Позиция Y рамки (px)",
+    min: -16384,
+    max: 16384,
+    step: "any",
+  },
+  frameWidth: { label: "Ширина рамки (px)", min: 16, max: 16384, step: "any" },
+  frameHeight: { label: "Высота рамки (px)", min: 16, max: 16384, step: "any" },
+} satisfies Record<
+  string,
+  { label: string; min?: number; max?: number; step: number | "any" }
+>;
+type NumericField = keyof typeof numericFields;
+
+function numericHint(key: NumericField) {
+  const field: { min?: number; max?: number; step: number | "any" } =
+    numericFields[key];
+  if (key === "gridOpacity")
+    return "От 0 до 1: 0 — линии не видны, 1 — непрозрачные линии.";
+  if (field.min === undefined)
+    return "Любое конечное число в px; допустимы отрицательные и дробные значения.";
+  return `От ${field.min} до ${field.max} px${field.step === 1 ? ", целое число" : "; допустимы дробные значения"}.`;
+}
 
 function draftFromScene(scene?: SceneDto): SceneDraft {
   const backgroundFrame = scene?.backgroundFrame;
@@ -171,14 +209,102 @@ function SceneEditor({
     }
   });
   const [aspectLocked, setAspectLocked] = useState(true);
+  // Keep intermediate text such as "-0." while the draft stays numeric.
+  const [numericInputs, setNumericInputs] = useState<
+    Partial<Record<NumericField, string>>
+  >({});
+  const fieldPrefix = useId();
   const selectedMap = maps.find(
     (asset) => asset.id === form.state.draft.mapAssetId,
   );
 
-  useEffect(() => form.replace(initial), [initial]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    form.replace(initial);
+    setNumericInputs({});
+  }, [initial]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const number = (key: keyof SceneDraft, value: string) =>
-    form.update({ [key]: Number(value) } as Partial<SceneDraft>);
+  const errors: Partial<Record<keyof SceneDraft, string>> = {};
+  if (
+    !form.state.draft.name.trim() ||
+    form.state.draft.name.trim().length > 100
+  )
+    errors.name = "Введите название от 1 до 100 символов.";
+  for (const key of Object.keys(numericFields) as NumericField[]) {
+    const field: { min?: number; max?: number; step: number | "any" } =
+      numericFields[key];
+    const value = form.state.draft[key];
+    if (
+      !Number.isFinite(value) ||
+      (field.min !== undefined && value < field.min) ||
+      (field.max !== undefined && value > field.max) ||
+      (field.step === 1 && !Number.isInteger(value))
+    )
+      errors[key] = `Введите значение. ${numericHint(key)}`;
+  }
+  const invalid = Object.keys(errors).length > 0;
+  const saveReason =
+    form.state.status === "saving"
+      ? "Сохраняем изменения…"
+      : invalid
+        ? "Исправьте отмеченные поля перед сохранением."
+        : !form.dirty && !uploadFile
+          ? "Нет изменений для сохранения."
+          : undefined;
+  const number = (key: NumericField, raw: string) => {
+    const value = raw.trim() === "" ? Number.NaN : Number(raw);
+    setNumericInputs((current) => ({ ...current, [key]: raw }));
+    if (
+      aspectLocked &&
+      selectedMap &&
+      (key === "frameWidth" || key === "frameHeight")
+    ) {
+      const ratio =
+        (selectedMap.width ?? form.state.draft.frameWidth) /
+        Math.max(selectedMap.height ?? form.state.draft.frameHeight, 1);
+      form.update(
+        key === "frameWidth"
+          ? { frameWidth: value, frameHeight: value / ratio }
+          : { frameHeight: value, frameWidth: value * ratio },
+      );
+      const linkedKey = key === "frameWidth" ? "frameHeight" : "frameWidth";
+      setNumericInputs((current) => {
+        const next = { ...current };
+        delete next[linkedKey];
+        return next;
+      });
+    } else form.update({ [key]: value });
+  };
+  const numericField = (key: NumericField) => {
+    const { label, ...constraints } = numericFields[key];
+    const id = `${fieldPrefix}-${key}`;
+    return (
+      <label key={key} htmlFor={id}>
+        <span>{label}</span>
+        <FormInput
+          id={id}
+          aria-label={label}
+          type="number"
+          {...constraints}
+          required
+          value={
+            numericInputs[key] ??
+            (Number.isFinite(form.state.draft[key])
+              ? form.state.draft[key]
+              : "")
+          }
+          aria-describedby={`${id}-hint${errors[key] ? ` ${id}-error` : ""}`}
+          aria-invalid={Boolean(errors[key])}
+          onChange={(e) => number(key, e.target.value)}
+        />
+        <small id={`${id}-hint`}>{numericHint(key)}</small>
+        {errors[key] && (
+          <span className="field-error" id={`${id}-error`}>
+            {errors[key]}
+          </span>
+        )}
+      </label>
+    );
+  };
   const fitMap = () => {
     const mapWidth = selectedMap?.width ?? form.state.draft.frameWidth;
     const mapHeight = selectedMap?.height ?? form.state.draft.frameHeight;
@@ -194,9 +320,21 @@ function SceneEditor({
       frameX: (form.state.draft.width - width) / 2,
       frameY: (form.state.draft.height - height) / 2,
     });
+    setNumericInputs((current) => {
+      const next = { ...current };
+      for (const key of [
+        "frameX",
+        "frameY",
+        "frameWidth",
+        "frameHeight",
+      ] as const)
+        delete next[key];
+      return next;
+    });
   };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (saveReason) return;
     await form.submit();
   };
 
@@ -207,14 +345,26 @@ function SceneEditor({
       title={scene ? `Настройка: ${scene.name}` : "Новая сцена"}
       onClose={onCancel}
     >
-      <form className="scene-editor" onSubmit={submit}>
+      <form className="scene-editor" onSubmit={submit} noValidate>
         <label className="field">
           Название
           <FormInput
+            required
+            maxLength={100}
+            aria-label="Название"
+            aria-invalid={Boolean(errors.name)}
+            aria-describedby={
+              errors.name ? `${fieldPrefix}-name-error` : undefined
+            }
             value={form.state.draft.name}
             onChange={(e) => form.update({ name: e.target.value })}
           />
         </label>
+        {errors.name && (
+          <div className="field-error" id={`${fieldPrefix}-name-error`}>
+            {errors.name}
+          </div>
+        )}
         <label className="field">
           Карта
           <FormSelect
@@ -231,13 +381,6 @@ function SceneEditor({
             ))}
           </FormSelect>
         </label>
-        {selectedMap?.url && (
-          <img
-            className="scene-map-preview"
-            src={selectedMap.url}
-            alt={`Предпросмотр карты ${selectedMap.name}`}
-          />
-        )}
         <ImageUploadField
           label="Загрузить новую карту"
           value={uploadFile}
@@ -246,26 +389,8 @@ function SceneEditor({
         <fieldset>
           <legend>Игровая область</legend>
           <div className="scene-form-grid">
-            <label>
-              Ширина
-              <FormInput
-                type="number"
-                min={320}
-                max={16384}
-                value={form.state.draft.width}
-                onChange={(e) => number("width", e.target.value)}
-              />
-            </label>
-            <label>
-              Высота
-              <FormInput
-                type="number"
-                min={320}
-                max={16384}
-                value={form.state.draft.height}
-                onChange={(e) => number("height", e.target.value)}
-              />
-            </label>
+            {numericField("width")}
+            {numericField("height")}
           </div>
         </fieldset>
         <fieldset>
@@ -273,57 +398,30 @@ function SceneEditor({
           <label>
             <input
               type="checkbox"
+              aria-describedby={`${fieldPrefix}-grid-hint`}
               checked={form.state.draft.gridEnabled}
               onChange={(e) => form.update({ gridEnabled: e.target.checked })}
             />{" "}
-            Показывать сетку
+            Сетка: привязка и измерение
           </label>
+          <p id={`${fieldPrefix}-grid-hint`}>
+            Сетка задаёт привязку к клетке, шаг перемещения и единицу линейки.
+            Непрозрачность меняет только видимость линий: при 0 привязка
+            остаётся включённой.
+          </p>
           <div className="scene-form-grid">
+            {numericField("gridSize")}
+            {numericField("gridOffsetX")}
+            {numericField("gridOffsetY")}
             <label>
-              Размер клетки
-              <FormInput
-                type="number"
-                min={16}
-                max={256}
-                value={form.state.draft.gridSize}
-                onChange={(e) => number("gridSize", e.target.value)}
-              />
-            </label>
-            <label>
-              Смещение X
-              <FormInput
-                type="number"
-                value={form.state.draft.gridOffsetX}
-                onChange={(e) => number("gridOffsetX", e.target.value)}
-              />
-            </label>
-            <label>
-              Смещение Y
-              <FormInput
-                type="number"
-                value={form.state.draft.gridOffsetY}
-                onChange={(e) => number("gridOffsetY", e.target.value)}
-              />
-            </label>
-            <label>
-              Цвет
+              Цвет сетки
               <FormInput
                 type="color"
                 value={form.state.draft.gridColor}
                 onChange={(e) => form.update({ gridColor: e.target.value })}
               />
             </label>
-            <label>
-              Непрозрачность
-              <FormInput
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={form.state.draft.gridOpacity}
-                onChange={(e) => number("gridOpacity", e.target.value)}
-              />
-            </label>
+            {numericField("gridOpacity")}
           </div>
         </fieldset>
         <fieldset>
@@ -341,57 +439,46 @@ function SceneEditor({
           </Button>
           <div className="scene-form-grid">
             {(["frameX", "frameY", "frameWidth", "frameHeight"] as const).map(
-              (key) => (
-                <label key={key}>
-                  {key.replace("frame", "")}
-                  <FormInput
-                    type="number"
-                    min={
-                      key.includes("Width") || key.includes("Height")
-                        ? 16
-                        : undefined
-                    }
-                    value={form.state.draft[key]}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      if (
-                        aspectLocked &&
-                        selectedMap &&
-                        (key === "frameWidth" || key === "frameHeight")
-                      ) {
-                        const ratio =
-                          (selectedMap.width ?? form.state.draft.frameWidth) /
-                          Math.max(
-                            selectedMap.height ?? form.state.draft.frameHeight,
-                            1,
-                          );
-                        form.update(
-                          key === "frameWidth"
-                            ? { frameWidth: value, frameHeight: value / ratio }
-                            : { frameHeight: value, frameWidth: value * ratio },
-                        );
-                      } else number(key, e.target.value);
-                    }}
-                  />
-                </label>
-              ),
+              numericField,
             )}
           </div>
         </fieldset>
+        <SceneGridPreview
+          draft={form.state.draft}
+          map={selectedMap}
+          invalidReason={
+            uploadFile
+              ? "Новая карта ещё не сохранена. Сохраните сцену или удалите выбранный файл, чтобы увидеть карту и сетку."
+              : (Object.keys(numericFields) as NumericField[])
+                  .filter((key) => errors[key])
+                  .map((key) => numericFields[key].label)
+                  .join(", ")
+          }
+        />
         {form.state.error && (
-          <div className="field-error">{form.state.error}</div>
+          <div className="field-error" role="alert">
+            {form.state.error}
+          </div>
         )}
         {form.state.status === "conflict" && (
           <div className="field-error">
             Сцена изменилась на сервере. Закройте форму и откройте её снова.
           </div>
         )}
+        {saveReason && (
+          <p id={`${fieldPrefix}-save-reason`} role="status">
+            {saveReason}
+          </p>
+        )}
         <div className="dialog-actions">
           <Button
             type="submit"
             view="action"
             loading={form.state.status === "saving"}
-            disabled={!form.dirty && !uploadFile}
+            disabled={Boolean(saveReason)}
+            aria-describedby={
+              saveReason ? `${fieldPrefix}-save-reason` : undefined
+            }
           >
             Сохранить
           </Button>

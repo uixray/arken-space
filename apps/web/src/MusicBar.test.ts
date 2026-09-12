@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { createElement } from "react";
-import type { AssetDto, AudioStateDto } from "@arken/contracts";
+import type { AssetDto, AudioStateDto, CommandAck } from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isAudioConsentError } from "./audio-playback";
 import { volumeSliderToGain } from "./audio-volume";
 import { resolvePlaybackAction } from "./music-playback";
 import type { GameSocket } from "./realtime";
+import { notify } from "./ui/notifications";
 import { fireEvent, renderComponent, screen } from "./test-support/render";
 
 vi.mock("@gravity-ui/uikit", () => ({
@@ -42,6 +43,111 @@ const playingAudio: AudioStateDto = {
 
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
+
+describe("UIX-417 audio acknowledgement copy", () => {
+  it.each<{
+    reason?: string;
+    status: CommandAck["status"];
+    message: string;
+  }>([
+    {
+      reason: "GM_REQUIRED",
+      status: "FORBIDDEN",
+      message: "Управлять музыкой может только ведущий.",
+    },
+    {
+      reason: "INVALID_COMMAND",
+      status: "INVALID",
+      message: "Некорректная команда управления музыкой.",
+    },
+    {
+      reason: "ASSET_NOT_FOUND",
+      status: "INVALID",
+      message: "Аудиофайл не найден. Выберите другой трек.",
+    },
+    {
+      reason: "REVISION_CONFLICT",
+      status: "CONFLICT",
+      message: "Состояние музыки изменилось. Повторите команду.",
+    },
+    {
+      reason: "AUDIO_NOT_SELECTED",
+      status: "INVALID",
+      message: "Трек не выбран или его длительность недоступна.",
+    },
+    {
+      reason: "AUDIO_END_NOT_APPLICABLE",
+      status: "INVALID",
+      message: "Сейчас нельзя завершить воспроизведение трека.",
+    },
+    {
+      reason: "AUDIO_UPDATE_FAILED",
+      status: "CONFLICT",
+      message: "Не удалось обновить музыку. Повторите команду.",
+    },
+    {
+      reason: "UNRECOGNIZED_AUDIO_REASON",
+      status: "INVALID",
+      message: "Сервер отклонил команду",
+    },
+    { status: "INVALID", message: "Сервер отклонил команду" },
+  ])(
+    "renders Russian for $reason without changing the ACK",
+    ({ reason, status, message }) => {
+      vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(
+        () => {},
+      );
+      vi.mocked(notify).mockClear();
+      const acknowledgement: CommandAck = Object.freeze({
+        ok: false,
+        status,
+        ...(reason === undefined ? {} : { reason }),
+      });
+      const emit = vi.fn(
+        (
+          _event: string,
+          _command: unknown,
+          callback: (result: CommandAck) => void,
+        ) => callback(acknowledgement),
+      );
+      const onUpload = vi.fn();
+      renderComponent(
+        createElement(MusicBar, {
+          audio: { ...playingAudio, playing: false },
+          assets: [audioAsset],
+          role: "GM",
+          socket: { emit } as unknown as GameSocket,
+          onUpload,
+        }),
+      );
+
+      // The actual visible topbar handler constructs the command and consumes
+      // the controlled socket ACK; notification rendering is the browser gate.
+      fireEvent.click(screen.getByRole("button", { name: "Играть" }));
+
+      expect(emit).toHaveBeenCalledExactlyOnceWith(
+        "audio:set",
+        {
+          command: "PLAY",
+          revision: playingAudio.revision,
+          actionId: expect.any(String),
+        },
+        expect.any(Function),
+      );
+      expect(notify).toHaveBeenCalledExactlyOnceWith({
+        title: "Не удалось изменить музыку",
+        message,
+        tone: "danger",
+      });
+      expect(acknowledgement).toEqual({
+        ok: false,
+        status,
+        ...(reason === undefined ? {} : { reason }),
+      });
+      expect(onUpload).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe("personal music volume", () => {
   it("keeps the first slider step quiet instead of jumping to 5% gain", () => {

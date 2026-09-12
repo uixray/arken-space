@@ -493,6 +493,68 @@ function stateMap(nodes: readonly { node: SpellNode; state: string }[]) {
   return Object.fromEntries(nodes.map(({ node, state }) => [node.id, state]));
 }
 
+describe("UIX-262 node lifecycle visibility controls", () => {
+  it.each(["DRAFT", "REFERENCE", "ARCHIVED"] as const)(
+    "hides unassigned %s nodes after school privacy and immutable discoveries",
+    (lifecycle) => {
+      const input = fixture();
+      const nonActiveIds = new Set<SpellNode["id"]>([
+        input.nodeIds.available,
+        input.nodeIds.publicNoGrant,
+        input.nodeIds.source,
+        input.nodeIds.discoveredAssigned,
+        input.nodeIds.gmOnlyTarget,
+      ]);
+      const assignmentsBefore = structuredClone(input.currentAssignments);
+      const currentGraph: SpellProgressionGraph = {
+        ...input.graph,
+        nodes: input.graph.nodes.map((node) =>
+          nonActiveIds.has(node.id) ? { ...node, lifecycle } : node,
+        ),
+      };
+      const { player, gm } = buildSpellProgressionProjections({
+        ...input,
+        graph: currentGraph,
+      });
+      expect(stateMap(gm.nodes)).toMatchObject({
+        [input.nodeIds.available]: "HIDDEN",
+        [input.nodeIds.publicNoGrant]: "HIDDEN",
+        [input.nodeIds.source]: "DISCOVERED",
+        [input.nodeIds.discoveredAssigned]: "DISCOVERED",
+        [input.nodeIds.gmOnlyTarget]: "HIDDEN",
+        [input.nodeIds.anyAvailable]: "AVAILABLE",
+        [input.nodeIds.rankLocked]: "LOCKED",
+        [input.nodeIds.orphan]: "DISCOVERED",
+      });
+      expect(gm.graph).toEqual(currentGraph);
+      for (const hiddenId of [
+        input.nodeIds.available,
+        input.nodeIds.publicNoGrant,
+        input.nodeIds.gmOnlyTarget,
+      ])
+        expect(JSON.stringify(player)).not.toContain(hiddenId);
+      expect(JSON.stringify(player)).not.toContain(
+        "GM_ONLY_ASSIGNED_SNAPSHOT_SECRET",
+      );
+      expect(player.nodes).toContainEqual(
+        expect.objectContaining({
+          id: input.nodeIds.source,
+          state: "DISCOVERED",
+          mechanicsText: "SOURCE_SNAPSHOT_MECHANICS_WINS",
+        }),
+      );
+      expect(player.nodes).toContainEqual(
+        expect.objectContaining({
+          id: input.nodeIds.discoveredAssigned,
+          state: "DISCOVERED",
+          mechanicsText: "DISCOVERED_SNAPSHOT_MECHANICS_WINS",
+        }),
+      );
+      expect(input.currentAssignments).toEqual(assignmentsBefore);
+    },
+  );
+});
+
 describe("UIX-578 spell progression projection", () => {
   it("calculates branch, discovery, prerequisite and visibility states deterministically", () => {
     const input = fixture();

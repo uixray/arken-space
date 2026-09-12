@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import { renderComponent } from "./test-support/render";
+import type { OptimisticTokenPlacer } from "./optimistic-token-placement";
 
 const apiMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ api: apiMock }));
@@ -22,13 +23,11 @@ const { useTokenDefinitionActions } =
  * которое человек задал в редакторе. Не «вызвался ли обработчик» и не «что
  * ответил сервер» — они оба остались бы зелёными и при потерянном поле.
  */
-const scene = { id: "сцена-1" } as SceneDto;
+const scene = { id: "сцена-1", width: 1024, height: 768 } as SceneDto;
 
 const actions = (
   snapshot: GameSnapshot | null = null,
-  placeOptimistically?: (
-    request: import("./optimistic-token-mutations").TokenPlacementRequest,
-  ) => void,
+  placeOptimistically?: OptimisticTokenPlacer,
 ) => {
   const run = vi.fn(async (action: () => Promise<unknown>) => {
     await action();
@@ -58,27 +57,105 @@ beforeEach(() => {
 });
 
 describe("тело запроса определения токена", () => {
-  it("размещение и создание передают запрос optimistic контуру без ожидания сети", async () => {
-    const place = vi.fn();
+  const input = {
+    name: "Страж",
+    characterId: null,
+    defaultAssetId: "asset-1",
+    defaultWidth: 64,
+    defaultHeight: 64,
+    controllerMembershipIds: [],
+  };
+
+  it("обычное размещение по-прежнему завершается до optimistic outcome", async () => {
+    const place = vi.fn<OptimisticTokenPlacer>(() => new Promise(() => {}));
     const commands = actions(null, place);
     await commands.onPlaceTokenDefinition("definition-1");
-    await commands.onCreateAndPlaceTokenDefinition({
-      name: "Страж",
-      characterId: null,
-      defaultAssetId: "asset-1",
-      defaultWidth: 64,
-      defaultHeight: 64,
-      controllerMembershipIds: [],
-    });
-    expect(place).toHaveBeenCalledTimes(2);
+    expect(place).toHaveBeenCalledOnce();
     expect(place.mock.calls[0]?.[0]).toMatchObject({
       path: "/api/token-definitions/definition-1/placements",
       body: { definitionId: "definition-1", sceneId: scene.id },
     });
-    expect(place.mock.calls[1]?.[0]).toMatchObject({
+    expect(place.mock.calls[0]).toHaveLength(1);
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it("create-and-place ждёт accepted outcome и владеет ошибкой формы", async () => {
+    let accept!: (outcome: Awaited<ReturnType<OptimisticTokenPlacer>>) => void;
+    const place = vi.fn<OptimisticTokenPlacer>(
+      () =>
+        new Promise((resolve) => {
+          accept = resolve;
+        }),
+    );
+    const commands = actions(null, place);
+    const finished = vi.fn();
+    const pending = commands
+      .onCreateAndPlaceTokenDefinition(input)
+      .then(finished);
+    await Promise.resolve();
+    expect(finished).not.toHaveBeenCalled();
+    expect(place.mock.calls[0]?.[0]).toMatchObject({
       path: "/api/tokens",
-      body: { name: "Страж", assetId: "asset-1", width: 64, height: 64 },
+      body: {
+        name: "Страж",
+        assetId: "asset-1",
+        width: 64,
+        height: 64,
+        x: 480,
+        y: 352,
+        sceneId: scene.id,
+      },
     });
+    expect(place.mock.calls[0]?.[1]).toEqual({ errorOwner: "caller" });
+    accept({ status: "accepted" });
+    await pending;
+    expect(finished).toHaveBeenCalledOnce();
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ status: "failed", reason: new Error("Отказ сервера") }, "Отказ сервера"],
+    [{ status: "cancelled" }, "Сессия изменилась"],
+    [
+      { status: "skipped", reason: "not-ready" },
+      "Данные кампании ещё не загружены",
+    ],
+    [{ status: "skipped", reason: "paused" }, "Игра приостановлена"],
+    [
+      { status: "skipped", reason: "missing-scene" },
+      "Активная сцена недоступна",
+    ],
+  ] satisfies [Awaited<ReturnType<OptimisticTokenPlacer>>, string][])(
+    "create-and-place не считает outcome %j успешным",
+    async (outcome, message) => {
+      const place = vi.fn<OptimisticTokenPlacer>().mockResolvedValue(outcome);
+      await expect(
+        actions(null, place).onCreateAndPlaceTokenDefinition(input),
+      ).rejects.toThrow(message);
+      expect(apiMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("исчезнувшая активная сцена не даёт ложного успеха без запроса", async () => {
+    const place = vi.fn<OptimisticTokenPlacer>();
+    // An explicit ref is needed: the helper's default scene is only fixture data.
+    let captured!: ReturnType<typeof useTokenDefinitionActions>;
+    function Probe() {
+      captured = useTokenDefinitionActions({
+        run: async (action) => {
+          await action();
+        },
+        snapshotRef: { current: null },
+        activeSceneRef: { current: undefined },
+        placeOptimistically: place,
+      });
+      return null;
+    }
+    renderComponent(<Probe />);
+    await expect(
+      captured.onCreateAndPlaceTokenDefinition(input),
+    ).rejects.toThrow("Активная сцена недоступна");
+    expect(place).not.toHaveBeenCalled();
     expect(apiMock).not.toHaveBeenCalled();
   });
   it("создание везёт все поля, которые задал мастер", async () => {

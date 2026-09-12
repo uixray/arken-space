@@ -449,6 +449,39 @@ describe("UIX-246 story HTTP integration", () => {
     });
     expect(imported.statusCode).toBe(201);
     const postId = imported.json().postIds[0] as string;
+    const firstList = await app.inject({
+      method: "GET",
+      url: "/api/story/posts",
+      headers: headers(secrets.gm),
+    });
+    expect(firstList.statusCode).toBe(200);
+    expect(firstList.json().posts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: postId,
+          body: "Rights review",
+          lifecycle: "DRAFT",
+          gmNotes:
+            "Запись импортирована из Telegram: проверьте права и вложения перед публикацией.",
+        }),
+      ]),
+    );
+    // The localized default belongs only to newly imported records. A later
+    // reviewed import must not translate or reset an author's saved note.
+    const authoredNote =
+      "Ed's private Waterdeep note: keep the original wording.";
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/story/posts/${postId}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: action(), revision: 0, gmNotes: authoredNote },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json()).toMatchObject({
+      id: postId,
+      revision: 1,
+      gmNotes: authoredNote,
+    });
     const secondReview = await app.inject({
       method: "POST",
       url: "/api/story/imports/telegram/dry-run",
@@ -469,12 +502,43 @@ describe("UIX-246 story HTTP integration", () => {
       },
     });
     expect(approved.statusCode).toBe(201);
+    const afterReview = await app.inject({
+      method: "GET",
+      url: "/api/story/posts",
+      headers: headers(secrets.gm),
+    });
+    expect(afterReview.statusCode).toBe(200);
+    expect(afterReview.json().posts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: postId,
+          body: "Rights review",
+          revision: 1,
+          gmNotes: authoredNote,
+        }),
+      ]),
+    );
     const publish = await app.inject({
       method: "POST",
       url: `/api/story/posts/${postId}/publish`,
       headers: headers(secrets.gm),
-      payload: { actionId: action(), revision: 0 },
+      payload: { actionId: action(), revision: 1 },
     });
     expect(publish.statusCode).toBe(200);
+    const playerList = await app.inject({
+      method: "GET",
+      url: "/api/story/posts",
+      headers: headers(secrets.player),
+    });
+    expect(playerList.statusCode).toBe(200);
+    const visiblePost = playerList
+      .json()
+      .posts.find((post: { id: string }) => post.id === postId);
+    expect(visiblePost).toMatchObject({
+      id: postId,
+      body: "Rights review",
+      lifecycle: "PUBLISHED",
+    });
+    expect(visiblePost).not.toHaveProperty("gmNotes");
   });
 });

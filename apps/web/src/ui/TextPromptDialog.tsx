@@ -70,7 +70,7 @@ export function TextPromptDialog({
         value={state.draft.value}
         onUpdate={(value) => update({ value })}
         placeholder={label}
-        aria-label={label}
+        controlProps={{ "aria-label": label }}
         validationState={state.draft.value.trim() ? undefined : "invalid"}
         errorMessage={state.draft.value.trim() ? undefined : "Введите значение"}
         onKeyDown={(event) => {

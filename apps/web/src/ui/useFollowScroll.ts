@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type UIEvent as ReactUIEvent,
@@ -49,6 +50,24 @@ export function useFollowScroll(
   const hiddenGeometryRef = useRef(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [newItemCount, setNewItemCount] = useState(0);
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list || !isAtBottom) return;
+    // UIX-475: while following, ResizeObserver owns the bottom position.
+    // Native scroll anchoring can otherwise move the old reading anchor when
+    // media above it shrinks, dispatching scroll before our ResizeObserver and
+    // incorrectly turning follow off. Do not filter scroll events or infer
+    // intent: real user/programmatic scrolling still uses onScroll unchanged.
+    // Readers regain the original anchoring policy immediately before paint.
+    const value = list.style.getPropertyValue("overflow-anchor");
+    const priority = list.style.getPropertyPriority("overflow-anchor");
+    list.style.setProperty("overflow-anchor", "none", priority);
+    return () => {
+      if (value) list.style.setProperty("overflow-anchor", value, priority);
+      else list.style.removeProperty("overflow-anchor");
+    };
+  }, [isAtBottom]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const list = listRef.current;

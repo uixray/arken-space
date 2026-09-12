@@ -5,6 +5,16 @@ export type TokenPlacementRequest = {
   body: Record<string, unknown>;
 };
 
+export type TokenPlacementOutcome =
+  | { status: "accepted" }
+  | { status: "failed"; reason: unknown }
+  | { status: "cancelled" };
+
+export type TokenPlacementOptions = {
+  /** Default placements retain shared errors; an awaiting form may own its error. */
+  errorOwner?: "shared" | "caller";
+};
+
 /** Build the visible draft from local metadata, not a speculative server ID. */
 export function optimisticPlacementToken(
   snapshot: GameSnapshot,
@@ -137,22 +147,30 @@ export class OptimisticTokenMutations {
     return result;
   }
 
-  /** Independent placements start immediately, with no shared request queue. */
+  /**
+   * Independent placements paint immediately, with no shared request queue.
+   * The outcome resolves even on failure, so fire-and-forget callers stay safe.
+   */
   place(
     temporary: TokenDto,
     send: () => Promise<Partial<TokenDto> & { id: string; revision: number }>,
-  ): void {
+    options?: TokenPlacementOptions,
+  ): Promise<TokenPlacementOutcome> {
     const generation = this.generation;
     this.placements.set(temporary.id, temporary);
     this.changed();
-    void Promise.resolve()
+    return Promise.resolve()
       .then(() => (generation === this.generation ? send() : undefined))
-      .then((response) => {
-        if (generation !== this.generation || !response) return;
+      .then((response): TokenPlacementOutcome => {
+        if (generation !== this.generation || !response)
+          return { status: "cancelled" };
         this.dependencies.acceptToken({ ...temporary, ...response });
+        return { status: "accepted" };
       })
-      .catch((reason) => {
-        if (generation === this.generation) this.dependencies.onError(reason);
+      .catch((reason): TokenPlacementOutcome => {
+        if (generation !== this.generation) return { status: "cancelled" };
+        if (options?.errorOwner !== "caller") this.dependencies.onError(reason);
+        return { status: "failed", reason };
       })
       .finally(() => {
         if (generation !== this.generation) return;

@@ -2,6 +2,7 @@ import { type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import type { GameSnapshot } from "@arken/contracts";
 import { expect, test } from "./campaign-fixture";
+import { seedChatLog } from "./chat-seed";
 
 /**
  * UIX-493 — лента открывается на последних записях, а не выше них.
@@ -41,21 +42,27 @@ const distanceToBottom = (page: Page) =>
 
 /** Наполняет журнал так, чтобы лента заведомо переполнилась по высоте. */
 async function seedLog(page: Page, count: number) {
-  await page.evaluate(async (total) => {
-    for (let index = 0; index < total; index += 1) {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          actionId: crypto.randomUUID(),
-          body: `Запись журнала ${index} — достаточно длинная, чтобы занять высоту и переполнить ленту событий.`,
-          stream: "TABLE",
-        }),
-      });
-      if (!response.ok) throw new Error(await response.text());
-    }
-  }, count);
+  await seedChatLog(count, {
+    actionId: randomUUID,
+    wait: (milliseconds) => page.waitForTimeout(milliseconds),
+    extendTimeout: (milliseconds) =>
+      test.setTimeout(test.info().timeout + milliseconds),
+    post: (payload) =>
+      page.evaluate(async (body) => {
+        const result = await fetch("/api/chat", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        return {
+          ok: result.ok,
+          status: result.status,
+          retryAfter: result.headers.get("retry-after"),
+          body: result.ok ? "" : await result.text(),
+        };
+      }, payload),
+  });
 }
 
 /**

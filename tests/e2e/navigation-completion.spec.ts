@@ -87,6 +87,28 @@ async function install(page: Page, role: "GM" | "PLAYER") {
   return current;
 }
 
+test("UIX-423 world editor and reader names match their dialogs on desktop and compact", async ({
+  page,
+}) => {
+  await install(page, "GM");
+  await page.route("**/api/world-content**", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.goto("/");
+  for (const width of [1024, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const name of ["Редактор мира", "Справочник мира"]) {
+      await openWorkspaceSection(page, name);
+      const dialog = page.getByRole("dialog", { name, exact: true });
+      await expect(dialog).toBeVisible();
+      await dialog
+        .getByRole("button", { name: "Закрыть окно", exact: true })
+        .click();
+      await expect(dialog).toBeHidden();
+    }
+  }
+});
+
 test("UIX-416 header omits campaign name while GM rename remains in session menu", async ({
   page,
 }) => {
