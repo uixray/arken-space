@@ -4480,7 +4480,7 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   await page.locator("#chat-tab-activity").click();
   const picker = page.locator(".chat-compose .sticker-picker");
   await picker.locator(":scope > button").click();
-  const panel = picker.locator(".sticker-picker-panel");
+  const panel = page.getByRole("dialog", { name: "Выбор стикера" });
   await expect(panel.getByRole("tab")).toHaveCount(5);
   await panel.getByRole("tab").nth(2).click();
   await panel.getByRole("searchbox").fill("assigned");
