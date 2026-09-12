@@ -356,6 +356,16 @@ try {
   );
   runComponent("direct-restored");
   run("baseline", spec, composerTitles);
+  const activityDescription = 'aria-describedby="activity-composer-hint"';
+  fault(
+    caller,
+    activityDescription,
+    `${activityDescription}\n            aria-expanded={slashSuggestions.length > 0}`,
+    () =>
+      run("textbox-expanded-state", spec, composerTitles, {
+        [activityTitle]: `${prefix}: textbox does not own unsupported expanded state`,
+      }),
+  );
   const lateAck = 'else await onChat(intent.body, visibility, "TABLE");';
   fault(caller, lateAck, `${lateAck}\n      setComposer("");`, () =>
     run("late-ack-clear", spec, composerTitles, {

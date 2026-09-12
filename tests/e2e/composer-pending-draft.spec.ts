@@ -58,6 +58,20 @@ test(`${MARKER}: late success preserves a newer activity draft and private send`
   });
 
   try {
+    await composer.fill("/");
+    const commands = page
+      .locator("#chat-panel-activity")
+      .getByRole("button", { name: "Быстрые команды", exact: true });
+    await expect(commands).toHaveAttribute("aria-expanded", "true");
+    await expect(commands).toHaveAttribute(
+      "aria-controls",
+      "activity-slash-suggestions",
+    );
+    await expect(page.locator("#activity-slash-suggestions")).toBeVisible();
+    await expect(
+      composer,
+      `${MARKER}: textbox does not own unsupported expanded state`,
+    ).not.toHaveAttribute("aria-expanded");
     await composer.fill("Первое задержанное");
     const firstResponse = page.waitForResponse(
       (response) =>

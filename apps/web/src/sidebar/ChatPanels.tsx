@@ -817,7 +817,6 @@ export function ActivityPanel({
           <FormTextArea
             aria-label="Сообщение или бросок"
             aria-describedby="activity-composer-hint"
-            aria-expanded={slashSuggestions.length > 0}
             aria-controls={
               slashSuggestions.length > 0
                 ? "activity-slash-suggestions"
@@ -848,6 +847,11 @@ export function ActivityPanel({
               aria-label="Быстрые команды"
               title="Быстрые команды"
               aria-expanded={slashSuggestions.length > 0}
+              aria-controls={
+                slashSuggestions.length > 0
+                  ? "activity-slash-suggestions"
+                  : undefined
+              }
               onClick={() => setSlashHelpOpen((open) => !open)}
             >
               <span aria-hidden="true">/</span>
@@ -1550,7 +1554,6 @@ export function ChatPanel({
                     : "Сообщение или бросок"
                 }
                 aria-describedby="chat-composer-hint"
-                aria-expanded={slashSuggestions.length > 0}
                 aria-controls={
                   slashSuggestions.length > 0
                     ? "chat-slash-suggestions"
@@ -1588,6 +1591,11 @@ export function ChatPanel({
                   aria-label="Быстрые команды"
                   title="Быстрые команды"
                   aria-expanded={slashSuggestions.length > 0}
+                  aria-controls={
+                    slashSuggestions.length > 0
+                      ? "chat-slash-suggestions"
+                      : undefined
+                  }
                   onClick={() => setSlashHelpOpen((open) => !open)}
                 >
                   <span aria-hidden="true">/</span>
