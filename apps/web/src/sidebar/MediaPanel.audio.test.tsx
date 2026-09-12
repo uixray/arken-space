@@ -80,8 +80,7 @@ it.each([
     const input = screen.getByLabelText<HTMLInputElement>("Музыка и звуки");
     const section = input.closest(".upload-section") as HTMLElement;
     const upload = within(section).getByRole("button", {
-      name: "Загрузить",
-      exact: true,
+        name: "Загрузить",
     });
     const file = new File(["synthetic audio candidate"], name, { type });
     await user.upload(input, file);
@@ -122,8 +121,7 @@ it("keeps the audio candidate for retry after a server rejection", async () => {
   const input = screen.getByLabelText<HTMLInputElement>("Музыка и звуки");
   const section = input.closest(".upload-section") as HTMLElement;
   const upload = within(section).getByRole("button", {
-    name: "Загрузить",
-    exact: true,
+      name: "Загрузить",
   });
   const file = new File(["candidate"], "retry.mp3", { type: "audio/mpeg" });
   await user.upload(input, file);
@@ -145,7 +143,7 @@ it("keeps AUDIO creation unavailable to PLAYER in the actual caller", () => {
   expect(screen.getByLabelText("Изображения токенов")).toBeInTheDocument();
   expect(screen.getByLabelText("Портреты персонажей")).toBeInTheDocument();
   expect(
-    screen.getAllByRole("button", { name: "Загрузить", exact: true }),
+      screen.getAllByRole("button", { name: "Загрузить" }),
   ).toHaveLength(2);
   expect(onUpload).not.toHaveBeenCalled();
 });

@@ -25,7 +25,7 @@ describe("parseDiceSemanticOutcome", () => {
     { kind: "NORMAL", keptNaturalD20: 21 },
     { kind: "NORMAL", keptNaturalD20: 1.5 },
     { kind: "NORMAL", keptNaturalD20: "20" },
-    { kind: { toString: () => "NORMAL" }, keptNaturalD20: 12 },
+    { kind: { toString: (): string => "NORMAL" }, keptNaturalD20: 12 },
     { kind: "UNKNOWN", keptNaturalD20: 12 },
     { kind: "NORMAL" },
   ])("rejects invalid semantic %j", (input) => {

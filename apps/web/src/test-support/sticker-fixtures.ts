@@ -6,10 +6,10 @@ export function stickerPack(count = 1): StickerPackDto {
   return {
     id: packId,
     name: "Проверка стикеров",
-    subject: "COMMON",
+    subject: "CREATURE",
     subjectCharacterId: null,
     subjectMembershipId: null,
-    subjectLabel: "Общие",
+    subjectLabel: "Существо",
     lifecycle: "ACTIVE",
     canSend: true,
     stickers: Array.from({ length: count }, (_, index) => ({
