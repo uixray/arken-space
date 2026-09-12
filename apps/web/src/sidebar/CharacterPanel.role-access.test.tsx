@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
 import type { Button, TextArea, TextInput } from "@gravity-ui/uikit";
-import type { CharacterDto, GameSnapshot } from "@arken/contracts";
+import type { AssetDto, CharacterDto, GameSnapshot } from "@arken/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
+  act,
   renderComponent,
   screen,
   userEvent,
@@ -19,14 +20,13 @@ import {
   type CampaignActions,
 } from "../campaign-actions-context";
 import type { ArkenDialog } from "../ui/ArkenDialog";
-import type { TextPromptDialog } from "../ui/TextPromptDialog";
 import type { ImageUploadField } from "../ui/ImageUploadField";
 import type { CharacterMediaGallery } from "./CharacterMediaGallery";
 import { CharacterPanel } from "./CharacterWorkspace";
 
 // UIX-414: retain the actual parent role decision, FormTextArea wrapper,
 // native focus/change/blur events and mutation runner. Only the CSS library
-// controls, closed dialogs, file-upload leaf and self-fetching gallery are
+// controls, dialog shell, file-upload leaf and self-fetching gallery are
 // replaced. No mock receives a role or computes ownership.
 vi.mock("@gravity-ui/uikit", () => ({
   Button: ({
@@ -81,6 +81,7 @@ vi.mock("@gravity-ui/uikit", () => ({
     onBlur,
     type,
     placeholder,
+    onUpdate,
   }: ComponentProps<typeof TextInput>) => (
     <input
       {...controlProps}
@@ -88,7 +89,7 @@ vi.mock("@gravity-ui/uikit", () => ({
       defaultValue={defaultValue}
       value={value}
       disabled={disabled}
-      onChange={onChange}
+      onChange={onChange ?? ((event) => onUpdate?.(event.target.value))}
       onBlur={onBlur}
       type={type}
       placeholder={placeholder}
@@ -96,13 +97,49 @@ vi.mock("@gravity-ui/uikit", () => ({
   ),
 }));
 vi.mock("../ui/ArkenDialog", () => ({
-  ArkenDialog: (_props: ComponentProps<typeof ArkenDialog>) => null,
-}));
-vi.mock("../ui/TextPromptDialog", () => ({
-  TextPromptDialog: (_props: ComponentProps<typeof TextPromptDialog>) => null,
+  ArkenDialog: ({
+    open,
+    title,
+    children,
+    applyLabel = "Сохранить",
+    loading,
+    error,
+    onApply,
+    onClose,
+  }: ComponentProps<typeof ArkenDialog>) =>
+    open ? (
+      <div role="dialog" aria-label={title}>
+        {children}
+        {error ? <div role="alert">{error}</div> : null}
+        {onApply ? (
+          <button type="button" disabled={loading} onClick={onApply}>
+            {applyLabel}
+          </button>
+        ) : null}
+        <button type="button" onClick={onClose}>
+          Закрыть
+        </button>
+      </div>
+    ) : null,
 }));
 vi.mock("../ui/ImageUploadField", () => ({
-  ImageUploadField: (_props: ComponentProps<typeof ImageUploadField>) => null,
+  ImageUploadField: ({
+    disabled,
+    onUpdate,
+  }: ComponentProps<typeof ImageUploadField>) => (
+    <label>
+      Upload portrait
+      <input
+        aria-label="Upload portrait file"
+        type="file"
+        disabled={disabled}
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) onUpdate(file);
+        }}
+      />
+    </label>
+  ),
 }));
 vi.mock("./CharacterMediaGallery", () => ({
   // A prop-only sentinel, not proof of gallery interactions/server ACL. It
@@ -229,7 +266,28 @@ function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
   };
 }
 
+const portraitAsset: AssetDto = {
+  id: "portrait-1",
+  kind: "PORTRAIT",
+  name: "Портрет героя",
+  mimeType: "image/png",
+  sizeBytes: 1024,
+  width: 256,
+  height: 256,
+  durationSeconds: null,
+  url: "/portrait.png",
+  createdAt: new Date(0).toISOString(),
+};
+
 type PanelProps = ComponentProps<typeof CharacterPanel>;
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
   const onPatch = vi.fn<PanelProps["onPatch"]>().mockResolvedValue(undefined);
@@ -238,16 +296,28 @@ function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
   const onReplaceControllers =
     vi.fn<PanelProps["onReplaceControllers"]>(unexpectedAction);
   const onRoll = vi.fn<PanelProps["onRoll"]>(unexpectedAction);
+  const uploadAsset = vi
+    .fn<CampaignActions["asset"]["uploadAsset"]>()
+    .mockResolvedValue(portraitAsset);
   const decoy = makeCharacter({
     id: "another-character",
     name: "Не редактируется",
     revision: 91,
   });
-  renderComponent(
-    <CampaignActionsContext.Provider value={actions}>
+  const panel = (currentSnapshot: GameSnapshot, current: CharacterDto) => (
+    <CampaignActionsContext.Provider
+      value={{
+        ...actions,
+        asset: { ...actions.asset, uploadAsset },
+      }}
+    >
       <CharacterPanel
-        snapshot={{ ...snapshot, characters: [decoy, character] }}
-        character={character}
+        snapshot={{
+          ...currentSnapshot,
+          assets: [...currentSnapshot.assets, portraitAsset],
+          characters: [decoy, current],
+        }}
+        character={current}
         selectedId={decoy.id}
         setSelectedId={unexpectedAction}
         showCharacterPicker={false}
@@ -256,9 +326,20 @@ function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
         onRoll={onRoll}
         onUpdateCounters={onUpdateCounters}
       />
-    </CampaignActionsContext.Provider>,
+    </CampaignActionsContext.Provider>
   );
-  return { onPatch, onUpdateCounters, onReplaceControllers, onRoll };
+  const rendered = renderComponent(panel(snapshot, character));
+  return {
+    onPatch,
+    onUpdateCounters,
+    onReplaceControllers,
+    onRoll,
+    uploadAsset,
+    rerender: rendered.rerender,
+    rerenderPanel: (nextSnapshot: GameSnapshot, nextCharacter: CharacterDto) =>
+      rendered.rerender(panel(nextSnapshot, nextCharacter)),
+    unmount: rendered.unmount,
+  };
 }
 
 async function openBackstory(user: ReturnType<typeof userEvent.setup>) {
@@ -348,5 +429,310 @@ describe("CharacterPanel backstory role and mutation wiring", () => {
       screen.getByRole("button", { name: "Gallery edit permission" }),
     ).toBeDisabled();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("CharacterPanel identity and portrait role wiring", () => {
+  it.each(["GM", "OWNER", "CONTROLLER"] as const)(
+    "%s can rename, choose a portrait, and upload with the character target",
+    async (actor) => {
+      const snapshot = actor === "GM" ? gmSnapshot() : playerSnapshot();
+      const character = makeCharacter({
+        ownerMembershipId: actor === "OWNER" ? snapshot.me.id : "another-owner",
+        controllerMembershipIds: actor === "CONTROLLER" ? [snapshot.me.id] : [],
+      });
+      const calls = renderPanel(snapshot, character);
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Переименовать" }));
+      const name = screen.getByRole("textbox", { name: "Имя персонажа" });
+      await user.clear(name);
+      await user.type(name, "Новое имя");
+      await user.click(screen.getByRole("button", { name: "Сохранить" }));
+      await waitFor(() => {
+        expect(calls.onPatch).toHaveBeenCalledTimes(1);
+        expect(
+          calls.onPatch,
+          "UIX414_IDENTITY_RENAME_PATCH_TARGET",
+        ).toHaveBeenNthCalledWith(1, character.id, {
+          name: "Новое имя",
+          revision: character.revision,
+        });
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: portraitAsset.name }),
+      );
+      await waitFor(() => {
+        expect(calls.onPatch).toHaveBeenCalledTimes(2);
+        expect(
+          calls.onPatch,
+          "UIX414_IDENTITY_PICK_PATCH_TARGET",
+        ).toHaveBeenNthCalledWith(2, character.id, {
+          portraitAssetId: portraitAsset.id,
+          revision: character.revision,
+        });
+      });
+
+      const file = new File(["portrait"], "portrait.png", {
+        type: "image/png",
+      });
+      await user.upload(screen.getByLabelText("Upload portrait file"), file);
+      expect(calls.uploadAsset).not.toHaveBeenCalled();
+      await user.click(
+        screen.getByRole("button", { name: "Загрузить и назначить" }),
+      );
+      await waitFor(() => {
+        expect(calls.uploadAsset).toHaveBeenCalledTimes(1);
+        expect(
+          calls.uploadAsset,
+          "UIX414_IDENTITY_UPLOAD_CALL",
+        ).toHaveBeenNthCalledWith(1, file, "PORTRAIT");
+        expect(calls.onPatch).toHaveBeenCalledTimes(3);
+        expect(
+          calls.onPatch,
+          "UIX414_IDENTITY_UPLOAD_PATCH_TARGET",
+        ).toHaveBeenNthCalledWith(3, character.id, {
+          portraitAssetId: portraitAsset.id,
+          revision: character.revision,
+        });
+      });
+    },
+  );
+
+  it("disables rename, picker and portrait upload for an unrelated player", async () => {
+    const calls = renderPanel(playerSnapshot(), makeCharacter());
+    const user = userEvent.setup();
+    const rename = screen.getByRole("button", { name: "Переименовать" });
+    const picker = screen.getByRole("button", { name: portraitAsset.name });
+    const upload = screen.getByLabelText("Upload portrait file");
+    expect(rename, "UIX414_IDENTITY_RENAME_DISABLED").toBeDisabled();
+    expect(picker, "UIX414_IDENTITY_PICK_DISABLED").toBeDisabled();
+    expect(upload, "UIX414_IDENTITY_UPLOAD_DISABLED").toBeDisabled();
+    await user.click(rename);
+    await user.click(picker);
+    await user.upload(upload, new File(["portrait"], "portrait.png"));
+    const assign = screen.getByRole("button", {
+      name: "Загрузить и назначить",
+    });
+    expect(assign).toBeDisabled();
+    await user.click(assign);
+    expect(
+      calls.onPatch,
+      "UIX414_IDENTITY_UNRELATED_PATCH_0",
+    ).not.toHaveBeenCalled();
+    expect(
+      calls.uploadAsset,
+      "UIX414_IDENTITY_UNRELATED_UPLOAD_0",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("rechecks edit permission before submitting an already-open rename dialog", async () => {
+    const snapshot = playerSnapshot();
+    const character = makeCharacter({ ownerMembershipId: snapshot.me.id });
+    const calls = renderPanel(snapshot, character);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Переименовать" }));
+    calls.rerender(
+      <CampaignActionsContext.Provider value={actions}>
+        <CharacterPanel
+          snapshot={{
+            ...snapshot,
+            assets: [...snapshot.assets, portraitAsset],
+            characters: [character],
+          }}
+          character={{
+            ...character,
+            ownerMembershipId: "someone-else",
+            controllerMembershipIds: [],
+          }}
+          selectedId={character.id}
+          showCharacterPicker={false}
+          setSelectedId={unexpectedAction}
+          onPatch={calls.onPatch}
+          onReplaceControllers={calls.onReplaceControllers}
+          onRoll={calls.onRoll}
+          onUpdateCounters={calls.onUpdateCounters}
+        />
+      </CampaignActionsContext.Provider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(
+      calls.onPatch,
+      "UIX414_IDENTITY_RECHECK_NO_PATCH",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("disables an already-selected portrait after edit permission is revoked", async () => {
+    const snapshot = playerSnapshot();
+    const character = makeCharacter({ ownerMembershipId: snapshot.me.id });
+    const calls = renderPanel(snapshot, character);
+    const user = userEvent.setup();
+    await user.upload(
+      screen.getByLabelText("Upload portrait file"),
+      new File(["portrait"], "portrait.png", { type: "image/png" }),
+    );
+
+    calls.rerenderPanel(snapshot, {
+      ...character,
+      ownerMembershipId: "someone-else",
+    });
+    const assign = screen.getByRole("button", {
+      name: "Загрузить и назначить",
+    });
+    expect(
+      assign,
+      "UIX414_PORTRAIT_SELECTED_REVOKED_ASSIGN_DISABLED",
+    ).toBeDisabled();
+    await user.click(assign);
+    expect(
+      calls.uploadAsset,
+      "UIX414_PORTRAIT_SELECTED_REVOKED_UPLOAD_0",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("does not patch a portrait whose upload resolves after permission loss", async () => {
+    const snapshot = playerSnapshot();
+    const character = makeCharacter({ ownerMembershipId: snapshot.me.id });
+    const calls = renderPanel(snapshot, character);
+    const upload = deferred<AssetDto>();
+    calls.uploadAsset.mockReturnValueOnce(upload.promise);
+    const user = userEvent.setup();
+    const file = new File(["portrait"], "portrait.png", {
+      type: "image/png",
+    });
+    await user.upload(screen.getByLabelText("Upload portrait file"), file);
+    await user.click(
+      screen.getByRole("button", { name: "Загрузить и назначить" }),
+    );
+    await waitFor(() => {
+      expect(
+        calls.uploadAsset,
+        "UIX414_PORTRAIT_PENDING_REVOKED_UPLOAD_STARTED",
+      ).toHaveBeenCalledWith(file, "PORTRAIT");
+    });
+
+    calls.rerenderPanel(snapshot, {
+      ...character,
+      ownerMembershipId: "someone-else",
+    });
+    await act(async () => {
+      upload.resolve(portraitAsset);
+      await upload.promise;
+    });
+    expect(
+      calls.onPatch,
+      "UIX414_PORTRAIT_PENDING_REVOKED_PATCH_0",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("does not patch a portrait whose upload resolves after unmount", async () => {
+    const snapshot = playerSnapshot();
+    const character = makeCharacter({ ownerMembershipId: snapshot.me.id });
+    const calls = renderPanel(snapshot, character);
+    const upload = deferred<AssetDto>();
+    calls.uploadAsset.mockReturnValueOnce(upload.promise);
+    const user = userEvent.setup();
+    await user.upload(
+      screen.getByLabelText("Upload portrait file"),
+      new File(["portrait"], "portrait.png", { type: "image/png" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Загрузить и назначить" }),
+    );
+    await waitFor(() => {
+      expect(
+        calls.uploadAsset,
+        "UIX414_PORTRAIT_PENDING_UNMOUNT_UPLOAD_STARTED",
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    calls.unmount();
+    await act(async () => {
+      upload.resolve(portraitAsset);
+      await upload.promise;
+    });
+    expect(
+      calls.onPatch,
+      "UIX414_PORTRAIT_PENDING_UNMOUNT_PATCH_0",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("does not redirect a pending portrait upload to a different character", async () => {
+    const snapshot = playerSnapshot();
+    const character = makeCharacter({ ownerMembershipId: snapshot.me.id });
+    const calls = renderPanel(snapshot, character);
+    const upload = deferred<AssetDto>();
+    calls.uploadAsset.mockReturnValueOnce(upload.promise);
+    const user = userEvent.setup();
+    await user.upload(
+      screen.getByLabelText("Upload portrait file"),
+      new File(["portrait"], "portrait.png", { type: "image/png" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Загрузить и назначить" }),
+    );
+    await waitFor(() => {
+      expect(
+        calls.uploadAsset,
+        "UIX414_PORTRAIT_PENDING_TARGET_CHANGE_UPLOAD_STARTED",
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    const nextCharacter = makeCharacter({
+      id: "next-character",
+      ownerMembershipId: snapshot.me.id,
+      revision: 23,
+    });
+    calls.rerenderPanel(snapshot, nextCharacter);
+    await act(async () => {
+      upload.resolve(portraitAsset);
+      await upload.promise;
+    });
+    expect(
+      calls.onPatch,
+      "UIX414_PORTRAIT_PENDING_TARGET_CHANGE_PATCH_0",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("does not assign a pending portrait after the active actor changes", async () => {
+    const snapshot = playerSnapshot();
+    const character = makeCharacter({ ownerMembershipId: snapshot.me.id });
+    const calls = renderPanel(snapshot, character);
+    const upload = deferred<AssetDto>();
+    calls.uploadAsset.mockReturnValueOnce(upload.promise);
+    const user = userEvent.setup();
+    await user.upload(
+      screen.getByLabelText("Upload portrait file"),
+      new File(["portrait"], "portrait.png", { type: "image/png" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Загрузить и назначить" }),
+    );
+    await waitFor(() => {
+      expect(
+        calls.uploadAsset,
+        "UIX414_PORTRAIT_PENDING_ACTOR_CHANGE_UPLOAD_STARTED",
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    const replacementViewerId = "replacement-viewer";
+    calls.rerenderPanel(
+      {
+        ...snapshot,
+        me: { ...snapshot.me, id: replacementViewerId },
+      },
+      {
+        ...character,
+        ownerMembershipId: replacementViewerId,
+      },
+    );
+    await act(async () => {
+      upload.resolve(portraitAsset);
+      await upload.promise;
+    });
+    expect(
+      calls.onPatch,
+      "UIX414_PORTRAIT_PENDING_ACTOR_CHANGE_PATCH_0",
+    ).not.toHaveBeenCalled();
   });
 });

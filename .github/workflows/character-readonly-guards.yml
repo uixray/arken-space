@@ -1,0 +1,55 @@
+name: Character read-only guards
+
+on:
+  push:
+    branches: [codex/uix-414-sheet-readonly]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: character-readonly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CI: "true"
+      NODE_OPTIONS: --max-old-space-size=2048
+      NO_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @arken/contracts --filter @arken/system build
+      - name: Component baseline, deliberate source faults, exact restoration
+        run: node scripts/check-character-readonly-guards.mjs
+      - name: Shared rename-dialog caller regression
+        run: pnpm exec vitest run apps/web/src/sidebar/StatLayoutCard.test.tsx --maxWorkers=1 --retry=0
+      - name: Types and changed-file quality
+        run: |
+          pnpm --filter @arken/web typecheck
+          pnpm exec eslint apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx apps/web/src/sidebar/StatLayoutCard.test.tsx apps/web/src/ui/TextPromptDialog.tsx scripts/check-character-readonly-guards.mjs
+          files=(apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx apps/web/src/sidebar/StatLayoutCard.test.tsx apps/web/src/ui/TextPromptDialog.tsx scripts/check-character-readonly-guards.mjs .github/workflows/character-readonly-guards.yml)
+          if ! pnpm exec prettier --check "${files[@]}"; then
+            for file in "${files[@]}"; do
+              pnpm exec prettier "$file" | diff -u "$file" - || true
+            done
+            exit 1
+          fi
+      - name: Retain bounded synthetic receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: character-readonly-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/character-readonly/receipt.json
+          retention-days: 7
+          if-no-files-found: error
