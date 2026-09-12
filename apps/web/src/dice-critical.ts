@@ -1,4 +1,5 @@
 import type { DiceResult } from "@arken/contracts";
+import { parseDiceSemanticOutcome } from "./dice-outcome";
 
 export type DiceCritical = {
   kind: "failure" | "success";
@@ -22,11 +23,17 @@ function keptNaturalD20(term: DiceResult["terms"][number]) {
 export function getDiceCritical(dice: DiceResult): DiceCritical | null {
   // New history rows carry the server-authoritative semantic. The term-based
   // path remains solely for backwards compatibility with legacy stored rolls.
-  if (dice.semanticOutcome?.kind === "CRITICAL_FAILURE")
-    return { kind: "failure", natural: 1, label: "Критический провал" };
-  if (dice.semanticOutcome?.kind === "CRITICAL_SUCCESS")
-    return { kind: "success", natural: 20, label: "Критический успех" };
-  if (dice.semanticOutcome?.kind === "NORMAL") return null;
+  if (dice.semanticOutcome !== undefined) {
+    const outcome = parseDiceSemanticOutcome(dice.semanticOutcome);
+    // Malformed authoritative metadata is not a legacy row: do not infer a
+    // different outcome from its terms after rejecting the supplied semantic.
+    if (!outcome) return null;
+    if (outcome.kind === "CRITICAL_FAILURE")
+      return { kind: "failure", natural: 1, label: "Критический провал" };
+    if (outcome.kind === "CRITICAL_SUCCESS")
+      return { kind: "success", natural: 20, label: "Критический успех" };
+    return null;
+  }
   const naturals = dice.terms
     .map(keptNaturalD20)
     .filter((value): value is number => value !== null);
