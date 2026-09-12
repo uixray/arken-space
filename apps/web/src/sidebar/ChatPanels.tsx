@@ -586,19 +586,20 @@ export function ActivityPanel({
         <section className="activity-roll-controls" aria-label="Быстрые броски">
           <div className="activity-roll-controls__heading">
             <strong>Быстрые броски</strong>
-            {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
-              <FormSelect
-                aria-label="Персонаж для броска"
-                value={rollCharacter?.id ?? ""}
-                onChange={(event) => setRollCharacterId(event.target.value)}
-              >
-                {availableRollCharacters.map((character) => (
-                  <option key={character.id} value={character.id}>
-                    {character.name}
-                  </option>
-                ))}
-              </FormSelect>
-            )}
+            {snapshot.me.role === "GM" &&
+              availableRollCharacters.length > 0 && (
+                <FormSelect
+                  aria-label="Персонаж для броска"
+                  value={rollCharacter?.id ?? ""}
+                  onChange={(event) => setRollCharacterId(event.target.value)}
+                >
+                  {availableRollCharacters.map((character) => (
+                    <option key={character.id} value={character.id}>
+                      {character.name}
+                    </option>
+                  ))}
+                </FormSelect>
+              )}
             {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
                 подписывала — uikit рисует свой `<label>` внутри, а вложенные не
                 связываются: программа чтения с экрана называла поле «флажок». */}

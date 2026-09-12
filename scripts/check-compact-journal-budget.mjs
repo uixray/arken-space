@@ -107,7 +107,9 @@ function run(id, broken = false) {
           test.results.length !== 1 ||
           test.results[0].retry !== 0
         ) {
-          throw new Error(`${id}: unexpected project, expected status or retry`);
+          throw new Error(
+            `${id}: unexpected project, expected status or retry`,
+          );
         }
         const result = test.results[0];
         const shouldFail = broken && item.title.startsWith("PLAYER ");

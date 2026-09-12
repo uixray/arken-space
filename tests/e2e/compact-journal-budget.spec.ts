@@ -190,13 +190,13 @@ for (const viewport of [
   { width: 650, height: 698 },
   { width: 360, height: 640 },
 ] as const) {
-  test(
-    `PLAYER ${viewport.width}x${viewport.height}: UIX624_JOURNAL_VISIBLE_BUDGET`,
-    async ({ page, gmToken }) => {
-      await preparePlayerJournal(page, gmToken);
-      await assertCompactBudget(page, viewport);
-    },
-  );
+  test(`PLAYER ${viewport.width}x${viewport.height}: UIX624_JOURNAL_VISIBLE_BUDGET`, async ({
+    page,
+    gmToken,
+  }) => {
+    await preparePlayerJournal(page, gmToken);
+    await assertCompactBudget(page, viewport);
+  });
 }
 
 test("desktop 1280x900 preserves journal flex layout", async ({
