@@ -1,0 +1,93 @@
+name: Compact journal budget
+
+on:
+  push:
+    branches: [codex/uix-624-compact-journal]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compact-journal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: arken
+          POSTGRES_USER: arken
+          POSTGRES_PASSWORD: arken
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arken -d arken"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      CI: "true"
+      NODE_OPTIONS: --max-old-space-size=2048
+      DATABASE_URL: postgres://arken:arken@localhost:5432/arken
+      WEB_ORIGIN: http://localhost:5173
+      PUBLIC_URL: http://localhost:5173
+      MEDIA_ROOT: ./media
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Changed-file quality
+        shell: bash
+        run: |
+          files=(apps/web/src/sidebar/ChatPanels.tsx apps/web/src/sidebar/ChatPanels.pending-draft.test.tsx apps/web/src/ui/useSubmissionDraft.ts apps/web/src/ui/GravityFormControls.tsx apps/web/src/ui/GravityFormControls.dom.test.tsx apps/web/src/sidebar/ChatPanels.scope.test.tsx apps/web/src/styles.css apps/web/src/mobile-foundation.css tests/e2e/compact-journal-budget.spec.ts tests/e2e/activity-feed-layout.spec.ts tests/e2e/composer-pending-draft.spec.ts tests/e2e/dialog-focus.spec.ts tests/e2e/modal-focus.ts scripts/check-compact-journal-budget.mjs scripts/check-composer-drafts.mjs .github/workflows/compact-journal-budget.yml)
+          if ! pnpm exec prettier --check "${files[@]}"; then
+            for file in "${files[@]}"; do
+              pnpm exec prettier "$file" | diff -u "$file" - || true
+            done
+            exit 1
+          fi
+          pnpm exec eslint apps/web/src/sidebar/ChatPanels.tsx apps/web/src/sidebar/ChatPanels.pending-draft.test.tsx apps/web/src/ui/useSubmissionDraft.ts apps/web/src/ui/GravityFormControls.tsx apps/web/src/ui/GravityFormControls.dom.test.tsx apps/web/src/sidebar/ChatPanels.scope.test.tsx tests/e2e/compact-journal-budget.spec.ts tests/e2e/activity-feed-layout.spec.ts tests/e2e/composer-pending-draft.spec.ts tests/e2e/dialog-focus.spec.ts tests/e2e/modal-focus.ts scripts/check-compact-journal-budget.mjs scripts/check-composer-drafts.mjs
+      - run: pnpm build
+      - run: pnpm typecheck
+      - name: Prepare isolated test database
+        run: |
+          token=$(openssl rand -hex 24)
+          echo "::add-mask::$token"
+          echo "GM_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
+          pnpm db:migrate
+      - run: pnpm exec playwright install --with-deps chrome
+      - name: Real browser baseline, source fault and restoration
+        shell: bash
+        run: |
+          mkdir -p media
+          node apps/server/dist/index.js > "$RUNNER_TEMP/compact-journal-api.log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for i in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:4100/healthz > /dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          node scripts/check-compact-journal-budget.mjs
+          node scripts/check-composer-drafts.mjs
+      - name: Compact synthetic receipt only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-journal-budget
+          path: |
+            ${{ runner.temp }}/compact-journal-budget/receipt.json
+            ${{ runner.temp }}/composer-drafts/receipt.json
+          retention-days: 7
+          if-no-files-found: warn

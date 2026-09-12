@@ -92,6 +92,7 @@ import {
 import { QuickRollPanel } from "./QuickRollPanel";
 import { ResourceCounters } from "./ResourceCounters";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
+import { useSubmissionDraft } from "../ui/useSubmissionDraft";
 
 /**
  * UIX-388: shared tooltip/label text for the composer's send icon so
@@ -334,7 +335,11 @@ export function ActivityPanel({
     () => createRollCharacterNameSource(snapshot),
     [snapshot],
   );
-  const [composer, setComposer] = useState("");
+  const activityDraft = useSubmissionDraft(
+    `${snapshot.campaign.id}:${snapshot.me.id}:activity`,
+  );
+  const composer = activityDraft.value;
+  const setComposer = activityDraft.setValue;
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const availableRollCharacters = useMemo(
@@ -406,6 +411,7 @@ export function ActivityPanel({
       setComposerError(intent.message);
       return;
     }
+    const consumed = activityDraft.consume();
     setComposerError("");
     try {
       if (intent.kind === "ROLL")
@@ -417,13 +423,14 @@ export function ActivityPanel({
           "NORMAL",
         );
       else await onChat(intent.body, visibility, "TABLE");
-      setComposer("");
     } catch {
-      setComposerError(
-        intent.kind === "ROLL"
-          ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
-          : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
-      );
+      activityDraft.restore(consumed.token, consumed.value);
+      if (activityDraft.isCurrentScope(consumed.token))
+        setComposerError(
+          intent.kind === "ROLL"
+            ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
+            : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+        );
     }
   };
   const submit = (event: FormEvent) => {
@@ -577,72 +584,80 @@ export function ActivityPanel({
       id="chat-panel-activity"
       aria-labelledby="chat-tab-activity"
     >
-      <section className="activity-roll-controls" aria-label="Быстрые броски">
-        <div className="activity-roll-controls__heading">
-          <strong>Быстрые броски</strong>
-          {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
-            <FormSelect
-              aria-label="Персонаж для броска"
-              value={rollCharacter?.id ?? ""}
-              onChange={(event) => setRollCharacterId(event.target.value)}
+      <div
+        className="activity-feed__controls"
+        role="region"
+        aria-label="Быстрые броски и ресурсы"
+        tabIndex={0}
+      >
+        <section className="activity-roll-controls" aria-label="Быстрые броски">
+          <div className="activity-roll-controls__heading">
+            <strong>Быстрые броски</strong>
+            {snapshot.me.role === "GM" &&
+              availableRollCharacters.length > 0 && (
+                <FormSelect
+                  aria-label="Персонаж для броска"
+                  value={rollCharacter?.id ?? ""}
+                  onChange={(event) => setRollCharacterId(event.target.value)}
+                >
+                  {availableRollCharacters.map((character) => (
+                    <option key={character.id} value={character.id}>
+                      {character.name}
+                    </option>
+                  ))}
+                </FormSelect>
+              )}
+            {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
+                подписывала — uikit рисует свой `<label>` внутри, а вложенные не
+                связываются: программа чтения с экрана называла поле «флажок». */}
+            <FormInput
+              className="compact-check"
+              type="checkbox"
+              checked={physicalDice}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                setPhysicalDice(enabled);
+                window.localStorage.setItem(
+                  physicalDiceStorageKey(snapshot.me.id),
+                  String(enabled),
+                );
+              }}
             >
-              {availableRollCharacters.map((character) => (
-                <option key={character.id} value={character.id}>
-                  {character.name}
-                </option>
-              ))}
-            </FormSelect>
-          )}
-          {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
-              подписывала — uikit рисует свой `<label>` внутри, а вложенные не
-              связываются: программа чтения с экрана называла поле «флажок». */}
-          <FormInput
-            className="compact-check"
-            type="checkbox"
-            checked={physicalDice}
-            onChange={(event) => {
-              const enabled = event.target.checked;
-              setPhysicalDice(enabled);
-              window.localStorage.setItem(
-                physicalDiceStorageKey(snapshot.me.id),
-                String(enabled),
-              );
-            }}
-          >
-            Физические кубы
-          </FormInput>
-        </div>
+              Физические кубы
+            </FormInput>
+          </div>
 
-        {rollCharacter ? (
-          <QuickRollPanel
-            rollCharacter={rollCharacter}
-            campaignId={snapshot.campaign.id}
-            membershipId={snapshot.me.id}
-            rows={rollableStatRows(
-              statRowsFromLayout(snapshot.campaign.statLayout),
-            )}
-            quickRollPending={quickRollPending}
-            gmOnly={rollVisibility === "GM_ONLY"}
-            onQuickRoll={(formula, label, bonus, mode) =>
-              void submitQuickRoll(formula, label, bonus, mode)
+          {rollCharacter ? (
+            <QuickRollPanel
+              rollCharacter={rollCharacter}
+              campaignId={snapshot.campaign.id}
+              membershipId={snapshot.me.id}
+              rows={rollableStatRows(
+                statRowsFromLayout(snapshot.campaign.statLayout),
+              )}
+              quickRollPending={quickRollPending}
+              gmOnly={rollVisibility === "GM_ONLY"}
+              onQuickRoll={(formula, label, bonus, mode) =>
+                void submitQuickRoll(formula, label, bonus, mode)
+              }
+            />
+          ) : (
+            <p className="muted">Нет доступного персонажа для броска.</p>
+          )}
+        </section>
+        {rollCharacter && (
+          <ResourceCounters
+            scopeKey={rollCharacter.id}
+            rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
+            resources={rollCharacter.resources}
+            stats={rollCharacter.stats}
+            editable={canSpendResources}
+            onSpend={(intent) =>
+              spendResource(rollCharacter.id, rollCharacter.revision, intent)
             }
           />
-        ) : (
-          <p className="muted">Нет доступного персонажа для броска.</p>
         )}
-      </section>
-      {rollCharacter && (
-        <ResourceCounters
-          scopeKey={rollCharacter.id}
-          rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
-          resources={rollCharacter.resources}
-          stats={rollCharacter.stats}
-          editable={canSpendResources}
-          onSpend={(intent) =>
-            spendResource(rollCharacter.id, rollCharacter.revision, intent)
-          }
-        />
-      )}
+      </div>
       <div className="activity-log-toolbar">
         <span className="eyebrow">Журнал</span>
         {/* Фильтр относится к самому журналу, поэтому находится напротив его
@@ -802,7 +817,6 @@ export function ActivityPanel({
           <FormTextArea
             aria-label="Сообщение или бросок"
             aria-describedby="activity-composer-hint"
-            aria-expanded={slashSuggestions.length > 0}
             aria-controls={
               slashSuggestions.length > 0
                 ? "activity-slash-suggestions"
@@ -833,6 +847,11 @@ export function ActivityPanel({
               aria-label="Быстрые команды"
               title="Быстрые команды"
               aria-expanded={slashSuggestions.length > 0}
+              aria-controls={
+                slashSuggestions.length > 0
+                  ? "activity-slash-suggestions"
+                  : undefined
+              }
               onClick={() => setSlashHelpOpen((open) => !open)}
             >
               <span aria-hidden="true">/</span>
@@ -919,11 +938,16 @@ export function DirectChatPanel({
       "",
   );
   const [selectingPeer, setSelectingPeer] = useState(false);
-  const [composer, setComposer] = useState("");
+  const directDraft = useSubmissionDraft(
+    `${snapshot.campaign.id}:${snapshot.me.id}:${activeThread?.id ?? "none"}`,
+  );
+  const composer = directDraft.value;
+  const setComposer = directDraft.setValue;
   const [attachment, setAttachment] = useState<ChatAttachmentMetadata | null>(
     null,
   );
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState("");
+  const attachmentRef = useRef<ChatAttachmentMetadata | null>(null);
   const attachmentPreviewUrlRef = useRef("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -951,9 +975,6 @@ export function DirectChatPanel({
     loadOlder,
   });
 
-  useEffect(() => {
-    attachmentPreviewUrlRef.current = attachmentPreviewUrl;
-  }, [attachmentPreviewUrl]);
   useEffect(
     () => () => {
       if (attachmentPreviewUrlRef.current)
@@ -995,15 +1016,27 @@ export function DirectChatPanel({
     return () => window.clearTimeout(timer);
   }, [activeThread, latestSequence, onMarkChatRead, visible]);
 
+  function replaceAttachment(
+    next: ChatAttachmentMetadata | null,
+    previewUrl: string,
+  ) {
+    const previousUrl = attachmentPreviewUrlRef.current;
+    attachmentRef.current = next;
+    attachmentPreviewUrlRef.current = previewUrl;
+    if (previousUrl && previousUrl !== previewUrl)
+      URL.revokeObjectURL(previousUrl);
+    setAttachment(next);
+    setAttachmentPreviewUrl(previewUrl);
+  }
+
   async function attachFile(file: File) {
     setUploading(true);
     setError("");
     try {
       const previewUrl = URL.createObjectURL(file);
       try {
-        setAttachment(await onUploadAttachment(file));
-        if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
-        setAttachmentPreviewUrl(previewUrl);
+        directDraft.touch();
+        replaceAttachment(await onUploadAttachment(file), previewUrl);
       } catch (error) {
         URL.revokeObjectURL(previewUrl);
         throw error;
@@ -1061,19 +1094,26 @@ export function DirectChatPanel({
     event.preventDefault();
     const body = composer.trim();
     if (!activeThread || (!body && !attachment)) return;
+    const consumed = directDraft.consume();
+    const sentAttachment = attachment;
     setError("");
     try {
       await onDirectChat(
         activeThread.id,
         body || "Изображение",
-        attachment ? [attachment.contentId] : [],
+        sentAttachment ? [sentAttachment.contentId] : [],
       );
-      setComposer("");
-      setAttachment(null);
-      if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
-      setAttachmentPreviewUrl("");
+      // Text edits do not make a previously sent attachment a new attachment.
+      if (
+        directDraft.isCurrentScope(consumed.token) &&
+        attachmentRef.current === sentAttachment
+      ) {
+        replaceAttachment(null, "");
+      }
     } catch {
-      setError("Не удалось отправить личное сообщение.");
+      directDraft.restore(consumed.token, consumed.value);
+      if (directDraft.isCurrentScope(consumed.token))
+        setError("Не удалось отправить личное сообщение.");
     }
   }
 
@@ -1192,10 +1232,8 @@ export function DirectChatPanel({
                   view="flat"
                   type="button"
                   onClick={() => {
-                    setAttachment(null);
-                    if (attachmentPreviewUrl)
-                      URL.revokeObjectURL(attachmentPreviewUrl);
-                    setAttachmentPreviewUrl("");
+                    directDraft.touch();
+                    replaceAttachment(null, "");
                   }}
                 >
                   Убрать
@@ -1264,7 +1302,11 @@ export function ChatPanel({
   onMessageFocused: () => void;
   onOpenPlayerRequests: () => void;
 }) {
-  const [composer, setComposer] = useState("");
+  const chatDraft = useSubmissionDraft(
+    `${snapshot.campaign.id}:${snapshot.me.id}:${activeStream}`,
+  );
+  const composer = chatDraft.value;
+  const setComposer = chatDraft.setValue;
   const [composerError, setComposerError] = useState("");
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const messages = useMemo(
@@ -1364,18 +1406,28 @@ export function ChatPanel({
       setComposerError(intent.message);
       return;
     }
+    const consumed = chatDraft.consume();
     setComposerError("");
-    if (intent.kind === "ROLL" && activeStream === "TABLE")
-      await onRoll(
-        intent.formula,
-        undefined,
-        visibility,
-        snapshot.me.characterId,
-        "NORMAL",
-      );
-    else if (intent.kind === "TEXT")
-      await onChat(intent.body, visibility, activeStream);
-    setComposer("");
+    try {
+      if (intent.kind === "ROLL" && activeStream === "TABLE")
+        await onRoll(
+          intent.formula,
+          undefined,
+          visibility,
+          snapshot.me.characterId,
+          "NORMAL",
+        );
+      else if (intent.kind === "TEXT")
+        await onChat(intent.body, visibility, activeStream);
+    } catch {
+      chatDraft.restore(consumed.token, consumed.value);
+      if (chatDraft.isCurrentScope(consumed.token))
+        setComposerError(
+          intent.kind === "ROLL"
+            ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
+            : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+        );
+    }
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -1502,7 +1554,6 @@ export function ChatPanel({
                     : "Сообщение или бросок"
                 }
                 aria-describedby="chat-composer-hint"
-                aria-expanded={slashSuggestions.length > 0}
                 aria-controls={
                   slashSuggestions.length > 0
                     ? "chat-slash-suggestions"
@@ -1540,6 +1591,11 @@ export function ChatPanel({
                   aria-label="Быстрые команды"
                   title="Быстрые команды"
                   aria-expanded={slashSuggestions.length > 0}
+                  aria-controls={
+                    slashSuggestions.length > 0
+                      ? "chat-slash-suggestions"
+                      : undefined
+                  }
                   onClick={() => setSlashHelpOpen((open) => !open)}
                 >
                   <span aria-hidden="true">/</span>
