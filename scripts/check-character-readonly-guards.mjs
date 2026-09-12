@@ -57,8 +57,32 @@ const revoked =
   " rechecks edit permission before submitting an already-open rename dialog";
 const positiveFailures = (marker) =>
   Object.fromEntries(positive.map((name) => [name, marker]));
+const selectedRevoked =
+  suite +
+  " disables an already-selected portrait after edit permission is revoked";
+const pendingCases = [
+  [
+    "does not patch a portrait whose upload resolves after permission loss",
+    "UIX414_PORTRAIT_PENDING_REVOKED_PATCH_0",
+  ],
+  [
+    "does not patch a portrait whose upload resolves after unmount",
+    "UIX414_PORTRAIT_PENDING_UNMOUNT_PATCH_0",
+  ],
+  [
+    "does not redirect a pending portrait upload to a different character",
+    "UIX414_PORTRAIT_PENDING_TARGET_CHANGE_PATCH_0",
+  ],
+  [
+    "does not assign a pending portrait after the active actor changes",
+    "UIX414_PORTRAIT_PENDING_ACTOR_CHANGE_PATCH_0",
+  ],
+].map(([name, marker]) => [suite + " " + name, marker]);
+const pendingFailures = Object.fromEntries(pendingCases);
 const expectedNames = [
   ...positive,
+  selectedRevoked,
+  ...pendingCases.map(([name]) => name),
   unrelated,
   revoked,
   ...[
@@ -132,12 +156,62 @@ const faults = [
   {
     id: "upload-wrong-target",
     replacements: [
-      [
-        "await onPatch(character.id, {\n              portraitAssetId: asset.id,",
-        "await onPatch(selectedId, {\n              portraitAssetId: asset.id,",
-      ],
+      ["const targetId = character.id;", "const targetId = selectedId;"],
     ],
     failures: positiveFailures("UIX414_IDENTITY_UPLOAD_PATCH_TARGET"),
+  },
+  {
+    id: "selected-upload-enabled-after-revoke",
+    replacements: [
+      ["disabled={!editable || !portraitUpload}", "disabled={!portraitUpload}"],
+    ],
+    failures: {
+      [selectedRevoked]: "UIX414_PORTRAIT_SELECTED_REVOKED_ASSIGN_DISABLED",
+    },
+  },
+  {
+    id: "pending-upload-context-ignored",
+    replacements: [
+      [
+        "if (portraitUploadEpochRef.current !== uploadEpoch) return;",
+        "void uploadEpoch;",
+      ],
+    ],
+    failures: pendingFailures,
+  },
+  {
+    id: "pending-upload-unmount-ignored",
+    replacements: [
+      [
+        "if (portraitUploadEpochRef.current === epoch) {\n        portraitUploadEpochRef.current = epoch + 1;\n      }",
+        "void epoch;",
+      ],
+    ],
+    failures: Object.fromEntries([pendingCases[1]]),
+  },
+  {
+    id: "pending-upload-permission-ignored",
+    replacements: [
+      ["    editable,\n    portraitUpload,", "    portraitUpload,"],
+    ],
+    failures: Object.fromEntries([pendingCases[0]]),
+  },
+  {
+    id: "pending-upload-target-ignored",
+    replacements: [
+      ["    character?.id,\n    editable,", "    editable,"],
+    ],
+    failures: Object.fromEntries([pendingCases[2]]),
+  },
+  {
+    id: "pending-upload-actor-ignored",
+    replacements: [
+      [
+        "    snapshot.me.id,\n    snapshot.me.role,",
+        "    snapshot.me.role,",
+      ],
+    ],
+    failures: Object.fromEntries([pendingCases[3]]),
   },
 ];
 

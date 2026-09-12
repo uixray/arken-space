@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   statKeyFromLabel,
   moveStatRow,
@@ -981,6 +988,25 @@ export function CharacterPanel({
     character &&
     (snapshot.me.role === "GM" ||
       character.ownerMembershipId === snapshot.me.id);
+  const portraitUploadEpochRef = useRef(0);
+  useLayoutEffect(() => {
+    const epoch = portraitUploadEpochRef.current + 1;
+    portraitUploadEpochRef.current = epoch;
+    return () => {
+      // An uploaded asset belongs to the exact actor, character, permission
+      // and selected-file context that started it. Cleanup also invalidates a
+      // pending result when the sheet unmounts.
+      if (portraitUploadEpochRef.current === epoch) {
+        portraitUploadEpochRef.current = epoch + 1;
+      }
+    };
+  }, [
+    snapshot.me.id,
+    snapshot.me.role,
+    character?.id,
+    editable,
+    portraitUpload,
+  ]);
   // Хук обязан стоять до раннего выхода ниже: порядок вызовов не должен
   // зависеть от того, назначен ли персонаж. Пустая строка безопасна — без
   // персонажа поле не отрисовано, и класть значение некуда.
@@ -1268,15 +1294,19 @@ export function CharacterPanel({
         onClick={() =>
           void runCharacterMutation(async () => {
             if (!editable || !portraitUpload) return;
-            const asset = await assetActions.uploadAsset(
-              portraitUpload,
-              "PORTRAIT",
-            );
-            await onPatch(character.id, {
+            const uploadEpoch = portraitUploadEpochRef.current;
+            const file = portraitUpload;
+            const targetId = character.id;
+            const targetRevision = character.revision;
+            const asset = await assetActions.uploadAsset(file, "PORTRAIT");
+            if (portraitUploadEpochRef.current !== uploadEpoch) return;
+            await onPatch(targetId, {
               portraitAssetId: asset.id,
-              revision: character.revision,
+              revision: targetRevision,
             });
-            setPortraitUpload(undefined);
+            if (portraitUploadEpochRef.current === uploadEpoch) {
+              setPortraitUpload(undefined);
+            }
           })
         }
       >

@@ -32,11 +32,13 @@ jobs:
       - run: pnpm --filter @arken/contracts --filter @arken/system build
       - name: Component baseline, deliberate source faults, exact restoration
         run: node scripts/check-character-readonly-guards.mjs
+      - name: Shared rename-dialog caller regression
+        run: pnpm exec vitest run apps/web/src/sidebar/StatLayoutCard.test.tsx --maxWorkers=1 --retry=0
       - name: Types and changed-file quality
         run: |
           pnpm --filter @arken/web typecheck
-          pnpm exec eslint apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx apps/web/src/ui/TextPromptDialog.tsx scripts/check-character-readonly-guards.mjs
-          files=(apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx apps/web/src/ui/TextPromptDialog.tsx scripts/check-character-readonly-guards.mjs .github/workflows/character-readonly-guards.yml)
+          pnpm exec eslint apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx apps/web/src/sidebar/StatLayoutCard.test.tsx apps/web/src/ui/TextPromptDialog.tsx scripts/check-character-readonly-guards.mjs
+          files=(apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx apps/web/src/sidebar/StatLayoutCard.test.tsx apps/web/src/ui/TextPromptDialog.tsx scripts/check-character-readonly-guards.mjs .github/workflows/character-readonly-guards.yml)
           if ! pnpm exec prettier --check "${files[@]}"; then
             for file in "${files[@]}"; do
               pnpm exec prettier "$file" | diff -u "$file" - || true
