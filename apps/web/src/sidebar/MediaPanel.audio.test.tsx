@@ -142,8 +142,6 @@ it("keeps AUDIO creation unavailable to PLAYER in the actual caller", () => {
   expect(screen.queryByLabelText("Музыка и звуки")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Изображения токенов")).toBeInTheDocument();
   expect(screen.getByLabelText("Портреты персонажей")).toBeInTheDocument();
-  expect(
-      screen.getAllByRole("button", { name: "Загрузить" }),
-  ).toHaveLength(2);
+  expect(screen.getAllByRole("button", { name: "Загрузить" })).toHaveLength(2);
   expect(onUpload).not.toHaveBeenCalled();
 });
