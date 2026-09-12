@@ -75,7 +75,12 @@ for (const variant of ["workspace", "modal"] as const) {
   it(`Escape closes the picker, not its ${variant}, and returns focus`, async () => {
     const close = vi.fn();
     render(
-      <ArkenDialog open variant={variant} title="Стикеры в окне" onClose={close}>
+      <ArkenDialog
+        open
+        variant={variant}
+        title="Стикеры в окне"
+        onClose={close}
+      >
         <StickerPicker onSelect={async () => {}} />
       </ArkenDialog>,
     );
@@ -128,7 +133,9 @@ it("current-session rejection stays open and a retry can succeed", async () => {
     "Не удалось отправить стикер.",
   );
   fireEvent.click(screen.getByRole("option", { name: "Стикер 1" }));
-  await waitFor(() => expect(trigger).toHaveAttribute("aria-expanded", "false"));
+  await waitFor(() =>
+    expect(trigger).toHaveAttribute("aria-expanded", "false"),
+  );
   expect(send).toHaveBeenCalledTimes(2);
 });
 

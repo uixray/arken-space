@@ -108,7 +108,10 @@ it("does not claim Escape bubbling from a portalled child overlay", () => {
       footer={false}
       onClose={onClose}
     >
-      {createPortal(<button type="button">Вложенный слой</button>, document.body)}
+      {createPortal(
+        <button type="button">Вложенный слой</button>,
+        document.body,
+      )}
     </ArkenDialog>,
   );
 
@@ -122,8 +125,20 @@ it("closes only the directly owning nested workspace", () => {
   const closeOuter = vi.fn();
   const closeInner = vi.fn();
   renderComponent(
-    <ArkenDialog open title="Внешнее окно" variant="workspace" footer={false} onClose={closeOuter}>
-      <ArkenDialog open title="Внутреннее окно" variant="workspace" footer={false} onClose={closeInner}>
+    <ArkenDialog
+      open
+      title="Внешнее окно"
+      variant="workspace"
+      footer={false}
+      onClose={closeOuter}
+    >
+      <ArkenDialog
+        open
+        title="Внутреннее окно"
+        variant="workspace"
+        footer={false}
+        onClose={closeInner}
+      >
         <input aria-label="Вложенное поле" />
       </ArkenDialog>
     </ArkenDialog>,

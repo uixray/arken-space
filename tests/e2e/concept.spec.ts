@@ -987,12 +987,17 @@ for (const role of ["GM", "PLAYER"] as const) {
       };
       await portraitInput.setInputFiles(portraitFile);
       await expect(portraitInput).toHaveValue("");
-      await expect(portraitSection.getByRole("button", {
-        name: "Загрузить", exact: true,
-      })).toBeEnabled();
-      await expect(portraitSection.getByRole("img", {
-        name: "Предпросмотр repeat-portrait.png",
-      })).toBeVisible();
+      await expect(
+        portraitSection.getByRole("button", {
+          name: "Загрузить",
+          exact: true,
+        }),
+      ).toBeEnabled();
+      await expect(
+        portraitSection.getByRole("img", {
+          name: "Предпросмотр repeat-portrait.png",
+        }),
+      ).toBeVisible();
       await portraitInput.setInputFiles({
         name: "rejected.svg",
         mimeType: "image/svg+xml",
@@ -1000,21 +1005,32 @@ for (const role of ["GM", "PLAYER"] as const) {
       });
       await expect(portraitInput).toHaveValue("");
       await expect(portraitSection.getByRole("alert")).toBeVisible();
-      await portraitSection.getByRole("button", {
-        name: "Удалить repeat-portrait.png", exact: true,
-      }).click();
+      await portraitSection
+        .getByRole("button", {
+          name: "Удалить repeat-portrait.png",
+          exact: true,
+        })
+        .click();
       await expect(portraitSection.getByRole("alert")).toHaveCount(0);
       await portraitInput.setInputFiles(portraitFile);
       await expect(portraitInput).toHaveValue("");
-      await expect(portraitSection.getByRole("img", {
-        name: "Предпросмотр repeat-portrait.png",
-      })).toBeVisible();
-      await portraitSection.getByRole("button", {
-        name: "Удалить repeat-portrait.png", exact: true,
-      }).click();
-      await expect(portraitSection.getByRole("button", {
-        name: "Загрузить", exact: true,
-      })).toBeDisabled();
+      await expect(
+        portraitSection.getByRole("img", {
+          name: "Предпросмотр repeat-portrait.png",
+        }),
+      ).toBeVisible();
+      await portraitSection
+        .getByRole("button", {
+          name: "Удалить repeat-portrait.png",
+          exact: true,
+        })
+        .click();
+      await expect(
+        portraitSection.getByRole("button", {
+          name: "Загрузить",
+          exact: true,
+        }),
+      ).toBeDisabled();
       expect(unexpectedWrites).toEqual([]);
       // Audio intake must reach a local AUDIO draft without an image decoder.
       // These bytes test client selection only; server media validation is separate.
@@ -1032,17 +1048,28 @@ for (const role of ["GM", "PLAYER"] as const) {
           buffer: Buffer.from("client intake candidate only", "utf8"),
         });
         await expect(audioInput).toHaveValue("");
-        await expect(audioSection.getByRole("button", {
-          name: "Загрузить", exact: true,
-        })).toBeEnabled();
-        await expect(audioSection.getByText(name, { exact: true })).toBeVisible();
+        await expect(
+          audioSection.getByRole("button", {
+            name: "Загрузить",
+            exact: true,
+          }),
+        ).toBeEnabled();
+        await expect(
+          audioSection.getByText(name, { exact: true }),
+        ).toBeVisible();
         await expect(audioSection.locator("img, audio, video")).toHaveCount(0);
-        await audioSection.getByRole("button", {
-          name: `Удалить ${name}`, exact: true,
-        }).click();
-        await expect(audioSection.getByRole("button", {
-          name: "Загрузить", exact: true,
-        })).toBeDisabled();
+        await audioSection
+          .getByRole("button", {
+            name: `Удалить ${name}`,
+            exact: true,
+          })
+          .click();
+        await expect(
+          audioSection.getByRole("button", {
+            name: "Загрузить",
+            exact: true,
+          }),
+        ).toBeDisabled();
       }
       expect(unexpectedWrites).toEqual([]);
       await expect(

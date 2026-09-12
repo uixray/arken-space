@@ -16,6 +16,7 @@ export {
   Circle as NormalRollIcon,
   Circle as OfflineStatusIcon,
   CircleDot as OnlineStatusIcon,
+  Copy as DuplicateIcon,
   ChevronsLeft as CollapseToolbarIcon,
   ChevronsRight as ExpandToolbarIcon,
   Eraser as CoverBrushIcon,

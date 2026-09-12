@@ -56,9 +56,9 @@ export function AudioUploadField({
     onUpdate(undefined);
   };
 
-  const describedBy = [hint ? hintId : null, error ? errorId : null]
-    .filter(Boolean)
-    .join(" ") || undefined;
+  const describedBy =
+    [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") ||
+    undefined;
 
   return (
     <div className="arken-upload-field">
@@ -109,9 +109,7 @@ export function AudioUploadField({
           </figcaption>
         </figure>
       ) : (
-        <div className="arken-upload-field__empty">
-          Выберите MP3 или OGG.
-        </div>
+        <div className="arken-upload-field__empty">Выберите MP3 или OGG.</div>
       )}
       {error ? (
         <div id={errorId} className="field-error" role="alert">

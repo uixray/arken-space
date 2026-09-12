@@ -9,12 +9,12 @@ The existing forms worktree now holds `codex/ui-review-integration`; no addition
 worktree, dependency installation, generated assets, or application process.
 The original branch tips remain unchanged:
 
-| Pool | Preserved source revision | Integrated behavior |
-| --- | --- | --- |
+| Pool              | Preserved source revision                  | Integrated behavior                                                                                  |
+| ----------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
 | UIX-421 / UIX-589 | `fe0af95c7de6b841d4e71b4ab82312b06c2671b9` | Form errors and focus; upload prerequisites; repeat image selection; finite MP3/OGG candidate intake |
-| UIX-644 | `d0ff49f02539f6ffb3418abeb9795917276b1dfd` | Owned sticker popup lifecycle; first Escape belongs to nested Select, second to workspace |
-| UIX-645 | `f593a2fc5651be1d9de7adfc43d5753f81901a03` | Shared Lucide/AppIcon; accessible action names and scoped source policy |
-| UIX-289 | `803602fdcecb94f21ba25716f45420b78f9aa6c4` | Explicit dice semantics and decorative frame validation at the client boundary |
+| UIX-644           | `d0ff49f02539f6ffb3418abeb9795917276b1dfd` | Owned sticker popup lifecycle; first Escape belongs to nested Select, second to workspace            |
+| UIX-645           | `f593a2fc5651be1d9de7adfc43d5753f81901a03` | Shared Lucide/AppIcon; accessible action names and scoped source policy                              |
+| UIX-289           | `803602fdcecb94f21ba25716f45420b78f9aa6c4` | Explicit dice semantics and decorative frame validation at the client boundary                       |
 
 ## Integration decisions
 

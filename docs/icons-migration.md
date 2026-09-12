@@ -8,30 +8,30 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 
 ## Подготовлено, но не принято
 
-| Контрол | Прежнее представление | Named Lucide | Проверка |
-| --- | --- | --- | --- |
-| Workspace close / reset | × / сброс | X / RotateCcw | existing ArkenDialog.icons + AppIcon DOM |
-| Карта: pan / reveal / cover | CSS glyphs | Hand / Eye / EyeOff | MapToolbar DOM, доступные имена |
-| Кисть reveal / cover | CSS круги | Brush / Eraser | состав SVG, прежние handlers |
-| Полигон reveal / cover | CSS pentagon / hexagon | Pentagon / Hexagon | разные формы в collapsed DOM |
-| Draw / ruler / ping | CSS glyphs | Pencil / Ruler / MapPin | data-tool и SVG |
-| Cursor PLAYER / GM | CSS arrow | MousePointer2 | разные права, имена и действия |
-| Grid / resize | CSS # / стрелки | Grid3x3 / Maximize2 | scoped CSS + SVG |
-| History undo / redo | CSS + HTML entities | Undo2 / Redo2 | отсутствие двойных glyphs |
-| Toolbar expand / collapse / more | « / » / bullets | ChevronsLeft / ChevronsRight / Ellipsis | collapsed state и имена |
-| Sidebar collapse | HTML entity | PanelRightClose | scoped source gate; browser ещё не выполнен |
-| Music play / pause / volume / menu | glyphs и entities | Play / Pause / Volume2 / Ellipsis | реальные SVG и разные формы play/pause |
-| Game pause action | Ⅱ | Pause | прежнее доступное действие + SVG |
-| Shell: сцены / публикация / create / session / sidebar / toast | glyphs и entities | ChevronDown / Cast, ScreenShare / Plus / Menu / PanelRightOpen / X | source guard и negative source fixture; browser не выполнен |
-| Персонажи: rail / close / add / archive | glyphs и emoji | PanelLeftClose / PanelLeftOpen / X / Plus / Archive | scoped source guard; browser не выполнен |
-| Характеристики: reorder / rename / delete / add | glyphs | ArrowUp / ArrowDown / Pencil / Trash / Plus | существующий StatLayoutCard DOM дополнен; negative source fixture |
-| Режимы бросков / приватность / disclosure | стрелки, круг, diamond | ArrowUp / ArrowDown / Circle / EyeOff / ChevronRight / ChevronDown | новые DiceTray DOM-кейсы; shared secret icon; source guard |
-| Ресурсы / статус участников | отдельные −/+ и ●/○ | Minus / Plus / CircleDot / Circle | ResourceCounters DOM дополнен; hidden online/offline text; source guard |
-| World/character media | reorder / pagination arrows | ArrowUp / ArrowDown / ArrowLeft / ArrowRight | source guard; явные доступные имена; runtime gate остаётся |
-| World map / token selection / zoom | markers / checkmark / −/+ | MapPin / UsersRound / Check / Minus / Plus | WorldMaps GM/PLAYER marker и TokenCondition DOM дополнены; layer/zoom source-only |
-| Upload / selection / foundation preview | Gravity SVG | Trash / ArrowRight / X / Plus / Settings | upload/selection DOM дополнены; прямой импорт прежнего пака запрещён scoped guard |
-| StickerPicker compact trigger | escaped Unicode smile | Sticker | named/disabled trigger DOM подготовлен; escaped literal guard fixture |
-| Chat filter / Activity and legacy chat send | ⋯ / ➤ | Ellipsis / Send | scoped source guard; runtime pending after integration with draft repair |
+| Контрол                                                        | Прежнее представление       | Named Lucide                                                       | Проверка                                                                          |
+| -------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Workspace close / reset                                        | × / сброс                   | X / RotateCcw                                                      | existing ArkenDialog.icons + AppIcon DOM                                          |
+| Карта: pan / reveal / cover                                    | CSS glyphs                  | Hand / Eye / EyeOff                                                | MapToolbar DOM, доступные имена                                                   |
+| Кисть reveal / cover                                           | CSS круги                   | Brush / Eraser                                                     | состав SVG, прежние handlers                                                      |
+| Полигон reveal / cover                                         | CSS pentagon / hexagon      | Pentagon / Hexagon                                                 | разные формы в collapsed DOM                                                      |
+| Draw / ruler / ping                                            | CSS glyphs                  | Pencil / Ruler / MapPin                                            | data-tool и SVG                                                                   |
+| Cursor PLAYER / GM                                             | CSS arrow                   | MousePointer2                                                      | разные права, имена и действия                                                    |
+| Grid / resize                                                  | CSS # / стрелки             | Grid3x3 / Maximize2                                                | scoped CSS + SVG                                                                  |
+| History undo / redo                                            | CSS + HTML entities         | Undo2 / Redo2                                                      | отсутствие двойных glyphs                                                         |
+| Toolbar expand / collapse / more                               | « / » / bullets             | ChevronsLeft / ChevronsRight / Ellipsis                            | collapsed state и имена                                                           |
+| Sidebar collapse                                               | HTML entity                 | PanelRightClose                                                    | scoped source gate; browser ещё не выполнен                                       |
+| Music play / pause / volume / menu                             | glyphs и entities           | Play / Pause / Volume2 / Ellipsis                                  | реальные SVG и разные формы play/pause                                            |
+| Game pause action                                              | Ⅱ                           | Pause                                                              | прежнее доступное действие + SVG                                                  |
+| Shell: сцены / публикация / create / session / sidebar / toast | glyphs и entities           | ChevronDown / Cast, ScreenShare / Plus / Menu / PanelRightOpen / X | source guard и negative source fixture; browser не выполнен                       |
+| Персонажи: rail / close / add / archive                        | glyphs и emoji              | PanelLeftClose / PanelLeftOpen / X / Plus / Archive                | scoped source guard; browser не выполнен                                          |
+| Характеристики: reorder / rename / delete / add                | glyphs                      | ArrowUp / ArrowDown / Pencil / Trash / Plus                        | существующий StatLayoutCard DOM дополнен; negative source fixture                 |
+| Режимы бросков / приватность / disclosure                      | стрелки, круг, diamond      | ArrowUp / ArrowDown / Circle / EyeOff / ChevronRight / ChevronDown | новые DiceTray DOM-кейсы; shared secret icon; source guard                        |
+| Ресурсы / статус участников                                    | отдельные −/+ и ●/○         | Minus / Plus / CircleDot / Circle                                  | ResourceCounters DOM дополнен; hidden online/offline text; source guard           |
+| World/character media                                          | reorder / pagination arrows | ArrowUp / ArrowDown / ArrowLeft / ArrowRight                       | source guard; явные доступные имена; runtime gate остаётся                        |
+| World map / token selection / zoom                             | markers / checkmark / −/+   | MapPin / UsersRound / Check / Minus / Plus                         | WorldMaps GM/PLAYER marker и TokenCondition DOM дополнены; layer/zoom source-only |
+| Upload / selection / foundation preview                        | Gravity SVG                 | Trash / ArrowRight / X / Plus / Settings                           | upload/selection DOM дополнены; прямой импорт прежнего пака запрещён scoped guard |
+| StickerPicker compact trigger                                  | escaped Unicode smile       | Sticker                                                            | named/disabled trigger DOM подготовлен; escaped literal guard fixture             |
+| Chat filter / Activity and legacy chat send                    | ⋯ / ➤                       | Ellipsis / Send                                                    | scoped source guard; runtime pending after integration with draft repair          |
 
 Ни одна строка не означает PASS нового runtime. Старые foundation-результаты
 отделены в [checkpoint](./plans/uix-645-lucide-foundation.md).

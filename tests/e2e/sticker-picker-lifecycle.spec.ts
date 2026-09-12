@@ -85,7 +85,10 @@ for (const role of ["GM", "PLAYER"] as const) {
       const trigger = page.locator(".chat-compose .sticker-picker > button");
       const panel = page.getByRole("dialog", { name: "Выбор стикера" });
       const search = panel.getByRole("searchbox");
-      const first = panel.getByRole("option", { name: "Стикер 1", exact: true });
+      const first = panel.getByRole("option", {
+        name: "Стикер 1",
+        exact: true,
+      });
 
       await trigger.click();
       await expect(search).toBeFocused();
@@ -124,10 +127,15 @@ for (const role of ["GM", "PLAYER"] as const) {
       await expect(panel.getByRole("option")).toHaveCount(36);
       await expect
         .poll(() =>
-          panel.evaluate((element) => element.scrollHeight > element.clientHeight),
+          panel.evaluate(
+            (element) => element.scrollHeight > element.clientHeight,
+          ),
         )
         .toBe(true);
-      const last = panel.getByRole("option", { name: "Стикер 36", exact: true });
+      const last = panel.getByRole("option", {
+        name: "Стикер 36",
+        exact: true,
+      });
       await last.scrollIntoViewIfNeeded();
       await hitTarget(last);
       await search.scrollIntoViewIfNeeded();

@@ -231,9 +231,7 @@ describe("MediaPanel upload sections by role", () => {
     ).toHaveAccessibleDescription("Дождитесь завершения другой загрузки.");
     finishUpload(asset);
     await waitFor(() =>
-      expect(tokenUpload).toHaveAccessibleDescription(
-        "Сначала выберите файл.",
-      ),
+      expect(tokenUpload).toHaveAccessibleDescription("Сначала выберите файл."),
     );
     expect(tokenUpload).toBeDisabled();
   });

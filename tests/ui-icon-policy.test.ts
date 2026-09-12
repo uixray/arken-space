@@ -67,7 +67,11 @@ describe("UIX-645 icon source policy", () => {
     ["apps/web/src/sidebar/ResourceCounters.tsx", "AddIcon", "+"],
     ["apps/web/src/WorldContentWorkspace.tsx", "MoveUpIcon", "↑"],
     ["apps/web/src/WorldMapsWorkspace.tsx", "WorldLocationIcon", "●"],
-    ["apps/web/src/renderers/TokenConditionMenu.tsx", "SelectedOptionIcon", "✓"],
+    [
+      "apps/web/src/renderers/TokenConditionMenu.tsx",
+      "SelectedOptionIcon",
+      "✓",
+    ],
     ["apps/web/src/renderers/Orthographic2DRenderer.tsx", "DecreaseIcon", "−"],
     ["apps/web/src/ui/SelectionActions.tsx", "CloseIcon", "×"],
     ["apps/web/src/ui/ImageUploadField.tsx", "DeleteIcon", "×"],
@@ -90,12 +94,12 @@ describe("UIX-645 icon source policy", () => {
     expectFinding("const v = <button><span>+</span></button>;", "text glyph");
     expectFinding('const v = <Button>{"-"}</Button>;', "literal glyph");
     expectFinding('const v = <button>{"\\u263A"}</button>;', "literal glyph");
-    expect(scanUiSource("const view = <button>→</button>;").join("\n")).toContain(
-      "text glyph",
-    );
-    expect(scanUiSource("const view = <button>&rarr;</button>;").join("\n")).toContain(
-      "text glyph",
-    );
+    expect(
+      scanUiSource("const view = <button>→</button>;").join("\n"),
+    ).toContain("text glyph");
+    expect(
+      scanUiSource("const view = <button>&rarr;</button>;").join("\n"),
+    ).toContain("text glyph");
     expect(scanUiSource('const item = { icon: "×" };').join("\n")).toContain(
       "literal glyph",
     );
@@ -164,7 +168,7 @@ describe("UIX-645 icon source policy", () => {
       "subpath export",
       "apps/web/src/ui/icons.ts",
     );
-    expectFinding('const module = import(moduleName);', "dynamic Lucide");
+    expectFinding("const module = import(moduleName);", "dynamic Lucide");
     expectFinding(
       'import "https://unpkg.com/lucide-react";',
       "CDN icon import",
@@ -202,9 +206,9 @@ describe("UIX-645 icon source policy", () => {
       [],
     );
     expect(scanUiSource('const separator = " · ";')).toEqual([]);
-    expect(scanUiSource('const operator = "+"; const math = <p>+</p>;')).toEqual(
-      [],
-    );
+    expect(
+      scanUiSource('const operator = "+"; const math = <p>+</p>;'),
+    ).toEqual([]);
     expect(scanUiSource('const text = "&#x110000;";')).toEqual([]);
     expect(decodeCssHexEscapes("\\110000 ")).toBe("\\110000 ");
     expectFinding("const = ;", "invalid TypeScript/TSX syntax");

@@ -67,6 +67,7 @@ import {
   CharacterArchiveIcon,
   CloseIcon,
   CollapseCharacterRailIcon,
+  DecreaseIcon,
   ExpandCharacterRailIcon,
 } from "../ui/icons";
 
@@ -507,7 +508,7 @@ function CreateCharacterDialog({
           <option value="">Без шаблона (пустой лист)</option>
           {characters.map((character) => (
             <option key={character.id} value={character.id}>
-              На основе «{character.name}»
+              {`На основе «${character.name}»`}
             </option>
           ))}
         </FormSelect>
@@ -1855,10 +1856,11 @@ export function CharacterPanel({
             <b>{WALLET_LABELS[key]}</b>
             <Button
               disabled={!editable || walletDraft[key] === 0}
+              aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => changeWallet(key, -1)}
             >
-              −
+              <AppIcon icon={DecreaseIcon} />
             </Button>
             <FormInput
               type="number"
@@ -1883,8 +1885,9 @@ export function CharacterPanel({
               disabled={!editable}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => changeWallet(key, 1)}
+              aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
             >
-              +
+              <AppIcon icon={AddIcon} />
             </Button>
           </span>
         ))}

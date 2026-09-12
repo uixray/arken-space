@@ -101,7 +101,9 @@ describe("getDiceCritical", () => {
     for (const natural of [1, 20]) {
       expect(
         getDiceCritical({
-          ...result([{ notation: "1d20", rolls: [natural], subtotal: natural }]),
+          ...result([
+            { notation: "1d20", rolls: [natural], subtotal: natural },
+          ]),
           semanticOutcome: semantic as DiceResult["semanticOutcome"],
         }),
       ).toBeNull();

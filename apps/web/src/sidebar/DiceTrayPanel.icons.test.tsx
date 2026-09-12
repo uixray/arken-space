@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, renderComponent, screen } from "../test-support/render";
+import {
+  act,
+  fireEvent,
+  renderComponent,
+  screen,
+} from "../test-support/render";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 
 describe("UIX645 dice controls", () => {
@@ -18,7 +23,10 @@ describe("UIX645 dice controls", () => {
     );
     const shapes = modes.map((mode) => {
       const svg = mode.querySelector("svg.arken-icon");
-      expect(svg, "UIX645_DICE_MODE_ICON").toHaveAttribute("aria-hidden", "true");
+      expect(svg, "UIX645_DICE_MODE_ICON").toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
       expect(svg).toHaveAttribute("focusable", "false");
       return svg?.innerHTML;
     });

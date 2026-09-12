@@ -409,7 +409,7 @@ export function ResourceCounters({
                     );
                   }}
                 >
-                  +{regen}
+                  {`+${regen}`}
                 </Button>
               )}
             </div>

@@ -51,12 +51,18 @@ async function openCreation() {
   });
   return {
     dialog,
-    name: within(dialog).getByRole("textbox", { name: "Название", exact: true }),
+    name: within(dialog).getByRole("textbox", {
+      name: "Название",
+      exact: true,
+    }),
     slug: within(dialog).getByRole("textbox", {
       name: "Идентификатор",
       exact: true,
     }),
-    submit: within(dialog).getByRole("button", { name: "Создать", exact: true }),
+    submit: within(dialog).getByRole("button", {
+      name: "Создать",
+      exact: true,
+    }),
   };
 }
 

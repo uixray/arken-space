@@ -4,12 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import { CampaignActionsContext } from "../campaign-actions-context";
 
-// UIX-388: same mocking precedent as RollButton.test.tsx / AppErrorBoundary
-// test.ts -- vitest runs this repo's tests under `environment: "node"` (no
-// jsdom), so @gravity-ui/uikit's real components (which ship CSS the node
-// transform can't handle) are swapped for plain DOM elements that preserve
-// the prop contract ChatPanel actually relies on.
+// This suite checks server-rendered composer markup, not popup interaction.
+// Real Gravity Popup ownership/focus is covered by StickerPicker.dom.test.tsx.
+// Keep the closed Popup contract in this existing node-environment mock.
 vi.mock("@gravity-ui/uikit", () => ({
+  Popup: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
+    open ? children : null,
   Button: ({
     className,
     type,

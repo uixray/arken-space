@@ -106,12 +106,15 @@ describe("normalizeDiceFrameReference", () => {
       { setKey: "ARKEN_CRITICAL_V1", frameKey: "critical-success" },
       { kind: "CRITICAL_SUCCESS", keptNaturalD20: 1 },
     ],
-  ])("drops invalid, orphan, opposite, or normal frame %#", (frame, outcome) => {
-    expect(
-      normalizeDiceFrameReference(
-        frame,
-        outcome as Parameters<typeof normalizeDiceFrameReference>[1],
-      ),
-    ).toBeNull();
-  });
+  ])(
+    "drops invalid, orphan, opposite, or normal frame %#",
+    (frame, outcome) => {
+      expect(
+        normalizeDiceFrameReference(
+          frame,
+          outcome as Parameters<typeof normalizeDiceFrameReference>[1],
+        ),
+      ).toBeNull();
+    },
+  );
 });

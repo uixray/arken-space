@@ -632,7 +632,9 @@ for (const width of [1280, 390]) {
         name: "Название",
         exact: true,
       });
-      await create.getByRole("button", { name: "Создать", exact: true }).click();
+      await create
+        .getByRole("button", { name: "Создать", exact: true })
+        .click();
       await expect(name).toBeFocused();
       await expect(name).toHaveAttribute("aria-invalid", "true");
       await expect(name).toHaveAccessibleDescription("Укажите название.");

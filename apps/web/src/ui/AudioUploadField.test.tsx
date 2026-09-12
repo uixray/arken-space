@@ -49,9 +49,7 @@ describe("AudioUploadField", () => {
     const input = screen.getByLabelText("Аудиофайл");
     const click = vi.spyOn(input, "click");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Выбрать файл" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Выбрать файл" }));
 
     expect(click).toHaveBeenCalledOnce();
   });
@@ -62,57 +60,69 @@ describe("AudioUploadField", () => {
     ["application/ogg", "scene.ogg"],
     ["", "SCENE.MP3"],
     ["", "scene.ogg"],
-  ])("принимает допустимый кандидат %s %s и сбрасывает input", async (type, name) => {
-    const onUpdate = vi.fn();
-    renderComponent(
-      <AudioUploadField label="Аудиофайл" onUpdate={onUpdate} />,
-    );
-    const input = screen.getByLabelText<HTMLInputElement>("Аудиофайл");
-    const file = new File(["fixture"], name, { type });
+  ])(
+    "принимает допустимый кандидат %s %s и сбрасывает input",
+    async (type, name) => {
+      const onUpdate = vi.fn();
+      renderComponent(
+        <AudioUploadField label="Аудиофайл" onUpdate={onUpdate} />,
+      );
+      const input = screen.getByLabelText<HTMLInputElement>("Аудиофайл");
+      const file = new File(["fixture"], name, { type });
 
-    await userEvent.upload(input, file);
+      await userEvent.upload(input, file);
 
-    expect(onUpdate).toHaveBeenCalledWith(file);
-    expect(input).toHaveAttribute(
-      "accept",
-      ".mp3,.ogg,audio/mpeg,audio/ogg,application/ogg",
-    );
-    expect(input).toHaveValue("");
-    expect(input.files).toHaveLength(0);
-  });
+      expect(onUpdate).toHaveBeenCalledWith(file);
+      expect(input).toHaveAttribute(
+        "accept",
+        ".mp3,.ogg,audio/mpeg,audio/ogg,application/ogg",
+      );
+      expect(input).toHaveValue("");
+      expect(input.files).toHaveLength(0);
+    },
+  );
 
   it.each([
     ["audio/wav", "renamed.mp3"],
     ["image/png", "renamed.ogg"],
     ["", "unknown.wav"],
-  ])("отклоняет известный чужой MIME или неизвестное расширение", async (type, name) => {
-    const user = userEvent.setup({ applyAccept: false });
-    const onUpdate = vi.fn();
-    renderComponent(
-      <AudioUploadField label="Аудиофайл" onUpdate={onUpdate} />,
-    );
-    const input = screen.getByLabelText<HTMLInputElement>("Аудиофайл");
+  ])(
+    "отклоняет известный чужой MIME или неизвестное расширение",
+    async (type, name) => {
+      const user = userEvent.setup({ applyAccept: false });
+      const onUpdate = vi.fn();
+      renderComponent(
+        <AudioUploadField label="Аудиофайл" onUpdate={onUpdate} />,
+      );
+      const input = screen.getByLabelText<HTMLInputElement>("Аудиофайл");
 
-    await user.upload(input, new File(["fixture"], name, { type }));
+      await user.upload(input, new File(["fixture"], name, { type }));
 
-    expect(onUpdate).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Поддерживаются только MP3 и OGG.",
-    );
-    expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(input).toHaveAccessibleDescription(
-      "Поддерживаются только MP3 и OGG.",
-    );
-  });
+      expect(onUpdate).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Поддерживаются только MP3 и OGG.",
+      );
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAccessibleDescription(
+        "Поддерживаются только MP3 и OGG.",
+      );
+    },
+  );
 
   it("сохраняет controlled файл при cancel и недопустимом выборе", async () => {
     const user = userEvent.setup({ applyAccept: false });
     renderComponent(<ControlledField />);
     const input = screen.getByLabelText<HTMLInputElement>("Аудиофайл");
-    await user.upload(input, new File(["mp3"], "kept.mp3", { type: "audio/mpeg" }));
+    await user.upload(
+      input,
+      new File(["mp3"], "kept.mp3", { type: "audio/mpeg" }),
+    );
 
     fireEvent.change(input, { target: { files: [] } });
-    await user.upload(input, new File(["wav"], "bad.wav", { type: "audio/wav" }));
+    await user.upload(
+      input,
+      new File(["wav"], "bad.wav", { type: "audio/wav" }),
+    );
 
     expect(screen.getByText("kept.mp3")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toBeInTheDocument();
@@ -138,7 +148,10 @@ describe("AudioUploadField", () => {
     const input = screen.getByLabelText<HTMLInputElement>("Аудиофайл");
     const file = new File(["mp3"], "same.mp3", { type: "audio/mpeg" });
     await user.upload(input, file);
-    await user.upload(input, new File(["wav"], "bad.wav", { type: "audio/wav" }));
+    await user.upload(
+      input,
+      new File(["wav"], "bad.wav", { type: "audio/wav" }),
+    );
     await user.click(screen.getByRole("button", { name: "Удалить same.mp3" }));
     await user.upload(input, file);
 
@@ -192,7 +205,10 @@ describe("AudioUploadField", () => {
       "MP3 или OGG; загрузится после сохранения.",
     );
 
-    await user.upload(input, new File(["wav"], "bad.wav", { type: "audio/wav" }));
+    await user.upload(
+      input,
+      new File(["wav"], "bad.wav", { type: "audio/wav" }),
+    );
 
     expect(input).toHaveAccessibleDescription(
       "MP3 или OGG; загрузится после сохранения. Поддерживаются только MP3 и OGG.",

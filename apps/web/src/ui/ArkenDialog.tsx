@@ -97,7 +97,9 @@ export function ArkenDialog({
             // aria-expanded=false, remains the workspace's close command.
             const targetElement =
               target instanceof Element ? target : target.parentElement;
-            if (targetElement?.closest('[role="dialog"]') !== event.currentTarget)
+            if (
+              targetElement?.closest('[role="dialog"]') !== event.currentTarget
+            )
               return;
             if (
               targetElement?.closest('[role="combobox"][aria-expanded="true"]')

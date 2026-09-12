@@ -365,7 +365,10 @@ describe("topbar popovers dismiss like every other details popover", () => {
     const view = renderBar("GM");
     const { container } = view;
     for (const name of ["Пауза", "Громкость", "Меню музыки"]) {
-      const control = screen.getByLabelText(name, { exact: true });
+      const control = screen.getByLabelText(name, {
+        exact: true,
+        selector: name === "Пауза" ? "button" : "summary",
+      });
       const icons = control.querySelectorAll("svg.arken-icon");
       expect(icons, `${name} Lucide icon`).toHaveLength(1);
       expect(icons[0]).toHaveAttribute("aria-hidden", "true");

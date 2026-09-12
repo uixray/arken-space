@@ -243,10 +243,18 @@ describe("MapToolbar — панель инструментов карты (UIX-4
       "UNDO",
       "REDO",
     ]) {
-      const control = container.querySelector<HTMLElement>(`[data-tool="${tool}"]`);
+      const control = container.querySelector<HTMLElement>(
+        `[data-tool="${tool}"]`,
+      );
       expect(control, `${tool} control`).not.toBeNull();
-      expect(control!.querySelectorAll("svg.arken-icon"), `${tool} Lucide`).toHaveLength(1);
-      expect(control!.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+      expect(
+        control!.querySelectorAll("svg.arken-icon"),
+        `${tool} Lucide`,
+      ).toHaveLength(1);
+      expect(control!.querySelector("svg")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
     }
     const collapse = screen.getByRole("button", {
       name: "Свернуть панель до значков",

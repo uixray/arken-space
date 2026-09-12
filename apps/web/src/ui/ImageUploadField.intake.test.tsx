@@ -48,8 +48,14 @@ function ControlledField({ disabled = false }: { disabled?: boolean }) {
   );
 }
 
-const originalCreateUrl = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
-const originalRevokeUrl = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+const originalCreateUrl = Object.getOwnPropertyDescriptor(
+  URL,
+  "createObjectURL",
+);
+const originalRevokeUrl = Object.getOwnPropertyDescriptor(
+  URL,
+  "revokeObjectURL",
+);
 
 afterAll(() => {
   for (const [key, descriptor] of [
@@ -213,8 +219,14 @@ describe("UIX-612 — единый intake изображения", () => {
 
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
-    expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(1, "blob:intake-preview-1");
-    expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(2, "blob:intake-preview-2");
+    expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(
+      1,
+      "blob:intake-preview-1",
+    );
+    expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(
+      2,
+      "blob:intake-preview-2",
+    );
   });
 
   it.each([

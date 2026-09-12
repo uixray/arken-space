@@ -89,9 +89,7 @@ test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player selects keep keyboard focus and
   });
   const characterName = playerSnapshot.characters[0]!.name;
   await expect(
-    character.locator(
-      `option[value="${playerSnapshot.characters[0]!.id}"]`,
-    ),
+    character.locator(`option[value="${playerSnapshot.characters[0]!.id}"]`),
   ).toHaveText(characterName);
   await character.focus();
   await expect(character).toHaveValue("");
@@ -168,7 +166,9 @@ test("UIX644_PLAYER_REQUEST_GM_FILTERS: GM native filters combine state horizon 
   await signInAsGm(page, gmToken);
   await openWorkspaceSection(page, "Открытые заявки");
   const dialog = page.getByRole("dialog", { name: "Открытые заявки" });
-  await expect(dialog.getByText("Новая заявка", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("Новая заявка", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(dialog.getByLabel("Название", { exact: true })).toHaveCount(0);
   const openCard = dialog.locator(".player-request-card", {
     hasText: "Открытая публичная заявка",
