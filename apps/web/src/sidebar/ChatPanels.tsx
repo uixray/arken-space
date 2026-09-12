@@ -943,6 +943,7 @@ export function DirectChatPanel({
     null,
   );
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState("");
+  const attachmentRef = useRef<ChatAttachmentMetadata | null>(null);
   const attachmentPreviewUrlRef = useRef("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -970,9 +971,6 @@ export function DirectChatPanel({
     loadOlder,
   });
 
-  useEffect(() => {
-    attachmentPreviewUrlRef.current = attachmentPreviewUrl;
-  }, [attachmentPreviewUrl]);
   useEffect(
     () => () => {
       if (attachmentPreviewUrlRef.current)
@@ -1014,6 +1012,19 @@ export function DirectChatPanel({
     return () => window.clearTimeout(timer);
   }, [activeThread, latestSequence, onMarkChatRead, visible]);
 
+  function replaceAttachment(
+    next: ChatAttachmentMetadata | null,
+    previewUrl: string,
+  ) {
+    const previousUrl = attachmentPreviewUrlRef.current;
+    attachmentRef.current = next;
+    attachmentPreviewUrlRef.current = previewUrl;
+    if (previousUrl && previousUrl !== previewUrl)
+      URL.revokeObjectURL(previousUrl);
+    setAttachment(next);
+    setAttachmentPreviewUrl(previewUrl);
+  }
+
   async function attachFile(file: File) {
     setUploading(true);
     setError("");
@@ -1021,9 +1032,7 @@ export function DirectChatPanel({
       const previewUrl = URL.createObjectURL(file);
       try {
         directDraft.touch();
-        setAttachment(await onUploadAttachment(file));
-        if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
-        setAttachmentPreviewUrl(previewUrl);
+        replaceAttachment(await onUploadAttachment(file), previewUrl);
       } catch (error) {
         URL.revokeObjectURL(previewUrl);
         throw error;
@@ -1083,7 +1092,6 @@ export function DirectChatPanel({
     if (!activeThread || (!body && !attachment)) return;
     const consumed = directDraft.consume();
     const sentAttachment = attachment;
-    const sentPreviewUrl = attachmentPreviewUrl;
     setError("");
     try {
       await onDirectChat(
@@ -1091,10 +1099,12 @@ export function DirectChatPanel({
         body || "Изображение",
         sentAttachment ? [sentAttachment.contentId] : [],
       );
-      if (directDraft.isUntouched(consumed.token)) {
-        setAttachment(null);
-        if (sentPreviewUrl) URL.revokeObjectURL(sentPreviewUrl);
-        setAttachmentPreviewUrl("");
+      // Text edits do not make a previously sent attachment a new attachment.
+      if (
+        directDraft.isCurrentScope(consumed.token) &&
+        attachmentRef.current === sentAttachment
+      ) {
+        replaceAttachment(null, "");
       }
     } catch {
       directDraft.restore(consumed.token, consumed.value);
@@ -1219,10 +1229,7 @@ export function DirectChatPanel({
                   type="button"
                   onClick={() => {
                     directDraft.touch();
-                    setAttachment(null);
-                    if (attachmentPreviewUrl)
-                      URL.revokeObjectURL(attachmentPreviewUrl);
-                    setAttachmentPreviewUrl("");
+                    replaceAttachment(null, "");
                   }}
                 >
                   Убрать

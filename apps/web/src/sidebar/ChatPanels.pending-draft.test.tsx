@@ -82,16 +82,18 @@ function renderDirect(onDirectChat: ChatActions["onDirectChat"]) {
   let upload = 0;
   renderComponent(
     <CampaignActionsContext.Provider
-      value={{
-        chatHistory: {
-          onLoadThreadHistory: async () => ({
-            loaded: 0,
-            hasMore: false,
-            accepted: false,
-            messageIds: [],
-          }),
-        },
-      } as never}
+      value={
+        {
+          chatHistory: {
+            onLoadThreadHistory: async () => ({
+              loaded: 0,
+              hasMore: false,
+              accepted: false,
+              messageIds: [],
+            }),
+          },
+        } as never
+      }
     >
       <DirectChatPanel
         snapshot={current}
@@ -164,7 +166,9 @@ describe("UIX624 DirectChatPanel pending draft ownership", () => {
       await send.promise;
     });
     await waitFor(() =>
-      expect(composer, "UIX624_DIRECT_NEWER_DRAFT").toHaveValue("Новый черновик"),
+      expect(composer, "UIX624_DIRECT_NEWER_DRAFT").toHaveValue(
+        "Новый черновик",
+      ),
     );
     expect(screen.getByText("new.png")).toBeInTheDocument();
     expect(screen.queryByText("old.png")).not.toBeInTheDocument();
@@ -172,6 +176,40 @@ describe("UIX624 DirectChatPanel pending draft ownership", () => {
       URL.revokeObjectURL,
       "UIX624_DIRECT_NEW_ATTACHMENT_NOT_REVOKED",
     ).not.toHaveBeenCalledWith("blob:preview-2");
+  });
+
+  it("success consumes sent attachment while keeping newer text", async () => {
+    const send = deferred();
+    const onDirectChat = vi.fn(() => send.promise);
+    renderDirect(onDirectChat);
+    const composer = screen.getByRole("textbox", {
+      name: "Личное сообщение: Собеседник",
+    });
+    await userEvent.upload(
+      screen.getByLabelText("Изображение"),
+      new File(["old"], "old.png", { type: "image/png" }),
+    );
+    await userEvent.type(composer, "Первое сообщение");
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    await waitFor(() => expect(composer).toHaveValue(""));
+    await userEvent.type(composer, "Новый черновик");
+    await act(async () => {
+      send.resolve();
+      await send.promise;
+    });
+    expect(composer, "UIX624_DIRECT_NEWER_DRAFT").toHaveValue("Новый черновик");
+    expect(
+      screen.queryByRole("img", { name: "Вложение old.png" }),
+      "UIX624_DIRECT_SENT_ATTACHMENT_CONSUMED",
+    ).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview-1");
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    expect(onDirectChat).toHaveBeenNthCalledWith(
+      2,
+      threadId,
+      "Новый черновик",
+      [],
+    );
   });
 
   it("failure restores only untouched text and retains its preview", async () => {

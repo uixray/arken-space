@@ -50,6 +50,7 @@ const composerTitles = [activityTitle, streamTitle];
 const directPrefix = "UIX624 DirectChatPanel pending draft ownership";
 const directSuccess = `${directPrefix} late success keeps newer text and attachment`;
 const directFailure = `${directPrefix} failure restores only untouched text and retains its preview`;
+const directConsumed = `${directPrefix} success consumes sent attachment while keeping newer text`;
 const receipt = {
   sha: process.env.GITHUB_SHA,
   runId: process.env.GITHUB_RUN_ID,
@@ -215,13 +216,13 @@ function runComponent(id, failures = {}) {
   console.log(JSON.stringify(record));
   if (
     JSON.stringify(names) !==
-      JSON.stringify([directSuccess, directFailure].sort()) ||
+      JSON.stringify([directSuccess, directFailure, directConsumed].sort()) ||
     JSON.stringify(record.failed) !==
       JSON.stringify(Object.keys(failures).sort()) ||
     assertions.some((item) => !["passed", "failed"].includes(item.status)) ||
-    report.numTotalTests !== 2 ||
+    report.numTotalTests !== 3 ||
     report.numFailedTests !== failed.length ||
-    report.numPassedTests !== 2 - failed.length ||
+    report.numPassedTests !== 3 - failed.length ||
     report.numPendingTests ||
     report.numTodoTests ||
     child.status !== (failed.length ? 1 : 0) ||
@@ -258,11 +259,22 @@ function fault(file, from, to, check) {
 
 try {
   runComponent("direct-baseline");
-  const directAck = "if (directDraft.isUntouched(consumed.token)) {";
+  const directAck =
+    "if (\n        directDraft.isCurrentScope(consumed.token) &&\n        attachmentRef.current === sentAttachment\n      ) {";
   fault(caller, directAck, `setComposer("");\n      ${directAck}`, () =>
     runComponent("direct-late-ack-clear", {
       [directSuccess]: "UIX624_DIRECT_NEWER_DRAFT",
+      [directConsumed]: "UIX624_DIRECT_NEWER_DRAFT",
     }),
+  );
+  fault(
+    caller,
+    directAck,
+    "if (directDraft.isUntouched(consumed.token)) {",
+    () =>
+      runComponent("direct-text-guards-attachment", {
+        [directConsumed]: "UIX624_DIRECT_SENT_ATTACHMENT_CONSUMED",
+      }),
   );
   const directRestore = "directDraft.restore(consumed.token, consumed.value);";
   fault(caller, directRestore, "// Deliberately omit direct recovery.", () =>
@@ -311,6 +323,9 @@ try {
     receipt.success = false;
     process.exitCode = 1;
   }
-  writeFileSync(path.join(out, "receipt.json"), JSON.stringify(receipt, null, 2));
+  writeFileSync(
+    path.join(out, "receipt.json"),
+    JSON.stringify(receipt, null, 2),
+  );
   console.log(JSON.stringify(receipt));
 }
