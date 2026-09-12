@@ -30,6 +30,7 @@ export const protectedSourceFiles = [
   "apps/web/src/ui/SelectionActions.tsx",
   "apps/web/src/ui/ImageUploadField.tsx",
   "apps/web/src/ui/GravityFoundationPreview.tsx",
+  "apps/web/src/StickerPicker.tsx",
   "apps/web/src/ui/CursorPresenceMenu.tsx",
   "apps/web/src/renderers/GridSettings.tsx",
   "apps/web/src/renderers/CanvasHistoryControls.tsx",

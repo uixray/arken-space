@@ -1,5 +1,16 @@
 # UIX-645 — Lucide foundation checkpoint, 2026-09-06
 
+## Продолжение 2026-09-12 — escaped glyph в выборе стикеров
+
+После `128c87d` текущий source-аудит обнаружил ещё `\u263A` в компактном
+StickerPicker: заменён на официальный Sticker, текстовый режим «Стикеры»,
+disabled/expanded/haspopup и каталог не менялись. Добавлены два узких DOM-кейса
+trigger и negative fixture escaped literal; guard перечисляет **27** файлов.
+Runtime не выполнялся. Source inventory не является доказательством полного
+отсутствия glyphs; ChatPanels и сохранённый скрытый Initiative ещё учтены отдельно.
+UIX-644 lifecycle/Escape/focus/outside/geometry стикеров остаётся самостоятельным
+непроверенным scope, замена иконки его не закрывает. Публикации нет.
+
 ## Продолжение 2026-09-12 — оставшиеся авторские Gravity SVG
 
 База локального пула `6a2727e`: SelectionActions, ImageUploadField и

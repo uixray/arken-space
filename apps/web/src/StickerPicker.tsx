@@ -9,6 +9,8 @@ import type { StickerPackDto } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { api } from "./api";
 import { filterStickerPacks } from "./sticker-picker-state";
+import { AppIcon } from "./ui/AppIcon";
+import { StickerPickerIcon } from "./ui/icons";
 
 const categories = [
   ["COMMON", "Общие"],
@@ -115,7 +117,7 @@ export function StickerPicker({
         aria-haspopup="dialog"
         onClick={() => setOpen((value) => !value)}
       >
-        {iconOnly ? <span aria-hidden="true">{"\u263A"}</span> : "Стикеры"}
+        {iconOnly ? <AppIcon icon={StickerPickerIcon} /> : "Стикеры"}
       </Button>
       {open && (
         <div

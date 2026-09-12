@@ -48,6 +48,7 @@ export {
   Ruler as RulerIcon,
   ScreenShare as PublishSceneIcon,
   Settings as SettingsIcon,
+  Sticker as StickerPickerIcon,
   Trash as DeleteIcon,
   Undo2 as UndoIcon,
   UsersRound as PartyLocationIcon,

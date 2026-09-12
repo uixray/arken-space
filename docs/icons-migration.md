@@ -30,6 +30,7 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
 | World/character media | reorder / pagination arrows | ArrowUp / ArrowDown / ArrowLeft / ArrowRight | source guard; явные доступные имена; runtime gate остаётся |
 | World map / token selection / zoom | markers / checkmark / −/+ | MapPin / UsersRound / Check / Minus / Plus | WorldMaps GM/PLAYER marker и TokenCondition DOM дополнены; layer/zoom source-only |
 | Upload / selection / foundation preview | Gravity SVG | Trash / ArrowRight / X / Plus / Settings | upload/selection DOM дополнены; прямой импорт прежнего пака запрещён scoped guard |
+| StickerPicker compact trigger | escaped Unicode smile | Sticker | named/disabled trigger DOM подготовлен; escaped literal guard fixture |
 
 Ни одна строка не означает PASS нового runtime. Старые foundation-результаты
 отделены в [checkpoint](./plans/uix-645-lucide-foundation.md).
@@ -45,6 +46,9 @@ main `22e0583` плюс сохранённый foundation). Source inventory 202
       клавиатурная логика и radio semantics сохранены, QA ожидается.
 - [ ] `sidebar/ChatPanels.tsx`: фильтры и send; миграцию совместить с
       интегрированным UIX-624, не затереть его pending-draft repair.
+- [ ] `StickerPicker.tsx`: escaped `\u263A` найден дополнительным аудитом;
+      trigger мигрирован на Sticker, текстовый режим сохранён. Lifecycle и
+      browser matrix — отдельные оставшиеся критерии UIX-644, не решены иконкой.
 - [ ] `sidebar/CharacterWorkspace.tsx`: rail, close, add/archive controls.
       Source подготовлен; compact alignment и browser QA ожидаются.
 - [ ] `sidebar/StatLayoutCard.tsx`: reorder, rename, delete, add. Source и
