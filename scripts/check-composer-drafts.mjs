@@ -244,8 +244,7 @@ function runComponent(
   receipt.runs.push(record);
   console.log(JSON.stringify(record));
   if (
-    JSON.stringify(names) !==
-      JSON.stringify([...titles].sort()) ||
+    JSON.stringify(names) !== JSON.stringify([...titles].sort()) ||
     JSON.stringify(record.failed) !==
       JSON.stringify(Object.keys(failures).sort()) ||
     assertions.some((item) => !["passed", "failed"].includes(item.status)) ||
