@@ -35,8 +35,14 @@ jobs:
       - name: Types and changed-file quality
         run: |
           pnpm --filter @arken/web typecheck
-          pnpm exec eslint apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx scripts/check-character-readonly-guards.mjs
-          pnpm exec prettier --check apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx scripts/check-character-readonly-guards.mjs .github/workflows/character-readonly-guards.yml
+          pnpm exec eslint apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx apps/web/src/ui/TextPromptDialog.tsx scripts/check-character-readonly-guards.mjs
+          files=(apps/web/src/sidebar/CharacterWorkspace.tsx apps/web/src/sidebar/CharacterPanel.role-access.test.tsx apps/web/src/ui/TextPromptDialog.tsx scripts/check-character-readonly-guards.mjs .github/workflows/character-readonly-guards.yml)
+          if ! pnpm exec prettier --check "${files[@]}"; then
+            for file in "${files[@]}"; do
+              pnpm exec prettier "$file" | diff -u "$file" - || true
+            done
+            exit 1
+          fi
       - name: Retain bounded synthetic receipts
         if: always()
         uses: actions/upload-artifact@v4

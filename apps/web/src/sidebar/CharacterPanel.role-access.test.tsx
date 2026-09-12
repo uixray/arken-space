@@ -81,7 +81,6 @@ vi.mock("@gravity-ui/uikit", () => ({
     type,
     placeholder,
     onUpdate,
-    "aria-label": ariaLabel,
   }: ComponentProps<typeof TextInput>) => (
     <input
       {...controlProps}
@@ -93,7 +92,6 @@ vi.mock("@gravity-ui/uikit", () => ({
       onBlur={onBlur}
       type={type}
       placeholder={placeholder}
-      aria-label={ariaLabel}
     />
   ),
 }));
