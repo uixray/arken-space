@@ -969,6 +969,53 @@ for (const role of ["GM", "PLAYER"] as const) {
       await expect(
         files.getByText("Сначала выберите файл.", { exact: true }),
       ).toHaveCount(5);
+      // UIX-589/421: use the real shared upload field, not its component mock.
+      // setInputFiles checks the browser reset contract, not OS chooser behavior.
+      const portraitInput = files.getByLabel("Портреты персонажей", {
+        exact: true,
+      });
+      const portraitSection = files.locator(".upload-section").filter({
+        has: page.getByLabel("Портреты персонажей", { exact: true }),
+      });
+      const portraitFile = {
+        name: "repeat-portrait.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      };
+      await portraitInput.setInputFiles(portraitFile);
+      await expect(portraitInput).toHaveValue("");
+      await expect(portraitSection.getByRole("button", {
+        name: "Загрузить", exact: true,
+      })).toBeEnabled();
+      await expect(portraitSection.getByRole("img", {
+        name: "Предпросмотр repeat-portrait.png",
+      })).toBeVisible();
+      await portraitInput.setInputFiles({
+        name: "rejected.svg",
+        mimeType: "image/svg+xml",
+        buffer: Buffer.from("<svg/>", "utf8"),
+      });
+      await expect(portraitInput).toHaveValue("");
+      await expect(portraitSection.getByRole("alert")).toBeVisible();
+      await portraitSection.getByRole("button", {
+        name: "Удалить repeat-portrait.png", exact: true,
+      }).click();
+      await expect(portraitSection.getByRole("alert")).toHaveCount(0);
+      await portraitInput.setInputFiles(portraitFile);
+      await expect(portraitInput).toHaveValue("");
+      await expect(portraitSection.getByRole("img", {
+        name: "Предпросмотр repeat-portrait.png",
+      })).toBeVisible();
+      await portraitSection.getByRole("button", {
+        name: "Удалить repeat-portrait.png", exact: true,
+      }).click();
+      await expect(portraitSection.getByRole("button", {
+        name: "Загрузить", exact: true,
+      })).toBeDisabled();
+      expect(unexpectedWrites).toEqual([]);
       await expect(
         files.getByRole("button", { name: "Загрузить", exact: true }),
       ).toHaveCount(5);
