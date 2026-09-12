@@ -577,72 +577,79 @@ export function ActivityPanel({
       id="chat-panel-activity"
       aria-labelledby="chat-tab-activity"
     >
-      <section className="activity-roll-controls" aria-label="Быстрые броски">
-        <div className="activity-roll-controls__heading">
-          <strong>Быстрые броски</strong>
-          {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
-            <FormSelect
-              aria-label="Персонаж для броска"
-              value={rollCharacter?.id ?? ""}
-              onChange={(event) => setRollCharacterId(event.target.value)}
-            >
-              {availableRollCharacters.map((character) => (
-                <option key={character.id} value={character.id}>
-                  {character.name}
-                </option>
-              ))}
-            </FormSelect>
-          )}
-          {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
-              подписывала — uikit рисует свой `<label>` внутри, а вложенные не
-              связываются: программа чтения с экрана называла поле «флажок». */}
-          <FormInput
-            className="compact-check"
-            type="checkbox"
-            checked={physicalDice}
-            onChange={(event) => {
-              const enabled = event.target.checked;
-              setPhysicalDice(enabled);
-              window.localStorage.setItem(
-                physicalDiceStorageKey(snapshot.me.id),
-                String(enabled),
-              );
-            }}
-          >
-            Физические кубы
-          </FormInput>
-        </div>
-
-        {rollCharacter ? (
-          <QuickRollPanel
-            rollCharacter={rollCharacter}
-            campaignId={snapshot.campaign.id}
-            membershipId={snapshot.me.id}
-            rows={rollableStatRows(
-              statRowsFromLayout(snapshot.campaign.statLayout),
+      <div
+        className="activity-feed__controls"
+        role="region"
+        aria-label="Быстрые броски и ресурсы"
+        tabIndex={0}
+      >
+        <section className="activity-roll-controls" aria-label="Быстрые броски">
+          <div className="activity-roll-controls__heading">
+            <strong>Быстрые броски</strong>
+            {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
+              <FormSelect
+                aria-label="Персонаж для броска"
+                value={rollCharacter?.id ?? ""}
+                onChange={(event) => setRollCharacterId(event.target.value)}
+              >
+                {availableRollCharacters.map((character) => (
+                  <option key={character.id} value={character.id}>
+                    {character.name}
+                  </option>
+                ))}
+              </FormSelect>
             )}
-            quickRollPending={quickRollPending}
-            gmOnly={rollVisibility === "GM_ONLY"}
-            onQuickRoll={(formula, label, bonus, mode) =>
-              void submitQuickRoll(formula, label, bonus, mode)
+            {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
+                подписывала — uikit рисует свой `<label>` внутри, а вложенные не
+                связываются: программа чтения с экрана называла поле «флажок». */}
+            <FormInput
+              className="compact-check"
+              type="checkbox"
+              checked={physicalDice}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                setPhysicalDice(enabled);
+                window.localStorage.setItem(
+                  physicalDiceStorageKey(snapshot.me.id),
+                  String(enabled),
+                );
+              }}
+            >
+              Физические кубы
+            </FormInput>
+          </div>
+
+          {rollCharacter ? (
+            <QuickRollPanel
+              rollCharacter={rollCharacter}
+              campaignId={snapshot.campaign.id}
+              membershipId={snapshot.me.id}
+              rows={rollableStatRows(
+                statRowsFromLayout(snapshot.campaign.statLayout),
+              )}
+              quickRollPending={quickRollPending}
+              gmOnly={rollVisibility === "GM_ONLY"}
+              onQuickRoll={(formula, label, bonus, mode) =>
+                void submitQuickRoll(formula, label, bonus, mode)
+              }
+            />
+          ) : (
+            <p className="muted">Нет доступного персонажа для броска.</p>
+          )}
+        </section>
+        {rollCharacter && (
+          <ResourceCounters
+            scopeKey={rollCharacter.id}
+            rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
+            resources={rollCharacter.resources}
+            stats={rollCharacter.stats}
+            editable={canSpendResources}
+            onSpend={(intent) =>
+              spendResource(rollCharacter.id, rollCharacter.revision, intent)
             }
           />
-        ) : (
-          <p className="muted">Нет доступного персонажа для броска.</p>
         )}
-      </section>
-      {rollCharacter && (
-        <ResourceCounters
-          scopeKey={rollCharacter.id}
-          rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
-          resources={rollCharacter.resources}
-          stats={rollCharacter.stats}
-          editable={canSpendResources}
-          onSpend={(intent) =>
-            spendResource(rollCharacter.id, rollCharacter.revision, intent)
-          }
-        />
-      )}
+      </div>
       <div className="activity-log-toolbar">
         <span className="eyebrow">Журнал</span>
         {/* Фильтр относится к самому журналу, поэтому находится напротив его
