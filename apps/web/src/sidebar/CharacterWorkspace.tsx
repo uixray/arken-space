@@ -1222,7 +1222,9 @@ export function CharacterPanel({
           <h2>{character.name}</h2>
         </div>
         <div className="inline-fields">
-          <Button onClick={() => setRenameOpen(true)}>Переименовать</Button>
+          <Button disabled={!editable} onClick={() => setRenameOpen(true)}>
+            Переименовать
+          </Button>
           <span className="revision">rev {character.revision}</span>
         </div>
       </div>
@@ -1239,27 +1241,33 @@ export function CharacterPanel({
           aria-label="Портрет персонажа"
           value={character.portraitAssetId ?? null}
           noneLabel="Без портрета"
+          disabled={!editable}
           assets={snapshot.assets.filter((asset) => asset.kind === "PORTRAIT")}
-          onChange={(assetId) =>
+          onChange={(assetId) => {
+            if (!editable) return;
             void runCharacterMutation(() =>
               onPatch(character.id, {
                 portraitAssetId: assetId,
                 revision: character.revision,
               }),
-            )
-          }
+            );
+          }}
         />
       </label>
       <ImageUploadField
         label="Загрузить портрет для персонажа"
         value={portraitUpload}
-        onUpdate={setPortraitUpload}
+        disabled={!editable}
+        onUpdate={(file) => {
+          if (!editable) return;
+          setPortraitUpload(file);
+        }}
       />
       <Button
-        disabled={!portraitUpload}
+        disabled={!editable || !portraitUpload}
         onClick={() =>
           void runCharacterMutation(async () => {
-            if (!portraitUpload) return;
+            if (!editable || !portraitUpload) return;
             const asset = await assetActions.uploadAsset(
               portraitUpload,
               "PORTRAIT",
@@ -1865,6 +1873,7 @@ export function CharacterPanel({
         initialValue={character.name}
         onClose={() => setRenameOpen(false)}
         onApply={async (name) => {
+          if (!editable) return;
           await onPatch(character.id, {
             name,
             revision: character.revision,
