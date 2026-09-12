@@ -6,8 +6,14 @@ import { stickerPack } from "../../apps/web/src/test-support/sticker-fixtures";
 async function install(page: Page, role: "GM" | "PLAYER") {
   const snapshot = buildGameSnapshot(role, { schemaVersion: 2 });
   const catalog = [stickerPack(36)];
+  const reads = { story: 0 };
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/story/posts") {
+      reads.story += 1;
+      // App consumes a paginated envelope here, not the generic list fallback.
+      return route.fulfill({ json: { posts: [], nextCursor: null } });
+    }
     if (path.endsWith("/content")) {
       return route.fulfill({
         contentType: "image/svg+xml",
@@ -23,6 +29,7 @@ async function install(page: Page, role: "GM" | "PLAYER") {
             : [],
     });
   });
+  return reads;
 }
 
 async function hitTarget(target: Locator) {
@@ -70,8 +77,9 @@ for (const role of ["GM", "PLAYER"] as const) {
       page,
     }) => {
       await page.setViewportSize({ width, height: 844 });
-      await install(page, role);
+      const reads = await install(page, role);
       await page.goto("/");
+      await expect.poll(() => reads.story).toBeGreaterThan(0);
       if (width === 390) await page.locator("#compact-nav-journal").click();
       await page.locator("#chat-tab-activity").click();
       const trigger = page.locator(".chat-compose .sticker-picker > button");
