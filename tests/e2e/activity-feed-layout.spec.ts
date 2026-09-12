@@ -80,7 +80,14 @@ async function worstOverlap(page: Page) {
   return page.evaluate(() => {
     const feed = document.querySelector(".activity-feed");
     if (!feed) throw new Error("Вкладка «Журнал» не отрисована");
+    // display:contents has no box: its children, not the wrapper's zero rect,
+    // participate in desktop flex layout and must remain in overlap checks.
     const boxes = [...feed.children]
+      .flatMap((child) =>
+        getComputedStyle(child).display === "contents"
+          ? [...child.children]
+          : [child],
+      )
       .filter((child) => {
         const position = getComputedStyle(child).position;
         return position !== "absolute" && position !== "fixed";

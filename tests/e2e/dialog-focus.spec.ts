@@ -1,5 +1,6 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./campaign-fixture";
+import { assertModalFocusCycle } from "./modal-focus";
 
 /**
  * UIX-532 — клавиатура не уходит из открытого модального диалога.
@@ -35,23 +36,16 @@ test("модальный диалог держит Tab внутри себя", a
   await page
     .getByRole("button", { name: "Переименовать кампанию", exact: true })
     .click();
-  await expect(page.locator('[role="dialog"]').first()).toBeVisible();
-
-  const escaped: string[] = [];
-  for (let step = 0; step < TAB_PRESSES; step += 1) {
-    await page.keyboard.press("Tab");
-    const leak = await page.evaluate(() => {
-      const active = document.activeElement;
-      const dialog = document.querySelector('[role="dialog"]');
-      if (!active || !dialog) return null;
-      if (dialog.contains(active)) return null;
-      if (active.hasAttribute("data-floating-ui-focus-guard")) return null;
-      return `${active.tagName.toLowerCase()} ${active.className}`.slice(0, 80);
-    });
-    if (leak) escaped.push(`${step}: ${leak}`);
-  }
-
-  expect(escaped, "фокус ушёл из диалога в интерфейс под ним").toEqual([]);
+  // Keep all 20 keypresses, but record actual focusin escapes rather than
+  // sampling body during FloatingFocusManager's next-frame guard handoff.
+  // The shared helper accepts only this modal's inside guards and still
+  // fails any real background focus hop even when focus later recovers.
+  await assertModalFocusCycle(
+    page,
+    page.getByRole("dialog", { name: "Название кампании", exact: true }),
+    "Tab",
+    TAB_PRESSES,
+  );
 });
 
 test("закрытый диалог возвращает фокус тому, кто его открыл", async ({

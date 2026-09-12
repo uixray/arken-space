@@ -213,29 +213,50 @@
     min-height: 44px;
   }
 
-  /* A short visual viewport scrolls the controls, rather than clipping the
-   * composer behind the keyboard. The transcript keeps its own bounded log. */
+  /* The journal owns the available height. Its two intentionally bounded
+   * scrollports keep both the transcript and composer reachable without a
+   * competing scroll on the whole sidebar. */
   .app-shell--compact .panel-scroll.chat-scroll {
+    overflow: hidden;
+  }
+
+  .app-shell--compact .activity-feed {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .app-shell--compact .activity-feed__controls {
+    display: flex;
+    flex: 0 1 220px;
+    flex-direction: column;
+    min-height: 0;
+    max-height: 220px;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
 
-  .app-shell--compact .activity-feed {
-    height: auto;
-    min-height: 100%;
-    overflow: visible;
+  .app-shell--compact .activity-feed > .message-list {
+    flex: 1 1 160px;
+    min-height: 160px;
   }
 
-  .app-shell--compact .activity-feed > .activity-roll-controls {
+  .app-shell--compact .activity-feed__controls > .activity-roll-controls {
     flex: 0 0 auto;
   }
 
-  .app-shell--compact .activity-feed > .message-list {
-    flex: 1 0 160px;
-    max-height: max(
-      160px,
-      calc(var(--compact-viewport-height, 100dvh) - 340px)
-    );
+  /* The controls wrapper is the single compact scrollport. A persisted
+   * desktop quick-roll height must not create a tiny nested scroller here. */
+  .app-shell--compact .activity-feed__controls .quick-roll-panel {
+    height: auto !important;
+  }
+
+  .app-shell--compact .activity-feed__controls .quick-roll-panel__body {
+    overflow: visible;
+  }
+
+  .app-shell--compact .activity-feed__controls .panel-resize-handle {
+    display: none;
   }
 
   .app-shell--compact .activity-roll-controls__heading {
