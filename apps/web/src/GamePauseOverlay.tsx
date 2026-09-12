@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import pauseArtwork from "./assets/game-pause-rest.webp";
+import { AppIcon } from "./ui/AppIcon";
+import { PauseIcon } from "./ui/icons";
 
 export function GamePauseOverlay({
   paused,
@@ -63,9 +65,7 @@ export function GamePauseOverlay({
           onClick={() => void toggle()}
         >
           {!paused && (
-            <span className="game-pause-control__icon" aria-hidden="true">
-              Ⅱ
-            </span>
+            <AppIcon icon={PauseIcon} className="game-pause-control__icon" />
           )}
           <span className="game-pause-control__label">
             {paused ? "Продолжить игру" : "Начать перерыв"}

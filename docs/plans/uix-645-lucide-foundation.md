@@ -1,5 +1,51 @@
 # UIX-645 — Lucide foundation checkpoint, 2026-09-06
 
+## Продолжение 2026-09-12 — карта и навигация, локальный пул
+
+Этот раздел актуальнее исторического foundation-отчёта ниже.
+
+Дополнение текущего пула: локально подготовлен также MusicBar (Play/Pause,
+Volume2, Ellipsis) и GamePauseOverlay (Pause), с двумя focused DOM-кейсами.
+Добавлены `docs/icons-migration.md`, `scripts/ui-icon-policy.mjs` и
+`tests/ui-icon-policy.test.ts`. Guard читает десять точных source-файлов,
+CSS-охват по-прежнему toolbar/grid/resize; negative fixtures включают JSX,
+entities, config/template, CSS escapes, named-only import contract и
+исключения для прозы/математики. Source review исправил обработку отсутствующих
+AST nodes и запрет динамического каталога: это статическая policy, а не runtime
+security boundary. Никакие новые runtime PASS не заявляются.
+
+Все 38 оставшихся групп source-кандидатов зафиксированы в migration checklist
+по областям; неоднозначную форму выбирать по реальному действию и доступному
+имени, не меняя flow. Потребители другого SVG-пака и скрытые legacy-контролы
+учтены отдельно. Дальше — продолжение checklist и разрешённый hosted gate;
+пока публикация этого отдельного пула не разрешена, он остаётся локальным.
+
+- Исходный foundation сохранён отдельным коммитом `f506a7c`, затем без
+  конфликтов интегрирован проверенный main `22e0583` в `db68636`.
+  Используется прежнее рабочее дерево; повторных установок и копий зависимостей нет.
+- Переведены MapToolbar, CursorPresenceMenu, GridSettings,
+  CanvasHistoryControls и кнопка сворачивания Sidebar; общий AppIcon и
+  семантические named exports переиспользованы. Контролы и обработчики сохранены.
+- Удалены CSS-псевдоиконки только связанного toolbar-пула. В развёрнутом виде
+  доступны подписи, в свёрнутом — реальные SVG. Раскрытие и скрытие тумана
+  полигоном различаются Pentagon/Hexagon, а не одной формой без подписи.
+- Дополнены DOM-проверки состава иконок, доступных имён курсора и различимости
+  полигонов после сворачивания. Независимый source review нашёл одинаковые
+  polygon-иконки; исправлено до runtime gate.
+- Изменены: `MapToolbar.tsx`, `MapToolbar.dom.test.tsx`, `Sidebar.tsx`,
+  `renderers/CanvasHistoryControls.tsx`, `renderers/GridSettings.tsx`,
+  `ui/CursorPresenceMenu.tsx`, `ui/CursorPresenceMenu.test.tsx`, `ui/icons.ts`,
+  связанный участок `styles.css`. Anti-regression guard и полный реестр —
+  следующий связанный шаг, не доказанная готовность.
+- Проверено только чтением source/diff и `git diff --check`. Тесты, сборка,
+  темы/контраст и browser QA новой ревизии не запускались. Исторические PASS
+  ниже не являются приёмкой текущего пула.
+- Код локальный: не опубликован, не main и не production. UIX-645 остаётся
+  In Progress. Следующее действие: scoped guard + полный migration checklist,
+  затем разрешённый hosted gate; не закрывать всю карточку по карте.
+
+## Историческое состояние 2026-09-06
+
 - **Решения:** Lucide — обязательный пак авторских UI-иконок; Unicode/emoji/
   entities/CSS content не заменяют иконки. Обычный текст, формулы, хоткеи и
   пользовательский контент не затрагиваются. Полная миграция и её приёмка —

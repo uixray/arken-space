@@ -4,6 +4,17 @@ import { renderComponent, screen, userEvent } from "./test-support/render";
 import { GamePauseOverlay } from "./GamePauseOverlay";
 
 describe("GamePauseOverlay", () => {
+  it("UIX645_PAUSE_CONTROL_LUCIDE preserves its accessible action", () => {
+    renderComponent(
+      <GamePauseOverlay paused={false} isGm onToggle={vi.fn()} />,
+    );
+    const control = screen.getByRole("button", { name: "Начать перерыв" });
+    const icon = control.querySelector("svg.arken-icon");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+    expect(control).not.toHaveTextContent("Ⅱ");
+  });
+
   it("waits for authoritative state and exposes retry without pretending to resume", async () => {
     const onToggle = vi.fn().mockRejectedValue(new Error("offline"));
     renderComponent(<GamePauseOverlay paused isGm onToggle={onToggle} />);

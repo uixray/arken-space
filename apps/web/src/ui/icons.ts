@@ -1,4 +1,30 @@
 // UIX-645: named exports only. Never import the full icon registry or use glyphs
 // as UI icons. Add the required Lucide icon here; see docs/icons.md.
-export { RotateCcw as ResetWindowIcon, X as CloseIcon } from "lucide-react";
+export {
+  Brush as FogBrushIcon,
+  ChevronsLeft as CollapseToolbarIcon,
+  ChevronsRight as ExpandToolbarIcon,
+  Eraser as CoverBrushIcon,
+  Eye as RevealFogIcon,
+  EyeOff as CoverFogIcon,
+  Grid3x3 as GridSettingsIcon,
+  Hand as PanIcon,
+  Hexagon as CoverPolygonIcon,
+  MapPin as PingIcon,
+  Maximize2 as ResizeMapIcon,
+  Ellipsis as MoreToolsIcon,
+  Ellipsis as MoreIcon,
+  MousePointer2 as CursorPresenceIcon,
+  PanelRightClose as SidebarCollapseIcon,
+  Pause as PauseIcon,
+  Pencil as DrawIcon,
+  Pentagon as FogPolygonIcon,
+  Play as PlayIcon,
+  Redo2 as RedoIcon,
+  RotateCcw as ResetWindowIcon,
+  Ruler as RulerIcon,
+  Undo2 as UndoIcon,
+  Volume2 as VolumeIcon,
+  X as CloseIcon,
+} from "lucide-react";
 export type { LucideIcon } from "lucide-react";
