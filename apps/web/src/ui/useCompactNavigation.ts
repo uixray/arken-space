@@ -68,21 +68,42 @@ export function useCompactNavigation(
     [],
   );
 
-  // Remember the last control before pointer or Tab moves focus onto navigation.
+  // Keep the foreground desktop pane before a breakpoint hides its siblings.
+  // Portal focus then retains its trigger's pane (e.g. an open sticker picker).
+  // Untouched sessions still start on Map; compact navigation stays explicit.
   useEffect(() => {
-    const rememberFocus = (event: FocusEvent) => {
+    const rememberForeground = (event: Event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
+      if (target.closest("[hidden], [inert]")) return;
       for (const name of Object.keys(roots) as CompactSurface[]) {
         if (document.getElementById(roots[name])?.contains(target)) {
-          focusMemory.current[name] = target;
+          // Pointer targets need not be focusable; only remember real controls
+          // for later keyboard focus restoration.
+          if (event.type === "focusin") focusMemory.current[name] = target;
+          if (!getCompact() && name !== "character") {
+            setState((old) => {
+              const sameIdentity = old.scopeKey === scopeKey;
+              if (sameIdentity && old.surface === name) return old;
+              return {
+                scopeKey,
+                surface: name,
+                previous: name,
+                characterVisited: sameIdentity && old.characterVisited,
+              };
+            });
+          }
           break;
         }
       }
     };
-    document.addEventListener("focusin", rememberFocus);
-    return () => document.removeEventListener("focusin", rememberFocus);
-  }, []);
+    document.addEventListener("focusin", rememberForeground);
+    document.addEventListener("pointerdown", rememberForeground);
+    return () => {
+      document.removeEventListener("focusin", rememberForeground);
+      document.removeEventListener("pointerdown", rememberForeground);
+    };
+  }, [scopeKey]);
 
   // Presentation geometry only: never resize the canvas state or auth session.
   // visualViewport shrinks above a virtual keyboard; dvh remains the CSS fallback.

@@ -395,7 +395,7 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
   await expect(page.locator(".account-menu__content .g-button")).toHaveCount(1);
 });
 
-test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
+test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
   page,
 }) => {
   let activeSnapshot = structuredClone(snapshot);
@@ -419,13 +419,17 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
 
   const toolbar = page.getByRole("toolbar", { name: "Инструменты карты" });
   const tool = (id: string) => toolbar.locator(`[data-tool="${id}"]`);
-  const pseudoContent = (control: Locator) =>
-    control.evaluate((element) =>
-      getComputedStyle(element, "::before").content.replace(
-        /^(?:"(.*)"|'(.*)')$/,
-        "$1$2",
-      ),
-    );
+  const iconMarkup = async (control: Locator) => {
+    const icon = control.locator("svg.arken-icon");
+    await expect(icon).toHaveCount(1);
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveAttribute("aria-hidden", "true");
+    await expect(icon).toHaveAttribute("focusable", "false");
+    const bounds = await icon.boundingBox();
+    expect(bounds!.width).toBeGreaterThan(0);
+    expect(bounds!.height).toBeGreaterThan(0);
+    return icon.innerHTML();
+  };
 
   await expect(toolbar).toBeVisible();
   await expect(toolbar).not.toHaveClass(/is-collapsed/);
@@ -448,11 +452,17 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
     ).toBeGreaterThan(0);
   }
 
-  const distinctGlyphs = await Promise.all(
-    labelledTools.map(([id]) => pseudoContent(tool(id))),
+  const distinctIcons = await Promise.all(
+    labelledTools.map(([id]) => iconMarkup(tool(id))),
   );
-  expect(distinctGlyphs.every((glyph) => glyph.trim().length > 0)).toBe(true);
-  expect(new Set(distinctGlyphs).size).toBe(distinctGlyphs.length);
+  expect(distinctIcons.every((icon) => icon.trim().length > 0)).toBe(true);
+  expect(new Set(distinctIcons).size).toBe(distinctIcons.length);
+  const pan = tool("PAN");
+  await expect(pan).toHaveAttribute("aria-pressed", "true");
+  await expect(pan.locator(".map-tool__label")).toHaveCSS(
+    "color",
+    await pan.evaluate((element) => getComputedStyle(element).color),
+  );
 
   await expect(tool("ENCOUNTER_START")).toHaveCount(0);
   await expect(tool("BATTLE_ZONE")).toHaveCount(0);
@@ -506,7 +516,13 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
     const control = tool(id);
     await expect(control).toHaveCSS("font-size", "0px");
     await expect(control).toHaveAttribute("aria-label", accessibleName);
-    expect((await pseudoContent(control)).trim().length).toBeGreaterThan(0);
+    await expect(control.locator(".map-tool__label")).toHaveCSS(
+      "font-size",
+      "0px",
+    );
+    expect(await iconMarkup(control)).toBe(
+      distinctIcons[labelledTools.findIndex(([toolId]) => toolId === id)],
+    );
   }
 
   activeSnapshot = structuredClone(snapshot);

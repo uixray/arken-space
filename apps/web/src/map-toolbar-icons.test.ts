@@ -28,15 +28,8 @@ const toolbarToolIds = [
   ),
 ].sort();
 
-const decodeCssGlyph = (value: string) =>
-  value
-    .replace(/\\([0-9a-f]{1,6})\s?/gi, (_, codePoint: string) =>
-      String.fromCodePoint(Number.parseInt(codePoint, 16)),
-    )
-    .replace(/\\(.)/g, "$1");
-
 describe("map toolbar icon styles", () => {
-  it("provides a non-empty glyph for every current toolbar data-tool", () => {
+  it("does not duplicate the rendered SVG icons with CSS glyphs", () => {
     expect(toolbarToolIds).toEqual(
       expect.arrayContaining([
         "FOG_BRUSH",
@@ -53,18 +46,10 @@ describe("map toolbar icon styles", () => {
           `\\[data-tool="${tool}"\\]::before\\s*\\{[^}]*?content:\\s*(["'])(.*?)\\1\\s*;`,
         ),
       );
-      expect(rule, `${tool} must have a quoted ::before content rule`).not.toBe(
+      // Actual SVG presence/geometry is checked by MapToolbar DOM and App E2E.
+      expect(rule, `${tool} must not generate a second icon via CSS`).toBe(
         null,
       );
-
-      const glyph = decodeCssGlyph(rule?.[2] ?? "");
-      expect(
-        [...glyph].some(
-          (character) =>
-            character.trim().length > 0 && character.codePointAt(0) !== 0,
-        ),
-        `${tool} must render a real, non-whitespace glyph`,
-      ).toBe(true);
     }
   });
 });

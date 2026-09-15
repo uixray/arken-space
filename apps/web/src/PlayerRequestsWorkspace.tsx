@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type {
   GameSnapshot,
   PlayerRequestDto,
@@ -53,6 +53,9 @@ export function PlayerRequestsWorkspace({
     resolutionNote?: string,
   ) => Promise<void>;
 }) {
+  const horizonId = useId();
+  const audienceId = useId();
+  const characterId = useId();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [editing, setEditing] = useState<PlayerRequestDto | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -164,9 +167,10 @@ export function PlayerRequestsWorkspace({
             </label>
             {!editing && (
               <div className="player-requests__grid">
-                <label>
-                  Когда
+                <div className="player-requests__field">
+                  <label htmlFor={horizonId}>Когда</label>
                   <select
+                    id={horizonId}
                     value={draft.horizon}
                     onChange={(e) =>
                       setDraft({
@@ -183,10 +187,11 @@ export function PlayerRequestsWorkspace({
                       ),
                     )}
                   </select>
-                </label>
-                <label>
-                  Кто увидит
+                </div>
+                <div className="player-requests__field">
+                  <label htmlFor={audienceId}>Кто увидит</label>
                   <select
+                    id={audienceId}
                     value={draft.audience}
                     onChange={(e) =>
                       setDraft({
@@ -203,10 +208,11 @@ export function PlayerRequestsWorkspace({
                       ),
                     )}
                   </select>
-                </label>
-                <label>
-                  Персонаж (необязательно)
+                </div>
+                <div className="player-requests__field">
+                  <label htmlFor={characterId}>Персонаж (необязательно)</label>
                   <select
+                    id={characterId}
                     value={draft.characterId}
                     onChange={(e) =>
                       setDraft({ ...draft, characterId: e.target.value })
@@ -219,7 +225,7 @@ export function PlayerRequestsWorkspace({
                       </option>
                     ))}
                   </select>
-                </label>
+                </div>
               </div>
             )}
             <div className="player-requests__actions">

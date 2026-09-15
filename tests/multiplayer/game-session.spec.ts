@@ -856,7 +856,10 @@ test("GM and six isolated players recover authoritative state without security l
     await openWorkspaceSection(gmPage, "Подготовка");
     const setupDialog = gmPage.getByRole("dialog", { name: "Подготовка" });
     await expect(
-      setupDialog.getByRole("button", { name: "● Player 1", exact: true }),
+      setupDialog.getByRole("button", {
+        name: "Онлайн: Player 1",
+        exact: true,
+      }),
     ).toBeVisible();
     await setupDialog.getByRole("button", { name: "Закрыть окно" }).click();
 

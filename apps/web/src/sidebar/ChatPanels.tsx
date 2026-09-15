@@ -388,20 +388,32 @@ export function ActivityPanel({
     () => statLabelsFromLayout(snapshot.campaign.statLayout),
     [snapshot.campaign.statLayout],
   );
-  const suggestions = useComposerSuggestions(
+  const {
+    rootRef: suggestionsRootRef,
+    textareaRef: suggestionsTextareaRef,
+    visible: suggestionsVisible,
+    explicit: suggestionsExplicit,
+    complete: completeSuggestions,
+    isComposing: isSuggestionsComposing,
+    onKeyDown: onSuggestionsKeyDown,
+    onCompositionStart: onSuggestionsCompositionStart,
+    onCompositionEnd: onSuggestionsCompositionEnd,
+    edited: onSuggestionsEdited,
+    toggle: toggleSuggestions,
+  } = useComposerSuggestions(
     `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${snapshot.me.characterId ?? "none"}:activity`,
     getSlashCommandSuggestions(composer, characterStats, statLabels).length > 0,
   );
-  const slashSuggestions = suggestions.visible
+  const slashSuggestions = suggestionsVisible
     ? getSlashCommandSuggestions(
-        suggestions.explicit ? "/" : composer,
+        suggestionsExplicit ? "/" : composer,
         characterStats,
         statLabels,
       )
     : [];
   const executeActivitySuggestion = (insertion: string) => {
     const intent = parseComposerInput(insertion, characterStats, statLabels);
-    suggestions.complete();
+    completeSuggestions();
     if (intent.kind !== "ROLL") {
       setComposer(insertion);
       return;
@@ -475,7 +487,7 @@ export function ActivityPanel({
   const onComposerKeyDown = (
     event: ReactKeyboardEvent<HTMLTextAreaElement>,
   ) => {
-    if (suggestions.isComposing(event)) return;
+    if (isSuggestionsComposing(event)) return;
     const action = decideComposerKeydown({
       key: event.key,
       ctrlKey: event.ctrlKey,
@@ -888,13 +900,13 @@ export function ActivityPanel({
       <form className="chat-compose chat-compose--single" onSubmit={submit}>
         <div
           className="chat-composer-input"
-          ref={suggestions.rootRef}
-          onKeyDown={suggestions.onKeyDown}
-          onCompositionStart={suggestions.onCompositionStart}
-          onCompositionEnd={suggestions.onCompositionEnd}
+          ref={suggestionsRootRef}
+          onKeyDown={onSuggestionsKeyDown}
+          onCompositionStart={onSuggestionsCompositionStart}
+          onCompositionEnd={onSuggestionsCompositionEnd}
         >
           <FormTextArea
-            controlRef={suggestions.textareaRef}
+            controlRef={suggestionsTextareaRef}
             aria-label="Сообщение или бросок"
             aria-invalid={composerInvalid || undefined}
             aria-describedby={
@@ -910,7 +922,7 @@ export function ActivityPanel({
             placeholder={"Сообщение? Введите / для быстрых команд"}
             value={composer}
             onChange={(event) => {
-              suggestions.edited();
+              onSuggestionsEdited();
               setComposer(event.target.value);
               setComposerError("");
               setComposerInvalid(false);
@@ -939,7 +951,7 @@ export function ActivityPanel({
                   ? "activity-slash-suggestions"
                   : undefined
               }
-              onClick={suggestions.toggle}
+              onClick={toggleSuggestions}
             >
               <span aria-hidden="true">/</span>
             </Button>
@@ -1435,17 +1447,29 @@ export function ChatPanel({
   const canCompose =
     activeStream === "TABLE" ||
     (activeStream === "STORY" && snapshot.me.role === "GM");
-  const suggestions = useComposerSuggestions(
+  const {
+    rootRef: suggestionsRootRef,
+    textareaRef: suggestionsTextareaRef,
+    visible: suggestionsVisible,
+    explicit: suggestionsExplicit,
+    complete: completeSuggestions,
+    isComposing: isSuggestionsComposing,
+    onKeyDown: onSuggestionsKeyDown,
+    onCompositionStart: onSuggestionsCompositionStart,
+    onCompositionEnd: onSuggestionsCompositionEnd,
+    edited: onSuggestionsEdited,
+    toggle: toggleSuggestions,
+  } = useComposerSuggestions(
     `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${snapshot.me.characterId ?? "none"}:${activeStream}`,
     getSlashCommandSuggestions(composer).length > 0,
     visible && activeStream === "TABLE",
   );
-  const slashSuggestions = suggestions.visible
-    ? getSlashCommandSuggestions(suggestions.explicit ? "/" : composer)
+  const slashSuggestions = suggestionsVisible
+    ? getSlashCommandSuggestions(suggestionsExplicit ? "/" : composer)
     : [];
   const executeChatSuggestion = (insertion: string) => {
     const intent = parseComposerInput(insertion);
-    suggestions.complete();
+    completeSuggestions();
     if (intent.kind !== "ROLL") {
       setComposer(insertion);
       return;
@@ -1527,7 +1551,7 @@ export function ChatPanel({
   const onComposerKeyDown = (
     event: ReactKeyboardEvent<HTMLTextAreaElement>,
   ) => {
-    if (suggestions.isComposing(event)) return;
+    if (isSuggestionsComposing(event)) return;
     const action = decideComposerKeydown({
       key: event.key,
       ctrlKey: event.ctrlKey,
@@ -1640,13 +1664,13 @@ export function ChatPanel({
           <form className="chat-compose chat-compose--single" onSubmit={submit}>
             <div
               className="chat-composer-input"
-              ref={suggestions.rootRef}
-              onKeyDown={suggestions.onKeyDown}
-              onCompositionStart={suggestions.onCompositionStart}
-              onCompositionEnd={suggestions.onCompositionEnd}
+              ref={suggestionsRootRef}
+              onKeyDown={onSuggestionsKeyDown}
+              onCompositionStart={onSuggestionsCompositionStart}
+              onCompositionEnd={onSuggestionsCompositionEnd}
             >
               <FormTextArea
-                controlRef={suggestions.textareaRef}
+                controlRef={suggestionsTextareaRef}
                 aria-label={
                   activeStream === "STORY"
                     ? "Сообщение сюжета"
@@ -1665,7 +1689,7 @@ export function ChatPanel({
                 }
                 value={composer}
                 onChange={(event) => {
-                  suggestions.edited();
+                  onSuggestionsEdited();
                   setComposer(event.target.value);
                 }}
                 onKeyDown={onComposerKeyDown}
@@ -1695,7 +1719,7 @@ export function ChatPanel({
                       ? "chat-slash-suggestions"
                       : undefined
                   }
-                  onClick={suggestions.toggle}
+                  onClick={toggleSuggestions}
                 >
                   <span aria-hidden="true">/</span>
                 </Button>
