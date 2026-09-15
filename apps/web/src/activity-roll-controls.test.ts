@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  charactersAvailableForActivityRolls,
   filterActivityEvents,
   formulaBonus,
   physicalRollBonus,
@@ -11,6 +12,11 @@ import {
   writeRollLogCollapsed,
 } from "./activity-roll-controls";
 import type { ActivityEvent } from "./activity-feed";
+import type { CharacterDto } from "@arken/contracts";
+import {
+  playerSnapshot,
+  gmSnapshot,
+} from "./test-support/game-snapshot-fixtures";
 
 const message = (stream: "TABLE" | "STORY" | "ROLLS", kind = "TEXT") =>
   ({
@@ -32,6 +38,39 @@ const message = (stream: "TABLE" | "STORY" | "ROLLS", kind = "TEXT") =>
   }) as ActivityEvent;
 
 describe("activity roll controls", () => {
+  const ownedA = {
+    id: "character-a",
+    ownerMembershipId: "member-under-test",
+  } as CharacterDto;
+  const activeB = {
+    id: "character-b",
+    ownerMembershipId: "another-member",
+  } as CharacterDto;
+
+  it("uses only the active player character, not the first owned one", () => {
+    const snapshot = playerSnapshot({ characters: [ownedA, activeB] });
+    snapshot.me.characterId = activeB.id;
+    expect(charactersAvailableForActivityRolls(snapshot)).toEqual([activeB]);
+  });
+
+  it.each([null, "missing-character"])(
+    "does not replace unavailable active character %s with an owned one",
+    (characterId) => {
+      const snapshot = playerSnapshot({ characters: [ownedA] });
+      snapshot.me.characterId = characterId;
+      expect(charactersAvailableForActivityRolls(snapshot)).toEqual([]);
+    },
+  );
+
+  it("keeps all visible characters available to the GM selector", () => {
+    const snapshot = gmSnapshot({ characters: [ownedA, activeB] });
+    snapshot.me.characterId = activeB.id;
+    expect(charactersAvailableForActivityRolls(snapshot)).toEqual([
+      ownedA,
+      activeB,
+    ]);
+  });
+
   it("filters roll, story and reference events independently", () => {
     const events = [
       message("ROLLS", "DICE"),

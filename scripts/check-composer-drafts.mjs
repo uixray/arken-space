@@ -356,7 +356,8 @@ try {
   );
   runComponent("direct-restored");
   run("baseline", spec, composerTitles);
-  const activityDescription = 'aria-describedby="activity-composer-hint"';
+  const activityDescription =
+    'aria-describedby={\n              composerError\n                ? "activity-composer-hint activity-composer-error"\n                : "activity-composer-hint"\n            }';
   fault(
     caller,
     activityDescription,

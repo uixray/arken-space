@@ -117,7 +117,7 @@ const faults = [
     id: "upload-enabled",
     replacements: [
       [
-        "value={portraitUpload}\n        disabled={!editable}",
+        "value={portraitUpload}\n        disabled={!editable || portraitUploadPending}",
         "value={portraitUpload}",
       ],
     ],
@@ -163,7 +163,10 @@ const faults = [
   {
     id: "selected-upload-enabled-after-revoke",
     replacements: [
-      ["disabled={!editable || !portraitUpload}", "disabled={!portraitUpload}"],
+      [
+        "disabled={!editable || !portraitUpload || portraitUploadPending}",
+        "disabled={!portraitUpload || portraitUploadPending}",
+      ],
     ],
     failures: {
       [selectedRevoked]: "UIX414_PORTRAIT_SELECTED_REVOKED_ASSIGN_DISABLED",
