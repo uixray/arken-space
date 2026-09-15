@@ -125,6 +125,11 @@ export function SceneManagerDialog({
         </Button>
       </div>
       <div className="scene-manager-list">
+        {snapshot.scenes.length === 0 && (
+          <p className="empty">
+            Сцен пока нет. Создайте сцену для подготовки игры.
+          </p>
+        )}
         {snapshot.scenes.map((scene) => {
           const viewed =
             scene.id === viewedSceneId || (!viewedSceneId && scene.active);
