@@ -178,8 +178,6 @@ const activeScene: SceneDto = {
   },
   active: true,
 };
-const derivativeRequired =
-  "Обрежьте исходное изображение и создайте из него изображение токена.";
 const uploadRefused = "Сервер отклонил загрузку исходника.";
 const generationRefused = "Сервер отклонил создание изображения токена.";
 
@@ -211,22 +209,28 @@ function setupNegativeControl(failure?: "upload" | "generation") {
         return jsonResponse(
           gmSnapshot({ scenes: [activeScene], assets: serverAssets }),
         );
-      if (path === "/api/assets/source-a/token" && method === "POST") {
+      if (
+        (path === "/api/assets/source-a/token" ||
+          path === "/api/assets/source-b/token") &&
+        method === "POST"
+      ) {
         if (failure === "generation")
           return jsonResponse(
             { error: "TOKEN_GENERATION_REJECTED", message: generationRefused },
             422,
           );
-        serverAssets = [generated, ...serverAssets];
+        serverAssets = [
+          generated,
+          ...serverAssets.filter((asset) => asset.id !== generated.id),
+        ];
         return jsonResponse(generated, 201);
       }
-      // A broken submit guard must reach a recorded creation endpoint, not be
-      // hidden by a rejecting callback or an unrecognised-route exception.
+      // Both success and refusal controls use the real creation API boundary.
       if (
         method === "POST" &&
         (path === "/api/token-definitions" || path === "/api/tokens")
       )
-        return jsonResponse({ id: "unexpected-created-token" }, 201);
+        return jsonResponse({ id: "created-token" }, 201);
       // Real api() reports an upload refusal; this is not a creation request.
       if (path === "/api/client-logs" && method === "POST")
         return jsonResponse({ accepted: true }, 202);
@@ -342,36 +346,54 @@ async function expectUploadedLandscape() {
   });
   expect(
     within(picker).getByRole("button", { name: "Без изображения" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  ).toHaveAttribute("aria-pressed", "false");
 }
 
-async function attemptSubmitWithoutDerivative(name: string) {
-  // Each intent gets a fresh harness, so a previous submit's error cannot
-  // satisfy this assertion before the current submit actually reaches its guard.
-  expect(screen.queryByText(derivativeRequired)).not.toBeInTheDocument();
+async function attemptRefusedSubmit(name: string, message: string) {
   const submit = screen.getByRole("button", { name });
   await waitFor(() => expect(submit).toBeEnabled());
   await userEvent.click(submit);
-  expect(await screen.findByText(derivativeRequired)).toBeInTheDocument();
+  expect(await screen.findByText(message)).toBeInTheDocument();
   await waitFor(() => expect(submit).toBeEnabled());
   expect(screen.getByLabelText("Название")).toHaveValue("Страж исходника");
   expect(screen.queryByText("Редактор закрыт")).not.toBeInTheDocument();
 }
 
-describe("UIX-611 real-chain negative creation controls", () => {
+describe("UIX-611 real-chain single-confirm creation controls", () => {
   const submitIntents = ["Сохранить", "Создать и поставить"];
 
   it.each(submitIntents)(
-    "refuses an uploaded landscape IMAGE without generation via %s",
+    "derives an uploaded landscape IMAGE and creates via one %s",
     async (submitName) => {
       const control = setupNegativeControl();
       await control.uploadLandscape();
       await expectUploadedLandscape();
-      await attemptSubmitWithoutDerivative(submitName);
+      expect(
+        screen.queryByRole("button", { name: "Создать изображение токена" }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: submitName }));
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Редактор закрыт",
+      );
+      const creationPath =
+        submitName === "Сохранить" ? "/api/token-definitions" : "/api/tokens";
       expect(
         control.requests.map(({ method, path }) => `${method} ${path}`),
-      ).toEqual(["POST /api/assets?kind=IMAGE", "GET /api/bootstrap"]);
-      control.expectNoCreation();
+      ).toEqual([
+        "POST /api/assets?kind=IMAGE",
+        "GET /api/bootstrap",
+        "POST /api/assets/source-a/token",
+        "GET /api/bootstrap",
+        `POST ${creationPath}`,
+        "GET /api/bootstrap",
+      ]);
+      const creation = control.requests.find(
+        (request) => request.path === creationPath,
+      );
+      const body = JSON.parse(String(creation?.body));
+      expect(
+        body[submitName === "Сохранить" ? "defaultAssetId" : "assetId"],
+      ).toBe(generated.id);
     },
   );
 
@@ -384,7 +406,7 @@ describe("UIX-611 real-chain negative creation controls", () => {
       expect(
         screen.queryByRole("option", { name: sourceA.name }),
       ).not.toBeInTheDocument();
-      await attemptSubmitWithoutDerivative(submitName);
+      await attemptRefusedSubmit(submitName, uploadRefused);
       expect(
         control.requests.some((request) => request.path === "/api/bootstrap"),
       ).toBe(false);
@@ -398,10 +420,7 @@ describe("UIX-611 real-chain negative creation controls", () => {
       const control = setupNegativeControl("generation");
       await control.uploadLandscape();
       await expectUploadedLandscape();
-      await userEvent.click(
-        screen.getByRole("button", { name: "Создать изображение токена" }),
-      );
-      expect(await screen.findByText(generationRefused)).toBeInTheDocument();
+      await attemptRefusedSubmit(submitName, generationRefused);
       expect(
         control.requests.filter(
           (request) => request.path === "/api/assets/source-a/token",
@@ -410,10 +429,49 @@ describe("UIX-611 real-chain negative creation controls", () => {
       expect(
         screen.queryByRole("button", { name: generated.name }),
       ).not.toBeInTheDocument();
-      await attemptSubmitWithoutDerivative(submitName);
       control.expectNoCreation();
     },
   );
+
+  it("derives a newly selected IMAGE instead of retaining the previously selected ready TOKEN", async () => {
+    const control = setupNegativeControl();
+    expect(screen.getByLabelText("Исходное изображение")).toHaveValue("");
+    await userEvent.type(screen.getByLabelText("Название"), "Новый исходник");
+    const picker = screen.getByRole("group", {
+      name: "Изображение токена из файлов",
+    });
+    await userEvent.click(
+      within(picker).getByRole("button", { name: ready.name }),
+    );
+    expect(
+      within(picker).getByRole("button", { name: ready.name }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await userEvent.selectOptions(
+      screen.getByLabelText("Исходное изображение"),
+      sourceB.id,
+    );
+    expect(
+      within(picker).getByRole("button", { name: ready.name }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Редактор закрыт",
+    );
+    expect(
+      control.requests.map(({ method, path }) => `${method} ${path}`),
+    ).toEqual([
+      "POST /api/assets/source-b/token",
+      "GET /api/bootstrap",
+      "POST /api/token-definitions",
+      "GET /api/bootstrap",
+    ]);
+    const creation = control.requests.find(
+      (request) => request.path === "/api/token-definitions",
+    );
+    expect(JSON.parse(String(creation?.body)).defaultAssetId).toBe(
+      generated.id,
+    );
+  });
 
   it("cancels the uploaded-source draft before submit without creating a definition or placement", async () => {
     const control = setupNegativeControl();
@@ -432,7 +490,7 @@ describe("UIX-611 real-chain negative creation controls", () => {
 });
 
 describe("UIX-611 real editor uploaded-source selection", () => {
-  it("automatically selects uploaded portrait B and resets A's edited crop before generating a TOKEN", async () => {
+  it("awaits held upload B on Save and preserves a later deliberate source crop across reload", async () => {
     let resolveUpload!: (asset: AssetDto) => void;
     const uploadResult = new Promise<AssetDto>((resolve) => {
       resolveUpload = resolve;
@@ -459,9 +517,16 @@ describe("UIX-611 real editor uploaded-source selection", () => {
           requests.push({ path, method });
           return jsonResponse(gmSnapshot({ assets: serverAssets }));
         }
-        if (path === "/api/assets/source-b/token" && method === "POST") {
+        if (
+          (path === "/api/assets/source-b/token" ||
+            path === "/api/assets/source-a/token") &&
+          method === "POST"
+        ) {
           requests.push({ path, method, body: JSON.parse(String(init?.body)) });
-          serverAssets = [generated, ...serverAssets];
+          serverAssets = [
+            generated,
+            ...serverAssets.filter((asset) => asset.id !== generated.id),
+          ];
           return jsonResponse(generated, 201);
         }
         throw new Error(
@@ -470,7 +535,12 @@ describe("UIX-611 real editor uploaded-source selection", () => {
       },
     );
     vi.stubGlobal("fetch", fetchMock);
-    const onCreate = vi.fn().mockResolvedValue(undefined);
+    // A definition refusal leaves the real editor open for the subsequent
+    // deliberate source change and authoritative snapshot reload.
+    const onCreate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Повторите сохранение определения."))
+      .mockResolvedValue(undefined);
     const onCreateAndPlace = vi.fn().mockResolvedValue(undefined);
     const onCancel = vi.fn();
     function Harness() {
@@ -503,6 +573,7 @@ describe("UIX-611 real editor uploaded-source selection", () => {
     }
     renderComponent(<Harness />);
     const selector = screen.getByLabelText("Исходное изображение");
+    expect(selector).toHaveValue("");
     await userEvent.selectOptions(selector, sourceA.id);
     expect(selector).toHaveValue(sourceA.id);
     await userEvent.type(screen.getByLabelText("Название"), "Страж портрета");
@@ -539,16 +610,32 @@ describe("UIX-611 real editor uploaded-source selection", () => {
     expect(uploadRequest.path).toBe("/api/assets?kind=IMAGE");
     expect((uploadRequest.body as FormData).get("file")).toBe(file);
     expect(selector).toHaveValue(sourceA.id);
+    expect(selector).toBeDisabled();
     expect(zoom).toHaveValue("2");
+    expect(zoom).toBeDisabled();
     expect(screen.getByRole("radio", { name: "Бронза" })).toBeChecked();
     expect(preview.querySelector("img")).toHaveStyle({
       left: "-130%",
       top: "-70%",
     });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Загрузка исходного изображения…",
+    );
     expect(onCreate).not.toHaveBeenCalled();
     expect(onCreateAndPlace).not.toHaveBeenCalled();
 
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    await userEvent.click(save);
+    await waitFor(() => expect(save).toBeDisabled());
+    expect(
+      requests.filter((request) => request.path.endsWith("/token")),
+    ).toEqual([]);
+    expect(onCreate).not.toHaveBeenCalled();
+
     await act(async () => resolveUpload(sourceB));
+    expect(
+      await screen.findByText("Повторите сохранение определения."),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("option", { name: sourceB.name })).toHaveValue(
         sourceB.id,
@@ -557,9 +644,9 @@ describe("UIX-611 real editor uploaded-source selection", () => {
     expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
       "POST /api/assets?kind=IMAGE",
       "GET /api/bootstrap",
+      "POST /api/assets/source-b/token",
+      "GET /api/bootstrap",
     ]);
-    // Intended first baseline FAIL on unchanged source: B is really available,
-    // but the generator's existing effect retains A while A still exists.
     expect(selector).toHaveValue(sourceB.id);
     expect(zoom).toHaveValue("1");
     expect(screen.getByRole("radio", { name: "Без рамки" })).toBeChecked();
@@ -577,18 +664,16 @@ describe("UIX-611 real editor uploaded-source selection", () => {
     ).not.toBeInTheDocument();
     expect(
       within(picker).getByRole("button", { name: "Без изображения" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(onCreate).not.toHaveBeenCalled();
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(onCreate).toHaveBeenCalledOnce();
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Страж портрета",
+        defaultAssetId: generated.id,
+      }),
+    );
     expect(onCreateAndPlace).not.toHaveBeenCalled();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Создать изображение токена" }),
-    );
-    await waitFor(() =>
-      expect(
-        within(picker).getByRole("button", { name: generated.name }),
-      ).toHaveAttribute("aria-pressed", "true"),
-    );
     expect(requests.find((request) => request.path.endsWith("/token"))).toEqual(
       {
         path: "/api/assets/source-b/token",
@@ -645,7 +730,7 @@ describe("UIX-611 real editor uploaded-source selection", () => {
     });
     expect(
       within(picker).getByRole("button", { name: generated.name }),
-    ).toHaveAttribute("aria-pressed", "true");
+    ).toHaveAttribute("aria-pressed", "false");
     expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
       "POST /api/assets?kind=IMAGE",
       "GET /api/bootstrap",
@@ -654,8 +739,9 @@ describe("UIX-611 real editor uploaded-source selection", () => {
       "GET /api/bootstrap",
     ]);
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(onCreate).toHaveBeenCalledExactlyOnceWith({
+      expect(onCreate).toHaveBeenLastCalledWith({
         name: "Страж портрета",
         characterId: null,
         defaultAssetId: generated.id,
@@ -664,7 +750,12 @@ describe("UIX-611 real editor uploaded-source selection", () => {
         controllerMembershipIds: [],
       }),
     );
+    expect(
+      requests
+        .filter((request) => request.path.endsWith("/token"))
+        .map((request) => request.path),
+    ).toEqual(["/api/assets/source-b/token", "/api/assets/source-a/token"]);
     expect(onCreateAndPlace).not.toHaveBeenCalled();
-    expect(onCancel).toHaveBeenCalledOnce();
+    await waitFor(() => expect(onCancel).toHaveBeenCalledOnce());
   });
 });

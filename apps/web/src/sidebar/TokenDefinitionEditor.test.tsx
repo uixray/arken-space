@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { AssetDto, GameSnapshot } from "@arken/contracts";
-import { renderComponent, screen, userEvent } from "../test-support/render";
+import type {
+  AssetDto,
+  GameSnapshot,
+  TokenDefinitionDto,
+} from "@arken/contracts";
+import {
+  renderComponent,
+  screen,
+  userEvent,
+  waitFor,
+} from "../test-support/render";
 
 vi.mock("@gravity-ui/uikit", () => ({
   Button: ({
@@ -57,12 +66,31 @@ vi.mock("../ui/ImageUploadField", () => ({
 }));
 vi.mock("../TokenImageGenerator", () => ({
   TokenImageGenerator: ({
-    onGenerated,
+    onDraftChange,
   }: {
-    onGenerated: (asset: AssetDto) => void;
+    onDraftChange?: (draft: {
+      sourceAssetId: string;
+      cropX: number;
+      cropY: number;
+      zoom: number;
+      frame: "NONE";
+      name: string;
+    }) => void;
   }) => (
-    <button type="button" onClick={() => onGenerated(asset("token", "TOKEN"))}>
-      Создать изображение токена
+    <button
+      type="button"
+      onClick={() =>
+        onDraftChange?.({
+          sourceAssetId: "uploaded",
+          cropX: 0.5,
+          cropY: 0.5,
+          zoom: 1,
+          frame: "NONE",
+          name: "portrait",
+        })
+      }
+    >
+      Выбрать crop загруженного портрета
     </button>
   ),
 }));
@@ -95,24 +123,37 @@ function setup(
   upload = vi.fn().mockResolvedValue(asset("uploaded", "IMAGE")),
   snapshotOverride = snapshot,
   createAndPlace = vi.fn().mockResolvedValue(undefined),
+  onGenerateTokenImage = vi.fn().mockResolvedValue(asset("token", "TOKEN")),
+  onCreate = vi.fn().mockResolvedValue(undefined),
+  onCancel = vi.fn(),
+  definition?: TokenDefinitionDto,
 ) {
-  const onCreate = vi.fn().mockResolvedValue(undefined);
   const onCreateAndPlace = createAndPlace;
+  const onPatch = vi.fn().mockResolvedValue(undefined);
+  const onReplaceControllers = vi.fn().mockResolvedValue(undefined);
   renderComponent(
     <TokenDefinitionEditor
       snapshot={snapshotOverride}
+      definition={definition}
       onUpload={upload}
-      onGenerateTokenImage={vi.fn()}
-      onCancel={vi.fn()}
+      onGenerateTokenImage={onGenerateTokenImage}
+      onCancel={onCancel}
       onCreate={onCreate}
       onCreateAndPlace={onCreateAndPlace}
-      onPatch={vi.fn()}
-      onReplaceControllers={vi.fn()}
+      onPatch={onPatch}
+      onReplaceControllers={onReplaceControllers}
       onOpenCharacters={vi.fn()}
       onOpenMedia={vi.fn()}
     />,
   );
-  return { onCreate, onCreateAndPlace };
+  return {
+    onCreate,
+    onCreateAndPlace,
+    onGenerateTokenImage,
+    onCancel,
+    onPatch,
+    onReplaceControllers,
+  };
 }
 
 describe("UIX-611 — IMAGE служит только исходником TOKEN", () => {
@@ -122,38 +163,38 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
     expect(screen.getByTestId("ready-assets")).not.toHaveTextContent("source");
   });
 
-  it("не сохраняет загруженный портрет без производного TOKEN", async () => {
-    const { onCreate } = setup();
+  it("одним сохранением создаёт производный TOKEN и определение", async () => {
+    const { onCreate, onGenerateTokenImage } = setup();
     await userEvent.type(screen.getByLabelText("Название"), "Страж");
     await userEvent.click(
       screen.getByRole("button", { name: "Загрузить портрет" }),
     );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Выбрать crop загруженного портрета",
+      }),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
-    expect(
-      await screen.findByText(
-        "Обрежьте исходное изображение и создайте из него изображение токена.",
+    await waitFor(() =>
+      expect(onGenerateTokenImage).toHaveBeenCalledWith(
+        {
+          sourceAssetId: "uploaded",
+          cropX: 0.5,
+          cropY: 0.5,
+          zoom: 1,
+          frame: "NONE",
+          name: "portrait",
+        },
+        { actionId: expect.stringMatching(/^[0-9a-f-]{36}$/) },
       ),
-    ).toBeInTheDocument();
-    expect(onCreate).not.toHaveBeenCalled();
-  });
-
-  it("сохраняет id созданного производного TOKEN", async () => {
-    const { onCreate } = setup();
-    await userEvent.type(screen.getByLabelText("Название"), "Страж");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Загрузить портрет" }),
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Создать изображение токена" }),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(onCreate).toHaveBeenCalledWith(
       expect.objectContaining({ defaultAssetId: "token" }),
     );
   });
 
   it("по-прежнему сохраняет уже готовый квадратный TOKEN", async () => {
-    const { onCreate, onCreateAndPlace } = setup();
+    const { onCreate, onCreateAndPlace, onGenerateTokenImage } = setup();
     expect(
       screen.queryByRole("button", { name: "Создать и поставить" }),
     ).not.toBeInTheDocument();
@@ -164,6 +205,149 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
       expect.objectContaining({ defaultAssetId: "ready" }),
     );
     expect(onCreateAndPlace).not.toHaveBeenCalled();
+    expect(onGenerateTokenImage).not.toHaveBeenCalled();
+  });
+
+  it("preserves an existing definition TOKEN on name-only Save", async () => {
+    const definition: TokenDefinitionDto = {
+      id: "existing-definition",
+      name: "Старое имя",
+      ownName: "Старое имя",
+      characterId: null,
+      defaultAssetId: "ready",
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 3,
+    };
+    const { onPatch, onGenerateTokenImage, onCreate, onCreateAndPlace } = setup(
+      undefined,
+      snapshot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      definition,
+    );
+    const name = screen.getByLabelText("Название");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Новое имя");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() =>
+      expect(onPatch).toHaveBeenCalledWith(
+        definition.id,
+        definition.revision,
+        expect.objectContaining({ name: "Новое имя", defaultAssetId: "ready" }),
+      ),
+    );
+    expect(onGenerateTokenImage).not.toHaveBeenCalled();
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(onCreateAndPlace).not.toHaveBeenCalled();
+  });
+
+  it("does not create a definition when the embedded generation fails", async () => {
+    const onGenerateTokenImage = vi
+      .fn()
+      .mockRejectedValue(new Error("Генерация отклонена"));
+    const { onCreate } = setup(
+      undefined,
+      snapshot,
+      undefined,
+      onGenerateTokenImage,
+    );
+    await userEvent.type(screen.getByLabelText("Название"), "Страж");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Загрузить портрет" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Выбрать crop загруженного портрета",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Генерация отклонена",
+    );
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
+  it("reuses the generation action id after a generation rejection", async () => {
+    const generate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Временный сбой"))
+      .mockResolvedValueOnce(asset("token", "TOKEN"));
+    const { onCreate } = setup(undefined, snapshot, undefined, generate);
+    await userEvent.type(screen.getByLabelText("Название"), "Страж");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Загрузить портрет" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Выбрать crop загруженного портрета",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Временный сбой",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledOnce());
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[1]?.[1]).toEqual(generate.mock.calls[0]?.[1]);
+  });
+
+  it("cancels a held generation without creating a definition", async () => {
+    let resolveGeneration!: (value: AssetDto) => void;
+    const onGenerateTokenImage = new Promise<AssetDto>((resolve) => {
+      resolveGeneration = resolve;
+    });
+    const generate = vi.fn().mockReturnValue(onGenerateTokenImage);
+    const { onCreate, onCancel } = setup(
+      undefined,
+      snapshot,
+      undefined,
+      generate,
+    );
+    await userEvent.type(screen.getByLabelText("Название"), "Страж");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Загрузить портрет" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Выбрать crop загруженного портрета",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(generate).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    resolveGeneration(asset("late-token", "TOKEN"));
+    await waitFor(() => expect(onCancel).toHaveBeenCalledOnce());
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
+  it("reuses a matching generated derivative after definition save failure", async () => {
+    const generate = vi.fn().mockResolvedValue(asset("token", "TOKEN"));
+    const onCreate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Сохранение отклонено"))
+      .mockResolvedValueOnce(undefined);
+    setup(undefined, snapshot, undefined, generate, onCreate);
+    await userEvent.type(screen.getByLabelText("Название"), "Страж");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Загрузить портрет" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Выбрать crop загруженного портрета",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Сохранение отклонено",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
+    expect(generate).toHaveBeenCalledOnce();
   });
 
   it("не создаёт определение, если загрузка исходника не удалась", async () => {

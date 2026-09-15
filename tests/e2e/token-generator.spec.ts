@@ -1,6 +1,22 @@
 import { expect, test } from "./react-console-guard";
+import type { Locator, Route } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+
+async function chooseEmbeddedSource(editor: Locator) {
+  const source = editor.getByRole("combobox", {
+    name: "Исходное изображение",
+    exact: true,
+  });
+  const noImage = editor
+    .getByRole("group", { name: "Изображение токена из файлов", exact: true })
+    .getByRole("button", { name: "Без изображения", exact: true });
+  await expect(source).toHaveValue("");
+  await expect(noImage).toHaveAttribute("aria-pressed", "true");
+  await source.selectOption(sourceAsset.id);
+  await expect(source).toHaveValue(sourceAsset.id);
+  await expect(noImage).toHaveAttribute("aria-pressed", "false");
+}
 
 test("UIX-589 narrow frame targets are at least 44px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -285,7 +301,7 @@ async function mockBootstrap(
   );
 }
 
-test("UIX-255 GM generates and assigns a TOKEN asset before saving its definition", async ({
+test("UIX-589 GM saves crop and definition with one confirmation", async ({
   page,
 }) => {
   const generationRequests: Array<{
@@ -333,9 +349,7 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
   await page.locator(".token-palette > button").click();
   const editor = page.locator(".g-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
-  await expect(editor.locator(".token-image-generator select")).toHaveValue(
-    sourceAsset.id,
-  );
+  await chooseEmbeddedSource(editor);
 
   const preview = editor.locator(".token-image-preview");
   await editor.locator('.token-image-generator input[type="range"]').fill("2");
@@ -343,9 +357,11 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
   await preview.press("ArrowRight");
   await preview.press("ArrowDown");
   await editor.locator('input[type="radio"][value="BRONZE"]').check();
-  await editor
-    .getByRole("button", { name: "Создать изображение токена" })
-    .click();
+  await expect(
+    editor.getByRole("button", { name: "Создать изображение токена" }),
+  ).toHaveCount(0);
+  await editor.locator("form input").first().fill("Guard");
+  await editor.getByRole("button", { name: "Сохранить", exact: true }).click();
 
   await expect.poll(() => generationRequests.length).toBe(1);
   expect(generationRequests[0]).toEqual({
@@ -359,8 +375,6 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
     actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
 
-  await editor.locator("form input").first().fill("Guard");
-  await editor.locator(".dialog-actions button").first().click();
   await expect.poll(() => definitionRequests.length).toBe(1);
   expect(definitionRequests[0]).toMatchObject({
     name: "Guard",
@@ -422,6 +436,16 @@ for (const viewport of [
     const images = editor.getByRole("group", {
       name: "Изображение токена из файлов",
     });
+    const characterRow = editor
+      .locator("label")
+      .filter({ hasText: /^\s*Персонаж/ });
+    const characterRowBox = await characterRow.boundingBox();
+    const imagesRowBox = await images.locator("..").boundingBox();
+    expect(characterRowBox).not.toBeNull();
+    expect(imagesRowBox).not.toBeNull();
+    expect(imagesRowBox!.y).toBeGreaterThanOrEqual(
+      characterRowBox!.y + characterRowBox!.height,
+    );
     const image = images.getByRole("button", { name: sourceAsset.name });
     const noImage = images.getByRole("button", { name: "Без изображения" });
     await image.scrollIntoViewIfNeeded();
@@ -549,10 +573,12 @@ test("UIX-613 GM creates and places token on active scene in one action", async 
   page,
 }) => {
   const tokenRequests: Array<Record<string, unknown>> = [];
+  const writeOrder: string[] = [];
   await mockBootstrap(page, "GM");
   await page.route(
     "**/api/assets/a1111111-1111-4111-8111-111111111111/token",
     async (route) => {
+      writeOrder.push("derivative");
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -571,6 +597,7 @@ test("UIX-613 GM creates and places token on active scene in one action", async 
   );
   await page.route("**/api/tokens", async (route) => {
     if (route.request().method() === "POST") {
+      writeOrder.push("placement");
       tokenRequests.push(
         route.request().postDataJSON() as Record<string, unknown>,
       );
@@ -611,10 +638,11 @@ test("UIX-613 GM creates and places token on active scene in one action", async 
   await page.locator(".token-palette > button").click();
   const editor = page.locator(".g-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
+  await chooseEmbeddedSource(editor);
 
-  await editor
-    .getByRole("button", { name: "Создать изображение токена" })
-    .click();
+  await expect(
+    editor.getByRole("button", { name: "Создать изображение токена" }),
+  ).toHaveCount(0);
   await editor.locator("form input").first().fill("Ranger");
   const createAndPlaceButton = editor.locator(
     'button[value="create-and-place"]',
@@ -623,6 +651,7 @@ test("UIX-613 GM creates and places token on active scene in one action", async 
   await createAndPlaceButton.click();
 
   await expect.poll(() => tokenRequests.length).toBe(1);
+  expect(writeOrder).toEqual(["derivative", "placement"]);
   expect(tokenRequests[0]).toMatchObject({
     sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
     name: "Ranger",
@@ -633,3 +662,130 @@ test("UIX-613 GM creates and places token on active scene in one action", async 
     actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
 });
+
+for (const outcome of ["failure", "cancel"] as const) {
+  test(`UIX-589 held generation ${outcome} never creates a definition or placement`, async ({
+    page,
+  }) => {
+    await mockBootstrap(page, "GM");
+    const generationRequests: Array<Record<string, unknown>> = [];
+    const definitionWrites: string[] = [];
+    let held: Route | undefined;
+    await page.route(
+      "**/api/assets/a1111111-1111-4111-8111-111111111111/token",
+      (route) => {
+        generationRequests.push(
+          route.request().postDataJSON() as Record<string, unknown>,
+        );
+        held = route;
+      },
+    );
+    for (const path of ["/api/token-definitions", "/api/tokens"]) {
+      await page.route(`**${path}`, async (route) => {
+        definitionWrites.push(path);
+        await route.abort("blockedbyclient");
+      });
+    }
+    try {
+      await page.goto("/");
+      await openWorkspaceSection(page, "Токены");
+      await page.locator(".token-palette > button").click();
+      const editor = page.getByRole("dialog", {
+        name: "Новый токен",
+        exact: true,
+      });
+      await chooseEmbeddedSource(editor);
+      const name = editor.getByLabel("Название", { exact: true });
+      await name.fill("Generation draft");
+      const save = editor.getByRole("button", {
+        name: "Сохранить",
+        exact: true,
+      });
+      await save.click();
+      await expect.poll(() => generationRequests.length).toBe(1);
+      await expect(save).toBeDisabled();
+      await page.keyboard.press("Enter");
+      // keyboard.press has dispatched keyup; cross a rendering checkpoint so
+      // its native submit handling and any synchronous guarded action settle.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          ),
+      );
+      expect(generationRequests).toHaveLength(1);
+      expect(definitionWrites).toEqual([]);
+      if (!held) throw new Error("Generation did not reach its held boundary");
+      if (outcome === "cancel") {
+        await page.keyboard.press("Escape");
+        await expect(editor).toHaveCount(0);
+        await page.locator(".token-palette > button").click();
+        await editor
+          .getByLabel("Название", { exact: true })
+          .fill("New draft B");
+        // generateTokenImage awaits load() after the derivative response.
+        // Bind the resulting bootstrap body's completion before releasing A,
+        // rather than asserting B before the old operation resumes.
+        const refreshed = page.waitForEvent(
+          "requestfinished",
+          (request) =>
+            request.method() === "GET" &&
+            new URL(request.url()).pathname === "/api/bootstrap",
+        );
+        await held.fulfill({
+          status: 201,
+          json: {
+            ...sourceAsset,
+            id: "b2222222-2222-4222-8222-222222222222",
+            kind: "TOKEN",
+            width: 512,
+            height: 512,
+          },
+        });
+        held = undefined;
+        await refreshed;
+        // Let bootstrap JSON/load/generation continuations and React's next
+        // paint finish before checking that cancelled A did not affect B.
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => resolve()),
+              ),
+            ),
+        );
+        await expect(editor).toBeVisible();
+        await expect(
+          editor.getByLabel("Название", { exact: true }),
+        ).toHaveValue("New draft B");
+        await expect(
+          editor.getByRole("combobox", {
+            name: "Исходное изображение",
+            exact: true,
+          }),
+        ).toHaveValue("");
+        await expect(
+          editor
+            .getByRole("group", {
+              name: "Изображение токена из файлов",
+              exact: true,
+            })
+            .getByRole("button", { name: "Без изображения", exact: true }),
+        ).toHaveAttribute("aria-pressed", "true");
+      } else {
+        await held.fulfill({
+          status: 500,
+          json: { error: "GENERATION_FAILED", message: "Generation failed" },
+        });
+        held = undefined;
+        await expect(save).toBeEnabled();
+        await expect(name).toHaveValue("Generation draft");
+        await expect(editor.getByRole("alert")).toHaveText("Generation failed");
+      }
+      expect(generationRequests).toHaveLength(1);
+      expect(definitionWrites).toEqual([]);
+    } finally {
+      await held?.abort("blockedbyclient").catch(() => undefined);
+    }
+  });
+}

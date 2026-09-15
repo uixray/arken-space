@@ -48,16 +48,21 @@ const frameLabels: Record<TokenFramePreset, string> = {
 type Props = {
   imageAssets: AssetDto[];
   uploadedSourceId?: string;
+  selectedSourceId?: string;
   disabled?: boolean;
-  onGenerate: (input: {
-    sourceAssetId: string;
-    cropX: number;
-    cropY: number;
-    zoom: number;
-    frame: TokenFramePreset;
-    name?: string;
-  }) => Promise<AssetDto>;
-  onGenerated: (asset: AssetDto) => void;
+  embedded?: boolean;
+  onDraftChange?: (draft: TokenImageDraft | null) => void;
+  onGenerate?: (input: TokenImageDraft) => Promise<AssetDto>;
+  onGenerated?: (asset: AssetDto) => void;
+};
+
+export type TokenImageDraft = {
+  sourceAssetId: string;
+  cropX: number;
+  cropY: number;
+  zoom: number;
+  frame: TokenFramePreset;
+  name?: string;
 };
 
 function sourceName(asset: AssetDto) {
@@ -113,11 +118,16 @@ function TokenFramePreview({ frame }: { frame: TokenFramePreset }) {
 export function TokenImageGenerator({
   imageAssets,
   uploadedSourceId,
+  selectedSourceId,
   disabled = false,
+  embedded = false,
+  onDraftChange,
   onGenerate,
   onGenerated,
 }: Props) {
-  const [sourceAssetId, setSourceAssetId] = useState(imageAssets[0]?.id ?? "");
+  const [sourceAssetId, setSourceAssetId] = useState(
+    selectedSourceId ?? (embedded ? "" : (imageAssets[0]?.id ?? "")),
+  );
   const [transform, setTransform] = useState<TokenImageTransform>(
     DEFAULT_TOKEN_IMAGE_TRANSFORM,
   );
@@ -128,7 +138,24 @@ export function TokenImageGenerator({
   const source =
     imageAssets.find((asset) => asset.id === sourceAssetId) ?? null;
 
+  const reportDraft = (next: TokenImageTransform, asset = source) => {
+    onDraftChange?.(
+      asset
+        ? { sourceAssetId: asset.id, ...next, name: sourceName(asset) }
+        : null,
+    );
+  };
+
   useEffect(() => {
+    if (selectedSourceId !== undefined) {
+      if (selectedSourceId !== sourceAssetId) {
+        setSourceAssetId(selectedSourceId);
+        setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
+      }
+      // Controlled empty selection is an intentional "no source", not a
+      // request to choose the first library image on the following render.
+      return;
+    }
     if (!uploadedSourceId) consumedUploadId.current = undefined;
     if (
       uploadedSourceId &&
@@ -149,12 +176,16 @@ export function TokenImageGenerator({
       return;
     setSourceAssetId(imageAssets[0]?.id ?? "");
     setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
-  }, [imageAssets, sourceAssetId, uploadedSourceId]);
+  }, [imageAssets, selectedSourceId, sourceAssetId, uploadedSourceId]);
 
-  const updateTransform = (next: TokenImageTransform) =>
-    setTransform(clampTokenImageTransform(next));
+  const updateTransform = (next: TokenImageTransform) => {
+    const clamped = clampTokenImageTransform(next);
+    setTransform(clamped);
+    reportDraft(clamped);
+  };
 
   const onPreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!source || disabled || saving) return;
     const next = tokenImageTransformForKey(
       transform,
       event.key,
@@ -163,14 +194,17 @@ export function TokenImageGenerator({
     if (!next) return;
     event.preventDefault();
     setTransform(next);
+    reportDraft(next);
   };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (!source || disabled || saving) return;
     dragStart.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!source || disabled || saving) return;
     const start = dragStart.current;
     if (!start) return;
     const box = event.currentTarget.getBoundingClientRect();
@@ -178,18 +212,18 @@ export function TokenImageGenerator({
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
     dragStart.current = { x: event.clientX, y: event.clientY };
-    setTransform((current) =>
-      clampTokenImageTransform({
-        ...current,
-        // Dragging the image right reveals its left side, hence inverted crop.
-        cropX: current.cropX - dx / box.width,
-        cropY: current.cropY - dy / box.height,
-      }),
-    );
+    const next = clampTokenImageTransform({
+      ...transform,
+      // Dragging the image right reveals its left side, hence inverted crop.
+      cropX: transform.cropX - dx / box.width,
+      cropY: transform.cropY - dy / box.height,
+    });
+    setTransform(next);
+    reportDraft(next);
   };
 
   const generate = async () => {
-    if (!source || saving || disabled) return;
+    if (!source || saving || disabled || !onGenerate || !onGenerated) return;
     setSaving(true);
     setError("");
     try {
@@ -249,9 +283,16 @@ export function TokenImageGenerator({
           disabled={disabled || saving}
           onChange={(event) => {
             setSourceAssetId(event.target.value);
-            setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
+            const next = { ...DEFAULT_TOKEN_IMAGE_TRANSFORM };
+            setTransform(next);
+            reportDraft(
+              next,
+              imageAssets.find((asset) => asset.id === event.target.value) ??
+                null,
+            );
           }}
         >
+          {embedded && <option value="">Выберите исходное изображение</option>}
           {imageAssets.map((asset) => (
             <option key={asset.id} value={asset.id}>
               {asset.name}
@@ -261,9 +302,10 @@ export function TokenImageGenerator({
       </label>
       <div
         className={`token-image-preview token-image-preview--${transform.frame.toLowerCase()}`}
-        tabIndex={0}
+        tabIndex={source ? 0 : -1}
         role="group"
         aria-label={copy.previewLabel}
+        aria-disabled={!source || disabled || saving || undefined}
         onKeyDown={onPreviewKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -289,7 +331,7 @@ export function TokenImageGenerator({
           max="8"
           step="0.1"
           value={transform.zoom}
-          disabled={disabled || saving}
+          disabled={!source || disabled || saving}
           onChange={(event) =>
             updateTransform({ ...transform, zoom: Number(event.target.value) })
           }
@@ -297,7 +339,7 @@ export function TokenImageGenerator({
       </label>
       <fieldset
         className="token-image-generator__frames"
-        disabled={disabled || saving}
+        disabled={!source || disabled || saving}
       >
         <legend>{copy.frame}</legend>
         <div role="radiogroup" aria-label={copy.chooseFrame}>
@@ -318,20 +360,22 @@ export function TokenImageGenerator({
       <div className="token-image-generator__actions">
         <Button
           type="button"
-          onClick={() => setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM })}
-          disabled={disabled || saving}
+          onClick={() => updateTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM })}
+          disabled={!source || disabled || saving}
         >
           {copy.reset}
         </Button>
-        <Button
-          type="button"
-          view="action"
-          onClick={() => void generate()}
-          loading={saving}
-          disabled={disabled || saving || !source}
-        >
-          {copy.create}
-        </Button>
+        {!embedded && (
+          <Button
+            type="button"
+            view="action"
+            onClick={() => void generate()}
+            loading={saving}
+            disabled={disabled || saving || !source}
+          >
+            {copy.create}
+          </Button>
+        )}
       </div>
       {error && (
         <p className="field-error" role="alert">

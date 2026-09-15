@@ -22,14 +22,17 @@ export interface AssetActions {
   uploadAsset: (file: File, kind: AssetKind) => Promise<AssetDto>;
   getAssetUsage: (assetId: string) => Promise<AssetUsageResponseDto>;
   deleteAsset: (assetId: string) => Promise<DeleteAssetResponseDto>;
-  generateTokenImage: (input: {
-    sourceAssetId: string;
-    cropX: number;
-    cropY: number;
-    zoom: number;
-    frame: TokenFramePreset;
-    name?: string;
-  }) => Promise<AssetDto>;
+  generateTokenImage: (
+    input: {
+      sourceAssetId: string;
+      cropX: number;
+      cropY: number;
+      zoom: number;
+      frame: TokenFramePreset;
+      name?: string;
+    },
+    options?: { actionId?: string },
+  ) => Promise<AssetDto>;
 }
 
 export function useAssetActions(dependencies: {
@@ -70,12 +73,14 @@ export function useAssetActions(dependencies: {
         return result;
       },
 
-      generateTokenImage: async ({ sourceAssetId, ...transform }) => {
+      generateTokenImage: async ({ sourceAssetId, ...transform }, options) => {
         const asset = await api<AssetDto>(
           `/api/assets/${sourceAssetId}/token`,
           {
             method: "POST",
-            headers: { "x-action-id": crypto.randomUUID() },
+            headers: {
+              "x-action-id": options?.actionId ?? crypto.randomUUID(),
+            },
             body: JSON.stringify(transform),
           },
         );

@@ -275,7 +275,7 @@ async function installBoundary(page: Page) {
       writes.push(recorded);
       snapshot.snapshotVersion += 1;
       if (path !== "/api/token-definitions") {
-        snapshot.assets = [token, ...snapshot.assets];
+        // Deliberately keep bootstrap stale until definition commit.
         return route.fulfill({ status: 201, json: token });
       }
       const definition: TokenDefinitionDto = {
@@ -289,6 +289,7 @@ async function installBoundary(page: Page) {
         controllerMembershipIds: body.controllerMembershipIds as string[],
         revision: 0,
       };
+      snapshot.assets = [token, ...snapshot.assets];
       snapshot.tokenDefinitions = [definition];
       return route.fulfill({ status: 201, json: definition });
     }
@@ -314,7 +315,7 @@ async function installBoundary(page: Page) {
       await held.route.fulfill({ status: 201, json: b });
     },
     refreshUnrelatedSnapshot() {
-      snapshot.assets = [unrelated, token, b, a];
+      snapshot.assets = [unrelated, b, a];
       snapshot.snapshotVersion += 1;
       expect(sockets.size).toBeGreaterThan(0);
       for (const socket of sockets)
@@ -370,6 +371,14 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     const upload = editor.getByLabel("Загрузить новое изображение", {
       exact: true,
     });
+    const noImage = editor
+      .getByRole("group", {
+        name: "Изображение токена из файлов",
+        exact: true,
+      })
+      .getByRole("button", { name: "Без изображения", exact: true });
+    await expect(noImage).toHaveAttribute("aria-pressed", "true");
+    await expect(editor.locator(".token-image-preview")).toHaveCount(0);
     await upload.setInputFiles({
       name: a.name,
       mimeType: "image/png",
@@ -380,6 +389,7 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
       exact: true,
     });
     await expect(source).toHaveValue(a.id);
+    await expect(noImage).toHaveAttribute("aria-pressed", "false");
     const preview = editor.locator(".token-image-preview");
     const previewImage = preview.locator("img");
     await imageDecoded(previewImage, 60, 40);
@@ -404,7 +414,12 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     });
     await expect.poll(() => fixture.heldUploads.length).toBe(1);
     await expect(source).toHaveValue(a.id);
+    await expect(source).toBeDisabled();
     await expect(zoom).toHaveValue("2");
+    await expect(zoom).toBeDisabled();
+    await expect(editor.getByRole("status")).toHaveText(
+      "Загрузка исходного изображения…",
+    );
     await expect(
       editor.getByRole("radio", { name: "Бронза", exact: true }),
     ).toBeChecked();
@@ -434,6 +449,7 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     // Baseline-capable oracle: with the upload intent removed, B exists but
     // the still-valid A remains selected. Do not change this to a list check.
     await expect(source).toHaveValue(b.id);
+    await expect(noImage).toHaveAttribute("aria-pressed", "false");
     await expect(zoom).toHaveValue("1");
     await expect(
       editor.getByRole("radio", { name: "Без рамки", exact: true }),
@@ -454,24 +470,12 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     await expect(
       images.getByRole("button", { name: b.name, exact: true }),
     ).toHaveCount(0);
-    await editor
-      .getByRole("button", { name: "Создать изображение токена", exact: true })
-      .click();
     await expect(
-      images.getByRole("button", { name: token.name, exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(fixture.writes[2]).toEqual({
-      path: `/api/assets/${b.id}/token`,
-      actionId: expect.stringMatching(uuid),
-      status: 201,
-      body: {
-        cropX: 0.5,
-        cropY: 0.5,
-        zoom: 1,
-        frame: "NONE",
-        name: "SourceB-portrait",
-      },
-    });
+      editor.getByRole("button", {
+        name: "Создать изображение токена",
+        exact: true,
+      }),
+    ).toHaveCount(0);
     await source.selectOption(a.id);
     await zoom.fill("2");
     await preview.focus();
@@ -500,9 +504,14 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     ).toEqual(edited);
     await expect(
       images.getByRole("button", { name: token.name, exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
+    ).toHaveCount(0);
     await preview.scrollIntoViewIfNeeded();
     await capture(page, testInfo, "manual-a-after-live-snapshot");
+    // Return to uploaded B; one Save now generates B and saves its returned ID
+    // even though bootstrap does not yet expose the derivative.
+    await source.selectOption(b.id);
+    await zoom.fill("1");
+    await editor.getByRole("radio", { name: "Без рамки", exact: true }).check();
     await editor
       .getByRole("button", { name: "Сохранить", exact: true })
       .click();
@@ -514,6 +523,18 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     await expect(card.locator("img")).toHaveAttribute("src", token.url);
     await imageDecoded(card.locator("img"), 64, 64);
     expect(fixture.writes).toHaveLength(4);
+    expect(fixture.writes[2]).toEqual({
+      path: `/api/assets/${b.id}/token`,
+      actionId: expect.stringMatching(uuid),
+      status: 201,
+      body: {
+        cropX: 0.5,
+        cropY: 0.5,
+        zoom: 1,
+        frame: "NONE",
+        name: "SourceB-portrait",
+      },
+    });
     expect(fixture.writes[3]).toEqual({
       path: "/api/token-definitions",
       actionId: expect.stringMatching(uuid),
