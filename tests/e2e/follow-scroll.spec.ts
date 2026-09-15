@@ -466,7 +466,19 @@ for (const role of ["GM", "PLAYER"] as const) {
         await test.step("resource PATCH while reading history does not resume follow", async () => {
           await assertFollowing();
           await page.locator(LIST).hover();
-          await page.mouse.wheel(0, -10_000);
+          // A single wheel stroke did not reach the top in Firefox. Navigate
+          // with bounded real input, requiring progress after every stroke;
+          // do not replace the reader interaction with a scrollTop assignment.
+          for (let stroke = 0; stroke < 12; stroke += 1) {
+            const previousTop = await page
+              .locator(LIST)
+              .evaluate((list) => list.scrollTop);
+            if (previousTop === 0) break;
+            await page.mouse.wheel(0, -10_000);
+            await expect
+              .poll(() => page.locator(LIST).evaluate((list) => list.scrollTop))
+              .toBeLessThan(previousTop);
+          }
           await expect
             .poll(() => page.locator(LIST).evaluate((list) => list.scrollTop))
             .toBe(0);
@@ -495,7 +507,7 @@ for (const role of ["GM", "PLAYER"] as const) {
               response.request().method() === "PATCH",
           );
           await decrement.click();
-          await expect(await saved).toBeOK();
+          expect((await saved).ok()).toBe(true);
           await expect(input).toHaveValue(value);
           await assertSavedResource(value);
           await capture("history:after-patch");
