@@ -2501,6 +2501,8 @@ code {
   text-transform: uppercase;
 }
 .auth-panel {
+  /* The intro can reflow when its font loads; keep the login target anchored. */
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);

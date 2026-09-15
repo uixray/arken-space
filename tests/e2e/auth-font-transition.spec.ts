@@ -2,7 +2,8 @@ import { type Request, type Route } from "@playwright/test";
 import { captureAuthClickDiagnostics } from "./auth-click-diagnostics";
 import { expect, test } from "./campaign-fixture";
 
-// Hypothesis probe, not a workaround: only external font binaries are held.
+// Font reflow must not move the login button out from under a held pointer.
+// Only external font binaries are held; auth requests and native input are real.
 const FONT_URL = /^https:\/\/fonts\.gstatic\.com\/[^?#]+\.woff2(?:[?#].*)?$/;
 
 for (const transition of [false, true]) {
