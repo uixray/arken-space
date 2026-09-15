@@ -710,6 +710,9 @@ test("UIX-589 palette replacement and controllers commit in one PATCH with stabl
     await expect.poll(() => fixture.heldPatches.length).toBe(1);
     await expect(save).toBeDisabled();
     await expect(card.locator("img")).toHaveAttribute("src", oldToken.url);
+    await expect(
+      page.getByText("Токен обновлён.", { exact: true }),
+    ).toHaveCount(0);
     expect(fixture.controllerWrites).toEqual([]);
     const firstPatch = fixture.heldPatches[0]!.recorded.body!;
     expect(firstPatch).toEqual({
@@ -730,6 +733,9 @@ test("UIX-589 palette replacement and controllers commit in one PATCH with stabl
     await expect(editor).toBeVisible();
     await expect(card.locator("img")).toHaveAttribute("src", oldToken.url);
     await expect(
+      page.getByText("Токен обновлён.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
       editor.getByRole("checkbox", {
         name: "Игрок атомарной правки",
         exact: true,
@@ -741,6 +747,9 @@ test("UIX-589 palette replacement and controllers commit in one PATCH with stabl
     await expect(card.locator("img")).toHaveAttribute("src", oldToken.url);
     await fixture.finishPatch(true);
     await expect(editor).toHaveCount(0);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Токен обновлён." }),
+    ).toHaveText("Токен обновлён.");
     await expect(card.locator("img")).toHaveAttribute("src", token.url);
     await imageDecoded(card.locator("img"), 64, 64);
     expect(fixture.writes.map((entry) => entry.path)).toEqual([

@@ -526,6 +526,38 @@ it("waits for real HTTP success before closing, keeping unrelated shared errors 
   expect(network.unexpectedRequests).toEqual([]);
 });
 
+it("announces confirmed create-and-place only after the request succeeds", async () => {
+  const network = networkBoundary();
+  renderComponent(
+    <ThemeProvider theme="dark" lang="ru">
+      <Harness onClose={unusedAction} palette />
+    </ThemeProvider>,
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Создать токен" }));
+  await user.type(screen.getByLabelText("Название"), "Страж с подтверждением");
+  await user.click(screen.getByRole("button", { name: readyAsset.name }));
+  await user.click(screen.getByRole("button", { name: "Создать и поставить" }));
+  await waitFor(() => expect(network.tokenRequests).toHaveLength(1));
+  expect(
+    screen.queryByText("Токен создан и размещён на карте."),
+  ).not.toBeInTheDocument();
+  await network.complete(0, 201);
+  expect(
+    await screen.findByText("Токен создан и размещён на карте.", {
+      selector: '[role="status"]',
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("dialog", { name: "Новый токен" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Создать токен" }));
+  expect(
+    screen.queryByText("Токен создан и размещён на карте."),
+  ).not.toBeInTheDocument();
+  expect(network.unexpectedRequests).toEqual([]);
+});
+
 it("keeps reopened PalettePanel editor B after header-close of pending A and A's late HTTP success", async () => {
   const network = networkBoundary();
   renderComponent(
@@ -589,6 +621,9 @@ it("keeps reopened PalettePanel editor B after header-close of pending A and A's
   expect(
     retainedEditor.getByRole("button", { name: "Создать и поставить" }),
   ).toBeEnabled();
+  expect(
+    screen.queryByText("Токен создан и размещён на карте."),
+  ).not.toBeInTheDocument();
   expect(network.tokenRequests).toHaveLength(1);
   expect(network.telemetryRequests).toEqual([]);
   expect(network.unexpectedRequests).toEqual([]);
@@ -628,6 +663,9 @@ it("keeps reopened PalettePanel editor B clean after Escape from pending A and A
   expect(
     retainedEditor.getByRole("button", { name: "Создать и поставить" }),
   ).toBeEnabled();
+  expect(
+    screen.queryByText("Токен создан и размещён на карте."),
+  ).not.toBeInTheDocument();
   expect(screen.getByTestId("shared-error")).toBeEmptyDOMElement();
   expect(network.telemetryRequests).toEqual(["/api/client-logs"]);
   expect(network.tokenRequests).toHaveLength(1);

@@ -1,6 +1,11 @@
 import { expect, test } from "./react-console-guard";
-import type { Locator, Page, Route } from "@playwright/test";
-import type { ChatReadCursorDto, GameSnapshot } from "@arken/contracts";
+import type { Locator, Page, Route, WebSocketRoute } from "@playwright/test";
+import type {
+  AssetDto,
+  ChatReadCursorDto,
+  GameSnapshot,
+  TokenDefinitionDto,
+} from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import {
   tokenParitySource,
@@ -375,6 +380,7 @@ async function mockBootstrap(
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"/>',
       }),
   );
+  return fixture;
 }
 
 for (const size of [
@@ -482,7 +488,31 @@ test("UIX-589 GM saves crop and definition with one confirmation", async ({
     actionId: string | null;
   }> = [];
   const definitionRequests: Array<Record<string, unknown>> = [];
-  await mockBootstrap(page, "GM");
+  const fixture = await mockBootstrap(page, "GM");
+  const sourceBytes = await tokenParitySource(800, 600);
+  const reference = await tokenParityReference(sourceBytes, {
+    cropX: 0.51,
+    cropY: 0.51,
+    zoom: 2,
+    frame: "BRONZE",
+  });
+  const derivative: AssetDto = {
+    ...sourceAsset,
+    id: "b2222222-2222-4222-8222-222222222222",
+    kind: "TOKEN",
+    name: "Explorer token",
+    mimeType: "image/webp",
+    sizeBytes: reference.bytes.length,
+    width: 512,
+    height: 512,
+    url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
+  };
+  await page.route(`**${sourceAsset.url}`, (route) =>
+    route.fulfill({ contentType: "image/png", body: sourceBytes }),
+  );
+  await page.route(`**${derivative.url}`, (route) =>
+    route.fulfill({ contentType: "image/webp", body: reference.bytes }),
+  );
   await page.route(
     "**/api/assets/a1111111-1111-4111-8111-111111111111/token",
     async (route) => {
@@ -493,16 +523,7 @@ test("UIX-589 GM saves crop and definition with one confirmation", async ({
       await route.fulfill({
         status: 201,
         contentType: "application/json",
-        body: JSON.stringify({
-          ...sourceAsset,
-          id: "b2222222-2222-4222-8222-222222222222",
-          kind: "TOKEN",
-          name: "Explorer token",
-          mimeType: "image/webp",
-          width: 512,
-          height: 512,
-          url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
-        }),
+        body: JSON.stringify(derivative),
       });
     },
   );
@@ -510,11 +531,21 @@ test("UIX-589 GM saves crop and definition with one confirmation", async ({
     definitionRequests.push(
       route.request().postDataJSON() as Record<string, unknown>,
     );
-    await route.fulfill({
-      status: 201,
-      contentType: "application/json",
-      body: "{}",
-    });
+    const definition: TokenDefinitionDto = {
+      id: "45f46186-2ebc-4cf8-bce7-870097305a99",
+      name: "Guard",
+      ownName: "Guard",
+      characterId: null,
+      defaultAssetId: derivative.id,
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 0,
+    };
+    fixture.assets = [derivative, sourceAsset];
+    fixture.tokenDefinitions = [definition];
+    fixture.snapshotVersion += 1;
+    await route.fulfill({ status: 201, json: definition });
   });
 
   await page.goto("/");
@@ -558,6 +589,21 @@ test("UIX-589 GM saves crop and definition with one confirmation", async ({
     controllerMembershipIds: [],
     actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
+  await expect(
+    page.getByRole("status").filter({ hasText: "Токен создан." }),
+  ).toHaveText("Токен создан.");
+  const card = page.locator(".palette-card").filter({ hasText: "Guard" });
+  await expect(card).toBeVisible();
+  await expect(card.locator("img")).toHaveAttribute("src", derivative.url);
+  await expect
+    .poll(() =>
+      card.locator("img").evaluate((node) => ({
+        complete: (node as HTMLImageElement).complete,
+        width: (node as HTMLImageElement).naturalWidth,
+        height: (node as HTMLImageElement).naturalHeight,
+      })),
+    )
+    .toEqual({ complete: true, width: 512, height: 512 });
 });
 
 test("UIX-255 player palette does not expose GM token generator controls", async ({
@@ -753,95 +799,234 @@ for (const viewport of [
 
 test("UIX-613 GM creates and places token on active scene in one action", async ({
   page,
-}) => {
+}, info) => {
   const tokenRequests: Array<Record<string, unknown>> = [];
   const writeOrder: string[] = [];
-  await mockBootstrap(page, "GM");
+  const fixture = await mockBootstrap(page, "GM");
+  fixture.assets = [];
+  const sourceBytes = await tokenParitySource(800, 600);
+  const uploadedSource: AssetDto = {
+    ...sourceAsset,
+    sizeBytes: sourceBytes.length,
+  };
+  const reference = await tokenParityReference(sourceBytes, {
+    cropX: 0.5,
+    cropY: 0.5,
+    zoom: 1,
+    frame: "NONE",
+  });
+  const derivative: AssetDto = {
+    ...sourceAsset,
+    id: "b2222222-2222-4222-8222-222222222222",
+    kind: "TOKEN",
+    name: "Explorer token",
+    mimeType: "image/webp",
+    sizeBytes: reference.bytes.length,
+    width: 512,
+    height: 512,
+    url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
+  };
+  const sockets = new Set<WebSocketRoute>();
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString() === "40") {
+        sockets.add(socket);
+        socket.send('40{"sid":"token-success-socket"}');
+      }
+    });
+    socket.onClose(() => sockets.delete(socket));
+    socket.send(
+      '0{"sid":"token-success-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.route(`**${sourceAsset.url}`, (route) =>
+    route.fulfill({ contentType: "image/png", body: sourceBytes }),
+  );
+  await page.route(`**${derivative.url}`, (route) =>
+    route.fulfill({ contentType: "image/webp", body: reference.bytes }),
+  );
+  await page.route(
+    (url) => url.pathname === "/api/assets",
+    async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      expect(new URL(route.request().url()).searchParams.get("kind")).toBe(
+        "IMAGE",
+      );
+      const request = route.request();
+      const form = await new Response(
+        new Uint8Array(request.postDataBuffer()!),
+        {
+          headers: { "content-type": request.headers()["content-type"]! },
+        },
+      ).formData();
+      expect([...form.keys()]).toEqual(["file"]);
+      const file = form.get("file");
+      if (!file || typeof file === "string")
+        throw new Error("Expected local image File");
+      expect(file.name).toBe("Explorer.png");
+      expect(file.type).toBe("image/png");
+      expect(Buffer.from(await file.arrayBuffer())).toEqual(sourceBytes);
+      writeOrder.push("upload");
+      fixture.assets = [uploadedSource];
+      fixture.snapshotVersion += 1;
+      await route.fulfill({ status: 201, json: uploadedSource });
+    },
+  );
   await page.route(
     "**/api/assets/a1111111-1111-4111-8111-111111111111/token",
     async (route) => {
       writeOrder.push("derivative");
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({
-          ...sourceAsset,
-          id: "b2222222-2222-4222-8222-222222222222",
-          kind: "TOKEN",
-          name: "Explorer token",
-          mimeType: "image/webp",
-          width: 512,
-          height: 512,
-          url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
-        }),
+      expect(route.request().postDataJSON()).toEqual({
+        cropX: 0.5,
+        cropY: 0.5,
+        zoom: 1,
+        frame: "NONE",
+        name: "Explorer",
       });
+      // Bootstrap remains without TOKEN until placement commits.
+      await route.fulfill({ status: 201, json: derivative });
     },
   );
   await page.route("**/api/tokens", async (route) => {
-    if (route.request().method() === "POST") {
-      writeOrder.push("placement");
-      tokenRequests.push(
-        route.request().postDataJSON() as Record<string, unknown>,
-      );
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({
-          id: "35f46186-2ebc-4cf8-bce7-870097305a99",
-          definitionId: "45f46186-2ebc-4cf8-bce7-870097305a99",
-          definitionRevision: 0,
-          baseColor: "#8899aa",
-          frameColor: null,
-          layer: "PLAYER",
-          conditions: [],
-          sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
-          characterId: null,
-          ownerMembershipId: null,
-          controllerMembershipIds: [],
-          x: 768,
-          y: 468,
-          width: 64,
-          height: 64,
-          rotation: 0,
-          assetId: "b2222222-2222-4222-8222-222222222222",
-          name: "Ranger",
-          character: null,
-          asset: null,
-          revision: 0,
-        }),
-      });
-    } else {
-      await route.fallback();
-    }
+    if (route.request().method() !== "POST") return route.fallback();
+    writeOrder.push("placement");
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    tokenRequests.push(body);
+    const definition: TokenDefinitionDto = {
+      id: "45f46186-2ebc-4cf8-bce7-870097305a99",
+      name: "Ranger",
+      ownName: "Ranger",
+      characterId: null,
+      defaultAssetId: derivative.id,
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 0,
+    };
+    const placed: GameSnapshot["tokens"][number] = {
+      id: "35f46186-2ebc-4cf8-bce7-870097305a99",
+      definitionId: definition.id,
+      definitionRevision: 0,
+      baseColor: "#8899aa",
+      frameColor: null,
+      layer: "PLAYER",
+      conditions: [],
+      sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
+      characterId: null,
+      ownerMembershipId: null,
+      controllerMembershipIds: [],
+      x: 768,
+      y: 468,
+      z: 0,
+      levelId: null,
+      visible: true,
+      locked: false,
+      width: 64,
+      height: 64,
+      rotation: 0,
+      assetId: derivative.id,
+      name: "Ranger",
+      revision: 0,
+    };
+    fixture.assets = [derivative, uploadedSource];
+    fixture.tokenDefinitions = [definition];
+    fixture.tokens = [placed];
+    fixture.snapshotVersion += 1;
+    expect(sockets.size).toBeGreaterThan(0);
+    for (const socket of sockets)
+      socket.send(`42${JSON.stringify(["game:snapshot", fixture])}`);
+    await route.fulfill({ status: 201, json: placed });
   });
-
   await page.goto("/");
+  await expect.poll(() => sockets.size).toBeGreaterThan(0);
   await openWorkspaceSection(page, "Токены");
   await page.locator(".token-palette > button").click();
-  const editor = page.locator(".g-modal").last();
-  await expect(editor.locator(".token-image-generator")).toBeVisible();
-  await chooseEmbeddedSource(editor);
-
+  const editor = page.getByRole("dialog", { name: "Новый токен", exact: true });
+  await expect(
+    editor.getByRole("button", { name: "Без изображения", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await editor
+    .getByLabel("Загрузить новое изображение", { exact: true })
+    .setInputFiles({
+      name: "Explorer.png",
+      mimeType: "image/png",
+      buffer: sourceBytes,
+    });
+  await expect(
+    editor.getByRole("combobox", { name: "Исходное изображение", exact: true }),
+  ).toHaveValue(sourceAsset.id);
+  await expect(
+    editor.getByRole("button", { name: "Без изображения", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await expect
+    .poll(() =>
+      editor.locator(".token-image-preview img").evaluate((node) => ({
+        width: (node as HTMLImageElement).naturalWidth,
+        height: (node as HTMLImageElement).naturalHeight,
+      })),
+    )
+    .toEqual({ width: 800, height: 600 });
   await expect(
     editor.getByRole("button", { name: "Создать изображение токена" }),
   ).toHaveCount(0);
-  await editor.locator("form input").first().fill("Ranger");
-  const createAndPlaceButton = editor.locator(
-    'button[value="create-and-place"]',
-  );
-  await expect(createAndPlaceButton).toBeVisible();
-  await createAndPlaceButton.click();
-
+  await editor.getByLabel("Название", { exact: true }).fill("Ranger");
+  await editor.locator('button[value="create-and-place"]').click();
   await expect.poll(() => tokenRequests.length).toBe(1);
-  expect(writeOrder).toEqual(["derivative", "placement"]);
+  expect(writeOrder).toEqual(["upload", "derivative", "placement"]);
   expect(tokenRequests[0]).toMatchObject({
     sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
     name: "Ranger",
-    assetId: "b2222222-2222-4222-8222-222222222222",
+    assetId: derivative.id,
     width: 64,
     height: 64,
     controllerMembershipIds: [],
     actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+  });
+  await expect(editor).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Токен создан и размещён на карте." }),
+  ).toHaveText("Токен создан и размещён на карте.");
+  const card = page.locator(".palette-card").filter({ hasText: "Ranger" });
+  await expect(card).toBeVisible();
+  await expect(card.locator("img")).toHaveAttribute("src", derivative.url);
+  await expect
+    .poll(() =>
+      card.locator("img").evaluate((node) => ({
+        complete: (node as HTMLImageElement).complete,
+        width: (node as HTMLImageElement).naturalWidth,
+        height: (node as HTMLImageElement).naturalHeight,
+      })),
+    )
+    .toEqual({ complete: true, width: 512, height: 512 });
+  await expect(page.locator(".map-viewport")).toHaveAttribute(
+    "data-token-image-states",
+    "35f46186-2ebc-4cf8-bce7-870097305a99:loaded",
+  );
+  const screenshot = info.outputPath("token-created-and-placed.png");
+  await page.screenshot({ path: screenshot });
+  await info.attach("token-created-and-placed", {
+    path: screenshot,
+    contentType: "image/png",
+  });
+  const palette = page.getByRole("dialog", { name: "Токены", exact: true });
+  await palette
+    .getByRole("button", { name: "Закрыть окно", exact: true })
+    .click();
+  await expect(palette).toHaveCount(0);
+  const map = page.locator(".map-viewport");
+  await expect(map).toBeVisible();
+  await expect(map.locator("canvas").first()).toBeVisible();
+  await expect(map).toHaveAttribute(
+    "data-token-image-states",
+    "35f46186-2ebc-4cf8-bce7-870097305a99:loaded",
+  );
+  const mapScreenshot = info.outputPath("token-created-and-placed-map.png");
+  await map.screenshot({ path: mapScreenshot, animations: "disabled" });
+  await info.attach("token-created-and-placed-map", {
+    path: mapScreenshot,
+    contentType: "image/png",
   });
 });
 

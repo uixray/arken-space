@@ -29,6 +29,7 @@ export function PalettePanel(props: Props) {
   const [editor, setEditor] = useState<
     (typeof definitions)[number] | "NEW" | null
   >(null);
+  const [editorNotice, setEditorNotice] = useState("");
   const [deleteDefinition, setDeleteDefinition] = useState<
     (typeof definitions)[number] | null
   >(null);
@@ -49,9 +50,20 @@ export function PalettePanel(props: Props) {
         <span className="revision">{definitions.length}</span>
       </div>
       {props.snapshot.me.role === "GM" && (
-        <Button view="action" onClick={() => setEditor("NEW")}>
+        <Button
+          view="action"
+          onClick={() => {
+            setEditorNotice("");
+            setEditor("NEW");
+          }}
+        >
           Создать токен
         </Button>
+      )}
+      {editorNotice && (
+        <p className="field-notice" role="status">
+          {editorNotice}
+        </p>
       )}
       <p className="muted">
         {props.snapshot.campaign.paused
@@ -168,7 +180,12 @@ export function PalettePanel(props: Props) {
               )}
               {props.snapshot.me.role === "GM" && (
                 <div className="inline-fields">
-                  <Button onClick={() => setEditor(definition)}>
+                  <Button
+                    onClick={() => {
+                      setEditorNotice("");
+                      setEditor(definition);
+                    }}
+                  >
                     Настроить
                   </Button>
                   <Button
@@ -193,6 +210,15 @@ export function PalettePanel(props: Props) {
           onUpload={assetActions.uploadAsset}
           onGenerateTokenImage={assetActions.generateTokenImage}
           onCancel={() => setEditor(null)}
+          onSaved={(outcome) =>
+            setEditorNotice(
+              outcome === "created"
+                ? "Токен создан."
+                : outcome === "created-and-placed"
+                  ? "Токен создан и размещён на карте."
+                  : "Токен обновлён.",
+            )
+          }
           onCreate={tokenActions.onCreateTokenDefinition}
           onCreateAndPlace={tokenActions.onCreateAndPlaceTokenDefinition}
           onPatch={tokenActions.onPatchTokenDefinition}
@@ -341,6 +367,7 @@ export function TokenDefinitionEditor({
   onUpload,
   onGenerateTokenImage,
   onCancel,
+  onSaved,
   onCreate,
   onCreateAndPlace,
   onPatch,
@@ -352,6 +379,7 @@ export function TokenDefinitionEditor({
   onUpload: AssetActions["uploadAsset"];
   onGenerateTokenImage: AssetActions["generateTokenImage"];
   onCancel: () => void;
+  onSaved?: (outcome: "created" | "created-and-placed" | "updated") => void;
   onCreate: TokenDefinitionActions["onCreateTokenDefinition"];
   onCreateAndPlace: TokenDefinitionActions["onCreateAndPlaceTokenDefinition"];
   onPatch: TokenDefinitionActions["onPatchTokenDefinition"];
@@ -547,6 +575,13 @@ export function TokenDefinitionEditor({
         if (!current()) return;
       }
       if (current()) {
+        onSaved?.(
+          definition
+            ? "updated"
+            : createAndPlace
+              ? "created-and-placed"
+              : "created",
+        );
         savingRef.current = false;
         setSaving(false);
         cancelEditor();
