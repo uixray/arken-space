@@ -15,6 +15,7 @@ import { filterStickerPacks } from "./sticker-picker-state";
 import { useOverlayPopupClassName } from "./ui/overlay-owner";
 import { AppIcon } from "./ui/AppIcon";
 import { StickerPickerIcon } from "./ui/icons";
+import { retainJournalPopupOwner } from "./ui/useCompactNavigation";
 
 const categories = [
   ["COMMON", "Общие"],
@@ -70,6 +71,11 @@ export function StickerPicker({
   useLayoutEffect(() => {
     if (disabled) changeOpen(false);
   }, [disabled, changeOpen]);
+
+  useLayoutEffect(() => {
+    if (!open || disabled || !anchor) return;
+    return retainJournalPopupOwner(anchor);
+  }, [anchor, open, disabled]);
 
   useEffect(() => {
     if (!open || !anchor) return;

@@ -53,6 +53,8 @@ export function PlayerRequestsWorkspace({
     resolutionNote?: string,
   ) => Promise<void>;
 }) {
+  const titleId = useId();
+  const bodyId = useId();
   const horizonId = useId();
   const audienceId = useId();
   const characterId = useId();
@@ -148,23 +150,25 @@ export function PlayerRequestsWorkspace({
         {!isGm && (
           <form className="player-requests__form" onSubmit={submit}>
             <h3>{editing ? "Редактировать заявку" : "Новая заявка"}</h3>
-            <label>
-              Название
+            <div className="player-requests__field">
+              <label htmlFor={titleId}>Название</label>
               <input
+                id={titleId}
                 maxLength={120}
                 value={draft.title}
                 onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               />
-            </label>
-            <label>
-              Описание
+            </div>
+            <div className="player-requests__field">
+              <label htmlFor={bodyId}>Описание</label>
               <textarea
+                id={bodyId}
                 maxLength={4000}
                 rows={5}
                 value={draft.body}
                 onChange={(e) => setDraft({ ...draft, body: e.target.value })}
               />
-            </label>
+            </div>
             {!editing && (
               <div className="player-requests__grid">
                 <div className="player-requests__field">

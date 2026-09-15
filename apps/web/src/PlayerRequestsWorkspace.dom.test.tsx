@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
-import { renderComponent, screen } from "./test-support/render";
+import { fireEvent, renderComponent, screen } from "./test-support/render";
 import { playerSnapshot } from "./test-support/game-snapshot-fixtures";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 
@@ -22,7 +22,7 @@ vi.mock("./ui/ArkenDialog", () => ({
     ) : null,
 }));
 
-it("gives native request selects exact labels without option text", () => {
+it("keeps native request field labels exact after controlled draft rerenders", () => {
   renderComponent(
     <PlayerRequestsWorkspace
       open
@@ -33,6 +33,23 @@ it("gives native request selects exact labels without option text", () => {
       onAction={async () => {}}
     />,
   );
+
+  const title = screen.getByLabelText<HTMLInputElement>("Название", {
+    exact: true,
+  });
+  const description = screen.getByLabelText<HTMLTextAreaElement>("Описание", {
+    exact: true,
+  });
+  fireEvent.change(description, { target: { value: "Черновик описания" } });
+  fireEvent.change(title, { target: { value: "Черновик названия" } });
+
+  expect(screen.getByLabelText("Название", { exact: true })).toBe(title);
+  expect(screen.getByLabelText("Описание", { exact: true })).toBe(description);
+  expect(title).toHaveValue("Черновик названия");
+  expect(description).toHaveValue("Черновик описания");
+  expect(description).toHaveAccessibleName("Описание");
+  expect(description.labels).toHaveLength(1);
+  expect(description.labels![0]!.textContent?.trim()).toBe("Описание");
 
   for (const name of ["Когда", "Кто увидит", "Персонаж (необязательно)"]) {
     const control = screen.getByRole<HTMLSelectElement>("combobox", { name });
