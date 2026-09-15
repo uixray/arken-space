@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SceneDto } from "@arken/contracts";
 import { useDismissibleDetails } from "../ui/dismissible-details";
+import { AppIcon } from "../ui/AppIcon";
+import { GridSettingsIcon } from "../ui/icons";
 
 export interface GridSettingsProps {
   scene: SceneDto;
@@ -43,7 +45,8 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
         className="toolbar-detail-trigger"
         data-tool="GRID"
       >
-        Сетка
+        <AppIcon icon={GridSettingsIcon} />
+        <span className="map-tool__label">Сетка</span>
       </summary>
       <div className="grid-settings-popover">
         <label>

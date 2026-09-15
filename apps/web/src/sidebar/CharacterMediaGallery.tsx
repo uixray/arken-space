@@ -17,6 +17,13 @@ import {
   stepViewerItem,
 } from "../character-media-gallery-state";
 import type { AssetActions } from "../use-asset-actions";
+import { AppIcon } from "../ui/AppIcon";
+import {
+  MoveDownIcon,
+  MoveUpIcon,
+  NextPageIcon,
+  PreviousPageIcon,
+} from "../ui/icons";
 
 const CATEGORY_OPTIONS = Object.keys(
   CHARACTER_MEDIA_CATEGORY_LABELS,
@@ -284,7 +291,7 @@ export function CharacterMediaGallery({
                     title="Переместить выше"
                     onClick={() => void reorder(item.id, "up")}
                   >
-                    ↑
+                    <AppIcon icon={MoveUpIcon} />
                   </Button>
                   <Button
                     size="s"
@@ -295,7 +302,7 @@ export function CharacterMediaGallery({
                     title="Переместить ниже"
                     onClick={() => void reorder(item.id, "down")}
                   >
-                    ↓
+                    <AppIcon icon={MoveDownIcon} />
                   </Button>
                   <Button
                     size="s"
@@ -741,7 +748,7 @@ function MediaViewer({
                 if (previous) onNavigate(previous);
               }}
             >
-              ← Назад
+              <AppIcon icon={PreviousPageIcon} /> Назад
             </Button>
             <Button
               aria-label="Следующее изображение"
@@ -750,7 +757,7 @@ function MediaViewer({
                 if (next) onNavigate(next);
               }}
             >
-              Далее →
+              Далее <AppIcon icon={NextPageIcon} />
             </Button>
           </div>
         )}

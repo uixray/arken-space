@@ -6,6 +6,14 @@ import { FormInput } from "../ui/GravityFormControls";
 import { useRemoteFieldValue } from "../ui/remote-field-value";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 import { ArkenDialog } from "../ui/ArkenDialog";
+import { AppIcon } from "../ui/AppIcon";
+import {
+  AddIcon,
+  DeleteIcon,
+  MoveDownIcon,
+  MoveUpIcon,
+  RenameIcon,
+} from "../ui/icons";
 
 /** То, чем строка держится: сервер отвечает этим на попытку её удалить. */
 export interface StatKeyReference {
@@ -189,7 +197,7 @@ export function StatLayoutCard({
                     aria-label={`Переместить «${row.label}» выше`}
                     title="Переместить выше"
                   >
-                    <span aria-hidden="true">↑</span>
+                    <AppIcon icon={MoveUpIcon} />
                   </Button>
                   <Button
                     view="flat"
@@ -202,7 +210,7 @@ export function StatLayoutCard({
                     aria-label={`Переместить «${row.label}» ниже`}
                     title="Переместить ниже"
                   >
-                    <span aria-hidden="true">↓</span>
+                    <AppIcon icon={MoveDownIcon} />
                   </Button>
                   <Button
                     view="flat"
@@ -216,7 +224,7 @@ export function StatLayoutCard({
                     aria-label={`Переименовать «${row.label}»`}
                     title="Переименовать строку"
                   >
-                    <span aria-hidden="true">✎</span>
+                    <AppIcon icon={RenameIcon} />
                   </Button>
                   <Button
                     view="flat"
@@ -237,7 +245,7 @@ export function StatLayoutCard({
                         : "Удалить строку"
                     }
                   >
-                    <span aria-hidden="true">×</span>
+                    <AppIcon icon={DeleteIcon} />
                   </Button>
                 </>
               )}
@@ -250,7 +258,7 @@ export function StatLayoutCard({
             className="stat-field__add"
             onClick={() => setEditing({})}
           >
-            <span aria-hidden="true">＋</span> Добавить строку
+            <AppIcon icon={AddIcon} /> Добавить строку
           </Button>
         )}
       </div>

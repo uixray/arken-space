@@ -1,3 +1,4 @@
+import { useComposerSuggestions } from "../ui/use-composer-suggestions";
 import { RollVisibilityContext } from "../roll-visibility-context";
 import {
   useCallback,
@@ -35,6 +36,8 @@ import {
 } from "../stat-keys";
 
 import { useDismissibleDetails } from "../ui/dismissible-details";
+import { AppIcon } from "../ui/AppIcon";
+import { MoreIcon, SendIcon } from "../ui/icons";
 import {
   ACTIVITY_FILTERS,
   ACTIVITY_FILTER_LABEL,
@@ -344,7 +347,6 @@ export function ActivityPanel({
   const [composerInvalid, setComposerInvalid] = useState(false);
   const [quickRollError, setQuickRollError] = useState("");
   const [resourceError, setResourceError] = useState("");
-  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const availableRollCharacters = useMemo(
     () => charactersAvailableForActivityRolls(snapshot),
     [snapshot],
@@ -386,16 +388,37 @@ export function ActivityPanel({
     () => statLabelsFromLayout(snapshot.campaign.statLayout),
     [snapshot.campaign.statLayout],
   );
-  const slashSuggestions = slashHelpOpen
-    ? getSlashCommandSuggestions("/", characterStats, statLabels)
-    : getSlashCommandSuggestions(composer, characterStats, statLabels);
+  const {
+    rootRef: suggestionsRootRef,
+    textareaRef: suggestionsTextareaRef,
+    visible: suggestionsVisible,
+    explicit: suggestionsExplicit,
+    complete: completeSuggestions,
+    isComposing: isSuggestionsComposing,
+    onKeyDown: onSuggestionsKeyDown,
+    onCompositionStart: onSuggestionsCompositionStart,
+    onCompositionEnd: onSuggestionsCompositionEnd,
+    edited: onSuggestionsEdited,
+    toggle: toggleSuggestions,
+  } = useComposerSuggestions(
+    `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${snapshot.me.characterId ?? "none"}:activity`,
+    getSlashCommandSuggestions(composer, characterStats, statLabels).length > 0,
+  );
+  const slashSuggestions = suggestionsVisible
+    ? getSlashCommandSuggestions(
+        suggestionsExplicit ? "/" : composer,
+        characterStats,
+        statLabels,
+      )
+    : [];
   const executeActivitySuggestion = (insertion: string) => {
     const intent = parseComposerInput(insertion, characterStats, statLabels);
-    setSlashHelpOpen(false);
+    completeSuggestions();
     if (intent.kind !== "ROLL") {
       setComposer(insertion);
       return;
     }
+    const suggestionToken = activityDraft.touch();
     setComposer("");
     setComposerError("");
     setComposerInvalid(false);
@@ -405,13 +428,14 @@ export function ActivityPanel({
       "PUBLIC",
       snapshot.me.characterId,
       "NORMAL",
-    ).catch((reason) =>
+    ).catch((reason) => {
+      if (!activityDraft.isCurrentScope(suggestionToken)) return;
       setComposerError(
         reason instanceof Error && reason.message
           ? reason.message
           : "Не удалось выполнить бросок. Повторите попытку.",
-      ),
-    );
+      );
+    });
   };
   // UIX-388: a direct submit with the chosen visibility, not a mode toggle --
   // see composer-keyboard-intent.ts for why. Both the Send button (a normal
@@ -463,6 +487,7 @@ export function ActivityPanel({
   const onComposerKeyDown = (
     event: ReactKeyboardEvent<HTMLTextAreaElement>,
   ) => {
+    if (isSuggestionsComposing(event)) return;
     const action = decideComposerKeydown({
       key: event.key,
       ctrlKey: event.ctrlKey,
@@ -728,7 +753,7 @@ export function ActivityPanel({
             aria-label={activityFilterSummaryTitle(activityFilters)}
             title={activityFilterSummaryTitle(activityFilters)}
           >
-            <span aria-hidden="true">⋯</span>
+            <AppIcon icon={MoreIcon} />
             <span className="activity-filters-summary__label">Показывать</span>
             {hiddenActivityStreamCount(activityFilters) > 0 && (
               <span className="activity-filters-badge" aria-hidden="true">
@@ -873,8 +898,15 @@ export function ActivityPanel({
         </Button>
       )}
       <form className="chat-compose chat-compose--single" onSubmit={submit}>
-        <div className="chat-composer-input">
+        <div
+          className="chat-composer-input"
+          ref={suggestionsRootRef}
+          onKeyDown={onSuggestionsKeyDown}
+          onCompositionStart={onSuggestionsCompositionStart}
+          onCompositionEnd={onSuggestionsCompositionEnd}
+        >
           <FormTextArea
+            controlRef={suggestionsTextareaRef}
             aria-label="Сообщение или бросок"
             aria-invalid={composerInvalid || undefined}
             aria-describedby={
@@ -890,7 +922,7 @@ export function ActivityPanel({
             placeholder={"Сообщение? Введите / для быстрых команд"}
             value={composer}
             onChange={(event) => {
-              setSlashHelpOpen(false);
+              onSuggestionsEdited();
               setComposer(event.target.value);
               setComposerError("");
               setComposerInvalid(false);
@@ -919,7 +951,7 @@ export function ActivityPanel({
                   ? "activity-slash-suggestions"
                   : undefined
               }
-              onClick={() => setSlashHelpOpen((open) => !open)}
+              onClick={toggleSuggestions}
             >
               <span aria-hidden="true">/</span>
             </Button>
@@ -930,7 +962,7 @@ export function ActivityPanel({
               aria-label={`Отправить. ${SEND_TOOLTIP}`}
               title={SEND_TOOLTIP}
             >
-              <span aria-hidden="true">{"➤"}</span>
+              <AppIcon icon={SendIcon} />
             </Button>
           </div>
           {slashSuggestions.length > 0 && (
@@ -945,6 +977,7 @@ export function ActivityPanel({
                   key={suggestion.command}
                   type="button"
                   role="option"
+                  tabIndex={-1}
                   aria-selected="false"
                   onClick={() =>
                     executeActivitySuggestion(suggestion.insertion)
@@ -1375,7 +1408,6 @@ export function ChatPanel({
   const composer = chatDraft.value;
   const setComposer = chatDraft.setValue;
   const [composerError, setComposerError] = useState("");
-  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const messages = useMemo(
     () =>
       messagesForStream(snapshot.messages, activeStream, snapshot.chatThreads),
@@ -1415,19 +1447,34 @@ export function ChatPanel({
   const canCompose =
     activeStream === "TABLE" ||
     (activeStream === "STORY" && snapshot.me.role === "GM");
-  const slashSuggestions =
-    activeStream === "TABLE"
-      ? slashHelpOpen
-        ? getSlashCommandSuggestions("/")
-        : getSlashCommandSuggestions(composer)
-      : [];
+  const {
+    rootRef: suggestionsRootRef,
+    textareaRef: suggestionsTextareaRef,
+    visible: suggestionsVisible,
+    explicit: suggestionsExplicit,
+    complete: completeSuggestions,
+    isComposing: isSuggestionsComposing,
+    onKeyDown: onSuggestionsKeyDown,
+    onCompositionStart: onSuggestionsCompositionStart,
+    onCompositionEnd: onSuggestionsCompositionEnd,
+    edited: onSuggestionsEdited,
+    toggle: toggleSuggestions,
+  } = useComposerSuggestions(
+    `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${snapshot.me.characterId ?? "none"}:${activeStream}`,
+    getSlashCommandSuggestions(composer).length > 0,
+    visible && activeStream === "TABLE",
+  );
+  const slashSuggestions = suggestionsVisible
+    ? getSlashCommandSuggestions(suggestionsExplicit ? "/" : composer)
+    : [];
   const executeChatSuggestion = (insertion: string) => {
     const intent = parseComposerInput(insertion);
-    setSlashHelpOpen(false);
+    completeSuggestions();
     if (intent.kind !== "ROLL") {
       setComposer(insertion);
       return;
     }
+    const suggestionToken = chatDraft.touch();
     setComposer("");
     setComposerError("");
     void onRoll(
@@ -1436,9 +1483,10 @@ export function ChatPanel({
       "PUBLIC",
       snapshot.me.characterId,
       "NORMAL",
-    ).catch(() =>
-      setComposerError("Не удалось выполнить бросок. Повторите попытку."),
-    );
+    ).catch(() => {
+      if (chatDraft.isCurrentScope(suggestionToken))
+        setComposerError("Не удалось выполнить бросок. Повторите попытку.");
+    });
   };
 
   useEffect(() => {
@@ -1503,6 +1551,7 @@ export function ChatPanel({
   const onComposerKeyDown = (
     event: ReactKeyboardEvent<HTMLTextAreaElement>,
   ) => {
+    if (isSuggestionsComposing(event)) return;
     const action = decideComposerKeydown({
       key: event.key,
       ctrlKey: event.ctrlKey,
@@ -1613,8 +1662,15 @@ export function ChatPanel({
       {canCompose && (
         <>
           <form className="chat-compose chat-compose--single" onSubmit={submit}>
-            <div className="chat-composer-input">
+            <div
+              className="chat-composer-input"
+              ref={suggestionsRootRef}
+              onKeyDown={onSuggestionsKeyDown}
+              onCompositionStart={onSuggestionsCompositionStart}
+              onCompositionEnd={onSuggestionsCompositionEnd}
+            >
               <FormTextArea
+                controlRef={suggestionsTextareaRef}
                 aria-label={
                   activeStream === "STORY"
                     ? "Сообщение сюжета"
@@ -1633,7 +1689,7 @@ export function ChatPanel({
                 }
                 value={composer}
                 onChange={(event) => {
-                  setSlashHelpOpen(false);
+                  onSuggestionsEdited();
                   setComposer(event.target.value);
                 }}
                 onKeyDown={onComposerKeyDown}
@@ -1663,7 +1719,7 @@ export function ChatPanel({
                       ? "chat-slash-suggestions"
                       : undefined
                   }
-                  onClick={() => setSlashHelpOpen((open) => !open)}
+                  onClick={toggleSuggestions}
                 >
                   <span aria-hidden="true">/</span>
                 </Button>
@@ -1674,7 +1730,7 @@ export function ChatPanel({
                   aria-label={`Отправить. ${SEND_TOOLTIP}`}
                   title={SEND_TOOLTIP}
                 >
-                  <span aria-hidden="true">{"➤"}</span>
+                  <AppIcon icon={SendIcon} />
                 </Button>
               </div>
               {slashSuggestions.length > 0 && (
@@ -1689,6 +1745,7 @@ export function ChatPanel({
                       key={suggestion.command}
                       type="button"
                       role="option"
+                      tabIndex={-1}
                       aria-selected="false"
                       onClick={() =>
                         executeChatSuggestion(suggestion.insertion)

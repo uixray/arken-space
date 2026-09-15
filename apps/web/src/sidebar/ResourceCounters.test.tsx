@@ -105,6 +105,19 @@ describe("счётчики ресурсов", () => {
     expect(screen.getByText("10")).toBeInTheDocument();
   });
 
+  it("сохраняет доступные имена у иконок изменения ресурса", () => {
+    renderCounters();
+    for (const name of [
+      "Потратить одно очко: Выносливость",
+      "Вернуть одно очко: Выносливость",
+    ]) {
+      expect(
+        screen.getByRole("button", { name }).querySelector("svg.arken-icon"),
+        `UIX645_RESOURCE_COUNTER_ICON: ${name}`,
+      ).toBeInTheDocument();
+    }
+  });
+
   it("копит нажатия ±1 и отправляет одной правкой", async () => {
     const props = renderCounters();
     const spend = screen.getByRole("button", {

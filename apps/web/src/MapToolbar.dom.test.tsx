@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import { renderComponent, screen, userEvent } from "./test-support/render";
 import { MapToolbar, type MapToolbarProps } from "./MapToolbar";
 import { cursorPreferenceDefault } from "./cursor-preference";
+import { writeToolbarCollapsed } from "./toolbar-preference";
 
 vi.mock("./api", () => ({
   api: vi.fn().mockResolvedValue([]),
@@ -108,6 +109,9 @@ function createDefaultProps(
 }
 
 describe("MapToolbar — панель инструментов карты (UIX-407)", () => {
+  beforeEach(() => {
+    writeToolbarCollapsed(window.localStorage, "m1", false);
+  });
   it("рендерит инструменты для роли PLAYER: без тумана и боевой зоны", () => {
     const playerSnapshot = createMockSnapshot("PLAYER");
     const props = createDefaultProps({
@@ -181,7 +185,20 @@ describe("MapToolbar — панель инструментов карты (UIX-4
 
   it("сворачивает и разворачивает панель при клике на кнопку сворачивания", async () => {
     const props = createDefaultProps();
-    renderComponent(<MapToolbar {...props} />);
+    const { container } = renderComponent(<MapToolbar {...props} />);
+
+    const revealPolygon = container.querySelector(
+      '[data-tool="FOG_POLYGON"] svg',
+    );
+    const coverPolygon = container.querySelector(
+      '[data-tool="COVER_POLYGON"] svg',
+    );
+    expect(revealPolygon).not.toBeNull();
+    expect(coverPolygon).not.toBeNull();
+    expect(
+      revealPolygon?.innerHTML,
+      "UIX645_COLLAPSED_FOG_POLYGONS_REMAIN_DISTINCT",
+    ).not.toBe(coverPolygon?.innerHTML);
 
     const collapseButton = screen.getByRole("button", {
       name: /Свернуть панель до значков/,
@@ -190,6 +207,8 @@ describe("MapToolbar — панель инструментов карты (UIX-4
 
     await userEvent.click(collapseButton);
     expect(collapseButton).toHaveAttribute("aria-expanded", "false");
+    expect(container.querySelector(".map-toolbar")).toHaveClass("is-collapsed");
+    expect(revealPolygon?.innerHTML).not.toBe(coverPolygon?.innerHTML);
   });
 
   it("не возвращает боевые кнопки при сохранённом активном столкновении", () => {
@@ -202,5 +221,49 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(
       screen.queryByRole("button", { name: "Начать бой" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("UIX645_MAP_TOOLBAR_LUCIDE renders decorative SVG without glyph doubles", () => {
+    const props = createDefaultProps();
+    const { container } = renderComponent(<MapToolbar {...props} />);
+    for (const tool of [
+      "PAN",
+      "FOG",
+      "COVER",
+      "FOG_BRUSH",
+      "COVER_BRUSH",
+      "FOG_POLYGON",
+      "COVER_POLYGON",
+      "RULER",
+      "PING",
+      "DRAW",
+      "CURSOR_PRESENCE",
+      "GRID",
+      "RESIZE",
+      "UNDO",
+      "REDO",
+    ]) {
+      const control = container.querySelector<HTMLElement>(
+        `[data-tool="${tool}"]`,
+      );
+      expect(control, `${tool} control`).not.toBeNull();
+      expect(
+        control!.querySelectorAll("svg.arken-icon"),
+        `${tool} Lucide`,
+      ).toHaveLength(1);
+      expect(control!.querySelector("svg")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+    }
+    const collapse = screen.getByRole("button", {
+      name: "Свернуть панель до значков",
+    });
+    expect(collapse.querySelectorAll("svg.arken-icon")).toHaveLength(1);
+    const overflow = screen.getByLabelText("Дополнительные инструменты");
+    expect(overflow.querySelectorAll("svg.arken-icon")).toHaveLength(1);
+    expect(container.textContent).not.toContain("•••");
+    expect(container.textContent).not.toContain("↶");
+    expect(container.textContent).not.toContain("↷");
   });
 });

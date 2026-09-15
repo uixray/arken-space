@@ -1,5 +1,26 @@
 # UIX-644 — реестр меню, popup и picker
 
+## 2026-09-12 — Escape во внешнем окне «Токены»
+
+- На опубликованном интерфейсе дважды воспроизведено: Escape в раскрытом списке изображения токена закрывает и список, и всё рабочее окно. Выбор/сохранение/загрузка не выполнялись. Это внешний `TokenPalette` → `FormSelect` в workspace, не grid AssetPicker в модальном редакторе. Точная опубликованная ревизия не установлена.
+- Причина подтверждена также в текущей базе M77: workspace-ветка `ArkenDialog` безусловно закрывает окно на bubbling Escape. Прежние browser-сценарии модального редактора этого владельца не покрывают.
+- Локальная правка учитывает уже обработанное событие, DOM-владельца (включая вложенный dialog и React portal) и раскрытый combobox. Первый Escape оставлен дочернему Select; закрытое поле не блокирует следующий Escape окна. Ветка modal, слои, данные и действия назначения не менялись.
+- Подготовлены четыре DOM-сценария: настоящий Gravity FormSelect с двумя Escape, consumed event, React portal, вложенное рабочее окно. Новый browser spec `workspace-select-escape.spec.ts`: настоящий App/TokenPalette, GM/PLAYER × 1280/390, синтетические API, hit-test списка, неизменность выбранного изображения, возврат фокуса, два Escape и отсутствие игровых мутаций.
+- **Проверено только исходное поведение опубликованного интерфейса и исходный код. Исправленная ревизия ещё не запускалась:** DOM/browser/formatter/types/lint остаются отдельным hosted gate. Синтетический API не доказывает серверные права; это не закрытие всего UIX-644/UIX-502. Публикации и deploy нет.
+
+## 2026-09-12 — StickerPicker и нативные поля заявок, подготовка к проверке
+
+- База: `93935933738c78f459b8a0fa1c4d13747f82c8e3` (M77). Ниже сохранён исторический реестр 6 сентября, не текущая приёмка всех строк.
+- StickerPicker переведён с локального absolute/fixed блока и произвольного `1250` на существующий Gravity Popup: portal, owner class, fixed anchor positioning, initial search focus, Escape/outside/focus-out, возврат фокуса средствами библиотеки. Убрано размыкание overflow у всего chat shell. Цвет поверхности берётся из темы.
+- Hidden/inert владельца и disabled закрывают picker; observer работает только пока тот открыт и отключается при cleanup. Поздний ответ отправки не закрывает повторно открытый picker и не переносит старую ошибку в новую сессию. До завершения отправки повторная отправка заблокирована.
+- Реестр исходных точек дополнен `StickerPicker.tsx / tag:Popup / 1`. Это изменение инвентаризации, не доказательство runtime PASS.
+- Подготовлены `StickerPicker.dom.test.tsx` (реальный Popup и ArkenDialog workspace/modal, delayed resolve/reject, retry, disabled/hidden owner), `sticker-picker-lifecycle.spec.ts` (реальная Activity UI, синтетические read-only API fixtures, GM/PLAYER, 1280/390 → 360×480, hit-testing/scroll/Escape/outside focus/owner), `player-requests-controls.spec.ts` (реальная изолированная campaign fixture, invite/login/API, 3 PLAYER draft selects и 3 GM/PLAYER filters). Старый concept picker test теперь ищет portal dialog, а не потомка trigger.
+- При последующем source audit исправлена fixture `/api/story/posts`: App читает `{ posts, nextCursor }`, не `[]`. Browser-сценарий теперь ждёт фактического обращения к этому маршруту. Это исправление подготовленного теста, не результат его запуска.
+- **Текущий пул: source review + diff check только. Formatter, types, lint, Vitest и Chromium/Firefox ещё НЕ запущены. Публикации и production deploy нет. UIX-644 остаётся In Progress.** Синтетические browser fixtures не доказывают серверную авторизацию; viewport resize не доказывает настоящий browser zoom или экранную клавиатуру.
+- Browser-проверка picker внутри настоящего modal/workspace и смена чужого modal owner остаются открытыми: в текущем приложении нет подтверждённого доступного пользовательского маршрута для такого picker. Не создавать скрытые Direct/Story tabs ради тестов. DOM-покрытие не заменяет этот gate.
+- Не повторять уже интегрированные modal-stack исправления `7ab672e`, `222c1b8`, `72d5df1` и selection/zoom geometry: актуальные регрессии находятся в `modal-owner-contract`, `modal-owner-close-lifecycle`, `scene-workspace-dialog`, `canvas-token-regressions`. Исторические утверждения ниже об отсутствии этих проверок устарели.
+- Следующий gate: разрешённая удалённая валидация точной ревизии пула, затем обновление результатов отдельных строк. Полная матрица всего реестра, WorldMaps native selects, browser zoom и ручные/device AC этим пулом не закрываются. Интеграция отдельного локального UIX-645 должна сохранить его Sticker AppIcon.
+
 ## Контрольная точка — статический срез 2026-09-06
 
 - **База:** `8dadb9ae295560c6f225cce5de5be522683393ab`. Номера строк ниже относятся к этой базе, а не к параллельной правке scene picker.
@@ -258,3 +279,26 @@ UIX-644 остаётся In Progress. Следующий связанный пу
 карточки. Полные CI/многопользовательская проверка репозитория, объединённый CI с UIX-421/423/414,
 публичные push/PR и production **не выполнялись и не разрешаются этим протоколом проверки**.
 Чужая UIX-645 и antigravity главного оркестратора не изменялись.
+
+## Connected composer lifecycle slice — 2026-09-15
+
+Source prepared after the released PR75 base. Runtime status remains **PENDING**,
+not a new PASS for the complete B–E inventory.
+
+- Existing ActivityPanel and ChatPanel command lists share
+  `ui/use-composer-suggestions.ts`; the two listbox sites remain in ChatPanels.
+- Effective visibility includes typed slash commands and explicit trigger opening.
+  Escape/outside dismissal suppresses the current draft without clearing it; a
+  real edit or explicit reopening restores suggestions. Scope and stream changes
+  invalidate the popup without weakening submission/draft ownership.
+- The nearest composer handles its first Escape and restores origin focus.
+  Options use native button activation and programmatic arrow navigation; Home/End
+  stay native in the textarea, unrelated controls keep their keys, and Tab is not
+  trapped. Outside pointer/focus does not steal focus. IME input remains owned by
+  composition rather than command execution.
+- Prepared actual-caller evidence: `sidebar/ChatPanels.suggestions.dom.test.tsx`.
+  Prepared App browser evidence: `tests/e2e/composer-suggestions-lifecycle.spec.ts`,
+  GM/PLAYER at desktop/compact widths. Neither suite is accepted until executed
+  against the combined candidate; mock APIs do not prove backend permissions.
+- First-Escape containment, reopen and scope transitions must pass alongside the
+  existing sticker/workspace/overlay and published draft/action-context pool.

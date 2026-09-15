@@ -15,7 +15,8 @@
   border-radius: 12px;
   background: var(--g-color-base-background);
 }
-.player-requests label {
+.player-requests label,
+.player-requests__field {
   display: grid;
   gap: 6px;
   font-weight: 600;

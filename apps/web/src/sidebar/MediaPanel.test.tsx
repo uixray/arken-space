@@ -26,37 +26,49 @@ import type { ImageUploadFieldProps } from "../ui/ImageUploadField";
 //
 // Mocking notes (typed against the real prop contracts, per the AC's
 // concern about mocks that don't typecheck):
-// - `@gravity-ui/uikit`'s `Button` ships CSS this repo's Vitest transform
-//   can't handle (same constraint as the existing `renderToStaticMarkup`
-//   tests, e.g. RollButton.test.tsx) -- swapped for a plain <button>
-//   restricted to the props MediaPanel/ImageUploadField actually pass.
+// - This historical role-focused suite keeps a plain Button double restricted
+//   to the props it needs. Current vitest.config.ts supports real Gravity CSS;
+//   MediaPanel.audio.test.tsx deliberately uses real controls and upload fields.
 // - `ImageUploadField` is swapped for a minimal stub typed against its own
 //   exported `ImageUploadFieldProps`, so this file stays focused on
-//   MediaPanel's role gating rather than file-input/object-URL plumbing
-//   (which is that component's own concern, untouched here).
+//   MediaPanel's role gating rather than file-input/object-URL plumbing.
+//   This double must not be used as proof that actual MIME intake works.
 vi.mock("@gravity-ui/uikit", () => ({
   Button: ({
     disabled,
     loading,
     onClick,
     children,
+    "aria-describedby": describedBy,
   }: {
     disabled?: boolean;
     loading?: boolean;
     onClick?: () => void;
     children?: ReactNode;
+    "aria-describedby"?: string;
   }) => (
-    <button disabled={disabled} aria-busy={loading} onClick={onClick}>
+    <button
+      disabled={disabled}
+      aria-busy={loading}
+      aria-describedby={describedBy}
+      onClick={onClick}
+    >
       {children}
     </button>
   ),
 }));
 
 vi.mock("../ui/ImageUploadField", () => ({
-  ImageUploadField: ({ label, disabled }: ImageUploadFieldProps) => (
+  ImageUploadField: ({ label, disabled, onUpdate }: ImageUploadFieldProps) => (
     <div>
       <span>{label}</span>
-      <input type="file" aria-label={label} disabled={disabled} readOnly />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onUpdate(new File(["file"], `${label}.png`))}
+      >
+        Выбрать файл: {label}
+      </button>
     </div>
   ),
 }));
@@ -180,6 +192,48 @@ describe("MediaPanel upload sections by role", () => {
     expect(screen.queryByText("Карты")).not.toBeInTheDocument();
     expect(screen.queryByText("Другие изображения")).not.toBeInTheDocument();
     expect(screen.queryByText("Музыка и звуки")).not.toBeInTheDocument();
+  });
+
+  it("объясняет состояния недоступной загрузки видимым текстом", async () => {
+    let finishUpload!: (uploaded: AssetDto) => void;
+    const onUpload = vi.fn(
+      () =>
+        new Promise<AssetDto>((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    renderComponent(
+      <MediaPanel
+        snapshot={playerSnapshot()}
+        {...defaultActions()}
+        onUpload={onUpload}
+      />,
+    );
+    const tokenUpload = screen.getAllByRole("button", {
+      name: "Загрузить",
+    })[0]!;
+    expect(tokenUpload).toBeDisabled();
+    expect(tokenUpload).toHaveAccessibleDescription("Сначала выберите файл.");
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Выбрать файл: Изображения токенов",
+      }),
+    );
+    expect(tokenUpload).toBeEnabled();
+    expect(tokenUpload).toHaveAccessibleDescription("Файл готов к загрузке.");
+
+    await userEvent.click(tokenUpload);
+    expect(tokenUpload).toBeDisabled();
+    expect(tokenUpload).toHaveAccessibleDescription("Файл загружается.");
+    expect(
+      screen.getAllByRole("button", { name: "Загрузить" })[1],
+    ).toHaveAccessibleDescription("Дождитесь завершения другой загрузки.");
+    finishUpload(asset);
+    await waitFor(() =>
+      expect(tokenUpload).toHaveAccessibleDescription("Сначала выберите файл."),
+    );
+    expect(tokenUpload).toBeDisabled();
   });
 
   it("checks usage and deletes an unused asset after confirmation", async () => {

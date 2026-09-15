@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import type { ReactNode, Ref, TextareaHTMLAttributes } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { ThemeProvider } from "@gravity-ui/uikit";
+import { installMatchMediaMock } from "../test-support/dom-mocks";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DirectChatThreadDto, GameSnapshot } from "@arken/contracts";
 import { CampaignActionsContext } from "../campaign-actions-context";
 import { directSelectionStorageKey } from "../direct-chat-state";
@@ -8,45 +10,24 @@ import { playerSnapshot } from "../test-support/game-snapshot-fixtures";
 import type { ChatActions } from "../use-chat-actions";
 import {
   act,
-  renderComponent,
+  renderComponent as renderWithDOM,
   screen,
   userEvent,
   waitFor,
 } from "../test-support/render";
 
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    children,
-    ...props
-  }: {
-    children?: ReactNode;
-    disabled?: boolean;
-    type?: "button" | "submit";
-    className?: string;
-    "aria-label"?: string;
-    title?: string;
-  }) => <button {...props}>{children}</button>,
-  TextArea: ({
-    controlProps,
-    controlRef,
-    validationState,
-    ...props
-  }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
-    controlProps?: TextareaHTMLAttributes<HTMLTextAreaElement>;
-    controlRef?: Ref<HTMLTextAreaElement>;
-    validationState?: "invalid";
-  }) => (
-    <textarea
-      {...props}
-      {...controlProps}
-      ref={controlRef}
-      aria-invalid={validationState === "invalid" || undefined}
-    />
-  ),
-  TextInput: () => null,
-  Checkbox: () => null,
-  Select: () => null,
-}));
+// Keep real Gravity exports, including Popup and its native control adapters.
+function renderComponent(ui: ReactElement) {
+  return renderWithDOM(ui, {
+    wrapper: ({ children }) => (
+      <ThemeProvider theme="dark" lang="ru">
+        {children}
+      </ThemeProvider>
+    ),
+  });
+}
+beforeEach(() => installMatchMediaMock());
+afterEach(() => vi.unstubAllGlobals());
 
 const { DirectChatPanel } = await import("./ChatPanels");
 const threadId = "00000000-0000-4000-8000-000000000201";

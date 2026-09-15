@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type {
   GameSnapshot,
   PlayerRequestDto,
@@ -53,6 +53,11 @@ export function PlayerRequestsWorkspace({
     resolutionNote?: string,
   ) => Promise<void>;
 }) {
+  const titleId = useId();
+  const bodyId = useId();
+  const horizonId = useId();
+  const audienceId = useId();
+  const characterId = useId();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [editing, setEditing] = useState<PlayerRequestDto | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -145,28 +150,31 @@ export function PlayerRequestsWorkspace({
         {!isGm && (
           <form className="player-requests__form" onSubmit={submit}>
             <h3>{editing ? "Редактировать заявку" : "Новая заявка"}</h3>
-            <label>
-              Название
+            <div className="player-requests__field">
+              <label htmlFor={titleId}>Название</label>
               <input
+                id={titleId}
                 maxLength={120}
                 value={draft.title}
                 onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               />
-            </label>
-            <label>
-              Описание
+            </div>
+            <div className="player-requests__field">
+              <label htmlFor={bodyId}>Описание</label>
               <textarea
+                id={bodyId}
                 maxLength={4000}
                 rows={5}
                 value={draft.body}
                 onChange={(e) => setDraft({ ...draft, body: e.target.value })}
               />
-            </label>
+            </div>
             {!editing && (
               <div className="player-requests__grid">
-                <label>
-                  Когда
+                <div className="player-requests__field">
+                  <label htmlFor={horizonId}>Когда</label>
                   <select
+                    id={horizonId}
                     value={draft.horizon}
                     onChange={(e) =>
                       setDraft({
@@ -183,10 +191,11 @@ export function PlayerRequestsWorkspace({
                       ),
                     )}
                   </select>
-                </label>
-                <label>
-                  Кто увидит
+                </div>
+                <div className="player-requests__field">
+                  <label htmlFor={audienceId}>Кто увидит</label>
                   <select
+                    id={audienceId}
                     value={draft.audience}
                     onChange={(e) =>
                       setDraft({
@@ -203,10 +212,11 @@ export function PlayerRequestsWorkspace({
                       ),
                     )}
                   </select>
-                </label>
-                <label>
-                  Персонаж (необязательно)
+                </div>
+                <div className="player-requests__field">
+                  <label htmlFor={characterId}>Персонаж (необязательно)</label>
                   <select
+                    id={characterId}
                     value={draft.characterId}
                     onChange={(e) =>
                       setDraft({ ...draft, characterId: e.target.value })
@@ -219,7 +229,7 @@ export function PlayerRequestsWorkspace({
                       </option>
                     ))}
                   </select>
-                </label>
+                </div>
               </div>
             )}
             <div className="player-requests__actions">

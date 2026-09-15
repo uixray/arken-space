@@ -1,5 +1,6 @@
-import { Button, Icon } from "@gravity-ui/uikit";
-import { ArrowRight, TrashBin, Xmark } from "@gravity-ui/icons";
+import { Button } from "@gravity-ui/uikit";
+import { AppIcon } from "./AppIcon";
+import { CloseIcon, DeleteIcon, MoveSelectionIcon } from "./icons";
 
 export function SelectionActions({
   count,
@@ -20,15 +21,15 @@ export function SelectionActions({
       aria-label="Действия с выбранными объектами"
     >
       <Button view="normal" onClick={onMove}>
-        <Icon data={ArrowRight} size={16} />
+        <AppIcon icon={MoveSelectionIcon} />
         Переместить
       </Button>
       <Button view="outlined-danger" onClick={onDelete}>
-        <Icon data={TrashBin} size={16} />
+        <AppIcon icon={DeleteIcon} />
         Удалить
       </Button>
       <Button view="flat" aria-label="Снять выделение" onClick={onClear}>
-        <Icon data={Xmark} size={16} />
+        <AppIcon icon={CloseIcon} />
       </Button>
     </div>
   );

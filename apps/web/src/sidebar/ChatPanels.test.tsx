@@ -4,12 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import { CampaignActionsContext } from "../campaign-actions-context";
 
-// UIX-388: same mocking precedent as RollButton.test.tsx / AppErrorBoundary
-// test.ts -- vitest runs this repo's tests under `environment: "node"` (no
-// jsdom), so @gravity-ui/uikit's real components (which ship CSS the node
-// transform can't handle) are swapped for plain DOM elements that preserve
-// the prop contract ChatPanel actually relies on.
+// This suite checks server-rendered composer markup, not popup interaction.
+// Real Gravity Popup ownership/focus is covered by StickerPicker.dom.test.tsx.
+// Keep the closed Popup contract in this existing node-environment mock.
 vi.mock("@gravity-ui/uikit", () => ({
+  Popup: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
+    open ? children : null,
   Button: ({
     className,
     type,
@@ -76,7 +76,7 @@ vi.mock("@gravity-ui/uikit", () => ({
   ),
 }));
 
-const { ChatPanel } = await import("./ChatPanels");
+const { ChatPanel, ChatMessageBody } = await import("./ChatPanels");
 
 const noop = () => Promise.resolve();
 
@@ -287,4 +287,99 @@ describe("подпись персонажа в ленте (UIX-501)", () => {
     expect(markup).not.toContain('class="message-character"');
     expect(markup).not.toContain("Персонаж");
   });
+});
+
+describe("dice presentation boundary (UIX-289)", () => {
+  const validDice = {
+    formula: "1d20+5",
+    resolvedFormula: "1d20+5",
+    terms: [{ notation: "1d20", rolls: [20], subtotal: 20 }],
+    modifiers: [{ source: "5", value: 5 }],
+    total: 25,
+    semanticOutcome: { kind: "CRITICAL_SUCCESS", keptNaturalD20: 20 },
+  };
+
+  function renderDiceBody(dice: unknown, skill: boolean) {
+    const payload = skill
+      ? {
+          ...(dice as Record<string, unknown>),
+          skillCard: {
+            version: 1,
+            mode: "EXECUTE",
+            characterName: "Test actor",
+            entry: { id: "skill-1", name: "Test skill", kind: "SKILL" },
+            action: {
+              id: "action-1",
+              label: "Test action",
+              formula: "1d20+5",
+              kind: "CUSTOM",
+            },
+            result: { total: 25 },
+          },
+        }
+      : dice;
+    const message: GameSnapshot["messages"][number] = {
+      id: "dice-1",
+      sequence: 1,
+      membershipId: "member-1",
+      displayName: "Test participant",
+      characterId: null,
+      body: "Test roll",
+      visibility: "PUBLIC",
+      kind: "DICE",
+      threadId: "table-1",
+      stream: "TABLE",
+      dice: payload as GameSnapshot["messages"][number]["dice"],
+      createdAt: "2026-09-12T00:00:00.000Z",
+    };
+    return renderToStaticMarkup(<ChatMessageBody message={message} />);
+  }
+
+  it.each([false, true])(
+    "keeps total and critical label when decorative frame is invalid (skill=%s)",
+    (skill) => {
+      const markup = renderDiceBody(
+        { ...validDice, frame: { setKey: "PRIVATE", frameKey: "unpublished" } },
+        skill,
+      );
+      expect(markup).toMatch(
+        /<strong[^>]*aria-label="Итог броска"[^>]*>25<\/strong>/,
+      );
+      expect(markup).toContain("Критический успех");
+      expect(markup).not.toContain("Критический провал");
+    },
+  );
+
+  it.each([false, true])(
+    "does not turn malformed semantics into a legacy critical (skill=%s)",
+    (skill) => {
+      const markup = renderDiceBody(
+        {
+          ...validDice,
+          semanticOutcome: { kind: "CRITICAL_SUCCESS", keptNaturalD20: 1 },
+        },
+        skill,
+      );
+      expect(markup).not.toContain("roll-critical-label");
+      expect(markup).not.toContain("roll-result--critical-");
+    },
+  );
+
+  it.each([false, true])(
+    "preserves explicit noncritical semantics over natural legacy terms (skill=%s)",
+    (skill) => {
+      const markup = renderDiceBody(
+        {
+          ...validDice,
+          semanticOutcome: { kind: "NORMAL", keptNaturalD20: 20 },
+          frame: { setKey: "ARKEN_CRITICAL_V1", frameKey: "critical-success" },
+        },
+        skill,
+      );
+      expect(markup).toMatch(
+        /<strong[^>]*aria-label="Итог броска"[^>]*>25<\/strong>/,
+      );
+      expect(markup).not.toContain("roll-critical-label");
+    },
+  );
 });

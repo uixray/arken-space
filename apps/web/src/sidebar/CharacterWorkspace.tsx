@@ -62,6 +62,15 @@ import {
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
 import { CampaignClockDialog } from "./CampaignClockDialog";
+import { AppIcon } from "../ui/AppIcon";
+import {
+  AddIcon,
+  CharacterArchiveIcon,
+  CloseIcon,
+  CollapseCharacterRailIcon,
+  DecreaseIcon,
+  ExpandCharacterRailIcon,
+} from "../ui/icons";
 
 // UIX-389/UIX-391: re-exported for backward compatibility — RollButton now
 // lives in its own module (./RollButton) so CatalogEntryPicker can import it
@@ -200,7 +209,13 @@ export function CharacterWorkspace({
           }
           onClick={() => setRailCollapsed((current) => !current)}
         >
-          <span aria-hidden="true">{railCollapsed ? ">" : "<"}</span>
+          <AppIcon
+            icon={
+              railCollapsed
+                ? ExpandCharacterRailIcon
+                : CollapseCharacterRailIcon
+            }
+          />
         </button>
         <button
           type="button"
@@ -208,7 +223,7 @@ export function CharacterWorkspace({
           title="Закрыть рабочее пространство персонажей"
           onClick={onClose}
         >
-          <span aria-hidden="true">×</span>
+          <AppIcon icon={CloseIcon} />
         </button>
       </header>
       <div
@@ -221,7 +236,7 @@ export function CharacterWorkspace({
               className="character-rail__create"
               onClick={() => setCreateCharacterOpen(true)}
             >
-              <span aria-hidden="true">＋</span>
+              <AppIcon icon={AddIcon} />
               Создать персонажа
             </button>
           )}
@@ -231,7 +246,7 @@ export function CharacterWorkspace({
               className="character-rail__restore-archived"
               onClick={() => setRestoreDialogOpen(true)}
             >
-              <span aria-hidden="true">🗄</span>
+              <AppIcon icon={CharacterArchiveIcon} />
               Архив персонажей
             </button>
           )}
@@ -284,7 +299,7 @@ export function CharacterWorkspace({
                         dispatch({ type: "CLOSE", id: character.id })
                       }
                     >
-                      ×
+                      <AppIcon icon={CloseIcon} />
                     </button>
                   )}
                   {props.snapshot.me.role === "GM" && (
@@ -494,7 +509,7 @@ function CreateCharacterDialog({
           <option value="">Без шаблона (пустой лист)</option>
           {characters.map((character) => (
             <option key={character.id} value={character.id}>
-              На основе «{character.name}»
+              {`На основе «${character.name}»`}
             </option>
           ))}
         </FormSelect>
@@ -1892,10 +1907,11 @@ export function CharacterPanel({
             <b>{WALLET_LABELS[key]}</b>
             <Button
               disabled={!editable || walletDraft[key] === 0}
+              aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => changeWallet(key, -1)}
             >
-              −
+              <AppIcon icon={DecreaseIcon} />
             </Button>
             <FormInput
               type="number"
@@ -1920,8 +1936,9 @@ export function CharacterPanel({
               disabled={!editable}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => changeWallet(key, 1)}
+              aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
             >
-              +
+              <AppIcon icon={AddIcon} />
             </Button>
           </span>
         ))}

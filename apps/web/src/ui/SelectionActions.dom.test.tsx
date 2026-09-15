@@ -35,6 +35,12 @@ it.each([1, 4])(
     });
     expect(toolbar).not.toHaveTextContent(/Выбрано|Токенов:|Рисунков:|[0-9]/);
     expect(screen.getAllByRole("button")).toHaveLength(3);
+    for (const name of ["Переместить", "Удалить", "Снять выделение"]) {
+      expect(
+        screen.getByRole("button", { name }).querySelector("svg.arken-icon"),
+        `UIX645_SELECTION_ACTION_ICON: ${name}`,
+      ).toHaveAttribute("aria-hidden", "true");
+    }
     await user.click(screen.getByRole("button", { name: "Переместить" }));
     await user.click(screen.getByRole("button", { name: "Удалить" }));
     await user.click(screen.getByRole("button", { name: "Снять выделение" }));

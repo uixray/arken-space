@@ -1,14 +1,21 @@
 import {
+  useCallback,
   useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
 } from "react";
 import type { StickerPackDto } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button, Popup } from "@gravity-ui/uikit";
 import { api } from "./api";
 import { filterStickerPacks } from "./sticker-picker-state";
+import { useOverlayPopupClassName } from "./ui/overlay-owner";
+import { AppIcon } from "./ui/AppIcon";
+import { StickerPickerIcon } from "./ui/icons";
+import { retainJournalPopupOwner } from "./ui/useCompactNavigation";
 
 const categories = [
   ["COMMON", "Общие"],
@@ -36,7 +43,61 @@ export function StickerPicker({
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const panelId = useId();
+  const popupClassName = useOverlayPopupClassName("sticker-picker-popup");
+  const openRef = useRef(false);
+  const sessionRef = useRef(0);
+  const mountedRef = useRef(true);
+  const sendingRef = useRef(false);
+
+  const changeOpen = useCallback((next: boolean) => {
+    if (openRef.current === next) return;
+    openRef.current = next;
+    sessionRef.current += 1;
+    setOpen(next);
+    if (next) setError("");
+  }, []);
+
+  useLayoutEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      sessionRef.current += 1;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (disabled) changeOpen(false);
+  }, [disabled, changeOpen]);
+
+  useLayoutEffect(() => {
+    if (!open || disabled || !anchor) return;
+    return retainJournalPopupOwner(anchor);
+  }, [anchor, open, disabled]);
+
+  useEffect(() => {
+    if (!open || !anchor) return;
+    // A portal must not survive a cached owner's hidden/inert transition.
+    // Keyboard/viewport positioning belongs to Popup, not resize-to-dismiss.
+    const closeHiddenOwner = () => {
+      if (anchor.closest("[hidden], [inert]")) changeOpen(false);
+    };
+    const observer = new MutationObserver(closeHiddenOwner);
+    for (
+      let owner: HTMLElement | null = anchor;
+      owner;
+      owner = owner.parentElement
+    ) {
+      observer.observe(owner, {
+        attributes: true,
+        attributeFilter: ["hidden", "inert"],
+      });
+    }
+    closeHiddenOwner();
+    return () => observer.disconnect();
+  }, [anchor, open, changeOpen]);
 
   useEffect(() => {
     if (!open || packs) return;
@@ -49,24 +110,12 @@ export function StickerPicker({
     };
   }, [open, packs]);
 
-  useEffect(() => {
-    if (!open) return;
-    requestAnimationFrame(() =>
-      panelRef.current?.querySelector<HTMLElement>("input, button")?.focus(),
-    );
-  }, [open]);
-
   const visible = useMemo(
     () => filterStickerPacks(packs ?? [], category, query),
     [category, packs, query],
   );
 
   function onGridKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setOpen(false);
-      return;
-    }
     if (
       !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
     )
@@ -105,6 +154,7 @@ export function StickerPicker({
   return (
     <div className={`sticker-picker${iconOnly ? " sticker-picker--icon" : ""}`}>
       <Button
+        ref={setAnchor}
         className={iconOnly ? "composer-icon" : undefined}
         type="button"
         view="flat"
@@ -112,25 +162,37 @@ export function StickerPicker({
         aria-label={iconOnly ? "Стикеры" : undefined}
         title={iconOnly ? "Стикеры" : undefined}
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         aria-haspopup="dialog"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => changeOpen(!openRef.current)}
       >
-        {iconOnly ? <span aria-hidden="true">{"\u263A"}</span> : "Стикеры"}
+        {iconOnly ? <AppIcon icon={StickerPickerIcon} /> : "Стикеры"}
       </Button>
-      {open && (
+      <Popup
+        open={open && !disabled}
+        anchorElement={anchor}
+        className={popupClassName}
+        placement={["top-end", "bottom-end"]}
+        strategy="fixed"
+        initialFocus={searchRef}
+        onOpenChange={changeOpen}
+        disableTransition
+      >
         <div
+          id={panelId}
           className="sticker-picker-panel"
           role="dialog"
           aria-label="Выбор стикера"
-          ref={panelRef}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
-              setOpen(false);
+              event.stopPropagation();
+              changeOpen(false);
             }
           }}
         >
           <input
+            ref={searchRef}
             type="search"
             aria-label="Поиск стикеров"
             placeholder="Поиск по имени и описанию"
@@ -175,15 +237,23 @@ export function StickerPicker({
                 disabled={sending}
                 key={sticker.id}
                 onClick={async () => {
+                  if (sendingRef.current) return;
+                  sendingRef.current = true;
+                  const session = sessionRef.current;
                   setSending(true);
                   setError("");
                   try {
                     await onSelect(sticker.id);
-                    setOpen(false);
+                    if (mountedRef.current && sessionRef.current === session) {
+                      changeOpen(false);
+                    }
                   } catch {
-                    setError("Не удалось отправить стикер.");
+                    if (mountedRef.current && sessionRef.current === session) {
+                      setError("Не удалось отправить стикер.");
+                    }
                   } finally {
-                    setSending(false);
+                    sendingRef.current = false;
+                    if (mountedRef.current) setSending(false);
                   }
                 }}
               >
@@ -193,7 +263,7 @@ export function StickerPicker({
             ))}
           </div>
         </div>
-      )}
+      </Popup>
     </div>
   );
 }

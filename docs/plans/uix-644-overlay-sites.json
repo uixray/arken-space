@@ -43,6 +43,11 @@
       "count": 1
     },
     {
+      "file": "apps/web/src/StickerPicker.tsx",
+      "kind": "tag:Popup",
+      "count": 1
+    },
+    {
       "file": "apps/web/src/TokenImageGenerator.tsx",
       "kind": "tag:select",
       "count": 1

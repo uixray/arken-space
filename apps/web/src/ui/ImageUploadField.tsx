@@ -5,8 +5,9 @@ import {
   type DragEvent,
   type ClipboardEvent,
 } from "react";
-import { Button, Icon } from "@gravity-ui/uikit";
-import { TrashBin } from "@gravity-ui/icons";
+import { Button } from "@gravity-ui/uikit";
+import { AppIcon } from "./AppIcon";
+import { DeleteIcon } from "./icons";
 
 export interface ImageUploadFieldProps {
   label: string;
@@ -55,10 +56,16 @@ export function ImageUploadField({
   const [isDragOver, setIsDragOver] = useState(false);
 
   const acceptFile = (file?: File | null) => {
-    if (!file) return;
+    if (disabled || !file) return;
     const nextError = validateImageUploadFile(file);
     setIntakeError(nextError ?? "");
     if (!nextError) onUpdate(file);
+  };
+
+  const removeFile = () => {
+    if (disabled) return;
+    setIntakeError("");
+    onUpdate(undefined);
   };
 
   const acceptDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -144,7 +151,11 @@ export function ImageUploadField({
         type="file"
         accept={accept}
         disabled={disabled}
-        onChange={(event) => acceptFile(event.currentTarget.files?.[0])}
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = "";
+          acceptFile(file);
+        }}
       />
       {value ? (
         <figure className="arken-upload-field__preview">
@@ -160,9 +171,9 @@ export function ImageUploadField({
               view="flat-danger"
               aria-label={`Удалить ${value.name}`}
               disabled={disabled}
-              onClick={() => onUpdate(undefined)}
+              onClick={removeFile}
             >
-              <Icon data={TrashBin} size={16} />
+              <AppIcon icon={DeleteIcon} />
             </Button>
           </figcaption>
         </figure>

@@ -41,6 +41,16 @@ import { notify } from "./ui/notifications";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
+import { AppIcon } from "./ui/AppIcon";
+import {
+  AddIcon,
+  CloseIcon,
+  PublishedSceneIcon,
+  PublishSceneIcon,
+  ScenePickerIcon,
+  SessionMenuIcon,
+  SidebarExpandIcon,
+} from "./ui/icons";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { canvasHistoryVersion } from "./canvas-history-label";
 import { normalizeClientDiceResult } from "./dice-result";
@@ -1468,7 +1478,7 @@ export function App() {
                       />
                     )}
                     <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
-                    <span aria-hidden="true">⌄</span>
+                    <AppIcon icon={ScenePickerIcon} />
                   </summary>
                   <div
                     className="scene-picker__menu"
@@ -1561,9 +1571,13 @@ export function App() {
                     });
                   }}
                 >
-                  <span aria-hidden="true">
-                    {activeScene.id === broadcastScene?.id ? "⇥" : "◉"}
-                  </span>
+                  <AppIcon
+                    icon={
+                      activeScene.id === broadcastScene?.id
+                        ? PublishedSceneIcon
+                        : PublishSceneIcon
+                    }
+                  />
                 </button>
               )}
               {!previewSnapshot && snapshot.me.role === "GM" && (
@@ -1573,7 +1587,7 @@ export function App() {
                   title="Создать новую сцену"
                   onClick={() => setSceneDialogRequest((value) => value + 1)}
                 >
-                  <span aria-hidden="true">&#xff0b;</span>
+                  <AppIcon icon={AddIcon} />
                 </button>
               )}
             </div>
@@ -1597,7 +1611,7 @@ export function App() {
               />
               <details className="account-menu" ref={accountMenuRef}>
                 <summary aria-label="Меню сеанса" title="Меню сеанса">
-                  <span aria-hidden="true">&#x2630;</span>
+                  <AppIcon icon={SessionMenuIcon} />
                 </summary>
                 <div className="account-menu__content">
                   <span
@@ -1790,7 +1804,7 @@ export function App() {
                 aria-expanded="false"
                 onClick={() => handleSidebarCollapsedChange(false)}
               >
-                <span aria-hidden="true">&#x2039;</span>
+                <AppIcon icon={SidebarExpandIcon} />
               </button>
             )}
             <main
@@ -2285,7 +2299,7 @@ export function App() {
                           )
                         }
                       >
-                        ×
+                        <AppIcon icon={CloseIcon} />
                       </button>
                     </div>
                   ))}

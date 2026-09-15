@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import type { ReactNode, TextareaHTMLAttributes } from "react";
+import type { ReactElement } from "react";
+import { ThemeProvider } from "@gravity-ui/uikit";
+import { installMatchMediaMock } from "../test-support/dom-mocks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import { CampaignActionsContext } from "../campaign-actions-context";
@@ -7,38 +9,24 @@ import { playerSnapshot } from "../test-support/game-snapshot-fixtures";
 import {
   act,
   fireEvent,
-  renderComponent,
+  renderComponent as renderWithDOM,
   screen,
   userEvent,
   waitFor,
 } from "../test-support/render";
 
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-    ...props
-  }: {
-    children?: ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-    type?: "button" | "submit";
-    className?: string;
-    "aria-label"?: string;
-    title?: string;
-  }) => (
-    <button disabled={disabled} onClick={onClick} {...props}>
-      {children}
-    </button>
-  ),
-  TextArea: (props: TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-    <textarea {...props} />
-  ),
-  TextInput: () => null,
-  Checkbox: () => null,
-  Select: () => null,
-}));
+// Keep real Gravity exports, including Popup and its native control adapters.
+function renderComponent(ui: ReactElement) {
+  return renderWithDOM(ui, {
+    wrapper: ({ children }) => (
+      <ThemeProvider theme="dark" lang="ru">
+        {children}
+      </ThemeProvider>
+    ),
+  });
+}
+beforeEach(() => installMatchMediaMock());
+afterEach(() => vi.unstubAllGlobals());
 
 const { ChatPanel, DirectChatPanel } = await import("./ChatPanels");
 

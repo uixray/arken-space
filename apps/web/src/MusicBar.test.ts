@@ -360,4 +360,38 @@ describe("topbar popovers dismiss like every other details popover", () => {
 
     expect(overflow.open).toBe(false);
   });
+
+  it("UIX645_MUSIC_TOPBAR_LUCIDE keeps named controls and decorative SVG", () => {
+    const view = renderBar("GM");
+    const { container } = view;
+    for (const name of ["Пауза", "Громкость", "Меню музыки"]) {
+      const control = screen.getByLabelText(name, {
+        exact: true,
+        selector: name === "Пауза" ? "button" : "summary",
+      });
+      const icons = control.querySelectorAll("svg.arken-icon");
+      expect(icons, `${name} Lucide icon`).toHaveLength(1);
+      expect(icons[0]).toHaveAttribute("aria-hidden", "true");
+    }
+    const pauseIcon = screen
+      .getByRole("button", { name: "Пауза" })
+      .querySelector("svg.arken-icon")?.innerHTML;
+    expect(container.textContent).not.toContain("⏸");
+    expect(container.textContent).not.toContain("▶");
+    expect(container.textContent).not.toContain("⋯");
+
+    view.rerender(
+      createElement(MusicBar, {
+        audio: { ...playingAudio, playing: false },
+        assets: [audioAsset],
+        role: "GM",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+    const play = screen.getByRole("button", { name: "Играть" });
+    expect(play.querySelectorAll("svg.arken-icon")).toHaveLength(1);
+    expect(play.querySelector("svg.arken-icon")?.innerHTML).not.toBe(pauseIcon);
+    expect(play.textContent).not.toContain("▶");
+  });
 });

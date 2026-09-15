@@ -133,8 +133,13 @@ describe("web source encoding", () => {
     expect(catalog).toContain(
       "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e",
     );
-    expect(rollMode).toContain("\u2191");
-    expect(rollMode).toContain("\u2193");
-    expect(rollMode).toContain("\u25cf");
+    expect(rollMode).toContain("Режим броска");
+    const rollModeLabels = readFileSync(
+      path.join(root, "roll-mode.ts"),
+      "utf8",
+    );
+    for (const label of ["Преимущество", "Обычно", "Помеха"]) {
+      expect(rollModeLabels).toContain(label);
+    }
   });
 });

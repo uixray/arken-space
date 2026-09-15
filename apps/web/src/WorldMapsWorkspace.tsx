@@ -9,6 +9,8 @@ import type {
   WorldMapVisibility,
 } from "@arken/contracts";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { AppIcon } from "./ui/AppIcon";
+import { PartyLocationIcon, WorldLocationIcon } from "./ui/icons";
 import { WORLD_MAP_LOCATION_KIND_LABELS } from "./world-map-labels";
 import {
   authorizedWorldMapBackground,
@@ -463,7 +465,7 @@ export function WorldMapsWorkspace({
                         setStatus(`Выбрана локация: ${location.name}.`);
                       }}
                     >
-                      <span aria-hidden="true">●</span>
+                      <AppIcon icon={WorldLocationIcon} />
                       <span>{location.name}</span>
                     </button>
                   ))}
@@ -477,7 +479,7 @@ export function WorldMapsWorkspace({
                       aria-label="Текущая позиция группы"
                       role="img"
                     >
-                      ◆
+                      <AppIcon icon={PartyLocationIcon} size={24} />
                     </span>
                   ) : null}
                 </div>

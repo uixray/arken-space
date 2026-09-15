@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Popup, Switch } from "@gravity-ui/uikit";
 import type { CursorPreference } from "../cursor-preference";
+import { AppIcon } from "./AppIcon";
+import { CursorPresenceIcon } from "./icons";
 
 /**
  * UIX-403: cursor visibility, which is one setting for a player and two for a
@@ -32,6 +34,11 @@ export function CursorPresenceMenu({
     return (
       <button
         type="button"
+        aria-label={
+          preference.receiveEnabled
+            ? "Скрыть курсоры остальных"
+            : "Показывать курсоры остальных"
+        }
         title={
           preference.receiveEnabled
             ? "Скрыть курсоры остальных"
@@ -47,7 +54,8 @@ export function CursorPresenceMenu({
           })
         }
       >
-        Курсоры
+        <AppIcon icon={CursorPresenceIcon} />
+        <span className="map-tool__label">Курсоры</span>
       </button>
     );
 
@@ -56,6 +64,7 @@ export function CursorPresenceMenu({
       <button
         ref={setAnchor}
         type="button"
+        aria-label="Настроить видимость курсоров"
         aria-haspopup="dialog"
         aria-expanded={open}
         title="Настроить видимость курсоров"
@@ -63,7 +72,8 @@ export function CursorPresenceMenu({
         data-tool="CURSOR_PRESENCE"
         onClick={() => setOpen((value) => !value)}
       >
-        Курсоры
+        <AppIcon icon={CursorPresenceIcon} />
+        <span className="map-tool__label">Курсоры</span>
       </button>
       <Popup
         open={open}

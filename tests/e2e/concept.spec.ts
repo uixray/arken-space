@@ -395,7 +395,7 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
   await expect(page.locator(".account-menu__content .g-button")).toHaveCount(1);
 });
 
-test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
+test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
   page,
 }) => {
   let activeSnapshot = structuredClone(snapshot);
@@ -419,13 +419,17 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
 
   const toolbar = page.getByRole("toolbar", { name: "Инструменты карты" });
   const tool = (id: string) => toolbar.locator(`[data-tool="${id}"]`);
-  const pseudoContent = (control: Locator) =>
-    control.evaluate((element) =>
-      getComputedStyle(element, "::before").content.replace(
-        /^(?:"(.*)"|'(.*)')$/,
-        "$1$2",
-      ),
-    );
+  const iconMarkup = async (control: Locator) => {
+    const icon = control.locator("svg.arken-icon");
+    await expect(icon).toHaveCount(1);
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveAttribute("aria-hidden", "true");
+    await expect(icon).toHaveAttribute("focusable", "false");
+    const bounds = await icon.boundingBox();
+    expect(bounds!.width).toBeGreaterThan(0);
+    expect(bounds!.height).toBeGreaterThan(0);
+    return icon.innerHTML();
+  };
 
   await expect(toolbar).toBeVisible();
   await expect(toolbar).not.toHaveClass(/is-collapsed/);
@@ -448,11 +452,17 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
     ).toBeGreaterThan(0);
   }
 
-  const distinctGlyphs = await Promise.all(
-    labelledTools.map(([id]) => pseudoContent(tool(id))),
+  const distinctIcons = await Promise.all(
+    labelledTools.map(([id]) => iconMarkup(tool(id))),
   );
-  expect(distinctGlyphs.every((glyph) => glyph.trim().length > 0)).toBe(true);
-  expect(new Set(distinctGlyphs).size).toBe(distinctGlyphs.length);
+  expect(distinctIcons.every((icon) => icon.trim().length > 0)).toBe(true);
+  expect(new Set(distinctIcons).size).toBe(distinctIcons.length);
+  const pan = tool("PAN");
+  await expect(pan).toHaveAttribute("aria-pressed", "true");
+  await expect(pan.locator(".map-tool__label")).toHaveCSS(
+    "color",
+    await pan.evaluate((element) => getComputedStyle(element).color),
+  );
 
   await expect(tool("ENCOUNTER_START")).toHaveCount(0);
   await expect(tool("BATTLE_ZONE")).toHaveCount(0);
@@ -506,7 +516,13 @@ test("UIX-386 GM toolbar keeps glyphs and encounter states accessible", async ({
     const control = tool(id);
     await expect(control).toHaveCSS("font-size", "0px");
     await expect(control).toHaveAttribute("aria-label", accessibleName);
-    expect((await pseudoContent(control)).trim().length).toBeGreaterThan(0);
+    await expect(control.locator(".map-tool__label")).toHaveCSS(
+      "font-size",
+      "0px",
+    );
+    expect(await iconMarkup(control)).toBe(
+      distinctIcons[labelledTools.findIndex(([toolId]) => toolId === id)],
+    );
   }
 
   activeSnapshot = structuredClone(snapshot);
@@ -956,6 +972,122 @@ for (const role of ["GM", "PLAYER"] as const) {
       await openWorkspaceSection(page, "Файлы");
       await expect(files).toBeVisible();
       await expect(files.locator(".asset-row")).toHaveCount(5);
+      const uploads = files.getByRole("button", {
+        name: "Загрузить",
+        exact: true,
+      });
+      for (let index = 0; index < 5; index += 1) {
+        await expect(uploads.nth(index)).toBeDisabled();
+        await expect(uploads.nth(index)).toHaveAccessibleDescription(
+          "Сначала выберите файл.",
+        );
+      }
+      await expect(
+        files.getByText("Сначала выберите файл.", { exact: true }),
+      ).toHaveCount(5);
+      // UIX-589/421: use the real shared upload field, not its component mock.
+      // setInputFiles checks the browser reset contract, not OS chooser behavior.
+      const portraitInput = files.getByLabel("Портреты персонажей", {
+        exact: true,
+      });
+      const portraitSection = files.locator(".upload-section").filter({
+        has: page.getByLabel("Портреты персонажей", { exact: true }),
+      });
+      const portraitFile = {
+        name: "repeat-portrait.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      };
+      await portraitInput.setInputFiles(portraitFile);
+      await expect(portraitInput).toHaveValue("");
+      await expect(
+        portraitSection.getByRole("button", {
+          name: "Загрузить",
+          exact: true,
+        }),
+      ).toBeEnabled();
+      await expect(
+        portraitSection.getByRole("img", {
+          name: "Предпросмотр repeat-portrait.png",
+        }),
+      ).toBeVisible();
+      await portraitInput.setInputFiles({
+        name: "rejected.svg",
+        mimeType: "image/svg+xml",
+        buffer: Buffer.from("<svg/>", "utf8"),
+      });
+      await expect(portraitInput).toHaveValue("");
+      await expect(portraitSection.getByRole("alert")).toBeVisible();
+      await portraitSection
+        .getByRole("button", {
+          name: "Удалить repeat-portrait.png",
+          exact: true,
+        })
+        .click();
+      await expect(portraitSection.getByRole("alert")).toHaveCount(0);
+      await portraitInput.setInputFiles(portraitFile);
+      await expect(portraitInput).toHaveValue("");
+      await expect(
+        portraitSection.getByRole("img", {
+          name: "Предпросмотр repeat-portrait.png",
+        }),
+      ).toBeVisible();
+      await portraitSection
+        .getByRole("button", {
+          name: "Удалить repeat-portrait.png",
+          exact: true,
+        })
+        .click();
+      await expect(
+        portraitSection.getByRole("button", {
+          name: "Загрузить",
+          exact: true,
+        }),
+      ).toBeDisabled();
+      expect(unexpectedWrites).toEqual([]);
+      // Audio intake must reach a local AUDIO draft without an image decoder.
+      // These bytes test client selection only; server media validation is separate.
+      const audioInput = files.getByLabel("Музыка и звуки", { exact: true });
+      const audioSection = files.locator(".upload-section").filter({
+        has: page.getByLabel("Музыка и звуки", { exact: true }),
+      });
+      for (const [name, mimeType] of [
+        ["selected-audio.mp3", "audio/mpeg"],
+        ["selected-audio.ogg", "application/ogg"],
+      ]) {
+        await audioInput.setInputFiles({
+          name,
+          mimeType,
+          buffer: Buffer.from("client intake candidate only", "utf8"),
+        });
+        await expect(audioInput).toHaveValue("");
+        await expect(
+          audioSection.getByRole("button", {
+            name: "Загрузить",
+            exact: true,
+          }),
+        ).toBeEnabled();
+        await expect(
+          audioSection.getByText(name, { exact: true }),
+        ).toBeVisible();
+        await expect(audioSection.locator("img, audio, video")).toHaveCount(0);
+        await audioSection
+          .getByRole("button", {
+            name: `Удалить ${name}`,
+            exact: true,
+          })
+          .click();
+        await expect(
+          audioSection.getByRole("button", {
+            name: "Загрузить",
+            exact: true,
+          }),
+        ).toBeDisabled();
+      }
+      expect(unexpectedWrites).toEqual([]);
       await expect(
         files.getByRole("button", { name: "Загрузить", exact: true }),
       ).toHaveCount(5);
@@ -4593,7 +4725,7 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   await page.locator("#chat-tab-activity").click();
   const picker = page.locator(".chat-compose .sticker-picker");
   await picker.locator(":scope > button").click();
-  const panel = picker.locator(".sticker-picker-panel");
+  const panel = page.getByRole("dialog", { name: "Выбор стикера" });
   await expect(panel.getByRole("tab")).toHaveCount(5);
   await panel.getByRole("tab").nth(2).click();
   await panel.getByRole("searchbox").fill("assigned");

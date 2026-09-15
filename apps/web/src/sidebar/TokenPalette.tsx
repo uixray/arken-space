@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { AssetDto, GameSnapshot } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
 import { TokenImageGenerator } from "../TokenImageGenerator";
@@ -256,6 +256,12 @@ export function TokenImageAssignment({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const uploadStatusId = useId();
+  const uploadStatus = saving
+    ? "Файл загружается и назначается."
+    : file
+      ? "Файл готов к загрузке."
+      : "Сначала выберите файл.";
   const assign = async () => {
     if (!file || saving) return;
     setSaving(true);
@@ -296,10 +302,14 @@ export function TokenImageAssignment({
         view="action"
         disabled={!file || saving}
         loading={saving}
+        aria-describedby={uploadStatusId}
         onClick={() => void assign()}
       >
         Загрузить и назначить
       </Button>
+      <p className="muted" id={uploadStatusId}>
+        {uploadStatus}
+      </p>
       {error && (
         <div className="field-error" role="alert">
           {error}

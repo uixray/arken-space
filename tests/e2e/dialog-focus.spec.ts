@@ -1,4 +1,5 @@
 import { type Page } from "@playwright/test";
+import { captureAuthClickDiagnostics } from "./auth-click-diagnostics";
 import { expect, test } from "./campaign-fixture";
 import { assertModalFocusCycle } from "./modal-focus";
 
@@ -22,8 +23,24 @@ import { assertModalFocusCycle } from "./modal-focus";
  */
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page).toHaveURL("/");
+  const button = page.getByRole("button", { name: "Войти" });
+  const diagnostics = await captureAuthClickDiagnostics(button);
+  try {
+    await button.click();
+    await expect(page).toHaveURL("/");
+  } catch (error) {
+    // Attach only structural evidence on failure, not page/request artifacts.
+    await test
+      .info()
+      .attach("auth-click-diagnostics", {
+        body: JSON.stringify(await diagnostics.read()),
+        contentType: "application/json",
+      })
+      .catch(() => {});
+    throw error;
+  } finally {
+    await diagnostics.dispose();
+  }
 }
 
 const TAB_PRESSES = 20;

@@ -65,7 +65,17 @@ it("собирает кости и доступные иконные режим�
   ).not.toBeInTheDocument();
   const advantage = screen.getByRole("radio", { name: "Преимущество" });
   expect(advantage).toHaveAttribute("title", "Преимущество");
-  expect(advantage.textContent).toBe("↑");
+  const icons = ["Преимущество", "Обычно", "Помеха"].map((name) => {
+    const control = screen.getByRole("radio", { name });
+    expect(control.textContent).toBe("");
+    expect(control.querySelectorAll("svg.arken-icon")).toHaveLength(1);
+    const icon = control.querySelector("svg")!;
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+    expect(icon).toHaveAttribute("focusable", "false");
+    expect(icon.innerHTML.length).toBeGreaterThan(0);
+    return icon.innerHTML;
+  });
+  expect(new Set(icons).size).toBe(3);
   await userEvent.click(advantage);
   expect(advantage).toHaveAttribute("aria-checked", "true");
   await userEvent.click(screen.getByRole("button", { name: "d20" }));

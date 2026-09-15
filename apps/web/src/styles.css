@@ -60,7 +60,7 @@
  *      (`--arken-layer-popup`, 1000), `.arken-workspace-window` (1200,
  *      explicitly kept below Gravity's modal dialog layer).
  *   5. Dialogs -- modal dialogs and their backdrops sit above everything
- *      else, e.g. `.sticker-picker` (1250).
+ *      else. Sticker popups use the popup tier of their owning surface.
  * Dropdown/popover visibility must not depend on source DOM order -- always
  * reach for this tier list (or `--arken-layer-popup`) instead of an
  * ad-hoc/arbitrary z-index when adding a new overlay.
@@ -1949,9 +1949,6 @@ code {
   padding-inline: 0;
   font-size: 0;
 }
-.character-workspace__body.is-rail-collapsed .character-rail__create span {
-  font-size: 1rem;
-}
 .character-workspace__body.is-rail-collapsed .character-rail__item {
   grid-template-columns: 1fr;
 }
@@ -2504,6 +2501,8 @@ code {
   text-transform: uppercase;
 }
 .auth-panel {
+  /* The intro can reflow when its font loads; keep the login target anchored. */
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -3023,35 +3022,32 @@ code {
 /* Sticker picker */
 .sticker-picker {
   position: relative;
-  z-index: 1250;
-  isolation: isolate;
 }
-/* The message list owns scrolling, so opening a picker may safely escape the
-   chat shell without putting the entire sidebar above workspace windows. */
-.panel-scroll.chat-scroll:has(.sticker-picker-panel),
-.chat-panel:has(.sticker-picker-panel),
-.chat-compose:has(.sticker-picker-panel) {
-  overflow: visible;
+.sticker-picker-popup {
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--radius-md);
 }
-.chat-compose:has(.sticker-picker-panel) {
-  position: relative;
-  z-index: 1250;
+/* No interactive exit frame above another owner, even before portal unmount. */
+[data-floating-ui-status="close"]:has(> .sticker-picker-popup),
+[data-floating-ui-status="close"]:has(> .sticker-picker-popup) * {
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 .sticker-picker-panel {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + var(--space-xs));
-  z-index: 1250;
   pointer-events: auto;
   width: min(340px, calc(100vw - 2rem));
   max-height: min(520px, 70vh);
+  max-height: min(520px, 70dvh);
   overflow: auto;
+  overscroll-behavior: contain;
   display: grid;
   gap: var(--space-sm);
   padding: var(--space-sm);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #211f1c;
+  background: var(--surface-2);
+  color: var(--text);
   box-shadow: var(--shadow-lg);
 }
 .sticker-picker-panel > input {
@@ -3139,10 +3135,8 @@ code {
 }
 @media (max-width: 520px) {
   .sticker-picker-panel {
-    position: fixed;
-    inset: auto var(--space-sm) var(--space-sm);
-    width: auto;
     max-height: 60vh;
+    max-height: 60dvh;
   }
   .direct-compose {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -3273,7 +3267,7 @@ code {
   font-size: 11px;
   white-space: nowrap;
 }
-.world-map-marker > span:first-child {
+.world-map-marker > .arken-icon {
   color: var(--accent);
   font-size: 16px;
   line-height: 1;
@@ -3290,6 +3284,9 @@ code {
   line-height: 1;
   text-shadow: 0 1px 3px #000;
   pointer-events: none;
+}
+.world-map-party-marker > .arken-icon {
+  filter: drop-shadow(0 1px 3px #000);
 }
 .world-map-detail {
   display: grid;
@@ -3984,15 +3981,17 @@ code {
   text-align: left;
   white-space: nowrap;
 }
-.map-toolbar .map-tool::before,
-.grid-settings .toolbar-detail-trigger::before,
-.resize-settings .toolbar-detail-trigger::before {
+.map-toolbar .map-tool > .arken-icon,
+.grid-settings .toolbar-detail-trigger > .arken-icon,
+.resize-settings .toolbar-detail-trigger > .arken-icon {
   flex: 0 0 auto;
-  width: 16px;
   color: currentColor;
-  font-size: 16px;
-  line-height: 1;
-  text-align: center;
+}
+.map-toolbar .map-tool__label {
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
 }
 /* UIX-475: свёрнутая панель — прежний вид из одних значков. Подписи прячутся
    вместе с заголовками блоков: без подписей заголовок «Туман» над столбцом
@@ -4064,70 +4063,6 @@ code {
   margin-top: var(--space-xs);
   padding-top: var(--space-xs);
   border-top: 1px solid var(--line);
-}
-.map-toolbar .map-tool[data-tool="PAN"]::before {
-  content: "\1F590";
-}
-.map-toolbar .map-tool[data-tool="FOG"]::before {
-  content: "\25D0";
-}
-.map-toolbar .map-tool[data-tool="COVER"]::before {
-  content: "\25D1";
-}
-.map-toolbar .map-tool[data-tool="DRAW"]::before {
-  content: "\270E";
-}
-.map-toolbar .map-tool[data-tool="RULER"]::before {
-  content: "\2194";
-}
-.map-toolbar .map-tool[data-tool="PING"]::before {
-  content: "\2316";
-}
-.map-toolbar .map-tool[data-tool="FOG_BRUSH"]::before {
-  content: "\25CE";
-}
-.map-toolbar .map-tool[data-tool="COVER_BRUSH"]::before {
-  content: "\25C9";
-}
-.map-toolbar .map-tool[data-tool="FOG_POLYGON"]::before {
-  content: "\2B20";
-}
-.map-toolbar .map-tool[data-tool="COVER_POLYGON"]::before {
-  content: "\2B21";
-}
-/* UIX-466: зона боя. Скрещённые мечи — единственный глиф на панели, говорящий
-   о бое, а не о геометрии: остальные инструменты рисуют, этот назначает, кто
-   дерётся. */
-.map-toolbar .map-tool[data-tool="BATTLE_ZONE"]::before {
-  content: "\2694";
-}
-.map-toolbar .map-tool[data-tool="ENCOUNTER_START"]::before {
-  content: "\2694";
-}
-.map-toolbar .map-tool[data-tool="ENCOUNTER_END"]::before {
-  content: "\2691";
-}
-.map-toolbar .map-tool[data-tool="UNDO"]::before {
-  content: "\21B6";
-}
-.map-toolbar .map-tool[data-tool="REDO"]::before {
-  content: "\21B7";
-}
-/* UIX-427: the cursor-settings button had no rule here, so it rendered as an
-   empty square. A north-west arrowhead is the shape every pointer already is. */
-.map-toolbar .map-tool[data-tool="CURSOR_PRESENCE"]::before {
-  content: "\2196";
-}
-.grid-settings .toolbar-detail-trigger[data-tool="GRID"]::before {
-  content: "\0023";
-}
-.resize-settings .toolbar-detail-trigger[data-tool="RESIZE"]::before {
-  content: "\2922";
-}
-.map-toolbar .map-tool span {
-  margin: 0;
-  padding: 0;
-  font-size: 0;
 }
 /* UIX-311 Stage 4: "Начать бой" / "Завершить бой" — a labeled text button
    next to the icon-only .map-tool buttons, not a selectable MapTool. */

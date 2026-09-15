@@ -28,6 +28,14 @@ import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { AppIcon } from "../ui/AppIcon";
+import {
+  AddIcon,
+  DecreaseIcon,
+  DeleteIcon,
+  DuplicateIcon,
+  SelectedOptionIcon,
+} from "../ui/icons";
 import {
   pruneSelectionIds,
   rectanglesIntersect,
@@ -2406,7 +2414,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       })
                     }
                   >
-                    {"\u2398"}
+                    <AppIcon icon={DuplicateIcon} />
                   </button>
                   <button
                     className="map-object-list__action"
@@ -2421,7 +2429,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       })
                     }
                   >
-                    {"\u00d7"}
+                    <AppIcon icon={DeleteIcon} />
                   </button>
                 </li>
               );
@@ -2459,7 +2467,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       void props.onDrawingCopy?.(drawing.id, drawing.revision)
                     }
                   >
-                    {"\u2398"}
+                    <AppIcon icon={DuplicateIcon} />
                   </button>
                   <button
                     className="map-object-list__action"
@@ -2475,7 +2483,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                       })
                     }
                   >
-                    {"\u00d7"}
+                    <AppIcon icon={DeleteIcon} />
                   </button>
                 </li>
               );
@@ -3154,7 +3162,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 setTokenMenu(null);
               }}
             >
-              {tokenMenu.token.layer === layer ? "✓ " : ""}
+              {tokenMenu.token.layer === layer && (
+                <AppIcon icon={SelectedOptionIcon} />
+              )}
               {label}
             </button>
           ))}
@@ -3416,7 +3426,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           aria-label="Увеличить масштаб"
           onClick={() => zoomAtCenter(scale + 0.1)}
         >
-          +
+          <AppIcon icon={AddIcon} />
         </button>
         <input
           aria-label="Масштаб карты"
@@ -3431,7 +3441,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           aria-label="Уменьшить масштаб"
           onClick={() => zoomAtCenter(scale - 0.1)}
         >
-          −
+          <AppIcon icon={DecreaseIcon} />
         </button>
         {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
         {props.role === "GM" && (

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   AssetDto,
   WorldContentDto,
@@ -13,6 +13,8 @@ import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { AssetPicker } from "./ui/AssetPicker";
 import { ApiError, formatApiError } from "./api";
 import { WORLD_EDITOR_TITLE } from "./world-workspace-labels";
+import { AppIcon } from "./ui/AppIcon";
+import { MoveDownIcon, MoveUpIcon } from "./ui/icons";
 import {
   WORLD_CONTENT_LIFECYCLE_LABELS,
   WORLD_CONTENT_LIFECYCLES,
@@ -300,6 +302,10 @@ function CreateEntityDialog({
   onClose: () => void;
   onCreated: (created: WorldContentDto) => void;
 }) {
+  const fieldId = useId();
+  const nameRef = useRef<HTMLInputElement>(null);
+  const slugRef = useRef<HTMLInputElement>(null);
+  const [attempted, setAttempted] = useState(false);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
@@ -313,16 +319,29 @@ function CreateEntityDialog({
 
   const effectiveSlug = slugTouched ? slug : slugifyWorldContentName(name);
   const slugValid = isValidWorldContentSlug(effectiveSlug);
+  const nameInvalid = attempted && !name.trim();
+  const slugInvalid =
+    !slugValid &&
+    (effectiveSlug.length > 0 ||
+      (attempted && (slugTouched || Boolean(name.trim()))));
+  const slugHint = !effectiveSlug.trim()
+    ? "Укажите идентификатор, например waterdeep."
+    : effectiveSlug.trim().length > 160
+      ? "Идентификатор — не больше 160 символов."
+      : "Только строчные латинские буквы, цифры и дефисы.";
 
   const submit = async () => {
+    setAttempted(true);
     if (!name.trim()) {
       setError("Укажите название.");
+      nameRef.current?.focus();
       return;
     }
     if (!slugValid) {
       setError(
         "Идентификатор должен содержать строчные латинские буквы, цифры и дефисы между словами.",
       );
+      slugRef.current?.focus();
       return;
     }
     setBusy(true);
@@ -358,24 +377,41 @@ function CreateEntityDialog({
       <label className="field world-content-workspace__create-name">
         Название
         <FormInput
+          controlRef={nameRef}
+          aria-label="Название"
+          aria-invalid={nameInvalid}
+          aria-describedby={nameInvalid ? `${fieldId}-name-error` : undefined}
           value={name}
           disabled={busy}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            setError("");
+          }}
         />
+        {nameInvalid && (
+          <span id={`${fieldId}-name-error`} className="field-error">
+            Укажите название.
+          </span>
+        )}
       </label>
       <label className="field">
         Идентификатор
         <FormInput
+          controlRef={slugRef}
+          aria-label="Идентификатор"
+          aria-invalid={slugInvalid}
+          aria-describedby={slugInvalid ? `${fieldId}-slug-error` : undefined}
           value={effectiveSlug}
           disabled={busy}
           onChange={(event) => {
             setSlugTouched(true);
             setSlug(event.target.value);
+            setError("");
           }}
         />
-        {!slugValid && effectiveSlug.length > 0 && (
-          <span className="field-error">
-            Только строчные латинские буквы, цифры и дефисы.
+        {slugInvalid && (
+          <span id={`${fieldId}-slug-error`} className="field-error">
+            {slugHint}
           </span>
         )}
       </label>
@@ -927,16 +963,18 @@ function MediaSection({
                 <Button
                   size="s"
                   disabled={busy || index === 0}
+                  aria-label="Переместить выше"
                   onClick={() => void reorder(item.id, "up")}
                 >
-                  ↑
+                  <AppIcon icon={MoveUpIcon} />
                 </Button>
                 <Button
                   size="s"
                   disabled={busy || index === sorted.length - 1}
+                  aria-label="Переместить ниже"
                   onClick={() => void reorder(item.id, "down")}
                 >
-                  ↓
+                  <AppIcon icon={MoveDownIcon} />
                 </Button>
                 <Button
                   size="s"
