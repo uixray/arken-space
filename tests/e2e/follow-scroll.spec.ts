@@ -249,6 +249,7 @@ for (const role of ["GM", "PLAYER"] as const) {
   for (const viewport of [
     { width: 1920, height: 1080 },
     { width: 1280, height: 720 },
+    { width: 390, height: 844 },
   ]) {
     test(`UIX-475 real resource edits preserve follow-scroll (${role} ${viewport.width}x${viewport.height})`, async ({
       page,
@@ -333,6 +334,25 @@ for (const role of ["GM", "PLAYER"] as const) {
         const session = await page.request.get("/api/bootstrap");
         await expect(session).toBeOK();
         expect(((await session.json()) as GameSnapshot).me.role).toBe(role);
+        const openCompactJournal = async () => {
+          if (viewport.width !== 390) return;
+          const journal = page.locator("#compact-nav-journal");
+          await journal.click();
+          await expect(journal).toHaveAttribute("aria-pressed", "true");
+          await expect(page.locator("#activity-sidebar")).toBeVisible();
+        };
+        await openCompactJournal();
+        const assertSavedResource = async (value: string) => {
+          const snapshot = await page.request.get("/api/bootstrap");
+          await expect(snapshot).toBeOK();
+          const state = (await snapshot.json()) as GameSnapshot;
+          const savedCharacter = state.characters.find(
+            (entry) => entry.id === character.id,
+          );
+          expect(savedCharacter?.resources.physicalPower.current).toBe(
+            Number(value),
+          );
+        };
         const counters = page.locator(".resource-counters");
         const input = counters.getByRole("spinbutton", {
           name: "Очки: Выносливость",
@@ -364,6 +384,7 @@ for (const role of ["GM", "PLAYER"] as const) {
               true,
             );
             await expect(input).toHaveValue(value);
+            await assertSavedResource(value);
             if (phase === "input-enter") await expect(input).toBeFocused();
             await capture(`${phase}:after-patch`);
             await assertFollowing();
@@ -411,6 +432,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         await assertFollowing();
         await capture("before-reload");
         await page.reload();
+        await openCompactJournal();
         await expect(toggle).toHaveAttribute("aria-expanded", "false");
         await expect(input).toHaveValue("6");
         await observeResourceFollow(page);
@@ -441,6 +463,80 @@ for (const role of ["GM", "PLAYER"] as const) {
             "sidebar-reopened-edit",
           );
         }
+        await test.step("resource PATCH while reading history does not resume follow", async () => {
+          await assertFollowing();
+          await page.locator(LIST).hover();
+          // A single wheel stroke did not reach the top in Firefox. Navigate
+          // with bounded real input, requiring progress after every stroke;
+          // do not replace the reader interaction with a scrollTop assignment.
+          for (let stroke = 0; stroke < 12; stroke += 1) {
+            const previousTop = await page
+              .locator(LIST)
+              .evaluate((list) => list.scrollTop);
+            if (previousTop === 0) break;
+            await page.mouse.wheel(0, -10_000);
+            await expect
+              .poll(() => page.locator(LIST).evaluate((list) => list.scrollTop))
+              .toBeLessThan(previousTop);
+          }
+          await expect
+            .poll(() => page.locator(LIST).evaluate((list) => list.scrollTop))
+            .toBe(0);
+          await expect.poll(() => distanceToBottom(page)).toBeGreaterThan(400);
+          const readingTop = await page
+            .locator(LIST)
+            .evaluate((list) => list.scrollTop);
+          const assertReadingPosition = async () => {
+            await expect
+              .poll(async () =>
+                Math.abs(
+                  (await page
+                    .locator(LIST)
+                    .evaluate((list) => list.scrollTop)) - readingTop,
+                ),
+              )
+              .toBeLessThanOrEqual(AT_BOTTOM_TOLERANCE);
+            expect(await distanceToBottom(page)).toBeGreaterThan(400);
+          };
+          await capture("history:before-patch");
+          const value = String(Number(await input.inputValue()) - 1);
+          const saved = page.waitForResponse(
+            (response) =>
+              new URL(response.url()).pathname ===
+                `/api/characters/${character.id}/counters` &&
+              response.request().method() === "PATCH",
+          );
+          await decrement.click();
+          expect((await saved).ok()).toBe(true);
+          await expect(input).toHaveValue(value);
+          await assertSavedResource(value);
+          await capture("history:after-patch");
+          await assertReadingPosition();
+          const label = `UIX-475 reading-history ${randomUUID()}`;
+          const roll = await page.request.post("/api/dice", {
+            data: {
+              actionId: randomUUID(),
+              formula: "1d20",
+              label,
+              visibility: "PUBLIC",
+            },
+          });
+          await expect(roll).toBeOK();
+          await expect(
+            page.locator(LIST).locator("article.message").last(),
+          ).toContainText(label);
+          await capture("history:after-roll");
+          await assertReadingPosition();
+          await page.getByRole("button", { name: /Новые события/ }).click();
+          await assertFollowing();
+          // Explicit return to the latest events must restore follow for the
+          // next real resource edit and roll, not only move the viewport once.
+          await editAndRoll(
+            () => decrement.click(),
+            String(Number(value) - 1),
+            "history-returned-to-bottom",
+          );
+        });
       } finally {
         await capture("final-or-failure");
         await testInfo.attach("resource-follow-scroll", {
