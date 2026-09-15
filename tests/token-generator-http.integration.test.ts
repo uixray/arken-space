@@ -189,6 +189,231 @@ afterEach(async () => {
   env.MEDIA_QUOTA_BYTES = originalQuota;
 });
 
+async function seedReplacementDefinitions() {
+  const definitionId = crypto.randomUUID();
+  const otherDefinitionId = crypto.randomUUID();
+  const placementIds = [crypto.randomUUID(), crypto.randomUUID()];
+  const otherPlacementId = crypto.randomUUID();
+  await db.insert(schema.tokenDefinitions).values(
+    [definitionId, otherDefinitionId].map((id) => ({
+      id,
+      campaignId: ids.campaign,
+      defaultAssetId: ids.token,
+      name: "Shared old image",
+    })),
+  );
+  await db.insert(schema.tokens).values(
+    [...placementIds, otherPlacementId].map((id) => ({
+      id,
+      definitionId: id === otherPlacementId ? otherDefinitionId : definitionId,
+      sceneId: ids.scene,
+      ownerMembershipId: ids.gm,
+      assetId: ids.token,
+      name: "Shared old image",
+      x: 64,
+      y: 64,
+    })),
+  );
+  return { definitionId, otherDefinitionId, placementIds, otherPlacementId };
+}
+
+async function persistedReplacementState() {
+  return {
+    assets: await db.select().from(schema.assets).orderBy(schema.assets.id),
+    definitions: await db
+      .select()
+      .from(schema.tokenDefinitions)
+      .orderBy(schema.tokenDefinitions.id),
+    placements: await db.select().from(schema.tokens).orderBy(schema.tokens.id),
+    events: await db
+      .select()
+      .from(schema.gameEvents)
+      .orderBy(schema.gameEvents.sequence),
+    files: await Promise.all(
+      (await readdir(mediaRoot)).sort().map(async (name) => ({
+        name,
+        bytes: await readFile(join(mediaRoot, name)),
+      })),
+    ),
+  };
+}
+
+async function generateReplacementAsset() {
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/assets/${ids.image}/token`,
+    headers: headers(secrets.gm),
+    payload: transform,
+  });
+  expect(response.statusCode, response.body).toBe(201);
+  return response.json().id as string;
+}
+
+describe("UIX-589 derivative replacement HTTP acceptance", () => {
+  it("rejects generator quota exhaustion without partial media, definitions or placements", async () => {
+    await seedReplacementDefinitions();
+    const before = await persistedReplacementState();
+    env.MEDIA_QUOTA_BYTES = before.assets
+      .filter((asset) => asset.campaignId === ids.campaign)
+      .reduce((used, asset) => used + asset.sizeBytes, 0);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/assets/${ids.image}/token`,
+      headers: headers(secrets.gm),
+      payload: transform,
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json()).toEqual({ error: "MEDIA_QUOTA_EXCEEDED" });
+    expect(await persistedReplacementState()).toEqual(before);
+  });
+
+  it("accepts one same-revision competing replacement and cascades only its own placements", async () => {
+    const seeded = await seedReplacementDefinitions();
+    const replacementIds = [
+      await generateReplacementAsset(),
+      await generateReplacementAsset(),
+    ];
+    const before = await persistedReplacementState();
+    const actionIds = [crypto.randomUUID(), crypto.randomUUID()];
+    const responses = await Promise.all(
+      replacementIds.map((defaultAssetId, index) =>
+        app.inject({
+          method: "PATCH",
+          url: `/api/token-definitions/${seeded.definitionId}`,
+          headers: headers(secrets.gm),
+          payload: { actionId: actionIds[index], revision: 0, defaultAssetId },
+        }),
+      ),
+    );
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([
+      200, 409,
+    ]);
+    const winner = responses.findIndex(
+      (response) => response.statusCode === 200,
+    );
+    expect(responses[1 - winner].json()).toEqual({
+      error: "TOKEN_DEFINITION_CONFLICT",
+    });
+    const after = await persistedReplacementState();
+    expect(
+      after.definitions.find(
+        (definition) => definition.id === seeded.definitionId,
+      ),
+    ).toMatchObject({
+      defaultAssetId: replacementIds[winner],
+      revision: 1,
+    });
+    for (const placementId of seeded.placementIds)
+      expect(
+        after.placements.find((placement) => placement.id === placementId),
+      ).toMatchObject({ assetId: replacementIds[winner] });
+    expect(
+      after.definitions.find(
+        (definition) => definition.id === seeded.otherDefinitionId,
+      ),
+    ).toEqual(
+      before.definitions.find(
+        (definition) => definition.id === seeded.otherDefinitionId,
+      ),
+    );
+    expect(
+      after.placements.find(
+        (placement) => placement.id === seeded.otherPlacementId,
+      ),
+    ).toEqual(
+      before.placements.find(
+        (placement) => placement.id === seeded.otherPlacementId,
+      ),
+    );
+    expect(
+      after.events.filter((event) => actionIds.includes(event.actionId)),
+    ).toMatchObject([
+      {
+        actionId: actionIds[winner],
+        type: "token_definition.updated",
+        entityRevision: 1,
+      },
+    ]);
+    expect(after.assets).toEqual(before.assets);
+    expect(after.files).toEqual(before.files);
+  });
+
+  it("rolls back definition and placement replacement when the real audit insert fails", async () => {
+    const seeded = await seedReplacementDefinitions();
+    const replacementId = await generateReplacementAsset();
+    const before = await persistedReplacementState();
+    const contentBefore = await app.inject({
+      method: "GET",
+      url: `/api/assets/${ids.token}/content`,
+      headers: headers(secrets.gm),
+    });
+    expect(contentBefore.statusCode).toBe(200);
+    const actionId = crypto.randomUUID();
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const sequence = `uix589_reached_${suffix}`;
+    const rejectAudit = `uix589_reject_${suffix}`;
+    try {
+      await database.exec(`
+        CREATE SEQUENCE ${sequence};
+        CREATE FUNCTION ${rejectAudit}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.type = 'token_definition.updated' AND NEW.action_id = TG_ARGV[0]::uuid THEN
+            IF NOT EXISTS (SELECT 1 FROM token_definitions WHERE id = NEW.entity_id AND default_asset_id = TG_ARGV[1]::uuid AND revision = 1)
+              OR EXISTS (SELECT 1 FROM tokens WHERE definition_id = NEW.entity_id AND asset_id IS DISTINCT FROM TG_ARGV[1]::uuid)
+            THEN RAISE EXCEPTION 'UIX589_WRONG_FAILURE_SEAM'; END IF;
+            PERFORM nextval('${sequence}');
+            RAISE EXCEPTION 'UIX589_INJECTED_AUDIT_FAILURE';
+          END IF;
+          RETURN NEW;
+        END;
+        $$;
+        CREATE TRIGGER ${rejectAudit} BEFORE INSERT ON game_events
+          FOR EACH ROW EXECUTE FUNCTION ${rejectAudit}('${actionId}', '${replacementId}');
+      `);
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/token-definitions/${seeded.definitionId}`,
+        headers: headers(secrets.gm),
+        payload: { actionId, revision: 0, defaultAssetId: replacementId },
+      });
+      expect(response.statusCode).toBe(500);
+      expect(
+        (
+          await database.query<{ is_called: boolean }>(
+            `SELECT is_called FROM ${sequence}`,
+          )
+        ).rows,
+      ).toEqual([{ is_called: true }]);
+      expect(await persistedReplacementState()).toEqual(before);
+      const contentAfter = await app.inject({
+        method: "GET",
+        url: `/api/assets/${ids.token}/content`,
+        headers: headers(secrets.gm),
+      });
+      expect(contentAfter.statusCode).toBe(200);
+      expect(contentAfter.rawPayload).toEqual(contentBefore.rawPayload);
+      expect(contentAfter.headers.etag).toBe(contentBefore.headers.etag);
+    } finally {
+      await database.exec(`
+        DROP TRIGGER IF EXISTS ${rejectAudit} ON game_events;
+        DROP FUNCTION IF EXISTS ${rejectAudit}();
+        DROP SEQUENCE IF EXISTS ${sequence};
+      `);
+    }
+    const retry = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${seeded.definitionId}`,
+      headers: headers(secrets.gm),
+      payload: { actionId, revision: 0, defaultAssetId: replacementId },
+    });
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.json()).toMatchObject({
+      defaultAssetId: replacementId,
+      revision: 1,
+    });
+  });
+});
+
 describe("UIX-255 token generator HTTP", () => {
   it("is GM-only and hides foreign or non-IMAGE sources", async () => {
     const denied = await app.inject({
@@ -213,6 +438,7 @@ describe("UIX-255 token generator HTTP", () => {
   });
 
   it("creates one reusable 512px TOKEN and replays the same action", async () => {
+    const sourceBytesBefore = await readFile(join(mediaRoot, "source.webp"));
     const actionId = crypto.randomUUID();
     const created = await app.inject({
       method: "POST",
@@ -246,6 +472,9 @@ describe("UIX-255 token generator HTTP", () => {
     ).toHaveLength(1);
     expect(allAssets.find((asset) => asset.id === ids.image)?.kind).toBe(
       "IMAGE",
+    );
+    expect(await readFile(join(mediaRoot, "source.webp"))).toEqual(
+      sourceBytesBefore,
     );
     const generated = allAssets.find(
       (asset) => asset.id === created.json().id,

@@ -2,6 +2,11 @@ import { expect, test } from "./react-console-guard";
 import type { Locator, Route } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import {
+  tokenParitySource,
+  tokenParityReference,
+  tokenPreviewDifference,
+} from "../../apps/server/src/token-preview-parity.test-support";
 
 async function chooseEmbeddedSource(editor: Locator) {
   const source = editor.getByRole("combobox", {
@@ -271,11 +276,12 @@ const sourceAsset = {
 async function mockBootstrap(
   page: import("@playwright/test").Page,
   role: "GM" | "PLAYER",
+  image = sourceAsset,
 ) {
   const fixture = structuredClone(snapshot);
   fixture.me = { ...fixture.me, role };
   fixture.members[0] = { ...fixture.members[0]!, role };
-  fixture.assets = [sourceAsset];
+  fixture.assets = [image];
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
@@ -299,6 +305,103 @@ async function mockBootstrap(
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"/>',
       }),
   );
+}
+
+for (const size of [
+  { name: "landscape", width: 640, height: 400 },
+  { name: "portrait", width: 400, height: 640 },
+]) {
+  test(`UIX-589 ${size.name} preview agrees with the real WebP renderer`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const source = await tokenParitySource(size.width, size.height);
+    const original = Buffer.from(source);
+    await mockBootstrap(page, "GM", { ...sourceAsset, ...size });
+    await page.route(`**${sourceAsset.url}`, (route) =>
+      route.fulfill({ contentType: "image/png", body: source }),
+    );
+    await page.goto("/");
+    await openWorkspaceSection(page, "Токены");
+    await page.locator(".token-palette > button").click();
+    const editor = page.getByRole("dialog", {
+      name: "Новый токен",
+      exact: true,
+    });
+    await chooseEmbeddedSource(editor);
+    const preview = editor.locator(".token-image-preview");
+    await expect
+      .poll(() =>
+        preview.locator("img").evaluate((node) => ({
+          width: (node as HTMLImageElement).naturalWidth,
+          height: (node as HTMLImageElement).naturalHeight,
+        })),
+      )
+      .toEqual({ width: size.width, height: size.height });
+    await editor
+      .getByRole("slider", { name: "Масштаб изображения токена" })
+      .fill("2.3");
+    await preview.focus();
+    await preview.press("Shift+ArrowRight");
+    await preview.press("Shift+ArrowUp");
+    for (const frame of ["NONE", "BRONZE", "SILVER", "OBSIDIAN"] as const) {
+      await editor.locator(`input[type="radio"][value="${frame}"]`).check();
+      const box = await preview.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeCloseTo(box!.height, 3);
+      const actual = await preview.screenshot({ animations: "disabled" });
+      const reference = await tokenParityReference(source, {
+        cropX: 0.6,
+        cropY: 0.4,
+        zoom: 2.3,
+        frame,
+      });
+      expect(reference.metadata).toMatchObject({
+        format: "webp",
+        width: 512,
+        height: 512,
+        hasAlpha: true,
+      });
+      const difference = await tokenPreviewDifference(actual, reference.bytes);
+      await info.attach(`${size.name}-${frame}-preview`, {
+        body: actual,
+        contentType: "image/png",
+      });
+      await info.attach(`${size.name}-${frame}-server`, {
+        body: reference.bytes,
+        contentType: "image/webp",
+      });
+      await info.attach(`${size.name}-${frame}-difference`, {
+        body: JSON.stringify(difference),
+        contentType: "application/json",
+      });
+      // Different browser/libvips scaling and lossy WebP are not byte-equal.
+      // Compare content plus ring samples, excluding antialiased outer edges.
+      expect(difference.samples).toBeGreaterThan(3000);
+      // A fractional viewport position can add one capture pixel to one edge.
+      expect(
+        Math.abs(difference.width - difference.height),
+      ).toBeLessThanOrEqual(1);
+      expect(difference.mean).toBeLessThan(3);
+      expect(difference.maximum).toBeLessThan(12);
+      for (const value of difference.ringDifferences)
+        expect(value).toBeLessThan(24);
+      if (frame === "NONE") {
+        const wrongCrop = await tokenParityReference(source, {
+          cropX: 0.3,
+          cropY: 0.7,
+          zoom: 1.1,
+          frame,
+        });
+        const negative = await tokenPreviewDifference(actual, wrongCrop.bytes);
+        expect(
+          negative.mean,
+          "oracle rejects a genuinely different crop",
+        ).toBeGreaterThan(15);
+      }
+    }
+    expect(source).toEqual(original);
+  });
 }
 
 test("UIX-589 GM saves crop and definition with one confirmation", async ({
