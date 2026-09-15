@@ -17,8 +17,15 @@ html[data-player-theme] .g-root {
   --g-color-text-brand: var(--color-text-accent);
   --g-color-text-brand-heavy: var(--color-text-accent);
   --g-color-text-brand-contrast: var(--color-accent-ink);
+  --g-color-text-danger: var(--state-error-ink);
   --g-color-line-brand: var(--color-accent);
   --g-color-line-focus: var(--color-focus);
   --g-color-line-generic: var(--color-control-border);
   --g-color-line-generic-hover: var(--color-focus);
+  --g-color-line-generic-active: var(--color-focus);
+  --g-color-line-danger: var(--state-error-ink);
+  /* Text controls use their own outline hooks, not --g-color-line-focus.
+   * Without these, keyboard focus falls back to UIKit's low-contrast border. */
+  --g-text-input-focus-outline-color: var(--color-focus);
+  --g-text-area-focus-outline-color: var(--color-focus);
 }

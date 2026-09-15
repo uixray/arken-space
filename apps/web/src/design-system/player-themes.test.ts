@@ -88,6 +88,26 @@ describe("player theme configuration", () => {
     expect(Object.isFrozen(PLAYER_THEMES[0])).toBe(true);
   });
 
+  it("maps the actual UIKit text-control focus hooks and error ink", async () => {
+    // Structural guard only. Native keyboard/cascade/contrast are checked in
+    // the real-controls browser gate, not proved by reading this stylesheet.
+    const bridge = await readFile(
+      new URL("./player-theme-gravity.css", import.meta.url),
+      "utf8",
+    );
+    expect(bridge).toContain("html[data-player-theme] .g-root {");
+    for (const name of [
+      "g-color-line-generic-active",
+      "g-text-input-focus-outline-color",
+      "g-text-area-focus-outline-color",
+    ]) {
+      expect(bridge).toContain(`--${name}: var(--color-focus);`);
+    }
+    for (const name of ["g-color-text-danger", "g-color-line-danger"]) {
+      expect(bridge).toContain(`--${name}: var(--state-error-ink);`);
+    }
+  });
+
   it("keeps game success and school semantics outside personal-theme CSS", async () => {
     const css = await readFile(
       new URL("./player-themes.generated.css", import.meta.url),

@@ -64,13 +64,22 @@ Measurements taken during the 150ms color transition are not steady-state ratios
 The final connected preflight also passed after the source correction and early
 CI token-drift step: scoped format/lint, full web typecheck, 4/4 focused tests,
 three deterministic generated outputs and the actual-controls preview build.
-The whole isolated run took 64 seconds and did not start a database or Docker.
-The earlier inspected bundle included a recorded one-string correction; the
-rebuilt artifact is retained separately and has not had a second visual pass.
+Native keyboard QA then found a missing UIKit text-input/text-area outline hook;
+the bridge now maps those hooks and active/error borders explicitly. Both fields
+show a solid 2px focus ring in all seven themes; measured ring-to-surface contrast
+is 6.18–15.43:1. The 390px control fixture has no horizontal overflow. The light
+select popup is opaque and readable; arrow/Enter selection, Escape dismissal and
+system fallback preserve form data. These are scoped controls checks, not full
+mobile, layered-dialog or device acceptance.
+
+The corrective gate passed all five focused tests, formatting, lint, web types,
+deterministic token generation and the preview build in 64 seconds. It did not
+start a database or Docker. The pristine rebuilt artifact was independently
+opened to confirm input/textarea focus and the light error state. Earlier patched
+QA assets and original build artifacts are retained separately in the checkpoint.
 
 ## Acceptance still to perform
 
-- Inspect the pristine final bundle before promoting this foundation to a release.
 - Complete real control/text/focus and transition contrast across all seven themes.
 - Check light-mode portals, keyboard focus and responsive states.
 - Add approved subtle materials and validate contrast against their actual pixels.
