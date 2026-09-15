@@ -1,0 +1,41 @@
+import { PLAYER_THEME_DEFINITIONS } from "./player-themes.generated";
+
+export type PlayerThemeColorScheme = "dark" | "light";
+
+export type PlayerThemeDefinition = Readonly<{
+  id: string;
+  name: string;
+  colorScheme: PlayerThemeColorScheme;
+  version: number;
+}>;
+
+export type PlayerThemeId = (typeof PLAYER_THEME_DEFINITIONS)[number]["id"];
+
+/** Configuration only: no profile, account, or persistence boundary lives here. */
+export const PLAYER_THEMES: readonly PlayerThemeDefinition[] = Object.freeze(
+  PLAYER_THEME_DEFINITIONS.map((definition) =>
+    Object.freeze({ ...definition }),
+  ),
+);
+
+const playerThemeIds = new Set<string>(PLAYER_THEMES.map(({ id }) => id));
+
+export function isPlayerThemeId(value: unknown): value is PlayerThemeId {
+  return typeof value === "string" && playerThemeIds.has(value);
+}
+
+/**
+ * Resolves only supplied configuration. `system` deliberately means the
+ * existing baseline without a data-player-theme attribute, never forest.
+ */
+export function resolvePlayerThemeId({
+  selectedThemeId,
+  defaultThemeId,
+}: {
+  selectedThemeId?: string | null;
+  defaultThemeId?: string | null;
+}): PlayerThemeId | "system" {
+  if (isPlayerThemeId(selectedThemeId)) return selectedThemeId;
+  if (isPlayerThemeId(defaultThemeId)) return defaultThemeId;
+  return "system";
+}

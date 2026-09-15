@@ -39,6 +39,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Compare generated base and player-theme files with their canonical
+      # sources before spending time on the application build and test suite.
+      - name: Check generated design tokens
+        run: pnpm tokens:check
+
       # Release-скрипты выполняются POSIX sh на production host. Structural
       # Vitest ловит исчезновение gates, но не заменяет parser shell.
       - name: Check deploy shell syntax

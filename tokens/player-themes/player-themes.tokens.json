@@ -1,0 +1,878 @@
+{
+  "$description": "UIX-317 canonical personal-theme configuration extracted from the approved local foundation artifacts; colors are direct resolved source values, not a second palette.",
+  "$extensions": {
+    "arken": {
+      "source": {
+        "artifact": "ui-foundation-01",
+        "hashes": {
+          "design_system_tokens.json": "a13132720d347946da088c8b4a98e4172caaa14ebb3931f3ae455f79698a8645",
+          "bindings.json": "90d570ada5653f19af8d6f7572d0af863750b476526c84eebe8aa01616e9b4ac",
+          "theme-catalog.js": "a4a6af0f5d76c3d81ab3953b5a1996733afdd77650bb436e2fafa32dab659c05"
+        }
+      }
+    }
+  },
+  "themes": {
+    "forest": {
+      "name": "Лес",
+      "colorScheme": "dark",
+      "version": 1,
+      "tokens": {
+        "color-accent": {
+          "$type": "color",
+          "$value": "#77ad78"
+        },
+        "color-text-accent": {
+          "$type": "color",
+          "$value": "#ade9b4"
+        },
+        "color-surface-selected": {
+          "$type": "color",
+          "$value": "rgba(119, 173, 120, 0.18823529411764706)"
+        },
+        "color-canvas": {
+          "$type": "color",
+          "$value": "#020805"
+        },
+        "color-surface": {
+          "$type": "color",
+          "$value": "#040a07"
+        },
+        "color-surface-raised": {
+          "$type": "color",
+          "$value": "rgba(9, 18, 14, 0.8509803921568627)"
+        },
+        "color-border": {
+          "$type": "color",
+          "$value": "#16241b"
+        },
+        "color-text": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "color-text-muted": {
+          "$type": "color",
+          "$value": "#d0d3d0"
+        },
+        "color-text-faint": {
+          "$type": "color",
+          "$value": "#c5c6c3"
+        },
+        "color-danger": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "color-danger-ink": {
+          "$type": "color",
+          "$value": "#0b1015"
+        },
+        "color-danger-surface": {
+          "$type": "color",
+          "$value": "rgba(224, 124, 132, 0.10196078431372549)"
+        },
+        "color-shadow": {
+          "$type": "color",
+          "$value": "rgba(0, 0, 0, 0.7333333333333333)"
+        },
+        "color-control-border": {
+          "$type": "color",
+          "$value": "#5b655e"
+        },
+        "color-focus": {
+          "$type": "color",
+          "$value": "#ade9b4"
+        },
+        "color-accent-ink": {
+          "$type": "color",
+          "$value": "#020805"
+        },
+        "color-overlay": {
+          "$type": "color",
+          "$value": "#040a07"
+        },
+        "color-surface-hover": {
+          "$type": "color",
+          "$value": "rgba(119, 173, 120, 0.18823529411764706)"
+        },
+        "color-surface-active": {
+          "$type": "color",
+          "$value": "rgba(119, 173, 120, 0.18823529411764706)"
+        },
+        "color-accent-hover": {
+          "$type": "color",
+          "$value": "#ade9b4"
+        },
+        "color-accent-active": {
+          "$type": "color",
+          "$value": "#ade9b4"
+        },
+        "button-primary-background": {
+          "$type": "color",
+          "$value": "#77ad78"
+        },
+        "button-primary-ink": {
+          "$type": "color",
+          "$value": "#020805"
+        },
+        "field-background": {
+          "$type": "color",
+          "$value": "rgba(9, 18, 14, 0.8509803921568627)"
+        },
+        "field-border": {
+          "$type": "color",
+          "$value": "#5b655e"
+        },
+        "field-ink": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "state-error-ink": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "focus-color": {
+          "$type": "color",
+          "$value": "#ade9b4"
+        }
+      }
+    },
+    "dragons": {
+      "name": "Драконы",
+      "colorScheme": "dark",
+      "version": 1,
+      "tokens": {
+        "color-accent": {
+          "$type": "color",
+          "$value": "#a67ad4"
+        },
+        "color-text-accent": {
+          "$type": "color",
+          "$value": "#dac0ff"
+        },
+        "color-surface-selected": {
+          "$type": "color",
+          "$value": "rgba(166, 122, 212, 0.1803921568627451)"
+        },
+        "color-canvas": {
+          "$type": "color",
+          "$value": "#07030b"
+        },
+        "color-surface": {
+          "$type": "color",
+          "$value": "#0a050f"
+        },
+        "color-surface-raised": {
+          "$type": "color",
+          "$value": "rgba(16, 10, 22, 0.8509803921568627)"
+        },
+        "color-border": {
+          "$type": "color",
+          "$value": "#281a34"
+        },
+        "color-text": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "color-text-muted": {
+          "$type": "color",
+          "$value": "#d0d3d0"
+        },
+        "color-text-faint": {
+          "$type": "color",
+          "$value": "#c5c6c3"
+        },
+        "color-danger": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "color-danger-ink": {
+          "$type": "color",
+          "$value": "#0b1015"
+        },
+        "color-danger-surface": {
+          "$type": "color",
+          "$value": "rgba(224, 124, 132, 0.10196078431372549)"
+        },
+        "color-shadow": {
+          "$type": "color",
+          "$value": "rgba(0, 0, 0, 0.7333333333333333)"
+        },
+        "color-control-border": {
+          "$type": "color",
+          "$value": "#645d6c"
+        },
+        "color-focus": {
+          "$type": "color",
+          "$value": "#dac0ff"
+        },
+        "color-accent-ink": {
+          "$type": "color",
+          "$value": "#07030b"
+        },
+        "color-overlay": {
+          "$type": "color",
+          "$value": "#0a050f"
+        },
+        "color-surface-hover": {
+          "$type": "color",
+          "$value": "rgba(166, 122, 212, 0.1803921568627451)"
+        },
+        "color-surface-active": {
+          "$type": "color",
+          "$value": "rgba(166, 122, 212, 0.1803921568627451)"
+        },
+        "color-accent-hover": {
+          "$type": "color",
+          "$value": "#dac0ff"
+        },
+        "color-accent-active": {
+          "$type": "color",
+          "$value": "#dac0ff"
+        },
+        "button-primary-background": {
+          "$type": "color",
+          "$value": "#a67ad4"
+        },
+        "button-primary-ink": {
+          "$type": "color",
+          "$value": "#07030b"
+        },
+        "field-background": {
+          "$type": "color",
+          "$value": "rgba(16, 10, 22, 0.8509803921568627)"
+        },
+        "field-border": {
+          "$type": "color",
+          "$value": "#645d6c"
+        },
+        "field-ink": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "state-error-ink": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "focus-color": {
+          "$type": "color",
+          "$value": "#dac0ff"
+        }
+      }
+    },
+    "ice": {
+      "name": "Лёд",
+      "colorScheme": "dark",
+      "version": 1,
+      "tokens": {
+        "color-accent": {
+          "$type": "color",
+          "$value": "#64aeda"
+        },
+        "color-text-accent": {
+          "$type": "color",
+          "$value": "#b3e4ff"
+        },
+        "color-surface-selected": {
+          "$type": "color",
+          "$value": "rgba(100, 174, 218, 0.1803921568627451)"
+        },
+        "color-canvas": {
+          "$type": "color",
+          "$value": "#02080c"
+        },
+        "color-surface": {
+          "$type": "color",
+          "$value": "#040c12"
+        },
+        "color-surface-raised": {
+          "$type": "color",
+          "$value": "rgba(7, 19, 27, 0.8509803921568627)"
+        },
+        "color-border": {
+          "$type": "color",
+          "$value": "#152936"
+        },
+        "color-text": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "color-text-muted": {
+          "$type": "color",
+          "$value": "#d0d3d0"
+        },
+        "color-text-faint": {
+          "$type": "color",
+          "$value": "#c5c6c3"
+        },
+        "color-danger": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "color-danger-ink": {
+          "$type": "color",
+          "$value": "#0b1015"
+        },
+        "color-danger-surface": {
+          "$type": "color",
+          "$value": "rgba(224, 124, 132, 0.10196078431372549)"
+        },
+        "color-shadow": {
+          "$type": "color",
+          "$value": "rgba(0, 0, 0, 0.7333333333333333)"
+        },
+        "color-control-border": {
+          "$type": "color",
+          "$value": "#56656c"
+        },
+        "color-focus": {
+          "$type": "color",
+          "$value": "#b3e4ff"
+        },
+        "color-accent-ink": {
+          "$type": "color",
+          "$value": "#02080c"
+        },
+        "color-overlay": {
+          "$type": "color",
+          "$value": "#040c12"
+        },
+        "color-surface-hover": {
+          "$type": "color",
+          "$value": "rgba(100, 174, 218, 0.1803921568627451)"
+        },
+        "color-surface-active": {
+          "$type": "color",
+          "$value": "rgba(100, 174, 218, 0.1803921568627451)"
+        },
+        "color-accent-hover": {
+          "$type": "color",
+          "$value": "#b3e4ff"
+        },
+        "color-accent-active": {
+          "$type": "color",
+          "$value": "#b3e4ff"
+        },
+        "button-primary-background": {
+          "$type": "color",
+          "$value": "#64aeda"
+        },
+        "button-primary-ink": {
+          "$type": "color",
+          "$value": "#02080c"
+        },
+        "field-background": {
+          "$type": "color",
+          "$value": "rgba(7, 19, 27, 0.8509803921568627)"
+        },
+        "field-border": {
+          "$type": "color",
+          "$value": "#56656c"
+        },
+        "field-ink": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "state-error-ink": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "focus-color": {
+          "$type": "color",
+          "$value": "#b3e4ff"
+        }
+      }
+    },
+    "fire": {
+      "name": "Огонь",
+      "colorScheme": "dark",
+      "version": 1,
+      "tokens": {
+        "color-accent": {
+          "$type": "color",
+          "$value": "#cf6675"
+        },
+        "color-text-accent": {
+          "$type": "color",
+          "$value": "#ffc1b5"
+        },
+        "color-surface-selected": {
+          "$type": "color",
+          "$value": "rgba(207, 102, 117, 0.1843137254901961)"
+        },
+        "color-canvas": {
+          "$type": "color",
+          "$value": "#0b0204"
+        },
+        "color-surface": {
+          "$type": "color",
+          "$value": "#0e0306"
+        },
+        "color-surface-raised": {
+          "$type": "color",
+          "$value": "rgba(22, 7, 12, 0.8509803921568627)"
+        },
+        "color-border": {
+          "$type": "color",
+          "$value": "#35151d"
+        },
+        "color-text": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "color-text-muted": {
+          "$type": "color",
+          "$value": "#d0d3d0"
+        },
+        "color-text-faint": {
+          "$type": "color",
+          "$value": "#c5c6c3"
+        },
+        "color-danger": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "color-danger-ink": {
+          "$type": "color",
+          "$value": "#0b1015"
+        },
+        "color-danger-surface": {
+          "$type": "color",
+          "$value": "rgba(224, 124, 132, 0.10196078431372549)"
+        },
+        "color-shadow": {
+          "$type": "color",
+          "$value": "rgba(0, 0, 0, 0.7333333333333333)"
+        },
+        "color-control-border": {
+          "$type": "color",
+          "$value": "#6e5b5f"
+        },
+        "color-focus": {
+          "$type": "color",
+          "$value": "#ffc1b5"
+        },
+        "color-accent-ink": {
+          "$type": "color",
+          "$value": "#0b0204"
+        },
+        "color-overlay": {
+          "$type": "color",
+          "$value": "#0e0306"
+        },
+        "color-surface-hover": {
+          "$type": "color",
+          "$value": "rgba(207, 102, 117, 0.1843137254901961)"
+        },
+        "color-surface-active": {
+          "$type": "color",
+          "$value": "rgba(207, 102, 117, 0.1843137254901961)"
+        },
+        "color-accent-hover": {
+          "$type": "color",
+          "$value": "#ffc1b5"
+        },
+        "color-accent-active": {
+          "$type": "color",
+          "$value": "#ffc1b5"
+        },
+        "button-primary-background": {
+          "$type": "color",
+          "$value": "#cf6675"
+        },
+        "button-primary-ink": {
+          "$type": "color",
+          "$value": "#0b0204"
+        },
+        "field-background": {
+          "$type": "color",
+          "$value": "rgba(22, 7, 12, 0.8509803921568627)"
+        },
+        "field-border": {
+          "$type": "color",
+          "$value": "#6e5b5f"
+        },
+        "field-ink": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "state-error-ink": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "focus-color": {
+          "$type": "color",
+          "$value": "#ffc1b5"
+        }
+      }
+    },
+    "gold": {
+      "name": "Золото",
+      "colorScheme": "dark",
+      "version": 1,
+      "tokens": {
+        "color-accent": {
+          "$type": "color",
+          "$value": "#c9a85d"
+        },
+        "color-text-accent": {
+          "$type": "color",
+          "$value": "#ecd39b"
+        },
+        "color-surface-selected": {
+          "$type": "color",
+          "$value": "rgba(201, 168, 93, 0.18823529411764706)"
+        },
+        "color-canvas": {
+          "$type": "color",
+          "$value": "#090704"
+        },
+        "color-surface": {
+          "$type": "color",
+          "$value": "#100d08"
+        },
+        "color-surface-raised": {
+          "$type": "color",
+          "$value": "rgba(23, 18, 11, 0.8509803921568627)"
+        },
+        "color-border": {
+          "$type": "color",
+          "$value": "#30271a"
+        },
+        "color-text": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "color-text-muted": {
+          "$type": "color",
+          "$value": "#d0d3d0"
+        },
+        "color-text-faint": {
+          "$type": "color",
+          "$value": "#c5c6c3"
+        },
+        "color-danger": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "color-danger-ink": {
+          "$type": "color",
+          "$value": "#0b1015"
+        },
+        "color-danger-surface": {
+          "$type": "color",
+          "$value": "rgba(224, 124, 132, 0.10196078431372549)"
+        },
+        "color-shadow": {
+          "$type": "color",
+          "$value": "rgba(0, 0, 0, 0.7333333333333333)"
+        },
+        "color-control-border": {
+          "$type": "color",
+          "$value": "#68635a"
+        },
+        "color-focus": {
+          "$type": "color",
+          "$value": "#ecd39b"
+        },
+        "color-accent-ink": {
+          "$type": "color",
+          "$value": "#090704"
+        },
+        "color-overlay": {
+          "$type": "color",
+          "$value": "#100d08"
+        },
+        "color-surface-hover": {
+          "$type": "color",
+          "$value": "rgba(201, 168, 93, 0.18823529411764706)"
+        },
+        "color-surface-active": {
+          "$type": "color",
+          "$value": "rgba(201, 168, 93, 0.18823529411764706)"
+        },
+        "color-accent-hover": {
+          "$type": "color",
+          "$value": "#ecd39b"
+        },
+        "color-accent-active": {
+          "$type": "color",
+          "$value": "#ecd39b"
+        },
+        "button-primary-background": {
+          "$type": "color",
+          "$value": "#c9a85d"
+        },
+        "button-primary-ink": {
+          "$type": "color",
+          "$value": "#090704"
+        },
+        "field-background": {
+          "$type": "color",
+          "$value": "rgba(23, 18, 11, 0.8509803921568627)"
+        },
+        "field-border": {
+          "$type": "color",
+          "$value": "#68635a"
+        },
+        "field-ink": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "state-error-ink": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "focus-color": {
+          "$type": "color",
+          "$value": "#ecd39b"
+        }
+      }
+    },
+    "silver": {
+      "name": "Серебро",
+      "colorScheme": "dark",
+      "version": 1,
+      "tokens": {
+        "color-accent": {
+          "$type": "color",
+          "$value": "#a9bccb"
+        },
+        "color-text-accent": {
+          "$type": "color",
+          "$value": "#dfe8f1"
+        },
+        "color-surface-selected": {
+          "$type": "color",
+          "$value": "rgba(169, 188, 203, 0.18823529411764706)"
+        },
+        "color-canvas": {
+          "$type": "color",
+          "$value": "#06090c"
+        },
+        "color-surface": {
+          "$type": "color",
+          "$value": "#0b1014"
+        },
+        "color-surface-raised": {
+          "$type": "color",
+          "$value": "rgba(16, 24, 32, 0.8509803921568627)"
+        },
+        "color-border": {
+          "$type": "color",
+          "$value": "#25303a"
+        },
+        "color-text": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "color-text-muted": {
+          "$type": "color",
+          "$value": "#d0d3d0"
+        },
+        "color-text-faint": {
+          "$type": "color",
+          "$value": "#c5c6c3"
+        },
+        "color-danger": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "color-danger-ink": {
+          "$type": "color",
+          "$value": "#0b1015"
+        },
+        "color-danger-surface": {
+          "$type": "color",
+          "$value": "rgba(224, 124, 132, 0.10196078431372549)"
+        },
+        "color-shadow": {
+          "$type": "color",
+          "$value": "rgba(0, 0, 0, 0.7333333333333333)"
+        },
+        "color-control-border": {
+          "$type": "color",
+          "$value": "#5f676d"
+        },
+        "color-focus": {
+          "$type": "color",
+          "$value": "#dfe8f1"
+        },
+        "color-accent-ink": {
+          "$type": "color",
+          "$value": "#06090c"
+        },
+        "color-overlay": {
+          "$type": "color",
+          "$value": "#0b1014"
+        },
+        "color-surface-hover": {
+          "$type": "color",
+          "$value": "rgba(169, 188, 203, 0.18823529411764706)"
+        },
+        "color-surface-active": {
+          "$type": "color",
+          "$value": "rgba(169, 188, 203, 0.18823529411764706)"
+        },
+        "color-accent-hover": {
+          "$type": "color",
+          "$value": "#dfe8f1"
+        },
+        "color-accent-active": {
+          "$type": "color",
+          "$value": "#dfe8f1"
+        },
+        "button-primary-background": {
+          "$type": "color",
+          "$value": "#a9bccb"
+        },
+        "button-primary-ink": {
+          "$type": "color",
+          "$value": "#06090c"
+        },
+        "field-background": {
+          "$type": "color",
+          "$value": "rgba(16, 24, 32, 0.8509803921568627)"
+        },
+        "field-border": {
+          "$type": "color",
+          "$value": "#5f676d"
+        },
+        "field-ink": {
+          "$type": "color",
+          "$value": "#f1f0ed"
+        },
+        "state-error-ink": {
+          "$type": "color",
+          "$value": "#e07c84"
+        },
+        "focus-color": {
+          "$type": "color",
+          "$value": "#dfe8f1"
+        }
+      }
+    },
+    "light": {
+      "name": "Светлая",
+      "colorScheme": "light",
+      "version": 1,
+      "tokens": {
+        "color-accent": {
+          "$type": "color",
+          "$value": "#876039"
+        },
+        "color-text-accent": {
+          "$type": "color",
+          "$value": "#704620"
+        },
+        "color-surface-selected": {
+          "$type": "color",
+          "$value": "rgba(135, 96, 57, 0.10980392156862745)"
+        },
+        "color-canvas": {
+          "$type": "color",
+          "$value": "#eeeae2"
+        },
+        "color-surface": {
+          "$type": "color",
+          "$value": "#e6e0d5"
+        },
+        "color-surface-raised": {
+          "$type": "color",
+          "$value": "#f7f3ea"
+        },
+        "color-border": {
+          "$type": "color",
+          "$value": "#bfb6a8"
+        },
+        "color-text": {
+          "$type": "color",
+          "$value": "#292723"
+        },
+        "color-text-muted": {
+          "$type": "color",
+          "$value": "#544e45"
+        },
+        "color-text-faint": {
+          "$type": "color",
+          "$value": "#625a50"
+        },
+        "color-danger": {
+          "$type": "color",
+          "$value": "#a53d45"
+        },
+        "color-danger-ink": {
+          "$type": "color",
+          "$value": "#ffffff"
+        },
+        "color-danger-surface": {
+          "$type": "color",
+          "$value": "rgba(165, 61, 69, 0.07058823529411765)"
+        },
+        "color-shadow": {
+          "$type": "color",
+          "$value": "rgba(52, 40, 29, 0.2196078431372549)"
+        },
+        "color-control-border": {
+          "$type": "color",
+          "$value": "#837c71"
+        },
+        "color-focus": {
+          "$type": "color",
+          "$value": "#704620"
+        },
+        "color-accent-ink": {
+          "$type": "color",
+          "$value": "#eeeae2"
+        },
+        "color-overlay": {
+          "$type": "color",
+          "$value": "#e6e0d5"
+        },
+        "color-surface-hover": {
+          "$type": "color",
+          "$value": "rgba(135, 96, 57, 0.10980392156862745)"
+        },
+        "color-surface-active": {
+          "$type": "color",
+          "$value": "rgba(135, 96, 57, 0.10980392156862745)"
+        },
+        "color-accent-hover": {
+          "$type": "color",
+          "$value": "#704620"
+        },
+        "color-accent-active": {
+          "$type": "color",
+          "$value": "#704620"
+        },
+        "button-primary-background": {
+          "$type": "color",
+          "$value": "#876039"
+        },
+        "button-primary-ink": {
+          "$type": "color",
+          "$value": "#eeeae2"
+        },
+        "field-background": {
+          "$type": "color",
+          "$value": "#f7f3ea"
+        },
+        "field-border": {
+          "$type": "color",
+          "$value": "#837c71"
+        },
+        "field-ink": {
+          "$type": "color",
+          "$value": "#292723"
+        },
+        "state-error-ink": {
+          "$type": "color",
+          "$value": "#a53d45"
+        },
+        "focus-color": {
+          "$type": "color",
+          "$value": "#704620"
+        }
+      }
+    }
+  }
+}

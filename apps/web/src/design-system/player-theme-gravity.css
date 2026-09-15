@@ -1,0 +1,24 @@
+/* Opt-in bridge. The unthemed production UI and overlay ownership are unchanged.
+ * Personal colors must never replace saved canvas colors or game outcomes. */
+html[data-player-theme] .g-root {
+  --g-color-base-background: var(--color-canvas);
+  --g-color-base-float: var(--color-surface-raised);
+  --g-color-base-float-hover: var(--color-surface-hover);
+  --g-color-base-brand: var(--color-accent);
+  --g-color-base-brand-hover: var(--color-accent-hover);
+  --g-color-base-selection: var(--color-surface-selected);
+  --g-color-base-selection-hover: var(--color-surface-hover);
+  --g-color-base-generic: var(--color-surface-raised);
+  --g-color-base-generic-hover: var(--color-surface-hover);
+  --g-color-text-primary: var(--color-text);
+  --g-color-text-secondary: var(--color-text-muted);
+  --g-color-text-complementary: var(--color-text-muted);
+  --g-color-text-hint: var(--color-text-muted);
+  --g-color-text-brand: var(--color-text-accent);
+  --g-color-text-brand-heavy: var(--color-text-accent);
+  --g-color-text-brand-contrast: var(--color-accent-ink);
+  --g-color-line-brand: var(--color-accent);
+  --g-color-line-focus: var(--color-focus);
+  --g-color-line-generic: var(--color-control-border);
+  --g-color-line-generic-hover: var(--color-focus);
+}
