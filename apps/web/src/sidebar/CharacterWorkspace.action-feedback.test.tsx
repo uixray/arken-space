@@ -568,4 +568,61 @@ describe("character action feedback", () => {
       "Файл выбран. Загрузите его, чтобы назначить портрет.",
     );
   });
+  it("keeps a new character upload locked when the old epoch settles", async () => {
+    const first = deferred<AssetDto>();
+    const second = deferred<AssetDto>();
+    const upload = vi
+      .fn<CampaignActions["asset"]["uploadAsset"]>()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const patch = vi.fn<PanelProps["onPatch"]>().mockResolvedValue(undefined);
+    const commands = actions(upload);
+    const rendered = renderComponent(
+      view(snapshot(), { onPatch: patch }, commands),
+    );
+    await galleryLoaded();
+    selectPortrait(new File(["a"], "a.png", { type: "image/png" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Загрузить и назначить" }),
+    );
+    expect(upload).toHaveBeenCalledTimes(1);
+
+    rendered.rerender(
+      view(
+        snapshot([character({ id: "character-b", revision: 12 })]),
+        { onPatch: patch },
+        commands,
+      ),
+    );
+    await galleryLoaded();
+    expect(
+      screen.getByRole("button", { name: "Загрузить и назначить" }),
+    ).toHaveAttribute("aria-busy", "false");
+    const file = selectPortrait(
+      new File(["b"], "b.png", { type: "image/png" }),
+    );
+    const button = screen.getByRole("button", {
+      name: "Загрузить и назначить",
+    });
+    act(() => {
+      button.click();
+      button.click();
+    });
+    expect(upload).toHaveBeenCalledTimes(2);
+    await act(async () => first.resolve(portrait));
+    expect(patch).not.toHaveBeenCalled();
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.getByLabelText("Загрузить портрет для персонажа"),
+    ).toBeDisabled();
+    await act(async () => second.resolve(portrait));
+    expect(patch).toHaveBeenCalledExactlyOnceWith("character-b", {
+      portraitAssetId: portrait.id,
+      revision: 12,
+    });
+    expect(upload).toHaveBeenNthCalledWith(2, file, "PORTRAIT");
+    expect(button).toHaveAttribute("aria-busy", "false");
+    expect(button).toBeDisabled();
+  });
 });

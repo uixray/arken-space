@@ -110,6 +110,7 @@ export function FormTextArea({
   value,
   defaultValue,
   controlRef,
+  onChange,
   ...props
 }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
   controlRef?: Ref<HTMLTextAreaElement>;
@@ -118,14 +119,15 @@ export function FormTextArea({
     <TextArea
       {...props}
       controlRef={controlRef}
-      // Like TextInput, TextArea only forwards native ARIA descriptions via
-      // controlProps and derives aria-invalid from its own validation state.
+      // TextArea's outer props describe its wrapper. Native constraints,
+      // clipboard handlers and ARIA relationships belong to the real control.
       controlProps={{ ...props, className: undefined, style: undefined }}
       validationState={
         props["aria-invalid"] && props["aria-invalid"] !== "false"
           ? "invalid"
           : undefined
       }
+      onChange={onChange}
       value={value === undefined ? undefined : String(value)}
       defaultValue={
         defaultValue === undefined ? undefined : String(defaultValue)

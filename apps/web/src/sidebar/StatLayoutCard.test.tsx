@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import type { TextInput } from "@gravity-ui/uikit";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "../test-support/render";
 import { StatLayoutCard } from "./StatLayoutCard";
@@ -91,19 +92,12 @@ vi.mock("@gravity-ui/uikit", () => {
       defaultValue,
       disabled,
       type,
-      ...rest
-    }: {
-      value?: string;
-      defaultValue?: string;
-      disabled?: boolean;
-      type?: string;
-      onUpdate?: (next: string) => void;
-      onKeyDown?: (event: { key: string }) => void;
-      onBlur?: (event: { target: { value: string } }) => void;
-      "aria-label"?: string;
-    }) => (
+      controlProps,
+      controlRef,
+    }: ComponentProps<typeof TextInput>) => (
       <input
-        aria-label={rest["aria-label"]}
+        {...controlProps}
+        ref={controlRef}
         type={type}
         disabled={disabled}
         {...(value === undefined ? { defaultValue } : { value })}

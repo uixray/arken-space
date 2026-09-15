@@ -490,4 +490,28 @@ describe("ActivityPanel action context (UIX-621)", () => {
       expect(document.getElementById("activity-composer-error")).toBeNull();
     },
   );
+  it("does not publish a prior actor failure into the new composer scope", async () => {
+    const first = deferred();
+    const current = snapshot();
+    const onChat = vi.fn(() => first.promise);
+    const rendered = renderActivity(current, { onChat });
+    fireEvent.change(composerInput(), { target: { value: "Сообщение A" } });
+    submit();
+    expect(composerInput()).toHaveValue("");
+    rendered.rerender({
+      ...current,
+      me: { ...current.me, id: "replacement-actor" },
+    });
+    fireEvent.change(composerInput(), { target: { value: "Черновик B" } });
+    await act(async () =>
+      first.reject(new Error("Ошибка старого отправителя")),
+    );
+    expect(composerInput()).toHaveValue("Черновик B");
+    expect(composerInput()).not.toHaveAttribute("aria-invalid", "true");
+    expect(composerInput()).toHaveAttribute(
+      "aria-describedby",
+      "activity-composer-hint",
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

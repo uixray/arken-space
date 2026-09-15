@@ -161,3 +161,46 @@ Next: verify this whole correction pool off the laptop, then continue the
 approved main-screen design direction. Required targeted source diversions
 remain a separate gate; the shared PR workflows do not execute them. Retain
 the entire original acceptance scope rather than treating a PR as Done.
+
+## Reconciliation checkpoint — 2026-09-15
+
+- Revision: existing PR75 branch HEAD ec45aa8327e6a1ef4b487ebc295cf823d828a3c5,
+  merging released main 93935933738c78f459b8a0fa1c4d13747f82c8e3 with
+  --no-commit --no-ff. Both histories retained; merge remains uncommitted.
+- Decisions: main native textarea controlProps/onChange, invalid validation
+  mapping, command-button expansion, Activity/Chat/Direct scoped consume/restore
+  ownership, compact controls scroll wrapper and read-only identity guards
+  retained. PR75 named PLAYER action selection, initiating action identity,
+  same-render quick-roll lock, separate errors and access/prerequisite/dirty/
+  pending descriptions retained. Gallery canEditMedia remains narrower.
+- Portrait: busy ref/state combined with actor/character/permission/file epoch
+  invalidation and unmount cleanup. Context changes release the displayed lock;
+  an old completion cannot release a newer upload lock or patch a new context.
+  Selected files remain preserved, including after revoked permission; read-only
+  controls prevent assignment. Successful assignment releases busy before file
+  clearing changes the epoch.
+- Changed reconciliation files: CharacterWorkspace.tsx, ChatPanels.tsx,
+  GravityFormControls.tsx, GravityFormControls.dom.test.tsx, owning Activity/
+  Character action tests, this plan. Main source-diversion scripts retained;
+  only exact fault anchors for combined disabled guards and conditional composer
+  description adapted, without dropping faults or expected semantic markers.
+- Verification: light Git source diff and whitespace/conflict-marker inspection
+  only. No test runner, formatter, compiler, build, browser, server, installation,
+  commit or push performed. New regression cases cover old portrait completion
+  while new character upload is locked, and prior actor send failure vs new draft.
+- UNRUN targeted pool: activity-roll-controls.test.ts;
+  ActivityPanel.action-context.test.tsx; CharacterWorkspace.action-feedback.test.tsx;
+  CharacterPanel.role-access.test.tsx; GravityFormControls.dom.test.tsx;
+  ChatPanels.pending-draft.test.tsx; ChatPanels.scope.test.tsx;
+  tests/e2e/concept.spec.ts; tests/e2e/composer-pending-draft.spec.ts;
+  tests/e2e/compact-journal-budget.spec.ts; tests/e2e/activity-feed-layout.spec.ts;
+  scripts/check-character-readonly-guards.mjs; scripts/check-character-role-guards.mjs;
+  scripts/check-composer-drafts.mjs; scripts/check-compact-journal-budget.mjs.
+  Shared lint/format/typecheck/build/full Vitest/multiplayer/browser gates UNRUN.
+- Blockers/risks: source reconciliation is not runtime acceptance; hosted CI and
+  exact source-diversion gates still required. Portrait backend cancellation is
+  not introduced: an already sent PATCH may finish, but late upload results and
+  local completion state are context guarded. Existing main scoped draft hook
+  is preserved, not replaced with PR75's weaker edit revision.
+- Next action: independent integrated source review, formatting if available,
+  then owner-approved existing hosted PR gate. No merge/release/production claim.

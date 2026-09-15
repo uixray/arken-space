@@ -1434,8 +1434,12 @@ code {
   display: flex;
   flex-direction: column;
 }
-.activity-feed > * {
+.activity-feed > *,
+.activity-feed__controls > * {
   flex: 0 0 auto;
+}
+.activity-feed__controls {
+  display: contents;
 }
 /* UIX-560: у ленты есть пол, ниже которого её не отдают соседям.
 
@@ -1461,7 +1465,7 @@ code {
    низ: поле ввода сообщения уезжало за край, писать было нечем. Внутренняя
    прокрутка у него уже есть, поэтому сжатие ничего не прячет безвозвратно —
    она для того и появляется, когда кнопки перестают помещаться. */
-.activity-feed > .activity-roll-controls {
+.activity-feed__controls > .activity-roll-controls {
   flex: 0 1 auto;
   min-height: 0;
 }

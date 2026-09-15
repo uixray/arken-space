@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { createRef, useState } from "react";
+import {
+  createRef,
+  useState,
+  type ClipboardEvent as ReactClipboardEvent,
+} from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@gravity-ui/uikit";
 import type { ReactElement, ReactNode } from "react";
@@ -196,4 +200,65 @@ it("forwards textarea identity, validation, descriptions and native callbacks to
   });
   expect(validInput).not.toHaveAttribute("aria-invalid", "true");
   expect(validInput).not.toHaveAttribute("aria-describedby");
+});
+
+it("forwards textarea accessibility, constraints and the real control ref", () => {
+  const ref = createRef<HTMLTextAreaElement>();
+  renderComponent(
+    <>
+      <p id="message-hint">Не больше 40 символов.</p>
+      <FormTextArea
+        controlRef={ref}
+        aria-label="Сообщение или бросок"
+        aria-describedby="message-hint"
+        aria-invalid
+        required
+        maxLength={40}
+        rows={3}
+        defaultValue="Черновик"
+      />
+    </>,
+  );
+  expect(
+    screen.queryByRole("textbox", { name: "Сообщение или бросок" }),
+    "UIX624_TEXTAREA_NATIVE_LABEL",
+  ).not.toBeNull();
+  const textarea = screen.getByRole("textbox", {
+    name: "Сообщение или бросок",
+  });
+  expect(ref.current).toBe(textarea);
+  expect(textarea).toHaveAccessibleDescription("Не больше 40 символов.");
+  expect(textarea).toHaveAttribute("aria-invalid", "true");
+  expect(textarea).toBeRequired();
+  expect(textarea).toHaveAttribute("maxlength", "40");
+  expect(textarea).toHaveAttribute("rows", "3");
+  expect(textarea).toHaveValue("Черновик");
+});
+
+it("keeps native textarea change and paste handlers on the inner control", () => {
+  const changed = vi.fn();
+  let pasteCurrentTarget: EventTarget | null = null;
+  const pasted = vi.fn((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    pasteCurrentTarget = event.currentTarget;
+  });
+  renderComponent(
+    <FormTextArea
+      aria-label="Текст события"
+      onChange={changed}
+      onPaste={pasted}
+    />,
+  );
+  expect(
+    screen.queryByRole("textbox", { name: "Текст события" }),
+    "UIX624_TEXTAREA_NATIVE_EVENT_CONTROL",
+  ).not.toBeNull();
+  const textarea = screen.getByRole("textbox", { name: "Текст события" });
+  fireEvent.change(textarea, { target: { value: "Новая запись" } });
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(changed.mock.lastCall?.[0].target).toBe(textarea);
+  fireEvent.paste(textarea, {
+    clipboardData: { items: [] },
+  });
+  expect(pasted).toHaveBeenCalledTimes(1);
+  expect(pasteCurrentTarget).toBe(textarea);
 });
