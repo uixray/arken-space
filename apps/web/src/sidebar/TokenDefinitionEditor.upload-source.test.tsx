@@ -489,6 +489,172 @@ describe("UIX-611 real-chain single-confirm creation controls", () => {
   });
 });
 
+describe("UIX-589 atomic definition edit recovery", () => {
+  it("replays a committed PATCH after refresh failure, while a changed failed edit gets a new id", async () => {
+    const definition = {
+      id: "definition-under-edit",
+      name: "Старый страж",
+      ownName: "Старый страж",
+      characterId: null,
+      defaultAssetId: ready.id,
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 7,
+    };
+    const requests: Array<{ path: string; method: string; body?: unknown }> =
+      [];
+    let patchAttempts = 0;
+    let bootstrapAttempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const method = init?.method ?? "GET";
+        if (
+          path === `/api/token-definitions/${definition.id}` &&
+          method === "PATCH"
+        ) {
+          requests.push({ path, method, body: JSON.parse(String(init?.body)) });
+          patchAttempts += 1;
+          if (patchAttempts === 1)
+            return jsonResponse(
+              { error: "PATCH_REJECTED", message: "PATCH отклонён" },
+              503,
+            );
+          // Attempt two commits; the same-key retry receives the real replay shape.
+          return jsonResponse(
+            patchAttempts === 2
+              ? { ...definition, revision: 8 }
+              : { duplicate: true },
+          );
+        }
+        if (path === "/api/bootstrap" && method === "GET") {
+          requests.push({ path, method });
+          bootstrapAttempts += 1;
+          if (bootstrapAttempts === 1)
+            return jsonResponse(
+              { error: "BOOTSTRAP_FAILED", message: "Снимок недоступен" },
+              503,
+            );
+          return jsonResponse(
+            gmSnapshot({
+              scenes: [activeScene],
+              assets: [ready],
+              tokenDefinitions: [{ ...definition, revision: 8 }],
+            }),
+          );
+        }
+        if (path === "/api/client-logs" && method === "POST")
+          return jsonResponse({ accepted: true }, 202);
+        throw new Error(`Unexpected edit recovery request: ${method} ${path}`);
+      }),
+    );
+
+    function Harness() {
+      const [snapshot, setSnapshot] = useState(() =>
+        gmSnapshot({
+          scenes: [activeScene],
+          assets: [ready],
+          tokenDefinitions: [definition],
+        }),
+      );
+      const [open, setOpen] = useState(true);
+      const [sharedError, setSharedError] = useState("");
+      const load = useCallback(async () => {
+        setSnapshot(await api<GameSnapshot>("/api/bootstrap"));
+      }, []);
+      const { run } = useMutationRunners({ load, setError: setSharedError });
+      const actions = useTokenDefinitionActions({
+        run,
+        snapshotRef: useLatestRef(snapshot),
+        activeSceneRef: useLatestRef(activeScene),
+      });
+      return (
+        <>
+          <output data-testid="edit-shared-error">{sharedError}</output>
+          {open ? (
+            <TokenDefinitionEditor
+              snapshot={snapshot}
+              definition={definition}
+              onUpload={async () => {
+                throw new Error("Unexpected upload");
+              }}
+              onGenerateTokenImage={async () => {
+                throw new Error("Unexpected generation");
+              }}
+              onCreate={async () => {
+                throw new Error("Unexpected create");
+              }}
+              onCreateAndPlace={async () => {
+                throw new Error("Unexpected create-and-place");
+              }}
+              onCancel={() => setOpen(false)}
+              onPatch={actions.onPatchTokenDefinition}
+              onOpenCharacters={vi.fn()}
+              onOpenMedia={vi.fn()}
+            />
+          ) : (
+            <p role="status">Редактор закрыт</p>
+          )}
+        </>
+      );
+    }
+
+    renderComponent(<Harness />);
+    const name = screen.getByLabelText("Название");
+    await userEvent.clear(name);
+    await userEvent.type(name, "После отказа");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "PATCH отклонён",
+    );
+    expect(
+      requests.filter((request) => request.method === "PATCH"),
+    ).toHaveLength(1);
+    expect(
+      requests.filter((request) => request.path === "/api/bootstrap"),
+    ).toEqual([]);
+
+    await userEvent.clear(name);
+    await userEvent.type(name, "После commit");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Снимок недоступен",
+    );
+    expect(screen.getByTestId("edit-shared-error")).toHaveTextContent(
+      "Снимок недоступен",
+    );
+    const patches = requests.filter((request) => request.method === "PATCH");
+    expect(patches).toHaveLength(2);
+    const failedBody = patches[0]?.body as { actionId: string; name: string };
+    const committedBody = patches[1]?.body as {
+      actionId: string;
+      name: string;
+    };
+    expect(committedBody.name).toBe("После commit");
+    expect(committedBody.actionId).not.toBe(failedBody.actionId);
+
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByText("Редактор закрыт")).toBeInTheDocument();
+    const replayed = requests.filter((request) => request.method === "PATCH");
+    expect(replayed).toHaveLength(3);
+    expect(replayed[2]?.body).toEqual(committedBody);
+    expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      `PATCH /api/token-definitions/${definition.id}`,
+      `PATCH /api/token-definitions/${definition.id}`,
+      "GET /api/bootstrap",
+      `PATCH /api/token-definitions/${definition.id}`,
+      "GET /api/bootstrap",
+    ]);
+  });
+});
+
 describe("UIX-611 real editor uploaded-source selection", () => {
   it("awaits held upload B on Save and preserves a later deliberate source crop across reload", async () => {
     let resolveUpload!: (asset: AssetDto) => void;

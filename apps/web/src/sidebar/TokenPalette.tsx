@@ -196,7 +196,6 @@ export function PalettePanel(props: Props) {
           onCreate={tokenActions.onCreateTokenDefinition}
           onCreateAndPlace={tokenActions.onCreateAndPlaceTokenDefinition}
           onPatch={tokenActions.onPatchTokenDefinition}
-          onReplaceControllers={tokenActions.onReplaceTokenControllers}
           onOpenCharacters={() => {
             setEditor(null);
             props.onWorkspaceChange("setup");
@@ -345,7 +344,6 @@ export function TokenDefinitionEditor({
   onCreate,
   onCreateAndPlace,
   onPatch,
-  onReplaceControllers,
   onOpenCharacters,
   onOpenMedia,
 }: {
@@ -357,7 +355,9 @@ export function TokenDefinitionEditor({
   onCreate: TokenDefinitionActions["onCreateTokenDefinition"];
   onCreateAndPlace: TokenDefinitionActions["onCreateAndPlaceTokenDefinition"];
   onPatch: TokenDefinitionActions["onPatchTokenDefinition"];
-  onReplaceControllers: TokenDefinitionActions["onReplaceTokenControllers"];
+  // Kept at the component boundary while older focused harnesses migrate;
+  // editing now sends controllers atomically in PATCH rather than calling it.
+  onReplaceControllers?: TokenDefinitionActions["onReplaceTokenControllers"];
   onOpenCharacters: () => void;
   onOpenMedia: () => void;
 }) {
@@ -404,6 +404,11 @@ export function TokenDefinitionEditor({
   const generationCommand = useRef<{
     key: string;
     draft: TokenImageDraft;
+    actionId: string;
+  } | null>(null);
+  const patchCommand = useRef<{
+    key: string;
+    input: Parameters<TokenDefinitionActions["onPatchTokenDefinition"]>[2];
     actionId: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -520,13 +525,25 @@ export function TokenDefinitionEditor({
         await onCreate(input);
         if (!current()) return;
       } else {
-        await onPatch(definition.id, definition.revision, input);
-        if (!current()) return;
-        await onReplaceControllers(
-          definition.id,
-          definition.revision + 1,
-          inputSnapshot.controllerMembershipIds,
-        );
+        const key = JSON.stringify({
+          definitionId: definition.id,
+          revision: definition.revision,
+          input,
+        });
+        const command =
+          patchCommand.current?.key === key
+            ? patchCommand.current
+            : {
+                key,
+                input: { ...input },
+                actionId: crypto.randomUUID(),
+              };
+        patchCommand.current = command;
+        await onPatch(definition.id, definition.revision, command.input, {
+          actionId: command.actionId,
+          refresh: true,
+          errorOwner: "caller",
+        });
         if (!current()) return;
       }
       if (current()) {

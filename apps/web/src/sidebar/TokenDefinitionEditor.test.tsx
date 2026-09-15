@@ -7,6 +7,7 @@ import type {
   TokenDefinitionDto,
 } from "@arken/contracts";
 import {
+  act,
   renderComponent,
   screen,
   userEvent,
@@ -237,12 +238,111 @@ describe("UIX-611 — IMAGE служит только исходником TOKEN
       expect(onPatch).toHaveBeenCalledWith(
         definition.id,
         definition.revision,
-        expect.objectContaining({ name: "Новое имя", defaultAssetId: "ready" }),
+        expect.objectContaining({
+          name: "Новое имя",
+          defaultAssetId: "ready",
+          controllerMembershipIds: [],
+        }),
+        {
+          actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+          refresh: true,
+          errorOwner: "caller",
+        },
       ),
     );
     expect(onGenerateTokenImage).not.toHaveBeenCalled();
     expect(onCreate).not.toHaveBeenCalled();
     expect(onCreateAndPlace).not.toHaveBeenCalled();
+  });
+
+  it("retries the same atomic edit command after a failed PATCH", async () => {
+    const definition: TokenDefinitionDto = {
+      id: "existing-definition",
+      name: "Старое имя",
+      ownName: "Старое имя",
+      characterId: null,
+      defaultAssetId: "ready",
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 3,
+    };
+    const onPatch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Сеть прервана"))
+      .mockResolvedValueOnce(undefined);
+    // The real editor's command remains mounted after a caller-owned error;
+    // retry must replay its exact PATCH body/action id, not issue a second
+    // controller PUT or advance a local revision.
+    renderComponent(
+      <TokenDefinitionEditor
+        snapshot={snapshot}
+        definition={definition}
+        onUpload={vi.fn()}
+        onGenerateTokenImage={vi.fn()}
+        onCancel={vi.fn()}
+        onCreate={vi.fn()}
+        onCreateAndPlace={vi.fn()}
+        onPatch={onPatch}
+        onReplaceControllers={vi.fn()}
+        onOpenCharacters={vi.fn()}
+        onOpenMedia={vi.fn()}
+      />,
+    );
+    const name = screen.getByLabelText("Название");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Новое имя");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Сеть прервана");
+    expect(screen.getByLabelText("Название")).toHaveValue("Новое имя");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(onPatch).toHaveBeenCalledTimes(2));
+    expect(onPatch.mock.calls[1]).toEqual(onPatch.mock.calls[0]);
+  });
+
+  it("does not close again after cancellation and a late atomic PATCH", async () => {
+    const definition: TokenDefinitionDto = {
+      id: "existing-definition",
+      name: "Старое имя",
+      ownName: "Старое имя",
+      characterId: null,
+      defaultAssetId: "ready",
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 3,
+    };
+    let resolvePatch!: () => void;
+    const onPatch = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePatch = resolve;
+        }),
+    );
+    const onCancel = vi.fn();
+    renderComponent(
+      <TokenDefinitionEditor
+        snapshot={snapshot}
+        definition={definition}
+        onUpload={vi.fn()}
+        onGenerateTokenImage={vi.fn()}
+        onCancel={onCancel}
+        onCreate={vi.fn()}
+        onCreateAndPlace={vi.fn()}
+        onPatch={onPatch}
+        onReplaceControllers={vi.fn()}
+        onOpenCharacters={vi.fn()}
+        onOpenMedia={vi.fn()}
+      />,
+    );
+    const name = screen.getByLabelText("Название");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Новое имя");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(onPatch).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    await act(async () => resolvePatch());
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 
   it("does not create a definition when the embedded generation fails", async () => {

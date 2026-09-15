@@ -44,6 +44,14 @@ export interface TokenDefinitionActions {
       characterId?: string | null;
       defaultWidth?: number;
       defaultHeight?: number;
+      /** UIX-589: PATCH commits definition fields and access together. */
+      controllerMembershipIds?: string[];
+    },
+    options?: {
+      /** Reuse an immutable id when a caller retries the same command. */
+      actionId?: string;
+      refresh?: boolean;
+      errorOwner?: "global" | "caller";
     },
   ) => Promise<void>;
   onCreateTokenDefinition: (input: {
@@ -66,8 +74,10 @@ export interface TokenDefinitionActions {
   onCreateToken: (characterId: string) => Promise<void>;
 }
 
-const withAction = (body: Record<string, unknown> = {}) =>
-  JSON.stringify({ ...body, actionId: crypto.randomUUID() });
+const withAction = (
+  body: Record<string, unknown> = {},
+  actionId: string = crypto.randomUUID(),
+) => JSON.stringify({ ...body, actionId });
 
 export function useTokenDefinitionActions(dependencies: {
   /** Stable — see `use-mutation-runners.ts`. */
@@ -113,12 +123,15 @@ export function useTokenDefinitionActions(dependencies: {
           }),
         ),
 
-      onPatchTokenDefinition: (definitionId, revision, patch) =>
-        run(() =>
-          api(`/api/token-definitions/${definitionId}`, {
-            method: "PATCH",
-            body: withAction({ ...patch, revision }),
-          }),
+      onPatchTokenDefinition: (definitionId, revision, patch, options) =>
+        run(
+          () =>
+            api(`/api/token-definitions/${definitionId}`, {
+              method: "PATCH",
+              body: withAction({ ...patch, revision }, options?.actionId),
+            }),
+          options?.refresh ?? false,
+          options?.errorOwner ? { errorOwner: options.errorOwner } : undefined,
         ),
 
       // These two refetch the snapshot and then discard the result: callers

@@ -202,6 +202,12 @@ async function seedReplacementDefinitions() {
       name: "Shared old image",
     })),
   );
+  await db.insert(schema.tokenControllers).values(
+    [definitionId, otherDefinitionId].map((tokenDefinitionId) => ({
+      tokenDefinitionId,
+      membershipId: ids.player,
+    })),
+  );
   await db.insert(schema.tokens).values(
     [...placementIds, otherPlacementId].map((id) => ({
       id,
@@ -225,6 +231,13 @@ async function persistedReplacementState() {
       .from(schema.tokenDefinitions)
       .orderBy(schema.tokenDefinitions.id),
     placements: await db.select().from(schema.tokens).orderBy(schema.tokens.id),
+    controllers: await db
+      .select()
+      .from(schema.tokenControllers)
+      .orderBy(
+        schema.tokenControllers.tokenDefinitionId,
+        schema.tokenControllers.membershipId,
+      ),
     events: await db
       .select()
       .from(schema.gameEvents)
@@ -250,6 +263,205 @@ async function generateReplacementAsset() {
 }
 
 describe("UIX-589 derivative replacement HTTP acceptance", () => {
+  it("saves image and controllers with one revision, preserves omitted joins and replays without another mutation", async () => {
+    const seeded = await seedReplacementDefinitions();
+    const replacementId = await generateReplacementAsset();
+    const newPlayerId = crypto.randomUUID();
+    await db.insert(schema.memberships).values({
+      id: newPlayerId,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "New controller",
+    });
+    const before = await persistedReplacementState();
+    const actionId = crypto.randomUUID();
+    const payload = {
+      actionId,
+      revision: 0,
+      defaultAssetId: replacementId,
+      controllerMembershipIds: [newPlayerId],
+    };
+    const save = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${seeded.definitionId}`,
+      headers: headers(secrets.gm),
+      payload,
+    });
+    expect(save.statusCode, save.body).toBe(200);
+    expect(save.json()).toMatchObject({
+      defaultAssetId: replacementId,
+      revision: 1,
+    });
+    const committed = await persistedReplacementState();
+    expect(
+      committed.controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.definitionId,
+      ),
+    ).toMatchObject([{ membershipId: newPlayerId }]);
+    expect(
+      committed.controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.otherDefinitionId,
+      ),
+    ).toEqual(
+      before.controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.otherDefinitionId,
+      ),
+    );
+    for (const placementId of seeded.placementIds)
+      expect(
+        committed.placements.find((row) => row.id === placementId),
+      ).toMatchObject({ assetId: replacementId });
+    expect(
+      committed.events.filter((event) => event.actionId === actionId),
+    ).toMatchObject([{ type: "token_definition.updated", entityRevision: 1 }]);
+    const replay = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${seeded.definitionId}`,
+      headers: headers(secrets.gm),
+      payload,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ duplicate: true });
+    expect(await persistedReplacementState()).toEqual(committed);
+    const omitted = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${seeded.definitionId}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 1,
+        name: "Image-only follow-up",
+      },
+    });
+    expect(omitted.statusCode, omitted.body).toBe(200);
+    expect(omitted.json().revision).toBe(2);
+    expect((await persistedReplacementState()).controllers).toEqual(
+      committed.controllers,
+    );
+  });
+
+  it("rejects player, duplicate, non-player, foreign and missing controller assignments without changing any state", async () => {
+    const seeded = await seedReplacementDefinitions();
+    const replacementId = await generateReplacementAsset();
+    const foreignPlayerId = crypto.randomUUID();
+    await db.insert(schema.memberships).values({
+      id: foreignPlayerId,
+      campaignId: ids.foreignCampaign,
+      role: "PLAYER",
+      displayName: "Foreign controller",
+    });
+    const before = await persistedReplacementState();
+    const cases = [
+      {
+        secret: secrets.player,
+        controllers: [],
+        status: 403,
+        error: "GM_REQUIRED",
+      },
+      {
+        secret: secrets.gm,
+        controllers: [ids.player, ids.player],
+        status: 400,
+        error: "DUPLICATE_CONTROLLERS",
+      },
+      {
+        secret: secrets.gm,
+        controllers: [ids.gm],
+        status: 400,
+        error: "INVALID_CONTROLLER",
+      },
+      {
+        secret: secrets.gm,
+        controllers: [foreignPlayerId],
+        status: 400,
+        error: "INVALID_CONTROLLER",
+      },
+      {
+        secret: secrets.gm,
+        controllers: [crypto.randomUUID()],
+        status: 400,
+        error: "INVALID_CONTROLLER",
+      },
+    ];
+    for (const testCase of cases) {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/token-definitions/${seeded.definitionId}`,
+        headers: headers(testCase.secret),
+        payload: {
+          actionId: crypto.randomUUID(),
+          revision: 0,
+          defaultAssetId: replacementId,
+          controllerMembershipIds: testCase.controllers,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(testCase.status);
+      expect(response.json()).toEqual({ error: testCase.error });
+      expect(await persistedReplacementState()).toEqual(before);
+    }
+  });
+
+  it("keeps the entire combined save after broadcast failure and replays its action without another revision", async () => {
+    const seeded = await seedReplacementDefinitions();
+    const replacementId = await generateReplacementAsset();
+    const before = await persistedReplacementState();
+    const actionId = crypto.randomUUID();
+    const payload = {
+      actionId,
+      revision: 0,
+      defaultAssetId: replacementId,
+      controllerMembershipIds: [],
+    };
+    broadcastFailure = new Error("BROADCAST_FAILED");
+    const failedResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${seeded.definitionId}`,
+      headers: headers(secrets.gm),
+      payload,
+    });
+    expect(failedResponse.statusCode).toBe(500);
+    const committed = await persistedReplacementState();
+    expect(
+      committed.definitions.find((row) => row.id === seeded.definitionId),
+    ).toMatchObject({
+      defaultAssetId: replacementId,
+      revision: 1,
+    });
+    for (const placementId of seeded.placementIds)
+      expect(
+        committed.placements.find((row) => row.id === placementId),
+      ).toMatchObject({ assetId: replacementId });
+    expect(
+      committed.controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.definitionId,
+      ),
+    ).toEqual([]);
+    expect(
+      committed.controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.otherDefinitionId,
+      ),
+    ).toEqual(
+      before.controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.otherDefinitionId,
+      ),
+    );
+    expect(
+      committed.events.filter((event) => event.actionId === actionId),
+    ).toMatchObject([{ type: "token_definition.updated", entityRevision: 1 }]);
+    expect(committed.assets).toEqual(before.assets);
+    expect(committed.files).toEqual(before.files);
+    broadcastFailure = null;
+    const replay = await app.inject({
+      method: "PATCH",
+      url: `/api/token-definitions/${seeded.definitionId}`,
+      headers: headers(secrets.gm),
+      payload,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ duplicate: true });
+    expect(await persistedReplacementState()).toEqual(committed);
+  });
+
   it("rejects generator quota exhaustion without partial media, definitions or placements", async () => {
     await seedReplacementDefinitions();
     const before = await persistedReplacementState();
@@ -281,7 +493,12 @@ describe("UIX-589 derivative replacement HTTP acceptance", () => {
           method: "PATCH",
           url: `/api/token-definitions/${seeded.definitionId}`,
           headers: headers(secrets.gm),
-          payload: { actionId: actionIds[index], revision: 0, defaultAssetId },
+          payload: {
+            actionId: actionIds[index],
+            revision: 0,
+            defaultAssetId,
+            controllerMembershipIds: index === 0 ? [ids.player] : [],
+          },
         }),
       ),
     );
@@ -303,6 +520,20 @@ describe("UIX-589 derivative replacement HTTP acceptance", () => {
       defaultAssetId: replacementIds[winner],
       revision: 1,
     });
+    expect(
+      after.controllers
+        .filter((row) => row.tokenDefinitionId === seeded.definitionId)
+        .map((row) => row.membershipId),
+    ).toEqual(winner === 0 ? [ids.player] : []);
+    expect(
+      after.controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.otherDefinitionId,
+      ),
+    ).toEqual(
+      before.controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.otherDefinitionId,
+      ),
+    );
     for (const placementId of seeded.placementIds)
       expect(
         after.placements.find((placement) => placement.id === placementId),
@@ -360,6 +591,7 @@ describe("UIX-589 derivative replacement HTTP acceptance", () => {
           IF NEW.type = 'token_definition.updated' AND NEW.action_id = TG_ARGV[0]::uuid THEN
             IF NOT EXISTS (SELECT 1 FROM token_definitions WHERE id = NEW.entity_id AND default_asset_id = TG_ARGV[1]::uuid AND revision = 1)
               OR EXISTS (SELECT 1 FROM tokens WHERE definition_id = NEW.entity_id AND asset_id IS DISTINCT FROM TG_ARGV[1]::uuid)
+              OR EXISTS (SELECT 1 FROM token_controllers WHERE token_definition_id = NEW.entity_id)
             THEN RAISE EXCEPTION 'UIX589_WRONG_FAILURE_SEAM'; END IF;
             PERFORM nextval('${sequence}');
             RAISE EXCEPTION 'UIX589_INJECTED_AUDIT_FAILURE';
@@ -374,7 +606,12 @@ describe("UIX-589 derivative replacement HTTP acceptance", () => {
         method: "PATCH",
         url: `/api/token-definitions/${seeded.definitionId}`,
         headers: headers(secrets.gm),
-        payload: { actionId, revision: 0, defaultAssetId: replacementId },
+        payload: {
+          actionId,
+          revision: 0,
+          defaultAssetId: replacementId,
+          controllerMembershipIds: [],
+        },
       });
       expect(response.statusCode).toBe(500);
       expect(
@@ -404,13 +641,23 @@ describe("UIX-589 derivative replacement HTTP acceptance", () => {
       method: "PATCH",
       url: `/api/token-definitions/${seeded.definitionId}`,
       headers: headers(secrets.gm),
-      payload: { actionId, revision: 0, defaultAssetId: replacementId },
+      payload: {
+        actionId,
+        revision: 0,
+        defaultAssetId: replacementId,
+        controllerMembershipIds: [],
+      },
     });
     expect(retry.statusCode, retry.body).toBe(200);
     expect(retry.json()).toMatchObject({
       defaultAssetId: replacementId,
       revision: 1,
     });
+    expect(
+      (await persistedReplacementState()).controllers.filter(
+        (row) => row.tokenDefinitionId === seeded.definitionId,
+      ),
+    ).toEqual([]);
   });
 });
 

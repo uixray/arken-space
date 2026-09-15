@@ -242,6 +242,44 @@ describe("тело запроса определения токена", () => {
     expect(body).not.toHaveProperty("characterId");
   });
 
+  it("редактор может повторить атомарный PATCH с тем же action id и caller refresh", async () => {
+    const run = vi.fn(async (action: () => Promise<unknown>) => {
+      await action();
+    });
+    let commands!: ReturnType<typeof useTokenDefinitionActions>;
+    function Probe() {
+      commands = useTokenDefinitionActions({
+        run: run as never,
+        snapshotRef: { current: null },
+        activeSceneRef: { current: scene },
+      });
+      return null;
+    }
+    renderComponent(<Probe />);
+
+    await commands.onPatchTokenDefinition(
+      "токен-1",
+      4,
+      {
+        name: "Страж",
+        controllerMembershipIds: ["участник-4", "участник-5"],
+      },
+      { actionId: "edit-replay-1", refresh: true, errorOwner: "caller" },
+    );
+
+    expect(sentPath()).toBe("/api/token-definitions/токен-1");
+    expect(sentMethod()).toBe("PATCH");
+    expect(sentBody()).toMatchObject({
+      revision: 4,
+      name: "Страж",
+      controllerMembershipIds: ["участник-4", "участник-5"],
+      actionId: "edit-replay-1",
+    });
+    expect(run).toHaveBeenCalledWith(expect.any(Function), true, {
+      errorOwner: "caller",
+    });
+  });
+
   it("замена управляющих везёт список целиком, а не по одному", async () => {
     await actions().onReplaceTokenControllers("токен-9", 2, [
       "участник-4",
