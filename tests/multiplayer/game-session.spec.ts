@@ -5,6 +5,7 @@ import {
   type APIResponse,
   type BrowserContext,
   type Page,
+  type WebSocket,
 } from "@playwright/test";
 import { io, type Socket } from "socket.io-client";
 import { eq } from "drizzle-orm";
@@ -766,6 +767,50 @@ test("GM and six isolated players recover authoritative state without security l
       .poll(() => coloredPixels(pages[0]!, "CYAN"))
       .toBeGreaterThan(100);
 
+    // The GM uses the same browser drag path, but has a different command
+    // authority from the controlled player above. Keep the historical token
+    // image in storage while proving this second mutation rehydrates B.
+    const gmImageMap = gmPage.locator(".map-viewport");
+    const gmImageMapBounds = await gmImageMap.boundingBox();
+    if (!gmImageMapBounds) throw new Error("UIX-491 GM map not visible");
+    const gmMoveRevision = imageToken.revision;
+    await gmPage.mouse.move(
+      gmImageMapBounds.x + imageToken.x + imageToken.width / 2,
+      gmImageMapBounds.y + imageToken.y + imageToken.height / 2,
+    );
+    await gmPage.mouse.down();
+    await gmPage.mouse.move(
+      gmImageMapBounds.x + imageToken.x + imageToken.width / 2 - 20,
+      gmImageMapBounds.y + imageToken.y + imageToken.height / 2 + 24,
+      { steps: 5 },
+    );
+    await gmPage.mouse.up();
+    await expect
+      .poll(async () => {
+        const token = (await bootstrap(gm)).tokens.find(
+          (candidate) => candidate.id === imageToken.id,
+        );
+        return token?.revision ?? gmMoveRevision;
+      })
+      .toBeGreaterThan(gmMoveRevision);
+    imageToken = (await bootstrap(gm)).tokens.find(
+      (token) => token.id === imageToken.id,
+    )!;
+    for (const context of [gm, players[0]!]) {
+      expect(
+        (await bootstrap(context)).tokens.find(
+          (token) => token.id === imageToken.id,
+        ),
+      ).toMatchObject({
+        assetId: imageB.id,
+        definitionRevision: canonicalDefinitionRevision,
+      });
+    }
+    await expect.poll(() => coloredPixels(gmPage, "CYAN")).toBeGreaterThan(100);
+    await expect
+      .poll(() => coloredPixels(pages[0]!, "CYAN"))
+      .toBeGreaterThan(100);
+
     const bulkAction = actionId();
     const bulkPayload = {
       actionId: bulkAction,
@@ -841,6 +886,180 @@ test("GM and six isolated players recover authoritative state without security l
     await expect
       .poll(() => coloredPixels(pages[0]!, "CYAN"))
       .toBeGreaterThan(100);
+
+    // An independent protocol probe authenticated with Player 1's browser
+    // cookie must receive the definition projection, not the stale placement
+    // value injected above.
+    connections[1]!.socket.disconnect();
+    connections[1] = await connectSocket(players[0]!);
+    const reconnectedPlayerImage = connections[1]!.snapshot;
+    expect(
+      reconnectedPlayerImage.tokens.find((token) => token.id === imageToken.id),
+    ).toMatchObject({
+      assetId: imageB.id,
+      definitionRevision: canonicalDefinitionRevision,
+    });
+    expect(
+      reconnectedPlayerImage.assets.map((asset) => asset.id),
+    ).not.toContain(imageA.id);
+
+    // Now interrupt the actual browser transport. A GM movement while Player
+    // 1 is offline gives reconnect something new to recover, rather than
+    // treating the cached cyan canvas as evidence of a received update.
+    const playerImageMap = pages[0]!.locator(".map-viewport");
+    const playerCanvasBeforeReconnect = await playerImageMap.screenshot();
+    await players[0]!.setOffline(true);
+    try {
+      await pages[0]!.getByLabel("Меню сеанса").click();
+      await expect(
+        pages[0]!.getByText(/^(переподключение|нет связи)$/),
+      ).toBeVisible({ timeout: 15_000 });
+      await pages[0]!.getByLabel("Меню сеанса").click();
+
+      const offlineMoveRevision = imageToken.revision;
+      const offlineMoveBounds = await gmImageMap.boundingBox();
+      if (!offlineMoveBounds)
+        throw new Error("UIX-491 GM map not visible during player reconnect");
+      await gmPage.mouse.move(
+        offlineMoveBounds.x + imageToken.x + imageToken.width / 2,
+        offlineMoveBounds.y + imageToken.y + imageToken.height / 2,
+      );
+      await gmPage.mouse.down();
+      await gmPage.mouse.move(
+        offlineMoveBounds.x + imageToken.x + imageToken.width / 2 + 40,
+        offlineMoveBounds.y + imageToken.y + imageToken.height / 2 - 16,
+        { steps: 5 },
+      );
+      await gmPage.mouse.up();
+      await expect
+        .poll(async () => {
+          const token = (await bootstrap(gm)).tokens.find(
+            (candidate) => candidate.id === imageToken.id,
+          );
+          return token?.revision ?? offlineMoveRevision;
+        })
+        .toBeGreaterThan(offlineMoveRevision);
+      imageToken = (await bootstrap(gm)).tokens.find(
+        (token) => token.id === imageToken.id,
+      )!;
+      const expectedReconnectToken = {
+        id: imageToken.id,
+        x: imageToken.x,
+        y: imageToken.y,
+        revision: imageToken.revision,
+        assetId: imageB.id,
+        definitionRevision: canonicalDefinitionRevision,
+      };
+
+      let resolveBrowserSnapshot!: () => void;
+      let rejectBrowserSnapshot!: (reason: Error) => void;
+      const browserSnapshot = new Promise<void>((resolve, reject) => {
+        resolveBrowserSnapshot = resolve;
+        rejectBrowserSnapshot = reject;
+      });
+      const snapshotTimeout = setTimeout(
+        () =>
+          rejectBrowserSnapshot(
+            new Error("UIX-491 browser did not receive reconnect snapshot"),
+          ),
+        30_000,
+      );
+      const frameListeners = new Map<
+        WebSocket,
+        (frame: { payload: string | Buffer }) => void
+      >();
+      const observeReopenedSocket = (socket: WebSocket) => {
+        const onFrameReceived = (frame: { payload: string | Buffer }) => {
+          if (
+            typeof frame.payload !== "string" ||
+            !frame.payload.startsWith("42")
+          )
+            return;
+          try {
+            const event = JSON.parse(frame.payload.slice(2)) as [
+              string,
+              GameSnapshot,
+            ];
+            const token =
+              event[0] === "game:snapshot"
+                ? event[1]?.tokens.find(
+                    (candidate) => candidate.id === expectedReconnectToken.id,
+                  )
+                : undefined;
+            if (
+              token?.x === expectedReconnectToken.x &&
+              token.y === expectedReconnectToken.y &&
+              token.revision === expectedReconnectToken.revision &&
+              token.assetId === expectedReconnectToken.assetId &&
+              token.definitionRevision ===
+                expectedReconnectToken.definitionRevision
+            ) {
+              clearTimeout(snapshotTimeout);
+              resolveBrowserSnapshot();
+            }
+          } catch {
+            // Frames not containing a complete Socket.IO event are irrelevant
+            // to this reconnect assertion.
+          }
+        };
+        frameListeners.set(socket, onFrameReceived);
+        socket.on("framereceived", onFrameReceived);
+      };
+      pages[0]!.on("websocket", observeReopenedSocket);
+      const browserSocketReopened = pages[0]!.waitForEvent("websocket");
+      try {
+        await Promise.all([
+          players[0]!.setOffline(false),
+          browserSocketReopened,
+          browserSnapshot,
+        ]);
+      } finally {
+        clearTimeout(snapshotTimeout);
+        pages[0]!.off("websocket", observeReopenedSocket);
+        for (const [socket, listener] of frameListeners)
+          socket.removeListener("framereceived", listener);
+      }
+
+      await pages[0]!.getByLabel("Меню сеанса").click();
+      await expect(
+        pages[0]!.getByText("в сети", { exact: true }),
+      ).toBeVisible();
+      await pages[0]!.getByLabel("Меню сеанса").click();
+      await expect
+        .poll(
+          async () =>
+            !(await playerImageMap.screenshot()).equals(
+              playerCanvasBeforeReconnect,
+            ),
+        )
+        .toBe(true);
+      expect(
+        (await bootstrap(players[0]!)).tokens.find(
+          (token) => token.id === imageToken.id,
+        ),
+      ).toMatchObject({
+        x: imageToken.x,
+        y: imageToken.y,
+        assetId: imageB.id,
+        definitionRevision: canonicalDefinitionRevision,
+      });
+    } finally {
+      await players[0]!.setOffline(false);
+    }
+
+    // Reload both rendering clients before cleanup: persistence must keep the
+    // cyan canonical image and no canvas may paint the obsolete magenta A.
+    await gmPage.reload();
+    expect(
+      (await bootstrap(gm)).tokens.find((token) => token.id === imageToken.id),
+    ).toMatchObject({
+      assetId: imageB.id,
+      definitionRevision: canonicalDefinitionRevision,
+    });
+    for (const page of [gmPage, pages[0]!]) {
+      await expect.poll(() => coloredPixels(page, "CYAN")).toBeGreaterThan(100);
+      await expect.poll(() => coloredPixels(page, "MAGENTA")).toBe(0);
+    }
     await expectOk(
       await gm.request.delete(
         baseUrl + "/api/token-definitions/" + imageDefinitionId,
