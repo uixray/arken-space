@@ -1,6 +1,6 @@
 import { expect, test } from "./react-console-guard";
-import type { Locator, Route } from "@playwright/test";
-import type { GameSnapshot } from "@arken/contracts";
+import type { Locator, Page, Route } from "@playwright/test";
+import type { ChatReadCursorDto, GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import {
   tokenParitySource,
@@ -21,6 +21,21 @@ async function chooseEmbeddedSource(editor: Locator) {
   await source.selectOption(sourceAsset.id);
   await expect(source).toHaveValue(sourceAsset.id);
   await expect(noImage).toHaveAttribute("aria-pressed", "false");
+}
+
+async function settleFiniteAnimations(owner: Locator) {
+  await owner.evaluate(async (node) => {
+    await Promise.all(
+      node
+        .getAnimations({ subtree: true })
+        .filter((animation) =>
+          Number.isFinite(
+            Number(animation.effect?.getComputedTiming().endTime),
+          ),
+        )
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
 }
 
 test("UIX-589 narrow frame targets are at least 44px", async ({ page }) => {
@@ -297,6 +312,61 @@ async function mockBootstrap(
     }),
   );
   await page.route(
+    (url) =>
+      [
+        "/api/story/posts",
+        "/api/canvas/history",
+        "/api/operator/feedback/capability",
+      ].includes(url.pathname),
+    (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/canvas/history") return route.fulfill({ json: [] });
+      return route.fulfill({
+        status: 403,
+        json: {
+          error: "FORBIDDEN",
+          message: "Нет доступа к операторскому разделу.",
+        },
+      });
+    },
+  );
+  await page.route(
+    (url) => ["/api/chat/read", "/api/client-logs"].includes(url.pathname),
+    (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      if (new URL(route.request().url()).pathname === "/api/client-logs")
+        return route.fulfill({ status: 202, body: "" });
+      const body = route.request().postDataJSON() as {
+        threadId: string;
+        sequence: number;
+      };
+      const state = fixture.chatThreadStates?.find(
+        (entry) => entry.threadId === body.threadId,
+      );
+      expect(
+        state,
+        "read cursor targets a known synthetic thread",
+      ).toBeDefined();
+      expect(Number.isInteger(body.sequence) && body.sequence >= 0).toBe(true);
+      if (!state) throw new Error("Unknown synthetic read thread");
+      // /api/chat/read returns a cursor, not 204. The actual action passes
+      // this receipt into reconcileChatRead; an empty body would supply null.
+      const cursor: ChatReadCursorDto = {
+        campaignId: fixture.campaign.id,
+        threadId: body.threadId,
+        lastReadSequence: Math.max(
+          state.lastReadSequence,
+          Math.min(body.sequence, state.latestSequence),
+        ),
+        updatedAt: fixture.serverTime,
+      };
+      return route.fulfill({ status: 200, json: cursor });
+    },
+  );
+  await page.route(
     "**/api/assets/a1111111-1111-4111-8111-111111111111/content",
     (route) =>
       route.fulfill({
@@ -539,15 +609,24 @@ for (const viewport of [
     const images = editor.getByRole("group", {
       name: "Изображение токена из файлов",
     });
-    const characterRow = editor
-      .locator("label")
-      .filter({ hasText: /^\s*Персонаж/ });
-    const characterRowBox = await characterRow.boundingBox();
-    const imagesRowBox = await images.locator("..").boundingBox();
-    expect(characterRowBox).not.toBeNull();
-    expect(imagesRowBox).not.toBeNull();
-    expect(imagesRowBox!.y).toBeGreaterThanOrEqual(
-      characterRowBox!.y + characterRowBox!.height,
+    await settleFiniteAnimations(editor);
+    // One layout snapshot: sequential boundingBox calls can see different
+    // frames while the parent modal changes position.
+    const rows = await editor.evaluate((node) => {
+      const character = Array.from(node.querySelectorAll("label")).find(
+        (label) => /^\s*Персонаж/.test(label.textContent ?? ""),
+      );
+      const images = node.querySelector(
+        '[role="group"][aria-label="Изображение токена из файлов"]',
+      )?.parentElement;
+      if (!character || !images) throw new Error("Token form rows are missing");
+      return {
+        character: character.getBoundingClientRect().toJSON(),
+        images: images.getBoundingClientRect().toJSON(),
+      };
+    });
+    expect(rows.images.y).toBeGreaterThanOrEqual(
+      rows.character.y + rows.character.height,
     );
     const image = images.getByRole("button", { name: sourceAsset.name });
     const noImage = images.getByRole("button", { name: "Без изображения" });
@@ -892,3 +971,367 @@ for (const outcome of ["failure", "cancel"] as const) {
     }
   });
 }
+
+for (const size of [
+  {
+    name: "wide",
+    width: 640,
+    height: 400,
+    key: "ArrowRight",
+    axis: "left",
+    pinned: "top",
+  },
+  {
+    name: "portrait",
+    width: 400,
+    height: 640,
+    key: "ArrowDown",
+    axis: "top",
+    pinned: "left",
+  },
+] as const) {
+  test(`UIX-589 zoom-one overflow pan ${size.name} keyboard moves only the overflowing axis`, async ({
+    page,
+  }) => {
+    await mockBootstrap(page, "GM", { ...sourceAsset, ...size });
+    const source = await tokenParitySource(size.width, size.height);
+    await page.route(`**${sourceAsset.url}`, (route) =>
+      route.fulfill({ contentType: "image/png", body: source }),
+    );
+    await page.goto("/");
+    await openWorkspaceSection(page, "Токены");
+    await page.locator(".token-palette > button").click();
+    const editor = page.getByRole("dialog", {
+      name: "Новый токен",
+      exact: true,
+    });
+    await chooseEmbeddedSource(editor);
+    const preview = editor.locator(".token-image-preview");
+    const image = preview.locator("img");
+    await expect
+      .poll(() =>
+        image.evaluate((node) => (node as HTMLImageElement).naturalWidth),
+      )
+      .toBe(size.width);
+    const position = () =>
+      image.evaluate((node) => ({
+        left: parseFloat((node as HTMLElement).style.left),
+        top: parseFloat((node as HTMLElement).style.top),
+      }));
+    const before = await position();
+    await expect(
+      editor.getByRole("slider", {
+        name: "Масштаб изображения токена",
+        exact: true,
+      }),
+    ).toHaveValue("1");
+    await preview.focus();
+    await preview.press(size.key);
+    await expect
+      .poll(async () => (await position())[size.axis])
+      .toBeLessThan(before[size.axis]);
+    expect((await position())[size.pinned]).toBe(before[size.pinned]);
+    // The orthogonal key cannot expose a blank edge on the fitted axis.
+    await preview.press(size.key === "ArrowRight" ? "ArrowDown" : "ArrowRight");
+    expect((await position())[size.pinned]).toBe(before[size.pinned]);
+  });
+}
+
+async function openCropEditor(page: Page, width: number, height: number) {
+  const source = await tokenParitySource(width, height);
+  await mockBootstrap(page, "GM", { ...sourceAsset, width, height });
+  await page.route(`**${sourceAsset.url}`, (route) =>
+    route.fulfill({ contentType: "image/png", body: source }),
+  );
+  await page.goto("/");
+  await openWorkspaceSection(page, "Токены");
+  await page.locator(".token-palette > button").click();
+  const editor = page.getByRole("dialog", { name: "Новый токен", exact: true });
+  await chooseEmbeddedSource(editor);
+  const preview = editor.locator(".token-image-preview");
+  const image = preview.locator("img");
+  await expect
+    .poll(() =>
+      image.evaluate((node) => ({
+        width: (node as HTMLImageElement).naturalWidth,
+        height: (node as HTMLImageElement).naturalHeight,
+      })),
+    )
+    .toEqual({ width, height });
+  await settleFiniteAnimations(editor);
+  await preview.scrollIntoViewIfNeeded();
+  return { source, editor, preview, image };
+}
+
+async function cropGeometry(preview: Locator) {
+  return preview.evaluate((node) => {
+    const image = node.querySelector("img");
+    if (!image) throw new Error("Crop image is missing");
+    const box = node.getBoundingClientRect();
+    const imageBox = image.getBoundingClientRect();
+    return {
+      box: box.toJSON(),
+      imageX: imageBox.x - box.x,
+      imageY: imageBox.y - box.y,
+    };
+  });
+}
+
+async function settleCropGeometry(editor: Locator, preview: Locator) {
+  await settleFiniteAnimations(editor);
+  await preview.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      preview.evaluate(async (node) => {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        const before = node.getBoundingClientRect();
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        const after = node.getBoundingClientRect();
+        return Math.max(
+          Math.abs(after.x - before.x),
+          Math.abs(after.y - before.y),
+          Math.abs(after.width - before.width),
+          Math.abs(after.height - before.height),
+        );
+      }),
+    )
+    .toBeLessThanOrEqual(0.001);
+  // Both rectangles belong to the same layout snapshot.
+  return cropGeometry(preview);
+}
+
+for (const size of [
+  { name: "wide", width: 640, height: 400 },
+  { name: "portrait", width: 400, height: 640 },
+]) {
+  for (const zoom of [1, 2]) {
+    test(`UIX-589 ${size.name} mouse pan follows pointer one-to-one at zoom ${zoom}`, async ({
+      page,
+    }) => {
+      const { editor, preview } = await openCropEditor(
+        page,
+        size.width,
+        size.height,
+      );
+      await editor
+        .getByRole("slider", {
+          name: "Масштаб изображения токена",
+          exact: true,
+        })
+        .fill(String(zoom));
+      const before = await settleCropGeometry(editor, preview);
+      const box = before.box;
+      const expectedX = zoom === 1 && size.name === "portrait" ? 0 : 12;
+      const expectedY = zoom === 1 && size.name === "wide" ? 0 : 12;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      try {
+        await page.mouse.move(
+          box.x + box.width / 2 + 12,
+          box.y + box.height / 2 + 12,
+          { steps: 4 },
+        );
+        await expect
+          .poll(async () => {
+            const after = await cropGeometry(preview);
+            return Math.max(
+              Math.abs(after.imageX - before.imageX - expectedX),
+              Math.abs(after.imageY - before.imageY - expectedY),
+            );
+          })
+          .toBeLessThanOrEqual(1);
+      } finally {
+        await page.mouse.up();
+      }
+    });
+  }
+  test(`UIX-589 ${size.name} off-center zoom-one preview matches real renderer`, async ({
+    page,
+  }, info) => {
+    const { source, preview, image } = await openCropEditor(
+      page,
+      size.width,
+      size.height,
+    );
+    const before = await image.evaluate((node) => ({
+      left: (node as HTMLElement).style.left,
+      top: (node as HTMLElement).style.top,
+    }));
+    await preview.focus();
+    await preview.press(
+      size.name === "wide" ? "Shift+ArrowRight" : "Shift+ArrowDown",
+    );
+    await expect
+      .poll(() =>
+        image.evaluate((node) => ({
+          left: (node as HTMLElement).style.left,
+          top: (node as HTMLElement).style.top,
+        })),
+      )
+      .not.toEqual(before);
+    const actual = await preview.screenshot({ animations: "disabled" });
+    const reference = await tokenParityReference(source, {
+      cropX: size.name === "wide" ? 0.6 : 0.5,
+      cropY: size.name === "portrait" ? 0.6 : 0.5,
+      zoom: 1,
+      frame: "NONE",
+    });
+    const difference = await tokenPreviewDifference(actual, reference.bytes);
+    expect(difference.samples).toBeGreaterThan(3000);
+    expect(difference.mean).toBeLessThan(3);
+    expect(difference.maximum).toBeLessThan(12);
+    await info.attach("zoom-one-parity", {
+      body: JSON.stringify(difference),
+      contentType: "application/json",
+    });
+  });
+}
+
+test("UIX-589 compact real touch pan keeps fitted axis pinned", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "Real touch input uses Chromium CDP");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { editor, preview } = await openCropEditor(page, 640, 400);
+  const before = await settleCropGeometry(editor, preview);
+  const box = before.box;
+  const session = await page.context().newCDPSession(page);
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  try {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x, y, id: 1 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: x + 12, y: y + 12, id: 1 }],
+    });
+    await expect
+      .poll(async () => {
+        const after = await cropGeometry(preview);
+        return Math.max(
+          Math.abs(after.imageX - before.imageX - 12),
+          Math.abs(after.imageY - before.imageY),
+        );
+      })
+      .toBeLessThanOrEqual(1);
+  } finally {
+    await session
+      .send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+      .catch(() => undefined);
+    await session.detach();
+  }
+});
+
+test("UIX-589 compact accessible zoom controls clamp sync reset and remain touch-sized", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { editor, preview } = await openCropEditor(page, 640, 400);
+  const percent = editor.getByRole("spinbutton", {
+    name: "Масштаб изображения токена, проценты",
+    exact: true,
+  });
+  const range = editor.getByRole("slider", {
+    name: "Масштаб изображения токена",
+    exact: true,
+  });
+  const minus = editor.getByRole("button", {
+    name: "Уменьшить масштаб",
+    exact: true,
+  });
+  const plus = editor.getByRole("button", {
+    name: "Увеличить масштаб",
+    exact: true,
+  });
+  const reset = editor.getByRole("button", { name: "Сбросить", exact: true });
+  await expect(percent).toHaveAttribute("min", "100");
+  await expect(percent).toHaveAttribute("max", "800");
+  await expect(percent).toHaveAttribute("step", "10");
+  await expect(percent).toHaveValue("100");
+  await expect(minus).toBeDisabled();
+  await plus.click();
+  await expect(percent).toHaveValue("110");
+  await expect(range).toHaveValue("1.1");
+  await minus.click();
+  await expect(range).toHaveValue("1");
+  await percent.fill("950");
+  await percent.press("Enter");
+  await expect(percent).toHaveValue("800");
+  await expect(range).toHaveValue("8");
+  await expect(plus).toBeDisabled();
+  await percent.fill("20");
+  await percent.press("Tab");
+  await expect(percent).toHaveValue("100");
+  await expect(range).toHaveValue("1");
+  await range.fill("2");
+  await expect(percent).toHaveValue("200");
+  await editor.getByRole("radio", { name: "Бронза", exact: true }).check();
+  await preview.focus();
+  await preview.press("Shift+ArrowRight");
+  await reset.click();
+  await expect(range).toHaveValue("1");
+  await expect(percent).toHaveValue("100");
+  await expect(
+    editor.getByRole("radio", { name: "Без рамки", exact: true }),
+  ).toBeChecked();
+  await settleFiniteAnimations(editor);
+  for (const control of [
+    minus,
+    plus,
+    percent,
+    range,
+    reset,
+    ...(await editor.locator(".token-image-generator__frame-option").all()),
+  ]) {
+    const box = await control.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const element = node as HTMLElement;
+      return {
+        x: rect.x,
+        width: Number(rect.width.toFixed(3)),
+        height: Number(rect.height.toFixed(3)),
+        logicalWidth: element.offsetWidth,
+        logicalHeight: element.offsetHeight,
+      };
+    });
+    // Normalize sub-millipixel engine noise, not undersized touch targets:
+    // both the measured dimensions and native logical layout must be >=44.
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.logicalWidth).toBeGreaterThanOrEqual(44);
+    expect(box.logicalHeight).toBeGreaterThanOrEqual(44);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(391);
+  }
+  expect(
+    await editor.evaluate((node) => node.scrollWidth - node.clientWidth),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    ),
+  ).toBeLessThanOrEqual(1);
+  const box = await preview.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.width).toBeCloseTo(box!.height, 3);
+  await expect(editor).toBeVisible();
+  await expect(
+    editor.getByRole("button", { name: "Создать изображение токена" }),
+  ).toHaveCount(0);
+  await editor
+    .locator(".token-image-generator__zoom-controls")
+    .scrollIntoViewIfNeeded();
+  const screenshot = info.outputPath("crop-controls-390.png");
+  await page.screenshot({ path: screenshot });
+  await info.attach("crop-controls-390", {
+    path: screenshot,
+    contentType: "image/png",
+  });
+});

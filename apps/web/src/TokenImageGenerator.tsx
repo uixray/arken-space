@@ -7,6 +7,8 @@ import {
 } from "react";
 import type { AssetDto } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
+import { AppIcon } from "./ui/AppIcon";
+import { AddIcon, DecreaseIcon } from "./ui/icons";
 import {
   TOKEN_FRAME_PREVIEW_COLORS,
   resolveTokenImagePreviewCrop,
@@ -15,6 +17,7 @@ import {
   DEFAULT_TOKEN_IMAGE_TRANSFORM,
   TOKEN_FRAME_PRESETS,
   clampTokenImageTransform,
+  tokenImageCropSize,
   tokenImageTransformForKey,
   type TokenFramePreset,
   type TokenImageTransform,
@@ -23,6 +26,7 @@ import {
 const copy = {
   generator: "Генератор токена",
   uploadSource: 'Сначала загрузите исходное изображение в разделе "Файлы".',
+  uploadHere: "Сначала загрузите исходное изображение здесь.",
   fromImage: "Из изображения",
   sourceImage: "Исходное изображение",
   previewLabel:
@@ -30,6 +34,7 @@ const copy = {
   hint: "Перетаскивайте изображение или используйте клавиши стрелок. Shift делает шаг крупнее. Home / R сбрасывает кадрирование.",
   zoom: "Масштаб",
   zoomLabel: "Масштаб изображения токена",
+  zoomPercentLabel: "Масштаб изображения токена, проценты",
   frame: "Рамка",
   chooseFrame: "Выберите рамку токена",
   noFrame: "Без рамки",
@@ -133,10 +138,28 @@ export function TokenImageGenerator({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const dragStart = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    transform: TokenImageTransform;
+    sourceDimensions: { width: number; height: number };
+    cropSize: number;
+  } | null>(null);
   const consumedUploadId = useRef<string | undefined>(undefined);
   const source =
     imageAssets.find((asset) => asset.id === sourceAssetId) ?? null;
+  const sourceDimensions = {
+    width:
+      source?.width && Number.isFinite(source.width) && source.width > 0
+        ? source.width
+        : 1,
+    height:
+      source?.height && Number.isFinite(source.height) && source.height > 0
+        ? source.height
+        : 1,
+  };
+  const [zoomText, setZoomText] = useState("100");
 
   const reportDraft = (next: TokenImageTransform, asset = source) => {
     onDraftChange?.(
@@ -151,6 +174,7 @@ export function TokenImageGenerator({
       if (selectedSourceId !== sourceAssetId) {
         setSourceAssetId(selectedSourceId);
         setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
+        setZoomText("100");
       }
       // Controlled empty selection is an intentional "no source", not a
       // request to choose the first library image on the following render.
@@ -167,6 +191,7 @@ export function TokenImageGenerator({
       consumedUploadId.current = uploadedSourceId;
       setSourceAssetId(uploadedSourceId);
       setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
+      setZoomText("100");
       return;
     }
     if (
@@ -176,12 +201,22 @@ export function TokenImageGenerator({
       return;
     setSourceAssetId(imageAssets[0]?.id ?? "");
     setTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
+    setZoomText("100");
   }, [imageAssets, selectedSourceId, sourceAssetId, uploadedSourceId]);
 
+  useEffect(() => {
+    dragStart.current = null;
+  }, [sourceAssetId]);
+
   const updateTransform = (next: TokenImageTransform) => {
-    const clamped = clampTokenImageTransform(next);
+    const clamped = clampTokenImageTransform(next, sourceDimensions);
     setTransform(clamped);
+    setZoomText(String(Math.round(clamped.zoom * 100)));
     reportDraft(clamped);
+  };
+
+  const clearDrag = () => {
+    dragStart.current = null;
   };
 
   const onPreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -190,34 +225,58 @@ export function TokenImageGenerator({
       transform,
       event.key,
       event.shiftKey,
+      sourceDimensions,
     );
     if (!next) return;
     event.preventDefault();
-    setTransform(next);
-    reportDraft(next);
+    if (event.key === "Home" || event.key === "r" || event.key === "R")
+      clearDrag();
+    updateTransform(next);
   };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (!source || disabled || saving) return;
-    dragStart.current = { x: event.clientX, y: event.clientY };
+    if (
+      !source ||
+      disabled ||
+      saving ||
+      event.button !== 0 ||
+      dragStart.current
+    )
+      return;
+    dragStart.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      transform: { ...transform },
+      sourceDimensions: { ...sourceDimensions },
+      cropSize: tokenImageCropSize(sourceDimensions, transform.zoom),
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (!source || disabled || saving) return;
     const start = dragStart.current;
-    if (!start) return;
+    if (!start || start.pointerId !== event.pointerId) return;
     const box = event.currentTarget.getBoundingClientRect();
     if (!box.width || !box.height) return;
+    // React can batch a pointer burst before re-rendering. Every move must be
+    // derived from the immutable pointer-down crop, not a render-closed one.
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    dragStart.current = { x: event.clientX, y: event.clientY };
-    const next = clampTokenImageTransform({
-      ...transform,
-      // Dragging the image right reveals its left side, hence inverted crop.
-      cropX: transform.cropX - dx / box.width,
-      cropY: transform.cropY - dy / box.height,
-    });
+    const next = clampTokenImageTransform(
+      {
+        ...start.transform,
+        // Dragging the image right reveals its left side, hence inverted crop.
+        cropX:
+          start.transform.cropX -
+          (dx / box.width) * (start.cropSize / start.sourceDimensions.width),
+        cropY:
+          start.transform.cropY -
+          (dy / box.height) * (start.cropSize / start.sourceDimensions.height),
+      },
+      start.sourceDimensions,
+    );
     setTransform(next);
     reportDraft(next);
   };
@@ -240,11 +299,37 @@ export function TokenImageGenerator({
     }
   };
 
+  const commitZoomText = () => {
+    if (!source || disabled || saving) {
+      setZoomText(String(Math.round(transform.zoom * 100)));
+      return;
+    }
+    const percent = Number(zoomText);
+    if (!Number.isFinite(percent) || percent <= 0) {
+      setZoomText(String(Math.round(transform.zoom * 100)));
+      return;
+    }
+    const normalizedPercent = Math.min(
+      800,
+      Math.max(100, Math.round(percent / 10) * 10),
+    );
+    clearDrag();
+    updateTransform({ ...transform, zoom: normalizedPercent / 100 });
+  };
+
+  const changeZoom = (delta: number) => {
+    clearDrag();
+    const next = Math.round((transform.zoom + delta) * 10) / 10;
+    updateTransform({ ...transform, zoom: next });
+  };
+
   if (!imageAssets.length)
     return (
       <section className="token-image-generator token-image-generator--empty">
         <strong>{copy.generator}</strong>
-        <p className="muted">{copy.uploadSource}</p>
+        <p className="muted">
+          {embedded ? copy.uploadHere : copy.uploadSource}
+        </p>
       </section>
     );
 
@@ -282,9 +367,11 @@ export function TokenImageGenerator({
           value={sourceAssetId}
           disabled={disabled || saving}
           onChange={(event) => {
+            clearDrag();
             setSourceAssetId(event.target.value);
             const next = { ...DEFAULT_TOKEN_IMAGE_TRANSFORM };
             setTransform(next);
+            setZoomText("100");
             reportDraft(
               next,
               imageAssets.find((asset) => asset.id === event.target.value) ??
@@ -309,11 +396,14 @@ export function TokenImageGenerator({
         onKeyDown={onPreviewKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={() => {
-          dragStart.current = null;
+        onPointerUp={(event) => {
+          if (dragStart.current?.pointerId === event.pointerId) clearDrag();
         }}
-        onPointerCancel={() => {
-          dragStart.current = null;
+        onPointerCancel={(event) => {
+          if (dragStart.current?.pointerId === event.pointerId) clearDrag();
+        }}
+        onLostPointerCapture={(event) => {
+          if (dragStart.current?.pointerId === event.pointerId) clearDrag();
         }}
       >
         {source && (
@@ -322,21 +412,70 @@ export function TokenImageGenerator({
         <TokenFramePreview frame={transform.frame} />
       </div>
       <p className="token-image-generator__hint">{copy.hint}</p>
-      <label>
-        {copy.zoom}: {transform.zoom.toFixed(1)}x
-        <input
-          aria-label={copy.zoomLabel}
-          type="range"
-          min="1"
-          max="8"
-          step="0.1"
-          value={transform.zoom}
-          disabled={!source || disabled || saving}
-          onChange={(event) =>
-            updateTransform({ ...transform, zoom: Number(event.target.value) })
-          }
-        />
-      </label>
+      <div className="token-image-generator__zoom">
+        <span className="token-image-generator__zoom-heading">
+          {copy.zoom}, %
+        </span>
+        <div className="token-image-generator__zoom-controls">
+          <Button
+            type="button"
+            aria-label="Уменьшить масштаб"
+            onClick={() => changeZoom(-0.1)}
+            disabled={!source || disabled || saving || transform.zoom <= 1}
+          >
+            <AppIcon icon={DecreaseIcon} />
+          </Button>
+          <label>
+            <span className="arken-visually-hidden">
+              {copy.zoomPercentLabel}
+            </span>
+            <input
+              aria-label={copy.zoomPercentLabel}
+              type="number"
+              min="100"
+              max="800"
+              step="10"
+              inputMode="numeric"
+              value={zoomText}
+              disabled={!source || disabled || saving}
+              onChange={(event) => setZoomText(event.target.value)}
+              onBlur={commitZoomText}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                commitZoomText();
+              }}
+            />
+          </label>
+          <Button
+            type="button"
+            aria-label="Увеличить масштаб"
+            onClick={() => changeZoom(0.1)}
+            disabled={!source || disabled || saving || transform.zoom >= 8}
+          >
+            <AppIcon icon={AddIcon} />
+          </Button>
+        </div>
+        <label>
+          <span className="arken-visually-hidden">{copy.zoomLabel}</span>
+          <input
+            aria-label={copy.zoomLabel}
+            type="range"
+            min="1"
+            max="8"
+            step="0.1"
+            value={transform.zoom}
+            disabled={!source || disabled || saving}
+            onChange={(event) => {
+              clearDrag();
+              updateTransform({
+                ...transform,
+                zoom: Number(event.target.value),
+              });
+            }}
+          />
+        </label>
+      </div>
       <fieldset
         className="token-image-generator__frames"
         disabled={!source || disabled || saving}
@@ -350,7 +489,10 @@ export function TokenImageGenerator({
                 name="token-frame"
                 value={frame}
                 checked={transform.frame === frame}
-                onChange={() => updateTransform({ ...transform, frame })}
+                onChange={() => {
+                  clearDrag();
+                  updateTransform({ ...transform, frame });
+                }}
               />
               {frameLabels[frame]}
             </label>
@@ -360,7 +502,10 @@ export function TokenImageGenerator({
       <div className="token-image-generator__actions">
         <Button
           type="button"
-          onClick={() => updateTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM })}
+          onClick={() => {
+            clearDrag();
+            updateTransform({ ...DEFAULT_TOKEN_IMAGE_TRANSFORM });
+          }}
           disabled={!source || disabled || saving}
         >
           {copy.reset}

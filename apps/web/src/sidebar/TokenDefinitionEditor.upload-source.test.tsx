@@ -181,7 +181,7 @@ const activeScene: SceneDto = {
 const uploadRefused = "Сервер отклонил загрузку исходника.";
 const generationRefused = "Сервер отклонил создание изображения токена.";
 
-function setupNegativeControl(failure?: "upload" | "generation") {
+function setupNegativeControl(failure?: "upload" | "generation" | "size") {
   let serverAssets = [sourceB, ready];
   const requests: Array<{ path: string; method: string; body?: unknown }> = [];
   const unexpectedRequests: string[] = [];
@@ -197,6 +197,8 @@ function setupNegativeControl(failure?: "upload" | "generation") {
       const method = init?.method ?? "GET";
       requests.push({ path, method, body: init?.body });
       if (path === "/api/assets?kind=IMAGE" && method === "POST") {
+        if (failure === "size")
+          return jsonResponse({ error: "IMAGE_TOO_LARGE" }, 400);
         if (failure === "upload")
           return jsonResponse(
             { error: "UPLOAD_REJECTED", message: uploadRefused },
@@ -283,7 +285,7 @@ function setupNegativeControl(failure?: "upload" | "generation") {
 
   return {
     requests,
-    async uploadLandscape() {
+    async uploadLandscape(intake: "picker" | "paste" | "drop" = "picker") {
       await userEvent.type(
         screen.getByLabelText("Название"),
         "Страж исходника",
@@ -298,10 +300,20 @@ function setupNegativeControl(failure?: "upload" | "generation") {
           type: "image/png",
         },
       );
-      await userEvent.upload(
-        screen.getByLabelText("Загрузить новое изображение"),
-        file,
-      );
+      const input = screen.getByLabelText("Загрузить новое изображение");
+      if (intake === "picker") {
+        await userEvent.upload(input, file);
+      } else {
+        const root = input.closest(".arken-upload-field");
+        if (!root) throw new Error("Expected the real unified intake field");
+        const transfer = {
+          files: [file],
+          items: [{ kind: "file", getAsFile: () => file }],
+        };
+        if (intake === "paste")
+          fireEvent.paste(root, { clipboardData: transfer });
+        else fireEvent.drop(root, { dataTransfer: transfer });
+      }
       await waitFor(() =>
         expect(
           requests.filter(
@@ -361,6 +373,120 @@ async function attemptRefusedSubmit(name: string, message: string) {
 
 describe("UIX-611 real-chain single-confirm creation controls", () => {
   const submitIntents = ["Сохранить", "Создать и поставить"];
+
+  it.each(["paste", "drop"] as const)(
+    "%s follows the real IMAGE upload and edited crop through one Save",
+    async (intake) => {
+      const control = setupNegativeControl();
+      await control.uploadLandscape(intake);
+      await expectUploadedLandscape();
+      fireEvent.change(
+        screen.getByRole("slider", { name: "Масштаб изображения токена" }),
+        { target: { value: "2" } },
+      );
+      const preview = screen.getByRole("group", {
+        name: /^Интерактивный предпросмотр токена/,
+      });
+      fireEvent.keyDown(preview, { key: "ArrowRight", shiftKey: true });
+      fireEvent.keyDown(preview, { key: "ArrowDown", shiftKey: true });
+      await userEvent.click(screen.getByRole("radio", { name: "Бронза" }));
+      expect(preview.querySelector("img")).toHaveStyle({
+        left: "-130%",
+        top: "-70%",
+      });
+      expect(
+        control.requests.filter((request) => request.path.endsWith("/token")),
+      ).toEqual([]);
+      control.expectNoCreation();
+      await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Редактор закрыт",
+      );
+      expect(
+        control.requests.map(({ method, path }) => `${method} ${path}`),
+      ).toEqual([
+        "POST /api/assets?kind=IMAGE",
+        "GET /api/bootstrap",
+        "POST /api/assets/source-a/token",
+        "GET /api/bootstrap",
+        "POST /api/token-definitions",
+        "GET /api/bootstrap",
+      ]);
+      const derivative = control.requests.find((request) =>
+        request.path.endsWith("/token"),
+      );
+      expect(JSON.parse(String(derivative?.body))).toEqual({
+        cropX: 0.6,
+        cropY: 0.6,
+        zoom: 2,
+        frame: "BRONZE",
+        name: "Old Landscape",
+      });
+      const creation = control.requests.find(
+        (request) => request.path === "/api/token-definitions",
+      );
+      expect(JSON.parse(String(creation?.body))).toMatchObject({
+        name: "Страж исходника",
+        defaultAssetId: generated.id,
+      });
+    },
+  );
+
+  it.each(["paste", "drop"] as const)(
+    "rejects unsupported MIME from %s before any HTTP upload",
+    async (intake) => {
+      const control = setupNegativeControl();
+      await userEvent.type(
+        screen.getByLabelText("Название"),
+        "Черновик сохранён",
+      );
+      const root = screen
+        .getByLabelText("Загрузить новое изображение")
+        .closest(".arken-upload-field");
+      if (!root) throw new Error("Expected the real unified intake field");
+      const file = new File(
+        ["unsupported synthetic boundary bytes"],
+        "unsupported.gif",
+        { type: "image/gif" },
+      );
+      const transfer = {
+        files: [file],
+        items: [{ kind: "file", getAsFile: () => file }],
+      };
+      if (intake === "paste")
+        fireEvent.paste(root, { clipboardData: transfer });
+      else fireEvent.drop(root, { dataTransfer: transfer });
+      expect(
+        await screen.findByText("Поддерживаются только PNG, JPEG и WebP."),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Название")).toHaveValue(
+        "Черновик сохранён",
+      );
+      expect(screen.getByLabelText("Исходное изображение")).toHaveValue("");
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(control.requests).toEqual([]);
+      control.expectNoCreation();
+    },
+  );
+
+  it("preserves the editor and refuses Save after the server IMAGE_TOO_LARGE response", async () => {
+    // The boundary returns the real server code; no huge allocation or image
+    // decoder is exercised by this client intake acceptance test.
+    const control = setupNegativeControl("size");
+    await control.uploadLandscape("drop");
+    const message = "Не удалось выполнить запрос";
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    await attemptRefusedSubmit("Сохранить", message);
+    expect(
+      screen.queryByRole("option", { name: sourceA.name }),
+    ).not.toBeInTheDocument();
+    expect(
+      control.requests
+        .filter((request) => request.path !== "/api/client-logs")
+        .map(({ method, path }) => `${method} ${path}`),
+    ).toEqual(["POST /api/assets?kind=IMAGE"]);
+    control.expectNoCreation();
+  });
 
   it.each(submitIntents)(
     "derives an uploaded landscape IMAGE and creates via one %s",

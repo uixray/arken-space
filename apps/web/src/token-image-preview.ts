@@ -1,3 +1,5 @@
+import { tokenImageCropSize } from "./token-image-editor-state";
+
 export type TokenImagePreviewCropInput = {
   width: number;
   height: number;
@@ -34,7 +36,7 @@ export function resolveTokenImagePreviewCrop({
   cropY,
   zoom,
 }: TokenImagePreviewCropInput): TokenImagePreviewCrop {
-  const cropSize = Math.max(1, Math.floor(Math.min(width, height) / zoom));
+  const cropSize = tokenImageCropSize({ width, height }, zoom);
   const left = clamp(
     Math.round(cropX * width - cropSize / 2),
     0,
