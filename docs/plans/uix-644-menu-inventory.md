@@ -279,3 +279,26 @@ UIX-644 остаётся In Progress. Следующий связанный пу
 карточки. Полные CI/многопользовательская проверка репозитория, объединённый CI с UIX-421/423/414,
 публичные push/PR и production **не выполнялись и не разрешаются этим протоколом проверки**.
 Чужая UIX-645 и antigravity главного оркестратора не изменялись.
+
+## Connected composer lifecycle slice — 2026-09-15
+
+Source prepared after the released PR75 base. Runtime status remains **PENDING**,
+not a new PASS for the complete B–E inventory.
+
+- Existing ActivityPanel and ChatPanel command lists share
+  `ui/use-composer-suggestions.ts`; the two listbox sites remain in ChatPanels.
+- Effective visibility includes typed slash commands and explicit trigger opening.
+  Escape/outside dismissal suppresses the current draft without clearing it; a
+  real edit or explicit reopening restores suggestions. Scope and stream changes
+  invalidate the popup without weakening submission/draft ownership.
+- The nearest composer handles its first Escape and restores origin focus.
+  Options use native button activation and programmatic arrow navigation; Home/End
+  stay native in the textarea, unrelated controls keep their keys, and Tab is not
+  trapped. Outside pointer/focus does not steal focus. IME input remains owned by
+  composition rather than command execution.
+- Prepared actual-caller evidence: `sidebar/ChatPanels.suggestions.dom.test.tsx`.
+  Prepared App browser evidence: `tests/e2e/composer-suggestions-lifecycle.spec.ts`,
+  GM/PLAYER at desktop/compact widths. Neither suite is accepted until executed
+  against the combined candidate; mock APIs do not prove backend permissions.
+- First-Escape containment, reopen and scope transitions must pass alongside the
+  existing sticker/workspace/overlay and published draft/action-context pool.

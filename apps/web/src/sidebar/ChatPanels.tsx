@@ -1,3 +1,4 @@
+import { useComposerSuggestions } from "../ui/use-composer-suggestions";
 import { RollVisibilityContext } from "../roll-visibility-context";
 import {
   useCallback,
@@ -343,7 +344,9 @@ export function ActivityPanel({
   const composer = activityDraft.value;
   const setComposer = activityDraft.setValue;
   const [composerError, setComposerError] = useState("");
-  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
+  const [composerInvalid, setComposerInvalid] = useState(false);
+  const [quickRollError, setQuickRollError] = useState("");
+  const [resourceError, setResourceError] = useState("");
   const availableRollCharacters = useMemo(
     () => charactersAvailableForActivityRolls(snapshot),
     [snapshot],
@@ -362,7 +365,12 @@ export function ActivityPanel({
   );
   const filtersRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(filtersRef);
-  const [quickRollPending, setQuickRollPending] = useState(false);
+  const [pendingQuickRoll, setPendingQuickRoll] = useState<{
+    characterName: string;
+    label: string;
+  } | null>(null);
+  // The ref closes the same-render double-click gap; state is for feedback.
+  const quickRollInFlight = useRef(false);
   const rollVisibility = useContext(RollVisibilityContext);
   // UIX-372: the roll/event log can get long and spammy with quick rolls, so
   // it can be collapsed to a compact "last N entries" view independently of
@@ -380,27 +388,42 @@ export function ActivityPanel({
     () => statLabelsFromLayout(snapshot.campaign.statLayout),
     [snapshot.campaign.statLayout],
   );
-  const slashSuggestions = slashHelpOpen
-    ? getSlashCommandSuggestions("/", characterStats, statLabels)
-    : getSlashCommandSuggestions(composer, characterStats, statLabels);
+  const suggestions = useComposerSuggestions(
+    `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${snapshot.me.characterId ?? "none"}:activity`,
+    getSlashCommandSuggestions(composer, characterStats, statLabels).length > 0,
+  );
+  const slashSuggestions = suggestions.visible
+    ? getSlashCommandSuggestions(
+        suggestions.explicit ? "/" : composer,
+        characterStats,
+        statLabels,
+      )
+    : [];
   const executeActivitySuggestion = (insertion: string) => {
     const intent = parseComposerInput(insertion, characterStats, statLabels);
-    setSlashHelpOpen(false);
+    suggestions.complete();
     if (intent.kind !== "ROLL") {
       setComposer(insertion);
       return;
     }
+    const suggestionToken = activityDraft.touch();
     setComposer("");
     setComposerError("");
+    setComposerInvalid(false);
     void onRoll(
       intent.formula,
       intent.label,
       "PUBLIC",
       snapshot.me.characterId,
       "NORMAL",
-    ).catch(() =>
-      setComposerError("Не удалось выполнить бросок. Повторите попытку."),
-    );
+    ).catch((reason) => {
+      if (!activityDraft.isCurrentScope(suggestionToken)) return;
+      setComposerError(
+        reason instanceof Error && reason.message
+          ? reason.message
+          : "Не удалось выполнить бросок. Повторите попытку.",
+      );
+    });
   };
   // UIX-388: a direct submit with the chosen visibility, not a mode toggle --
   // see composer-keyboard-intent.ts for why. Both the Send button (a normal
@@ -411,10 +434,12 @@ export function ActivityPanel({
     const intent = parseComposerInput(composer, characterStats, statLabels);
     if (intent.kind === "INVALID") {
       setComposerError(intent.message);
+      setComposerInvalid(true);
       return;
     }
     const consumed = activityDraft.consume();
     setComposerError("");
+    setComposerInvalid(false);
     try {
       if (intent.kind === "ROLL")
         await onRoll(
@@ -425,14 +450,22 @@ export function ActivityPanel({
           "NORMAL",
         );
       else await onChat(intent.body, visibility, "TABLE");
-    } catch {
+    } catch (reason) {
       activityDraft.restore(consumed.token, consumed.value);
-      if (activityDraft.isCurrentScope(consumed.token))
-        setComposerError(
-          intent.kind === "ROLL"
+      if (!activityDraft.isCurrentScope(consumed.token)) return;
+      setComposerError(
+        reason instanceof Error &&
+          reason.message &&
+          !(
+            reason instanceof ApiError &&
+            reason.code === "REQUEST_FAILED" &&
+            !reason.details?.message
+          )
+          ? reason.message
+          : intent.kind === "ROLL"
             ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
             : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
-        );
+      );
     }
   };
   const submit = (event: FormEvent) => {
@@ -442,6 +475,7 @@ export function ActivityPanel({
   const onComposerKeyDown = (
     event: ReactKeyboardEvent<HTMLTextAreaElement>,
   ) => {
+    if (suggestions.isComposing(event)) return;
     const action = decideComposerKeydown({
       key: event.key,
       ctrlKey: event.ctrlKey,
@@ -481,21 +515,24 @@ export function ActivityPanel({
    */
   const spendResource = (
     characterId: string,
+    characterName: string,
     revision: number,
     intent: ResourceCounterIntent,
   ) => {
-    setComposerError("");
+    setResourceError("");
     return onUpdateCounters(
       characterId,
       revision,
       {},
       { resource: intent },
     ).catch((reason) => {
-      setComposerError(
+      const message =
         reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
           ? "Ресурсы уже изменены в другой сессии. Повторите действие."
-          : "Не удалось изменить очки. Проверьте соединение.",
-      );
+          : reason instanceof Error && reason.message
+            ? reason.message
+            : "Не удалось изменить очки. Проверьте соединение.";
+      setResourceError(`${characterName} · Ресурсы: ${message}`);
       // Пробрасывается дальше: счётчики отличают отказ от успеха только так.
       throw reason;
     });
@@ -511,9 +548,13 @@ export function ActivityPanel({
      */
     mode: RollMode = "NORMAL",
   ) => {
-    if (!rollCharacter) return;
-    setQuickRollPending(true);
-    setComposerError("");
+    if (!rollCharacter || quickRollInFlight.current) return;
+    quickRollInFlight.current = true;
+    // Keep the initiating identity even if the active/GM-selected character
+    // changes before the server responds. Never label A's result as B's.
+    const characterName = rollCharacter.name;
+    setPendingQuickRoll({ characterName, label });
+    setQuickRollError("");
     try {
       if (physicalDice) {
         const request = physicalRollChatRequest(
@@ -531,10 +572,15 @@ export function ActivityPanel({
       } else {
         await onRoll(formula, label, rollVisibility, rollCharacter.id, mode);
       }
-    } catch {
-      setComposerError("Не удалось выполнить бросок. Повторите попытку.");
+    } catch (reason) {
+      const message =
+        reason instanceof Error && reason.message
+          ? reason.message
+          : "Не удалось выполнить бросок. Повторите попытку.";
+      setQuickRollError(`${characterName} · ${label}: ${message}`);
     } finally {
-      setQuickRollPending(false);
+      quickRollInFlight.current = false;
+      setPendingQuickRoll(null);
     }
   };
   const timeline = useMemo(
@@ -594,7 +640,11 @@ export function ActivityPanel({
       >
         <section className="activity-roll-controls" aria-label="Быстрые броски">
           <div className="activity-roll-controls__heading">
-            <strong>Быстрые броски</strong>
+            <strong>
+              {snapshot.me.role === "PLAYER" && rollCharacter
+                ? `Броски и ресурсы · ${rollCharacter.name}`
+                : "Быстрые броски"}
+            </strong>
             {snapshot.me.role === "GM" &&
               availableRollCharacters.length > 0 && (
                 <FormSelect
@@ -637,7 +687,7 @@ export function ActivityPanel({
               rows={rollableStatRows(
                 statRowsFromLayout(snapshot.campaign.statLayout),
               )}
-              quickRollPending={quickRollPending}
+              quickRollPending={pendingQuickRoll !== null}
               gmOnly={rollVisibility === "GM_ONLY"}
               onQuickRoll={(formula, label, bonus, mode) =>
                 void submitQuickRoll(formula, label, bonus, mode)
@@ -645,6 +695,17 @@ export function ActivityPanel({
             />
           ) : (
             <p className="muted">Нет доступного персонажа для броска.</p>
+          )}
+          {pendingQuickRoll && (
+            <p role="status">
+              Бросаем… {pendingQuickRoll.characterName} ·{" "}
+              {pendingQuickRoll.label}
+            </p>
+          )}
+          {quickRollError && (
+            <p className="composer-error" role="alert">
+              {quickRollError}
+            </p>
           )}
         </section>
         {rollCharacter && (
@@ -655,9 +716,19 @@ export function ActivityPanel({
             stats={rollCharacter.stats}
             editable={canSpendResources}
             onSpend={(intent) =>
-              spendResource(rollCharacter.id, rollCharacter.revision, intent)
+              spendResource(
+                rollCharacter.id,
+                rollCharacter.name,
+                rollCharacter.revision,
+                intent,
+              )
             }
           />
+        )}
+        {resourceError && (
+          <p className="composer-error" role="alert">
+            {resourceError}
+          </p>
         )}
       </div>
       <div className="activity-log-toolbar">
@@ -815,10 +886,22 @@ export function ActivityPanel({
         </Button>
       )}
       <form className="chat-compose chat-compose--single" onSubmit={submit}>
-        <div className="chat-composer-input">
+        <div
+          className="chat-composer-input"
+          ref={suggestions.rootRef}
+          onKeyDown={suggestions.onKeyDown}
+          onCompositionStart={suggestions.onCompositionStart}
+          onCompositionEnd={suggestions.onCompositionEnd}
+        >
           <FormTextArea
+            controlRef={suggestions.textareaRef}
             aria-label="Сообщение или бросок"
-            aria-describedby="activity-composer-hint"
+            aria-invalid={composerInvalid || undefined}
+            aria-describedby={
+              composerError
+                ? "activity-composer-hint activity-composer-error"
+                : "activity-composer-hint"
+            }
             aria-controls={
               slashSuggestions.length > 0
                 ? "activity-slash-suggestions"
@@ -827,8 +910,10 @@ export function ActivityPanel({
             placeholder={"Сообщение? Введите / для быстрых команд"}
             value={composer}
             onChange={(event) => {
-              setSlashHelpOpen(false);
+              suggestions.edited();
               setComposer(event.target.value);
+              setComposerError("");
+              setComposerInvalid(false);
             }}
             onKeyDown={onComposerKeyDown}
             rows={3}
@@ -854,7 +939,7 @@ export function ActivityPanel({
                   ? "activity-slash-suggestions"
                   : undefined
               }
-              onClick={() => setSlashHelpOpen((open) => !open)}
+              onClick={suggestions.toggle}
             >
               <span aria-hidden="true">/</span>
             </Button>
@@ -880,6 +965,7 @@ export function ActivityPanel({
                   key={suggestion.command}
                   type="button"
                   role="option"
+                  tabIndex={-1}
                   aria-selected="false"
                   onClick={() =>
                     executeActivitySuggestion(suggestion.insertion)
@@ -901,7 +987,7 @@ export function ActivityPanel({
         </p>
       </form>
       {composerError && (
-        <p className="composer-error" role="alert">
+        <p className="composer-error" role="alert" id="activity-composer-error">
           {composerError}
         </p>
       )}
@@ -1310,7 +1396,6 @@ export function ChatPanel({
   const composer = chatDraft.value;
   const setComposer = chatDraft.setValue;
   const [composerError, setComposerError] = useState("");
-  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   const messages = useMemo(
     () =>
       messagesForStream(snapshot.messages, activeStream, snapshot.chatThreads),
@@ -1350,19 +1435,22 @@ export function ChatPanel({
   const canCompose =
     activeStream === "TABLE" ||
     (activeStream === "STORY" && snapshot.me.role === "GM");
-  const slashSuggestions =
-    activeStream === "TABLE"
-      ? slashHelpOpen
-        ? getSlashCommandSuggestions("/")
-        : getSlashCommandSuggestions(composer)
-      : [];
+  const suggestions = useComposerSuggestions(
+    `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${snapshot.me.characterId ?? "none"}:${activeStream}`,
+    getSlashCommandSuggestions(composer).length > 0,
+    visible && activeStream === "TABLE",
+  );
+  const slashSuggestions = suggestions.visible
+    ? getSlashCommandSuggestions(suggestions.explicit ? "/" : composer)
+    : [];
   const executeChatSuggestion = (insertion: string) => {
     const intent = parseComposerInput(insertion);
-    setSlashHelpOpen(false);
+    suggestions.complete();
     if (intent.kind !== "ROLL") {
       setComposer(insertion);
       return;
     }
+    const suggestionToken = chatDraft.touch();
     setComposer("");
     setComposerError("");
     void onRoll(
@@ -1371,9 +1459,10 @@ export function ChatPanel({
       "PUBLIC",
       snapshot.me.characterId,
       "NORMAL",
-    ).catch(() =>
-      setComposerError("Не удалось выполнить бросок. Повторите попытку."),
-    );
+    ).catch(() => {
+      if (chatDraft.isCurrentScope(suggestionToken))
+        setComposerError("Не удалось выполнить бросок. Повторите попытку.");
+    });
   };
 
   useEffect(() => {
@@ -1438,6 +1527,7 @@ export function ChatPanel({
   const onComposerKeyDown = (
     event: ReactKeyboardEvent<HTMLTextAreaElement>,
   ) => {
+    if (suggestions.isComposing(event)) return;
     const action = decideComposerKeydown({
       key: event.key,
       ctrlKey: event.ctrlKey,
@@ -1548,8 +1638,15 @@ export function ChatPanel({
       {canCompose && (
         <>
           <form className="chat-compose chat-compose--single" onSubmit={submit}>
-            <div className="chat-composer-input">
+            <div
+              className="chat-composer-input"
+              ref={suggestions.rootRef}
+              onKeyDown={suggestions.onKeyDown}
+              onCompositionStart={suggestions.onCompositionStart}
+              onCompositionEnd={suggestions.onCompositionEnd}
+            >
               <FormTextArea
+                controlRef={suggestions.textareaRef}
                 aria-label={
                   activeStream === "STORY"
                     ? "Сообщение сюжета"
@@ -1568,7 +1665,7 @@ export function ChatPanel({
                 }
                 value={composer}
                 onChange={(event) => {
-                  setSlashHelpOpen(false);
+                  suggestions.edited();
                   setComposer(event.target.value);
                 }}
                 onKeyDown={onComposerKeyDown}
@@ -1598,7 +1695,7 @@ export function ChatPanel({
                       ? "chat-slash-suggestions"
                       : undefined
                   }
-                  onClick={() => setSlashHelpOpen((open) => !open)}
+                  onClick={suggestions.toggle}
                 >
                   <span aria-hidden="true">/</span>
                 </Button>
@@ -1624,6 +1721,7 @@ export function ChatPanel({
                       key={suggestion.command}
                       type="button"
                       role="option"
+                      tabIndex={-1}
                       aria-selected="false"
                       onClick={() =>
                         executeChatSuggestion(suggestion.insertion)

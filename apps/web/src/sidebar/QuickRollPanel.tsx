@@ -109,7 +109,7 @@ export function QuickRollPanel({
             <AppIcon icon={SecretRollIcon} /> Броски уйдут только мастеру
           </p>
         )}
-        <div className="activity-quick-rolls">
+        <div className="activity-quick-rolls" aria-busy={quickRollPending}>
           {/* UIX-424: «Инициатива» больше не отдельная кнопка поверх броска на
            * ловкость — это настоящая характеристика раскладки, и кнопка на неё
            * приходит из списка ниже. Оставить обе значило бы дать две кнопки с

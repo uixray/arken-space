@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useReducer,
@@ -725,7 +726,9 @@ function CharacterControllerAccess({
   );
   const [draft, setDraft] = useState(canonical);
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
   const [error, setError] = useState("");
+  const saveDescriptionId = useId();
   const dirty =
     JSON.stringify([...draft].sort()) !== JSON.stringify([...canonical].sort());
 
@@ -741,6 +744,9 @@ function CharacterControllerAccess({
         Игроки, которые могут видеть и управлять этим персонажем.
       </p>
       <div className="character-controller-access__players">
+        {players.length === 0 && (
+          <p className="muted">В кампании пока нет игроков.</p>
+        )}
         {players.map((member) => {
           const owner = member.id === character.ownerMembershipId;
           const checked = owner || draft.includes(member.id);
@@ -772,18 +778,34 @@ function CharacterControllerAccess({
           {error}
         </p>
       )}
+      <p id={saveDescriptionId} className="muted" role="status">
+        {pending
+          ? "Сохраняем доступ к персонажу…"
+          : dirty
+            ? "Изменения доступа ещё не сохранены."
+            : "Изменений доступа нет."}
+      </p>
       <Button
         disabled={!dirty || pending}
+        aria-describedby={saveDescriptionId}
+        aria-busy={pending}
         onClick={() => {
+          if (pendingRef.current) return;
+          pendingRef.current = true;
           setPending(true);
           setError("");
-          void onSave(character.id, character.revision, draft)
-            .catch(() =>
+          void (async () => {
+            try {
+              await onSave(character.id, character.revision, draft);
+            } catch {
               setError(
                 "Не удалось сохранить доступ. Данные обновлены — проверьте список и повторите попытку.",
-              ),
-            )
-            .finally(() => setPending(false));
+              );
+            } finally {
+              pendingRef.current = false;
+              setPending(false);
+            }
+          })();
         }}
       >
         {pending ? "Сохранение…" : "Сохранить доступ"}
@@ -955,6 +977,9 @@ export function CharacterPanel({
   >(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [portraitUpload, setPortraitUpload] = useState<File>();
+  const [portraitUploadPending, setPortraitUploadPending] = useState(false);
+  const portraitUploadPendingRef = useRef(false);
+  const portraitUploadDescriptionId = useId();
   const [walletDraft, setWalletDraft] = useState(() =>
     normalizeWallet(character?.wallet ?? EMPTY_WALLET),
   );
@@ -1004,6 +1029,11 @@ export function CharacterPanel({
     (snapshot.me.role === "GM" ||
       character.ownerMembershipId === snapshot.me.id);
   const portraitUploadEpochRef = useRef(0);
+  useLayoutEffect(() => {
+    portraitUploadPendingRef.current = false;
+    setPortraitUploadPending(false);
+  }, [snapshot.me.id, snapshot.me.role, character?.id, editable]);
+
   useLayoutEffect(() => {
     const epoch = portraitUploadEpochRef.current + 1;
     portraitUploadEpochRef.current = epoch;
@@ -1298,21 +1328,35 @@ export function CharacterPanel({
       <ImageUploadField
         label="Загрузить портрет для персонажа"
         value={portraitUpload}
-        disabled={!editable}
+        disabled={!editable || portraitUploadPending}
         onUpdate={(file) => {
-          if (!editable) return;
+          if (!editable || portraitUploadPendingRef.current) return;
           setPortraitUpload(file);
         }}
       />
+      <p id={portraitUploadDescriptionId} className="muted" role="status">
+        {portraitUploadPending
+          ? "Загружаем и назначаем портрет…"
+          : !editable
+            ? "Портрет доступен только для чтения."
+            : portraitUpload
+              ? "Файл выбран. Загрузите его, чтобы назначить портрет."
+              : "Сначала выберите изображение портрета."}
+      </p>
       <Button
-        disabled={!editable || !portraitUpload}
-        onClick={() =>
+        disabled={!editable || !portraitUpload || portraitUploadPending}
+        aria-describedby={portraitUploadDescriptionId}
+        aria-busy={portraitUploadPending}
+        onClick={() => {
+          if (!editable || !portraitUpload || portraitUploadPendingRef.current)
+            return;
+          const uploadEpoch = portraitUploadEpochRef.current;
+          const file = portraitUpload;
+          const targetId = character.id;
+          const targetRevision = character.revision;
+          portraitUploadPendingRef.current = true;
+          setPortraitUploadPending(true);
           void runCharacterMutation(async () => {
-            if (!editable || !portraitUpload) return;
-            const uploadEpoch = portraitUploadEpochRef.current;
-            const file = portraitUpload;
-            const targetId = character.id;
-            const targetRevision = character.revision;
             const asset = await assetActions.uploadAsset(file, "PORTRAIT");
             if (portraitUploadEpochRef.current !== uploadEpoch) return;
             await onPatch(targetId, {
@@ -1320,12 +1364,19 @@ export function CharacterPanel({
               revision: targetRevision,
             });
             if (portraitUploadEpochRef.current === uploadEpoch) {
+              portraitUploadPendingRef.current = false;
+              setPortraitUploadPending(false);
               setPortraitUpload(undefined);
             }
-          })
-        }
+          }).finally(() => {
+            if (portraitUploadEpochRef.current === uploadEpoch) {
+              portraitUploadPendingRef.current = false;
+              setPortraitUploadPending(false);
+            }
+          });
+        }}
       >
-        Загрузить и назначить
+        {portraitUploadPending ? "Загрузка…" : "Загрузить и назначить"}
       </Button>
       <h3 className="character-block-heading">Галерея</h3>
       <CharacterMediaGallery

@@ -1,10 +1,13 @@
-# Local UI review candidate — 2026-09-12
+# Connected UI review candidate — 2026-09-15
 
 Status: source integration only. Not published, deployed, or runtime accepted.
 
 ## Inputs and preservation
 
-Accepted source base: `93935933738c78f459b8a0fa1c4d13747f82c8e3`.
+Released source base: `54b5006a782939ccb9e0c4317d195eda3f07b1e3`.
+The prior private candidate `cc58a74d2b492e1f9cba85ff156a63ded4b28dfd`
+is being reconciled with that exact base, preserving both histories. Earlier
+targeted checks on the private candidate do not prove the new combined source.
 The existing forms worktree now holds `codex/ui-review-integration`; no additional
 worktree, dependency installation, generated assets, or application process.
 The original branch tips remain unchanged:
@@ -58,9 +61,25 @@ acceptance. Prior accepted-base CI does not cover these changes.
 
 ## Current blocker and next action
 
-The assessed private test environment lacks the DOM test dependencies. Browser
-system-library readiness is separately blocked. No local heavy runner is allowed;
-no install or alternate browser/server bypass was attempted. Hold this candidate
-for scoped environment preparation and connected verification. Keep private
-technical receipts local; external issue synchronization remains subject to its
-existing authorization boundary.
+The owner now permits moderate laptop use. The current memory headroom is too
+small for a local connected browser/build pool, and the assessed private server
+does not have a ready browser runtime. Do not turn these constraints into repeated
+local launches or dependency installations. Prepare the reviewed code-only branch
+for hosted exact-lockfile CI, keeping private technical receipts local.
+
+Four shared files require explicit source review after merging the released base:
+CharacterWorkspace (portrait/access epochs and pending guards plus icon changes),
+ChatPanels (scope-aware drafts, action-specific errors and composer icons),
+QuickRollPanel (pending ARIA plus icons), and concept.spec (retain both the upload
+and action-context regressions). The released native textarea adapter is unchanged.
+
+The connected browser gate must include all 16 new mock cases from Files intake,
+Russian world copy, sticker lifecycle and workspace-select Escape, plus the
+released action-context/draft/readonly regressions. The two player-request control
+cases require a disposable real backend; they are not covered by mock-only runs.
+The observed quick-command trigger Escape gap belongs to UIX-644's existing
+lifecycle inventory and needs caller-level and browser regression evidence.
+
+Publishing a reviewed branch for CI is distinct from production release. Do not
+merge or deploy this candidate on the strength of the released base's green checks;
+require exact-candidate and exact-main gates, backup/restore and scoped postflight.
