@@ -428,6 +428,43 @@ describe("ActivityPanel action context (UIX-621)", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Соединение закрыто");
   });
 
+  it.each([
+    {
+      name: "an unstructured HTTP failure",
+      reason: new ApiError(
+        500,
+        "REQUEST_FAILED",
+        "Не удалось выполнить запрос",
+      ),
+      expected:
+        "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+    },
+    {
+      name: "a server-provided explanation",
+      reason: new ApiError(
+        403,
+        "REQUEST_FAILED",
+        "Этот канал доступен только мастеру.",
+        undefined,
+        undefined,
+        { message: "Этот канал доступен только мастеру." },
+      ),
+      expected: "Этот канал доступен только мастеру.",
+    },
+  ])(
+    "keeps action-specific feedback for $name",
+    async ({ reason, expected }) => {
+      renderActivity(snapshot(), {
+        onChat: vi.fn().mockRejectedValue(reason),
+      });
+      fireEvent.change(composerInput(), { target: { value: "Черновик" } });
+      await act(async () => submit());
+      expect(composerInput()).toHaveValue("Черновик");
+      expect(composerInput()).not.toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("alert")).toHaveTextContent(expected);
+    },
+  );
+
   it("keeps disclosure state on the command button, not the native multiline textbox", () => {
     renderActivity();
     const input = composerInput();

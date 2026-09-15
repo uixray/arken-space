@@ -442,7 +442,13 @@ export function ActivityPanel({
       activityDraft.restore(consumed.token, consumed.value);
       if (!activityDraft.isCurrentScope(consumed.token)) return;
       setComposerError(
-        reason instanceof Error && reason.message
+        reason instanceof Error &&
+          reason.message &&
+          !(
+            reason instanceof ApiError &&
+            reason.code === "REQUEST_FAILED" &&
+            !reason.details?.message
+          )
           ? reason.message
           : intent.kind === "ROLL"
             ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
