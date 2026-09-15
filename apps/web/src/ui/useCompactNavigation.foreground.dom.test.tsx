@@ -11,6 +11,7 @@ import {
 import { CompactNavigation } from "../CompactNavigation";
 import {
   COMPACT_LAYOUT_QUERY,
+  retainJournalPopupOwner,
   useCompactNavigation,
 } from "./useCompactNavigation";
 
