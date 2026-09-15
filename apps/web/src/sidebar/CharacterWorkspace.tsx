@@ -119,6 +119,7 @@ export function CharacterWorkspace({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
   const [campaignClockOpen, setCampaignClockOpen] = useState(false);
+  const sheetLimitDescriptionId = useId();
   const [railCollapsed, setRailCollapsed] = useState(false);
   // UIX-393: GM-only archive/restore. `archiveTarget` drives the confirm
   // dialog for a single character; `restoreDialogOpen` opens the separate
@@ -162,6 +163,7 @@ export function CharacterWorkspace({
   }, [active, onClose]);
 
   const openCount = state.openIds.length;
+  const sheetLimitReached = openCount >= MAX_OPEN_CHARACTER_SHEETS;
   return createPortal(
     <main
       ref={workspaceRef}
@@ -250,13 +252,18 @@ export function CharacterWorkspace({
               Архив персонажей
             </button>
           )}
+          {sheetLimitReached && (
+            <p className="muted" id={sheetLimitDescriptionId}>
+              Закройте один из открытых листов, чтобы открыть другой.
+            </p>
+          )}
           {characters.length === 0 ? (
             <p className="muted">Нет доступных персонажей.</p>
           ) : (
             characters.map((character) => {
               const isOpen = state.openIds.includes(character.id);
               const isCollapsed = state.collapsedIds.includes(character.id);
-              const full = !isOpen && openCount >= MAX_OPEN_CHARACTER_SHEETS;
+              const full = !isOpen && sheetLimitReached;
               return (
                 <div className="character-rail__item" key={character.id}>
                   <button
@@ -266,6 +273,9 @@ export function CharacterWorkspace({
                     }
                     aria-pressed={state.activeId === character.id}
                     disabled={full}
+                    aria-describedby={
+                      full ? sheetLimitDescriptionId : undefined
+                    }
                     title={
                       full
                         ? "Закройте один из открытых листов, чтобы открыть другой."
@@ -980,6 +990,8 @@ export function CharacterPanel({
   const [portraitUploadPending, setPortraitUploadPending] = useState(false);
   const portraitUploadPendingRef = useRef(false);
   const portraitUploadDescriptionId = useId();
+  const backstoryDescriptionId = useId();
+  const newResourceDescriptionId = useId();
   const [walletDraft, setWalletDraft] = useState(() =>
     normalizeWallet(character?.wallet ?? EMPTY_WALLET),
   );
@@ -1065,6 +1077,16 @@ export function CharacterPanel({
         text="Мастер ещё не назначил вам персонажа."
       />
     );
+  const editPermissionReason =
+    "Редактирование доступно мастеру, владельцу листа и назначенным контроллерам.";
+  const newResourceKey = newResourceName.trim();
+  const newResourceReason = !editable
+    ? "У вас нет права добавлять дополнительные ресурсы."
+    : !newResourceKey
+      ? "Введите название ресурса."
+      : resourcesDraft[newResourceKey]
+        ? `Ресурс «${newResourceKey}» уже существует.`
+        : undefined;
   const submitCharacterRoll = async (formula: string, label: string) => {
     setRollPending(true);
     setRollError("");
@@ -1389,6 +1411,8 @@ export function CharacterPanel({
       <details className="subsection">
         <summary>Предыстория</summary>
         <FormTextArea
+          aria-label="Предыстория"
+          aria-describedby={!editable ? backstoryDescriptionId : undefined}
           defaultValue={character.backstory}
           disabled={!editable}
           rows={8}
@@ -1401,6 +1425,11 @@ export function CharacterPanel({
             )
           }
         />
+        {!editable && (
+          <p className="muted" id={backstoryDescriptionId}>
+            {editPermissionReason}
+          </p>
+        )}
       </details>
       <h3 className="character-block-heading">Характеристики</h3>
       <div className="subsection character-roll-controls">
@@ -1875,11 +1904,23 @@ export function CharacterPanel({
           ))}
         <div className="inline-fields">
           <FormInput
+            aria-label="Название нового ресурса"
+            aria-invalid={
+              editable && newResourceKey && resourcesDraft[newResourceKey]
+                ? true
+                : undefined
+            }
+            aria-describedby={
+              newResourceReason ? newResourceDescriptionId : undefined
+            }
             value={newResourceName}
             placeholder="Новый ресурс"
             onChange={(event) => setNewResourceName(event.target.value)}
           />
           <Button
+            aria-describedby={
+              newResourceReason ? newResourceDescriptionId : undefined
+            }
             disabled={
               !editable ||
               !newResourceName.trim() ||
@@ -1898,6 +1939,11 @@ export function CharacterPanel({
             Добавить
           </Button>
         </div>
+        {newResourceReason && (
+          <p className="muted" id={newResourceDescriptionId}>
+            {newResourceReason}
+          </p>
+        )}
       </div>
       <label className="field">
         Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не

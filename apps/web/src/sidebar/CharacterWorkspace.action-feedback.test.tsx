@@ -17,15 +17,25 @@ import {
   waitFor,
   within,
 } from "../test-support/render";
-import { CharacterPanel } from "./CharacterWorkspace";
+import { CharacterPanel, CharacterWorkspace } from "./CharacterWorkspace";
 
 type PanelProps = ComponentProps<typeof CharacterPanel>;
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollIntoView",
+);
 
 // Real CharacterPanel, Gravity buttons, file input and gallery. Only the
 // gallery's unrelated read-only network boundary and absent browser APIs are
 // supplied here; mutation callbacks are observed at their owning controls.
 beforeEach(() => {
   installMatchMediaMock();
+  // jsdom has no layout scrolling. This suite checks the real sheet reducer
+  // and accessible descriptions, not browser scroll geometry.
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: vi.fn(),
+  });
   vi.stubGlobal(
     "URL",
     class extends URL {
@@ -37,7 +47,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (
-        /^\/api\/characters\/character-[ab]\/media$/.test(String(input)) &&
+        /^\/api\/characters\/character-[a-d]\/media$/.test(String(input)) &&
         init?.method === "GET"
       ) {
         return new Response("[]", {
@@ -48,7 +58,18 @@ beforeEach(() => {
     }),
   );
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  if (originalScrollIntoView) {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    );
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  }
+});
 
 const unexpectedAction = (): never => {
   throw new Error("Unexpected campaign action in character feedback test");
@@ -624,5 +645,161 @@ describe("character action feedback", () => {
     expect(upload).toHaveBeenNthCalledWith(2, file, "PORTRAIT");
     expect(button).toHaveAttribute("aria-busy", "false");
     expect(button).toBeDisabled();
+  });
+
+  it("names the locked backstory and explains why resources cannot be added", async () => {
+    const state = snapshot();
+    const readOnly = {
+      ...state,
+      me: {
+        ...state.me,
+        id: "player-guest",
+        role: "PLAYER" as const,
+        characterId: null,
+      },
+    };
+    renderComponent(view(readOnly));
+    await galleryLoaded();
+
+    fireEvent.click(screen.getByText("Предыстория", { selector: "summary" }));
+    const backstory = screen.getByRole("textbox", { name: "Предыстория" });
+    expect(backstory).toBeDisabled();
+    expect(backstory).toHaveAccessibleDescription(
+      "Редактирование доступно мастеру, владельцу листа и назначенным контроллерам.",
+    );
+    const resourceName = screen.getByRole("textbox", {
+      name: "Название нового ресурса",
+    });
+    const add = screen.getByRole("button", { name: "Добавить" });
+    expect(add).toBeDisabled();
+    expect(resourceName).toHaveAccessibleDescription(
+      "У вас нет права добавлять дополнительные ресурсы.",
+    );
+    expect(add).toHaveAccessibleDescription(
+      "У вас нет права добавлять дополнительные ресурсы.",
+    );
+  });
+
+  it("explains empty and duplicate resource names without a ready-state hint", async () => {
+    renderComponent(
+      view(
+        snapshot([
+          character({
+            resources: {
+              Запас: { current: 1, maximum: 2, recoverable: true },
+            },
+          }),
+        ]),
+      ),
+    );
+    await galleryLoaded();
+
+    const resourceName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Название нового ресурса",
+    });
+    const add = screen.getByRole("button", { name: "Добавить" });
+    expect(add).toBeDisabled();
+    expect(add).toHaveAccessibleDescription("Введите название ресурса.");
+
+    fireEvent.change(resourceName, { target: { value: "Удача" } });
+    expect(add).toBeEnabled();
+    expect(add).not.toHaveAttribute("aria-describedby");
+    expect(resourceName).not.toHaveAttribute("aria-invalid");
+
+    fireEvent.change(resourceName, { target: { value: "Запас" } });
+    expect(add).toBeDisabled();
+    expect(resourceName).toHaveAttribute("aria-invalid", "true");
+    expect(resourceName).toHaveAccessibleDescription(
+      "Ресурс «Запас» уже существует.",
+    );
+    expect(add).toHaveAccessibleDescription("Ресурс «Запас» уже существует.");
+  });
+
+  it("explains the sheet limit in the rail and removes it after a sheet closes", async () => {
+    const state = snapshot([
+      character({ id: "character-a", name: "Персонаж A" }),
+      character({ id: "character-b", name: "Персонаж B" }),
+      character({ id: "character-c", name: "Персонаж C" }),
+      character({ id: "character-d", name: "Персонаж D" }),
+    ]);
+    const workspaceProps: ComponentProps<typeof CharacterWorkspace> = {
+      snapshot: state,
+      onClose: unexpectedAction,
+      socket: null,
+      presence: [],
+      onReplaceCharacterControllers: unexpectedAction,
+      onPatchCharacter: unexpectedAction,
+      storyPosts: [],
+      storyNextCursor: null,
+      onRoll: unexpectedAction,
+      onCreateCharacter: unexpectedAction,
+      viewedSceneId: null,
+      sceneDialogRequest: 0,
+      selectedTokenIds: [],
+      onUpdateInitiative: unexpectedAction,
+      onSetOwnInitiative: unexpectedAction,
+      onRollInitiative: unexpectedAction,
+      onPreviewPlayer: unexpectedAction,
+      onUpdateCounters: unexpectedAction,
+      onCampaignClock: unexpectedAction,
+      requestedChatMessageId: null,
+      onRequestedChatMessageHandled: unexpectedAction,
+      onChatVisibilityChange: unexpectedAction,
+      collapsed: false,
+      onCollapsedChange: unexpectedAction,
+      onResizeHandleDown: unexpectedAction,
+      onResizeHandleMove: unexpectedAction,
+      onResizeHandleUp: unexpectedAction,
+      workspace: "characters",
+      operatorFeedbackAllowed: false,
+      onWorkspaceChange: unexpectedAction,
+    };
+    renderComponent(
+      <ThemeProvider theme="dark" lang="ru">
+        <CampaignActionsContext.Provider value={actions()}>
+          <CharacterWorkspace {...workspaceProps} />
+        </CampaignActionsContext.Provider>
+      </ThemeProvider>,
+    );
+    await galleryLoaded();
+
+    const rail = screen.getByRole("navigation", {
+      name: "Персонажи кампании",
+    });
+    fireEvent.click(
+      within(rail).getByText("Персонаж B", { selector: "strong" })
+        .parentElement!,
+    );
+    fireEvent.click(
+      within(rail).getByText("Персонаж C", { selector: "strong" })
+        .parentElement!,
+    );
+    await galleryLoaded();
+
+    const next = within(rail).getByText("Персонаж D", {
+      selector: "strong",
+    }).parentElement!;
+    expect(next).toBeDisabled();
+    expect(next).toHaveAccessibleDescription(
+      "Закройте один из открытых листов, чтобы открыть другой.",
+    );
+    expect(
+      within(rail).getByText(
+        "Закройте один из открытых листов, чтобы открыть другой.",
+      ),
+    ).toBeVisible();
+
+    fireEvent.click(
+      within(rail).getByRole("button", {
+        name: "Закрыть лист Персонаж B",
+      }),
+    );
+    expect(next).toBeEnabled();
+    expect(next).not.toHaveAttribute("aria-describedby");
+    expect(
+      within(rail).queryByText(
+        "Закройте один из открытых листов, чтобы открыть другой.",
+      ),
+    ).not.toBeInTheDocument();
   });
 });

@@ -93,6 +93,46 @@ async function openEditor(
   };
 }
 
+it("explains an empty scene list and opens the existing create flow without saving", async () => {
+  const props = {
+    open: true,
+    variant: "workspace" as const,
+    viewedSceneId: null,
+    onClose: vi.fn(),
+    onView: vi.fn(),
+    onPublish: vi.fn(),
+    onSave: vi.fn(),
+    onUpload: vi.fn(),
+  };
+  const view = renderComponent(
+    <SceneManagerDialog {...props} snapshot={gmSnapshot({ scenes: [] })} />,
+  );
+  const emptyText = "Сцен пока нет. Создайте сцену для подготовки игры.";
+  expect(screen.getByText(emptyText)).toBeVisible();
+  expect(screen.getAllByRole("button", { name: "Создать сцену" })).toHaveLength(
+    1,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Создать сцену" }));
+  const editor = within(
+    await screen.findByRole("dialog", { name: "Новая сцена" }),
+  );
+  expect(editor.getByRole("textbox", { name: "Название" })).toHaveValue(
+    "Новая сцена",
+  );
+  expect(props.onSave).not.toHaveBeenCalled();
+  fireEvent.click(editor.getByRole("button", { name: "Отмена" }));
+  expect(screen.getByText(emptyText)).toBeVisible();
+  view.rerender(
+    <SceneManagerDialog
+      {...props}
+      snapshot={gmSnapshot({ scenes: [scene] })}
+    />,
+  );
+  expect(screen.queryByText(emptyText)).not.toBeInTheDocument();
+  expect(screen.getByText(scene.name)).toBeVisible();
+  expect(props.onSave).not.toHaveBeenCalled();
+});
+
 it("explains clean save and keeps native color/units/ranges in the real scene editor", async () => {
   const { editor } = await openEditor();
   const save = editor.getByRole("button", { name: "Сохранить" });
