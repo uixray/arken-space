@@ -7,6 +7,9 @@ for (const role of ["GM", "PLAYER"] as const)
       page,
     }, testInfo) => {
       await page.setViewportSize({ width, height: 850 });
+      const errors: string[] = [];
+      const writes: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
       const snapshot = buildGameSnapshot(role);
       snapshot.scenes = [
         {
@@ -29,7 +32,15 @@ for (const role of ["GM", "PLAYER"] as const)
         },
       ];
       await page.route("**/api/**", (route) => {
-        const path = new URL(route.request().url()).pathname;
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        if (request.method() !== "GET") {
+          writes.push(`${request.method()} ${path}`);
+          return route.fulfill({
+            status: 405,
+            json: { error: "READ_ONLY_FIXTURE" },
+          });
+        }
         if (path === "/api/bootstrap") return route.fulfill({ json: snapshot });
         if (path === "/api/story/posts")
           return route.fulfill({ json: { posts: [], nextCursor: null } });
@@ -68,6 +79,19 @@ for (const role of ["GM", "PLAYER"] as const)
         expect(box!.width).toBeGreaterThanOrEqual(24);
         expect(box!.height).toBeGreaterThanOrEqual(24);
       }
+      await testInfo.attach("shell-icon-contract", {
+        body: JSON.stringify({
+          role,
+          width,
+          icons: await icons.count(),
+          controls: await controls.count(),
+          errors,
+          writes,
+        }),
+        contentType: "application/json",
+      });
+      expect(errors).toEqual([]);
+      expect(writes).toEqual([]);
       await page.screenshot({
         path: testInfo.outputPath(`shell-${role}-${width}.png`),
         fullPage: true,
