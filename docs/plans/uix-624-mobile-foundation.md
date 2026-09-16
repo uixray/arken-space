@@ -145,6 +145,7 @@ Candidate based on `d451abe`; this does not replace the full P1/mobile acceptanc
   disabled controls, checkbox/range targets beyond this scope, every tool popup,
   physical touch/browser zoom, desktop and integrated release gate. No task Done,
   Linear write, push or deploy. Selection-recovery remains untracked and untouched.
+
 ## 2026-09-16 — short portrait and landscape map controls
 
 Follow-up to `5ea2c0f`, not acceptance by extrapolation from the 850px-tall screen.
@@ -174,6 +175,7 @@ Follow-up to `5ea2c0f`, not acceptance by extrapolation from the 850px-tall scre
   character surfaces, all input touch targets, zoom-value interaction, or a real
   multiplayer session. The tests start in each viewport; they do not prove a
   live in-session rotation retained state. No publication/deploy or Linear Done.
+
 ## 2026-09-16 — PLAYER sheet, pending text and inner overflow
 
 Local continuation from `e9d8017`. Real App/CharacterWorkspace with an owned
@@ -204,6 +206,7 @@ inventory/skills/media/authorization fixture.
   the CSS-only runtime change. Existing character queue regression not replayed.
   No publication/deploy/Linear Done. All-skills/inventory/dialog controls, real
   device keyboard/touch, other roles/characters and integrated CI remain open.
+
 ## 2026-09-16 — integrated built-candidate UI gate
 
 Exact runtime candidate: `8504feac439ec0d68d473b13f7149b53ce47a3ba`.
@@ -234,3 +237,45 @@ not the separate production release or whole mobile acceptance.
 - Still required: remaining original UI624/316 and UI644 inventories/roles/states,
   physical-device/human acceptance, complete backend/persistence/multiplayer and
   exact integrated CI/release gates. A local built UI pass does not close these.
+
+## 2026-09-17 — current real-server entry/navigation/handoff gate
+
+Tested revision `9d019e95d92137265cd8a33a82852acb9eca3284`, unchanged
+`tests/e2e/mobile-foundation.spec.ts`:12/12PASS195.941s, one worker, retries0,
+no skips/flaky/unexpected. Eight GM/PLAYER ×360×800/820×1180 ×Chrome/Firefox
+journeys plus four desktop-first character/compact-preview cases.
+
+This time authentication, invitations, session cookies, bootstrap, chat writes,
+read cursors and realtime delivery used the actual current source API and isolated
+PostgreSQL18.1, not intercepted HTTP/socket responses. Reused only our stopped
+request-server-gate cluster (127.0.0.1:15439), API14109 and Vite5189; all listeners
+verified loopback. Per-test campaigns are created by the existing campaign fixture.
+Health reported databaseok, schema2 and the exact tested SHA.
+
+Verified within the existing assertions:
+
+- Actual GM entry and PLAYER invitation/name/keyboard entry.
+- Compact map/journal/character navigation, checked controls44px, no measured
+  document overflow, hidden/inert roots excluded from keyboard navigation.
+- Desktop collapse preference, canvas identity/zoom, journal reader position,
+  composer/resource drafts retained across surface/viewport changes.
+- Messages from a separate authenticated context arrive through real sockets;
+  hidden journal does not submit read acknowledgements, reopening does.
+- Nested rename and handoff confirmations own focus; cancelling preserves draft.
+  Confirmed exit unmounts game roots, bootstrap returns401 and reload stays signed
+  out. This does not prove a subsequent different player's entire session.
+
+Evidence: mobile-real-gate/results.json and8decoded geometry receipts (21measurements
+per GM /25per PLAYER), browser/vite config and loopback source copy. Source server
+logs are local only and may contain synthetic authentication URLs. Free RAM during
+run was approximately2.4GiB. Existing Konva6/7-layer warnings remain; this is not an
+all-console-clean or performance acceptance claim.
+
+Cleanup: own API/Vite stopped, isolated PG fast-stop succeeded, ports15439/14109/5189
+no longer listen; existing postgresql-x64-18 service remainsRunning. Temporary API
+entry removed via exact verified path. Original untracked selection test unchanged.
+
+Limits: development/source runtime, not current production bundle/GitHubPG17 CI,
+physical touch/Safari/software keyboard, full P2–P6, new-player cross-session privacy
+matrix or release acceptance. No product/test changes, full suite/build/release
+rerun, publication or Linear write; UIX-624 remains under original full criteria.
