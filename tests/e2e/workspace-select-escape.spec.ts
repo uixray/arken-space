@@ -78,9 +78,6 @@ async function install(
   await page.route("**/api/**", (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path === "/api/client-logs") {
-      return route.fulfill({ json: { ok: true } });
-    }
     if (request.method() !== "GET") {
       mutations.push(`${request.method()} ${path}`);
       return route.fulfill({
