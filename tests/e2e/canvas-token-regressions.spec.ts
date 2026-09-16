@@ -3054,3 +3054,108 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
   }
 }
+
+for (const change of ["revision", "locked", "revoked", "removed"] as const) {
+  test(`UIX-507 stale delete confirmation closes on ${change}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role =
+      change === "locked" || change === "revoked" ? "PLAYER" : "GM";
+    current.tokens[0].controllerMembershipIds = [current.me.id];
+    current.tokens[0].ownerMembershipId = current.me.id;
+    current.fogReveals = [
+      { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    const original = structuredClone(current.tokens[0]);
+    const writes: string[] = [];
+    const deletions: number[] = [];
+    const errors: string[] = [];
+    let publish: (() => void) | undefined;
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route(`**/api/tokens/${tokenId}`, async (route) => {
+      expect(route.request().method()).toBe("DELETE");
+      deletions.push(route.request().postDataJSON().revision);
+      current.tokens = [];
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") {
+          socket.send('40{"sid":"delete-lifecycle"}');
+          publish = () =>
+            socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+        }
+      });
+      socket.send(
+        '0{"sid":"delete-lifecycle","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect.poll(() => Boolean(publish)).toBe(true);
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    const trigger = map.getByRole("button", {
+      name: "Объекты карты",
+      exact: true,
+    });
+    const select = async (name: string) => {
+      await trigger.click();
+      await map.getByRole("button", { name, exact: true }).click();
+      await map.press("Escape");
+    };
+    await select("Selected token");
+    await map.press("Delete");
+    const dialog = page.getByRole("dialog", {
+      name: "Убрать токен с карты?",
+      exact: true,
+    });
+    await expect(dialog).toBeVisible();
+    current.scenes[0].name = "Snapshot updated";
+    // Controller/lock changes are deliberately tested without a placement
+    // revision bump: permission invalidation must not rely on revision alone.
+    current.tokens[0].revision = change === "revision" ? 1 : 0;
+    if (change === "locked") current.tokens[0].locked = true;
+    if (change === "revoked") current.tokens[0].controllerMembershipIds = [];
+    if (change === "removed") current.tokens = [];
+    publish!();
+    await expect(page.locator(".topbar")).toContainText("Snapshot updated");
+    await expect(dialog).toHaveCount(0);
+    expect(deletions).toEqual([]);
+    // Restore an eligible target, but not the stale confirmation. A new
+    // selection and confirmation must use the newly authoritative revision.
+    current.tokens = [{ ...original, revision: 2, name: "Restored token" }];
+    current.scenes[0].name = "Snapshot restored";
+    publish!();
+    await expect(page.locator(".topbar")).toContainText("Snapshot restored");
+    await expect(dialog).toHaveCount(0);
+    await select("Restored token");
+    await map.press("Enter");
+    await map
+      .getByRole("menuitem", { name: "Удалить с карты", exact: true })
+      .click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
+    await expect.poll(() => deletions.length).toBe(1);
+    expect(deletions).toEqual([2]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("delete-lifecycle-receipt", {
+      body: JSON.stringify({ change, deletions, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}

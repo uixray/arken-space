@@ -923,6 +923,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       showGmLayer,
     },
   );
+  const requestedDeleteToken =
+    interaction.deleteRequestedFor?.kind === "token"
+      ? selectableObjects.tokens.find(
+          (token) =>
+            token.id === interaction.deleteRequestedFor?.objectId &&
+            token.revision === interaction.deleteRequestedFor.revision,
+        )
+      : undefined;
+  const deleteRequestValid = canDeleteSelectedToken(
+    requestedDeleteToken,
+    props,
+  );
+  useEffect(() => {
+    // A confirmation belongs to one authoritative revision and permission set;
+    // do not silently retarget it after a snapshot update or restore it later.
+    if (interaction.deleteRequestedFor && !deleteRequestValid)
+      dispatchInteraction({ type: "cancel-delete" });
+  }, [interaction.deleteRequestedFor, deleteRequestValid]);
   const movableTargets = useMemo<MapMoveTarget[]>(
     () => [
       ...selectableObjects.tokens
@@ -3391,11 +3409,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           необратимостью там, где её нет, — худший вид подтверждения: человек
           учится не верить предупреждениям вообще. */}
       <ConfirmDialog
-        open={interaction.deleteRequestedFor !== null}
+        open={interaction.deleteRequestedFor !== null && deleteRequestValid}
         title="Убрать токен с карты?"
         message="Действие можно отменить: Ctrl+Z вернёт токен на место."
         onClose={() => dispatchInteraction({ type: "cancel-delete" })}
-        onConfirm={() => dispatchInteraction({ type: "confirm-delete" })}
+        onConfirm={() =>
+          dispatchInteraction({
+            type: deleteRequestValid ? "confirm-delete" : "cancel-delete",
+          })
+        }
       />
       <ConfirmDialog
         open={bulkDeleteRequested}

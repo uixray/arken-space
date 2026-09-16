@@ -247,3 +247,12 @@ completion. The untracked recovery spec is unchanged.
 - Verification: original RED retained; final 8/8 Chromium/Firefox cases passed, no retries, one worker (57.7 s). Web typecheck, scoped lint/format and diff checks passed. No full-suite rerun or build.
 - Evidence: local artifact folder `context-focus-gate` in the current session visualization directory. Natural Tab/arrow entry, narrow-menu geometry and native Shift-right-click remain unverified. The independent token-popup ResizeObserver acceptance failure remains open; this is not whole UIX-507/UIX-644 acceptance.
 - Untracked `tests/e2e/selection-recovery.spec.ts` unchanged and excluded. No push, deployment, Linear write or status closure.
+
+### 2026-09-16 — Invalidate stale single-token delete confirmation
+
+- Reproduced through the actual App socket handler: `game:snapshot` changes placement revision while the delete dialog stays open. The header proves the new snapshot reached the UI before the failed assertion.
+- A confirmation now requires the same selected-scene token id/revision and current deletion permission. Invalid dialogs are hidden immediately and the request cancelled, never silently retargeted or resurrected when eligibility returns. Confirm also checks the current validity flag. Backend authorization remains unchanged and authoritative.
+- Four socket cases: GM revision change; PLAYER locked; PLAYER controller revoked while owner id and revealed visibility remain; GM token removed. Lock/revoke intentionally keep placement revision unchanged so permission protection is not merely a revision check.
+- Each case then restores an eligible token at revision2: stale confirmation stays closed, explicit new selection/menu confirmation issues exactly one mock DELETE with revision2. Eight decoded receipts (Chrome/Firefox) have no additional writes/pageerrors.
+- Final connected24/24 PASS128.9s, one worker/no retries: lifecycle8 plus GM/PLAYER selection, player menu permissions, GM/PLAYER Tab-exit confirmation. Unchanged resize, DRAW and dice pools were not repeated. Web types/scoped lint/format/diff PASS. Artifacts: current-session delete-lifecycle-gate; RED retained.
+- Limits: single-token confirmation, not full bulk-delete lifecycle or live server/physical-device acceptance. Dynamic open-menu focus/role changes and fresh GM layer/appearance after snapshot update remain separate checks. No publication, build, CI rerun, Linear closure or new cards. Preserved untracked selection-recovery.spec.ts excluded.
