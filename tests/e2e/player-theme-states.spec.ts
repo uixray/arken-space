@@ -85,3 +85,83 @@ test("UIX-317 real theme controls distinguish read-only disabled invalid and loa
   expect(errors).toEqual([]);
   expect(api).toEqual([]);
 });
+
+test("UIX-317 readonly fields have a non-color cue without losing text selection", async ({
+  page,
+}, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const api: string[] = [];
+  await page.route("**/api/**", (route) => {
+    api.push(route.request().url());
+    return route.abort();
+  });
+  await page.setViewportSize({ width: 390, height: 850 });
+  await page.goto("/tests/fixtures/player-themes/");
+  const theme = page.getByRole("combobox", { name: "Тема", exact: true });
+  for (const entry of [{ id: "system", name: "Системная" }, ...PLAYER_THEMES]) {
+    if (entry.id !== "system") {
+      await theme.click();
+      await page.getByRole("option", { name: entry.name, exact: true }).click();
+    }
+    for (const name of ["Владелец", "Заметка только для чтения"]) {
+      const field = page.getByRole("textbox", { name, exact: true });
+      const content = field.locator("..");
+      await expect(content).toHaveCSS("border-top-style", "dashed");
+      // Reach the readonly field with native Tab, not programmatic focus.
+      const previous =
+        name === "Владелец"
+          ? page.getByRole("textbox", { name: "Предыстория", exact: true })
+          : page.getByRole("checkbox", {
+              name: "Показывать подпись персонажа",
+            });
+      await previous.focus();
+      await previous.press("Tab");
+      await expect(field).toBeFocused();
+      await expect(content).toHaveCSS("outline-style", "solid");
+      await expect(content).toHaveCSS("outline-width", "2px");
+      const original = await field.inputValue();
+      await field.press("ControlOrMeta+a");
+      const selected = await field.evaluate(
+        (node: HTMLInputElement | HTMLTextAreaElement) =>
+          node.value.slice(node.selectionStart ?? 0, node.selectionEnd ?? 0),
+      );
+      expect(selected).toBe(original);
+      await field.press("Backspace");
+      await expect(field).toHaveValue(original);
+      // The textarea is the last enabled control: forward Tab may enter
+      // browser chrome and retain document.activeElement in Firefox.
+      // Verify an explicit in-document destination in each direction instead.
+      await field.press(name === "Владелец" ? "Tab" : "Shift+Tab");
+      await expect(
+        name === "Владелец"
+          ? page.getByRole("textbox", { name: "Ресурс", exact: true })
+          : previous,
+      ).toBeFocused();
+    }
+    for (const name of [
+      "Имя",
+      "Предыстория",
+      "Недоступное поле",
+      "Недоступная заметка",
+    ]) {
+      const field = page.getByRole("textbox", { name, exact: true });
+      await expect(field.locator("..")).toHaveCSS("border-top-style", "solid");
+      if (name.startsWith("Недоступ")) await expect(field).toBeDisabled();
+    }
+    await page
+      .getByRole("textbox", { name: "Ресурс", exact: true })
+      .fill("Запас");
+    await expect(
+      page.getByRole("textbox", { name: "Ресурс", exact: true }),
+    ).toHaveAttribute("aria-invalid", "true");
+    if (entry.id === "system" || entry.id === "light") {
+      await info.attach(`readonly-${entry.id}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
+    }
+  }
+  expect(errors).toEqual([]);
+  expect(api).toEqual([]);
+});

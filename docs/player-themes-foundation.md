@@ -191,3 +191,30 @@ combinations passed in 18.1 seconds. No new contrast or screenshot acceptance is
 claimed by this state-only test; inherited opacity, textures and visual distinction
 of all states still need rendered measurements. No account/profile persistence or
 GM/PLAYER permission boundary is modeled by this story.
+
+## Read-only visual cue — 2026-09-17
+
+The shared Gravity foundation now gives enabled native readonly text inputs and
+textareas a dashed frame. It leaves text opacity/color and native selection intact;
+disabled controls (including readonly+disabled) keep their existing appearance.
+Editable inputs keep solid borders. A readonly keyboard-focus outline explicitly
+uses the existing focus tokens; the dashed frame never replaces the focus ring.
+The selector uses `[readonly]`, not the broad `:read-only` pseudo-class that would
+also match unrelated controls. No permission or mutation behavior is changed.
+
+The existing story adds readonly textarea and disabled input/textarea examples.
+Its existing keyboard/invalid/loading tests passed in both browsers after this
+change. A new test covers system plus seven palettes in Chrome/Firefox: dashed
+versus solid frames, native Tab entry, 2px solid focus, select-all and immutable
+Backspace, explicit in-document keyboard exit, and disabled precedence. Final
+new-test run: 2/2 PASS, 16 theme/browser combinations, 19.7 seconds. No pageerrors
+or API calls. A Firefox test assumption was corrected: Tab from the document's
+last enabled control can move into browser chrome while document.activeElement
+still names the textarea; the test now checks Shift+Tab to the prior checkbox.
+
+System Chromium and light Firefox screenshots were inspected: no clipping in the
+390px fixture, readonly remains readable without disabled dimming. This is not
+all-theme contrast certification, real clipboard permission coverage, application
+ACL verification, or full application theme migration. The archived classic-v1
+reference remains immutable; this accessibility change is part of the current
+candidate, not a replacement of its archived historical bundle.

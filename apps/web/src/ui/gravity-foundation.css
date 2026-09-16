@@ -321,3 +321,19 @@
   max-width: calc(100vw - 20px);
   max-height: inherit;
 }
+
+/* UIX-317: read-only is selectable content, not a disabled control. A dashed
+ * frame supplies a non-color cue without dimming text or blocking selection.
+ * Keep the normal solid focus outline and let disabled win if both are set.
+ * Match native readonly attributes, not :read-only (which also matches many
+ * controls that are not editable text, including selects and checkboxes). */
+.g-text-input__content:has(> input[readonly]:not(:disabled)),
+.g-text-area__content:has(> textarea[readonly]:not(:disabled)) {
+  border-style: dashed;
+}
+
+.g-text-input__content:has(> input[readonly]:not(:disabled):focus-visible),
+.g-text-area__content:has(> textarea[readonly]:not(:disabled):focus-visible) {
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset, 1px);
+}

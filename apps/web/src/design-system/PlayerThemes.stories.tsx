@@ -133,6 +133,32 @@ function PlayerThemeControls() {
               Показывать подпись персонажа
             </FormInput>
           </p>
+          <label>
+            Заметка только для чтения
+            <FormTextArea
+              aria-label="Заметка только для чтения"
+              value="Указание мастера"
+              readOnly
+            />
+          </label>
+          <label>
+            Недоступное поле
+            <FormInput
+              aria-label="Недоступное поле"
+              value="Недоступно"
+              readOnly
+              disabled
+            />
+          </label>
+          <label>
+            Недоступная заметка
+            <FormTextArea
+              aria-label="Недоступная заметка"
+              value="Недоступно"
+              readOnly
+              disabled
+            />
+          </label>
         </section>
       </main>
     </ThemeProvider>
