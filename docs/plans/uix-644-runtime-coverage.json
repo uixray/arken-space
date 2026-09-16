@@ -34,6 +34,12 @@
       "revision": "452f5f162da51f10fbafcedef92f5d85fc9d36cf",
       "artifact": "true-browser-zoom-gate/owner-06/token-generator-UIX-272-UI-05f7b--picker-at-desktop-viewport-chromium/trace.zip",
       "scope": "Token modal opening emitted ResizeObserver loop completed with undelivered notifications. Subsequent non-reproduction is not a fix; see token-resize-diagnosis/checkpoint.md."
+    },
+    "toolbar": {
+      "status": "PASS",
+      "revision": "cd99d3d30b23a0ba70baa0bc302e820c20faf2c5",
+      "artifact": "toolbar-settings-gate/results.json",
+      "scope": "Four GM1280/360short grid/resize/overflow keyboard cases, one mocked save each; related eight cases across two retained reports, including delayed outside focus and rejection."
     }
   },
   "sites": [
@@ -81,11 +87,11 @@
       "file": "apps/web/src/MapToolbar.tsx",
       "kind": "tag:details",
       "count": 2,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Size settings and toolbar overflow are two different callers.",
-      "evidence": [],
-      "next": "Next connected map-toolbar pool: keyboard/open/close, clipped owner, short viewport; preserve tool actions."
+      "scope": "Size mode selection/Done and overflow display toggles: keyboard/focus on1280 and360x480. No resize dragging/persistence claim.",
+      "evidence": ["toolbar"],
+      "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
     },
     {
       "file": "apps/web/src/MusicBar.tsx",
@@ -191,11 +197,11 @@
       "file": "apps/web/src/renderers/GridSettings.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "GM grid settings owned by map toolbar.",
-      "evidence": [],
-      "next": "Group with size/overflow map-toolbar gate, not whole-suite replay."
+      "scope": "Cancel draft reset/no save, explicit save/reopen value/focus, rejected draft retained, outside delayed-save focus. Mocked backend; preview pixels and full in-flight session races not accepted.",
+      "evidence": ["toolbar"],
+      "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
     },
     {
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
