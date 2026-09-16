@@ -1,6 +1,7 @@
 /* Opt-in bridge. The unthemed production UI and overlay ownership are unchanged.
  * Personal colors must never replace saved canvas colors or game outcomes. */
-html[data-player-theme] .g-root {
+/* Classic retains the original UIKit dark theme, not the personal-color bridge. */
+html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {
   --g-color-base-background: var(--color-canvas);
   --g-color-base-float: var(--color-surface-raised);
   --g-color-base-float-hover: var(--color-surface-hover);

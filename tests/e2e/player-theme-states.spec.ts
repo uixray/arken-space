@@ -165,3 +165,114 @@ test("UIX-317 readonly fields have a non-color cue without losing text selection
   expect(errors).toEqual([]);
   expect(api).toEqual([]);
 });
+
+test("UIX-317 classic preserves baseline controls and ignores mutable system colors", async ({
+  page,
+}, info) => {
+  const errors: string[] = [],
+    api: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/api/**", (route) => {
+    api.push(route.request().url());
+    return route.abort();
+  });
+  await page.setViewportSize({ width: 390, height: 850 });
+  await page.goto("/tests/fixtures/player-themes/");
+  await page.evaluate(() => document.fonts.ready);
+  // Freeze animations before either capture, rather than letting screenshot()
+  // stop and restart the loading stripes and border transitions independently.
+  await page.addStyleTag({
+    content:
+      "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }",
+  });
+  const theme = page.getByRole("combobox", { name: "Тема", exact: true });
+  const resource = page.getByRole("textbox", { name: "Ресурс", exact: true });
+  await resource.fill("Провизия");
+  const section = page.locator("main > section");
+  const settle = async () => {
+    await page.getByRole("heading", { name: "Персонаж", exact: true }).click();
+    // Match screenshot behavior: suspend only visual animations in this fixture.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+  };
+  await settle();
+  const sample = () =>
+    section.evaluate((root) =>
+      [root, ...root.querySelectorAll("*")].map((node) => {
+        const css = getComputedStyle(node);
+        const r = node.getBoundingClientRect();
+        return {
+          tag: node.tagName,
+          cls: node.className,
+          rect: [r.x, r.y, r.width, r.height],
+          css: Object.fromEntries(
+            Array.from(css)
+              .filter((key) => !key.startsWith("--"))
+              .map((key) => [key, css.getPropertyValue(key)]),
+          ),
+        };
+      }),
+    );
+  const before = await sample();
+  const baseline = await section.screenshot({ animations: "disabled" });
+  const choose = async (name: string) => {
+    await theme.click();
+    await page.getByRole("option", { name, exact: true }).click();
+    await settle();
+  };
+  await choose("Светлая");
+  await choose("Прежнее оформление");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-player-theme",
+    "classic-v1",
+  );
+  await expect(resource).toHaveValue("Провизия");
+  const classic = await section.screenshot({ animations: "disabled" });
+  await info.attach("baseline-controls", {
+    body: baseline,
+    contentType: "image/png",
+  });
+  await info.attach("classic-controls", {
+    body: classic,
+    contentType: "image/png",
+  });
+  const after = await sample();
+  await info.attach("computed-comparison", {
+    body: JSON.stringify({ before, after }),
+    contentType: "application/json",
+  });
+  expect(after).toEqual(before);
+  expect(classic.equals(baseline)).toBe(true);
+  // Emulate future base changes. This is deliberate test-only CSS, not a
+  // product palette change. Explicit classic must not merely alias system.
+  const drift = await page.addStyleTag({
+    content:
+      ":root { --color-canvas: rgb(1, 2, 3); --color-surface: rgb(4, 5, 6); --color-success: rgb(7, 8, 9); }",
+  });
+  await expect(page.locator("main")).toHaveCSS(
+    "background-color",
+    "rgb(24, 24, 22)",
+  );
+  await expect(section).toHaveCSS("background-color", "rgb(32, 32, 29)");
+  expect(
+    await page
+      .locator("html")
+      .evaluate((node) =>
+        getComputedStyle(node).getPropertyValue("--color-success").trim(),
+      ),
+  ).toBe("rgb(7, 8, 9)");
+  await choose("Системная");
+  await expect(page.locator("main")).toHaveCSS(
+    "background-color",
+    "rgb(1, 2, 3)",
+  );
+  await expect(section).toHaveCSS("background-color", "rgb(4, 5, 6)");
+  await choose("Прежнее оформление");
+  await expect(page.locator("main")).toHaveCSS(
+    "background-color",
+    "rgb(24, 24, 22)",
+  );
+  await expect(resource).toHaveValue("Провизия");
+  await drift.evaluate((node) => node.parentNode?.removeChild(node));
+  expect(errors).toEqual([]);
+  expect(api).toEqual([]);
+});

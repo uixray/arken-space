@@ -42,4 +42,10 @@ export const PLAYER_THEME_DEFINITIONS = [
     colorScheme: "light",
     version: 1,
   },
+  {
+    id: "classic-v1",
+    name: "Прежнее оформление",
+    colorScheme: "dark",
+    version: 1,
+  },
 ] as const;

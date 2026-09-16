@@ -218,3 +218,52 @@ all-theme contrast certification, real clipboard permission coverage, applicatio
 ACL verification, or full application theme migration. The archived classic-v1
 reference remains immutable; this accessibility change is part of the current
 candidate, not a replacement of its archived historical bundle.
+
+## Versioned classic color adapter — 2026-09-17
+
+`classic-v1` / **Прежнее оформление** is now a separate registry choice in the
+existing real-controls story, not an alias for `system`. Its 16 presentation
+colors are frozen as resolved DTCG values in
+`tokens/player-themes/classic-v1.tokens.json`, derived from
+`tokens/color.tokens.json` at archived build revision
+`1ea7051b56092551423546ae9a507a22069f9f62`. Git confirmed that source had not changed
+before extraction. Generation reads this frozen file, never the current base
+palette. The unit guard fixes its version and token-content digest. Success,
+card/game colors, geometry, responsive overrides and layer ordering are not
+captured or overridden by the color adapter.
+
+The existing generator emits classic into the same CSS and typed registry outputs;
+its classic-specific allowlist does not relax the seven personal palettes' exact
+key validation. Existing `tokens:check` already includes both generated outputs.
+The personal Gravity bridge excludes classic: classic retains the original UIKit
+dark appearance, while the seven approved palettes retain their bridge. Explicit
+classic overrides a profile default; explicit system still overrides classic as a
+default. These are configuration rules, not persistence claims.
+
+### Verification and limits
+
+- 26 focused unit tests passed (registry/resolver/frozen classic plus the original
+  seven-palette contrast suite). Classic is **not** added to the personal-palette
+  contrast certificate: preserving the old palette does not establish every
+  legacy text/control state meets the newer contrast requirements.
+- Six Chrome/Firefox browser tests passed in 46.5s with one worker: existing state
+  tests now loop eight registry themes; readonly tests cover system plus eight;
+  the new classic test checks a light-to-classic switch, preserved draft, exact
+  computed rendered styles/geometry and byte-identical section screenshots versus
+  current system in each browser. Test-only system color drift changes system but
+  not classic; gameplay success color continues inheriting outside the adapter.
+- Initial screenshot comparison differed by two corner pixels; simply disabling
+  animations did not settle it. Final captures freeze animations before both
+  images and sample computed styles/geometry before capture. The final test retains
+  exact comparisons: no pixel allowance, no masking. The cause of the transient
+  two-pixel raster difference is not proven; traces/reports were retained.
+- Scoped lint, web and E2E typechecks, format and deterministic generator checks
+  passed. The cleanup of the injected test stylesheet was adjusted to the generic
+  DOM Node type after the browser run; no product behavior changed in that fix.
+
+This is the **color/registry adapter**, not the completed selectable classic theme
+in the application. Full shell/chat/character/canvas-adjacent migration, stable
+classic typography/materials/component styles, comparison to the archived full
+application screenshots, user-facing application selection, account storage and
+reload/relogin remain open. The application entry still does not activate themes.
+The classic archive is unchanged; new accessibility fixes are not rolled back.
