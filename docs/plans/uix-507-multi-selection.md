@@ -238,3 +238,12 @@ from inside the menu, all narrow menu geometry, native Shift-right-click behavio
 or live server authorization. UIX-507/UIX-644 and unrelated observer failure remain
 open under their full criteria. No build, full CI restart, push, deploy or Linear
 completion. The untracked recovery spec is unchanged.
+
+### 2026-09-16 — Context-menu focus restoration (local gate)
+
+- On top of `63ae4ec`, reproduced Escape losing keyboard focus when a token-menu item was focused. Returning to the map must preserve the selected group.
+- Restore focus only for keyboard dismissal originating inside this menu and only to a visible, non-inert map owner. Outside pointer dismissal does not steal focus from the clicked control.
+- Extended the existing GM mixed-selection flow with focused-menu Escape and outside-click focus assertions; original group confirmation, toggle, move and delete assertions remain.
+- Verification: original RED retained; final 8/8 Chromium/Firefox cases passed, no retries, one worker (57.7 s). Web typecheck, scoped lint/format and diff checks passed. No full-suite rerun or build.
+- Evidence: local artifact folder `context-focus-gate` in the current session visualization directory. Natural Tab/arrow entry, narrow-menu geometry and native Shift-right-click remain unverified. The independent token-popup ResizeObserver acceptance failure remains open; this is not whole UIX-507/UIX-644 acceptance.
+- Untracked `tests/e2e/selection-recovery.spec.ts` unchanged and excluded. No push, deployment, Linear write or status closure.

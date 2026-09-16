@@ -532,6 +532,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (!tokenMenu) return;
     const close = (event: KeyboardEvent | PointerEvent) => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      if (
+        event instanceof KeyboardEvent &&
+        tokenMenuRef.current?.contains(document.activeElement)
+      ) {
+        const owner = containerRef.current;
+        // Restore only keyboard dismissal from this menu, never an outside
+        // pointer target or an owner that has become hidden/inert.
+        if (
+          owner?.getClientRects().length &&
+          !owner.closest("[hidden], [inert]")
+        )
+          owner.focus({ preventScroll: true });
+      }
       setTokenMenu(null);
     };
     window.addEventListener("keydown", close);

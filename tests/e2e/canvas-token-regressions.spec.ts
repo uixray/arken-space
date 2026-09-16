@@ -1460,6 +1460,28 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   expect(bulkRequests).toHaveLength(0);
   await page.keyboard.press("Escape");
   await expect(contextMenu).toHaveCount(0);
+  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+  await expect(contextMenu).toBeVisible();
+  const menuItem = contextMenu.getByRole("menuitemradio", {
+    name: "Игровой слой",
+    exact: true,
+  });
+  await menuItem.focus();
+  await expect(menuItem).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toHaveCount(0);
+  await expect(map).toBeFocused();
+
+  // Outside-pointer dismissal must not steal focus from the clicked control.
+  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+  await expect(contextMenu).toBeVisible();
+  await trigger.click();
+  await expect(contextMenu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await trigger.press("Escape");
+  await expect(
+    map.getByRole("region", { name: "Объекты карты", exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Удалить выбранное" }),
   ).toBeVisible();
