@@ -546,3 +546,116 @@ for (const width of [1280, 390])
       contentType: "application/json",
     });
   });
+
+for (const role of ["GM", "PLAYER"] as const)
+  for (const width of [1280, 390])
+    test(`UIX-644 object list lifecycle ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      const snapshot = await install(page, role);
+      snapshot.tokens = Array.from({ length: 24 }, (_, i) => ({
+        id: `object-${i}`,
+        definitionId: `definition-${i}`,
+        definitionRevision: 1,
+        controllerMembershipIds: [snapshot.me.id],
+        sceneId: snapshot.scenes[0].id,
+        characterId: null,
+        ownerMembershipId: snapshot.me.id,
+        assetId: null,
+        name: `Объект ${String(i + 1).padStart(2, "0")}`,
+        x: 64 + i * 64,
+        y: 320,
+        z: 0,
+        levelId: null,
+        width: 64,
+        height: 64,
+        rotation: 0,
+        visible: true,
+        locked: false,
+        baseColor: "#8899aa",
+        frameColor: null,
+        layer: "PLAYER" as const,
+        conditions: [],
+        revision: 1,
+      }));
+      const errors: string[] = [],
+        writes: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        const p = new URL(r.url()).pathname;
+        if (
+          p.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(r.method()) &&
+          p !== "/api/chat/read"
+        )
+          writes.push(`${r.method()} ${p}`);
+      });
+      await page.goto("/");
+      const trigger = page.getByRole("button", {
+          name: "Объекты карты",
+          exact: true,
+        }),
+        list = page.getByRole("region", { name: "Объекты карты", exact: true });
+      await trigger.click();
+      await expect(list).toBeVisible();
+      await page.keyboard.press("Tab");
+      if (await list.evaluate((el) => el === document.activeElement))
+        await page.keyboard.press("Tab");
+      const first = list.getByRole("button", {
+        name: "Объект 01",
+        exact: true,
+      });
+      await expect(first).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(first).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Escape");
+      await expect(list).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await trigger.press("Enter");
+      await expect(first).toHaveAttribute("aria-pressed", "true");
+      await page.setViewportSize({ width: 360, height: 480 });
+      await expect(list).toBeVisible();
+      const last = list.getByRole("button", { name: "Объект 24", exact: true });
+      await last.scrollIntoViewIfNeeded();
+      await assertHitTarget(last);
+      await expect
+        .poll(() =>
+          list.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return (
+              r.left >= 0 &&
+              r.top >= 0 &&
+              r.right <= innerWidth + 1 &&
+              r.bottom <= innerHeight + 1
+            );
+          }),
+        )
+        .toBe(true);
+      await testInfo.attach("object-list-short", {
+        body: await page.screenshot(),
+        contentType: "image/png",
+      });
+      await page.getByLabel("Меню сеанса", { exact: true }).click();
+      await expect(list).toBeHidden();
+      await expect(
+        page.getByLabel("Меню сеанса", { exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await trigger.click();
+      await page.locator("#compact-nav-journal").click();
+      await expect(list).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(trigger).toBeVisible();
+      await expect(list).toBeHidden();
+      await trigger.click();
+      await expect(first).toHaveAttribute("aria-pressed", "true");
+      await trigger.press("Escape");
+      await expect(list).toBeHidden();
+      expect(errors).toEqual([]);
+      expect(writes).toEqual([]);
+      await testInfo.attach("object-list-receipt", {
+        body: JSON.stringify({ role, width, writes, errors }),
+        contentType: "application/json",
+      });
+    });
