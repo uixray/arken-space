@@ -64,6 +64,12 @@
       "revision": "fa54b9a27b15ff2c4d339e2c413632be857b015f",
       "artifact": "world-image-gate/results.json",
       "scope": "Four GM1280/390 Chrome/Firefox actual-App cases:14-image name filter, pointer hit-test, keyboard cover selection/removal, isolated cover PATCH and gallery POST, clear-after-attach, reload of mock-backed saved selection/caption. Not real backend persistence or PLAYER ACL."
+    },
+    "characterImages": {
+      "status": "PASS",
+      "revision": "b048921c2220ece0efb42c492b3b424859a258e2",
+      "artifact": "character-image-gate/results.json",
+      "scope": "Eight GM/PLAYER-owner1280/390 Chrome/Firefox cases: portrait-only eligible assets, pointer hit, independent portrait PATCH and resource counters PATCH, keyboard focus-only then removal, preserved current/maximum/recoverable, reload mock-backed state. Not live persistence, non-owner ACL or failure recovery."
     }
   },
   "sites": [
@@ -251,11 +257,11 @@
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
       "kind": "tag:AssetPicker",
       "count": 2,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Two character-workspace asset picker occurrences, separate from template Select.",
-      "evidence": [],
-      "next": "Reconcile actual accessible caller and picker actions per occurrence."
+      "scope": "Both actual character-sheet callers: portrait and additional resource image; GM and PLAYER owner on desktop/compact.",
+      "evidence": ["characterImages"],
+      "next": "Non-owner/controller restrictions, live payload persistence and rejection/realtime recovery remain outside this scoped evidence."
     },
     {
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",

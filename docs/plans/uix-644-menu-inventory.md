@@ -952,3 +952,7 @@ Source `226533ae0cb33e0585f52a770ede01c5a21ee4ad`: desktop More now captures a v
 ## World image callers — 2026-09-16
 
 Evidence revision `fa54b9a27b15ff2c4d339e2c413632be857b015f`: four GM1280/390 Chrome/Firefox cases cover both inline AssetPicker callers in the world editor. Name filtering, real pointer hit, keyboard selection/removal, independent cover/gallery selection, exact save/attach requests and reloaded mock state passed. No product source changes required. `world-image-gate/results.json` and checkpoint under artifactBase; not live persistence, PLAYER ACL, failure recovery or whole UIX-644 acceptance.
+
+## Character image callers — 2026-09-16
+
+Evidence `b048921c2220ece0efb42c492b3b424859a258e2`:8/8 GM/PLAYER-owner1280/390 Chrome/Firefox actual-App cases PASS. Portrait excludes non-portrait image; resource accepts it independently. Exact revisioned mutations, keyboard focus without write then image removal, resource amounts preserved, reloaded mock state verified. No runtime changes. `character-image-gate/results.json` and checkpoint under artifactBase. Not live persistence, non-owner authorization, rejection recovery or complete UIX-644 acceptance.
