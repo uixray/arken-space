@@ -992,3 +992,32 @@ Source `7b4af10beef8ec1cbd59d96ecce49c88622cf2c2`: screenshot after initial8 PAS
 ## First-open font loading diagnosis — 2026-09-17
 
 Observed `0f910784d87ef8d832093a728ee327d140ce6e76`: project sans token is system-ui, but main.tsx imports UIKit fonts.css (Google Fonts Inter) and Gravity controls compute Inter. A temporary copy of the current original desktop token-modal test held three real woff2 requests until the first character Select pointerdown. Fonts then loaded (document.fonts events and faces recorded),30 native observer callbacks forwarded unchanged,0 ResizeObserver failures;1 diagnostic PASS8.2s. No CSS/font/observer implementation was changed. This specific late-font scenario does not reproduce the original failure and is NOT a fix or proof against all timing races. Artifacts font-open-diagnosis/results.json,diagnostic.json,diagnostic-spec.ts,config.mjs,checkpoint under artifactBase. Font requests/Inter usage are now verified rather than inferred from the system font token; do not simply remove Inter as an assumed no-visual-impact repair.
+
+## Observer callback geometry audit — 2026-09-17
+
+A bounded read-only dependency review identified a specific candidate feedback
+path: UIKit7.43 Dialog.Body uses useAnimateHeight. Its callback can unobserve its
+own body, write height/overflow, then reobserve and write height in the next rAF.
+Child-list mutation cleanup can also clear those styles. This is a candidate,
+not attribution of the original error. Trigger/Floating UI observers already
+exist during the original failing popup phase and cannot be excluded merely
+because the dialog-body observer was constructed earlier. Setup textarea entries
+remain outside that original phase.
+
+A new diagnostic ran the original desktop token-modal scenario once. The native
+observer wrapper forwarded callbacks synchronously and compared all connected
+observed targets before/after each callback (rect/client/scroll sizes and inline
+styles), recording observer creation stacks and frame epochs. It never caught or
+suppressed application errors. Result:1/1PASS10.7s,31callbacks,0recorded immediate
+geometry/style changes and0ResizeObserver errors. Thus this execution does not
+support a direct synchronous callback-write attribution. It is NOT a fix or
+proof that the original failure disappeared. Measurement itself forces layout
+and can affect timing; rAF/microtask changes were not captured by this pass.
+
+Evidence: observer-callback-audit/{results.json,diagnostic.json,diagnostic-spec.ts,
+config.mjs}. Original tracked browser case and production/dependency code remain
+unchanged. Temporary spec removed after terminal result; own Vite stopped.
+Existing FormSelect/TokenPalette ledger FAIL entries remain unresolved.
+Next useful diagnostic: correlate Dialog.Body observe/unobserve and microtask/rAF
+height transitions with a real error, rather than repeat width/font/warm loops
+or patch the dependency speculatively. No full suite/build/CI/deploy/Linear write.
