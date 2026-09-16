@@ -25,6 +25,37 @@ describe("token image editor state", () => {
     ).toMatchObject({ cropX: 0.5, cropY: 0.5 });
   });
 
+  it("uses the server's floored square crop for aspect-aware bounds", () => {
+    const edge = { zoom: 1, cropX: 0, cropY: 1, frame: "NONE" } as const;
+    // A 1200x800 landscape can pan horizontally at zoom 1, but its full
+    // short axis leaves no vertical travel.
+    expect(
+      clampTokenImageTransform(edge, { width: 1200, height: 800 }),
+    ).toEqual({
+      zoom: 1,
+      cropX: 1 / 3,
+      cropY: 0.5,
+      frame: "NONE",
+    });
+    // The same square crop reverses those axes for a portrait.
+    const portrait = clampTokenImageTransform(edge, {
+      width: 800,
+      height: 1200,
+    });
+    expect(portrait).toMatchObject({
+      zoom: 1,
+      cropX: 0.5,
+      frame: "NONE",
+    });
+    expect(portrait.cropY).toBeCloseTo(2 / 3, 14);
+    expect(Math.round(portrait.cropY * 1200 - 800 / 2)).toBe(400);
+    // Default callers retain the legacy square-source boundary.
+    expect(clampTokenImageTransform(edge)).toMatchObject({
+      cropX: 0.5,
+      cropY: 0.5,
+    });
+  });
+
   it("nudges the focal point without changing visual options", () => {
     expect(
       nudgeTokenImageTransform(

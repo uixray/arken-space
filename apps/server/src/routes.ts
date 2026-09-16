@@ -3653,6 +3653,15 @@ export function registerRoutes(
     if (!auth) return;
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = tokenDefinitionUpdateSchema.parse(request.body);
+    if (body.controllerMembershipIds !== undefined) {
+      if (auth.role !== "GM")
+        return reply.code(403).send({ error: "GM_REQUIRED" });
+      if (
+        new Set(body.controllerMembershipIds).size !==
+        body.controllerMembershipIds.length
+      )
+        return reply.code(400).send({ error: "DUPLICATE_CONTROLLERS" });
+    }
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
     const [current] = await db
@@ -3731,7 +3740,30 @@ export function registerRoutes(
       if (!character || !(await canAccessCharacter(db, auth, character)))
         return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
     }
-    const { actionId, revision: _revision, ...changes } = body;
+    if (body.controllerMembershipIds?.length) {
+      const valid = await db
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.campaignId, auth.campaignId),
+            eq(memberships.role, "PLAYER"),
+          ),
+        );
+      const validIds = new Set(valid.map((item) => item.id));
+      if (
+        body.controllerMembershipIds.some(
+          (membershipId) => !validIds.has(membershipId),
+        )
+      )
+        return reply.code(400).send({ error: "INVALID_CONTROLLER" });
+    }
+    const {
+      actionId,
+      revision: _revision,
+      controllerMembershipIds,
+      ...changes
+    } = body;
     const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
       const [next] = await tx
         .update(tokenDefinitions)
@@ -3757,6 +3789,18 @@ export function registerRoutes(
           .update(tokens)
           .set({ assetId: body.defaultAssetId, updatedAt: new Date() })
           .where(eq(tokens.definitionId, id));
+      }
+      if (controllerMembershipIds !== undefined) {
+        await tx
+          .delete(tokenControllers)
+          .where(eq(tokenControllers.tokenDefinitionId, id));
+        if (controllerMembershipIds.length)
+          await tx.insert(tokenControllers).values(
+            controllerMembershipIds.map((membershipId) => ({
+              tokenDefinitionId: id,
+              membershipId,
+            })),
+          );
       }
       await tx.insert(gameEvents).values({
         campaignId: auth.campaignId,

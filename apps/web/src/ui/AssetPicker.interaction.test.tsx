@@ -33,6 +33,29 @@ function asset(overrides: Partial<AssetDto> = {}): AssetDto {
 }
 
 describe("AssetPicker interaction", () => {
+  it("distinguishes an external crop selection from choosing no image", async () => {
+    const onChange = vi.fn();
+    const { rerender } = renderComponent(
+      <AssetPicker assets={[]} value={null} onChange={onChange} />,
+    );
+    const none = screen.getByRole("button", { name: "Без изображения" });
+    expect(none).toHaveAttribute("aria-pressed", "true");
+    rerender(
+      <AssetPicker
+        assets={[]}
+        value={null}
+        hasExternalSelection
+        onChange={onChange}
+      />,
+    );
+    expect(none).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await userEvent.click(none);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(null);
+    rerender(<AssetPicker assets={[]} value={null} onChange={onChange} />);
+    expect(none).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("calls onChange with the asset id when its tile is clicked", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

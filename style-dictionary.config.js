@@ -10,6 +10,9 @@
  * усложнить и `pnpm build`, и CI, и запуск Storybook ради значений, меняющихся
  * несколько раз в месяц. Вместо этого файл обновляется командой
  * `pnpm tokens:build`, а расхождение ловится проверкой `pnpm tokens:check`.
+ * Personal-theme source stays below `tokens/player-themes/` and is emitted by
+ * a restricted mapping script. It must not enter this glob: without a theme
+ * attribute, this baseline `:root` output remains unchanged.
  *
  * Имена выводятся так, чтобы совпасть с уже существующими в `styles.css`:
  * `font.size.body` → `--font-size-body`. Это не косметика — иначе пришлось бы

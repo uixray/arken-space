@@ -11,6 +11,8 @@ export interface AssetPickerProps {
   assets: AssetDto[];
   /** Currently selected asset id, or null/"" for "no selection". */
   value: string | null;
+  /** Another image source (e.g. a crop draft) is selected outside this grid. */
+  hasExternalSelection?: boolean;
   onChange: (assetId: string | null) => void;
   /** Label for the dedicated "no selection" tile. Defaults to "Без изображения". */
   noneLabel?: string;
@@ -50,6 +52,7 @@ function Thumb({ asset }: { asset: AssetDto }) {
 export function AssetPicker({
   assets,
   value,
+  hasExternalSelection = false,
   onChange,
   noneLabel = "Без изображения",
   filterable,
@@ -125,7 +128,7 @@ export function AssetPicker({
                 <button
                   type="button"
                   className="asset-picker__tile asset-picker__tile--none"
-                  aria-pressed={!value}
+                  aria-pressed={!value && !hasExternalSelection}
                   aria-label={noneLabel}
                   disabled={disabled}
                   tabIndex={0}

@@ -1236,6 +1236,7 @@ export const tokenDefinitionUpdateSchema = z.object({
   characterId: z.string().uuid().nullable().optional(),
   defaultWidth: z.number().min(16).max(1024).optional(),
   defaultHeight: z.number().min(16).max(1024).optional(),
+  controllerMembershipIds: z.array(z.string().uuid()).max(50).optional(),
 });
 export const revisionCommandSchema = z.object({
   actionId: actionIdSchema,

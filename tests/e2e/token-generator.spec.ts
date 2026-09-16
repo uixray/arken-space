@@ -1,6 +1,47 @@
 import { expect, test } from "./react-console-guard";
-import type { GameSnapshot } from "@arken/contracts";
+import type { Locator, Page, Route, WebSocketRoute } from "@playwright/test";
+import type {
+  AssetDto,
+  ChatReadCursorDto,
+  GameSnapshot,
+  TokenDefinitionDto,
+} from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import {
+  tokenParitySource,
+  tokenParityReference,
+  tokenPreviewDifference,
+} from "../../apps/server/src/token-preview-parity.test-support";
+
+async function chooseEmbeddedSource(editor: Locator) {
+  const source = editor.getByRole("combobox", {
+    name: "Исходное изображение",
+    exact: true,
+  });
+  const noImage = editor
+    .getByRole("group", { name: "Изображение токена из файлов", exact: true })
+    .getByRole("button", { name: "Без изображения", exact: true });
+  await expect(source).toHaveValue("");
+  await expect(noImage).toHaveAttribute("aria-pressed", "true");
+  await source.selectOption(sourceAsset.id);
+  await expect(source).toHaveValue(sourceAsset.id);
+  await expect(noImage).toHaveAttribute("aria-pressed", "false");
+}
+
+async function settleFiniteAnimations(owner: Locator) {
+  await owner.evaluate(async (node) => {
+    await Promise.all(
+      node
+        .getAnimations({ subtree: true })
+        .filter((animation) =>
+          Number.isFinite(
+            Number(animation.effect?.getComputedTiming().endTime),
+          ),
+        )
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+}
 
 test("UIX-589 narrow frame targets are at least 44px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -255,11 +296,12 @@ const sourceAsset = {
 async function mockBootstrap(
   page: import("@playwright/test").Page,
   role: "GM" | "PLAYER",
+  image = sourceAsset,
 ) {
   const fixture = structuredClone(snapshot);
   fixture.me = { ...fixture.me, role };
   fixture.members[0] = { ...fixture.members[0]!, role };
-  fixture.assets = [sourceAsset];
+  fixture.assets = [image];
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
@@ -275,6 +317,61 @@ async function mockBootstrap(
     }),
   );
   await page.route(
+    (url) =>
+      [
+        "/api/story/posts",
+        "/api/canvas/history",
+        "/api/operator/feedback/capability",
+      ].includes(url.pathname),
+    (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/canvas/history") return route.fulfill({ json: [] });
+      return route.fulfill({
+        status: 403,
+        json: {
+          error: "FORBIDDEN",
+          message: "Нет доступа к операторскому разделу.",
+        },
+      });
+    },
+  );
+  await page.route(
+    (url) => ["/api/chat/read", "/api/client-logs"].includes(url.pathname),
+    (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      if (new URL(route.request().url()).pathname === "/api/client-logs")
+        return route.fulfill({ status: 202, body: "" });
+      const body = route.request().postDataJSON() as {
+        threadId: string;
+        sequence: number;
+      };
+      const state = fixture.chatThreadStates?.find(
+        (entry) => entry.threadId === body.threadId,
+      );
+      expect(
+        state,
+        "read cursor targets a known synthetic thread",
+      ).toBeDefined();
+      expect(Number.isInteger(body.sequence) && body.sequence >= 0).toBe(true);
+      if (!state) throw new Error("Unknown synthetic read thread");
+      // /api/chat/read returns a cursor, not 204. The actual action passes
+      // this receipt into reconcileChatRead; an empty body would supply null.
+      const cursor: ChatReadCursorDto = {
+        campaignId: fixture.campaign.id,
+        threadId: body.threadId,
+        lastReadSequence: Math.max(
+          state.lastReadSequence,
+          Math.min(body.sequence, state.latestSequence),
+        ),
+        updatedAt: fixture.serverTime,
+      };
+      return route.fulfill({ status: 200, json: cursor });
+    },
+  );
+  await page.route(
     "**/api/assets/a1111111-1111-4111-8111-111111111111/content",
     (route) =>
       route.fulfill({
@@ -283,9 +380,107 @@ async function mockBootstrap(
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"/>',
       }),
   );
+  return fixture;
 }
 
-test("UIX-255 GM generates and assigns a TOKEN asset before saving its definition", async ({
+for (const size of [
+  { name: "landscape", width: 640, height: 400 },
+  { name: "portrait", width: 400, height: 640 },
+]) {
+  test(`UIX-589 ${size.name} preview agrees with the real WebP renderer`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const source = await tokenParitySource(size.width, size.height);
+    const original = Buffer.from(source);
+    await mockBootstrap(page, "GM", { ...sourceAsset, ...size });
+    await page.route(`**${sourceAsset.url}`, (route) =>
+      route.fulfill({ contentType: "image/png", body: source }),
+    );
+    await page.goto("/");
+    await openWorkspaceSection(page, "Токены");
+    await page.locator(".token-palette > button").click();
+    const editor = page.getByRole("dialog", {
+      name: "Новый токен",
+      exact: true,
+    });
+    await chooseEmbeddedSource(editor);
+    const preview = editor.locator(".token-image-preview");
+    await expect
+      .poll(() =>
+        preview.locator("img").evaluate((node) => ({
+          width: (node as HTMLImageElement).naturalWidth,
+          height: (node as HTMLImageElement).naturalHeight,
+        })),
+      )
+      .toEqual({ width: size.width, height: size.height });
+    await editor
+      .getByRole("slider", { name: "Масштаб изображения токена" })
+      .fill("2.3");
+    await preview.focus();
+    await preview.press("Shift+ArrowRight");
+    await preview.press("Shift+ArrowUp");
+    for (const frame of ["NONE", "BRONZE", "SILVER", "OBSIDIAN"] as const) {
+      await editor.locator(`input[type="radio"][value="${frame}"]`).check();
+      const box = await preview.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeCloseTo(box!.height, 3);
+      const actual = await preview.screenshot({ animations: "disabled" });
+      const reference = await tokenParityReference(source, {
+        cropX: 0.6,
+        cropY: 0.4,
+        zoom: 2.3,
+        frame,
+      });
+      expect(reference.metadata).toMatchObject({
+        format: "webp",
+        width: 512,
+        height: 512,
+        hasAlpha: true,
+      });
+      const difference = await tokenPreviewDifference(actual, reference.bytes);
+      await info.attach(`${size.name}-${frame}-preview`, {
+        body: actual,
+        contentType: "image/png",
+      });
+      await info.attach(`${size.name}-${frame}-server`, {
+        body: reference.bytes,
+        contentType: "image/webp",
+      });
+      await info.attach(`${size.name}-${frame}-difference`, {
+        body: JSON.stringify(difference),
+        contentType: "application/json",
+      });
+      // Different browser/libvips scaling and lossy WebP are not byte-equal.
+      // Compare content plus ring samples, excluding antialiased outer edges.
+      expect(difference.samples).toBeGreaterThan(3000);
+      // A fractional viewport position can add one capture pixel to one edge.
+      expect(
+        Math.abs(difference.width - difference.height),
+      ).toBeLessThanOrEqual(1);
+      expect(difference.mean).toBeLessThan(3);
+      expect(difference.maximum).toBeLessThan(12);
+      for (const value of difference.ringDifferences)
+        expect(value).toBeLessThan(24);
+      if (frame === "NONE") {
+        const wrongCrop = await tokenParityReference(source, {
+          cropX: 0.3,
+          cropY: 0.7,
+          zoom: 1.1,
+          frame,
+        });
+        const negative = await tokenPreviewDifference(actual, wrongCrop.bytes);
+        expect(
+          negative.mean,
+          "oracle rejects a genuinely different crop",
+        ).toBeGreaterThan(15);
+      }
+    }
+    expect(source).toEqual(original);
+  });
+}
+
+test("UIX-589 GM saves crop and definition with one confirmation", async ({
   page,
 }) => {
   const generationRequests: Array<{
@@ -293,7 +488,31 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
     actionId: string | null;
   }> = [];
   const definitionRequests: Array<Record<string, unknown>> = [];
-  await mockBootstrap(page, "GM");
+  const fixture = await mockBootstrap(page, "GM");
+  const sourceBytes = await tokenParitySource(800, 600);
+  const reference = await tokenParityReference(sourceBytes, {
+    cropX: 0.51,
+    cropY: 0.51,
+    zoom: 2,
+    frame: "BRONZE",
+  });
+  const derivative: AssetDto = {
+    ...sourceAsset,
+    id: "b2222222-2222-4222-8222-222222222222",
+    kind: "TOKEN",
+    name: "Explorer token",
+    mimeType: "image/webp",
+    sizeBytes: reference.bytes.length,
+    width: 512,
+    height: 512,
+    url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
+  };
+  await page.route(`**${sourceAsset.url}`, (route) =>
+    route.fulfill({ contentType: "image/png", body: sourceBytes }),
+  );
+  await page.route(`**${derivative.url}`, (route) =>
+    route.fulfill({ contentType: "image/webp", body: reference.bytes }),
+  );
   await page.route(
     "**/api/assets/a1111111-1111-4111-8111-111111111111/token",
     async (route) => {
@@ -304,16 +523,7 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
       await route.fulfill({
         status: 201,
         contentType: "application/json",
-        body: JSON.stringify({
-          ...sourceAsset,
-          id: "b2222222-2222-4222-8222-222222222222",
-          kind: "TOKEN",
-          name: "Explorer token",
-          mimeType: "image/webp",
-          width: 512,
-          height: 512,
-          url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
-        }),
+        body: JSON.stringify(derivative),
       });
     },
   );
@@ -321,11 +531,21 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
     definitionRequests.push(
       route.request().postDataJSON() as Record<string, unknown>,
     );
-    await route.fulfill({
-      status: 201,
-      contentType: "application/json",
-      body: "{}",
-    });
+    const definition: TokenDefinitionDto = {
+      id: "45f46186-2ebc-4cf8-bce7-870097305a99",
+      name: "Guard",
+      ownName: "Guard",
+      characterId: null,
+      defaultAssetId: derivative.id,
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 0,
+    };
+    fixture.assets = [derivative, sourceAsset];
+    fixture.tokenDefinitions = [definition];
+    fixture.snapshotVersion += 1;
+    await route.fulfill({ status: 201, json: definition });
   });
 
   await page.goto("/");
@@ -333,9 +553,7 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
   await page.locator(".token-palette > button").click();
   const editor = page.locator(".g-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
-  await expect(editor.locator(".token-image-generator select")).toHaveValue(
-    sourceAsset.id,
-  );
+  await chooseEmbeddedSource(editor);
 
   const preview = editor.locator(".token-image-preview");
   await editor.locator('.token-image-generator input[type="range"]').fill("2");
@@ -343,9 +561,11 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
   await preview.press("ArrowRight");
   await preview.press("ArrowDown");
   await editor.locator('input[type="radio"][value="BRONZE"]').check();
-  await editor
-    .getByRole("button", { name: "Создать изображение токена" })
-    .click();
+  await expect(
+    editor.getByRole("button", { name: "Создать изображение токена" }),
+  ).toHaveCount(0);
+  await editor.locator("form input").first().fill("Guard");
+  await editor.getByRole("button", { name: "Сохранить", exact: true }).click();
 
   await expect.poll(() => generationRequests.length).toBe(1);
   expect(generationRequests[0]).toEqual({
@@ -359,8 +579,6 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
     actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
 
-  await editor.locator("form input").first().fill("Guard");
-  await editor.locator(".dialog-actions button").first().click();
   await expect.poll(() => definitionRequests.length).toBe(1);
   expect(definitionRequests[0]).toMatchObject({
     name: "Guard",
@@ -371,6 +589,21 @@ test("UIX-255 GM generates and assigns a TOKEN asset before saving its definitio
     controllerMembershipIds: [],
     actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
+  await expect(
+    page.getByRole("status").filter({ hasText: "Токен создан." }),
+  ).toHaveText("Токен создан.");
+  const card = page.locator(".palette-card").filter({ hasText: "Guard" });
+  await expect(card).toBeVisible();
+  await expect(card.locator("img")).toHaveAttribute("src", derivative.url);
+  await expect
+    .poll(() =>
+      card.locator("img").evaluate((node) => ({
+        complete: (node as HTMLImageElement).complete,
+        width: (node as HTMLImageElement).naturalWidth,
+        height: (node as HTMLImageElement).naturalHeight,
+      })),
+    )
+    .toEqual({ complete: true, width: 512, height: 512 });
 });
 
 test("UIX-255 player palette does not expose GM token generator controls", async ({
@@ -422,6 +655,25 @@ for (const viewport of [
     const images = editor.getByRole("group", {
       name: "Изображение токена из файлов",
     });
+    await settleFiniteAnimations(editor);
+    // One layout snapshot: sequential boundingBox calls can see different
+    // frames while the parent modal changes position.
+    const rows = await editor.evaluate((node) => {
+      const character = Array.from(node.querySelectorAll("label")).find(
+        (label) => /^\s*Персонаж/.test(label.textContent ?? ""),
+      );
+      const images = node.querySelector(
+        '[role="group"][aria-label="Изображение токена из файлов"]',
+      )?.parentElement;
+      if (!character || !images) throw new Error("Token form rows are missing");
+      return {
+        character: character.getBoundingClientRect().toJSON(),
+        images: images.getBoundingClientRect().toJSON(),
+      };
+    });
+    expect(rows.images.y).toBeGreaterThanOrEqual(
+      rows.character.y + rows.character.height,
+    );
     const image = images.getByRole("button", { name: sourceAsset.name });
     const noImage = images.getByRole("button", { name: "Без изображения" });
     await image.scrollIntoViewIfNeeded();
@@ -547,89 +799,724 @@ for (const viewport of [
 
 test("UIX-613 GM creates and places token on active scene in one action", async ({
   page,
-}) => {
+}, info) => {
   const tokenRequests: Array<Record<string, unknown>> = [];
-  await mockBootstrap(page, "GM");
+  const writeOrder: string[] = [];
+  const fixture = await mockBootstrap(page, "GM");
+  fixture.assets = [];
+  const sourceBytes = await tokenParitySource(800, 600);
+  const uploadedSource: AssetDto = {
+    ...sourceAsset,
+    sizeBytes: sourceBytes.length,
+  };
+  const reference = await tokenParityReference(sourceBytes, {
+    cropX: 0.5,
+    cropY: 0.5,
+    zoom: 1,
+    frame: "NONE",
+  });
+  const derivative: AssetDto = {
+    ...sourceAsset,
+    id: "b2222222-2222-4222-8222-222222222222",
+    kind: "TOKEN",
+    name: "Explorer token",
+    mimeType: "image/webp",
+    sizeBytes: reference.bytes.length,
+    width: 512,
+    height: 512,
+    url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
+  };
+  const sockets = new Set<WebSocketRoute>();
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString() === "40") {
+        sockets.add(socket);
+        socket.send('40{"sid":"token-success-socket"}');
+      }
+    });
+    socket.onClose(() => sockets.delete(socket));
+    socket.send(
+      '0{"sid":"token-success-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.route(`**${sourceAsset.url}`, (route) =>
+    route.fulfill({ contentType: "image/png", body: sourceBytes }),
+  );
+  await page.route(`**${derivative.url}`, (route) =>
+    route.fulfill({ contentType: "image/webp", body: reference.bytes }),
+  );
+  await page.route(
+    (url) => url.pathname === "/api/assets",
+    async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      expect(new URL(route.request().url()).searchParams.get("kind")).toBe(
+        "IMAGE",
+      );
+      const request = route.request();
+      const form = await new Response(
+        new Uint8Array(request.postDataBuffer()!),
+        {
+          headers: { "content-type": request.headers()["content-type"]! },
+        },
+      ).formData();
+      expect([...form.keys()]).toEqual(["file"]);
+      const file = form.get("file");
+      if (!file || typeof file === "string")
+        throw new Error("Expected local image File");
+      expect(file.name).toBe("Explorer.png");
+      expect(file.type).toBe("image/png");
+      expect(Buffer.from(await file.arrayBuffer())).toEqual(sourceBytes);
+      writeOrder.push("upload");
+      fixture.assets = [uploadedSource];
+      fixture.snapshotVersion += 1;
+      await route.fulfill({ status: 201, json: uploadedSource });
+    },
+  );
   await page.route(
     "**/api/assets/a1111111-1111-4111-8111-111111111111/token",
     async (route) => {
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({
-          ...sourceAsset,
-          id: "b2222222-2222-4222-8222-222222222222",
-          kind: "TOKEN",
-          name: "Explorer token",
-          mimeType: "image/webp",
-          width: 512,
-          height: 512,
-          url: "/api/assets/b2222222-2222-4222-8222-222222222222/content",
-        }),
+      writeOrder.push("derivative");
+      expect(route.request().postDataJSON()).toEqual({
+        cropX: 0.5,
+        cropY: 0.5,
+        zoom: 1,
+        frame: "NONE",
+        name: "Explorer",
       });
+      // Bootstrap remains without TOKEN until placement commits.
+      await route.fulfill({ status: 201, json: derivative });
     },
   );
   await page.route("**/api/tokens", async (route) => {
-    if (route.request().method() === "POST") {
-      tokenRequests.push(
-        route.request().postDataJSON() as Record<string, unknown>,
-      );
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({
-          id: "35f46186-2ebc-4cf8-bce7-870097305a99",
-          definitionId: "45f46186-2ebc-4cf8-bce7-870097305a99",
-          definitionRevision: 0,
-          baseColor: "#8899aa",
-          frameColor: null,
-          layer: "PLAYER",
-          conditions: [],
-          sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
-          characterId: null,
-          ownerMembershipId: null,
-          controllerMembershipIds: [],
-          x: 768,
-          y: 468,
-          width: 64,
-          height: 64,
-          rotation: 0,
-          assetId: "b2222222-2222-4222-8222-222222222222",
-          name: "Ranger",
-          character: null,
-          asset: null,
-          revision: 0,
-        }),
-      });
-    } else {
-      await route.fallback();
-    }
+    if (route.request().method() !== "POST") return route.fallback();
+    writeOrder.push("placement");
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    tokenRequests.push(body);
+    const definition: TokenDefinitionDto = {
+      id: "45f46186-2ebc-4cf8-bce7-870097305a99",
+      name: "Ranger",
+      ownName: "Ranger",
+      characterId: null,
+      defaultAssetId: derivative.id,
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 0,
+    };
+    const placed: GameSnapshot["tokens"][number] = {
+      id: "35f46186-2ebc-4cf8-bce7-870097305a99",
+      definitionId: definition.id,
+      definitionRevision: 0,
+      baseColor: "#8899aa",
+      frameColor: null,
+      layer: "PLAYER",
+      conditions: [],
+      sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
+      characterId: null,
+      ownerMembershipId: null,
+      controllerMembershipIds: [],
+      x: 768,
+      y: 468,
+      z: 0,
+      levelId: null,
+      visible: true,
+      locked: false,
+      width: 64,
+      height: 64,
+      rotation: 0,
+      assetId: derivative.id,
+      name: "Ranger",
+      revision: 0,
+    };
+    fixture.assets = [derivative, uploadedSource];
+    fixture.tokenDefinitions = [definition];
+    fixture.tokens = [placed];
+    fixture.snapshotVersion += 1;
+    expect(sockets.size).toBeGreaterThan(0);
+    for (const socket of sockets)
+      socket.send(`42${JSON.stringify(["game:snapshot", fixture])}`);
+    await route.fulfill({ status: 201, json: placed });
   });
-
   await page.goto("/");
+  await expect.poll(() => sockets.size).toBeGreaterThan(0);
   await openWorkspaceSection(page, "Токены");
   await page.locator(".token-palette > button").click();
-  const editor = page.locator(".g-modal").last();
-  await expect(editor.locator(".token-image-generator")).toBeVisible();
-
+  const editor = page.getByRole("dialog", { name: "Новый токен", exact: true });
+  await expect(
+    editor.getByRole("button", { name: "Без изображения", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await editor
-    .getByRole("button", { name: "Создать изображение токена" })
-    .click();
-  await editor.locator("form input").first().fill("Ranger");
-  const createAndPlaceButton = editor.locator(
-    'button[value="create-and-place"]',
-  );
-  await expect(createAndPlaceButton).toBeVisible();
-  await createAndPlaceButton.click();
-
+    .getByLabel("Загрузить новое изображение", { exact: true })
+    .setInputFiles({
+      name: "Explorer.png",
+      mimeType: "image/png",
+      buffer: sourceBytes,
+    });
+  await expect(
+    editor.getByRole("combobox", { name: "Исходное изображение", exact: true }),
+  ).toHaveValue(sourceAsset.id);
+  await expect(
+    editor.getByRole("button", { name: "Без изображения", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await expect
+    .poll(() =>
+      editor.locator(".token-image-preview img").evaluate((node) => ({
+        width: (node as HTMLImageElement).naturalWidth,
+        height: (node as HTMLImageElement).naturalHeight,
+      })),
+    )
+    .toEqual({ width: 800, height: 600 });
+  await expect(
+    editor.getByRole("button", { name: "Создать изображение токена" }),
+  ).toHaveCount(0);
+  await editor.getByLabel("Название", { exact: true }).fill("Ranger");
+  await editor.locator('button[value="create-and-place"]').click();
   await expect.poll(() => tokenRequests.length).toBe(1);
+  expect(writeOrder).toEqual(["upload", "derivative", "placement"]);
   expect(tokenRequests[0]).toMatchObject({
     sceneId: "7376b502-02f8-4cd6-9c55-3816d70d44dc",
     name: "Ranger",
-    assetId: "b2222222-2222-4222-8222-222222222222",
+    assetId: derivative.id,
     width: 64,
     height: 64,
     controllerMembershipIds: [],
     actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+  });
+  await expect(editor).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Токен создан и размещён на карте." }),
+  ).toHaveText("Токен создан и размещён на карте.");
+  const card = page.locator(".palette-card").filter({ hasText: "Ranger" });
+  await expect(card).toBeVisible();
+  await expect(card.locator("img")).toHaveAttribute("src", derivative.url);
+  await expect
+    .poll(() =>
+      card.locator("img").evaluate((node) => ({
+        complete: (node as HTMLImageElement).complete,
+        width: (node as HTMLImageElement).naturalWidth,
+        height: (node as HTMLImageElement).naturalHeight,
+      })),
+    )
+    .toEqual({ complete: true, width: 512, height: 512 });
+  await expect(page.locator(".map-viewport")).toHaveAttribute(
+    "data-token-image-states",
+    "35f46186-2ebc-4cf8-bce7-870097305a99:loaded",
+  );
+  const screenshot = info.outputPath("token-created-and-placed.png");
+  await page.screenshot({ path: screenshot });
+  await info.attach("token-created-and-placed", {
+    path: screenshot,
+    contentType: "image/png",
+  });
+  const palette = page.getByRole("dialog", { name: "Токены", exact: true });
+  await palette
+    .getByRole("button", { name: "Закрыть окно", exact: true })
+    .click();
+  await expect(palette).toHaveCount(0);
+  const map = page.locator(".map-viewport");
+  await expect(map).toBeVisible();
+  await expect(map.locator("canvas").first()).toBeVisible();
+  await expect(map).toHaveAttribute(
+    "data-token-image-states",
+    "35f46186-2ebc-4cf8-bce7-870097305a99:loaded",
+  );
+  const mapScreenshot = info.outputPath("token-created-and-placed-map.png");
+  await map.screenshot({ path: mapScreenshot, animations: "disabled" });
+  await info.attach("token-created-and-placed-map", {
+    path: mapScreenshot,
+    contentType: "image/png",
+  });
+});
+
+for (const outcome of ["failure", "cancel"] as const) {
+  test(`UIX-589 held generation ${outcome} never creates a definition or placement`, async ({
+    page,
+  }) => {
+    await mockBootstrap(page, "GM");
+    const generationRequests: Array<Record<string, unknown>> = [];
+    const definitionWrites: string[] = [];
+    let held: Route | undefined;
+    await page.route(
+      "**/api/assets/a1111111-1111-4111-8111-111111111111/token",
+      (route) => {
+        generationRequests.push(
+          route.request().postDataJSON() as Record<string, unknown>,
+        );
+        held = route;
+      },
+    );
+    for (const path of ["/api/token-definitions", "/api/tokens"]) {
+      await page.route(`**${path}`, async (route) => {
+        definitionWrites.push(path);
+        await route.abort("blockedbyclient");
+      });
+    }
+    try {
+      await page.goto("/");
+      await openWorkspaceSection(page, "Токены");
+      await page.locator(".token-palette > button").click();
+      const editor = page.getByRole("dialog", {
+        name: "Новый токен",
+        exact: true,
+      });
+      await chooseEmbeddedSource(editor);
+      const name = editor.getByLabel("Название", { exact: true });
+      await name.fill("Generation draft");
+      const save = editor.getByRole("button", {
+        name: "Сохранить",
+        exact: true,
+      });
+      await save.click();
+      await expect.poll(() => generationRequests.length).toBe(1);
+      await expect(save).toBeDisabled();
+      await page.keyboard.press("Enter");
+      // keyboard.press has dispatched keyup; cross a rendering checkpoint so
+      // its native submit handling and any synchronous guarded action settle.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          ),
+      );
+      expect(generationRequests).toHaveLength(1);
+      expect(definitionWrites).toEqual([]);
+      if (!held) throw new Error("Generation did not reach its held boundary");
+      if (outcome === "cancel") {
+        await page.keyboard.press("Escape");
+        await expect(editor).toHaveCount(0);
+        await page.locator(".token-palette > button").click();
+        await editor
+          .getByLabel("Название", { exact: true })
+          .fill("New draft B");
+        // generateTokenImage awaits load() after the derivative response.
+        // Bind the resulting bootstrap body's completion before releasing A,
+        // rather than asserting B before the old operation resumes.
+        const refreshed = page.waitForEvent(
+          "requestfinished",
+          (request) =>
+            request.method() === "GET" &&
+            new URL(request.url()).pathname === "/api/bootstrap",
+        );
+        await held.fulfill({
+          status: 201,
+          json: {
+            ...sourceAsset,
+            id: "b2222222-2222-4222-8222-222222222222",
+            kind: "TOKEN",
+            width: 512,
+            height: 512,
+          },
+        });
+        held = undefined;
+        await refreshed;
+        // Let bootstrap JSON/load/generation continuations and React's next
+        // paint finish before checking that cancelled A did not affect B.
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => resolve()),
+              ),
+            ),
+        );
+        await expect(editor).toBeVisible();
+        await expect(
+          editor.getByLabel("Название", { exact: true }),
+        ).toHaveValue("New draft B");
+        await expect(
+          editor.getByRole("combobox", {
+            name: "Исходное изображение",
+            exact: true,
+          }),
+        ).toHaveValue("");
+        await expect(
+          editor
+            .getByRole("group", {
+              name: "Изображение токена из файлов",
+              exact: true,
+            })
+            .getByRole("button", { name: "Без изображения", exact: true }),
+        ).toHaveAttribute("aria-pressed", "true");
+      } else {
+        await held.fulfill({
+          status: 500,
+          json: { error: "GENERATION_FAILED", message: "Generation failed" },
+        });
+        held = undefined;
+        await expect(save).toBeEnabled();
+        await expect(name).toHaveValue("Generation draft");
+        await expect(editor.getByRole("alert")).toHaveText("Generation failed");
+      }
+      expect(generationRequests).toHaveLength(1);
+      expect(definitionWrites).toEqual([]);
+    } finally {
+      await held?.abort("blockedbyclient").catch(() => undefined);
+    }
+  });
+}
+
+for (const size of [
+  {
+    name: "wide",
+    width: 640,
+    height: 400,
+    key: "ArrowRight",
+    axis: "left",
+    pinned: "top",
+  },
+  {
+    name: "portrait",
+    width: 400,
+    height: 640,
+    key: "ArrowDown",
+    axis: "top",
+    pinned: "left",
+  },
+] as const) {
+  test(`UIX-589 zoom-one overflow pan ${size.name} keyboard moves only the overflowing axis`, async ({
+    page,
+  }) => {
+    await mockBootstrap(page, "GM", { ...sourceAsset, ...size });
+    const source = await tokenParitySource(size.width, size.height);
+    await page.route(`**${sourceAsset.url}`, (route) =>
+      route.fulfill({ contentType: "image/png", body: source }),
+    );
+    await page.goto("/");
+    await openWorkspaceSection(page, "Токены");
+    await page.locator(".token-palette > button").click();
+    const editor = page.getByRole("dialog", {
+      name: "Новый токен",
+      exact: true,
+    });
+    await chooseEmbeddedSource(editor);
+    const preview = editor.locator(".token-image-preview");
+    const image = preview.locator("img");
+    await expect
+      .poll(() =>
+        image.evaluate((node) => (node as HTMLImageElement).naturalWidth),
+      )
+      .toBe(size.width);
+    const position = () =>
+      image.evaluate((node) => ({
+        left: parseFloat((node as HTMLElement).style.left),
+        top: parseFloat((node as HTMLElement).style.top),
+      }));
+    const before = await position();
+    await expect(
+      editor.getByRole("slider", {
+        name: "Масштаб изображения токена",
+        exact: true,
+      }),
+    ).toHaveValue("1");
+    await preview.focus();
+    await preview.press(size.key);
+    await expect
+      .poll(async () => (await position())[size.axis])
+      .toBeLessThan(before[size.axis]);
+    expect((await position())[size.pinned]).toBe(before[size.pinned]);
+    // The orthogonal key cannot expose a blank edge on the fitted axis.
+    await preview.press(size.key === "ArrowRight" ? "ArrowDown" : "ArrowRight");
+    expect((await position())[size.pinned]).toBe(before[size.pinned]);
+  });
+}
+
+async function openCropEditor(page: Page, width: number, height: number) {
+  const source = await tokenParitySource(width, height);
+  await mockBootstrap(page, "GM", { ...sourceAsset, width, height });
+  await page.route(`**${sourceAsset.url}`, (route) =>
+    route.fulfill({ contentType: "image/png", body: source }),
+  );
+  await page.goto("/");
+  await openWorkspaceSection(page, "Токены");
+  await page.locator(".token-palette > button").click();
+  const editor = page.getByRole("dialog", { name: "Новый токен", exact: true });
+  await chooseEmbeddedSource(editor);
+  const preview = editor.locator(".token-image-preview");
+  const image = preview.locator("img");
+  await expect
+    .poll(() =>
+      image.evaluate((node) => ({
+        width: (node as HTMLImageElement).naturalWidth,
+        height: (node as HTMLImageElement).naturalHeight,
+      })),
+    )
+    .toEqual({ width, height });
+  await settleFiniteAnimations(editor);
+  await preview.scrollIntoViewIfNeeded();
+  return { source, editor, preview, image };
+}
+
+async function cropGeometry(preview: Locator) {
+  return preview.evaluate((node) => {
+    const image = node.querySelector("img");
+    if (!image) throw new Error("Crop image is missing");
+    const box = node.getBoundingClientRect();
+    const imageBox = image.getBoundingClientRect();
+    return {
+      box: box.toJSON(),
+      imageX: imageBox.x - box.x,
+      imageY: imageBox.y - box.y,
+    };
+  });
+}
+
+async function settleCropGeometry(editor: Locator, preview: Locator) {
+  await settleFiniteAnimations(editor);
+  await preview.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      preview.evaluate(async (node) => {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        const before = node.getBoundingClientRect();
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        const after = node.getBoundingClientRect();
+        return Math.max(
+          Math.abs(after.x - before.x),
+          Math.abs(after.y - before.y),
+          Math.abs(after.width - before.width),
+          Math.abs(after.height - before.height),
+        );
+      }),
+    )
+    .toBeLessThanOrEqual(0.001);
+  // Both rectangles belong to the same layout snapshot.
+  return cropGeometry(preview);
+}
+
+for (const size of [
+  { name: "wide", width: 640, height: 400 },
+  { name: "portrait", width: 400, height: 640 },
+]) {
+  for (const zoom of [1, 2]) {
+    test(`UIX-589 ${size.name} mouse pan follows pointer one-to-one at zoom ${zoom}`, async ({
+      page,
+    }) => {
+      const { editor, preview } = await openCropEditor(
+        page,
+        size.width,
+        size.height,
+      );
+      await editor
+        .getByRole("slider", {
+          name: "Масштаб изображения токена",
+          exact: true,
+        })
+        .fill(String(zoom));
+      const before = await settleCropGeometry(editor, preview);
+      const box = before.box;
+      const expectedX = zoom === 1 && size.name === "portrait" ? 0 : 12;
+      const expectedY = zoom === 1 && size.name === "wide" ? 0 : 12;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      try {
+        await page.mouse.move(
+          box.x + box.width / 2 + 12,
+          box.y + box.height / 2 + 12,
+          { steps: 4 },
+        );
+        await expect
+          .poll(async () => {
+            const after = await cropGeometry(preview);
+            return Math.max(
+              Math.abs(after.imageX - before.imageX - expectedX),
+              Math.abs(after.imageY - before.imageY - expectedY),
+            );
+          })
+          .toBeLessThanOrEqual(1);
+      } finally {
+        await page.mouse.up();
+      }
+    });
+  }
+  test(`UIX-589 ${size.name} off-center zoom-one preview matches real renderer`, async ({
+    page,
+  }, info) => {
+    const { source, preview, image } = await openCropEditor(
+      page,
+      size.width,
+      size.height,
+    );
+    const before = await image.evaluate((node) => ({
+      left: (node as HTMLElement).style.left,
+      top: (node as HTMLElement).style.top,
+    }));
+    await preview.focus();
+    await preview.press(
+      size.name === "wide" ? "Shift+ArrowRight" : "Shift+ArrowDown",
+    );
+    await expect
+      .poll(() =>
+        image.evaluate((node) => ({
+          left: (node as HTMLElement).style.left,
+          top: (node as HTMLElement).style.top,
+        })),
+      )
+      .not.toEqual(before);
+    const actual = await preview.screenshot({ animations: "disabled" });
+    const reference = await tokenParityReference(source, {
+      cropX: size.name === "wide" ? 0.6 : 0.5,
+      cropY: size.name === "portrait" ? 0.6 : 0.5,
+      zoom: 1,
+      frame: "NONE",
+    });
+    const difference = await tokenPreviewDifference(actual, reference.bytes);
+    expect(difference.samples).toBeGreaterThan(3000);
+    expect(difference.mean).toBeLessThan(3);
+    expect(difference.maximum).toBeLessThan(12);
+    await info.attach("zoom-one-parity", {
+      body: JSON.stringify(difference),
+      contentType: "application/json",
+    });
+  });
+}
+
+test("UIX-589 compact real touch pan keeps fitted axis pinned", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "Real touch input uses Chromium CDP");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { editor, preview } = await openCropEditor(page, 640, 400);
+  const before = await settleCropGeometry(editor, preview);
+  const box = before.box;
+  const session = await page.context().newCDPSession(page);
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  try {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x, y, id: 1 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: x + 12, y: y + 12, id: 1 }],
+    });
+    await expect
+      .poll(async () => {
+        const after = await cropGeometry(preview);
+        return Math.max(
+          Math.abs(after.imageX - before.imageX - 12),
+          Math.abs(after.imageY - before.imageY),
+        );
+      })
+      .toBeLessThanOrEqual(1);
+  } finally {
+    await session
+      .send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+      .catch(() => undefined);
+    await session.detach();
+  }
+});
+
+test("UIX-589 compact accessible zoom controls clamp sync reset and remain touch-sized", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { editor, preview } = await openCropEditor(page, 640, 400);
+  const percent = editor.getByRole("spinbutton", {
+    name: "Масштаб изображения токена, проценты",
+    exact: true,
+  });
+  const range = editor.getByRole("slider", {
+    name: "Масштаб изображения токена",
+    exact: true,
+  });
+  const minus = editor.getByRole("button", {
+    name: "Уменьшить масштаб",
+    exact: true,
+  });
+  const plus = editor.getByRole("button", {
+    name: "Увеличить масштаб",
+    exact: true,
+  });
+  const reset = editor.getByRole("button", { name: "Сбросить", exact: true });
+  await expect(percent).toHaveAttribute("min", "100");
+  await expect(percent).toHaveAttribute("max", "800");
+  await expect(percent).toHaveAttribute("step", "10");
+  await expect(percent).toHaveValue("100");
+  await expect(minus).toBeDisabled();
+  await plus.click();
+  await expect(percent).toHaveValue("110");
+  await expect(range).toHaveValue("1.1");
+  await minus.click();
+  await expect(range).toHaveValue("1");
+  await percent.fill("950");
+  await percent.press("Enter");
+  await expect(percent).toHaveValue("800");
+  await expect(range).toHaveValue("8");
+  await expect(plus).toBeDisabled();
+  await percent.fill("20");
+  await percent.press("Tab");
+  await expect(percent).toHaveValue("100");
+  await expect(range).toHaveValue("1");
+  await range.fill("2");
+  await expect(percent).toHaveValue("200");
+  await editor.getByRole("radio", { name: "Бронза", exact: true }).check();
+  await preview.focus();
+  await preview.press("Shift+ArrowRight");
+  await reset.click();
+  await expect(range).toHaveValue("1");
+  await expect(percent).toHaveValue("100");
+  await expect(
+    editor.getByRole("radio", { name: "Без рамки", exact: true }),
+  ).toBeChecked();
+  await settleFiniteAnimations(editor);
+  for (const control of [
+    minus,
+    plus,
+    percent,
+    range,
+    reset,
+    ...(await editor.locator(".token-image-generator__frame-option").all()),
+  ]) {
+    const box = await control.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const element = node as HTMLElement;
+      return {
+        x: rect.x,
+        width: Number(rect.width.toFixed(3)),
+        height: Number(rect.height.toFixed(3)),
+        logicalWidth: element.offsetWidth,
+        logicalHeight: element.offsetHeight,
+      };
+    });
+    // Normalize sub-millipixel engine noise, not undersized touch targets:
+    // both the measured dimensions and native logical layout must be >=44.
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.logicalWidth).toBeGreaterThanOrEqual(44);
+    expect(box.logicalHeight).toBeGreaterThanOrEqual(44);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(391);
+  }
+  expect(
+    await editor.evaluate((node) => node.scrollWidth - node.clientWidth),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    ),
+  ).toBeLessThanOrEqual(1);
+  const box = await preview.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.width).toBeCloseTo(box!.height, 3);
+  await expect(editor).toBeVisible();
+  await expect(
+    editor.getByRole("button", { name: "Создать изображение токена" }),
+  ).toHaveCount(0);
+  await editor
+    .locator(".token-image-generator__zoom-controls")
+    .scrollIntoViewIfNeeded();
+  const screenshot = info.outputPath("crop-controls-390.png");
+  await page.screenshot({ path: screenshot });
+  await info.attach("crop-controls-390", {
+    path: screenshot,
+    contentType: "image/png",
   });
 });

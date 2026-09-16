@@ -1,7 +1,11 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { AssetDto, GameSnapshot } from "@arken/contracts";
 import { Button } from "@gravity-ui/uikit";
-import { TokenImageGenerator } from "../TokenImageGenerator";
+import {
+  TokenImageGenerator,
+  type TokenImageDraft,
+} from "../TokenImageGenerator";
+import { DEFAULT_TOKEN_IMAGE_TRANSFORM } from "../token-image-editor-state";
 import {
   mergeAssets,
   tokenDefinitionAssets,
@@ -25,6 +29,7 @@ export function PalettePanel(props: Props) {
   const [editor, setEditor] = useState<
     (typeof definitions)[number] | "NEW" | null
   >(null);
+  const [editorNotice, setEditorNotice] = useState("");
   const [deleteDefinition, setDeleteDefinition] = useState<
     (typeof definitions)[number] | null
   >(null);
@@ -45,9 +50,20 @@ export function PalettePanel(props: Props) {
         <span className="revision">{definitions.length}</span>
       </div>
       {props.snapshot.me.role === "GM" && (
-        <Button view="action" onClick={() => setEditor("NEW")}>
+        <Button
+          view="action"
+          onClick={() => {
+            setEditorNotice("");
+            setEditor("NEW");
+          }}
+        >
           Создать токен
         </Button>
+      )}
+      {editorNotice && (
+        <p className="field-notice" role="status">
+          {editorNotice}
+        </p>
       )}
       <p className="muted">
         {props.snapshot.campaign.paused
@@ -164,7 +180,12 @@ export function PalettePanel(props: Props) {
               )}
               {props.snapshot.me.role === "GM" && (
                 <div className="inline-fields">
-                  <Button onClick={() => setEditor(definition)}>
+                  <Button
+                    onClick={() => {
+                      setEditorNotice("");
+                      setEditor(definition);
+                    }}
+                  >
                     Настроить
                   </Button>
                   <Button
@@ -189,10 +210,18 @@ export function PalettePanel(props: Props) {
           onUpload={assetActions.uploadAsset}
           onGenerateTokenImage={assetActions.generateTokenImage}
           onCancel={() => setEditor(null)}
+          onSaved={(outcome) =>
+            setEditorNotice(
+              outcome === "created"
+                ? "Токен создан."
+                : outcome === "created-and-placed"
+                  ? "Токен создан и размещён на карте."
+                  : "Токен обновлён.",
+            )
+          }
           onCreate={tokenActions.onCreateTokenDefinition}
           onCreateAndPlace={tokenActions.onCreateAndPlaceTokenDefinition}
           onPatch={tokenActions.onPatchTokenDefinition}
-          onReplaceControllers={tokenActions.onReplaceTokenControllers}
           onOpenCharacters={() => {
             setEditor(null);
             props.onWorkspaceChange("setup");
@@ -324,16 +353,24 @@ export function TokenImageAssignment({
   );
 }
 
+function initialImageDraft(asset: AssetDto): TokenImageDraft {
+  return {
+    sourceAssetId: asset.id,
+    ...DEFAULT_TOKEN_IMAGE_TRANSFORM,
+    name: asset.name.replace(/\.[^/.]+$/, "").slice(0, 90) || undefined,
+  };
+}
+
 export function TokenDefinitionEditor({
   snapshot,
   definition,
   onUpload,
   onGenerateTokenImage,
   onCancel,
+  onSaved,
   onCreate,
   onCreateAndPlace,
   onPatch,
-  onReplaceControllers,
   onOpenCharacters,
   onOpenMedia,
 }: {
@@ -342,10 +379,13 @@ export function TokenDefinitionEditor({
   onUpload: AssetActions["uploadAsset"];
   onGenerateTokenImage: AssetActions["generateTokenImage"];
   onCancel: () => void;
+  onSaved?: (outcome: "created" | "created-and-placed" | "updated") => void;
   onCreate: TokenDefinitionActions["onCreateTokenDefinition"];
   onCreateAndPlace: TokenDefinitionActions["onCreateAndPlaceTokenDefinition"];
   onPatch: TokenDefinitionActions["onPatchTokenDefinition"];
-  onReplaceControllers: TokenDefinitionActions["onReplaceTokenControllers"];
+  // Kept at the component boundary while older focused harnesses migrate;
+  // editing now sends controllers atomically in PATCH rather than calling it.
+  onReplaceControllers?: TokenDefinitionActions["onReplaceTokenControllers"];
   onOpenCharacters: () => void;
   onOpenMedia: () => void;
 }) {
@@ -372,74 +412,192 @@ export function TokenDefinitionEditor({
   );
   const [image, setImage] = useState<File>();
   const [uploadedSource, setUploadedSource] = useState<AssetDto>();
+  const [uploadPending, setUploadPending] = useState(false);
   const uploadSourcePromise = useRef<Promise<AssetDto> | null>(null);
+  const uploadSourceError = useRef<string | null>(null);
+  const generationDraft = useRef<TokenImageDraft | null>(null);
+  const [assetIntent, setAssetIntent] = useState<
+    "none" | "token" | "source" | "upload"
+  >(definition?.defaultAssetId ? "token" : "none");
+  const assetIntentRef = useRef(assetIntent);
+  const selectAssetIntent = (intent: typeof assetIntent) => {
+    assetIntentRef.current = intent;
+    setAssetIntent(intent);
+  };
+  const [generatorSourceId, setGeneratorSourceId] = useState("");
+  const generatedDerivative = useRef<{
+    key: string;
+    asset: AssetDto;
+  } | null>(null);
+  const generationCommand = useRef<{
+    key: string;
+    draft: TokenImageDraft;
+    actionId: string;
+  } | null>(null);
+  const patchCommand = useRef<{
+    key: string;
+    input: Parameters<TokenDefinitionActions["onPatchTokenDefinition"]>[2];
+    actionId: string;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState("");
   // This ref belongs to one mounted editor instance. PalettePanel can reopen
   // another "NEW" editor while this instance's server request is still pending.
   const mounted = useRef(true);
+  const operationEpoch = useRef(0);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      operationEpoch.current += 1;
     };
   }, []);
 
+  const cancelEditor = () => {
+    operationEpoch.current += 1;
+    uploadSourcePromise.current = null;
+    onCancel();
+  };
+
+  const draftKey = (draft: TokenImageDraft) => JSON.stringify(draft);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (savingRef.current) return;
     const submitter = (event.nativeEvent as SubmitEvent)
       .submitter as HTMLButtonElement | null;
     const createAndPlace = submitter?.value === "create-and-place";
     // Имя обязательно, только когда наследовать не от кого.
     if (!name.trim() && !characterId)
       return setError("Укажите название токена или выберите персонажа.");
+    const inputSnapshot = {
+      name: name.trim() || null,
+      characterId: characterId || null,
+      defaultWidth: Math.round(width * gridSize),
+      defaultHeight: Math.round(height * gridSize),
+      controllerMembershipIds: [...controllers],
+      intent: assetIntentRef.current,
+      selectedAssetId: assetId,
+      draft: generationDraft.current ? { ...generationDraft.current } : null,
+      upload: uploadSourcePromise.current,
+      uploadError: uploadSourceError.current,
+    };
+    const operation = ++operationEpoch.current;
+    const current = () =>
+      mounted.current && operationEpoch.current === operation;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
-      const selectedAssetId = assetId || null;
-      if (image && uploadSourcePromise.current) {
-        await uploadSourcePromise.current;
+      let draft = inputSnapshot.draft;
+      if (inputSnapshot.intent === "upload") {
+        if (!inputSnapshot.upload)
+          throw new Error(
+            inputSnapshot.uploadError ??
+              "Загрузка изображения не завершилась. Выберите файл заново.",
+          );
+        const source = await inputSnapshot.upload;
+        if (!current()) return;
+        // The upload's resolved asset is authoritative even before React has
+        // rendered its selection or the generator has run an effect.
+        draft = initialImageDraft(source);
       }
-      const selectedAsset = snapshot.assets
-        .concat(uploadedSource ?? [])
-        .find((asset) => asset.id === selectedAssetId);
-      if (selectedAsset?.kind === "IMAGE" || (image && !selectedAssetId)) {
-        setError(
-          "Обрежьте исходное изображение и создайте из него изображение токена.",
-        );
-        return;
+      if (!current()) return;
+      let defaultAssetId =
+        inputSnapshot.intent === "token" ? inputSnapshot.selectedAssetId : null;
+      if (
+        inputSnapshot.intent === "source" ||
+        inputSnapshot.intent === "upload"
+      ) {
+        if (!draft) {
+          setError("Выберите исходное изображение для токена.");
+          return;
+        }
+        const key = draftKey(draft);
+        const cached = generatedDerivative.current;
+        const command =
+          generationCommand.current?.key === key
+            ? generationCommand.current
+            : {
+                key,
+                draft: { ...draft },
+                actionId: crypto.randomUUID(),
+              };
+        generationCommand.current = command;
+        const derivative =
+          cached?.key === key
+            ? cached.asset
+            : await onGenerateTokenImage(command.draft, {
+                actionId: command.actionId,
+              });
+        if (!current()) return;
+        generatedDerivative.current = { key, asset: derivative };
+        defaultAssetId = derivative.id;
       }
       const input = {
         // Пустое поле у токена с персонажем — это «зовусь как он».
-        name: name.trim() || null,
-        characterId: characterId || null,
-        defaultAssetId: selectedAssetId,
+        name: inputSnapshot.name,
+        characterId: inputSnapshot.characterId,
+        defaultAssetId,
         // The API keeps pixel values for backwards compatibility. The editor
         // exposes grid units, so a token follows the active scene's grid.
-        defaultWidth: Math.round(width * gridSize),
-        defaultHeight: Math.round(height * gridSize),
-        controllerMembershipIds: controllers,
+        defaultWidth: inputSnapshot.defaultWidth,
+        defaultHeight: inputSnapshot.defaultHeight,
+        controllerMembershipIds: inputSnapshot.controllerMembershipIds,
       };
-      if (!definition && createAndPlace) await onCreateAndPlace(input);
-      else if (!definition) await onCreate(input);
-      else {
-        await onPatch(definition.id, definition.revision, input);
-        await onReplaceControllers(
-          definition.id,
-          definition.revision + 1,
-          controllers,
-        );
+      if (!definition && createAndPlace) {
+        await onCreateAndPlace(input);
+        if (!current()) return;
+      } else if (!definition) {
+        await onCreate(input);
+        if (!current()) return;
+      } else {
+        const key = JSON.stringify({
+          definitionId: definition.id,
+          revision: definition.revision,
+          input,
+        });
+        const command =
+          patchCommand.current?.key === key
+            ? patchCommand.current
+            : {
+                key,
+                input: { ...input },
+                actionId: crypto.randomUUID(),
+              };
+        patchCommand.current = command;
+        await onPatch(definition.id, definition.revision, command.input, {
+          actionId: command.actionId,
+          refresh: true,
+          errorOwner: "caller",
+        });
+        if (!current()) return;
       }
-      if (mounted.current) onCancel();
+      if (current()) {
+        onSaved?.(
+          definition
+            ? "updated"
+            : createAndPlace
+              ? "created-and-placed"
+              : "created",
+        );
+        savingRef.current = false;
+        setSaving(false);
+        cancelEditor();
+      }
     } catch (reason) {
-      if (mounted.current)
+      if (current())
         setError(
           reason instanceof Error
             ? reason.message
             : "Не удалось сохранить токен.",
         );
     } finally {
-      if (mounted.current) setSaving(false);
+      if (current()) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   };
 
@@ -448,165 +606,242 @@ export function TokenDefinitionEditor({
       open
       footer={false}
       title={definition ? `Настройка ${definition.name}` : "Новый токен"}
-      onClose={onCancel}
+      onClose={cancelEditor}
     >
       <form className="entity-form" onSubmit={submit}>
-        <label>
-          Название
-          <FormInput
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label>
-          Персонаж
-          <FormSelect
-            value={characterId}
-            onChange={(event) => setCharacterId(event.target.value)}
-            emptyMessage={
-              snapshot.characters.length === 0
-                ? "Персонажей пока нет"
-                : undefined
-            }
-            createAction={
-              snapshot.characters.length === 0
-                ? { label: "Создать персонажа", onSelect: onOpenCharacters }
-                : undefined
-            }
-          >
-            <option value="">Без персонажа</option>
-            {snapshot.characters.map((character) => (
-              <option key={character.id} value={character.id}>
-                {character.name}
-              </option>
-            ))}
-          </FormSelect>
-        </label>
-        <label>
-          Изображение из файлов
-          <AssetPicker
-            aria-label="Изображение токена из файлов"
-            value={assetId || null}
-            assets={tokenDefinitionAssets(
+        <fieldset
+          className="entity-form"
+          disabled={saving}
+          style={{ border: 0, margin: 0, minInlineSize: 0, padding: 0 }}
+        >
+          <label>
+            Название
+            <FormInput
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label>
+            Персонаж
+            <FormSelect
+              value={characterId}
+              onChange={(event) => setCharacterId(event.target.value)}
+              emptyMessage={
+                snapshot.characters.length === 0
+                  ? "Персонажей пока нет"
+                  : undefined
+              }
+              createAction={
+                snapshot.characters.length === 0
+                  ? { label: "Создать персонажа", onSelect: onOpenCharacters }
+                  : undefined
+              }
+            >
+              <option value="">Без персонажа</option>
+              {snapshot.characters.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name}
+                </option>
+              ))}
+            </FormSelect>
+          </label>
+          <label>
+            Изображение из файлов
+            <AssetPicker
+              aria-label="Изображение токена из файлов"
+              value={assetId || null}
+              hasExternalSelection={
+                assetIntent === "source" || assetIntent === "upload"
+              }
+              assets={tokenDefinitionAssets(
+                mergeAssets(snapshot.assets, uploadedSource),
+              )}
+              onChange={(nextAssetId) => {
+                if (savingRef.current) return;
+                uploadSourcePromise.current = null;
+                uploadSourceError.current = null;
+                setUploadPending(false);
+                setError("");
+                setImage(undefined);
+                generatedDerivative.current = null;
+                generationCommand.current = null;
+                selectAssetIntent(nextAssetId ? "token" : "none");
+                generationDraft.current = null;
+                setGeneratorSourceId("");
+                setAssetId(nextAssetId ?? "");
+              }}
+              emptyAction={{
+                label: "Добавить изображение",
+                onSelect: onOpenMedia,
+              }}
+            />
+          </label>
+          <TokenImageGenerator
+            imageAssets={tokenGeneratorSources(
               mergeAssets(snapshot.assets, uploadedSource),
             )}
-            onChange={(nextAssetId) => setAssetId(nextAssetId ?? "")}
-            emptyAction={{
-              label: "Добавить изображение",
-              onSelect: onOpenMedia,
+            uploadedSourceId={uploadedSource?.id}
+            selectedSourceId={generatorSourceId}
+            disabled={saving || uploadPending}
+            embedded
+            onDraftChange={(draft) => {
+              if (savingRef.current) return;
+              uploadSourcePromise.current = null;
+              uploadSourceError.current = null;
+              setUploadPending(false);
+              setError("");
+              generationDraft.current = draft;
+              selectAssetIntent(draft ? "source" : "none");
+              setGeneratorSourceId(draft?.sourceAssetId ?? "");
+              setAssetId("");
+              if (
+                !draft ||
+                generatedDerivative.current?.key !== draftKey(draft)
+              ) {
+                generatedDerivative.current = null;
+              }
+              if (
+                !draft ||
+                generationCommand.current?.key !== draftKey(draft)
+              ) {
+                generationCommand.current = null;
+              }
             }}
           />
-        </label>
-        <TokenImageGenerator
-          imageAssets={tokenGeneratorSources(
-            mergeAssets(snapshot.assets, uploadedSource),
+          <ImageUploadField
+            label="Загрузить новое изображение"
+            value={image}
+            hint="Выберите, вставьте или перетащите файл — он станет доступен в генераторе"
+            unifiedIntake
+            onUpdate={(file) => {
+              if (savingRef.current) return;
+              setImage(file);
+              setError("");
+              // Retain the current preview/crop while a replacement uploads.
+              // Save still awaits the captured new source, never this preview.
+              if (!file) setUploadedSource(undefined);
+              setUploadPending(Boolean(file));
+              uploadSourcePromise.current = null;
+              uploadSourceError.current = null;
+              generatedDerivative.current = null;
+              generationCommand.current = null;
+              selectAssetIntent(file ? "upload" : "none");
+              generationDraft.current = null;
+              setAssetId("");
+              if (!file) setGeneratorSourceId("");
+              if (!file) return;
+              const upload = onUpload(file, "IMAGE");
+              uploadSourcePromise.current = upload;
+              void upload
+                .then((asset) => {
+                  if (
+                    !mounted.current ||
+                    uploadSourcePromise.current !== upload
+                  )
+                    return;
+                  const draft = initialImageDraft(asset);
+                  setUploadPending(false);
+                  generationDraft.current = draft;
+                  selectAssetIntent("source");
+                  setGeneratorSourceId(asset.id);
+                  setUploadedSource(asset);
+                })
+                .catch((reason) => {
+                  if (
+                    !mounted.current ||
+                    uploadSourcePromise.current !== upload
+                  )
+                    return;
+                  uploadSourcePromise.current = null;
+                  setUploadPending(false);
+                  uploadSourceError.current =
+                    reason instanceof Error
+                      ? reason.message
+                      : "Не удалось загрузить исходное изображение.";
+                  setError(uploadSourceError.current);
+                });
+            }}
+            disabled={saving}
+          />
+          {uploadPending && (
+            <p role="status">Загрузка исходного изображения…</p>
           )}
-          uploadedSourceId={uploadedSource?.id}
-          disabled={saving}
-          onGenerate={onGenerateTokenImage}
-          onGenerated={(asset) => setAssetId(asset.id)}
-        />
-        <ImageUploadField
-          label="Загрузить новое изображение"
-          value={image}
-          hint="Выберите, вставьте или перетащите файл — он станет доступен в генераторе"
-          unifiedIntake
-          onUpdate={(file) => {
-            setImage(file);
-            setError("");
-            setUploadedSource(undefined);
-            uploadSourcePromise.current = null;
-            if (!file) return;
-            const upload = onUpload(file, "IMAGE");
-            uploadSourcePromise.current = upload;
-            void upload
-              .then((asset) => {
-                if (uploadSourcePromise.current !== upload) return;
-                setUploadedSource(asset);
-              })
-              .catch((reason) => {
-                if (uploadSourcePromise.current !== upload) return;
-                uploadSourcePromise.current = null;
-                setError(
-                  reason instanceof Error
-                    ? reason.message
-                    : "Не удалось загрузить исходное изображение.",
-                );
-              });
-          }}
-          disabled={saving}
-        />
-        <section className="token-dimensions" aria-label={"Размер токена"}>
-          <p className="token-dimensions__hint">
-            {"Размер в клетках активной сетки"} ({gridSize}
-            {" px на клетку"}).
-          </p>
-          <div className="inline-fields">
-            <label>
-              {"Ширина, клетки"}
-              <FormInput
-                type="number"
-                min={0.25}
-                max={16}
-                step={0.25}
-                value={width}
-                onChange={(event) => {
-                  const next = Math.max(0.25, Number(event.target.value));
-                  setWidth(next);
-                  if (lockAspect) setHeight(next / aspectRatio.current);
-                }}
-              />
-            </label>
-            <label>
-              {"Высота, клетки"}
-              <FormInput
-                type="number"
-                min={0.25}
-                max={16}
-                step={0.25}
-                value={height}
-                onChange={(event) => {
-                  const next = Math.max(0.25, Number(event.target.value));
-                  setHeight(next);
-                  if (lockAspect) setWidth(next * aspectRatio.current);
-                }}
-              />
-            </label>
-            <label className="aspect-lock">
-              <FormInput
-                type="checkbox"
-                checked={lockAspect}
-                onChange={(event) => {
-                  setLockAspect(event.target.checked);
-                  if (height > 0) aspectRatio.current = width / height;
-                }}
-              />
-              {"Сохранять пропорции"}
-            </label>
-          </div>
-        </section>
-        <fieldset>
-          <legend>Управление игроками</legend>
-          {snapshot.members
-            .filter((member) => member.role === "PLAYER")
-            .map((member) => (
-              <label key={member.id} className="inline-fields">
+          <section className="token-dimensions" aria-label={"Размер токена"}>
+            <p className="token-dimensions__hint">
+              {"Размер в клетках активной сетки"} ({gridSize}
+              {" px на клетку"}).
+            </p>
+            <div className="inline-fields">
+              <label>
+                {"Ширина, клетки"}
+                <FormInput
+                  type="number"
+                  min={0.25}
+                  max={16}
+                  step={0.25}
+                  value={width}
+                  onChange={(event) => {
+                    const next = Math.max(0.25, Number(event.target.value));
+                    setWidth(next);
+                    if (lockAspect) setHeight(next / aspectRatio.current);
+                  }}
+                />
+              </label>
+              <label>
+                {"Высота, клетки"}
+                <FormInput
+                  type="number"
+                  min={0.25}
+                  max={16}
+                  step={0.25}
+                  value={height}
+                  onChange={(event) => {
+                    const next = Math.max(0.25, Number(event.target.value));
+                    setHeight(next);
+                    if (lockAspect) setWidth(next * aspectRatio.current);
+                  }}
+                />
+              </label>
+              <label className="aspect-lock">
                 <FormInput
                   type="checkbox"
-                  checked={controllers.includes(member.id)}
-                  onChange={(event) =>
-                    setControllers((current) =>
-                      event.target.checked
-                        ? [...new Set([...current, member.id])]
-                        : current.filter((id) => id !== member.id),
-                    )
-                  }
+                  checked={lockAspect}
+                  onChange={(event) => {
+                    setLockAspect(event.target.checked);
+                    if (height > 0) aspectRatio.current = width / height;
+                  }}
                 />
-                {member.displayName}
+                {"Сохранять пропорции"}
               </label>
-            ))}
+            </div>
+          </section>
+          <fieldset>
+            <legend>Управление игроками</legend>
+            {snapshot.members
+              .filter((member) => member.role === "PLAYER")
+              .map((member) => (
+                <label key={member.id} className="inline-fields">
+                  <FormInput
+                    type="checkbox"
+                    checked={controllers.includes(member.id)}
+                    onChange={(event) =>
+                      setControllers((current) =>
+                        event.target.checked
+                          ? [...new Set([...current, member.id])]
+                          : current.filter((id) => id !== member.id),
+                      )
+                    }
+                  />
+                  {member.displayName}
+                </label>
+              ))}
+          </fieldset>
         </fieldset>
-        {error && <div className="field-error">{error}</div>}
+        {error && (
+          <div className="field-error" role="alert">
+            {error}
+          </div>
+        )}
         <div className="dialog-actions">
           <Button type="submit" view="action" loading={saving}>
             Сохранить
@@ -621,7 +856,7 @@ export function TokenDefinitionEditor({
               Создать и поставить
             </Button>
           ) : null}
-          <Button type="button" onClick={onCancel} disabled={saving}>
+          <Button type="button" onClick={cancelEditor}>
             Отмена
           </Button>
         </div>

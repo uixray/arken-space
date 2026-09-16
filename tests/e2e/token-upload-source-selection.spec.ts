@@ -29,6 +29,8 @@ const ids = {
   token: "61100000-0000-4000-8000-000000000106",
   unrelated: "61100000-0000-4000-8000-000000000107",
   definition: "61100000-0000-4000-8000-000000000108",
+  oldToken: "61100000-0000-4000-8000-000000000109",
+  player: "61100000-0000-4000-8000-000000000110",
 };
 const date = "2026-09-08T00:00:00.000Z";
 const uuid =
@@ -98,6 +100,13 @@ const token: AssetDto = {
   ...image(ids.token, "Derived-token.png", 64, 64, tokenBytes),
   kind: "TOKEN",
 };
+const oldToken: AssetDto = {
+  ...token,
+  id: ids.oldToken,
+  name: "Existing-token.png",
+  url: `/api/assets/${ids.oldToken}/content`,
+};
+
 const unrelated = image(
   ids.unrelated,
   "Unrelated-landscape.png",
@@ -145,8 +154,30 @@ type RecordedWrite = {
   status?: number;
 };
 
-async function installBoundary(page: Page) {
+async function installBoundary(page: Page, editExisting = false) {
   const snapshot = initialSnapshot();
+  if (editExisting) {
+    snapshot.assets = [oldToken, b];
+    snapshot.members.push({
+      id: ids.player,
+      role: "PLAYER",
+      displayName: "Игрок атомарной правки",
+      characterId: null,
+    });
+    snapshot.tokenDefinitions = [
+      {
+        id: ids.definition,
+        name: "Редактируемый страж",
+        ownName: "Редактируемый страж",
+        characterId: null,
+        defaultAssetId: oldToken.id,
+        defaultWidth: 64,
+        defaultHeight: 64,
+        controllerMembershipIds: [],
+        revision: 4,
+      },
+    ];
+  }
   const writes: RecordedWrite[] = [];
   const reads: string[] = [];
   const background: string[] = [];
@@ -154,6 +185,8 @@ async function installBoundary(page: Page) {
   const pageErrors: string[] = [];
   const sockets = new Set<WebSocketRoute>();
   const heldUploads: Array<{ route: Route; recorded: RecordedWrite }> = [];
+  const heldPatches: Array<{ route: Route; recorded: RecordedWrite }> = [];
+  const controllerWrites: string[] = [];
   const evidence: Array<{ phase: string; details: unknown }> = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
@@ -203,6 +236,7 @@ async function installBoundary(page: Page) {
         [a.url, aBytes],
         [b.url, bBytes],
         [token.url, tokenBytes],
+        [oldToken.url, tokenBytes],
         [unrelated.url, aBytes],
       ]).get(path);
       if (bytes)
@@ -217,6 +251,28 @@ async function installBoundary(page: Page) {
         status: path === "/api/client-logs" ? 202 : 204,
         body: "",
       });
+    }
+    if (
+      method === "PUT" &&
+      path === `/api/token-definitions/${ids.definition}/controllers`
+    ) {
+      controllerWrites.push(path);
+      unexpected.push(`${method} ${path}`);
+      return route.abort("blockedbyclient");
+    }
+    if (
+      editExisting &&
+      method === "PATCH" &&
+      path === `/api/token-definitions/${ids.definition}`
+    ) {
+      const recorded: RecordedWrite = {
+        path,
+        actionId: await request.headerValue("x-action-id"),
+        body: request.postDataJSON() as Record<string, unknown>,
+      };
+      writes.push(recorded);
+      heldPatches.push({ route, recorded });
+      return;
     }
     if (method === "POST" && path === "/api/assets") {
       const index = writes.filter((item) => item.upload).length;
@@ -275,7 +331,7 @@ async function installBoundary(page: Page) {
       writes.push(recorded);
       snapshot.snapshotVersion += 1;
       if (path !== "/api/token-definitions") {
-        snapshot.assets = [token, ...snapshot.assets];
+        // Deliberately keep bootstrap stale until definition commit.
         return route.fulfill({ status: 201, json: token });
       }
       const definition: TokenDefinitionDto = {
@@ -289,6 +345,7 @@ async function installBoundary(page: Page) {
         controllerMembershipIds: body.controllerMembershipIds as string[],
         revision: 0,
       };
+      snapshot.assets = [token, ...snapshot.assets];
       snapshot.tokenDefinitions = [definition];
       return route.fulfill({ status: 201, json: definition });
     }
@@ -302,8 +359,40 @@ async function installBoundary(page: Page) {
     unexpected,
     pageErrors,
     heldUploads,
+    heldPatches,
+    controllerWrites,
     evidence,
     sockets,
+    async finishPatch(success: boolean) {
+      const held = heldPatches.shift();
+      expect(held, "combined PATCH reached its held boundary").toBeDefined();
+      if (!held) throw new Error("No held combined PATCH");
+      if (!success) {
+        held.recorded.status = 500;
+        await held.route.fulfill({
+          status: 500,
+          json: { error: "EDIT_FAILED", message: "Атомарная правка отклонена" },
+        });
+        return;
+      }
+      const body = held.recorded.body!;
+      const definition: TokenDefinitionDto = {
+        id: ids.definition,
+        name: String(body.name),
+        ownName: String(body.name),
+        characterId: null,
+        defaultAssetId: String(body.defaultAssetId),
+        defaultWidth: Number(body.defaultWidth),
+        defaultHeight: Number(body.defaultHeight),
+        controllerMembershipIds: body.controllerMembershipIds as string[],
+        revision: Number(body.revision) + 1,
+      };
+      snapshot.assets = [token, ...snapshot.assets];
+      snapshot.tokenDefinitions = [definition];
+      snapshot.snapshotVersion += 1;
+      held.recorded.status = 200;
+      await held.route.fulfill({ status: 200, json: definition });
+    },
     async acceptB() {
       const held = heldUploads.shift();
       expect(held, "B reached the held upload boundary").toBeDefined();
@@ -314,7 +403,7 @@ async function installBoundary(page: Page) {
       await held.route.fulfill({ status: 201, json: b });
     },
     refreshUnrelatedSnapshot() {
-      snapshot.assets = [unrelated, token, b, a];
+      snapshot.assets = [unrelated, b, a];
       snapshot.snapshotVersion += 1;
       expect(sockets.size).toBeGreaterThan(0);
       for (const socket of sockets)
@@ -370,6 +459,14 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     const upload = editor.getByLabel("Загрузить новое изображение", {
       exact: true,
     });
+    const noImage = editor
+      .getByRole("group", {
+        name: "Изображение токена из файлов",
+        exact: true,
+      })
+      .getByRole("button", { name: "Без изображения", exact: true });
+    await expect(noImage).toHaveAttribute("aria-pressed", "true");
+    await expect(editor.locator(".token-image-preview")).toHaveCount(0);
     await upload.setInputFiles({
       name: a.name,
       mimeType: "image/png",
@@ -380,6 +477,7 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
       exact: true,
     });
     await expect(source).toHaveValue(a.id);
+    await expect(noImage).toHaveAttribute("aria-pressed", "false");
     const preview = editor.locator(".token-image-preview");
     const previewImage = preview.locator("img");
     await imageDecoded(previewImage, 60, 40);
@@ -404,7 +502,12 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     });
     await expect.poll(() => fixture.heldUploads.length).toBe(1);
     await expect(source).toHaveValue(a.id);
+    await expect(source).toBeDisabled();
     await expect(zoom).toHaveValue("2");
+    await expect(zoom).toBeDisabled();
+    await expect(editor.getByRole("status")).toHaveText(
+      "Загрузка исходного изображения…",
+    );
     await expect(
       editor.getByRole("radio", { name: "Бронза", exact: true }),
     ).toBeChecked();
@@ -434,6 +537,7 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     // Baseline-capable oracle: with the upload intent removed, B exists but
     // the still-valid A remains selected. Do not change this to a list check.
     await expect(source).toHaveValue(b.id);
+    await expect(noImage).toHaveAttribute("aria-pressed", "false");
     await expect(zoom).toHaveValue("1");
     await expect(
       editor.getByRole("radio", { name: "Без рамки", exact: true }),
@@ -454,24 +558,12 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     await expect(
       images.getByRole("button", { name: b.name, exact: true }),
     ).toHaveCount(0);
-    await editor
-      .getByRole("button", { name: "Создать изображение токена", exact: true })
-      .click();
     await expect(
-      images.getByRole("button", { name: token.name, exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(fixture.writes[2]).toEqual({
-      path: `/api/assets/${b.id}/token`,
-      actionId: expect.stringMatching(uuid),
-      status: 201,
-      body: {
-        cropX: 0.5,
-        cropY: 0.5,
-        zoom: 1,
-        frame: "NONE",
-        name: "SourceB-portrait",
-      },
-    });
+      editor.getByRole("button", {
+        name: "Создать изображение токена",
+        exact: true,
+      }),
+    ).toHaveCount(0);
     await source.selectOption(a.id);
     await zoom.fill("2");
     await preview.focus();
@@ -500,9 +592,14 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     ).toEqual(edited);
     await expect(
       images.getByRole("button", { name: token.name, exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
+    ).toHaveCount(0);
     await preview.scrollIntoViewIfNeeded();
     await capture(page, testInfo, "manual-a-after-live-snapshot");
+    // Return to uploaded B; one Save now generates B and saves its returned ID
+    // even though bootstrap does not yet expose the derivative.
+    await source.selectOption(b.id);
+    await zoom.fill("1");
+    await editor.getByRole("radio", { name: "Без рамки", exact: true }).check();
     await editor
       .getByRole("button", { name: "Сохранить", exact: true })
       .click();
@@ -514,6 +611,18 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     await expect(card.locator("img")).toHaveAttribute("src", token.url);
     await imageDecoded(card.locator("img"), 64, 64);
     expect(fixture.writes).toHaveLength(4);
+    expect(fixture.writes[2]).toEqual({
+      path: `/api/assets/${b.id}/token`,
+      actionId: expect.stringMatching(uuid),
+      status: 201,
+      body: {
+        cropX: 0.5,
+        cropY: 0.5,
+        zoom: 1,
+        frame: "NONE",
+        name: "SourceB-portrait",
+      },
+    });
     expect(fixture.writes[3]).toEqual({
       path: "/api/token-definitions",
       actionId: expect.stringMatching(uuid),
@@ -559,6 +668,107 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
       contentType: "application/json",
     });
     for (const held of fixture.heldUploads)
+      await held.route.abort("blockedbyclient").catch(() => undefined);
+  }
+});
+
+test("UIX-589 palette replacement and controllers commit in one PATCH with stable retry intent", async ({
+  page,
+}) => {
+  const fixture = await installBoundary(page, true);
+  try {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await openWorkspaceSection(page, "Токены");
+    const card = page
+      .locator(".palette-card")
+      .filter({ hasText: "Редактируемый страж" });
+    await expect(card).toBeVisible();
+    await expect(card.locator("img")).toHaveAttribute("src", oldToken.url);
+    await card.getByRole("button", { name: "Настроить", exact: true }).click();
+    const editor = page.getByRole("dialog", {
+      name: "Настройка Редактируемый страж",
+      exact: true,
+    });
+    const source = editor.getByRole("combobox", {
+      name: "Исходное изображение",
+      exact: true,
+    });
+    await expect(source).toHaveValue("");
+    await source.selectOption(b.id);
+    await expect(source).toHaveValue(b.id);
+    await imageDecoded(editor.locator(".token-image-preview img"), 40, 60);
+    await editor
+      .getByRole("slider", { name: "Масштаб изображения токена", exact: true })
+      .fill("2");
+    await editor.locator(".token-image-preview").focus();
+    await editor.locator(".token-image-preview").press("ArrowRight");
+    await editor
+      .getByRole("checkbox", { name: "Игрок атомарной правки", exact: true })
+      .check();
+    const save = editor.getByRole("button", { name: "Сохранить", exact: true });
+    await save.click();
+    await expect.poll(() => fixture.heldPatches.length).toBe(1);
+    await expect(save).toBeDisabled();
+    await expect(card.locator("img")).toHaveAttribute("src", oldToken.url);
+    await expect(
+      page.getByText("Токен обновлён.", { exact: true }),
+    ).toHaveCount(0);
+    expect(fixture.controllerWrites).toEqual([]);
+    const firstPatch = fixture.heldPatches[0]!.recorded.body!;
+    expect(firstPatch).toEqual({
+      name: "Редактируемый страж",
+      characterId: null,
+      defaultAssetId: token.id,
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [ids.player],
+      revision: 4,
+      actionId: expect.stringMatching(uuid),
+    });
+    await fixture.finishPatch(false);
+    await expect(editor.getByRole("alert")).toHaveText(
+      "Атомарная правка отклонена",
+    );
+    await expect(save).toBeEnabled();
+    await expect(editor).toBeVisible();
+    await expect(card.locator("img")).toHaveAttribute("src", oldToken.url);
+    await expect(
+      page.getByText("Токен обновлён.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      editor.getByRole("checkbox", {
+        name: "Игрок атомарной правки",
+        exact: true,
+      }),
+    ).toBeChecked();
+    await save.click();
+    await expect.poll(() => fixture.heldPatches.length).toBe(1);
+    expect(fixture.heldPatches[0]!.recorded.body).toEqual(firstPatch);
+    await expect(card.locator("img")).toHaveAttribute("src", oldToken.url);
+    await fixture.finishPatch(true);
+    await expect(editor).toHaveCount(0);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Токен обновлён." }),
+    ).toHaveText("Токен обновлён.");
+    await expect(card.locator("img")).toHaveAttribute("src", token.url);
+    await imageDecoded(card.locator("img"), 64, 64);
+    expect(fixture.writes.map((entry) => entry.path)).toEqual([
+      `/api/assets/${b.id}/token`,
+      `/api/token-definitions/${ids.definition}`,
+      `/api/token-definitions/${ids.definition}`,
+    ]);
+    expect(fixture.writes[0]!.body).toEqual({
+      cropX: 0.51,
+      cropY: 0.5,
+      zoom: 2,
+      frame: "NONE",
+      name: "SourceB-portrait",
+    });
+    expect(fixture.controllerWrites).toEqual([]);
+    expect(fixture.unexpected).toEqual([]);
+    expect(fixture.pageErrors).toEqual([]);
+  } finally {
+    for (const held of fixture.heldPatches)
       await held.route.abort("blockedbyclient").catch(() => undefined);
   }
 });
