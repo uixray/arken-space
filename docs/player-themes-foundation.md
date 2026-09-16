@@ -140,3 +140,35 @@ filled destructive-button text. Equal-color and black-alpha calibration cases
 are retained alongside the new negative/missing-token cases. No palette changed,
 no prior acceptance scope was removed, and the conditional light error-on-tint
 risk remains open.
+
+## Preserved pre-theme appearance: classic-v1 — 2026-09-17
+
+The pre-theme **local candidate appearance** is now archived independently of
+Codex's temporary visualization folder at:
+`D:/AI/personal/experiments/arken-space/asset-library.local/appearance/classic-v1/`.
+This ignored local library is not a new production deployment or public upload.
+
+- Build source: `1ea7051b56092551423546ae9a507a22069f9f62`.
+- Last app-rendering change in that build: `7b4af10beef8ec1cbd59d96ecce49c88622cf2c2`.
+- Full compiled bundle and source maps, eight synthetic GM/PLAYER shell screenshots
+  (1280/390, Chrome/Firefox), and existing verification receipts: 17 archived files,
+  8,834,459 bytes. Every copied file was re-read and matched by SHA256/size.
+- Archive manifest SHA256:
+  `b0fad4cd42bc4fc59e54207883439fa9d3c63a61a10ae365f8099c7ae9352f3d`.
+- Compared with the current checkout at preservation time, only the opt-in theme
+  resolver and its tests changed under `apps/web/src`; current application entry
+  still does not load that resolver. The build was reused, not regenerated.
+
+The archive is versioned and must not be overwritten. It records the agreed
+preservation boundary before theme migration, not a frozen copy of the previously
+released production application. It has no campaign database, player media or
+credentials. Google Fonts Inter remains external; offline pixel-perfect font
+reproduction is not established.
+
+**Still required:** implement a selectable, independently versioned classic theme
+that reproduces this appearance while keeping current behavior, permissions,
+fixes and accessibility. Do not restore the archived JavaScript application to
+implement a theme, and do not alias classic-v1 to the mutable `system` fallback.
+Registration, selection persistence and actual-theme comparison with these
+reference screenshots remain unimplemented. The archive alone does not close
+UIX-317 or the owner's “keep the old appearance selectable” requirement.
