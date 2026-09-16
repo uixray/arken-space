@@ -3169,6 +3169,9 @@ for (const change of [
   "map-layer",
   "visibility-revoked",
   "gm-layer",
+  "role-changed",
+  "actor-changed",
+  "scene-changed",
 ] as const) {
   test(`UIX-507 bulk confirmation keeps exact targets on ${change}`, async ({
     page,
@@ -3201,6 +3204,7 @@ for (const change of [
         revision: 0,
       },
     ];
+    const originalActor = structuredClone(current.me);
     const originalToken = structuredClone(current.tokens[0]);
     const originalDrawing = structuredClone(current.drawings[0]);
     const writes: string[] = [];
@@ -3294,6 +3298,18 @@ for (const change of [
       expect(current.tokens[0].revision).toBe(originalToken.revision);
       expect(current.drawings[0].revision).toBe(originalDrawing.revision);
     }
+    if (change === "role-changed") {
+      expect(originalActor.role).toBe("GM");
+      current.me.role = "PLAYER";
+    }
+    if (change === "actor-changed")
+      current.me.id = "e21b4bb6-ae66-47b9-b719-610e0440044c";
+    if (change === "scene-changed")
+      current.scenes[0].id = "8376b502-02f8-4cd6-9c55-3816d70d44dc";
+    if (["role-changed", "actor-changed", "scene-changed"].includes(change)) {
+      expect(current.tokens[0]).toEqual(originalToken);
+      expect(current.drawings[0]).toEqual(originalDrawing);
+    }
     current.scenes[0].name = "Bulk snapshot updated";
     publish!();
     await expect(page.locator(".topbar")).toContainText(
@@ -3301,6 +3317,8 @@ for (const change of [
     );
     await expect(dialog).toHaveCount(0);
     expect(requests).toEqual([]);
+    current.me = originalActor;
+    current.scenes[0].id = sceneId;
     current.tokens = [{ ...originalToken, revision: 2 }];
     current.drawings = [{ ...originalDrawing, revision: 2 }];
     current.scenes[0].name = "Bulk snapshot restored";

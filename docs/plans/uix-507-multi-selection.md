@@ -291,3 +291,24 @@ Own hidden Vite child stopped after the terminal result. No source fix was neede
 This proves client approval invalidation/reconfirmation, not real-server ACL,
 physical touch, scene/actor switch permutations or whole UIX-507 acceptance.
 No full suite/build/CI, publication, Linear writes or status closure.
+
+### 2026-09-17 — bulk approval is bound to actor, role and scene
+
+Added three remaining scope transitions to the same actual-App scenario:
+GM→PLAYER with unchanged owned/controlled targets, GM membership replacement,
+and replacement of the active scene. Target data and revisions are asserted
+unchanged before the snapshot arrives. Old confirmation closes without a write;
+restoring the original scope does not restore approval. Fresh marquee/confirmation
+still sends exactly the two revision2 targets.
+
+Six new cases PASS32.9s, Chrome/Firefox desktop1280, worker1/retries0; the preceding
+sixteen eligibility cases were not replayed. E2E types, scoped lint, format/diff
+PASS. Product code unchanged. The first test attempt mistakenly initialized the
+role case as PLAYER and changed it to PLAYER, so its retained failure is a harness
+error, not a product bug. The corrected test asserts its starting GM role.
+
+Evidence: bulk-scope-gate/{final-results.json,corrected-results.json,checkpoint.md}.
+Synthetic snapshot scope changes are not authentication/handoff or real server
+role-change proof; the separate real shared-browser gate remains the evidence
+for handoff. Scene replacement proves renderer-scope cleanup, not every scene
+picker workflow. No whole-issue closure, build, full suite, CI or publication.
