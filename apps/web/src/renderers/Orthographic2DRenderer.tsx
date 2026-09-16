@@ -3399,7 +3399,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    setTokenMenu(null);
+                    closeTokenMenu();
                     void props.onTokenAppearanceChange?.(
                       menuToken.id,
                       menuToken.revision,

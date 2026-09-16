@@ -3307,3 +3307,132 @@ for (const change of [
     });
   });
 }
+
+for (const width of [1280, 390]) {
+  test(`UIX-644 live token menu submits current layer and appearance ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    const writes: string[] = [],
+      errors: string[] = [];
+    const commands: unknown[] = [];
+    let publish: (() => void) | undefined;
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    for (const action of ["layer", "appearance"] as const) {
+      await page.route(`**/api/tokens/${tokenId}/${action}`, async (route) => {
+        expect(route.request().method()).toBe("PATCH");
+        const body = route.request().postDataJSON();
+        expect(body.revision).toBe(current.tokens[0].revision);
+        commands.push({
+          action,
+          revision: body.revision,
+          ...(action === "layer"
+            ? { layer: body.layer }
+            : { baseColor: body.baseColor, frameColor: body.frameColor }),
+        });
+        if (action === "layer") current.tokens[0].layer = body.layer;
+        else {
+          current.tokens[0].baseColor = body.baseColor;
+          current.tokens[0].frameColor = body.frameColor;
+        }
+        current.tokens[0].revision++;
+        await route.fulfill({ json: current.tokens[0] });
+      });
+    }
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") {
+          socket.send('40{"sid":"live-menu"}');
+          publish = () =>
+            socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+        }
+      });
+      socket.send(
+        '0{"sid":"live-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect.poll(() => Boolean(publish)).toBe(true);
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await map.press("Escape");
+    await page.keyboard.press("Enter");
+    const menu = map.getByRole("menu");
+    await expect(menu).toBeVisible();
+    current.tokens[0] = {
+      ...current.tokens[0],
+      revision: 1,
+      baseColor: "#123456",
+      frameColor: "#abcdef",
+    };
+    publish!();
+    await expect(menu.getByLabel("Цвет", { exact: true })).toHaveValue(
+      "#123456",
+    );
+    await menu
+      .getByRole("menuitemradio", { name: "Слой мастера", exact: true })
+      .click();
+    await expect.poll(() => commands.length).toBe(1);
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    current.tokens[0] = {
+      ...current.tokens[0],
+      revision: 3,
+      baseColor: "#654321",
+      frameColor: "#fedcba",
+    };
+    publish!();
+    await expect(menu.getByLabel("Цвет", { exact: true })).toHaveValue(
+      "#654321",
+    );
+    await expect(menu.locator('input[type="color"]').nth(1)).toHaveValue(
+      "#fedcba",
+    );
+    await page.keyboard.press("End");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await expect(
+      menu.getByRole("button", { name: "Без рамки", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => commands.length).toBe(2);
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+    expect(commands).toEqual([
+      { action: "layer", revision: 1, layer: "GM" },
+      {
+        action: "appearance",
+        revision: 3,
+        baseColor: "#654321",
+        frameColor: null,
+      },
+    ]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("live-menu-receipt", {
+      body: JSON.stringify({ width, commands, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
