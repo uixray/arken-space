@@ -307,3 +307,17 @@
     flex-direction: column;
   }
 }
+
+/* UIKit caches inline popup widths across browser zoom. Let measured content
+ * determine this adapter's width; preserve the positioning and owner layers. */
+[data-floating-ui-status]:has(> .arken-form-select-popup) {
+  min-width: 0 !important;
+  width: max-content !important;
+  max-width: calc(100vw - 20px) !important;
+}
+.arken-form-select-popup__content {
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 20px);
+  max-height: inherit;
+}

@@ -752,3 +752,35 @@ Artifacts true-browser-zoom-gate/results-red-01.json, results.json (diagnostic),
 browser-01/,diagnostic-02/ contain metrics/geometry receipts and screenshots.
 No zoom gate PASS claimed. Scope lint/format/diff passed; no app source change,
 new build, CI or deployment. Profiles restore100%/close in finally; preview stopped.
+## 2026-09-16 — zoom sizing repaired, related owner gate still RED
+
+Current working fix observes the open trigger with ResizeObserver/window resize,
+coalesces measurements by animation frame and sizes a popup-content wrapper to
+the measured width capped by viewport minus20px. Scoped outer floating CSS uses
+max-content/min-width0 to bypass cached library inline width. Positioning/owner
+z-index remain unchanged; open/closed List reset retained on the new wrapper.
+Observer/listener/frame cleanup runs on close. Vendor package not modified.
+
+A first numeric popupWidth implementation did NOT fix it: diagnostic-04 confirmed
+the patched module loaded and Select received634/905.2/738 widths, yet floating
+width retained666/937.198. Numeric prop alone was insufficient; removed afterward.
+Temporary response/Fiber diagnostics were removed; permanent geometry receipts
+and strict assertions remain unchanged.
+
+Current results:4/4true browser zoom PASS25.9s in dev, GM/PLAYER×1600/1280 across
+100/125/150/100;13/13GravityFormControls DOM tests PASS23.11s including new width
+320→160 regression; scoped lint/format/diff and web tsc768MiB PASS.
+
+NOT an accepted whole fix: related18-case owner gate stopped after7PASS at the
+real App desktop token-editor case, which posted /api/client-logs. Extracted
+request resource4596156f0365d8579d490a7c34ac2baf64ea0c65.json from trace.zip:
+window.error "ResizeObserver loop completed with undelivered notifications."
+Ten cases did not run. No exemption added for telemetry; prior UIX-50218PASS is
+historical, not current shared-code acceptance. No final build/production zoom
+gate/deploy while this error-free gate is RED.
+
+Evidence true-browser-zoom-gate/results-fix-dev-03.json (numeric attempt red),
+results-diagnostic-04.json,results-fix-dev-05.json (4PASS),owner-results.json and
+owner-06/trace. Next diagnose observer stack/entries on this exact App path,
+not broad canvas rewrites or warning suppression. Working code kept for bounded
+continuation; UIX-644 and full release remain open.

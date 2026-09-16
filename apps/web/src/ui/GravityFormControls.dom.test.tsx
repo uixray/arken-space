@@ -403,3 +403,34 @@ it.each([
     ).not.toHaveTextContent(value);
   },
 );
+
+it("refreshes open popup content width after the trigger resizes without losing selection", async () => {
+  const user = userEvent.setup();
+  const { container } = renderComponent(
+    <FormSelect aria-label="Размер списка" defaultValue="one">
+      <option value="one">Первый</option>
+      <option value="two">Второй</option>
+    </FormSelect>,
+  );
+  const trigger = screen.getByRole("combobox", { name: "Размер списка" });
+  let width = 320;
+  const measured = vi
+    .spyOn(trigger, "getBoundingClientRect")
+    .mockImplementation(() => new DOMRect(0, 0, width, 32));
+  try {
+    await user.click(trigger);
+    const content = () =>
+      document.querySelector<HTMLElement>(".arken-form-select-popup__content");
+    await expect.poll(() => content()?.style.width).toBe("320px");
+    width = 160;
+    fireEvent(window, new Event("resize"));
+    await expect.poll(() => content()?.style.width).toBe("160px");
+    expect(trigger).toHaveTextContent("Первый");
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(container).toContainElement(trigger);
+  } finally {
+    measured.mockRestore();
+  }
+});

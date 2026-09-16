@@ -1,7 +1,8 @@
 import {
   Children,
-  Fragment,
   isValidElement,
+  useLayoutEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type InputHTMLAttributes,
@@ -182,6 +183,39 @@ export function FormSelect({
   // Give each open/closed phase its own list to avoid replaying that state
   // into a keyboard reopen. Selection stays in the Select, not this subtree.
   const [open, setOpen] = useState(false);
+  const controlRef = useRef<HTMLButtonElement>(null);
+  const [popupWidth, setPopupWidth] = useState<number>();
+  useLayoutEffect(() => {
+    if (!open || !controlRef.current) return;
+    const control = controlRef.current;
+    let frame = 0;
+    const measure = () => {
+      const width = control.getBoundingClientRect().width;
+      // Size our popup content independently of UIKit's cached floating width.
+      // Respect Floating UI's 10px viewport padding on either side.
+      setPopupWidth(
+        width > 0
+          ? Math.max(1, Math.min(width, window.innerWidth - 20))
+          : undefined,
+      );
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(schedule);
+    observer?.observe(control);
+    window.addEventListener("resize", schedule);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", schedule);
+      cancelAnimationFrame(frame);
+    };
+  }, [open]);
   const popupClassName = useOverlayPopupClassName("arken-form-select-popup");
   const childOptions = Children.toArray(children)
     .filter(
@@ -216,13 +250,18 @@ export function FormSelect({
         ariaInvalid && ariaInvalid !== "false" ? "invalid" : undefined
       }
       disabled={disabled}
+      ref={controlRef}
       popupClassName={popupClassName}
       onOpenChange={setOpen}
       renderPopup={({ renderFilter, renderList }) => (
-        <Fragment key={open ? "open" : "closed"}>
+        <div
+          key={open ? "open" : "closed"}
+          className="arken-form-select-popup__content"
+          style={{ width: popupWidth }}
+        >
           {renderFilter()}
           {renderList()}
-        </Fragment>
+        </div>
       )}
       options={options}
       value={[String(selected)]}
