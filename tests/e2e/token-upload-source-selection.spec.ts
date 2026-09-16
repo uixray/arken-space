@@ -772,3 +772,95 @@ test("UIX-589 palette replacement and controllers commit in one PATCH with stabl
       await held.route.abort("blockedbyclient").catch(() => undefined);
   }
 });
+
+for (const width of [1280, 390]) {
+  test(`UIX-317 image intake error association and recovery in token dialog ${width}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 850 });
+    const fixture = await installBoundary(page);
+    await page.goto("/");
+    await openWorkspaceSection(page, "Токены");
+    await page
+      .locator(".token-palette")
+      .getByRole("button", { name: "Создать токен", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Новый токен",
+      exact: true,
+    });
+    const name = dialog.getByLabel("Название", { exact: true });
+    await name.fill("Черновик портрета");
+    const input = dialog.getByLabel("Загрузить новое изображение", {
+      exact: true,
+    });
+    const field = dialog
+      .locator(".arken-upload-field")
+      .filter({
+        has: page.getByLabel("Загрузить новое изображение", { exact: true }),
+      });
+    const picker = field.getByRole("button", {
+      name: "Выбрать файл",
+      exact: true,
+    });
+    const zone = field.getByRole("button", {
+      name: "Выбрать, вставить или перетащить файл",
+      exact: true,
+    });
+    const hint =
+      "Выберите, вставьте или перетащите файл — он станет доступен в генераторе";
+    const error = "Поддерживаются только PNG, JPEG и WebP.";
+    for (const control of [input, picker, zone])
+      await expect(control).toHaveAccessibleDescription(hint);
+    const bad = {
+      name: "unsupported.svg",
+      mimeType: "image/svg+xml",
+      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    };
+    await input.setInputFiles(bad);
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    for (const control of [input, picker, zone])
+      await expect(control).toHaveAccessibleDescription(`${hint} ${error}`);
+    await expect(field.getByRole("alert")).toHaveText(error);
+    await field.getByRole("alert").scrollIntoViewIfNeeded();
+    const box = (await field.getByRole("alert").boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(fixture.writes).toEqual([]);
+    await input.setInputFiles({
+      name: a.name,
+      mimeType: "image/png",
+      buffer: aBytes,
+    });
+    const source = dialog.getByRole("combobox", {
+      name: "Исходное изображение",
+      exact: true,
+    });
+    await expect(source).toHaveValue(a.id);
+    await imageDecoded(dialog.locator(".token-image-preview img"), 60, 40);
+    await expect(field.getByRole("alert")).toHaveCount(0);
+    await expect(input).not.toHaveAttribute("aria-invalid");
+    await expect(input).toHaveAccessibleDescription(hint);
+    await input.setInputFiles(bad);
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await expect(source).toHaveValue(a.id);
+    await expect(name).toHaveValue("Черновик портрета");
+    await imageDecoded(dialog.locator(".token-image-preview img"), 60, 40);
+    expect(fixture.writes.map((write) => write.path)).toEqual(["/api/assets"]);
+    expect(fixture.pageErrors).toEqual([]);
+    expect(fixture.unexpected).toEqual([]);
+    expect(
+      fixture.background.filter((entry) => entry.includes("client-logs")),
+    ).toEqual([]);
+    await capture(page, info, "image-intake-error");
+    await info.attach("image-intake-receipt", {
+      body: JSON.stringify({
+        width,
+        writes: fixture.writes,
+        errors: fixture.pageErrors,
+        background: fixture.background,
+      }),
+      contentType: "application/json",
+    });
+  });
+}

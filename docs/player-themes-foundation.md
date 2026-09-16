@@ -368,3 +368,26 @@ Scoped ESLint, web TypeScript, formatting and diffcheck passed.
 Scope: jsdom with the existing native-button Gravity mock, not real browser
 accessibility-tree or spoken screen-reader verification. No full suite/build,
 production upload, publication or Linear completion is claimed.
+
+## Image intake real-App gate — 2026-09-17
+
+The existing token-upload-source-selection browser fixture now has a connected
+validation/recovery scenario at1280/390 in Chrome/Firefox: real App, token dialog,
+Gravity button, native file input and interactive dropzone. Invalid SVG selection
+exposes the linked hint/error description on all three controls and aria-invalid
+on the input, without an upload. A valid decodable PNG clears the error and becomes
+the generator source. A subsequent invalid replacement preserves that source,
+preview and typed token name. Exactly one deliberate IMAGE upload is recorded;
+no token save, unexpected writes, pageerrors or diagnostic client-logs occurred.
+
+4/4 PASS23s, one worker/retries0; scoped ESLint/E2E tsc and formatting/diff checks
+passed. The first attempt failed because the test's nested `has` locator wrongly
+included the outer dialog; the relative inner locator was corrected without
+changing application code or weakening assertions. Both reports are retained in
+image-intake-browser. The final narrow screenshot shows retained draft/preview;
+it is scrolled to the upper form, not proof of visible error-copy typography.
+Error description and initial horizontal bounds are asserted in the browser.
+
+This is synthetic HTTP/socket transport, not server validation, durable upload,
+spoken screen-reader output, physical mobile or complete UIX-317 acceptance.
+The development server was stopped. No build, full-suite or release rerun.
