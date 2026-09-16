@@ -106,6 +106,12 @@
       "revision": "5311000403d01e9c96ec6fcf9f03888c0fa2c60c",
       "artifact": "object-list-gate/results.json",
       "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox actual-App cases: keyboard selects first of24 tokens, Escape retains selection/returns trigger,360x480 list scroll/last hit and bounds, outside session focus, Journal/Map hidden owner and retained selection. No clone/delete/move/placement payload."
+    },
+    "drawingPalette": {
+      "status": "PASS",
+      "revision": "7b4af10beef8ec1cbd59d96ecce49c88622cf2c2",
+      "artifact": "drawing-palette-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox cases: red preset/native input value, width12 and keyboard1/50,360x480 map-bound containment and internal scroll to top/bottom controls, tool/journal state retention. No actual drawing or OS color dialog."
     }
   },
   "sites": [
@@ -482,9 +488,10 @@
     {
       "id": "drawing-color-panel",
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
-      "status": "BLOCKED",
-      "scope": "Inline drawing palette plus native color chooser; not a custom listbox/menu AST occurrence.",
-      "next": "Keep palette accessibility separate from OS color-dialog acceptance."
+      "status": "PASS",
+      "scope": "DOM drawing palette settings/lifecycle including short-map containment. Native color input type/value only; OS chooser excluded.",
+      "next": "Actual stroke payload/pixels, editing existing strokes, OS color chooser and physical touch sizing remain separate gates.",
+      "evidence": ["drawingPalette"]
     },
     {
       "id": "compact-navigation",

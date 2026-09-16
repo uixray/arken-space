@@ -984,3 +984,7 @@ Observed `16a1ae63a6ed0188da59d97cd440b471f6b9768d`: two diagnostic first-open c
 ## Object list lifecycle — 2026-09-16
 
 Evidence `5311000403d01e9c96ec6fcf9f03888c0fa2c60c`:8/8 GM/PLAYER1280/390 Chrome/Firefox PASS40.5s. Real keyboard local token selection survives Escape and Journal/Map transitions; scroll24rows, last pointer hit and bounds at360x480, outside session focus. Eight receipts no writes/pageerrors; eight screenshots retained, first GM short screenshot visually checked. No runtime change. No mixed object kinds, clone/delete or liveACL acceptance. `object-list-gate/results.json`, short.png/checkpoint; supplemental bucket only, not complete UIX644.
+
+## Drawing palette containment — 2026-09-16
+
+Source `7b4af10beef8ec1cbd59d96ecce49c88622cf2c2`: screenshot after initial8 PASS revealed top clipping by map despite viewport-only geometry. Stronger map-bound test reproduced failure. CSS now limits palette height to map minus16px and scrolls internally. Final8/8 GM/PLAYER Chrome/Firefox PASS39.0s includes presets/slider keyboard, real hits after scrolling both ends, tool/journal retention. First/fixed short screenshots visually inspected. Native OS chooser not opened; no drawing payload. Artifacts `drawing-palette-gate/results.json`, map-red-results.json, viewport-only-results.json, checkpoint. Supplemental DOM scope only, not wholeUIX644.
