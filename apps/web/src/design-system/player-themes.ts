@@ -35,6 +35,9 @@ export function resolvePlayerThemeId({
   selectedThemeId?: string | null;
   defaultThemeId?: string | null;
 }): PlayerThemeId | "system" {
+  // Explicit baseline choice is different from clearing the override (null).
+  // A profile default must not silently replace the user's selected system theme.
+  if (selectedThemeId === "system") return "system";
   if (isPlayerThemeId(selectedThemeId)) return selectedThemeId;
   if (isPlayerThemeId(defaultThemeId)) return defaultThemeId;
   return "system";

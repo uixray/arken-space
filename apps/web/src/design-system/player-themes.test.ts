@@ -79,6 +79,25 @@ describe("player theme configuration", () => {
     expect(isPlayerThemeId("system")).toBe(false);
   });
 
+  it.each(PLAYER_THEMES.map(({ id }) => id))(
+    "preserves an explicit system choice over the %s profile default",
+    (defaultThemeId) => {
+      // Simulate serialization of a supplied preference, not a storage adapter.
+      const preference = JSON.parse(
+        JSON.stringify({ selectedThemeId: "system" }),
+      );
+      expect(resolvePlayerThemeId({ ...preference, defaultThemeId })).toBe(
+        "system",
+      );
+      expect(
+        resolvePlayerThemeId({ selectedThemeId: null, defaultThemeId }),
+      ).toBe(defaultThemeId);
+      expect(
+        resolvePlayerThemeId({ selectedThemeId: undefined, defaultThemeId }),
+      ).toBe(defaultThemeId);
+    },
+  );
+
   it("does not mutate configuration while resolving", () => {
     const before = JSON.stringify(PLAYER_THEMES);
     resolvePlayerThemeId({ selectedThemeId: "fire" });

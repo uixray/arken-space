@@ -102,3 +102,7 @@ No palette, generated output, runtime stylesheet or identity preference changed.
 This is steady-state configured-color evidence only. It does not establish actual
 cascade, textures, animated transitions, focus geometry, disabled/read-only
 semantics or shared-PC privacy. Existing runtime and persistence gaps remain.
+
+## Explicit baseline preference — 2026-09-17
+
+An explicit `selectedThemeId: "system"` wins over any supplied personal default. Clearing the override is `null`/absence, not `"system"`: only clearing returns to the personal default. This distinction is tested for all seven theme defaults, including a serialized preference round trip. It is a configuration-resolution test, not proof of database persistence or shared-PC handoff. `system` continues to mean no data-player-theme attribute; it is not a separately versioned frozen legacy theme. The requested permanently selectable old appearance still requires that distinct preservation/migration gate. Account-versus-membership persistence remains unresolved and is not chosen by this fix.
