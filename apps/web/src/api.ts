@@ -130,9 +130,26 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       { cause: reason },
     );
   }
-  const data = (await response
-    .json()
-    .catch(() => null)) as ApiResponseError | null;
+  let data: ApiResponseError | null = null;
+  try {
+    const body = await response.text();
+    // Empty successful responses remain valid for commands without a payload.
+    if (body.trim()) data = JSON.parse(body) as ApiResponseError | null;
+  } catch (reason) {
+    if (
+      init?.signal?.aborted ||
+      (reason instanceof Error && reason.name === "AbortError")
+    )
+      throw reason;
+    // A successful HTML fallback or truncated JSON must not masquerade as a
+    // valid null snapshot and crash its consumer. Do not echo response content
+    // or retry a mutation: the server may already have applied it.
+    if (response.ok)
+      throw new Error(
+        "Не удалось прочитать ответ сервера. Обновите данные перед повторением действия.",
+        { cause: reason },
+      );
+  }
   if (!response.ok) {
     const requestId =
       response.headers.get("x-request-id") ?? data?.requestId ?? undefined;

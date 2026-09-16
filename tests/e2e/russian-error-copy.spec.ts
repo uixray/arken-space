@@ -422,3 +422,32 @@ for (const width of [1280, 390]) {
     }
   });
 }
+
+test("UIX-417 malformed bootstrap shows Russian recovery text instead of crashing", async ({
+  page,
+}) => {
+  let bootstrapReads = 0;
+  await page.route("**/api/**", (route) => {
+    if (new URL(route.request().url()).pathname === "/api/bootstrap") {
+      bootstrapReads++;
+      return route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<html>Private proxy failure</html>",
+      });
+    }
+    return route.fulfill({ status: 202, body: "" });
+  });
+  await page.goto("/");
+  await expect(
+    page.getByText(
+      "Не удалось прочитать ответ сервера. Обновите данные перед повторением действия.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Интерфейс временно остановлен" }),
+  ).toHaveCount(0);
+  await expect(page.getByText("Private proxy failure")).toHaveCount(0);
+  expect(bootstrapReads).toBeGreaterThan(0);
+});

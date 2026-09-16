@@ -264,3 +264,55 @@ describe("client event buffer durability", () => {
     expect(postAuthFetch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("UIX-417 malformed response copy", () => {
+  it.each(["<html>Internal private proxy details</html>", '{"unfinished":'])(
+    "rejects malformed successful payloads without leaking or retrying: %s",
+    async (body) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response(body, { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(api("/api/canvas/bulk", { method: "POST" })).rejects.toThrow(
+        "Не удалось прочитать ответ сервера. Обновите данные перед повторением действия.",
+      );
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
+  it("retains empty and explicit null success responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(new Response("null", { status: 200 })),
+    );
+    await expect(api("/api/example")).resolves.toBeNull();
+    await expect(api("/api/example")).resolves.toBeNull();
+  });
+  it("retains HTTP status and safe fallback for a non-JSON failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("<html>private</html>", { status: 502 }),
+        ),
+    );
+    await expect(api("/api/example")).rejects.toMatchObject({
+      status: 502,
+      code: "REQUEST_FAILED",
+      message: "Не удалось выполнить запрос",
+    });
+  });
+  it("preserves cancellation while the response body is being read", async () => {
+    const cancelled = new DOMException(
+      "The operation was aborted.",
+      "AbortError",
+    );
+    const response = new Response("{}");
+    vi.spyOn(response, "text").mockRejectedValue(cancelled);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    await expect(api("/api/example")).rejects.toBe(cancelled);
+  });
+});
