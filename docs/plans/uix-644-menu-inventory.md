@@ -108,8 +108,8 @@
 
 | Место использования / строки                                                    | Роль / владелец                                                                                                                                                                                                            | Доказательства / пробел                                                                                  |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `PlayerRequestsWorkspace.tsx:169,189,209` (3)                                   | PLAYER, поля выбора при создании черновика внутри W: horizon, audience, character. При редактировании эти три поля скрыты.                                                                                                 | Сценарии заявок; отдельного протокола проверки overlay нет.                                              |
-| `PlayerRequestsWorkspace.tsx:249,263,280` (3)                                   | Фильтры GM/PLAYER внутри W; роли меняют доступный набор заявок.                                                                                                                                                            | Сценарии заявок; нативный popup ещё не проверен во время выполнения.                                     |
+| `PlayerRequestsWorkspace.tsx:169,189,209` (3)                                   | PLAYER, поля выбора при создании черновика внутри W: horizon, audience, character. При редактировании эти три поля скрыты.                                                                                                 | Реальный сервер: клавиатура/фокус трёх полей, черновик при 390→360 и отправка; исторический CI, см. аудит ниже. Не протокол системного popup.                                              |
+| `PlayerRequestsWorkspace.tsx:249,263,280` (3)                                   | Фильтры GM/PLAYER внутри W; роли меняют доступный набор заявок.                                                                                                                                                            | Реальный сервер: сочетания трёх фильтров PLAYER/GM и сброс после повторного открытия GM; исторический CI, см. аудит ниже.                                     |
 | `WorldMapsWorkspace.tsx:283` (1)                                                | Текущая карта, прямой reader GM/PLAYER; W, workspace на весь холст.                                                                                                                                                        | `tests/e2e/world-maps.spec.ts` сценарий работы, не весь жизненный цикл нативного popup.                  |
 | `WorldMapsWorkspace.tsx:341,618,684,699,751,768` (6)                            | GM: фон черновика / связанная сцена / варианты в формах создания карты и локации; W. Компоновка stage/detail и прокрутка принадлежат workspace.                                                                            | Сценарий world-maps; размещение/клавиатура каждого вхождения ещё не проверены.                           |
 | `TokenImageGenerator.tsx:231` (1)                                               | Выбор исходного ресурса внутри модального редактора TokenPalette GM → M. Сам генератор — секция в потоке, не popup.                                                                                                        | `tests/e2e/token-generator.spec.ts`; нативный элемент выбора нельзя смешивать с E1 Gravity Select.       |
@@ -508,3 +508,38 @@ at window.error. `resize-observer-gate/trace-01` reproduced the error:
   failing catalog error-free slice is now PASS, not the whole UIX-644 gate.
 - Scoped lint/format/diff, web typecheck768MiB and one production build1.93s
   PASS; large main-chunk warning retained. No full suite or CI restart.
+## 2026-09-16 — native player-request evidence reconciliation
+
+The six native selects are not untested merely because they have no Gravity
+popup receipt. Existing `tests/e2e/player-requests-controls.spec.ts` uses the real
+campaign/server fixture, not a list-filter mock:
+
+- `UIX644_PLAYER_REQUEST_NATIVE_DRAFT`: PLAYER keyboard selection and focus for
+  horizon/audience/character; draft retained from390x844 to360x640; submission
+  shows the selected labels; state/horizon/audience filters hide/show the card.
+- `UIX644_PLAYER_REQUEST_GM_FILTERS`: actual PLAYER public/open and private/closed
+  requests; GM has no creation form, combines all three filters, and reopening
+  resets the workspace filters to OPEN/ALL/ALL.
+
+Historical evidence: existing E2E run35043939211 at exact released revision
+7f28ca399ec0530e55e6bd41d4427ea23150522b is SUCCESS. Chromium job104629600020
+reports239passed/2skipped; Firefox job104629599902 reports238passed/3skipped.
+Both execute the full configured test directory, one worker, fail-on-flaky.
+The exact-revision request spec and its campaign/console-guard fixture chain
+have no skip/fixme path; collection has no request-specific exclusion. Inclusion
+of these cases is inferred from that configuration and the successful aggregate,
+not from a named-case receipt: the dot-reporter job logs do not name individual
+passing tests, and this successful workflow did not upload their test-results.
+Do not turn the aggregate into a fabricated per-case artifact.
+
+At audit revision c8bf29d18d168aed62bd8e745cc5370e2de54421, request workspace,
+request spec and both fixtures are unchanged from that release. Global styles
+have changed, however: historical evidence is reusable for unchanged behavior,
+not proof of exact-current visual acceptance. The later connected integration
+pool must include these two existing cases rather than create duplicate tests.
+
+Still not established by these cases: physical-device native popup appearance,
+OS popup geometry/z-index, full outside/Escape/scroll/browser-zoom lifecycle,
+or the complete UIX-644 gate. No CI rerun, local server, database, or browser
+was started for this evidence-only reconciliation. Raw existing job logs are
+retained in the local native-menu-ci-audit artifact directory.
