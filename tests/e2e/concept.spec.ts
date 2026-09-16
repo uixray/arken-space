@@ -3197,6 +3197,23 @@ test("UIX-468 resource counters batch, rebase and roll back conflicts", async ({
   });
   await expect(physicalInput).toHaveValue("5");
   await expect.poll(() => counterRequests.length).toBe(1);
+  // Native in-flow disclosure: pending resource draft survives keyboard close/open.
+  const resourceSummary = counters.locator("summary");
+  await resourceSummary.focus();
+  await resourceSummary.press("Enter");
+  await expect(counters).not.toHaveAttribute("open", "");
+  await expect(physicalInput).toBeHidden();
+  await expect(resourceSummary).toContainText("Выносливость: 5");
+  await expect(resourceSummary).toBeFocused();
+  await resourceSummary.press("Space");
+  await expect(counters).toHaveAttribute("open", "");
+  await expect(physicalInput).toHaveValue("5");
+  await expect(manaInput).toHaveValue("2");
+  await resourceSummary.click();
+  await expect(physicalInput).toBeHidden();
+  await resourceSummary.click();
+  await expect(physicalInput).toBeVisible();
+  expect(counterRequests).toHaveLength(1);
   expect(counterRequests[0]).toMatchObject({
     method: "PATCH",
     revision: 1,

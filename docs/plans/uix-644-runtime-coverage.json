@@ -371,9 +371,9 @@
       "count": 1,
       "status": "BLOCKED",
       "classification": "in-flow",
-      "scope": "Disclosure section in document flow, not floating popup.",
+      "scope": "Legacy in-flow disclosure: no production import/JSX caller found in apps/web/src at bc3dde8fd170b6c062ceb6e887f616f4861d6de9; only component tests. Not the active encounter queue.",
       "evidence": [],
-      "next": "Keep ordinary disclosure/accessibility criteria separate from popup layering."
+      "next": "Explicit source-only inactive exclusion; retain the static bucket. Do not enable legacy UI for coverage or claim current encounter acceptance."
     },
     {
       "file": "apps/web/src/sidebar/ResourceCounters.tsx",

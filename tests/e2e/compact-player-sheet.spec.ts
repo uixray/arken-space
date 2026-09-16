@@ -112,7 +112,17 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
         await page.evaluate(() => document.documentElement.scrollWidth),
       ).toBeLessThanOrEqual(size.width);
     }
-    await sheet.getByText("Предыстория", { exact: true }).first().click();
+    const disclosure = sheet
+      .locator("details.subsection")
+      .filter({ has: page.locator("summary", { hasText: /^Предыстория$/ }) });
+    const summary = disclosure.locator("summary");
+    await summary.focus();
+    await summary.press("Enter");
+    await expect(disclosure).toHaveAttribute("open", "");
+    await expect(summary).toBeFocused();
+    await summary.press("Space");
+    await expect(disclosure).not.toHaveAttribute("open", "");
+    await summary.click();
     const story = sheet.getByRole("textbox", {
       name: "Предыстория",
       exact: true,
@@ -120,6 +130,13 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
     const draft =
       "Арина ищет пропавших путников. Этот текст ещё ожидает сохранения.";
     await story.fill(draft);
+    await summary.click();
+    await expect(disclosure).not.toHaveAttribute("open", "");
+    await expect(story).toBeHidden();
+    await expect.poll(() => patches.length).toBe(1);
+    await summary.press("Enter");
+    await expect(story).toHaveValue(draft);
+    await expect(summary).toBeFocused();
     await page.getByRole("button", { name: "Журнал", exact: true }).click();
     await expect.poll(() => patches.length).toBe(1);
     await expect(sheet).toBeHidden();
