@@ -2174,3 +2174,81 @@ for (const tool of ["PAN", "DRAW"] as const) {
       await expect(map).toHaveAttribute("data-resize-handle-x", String(right));
   });
 }
+
+for (const tool of ["FOG", "COVER"] as const) {
+  test(`UIX-507 Shift fog gesture and Escape cancellation ${tool}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await installCanvasReviewRoutes(page);
+    const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+    await page.route("**/api/**", async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (["GET", "HEAD"].includes(request.method())) return route.fallback();
+      if (path === "/api/chat/read") return route.fulfill({ json: {} });
+      writes.push({
+        path,
+        body: request.postDataJSON() as Record<string, unknown>,
+      });
+      return route.fulfill({ json: {} });
+    });
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    const control = page.locator(`.map-tool[data-tool="${tool}"]`);
+    await control.click();
+    await expect(control).toHaveAttribute("aria-pressed", "true");
+    const points = await map.evaluate((node) => {
+      const b = node.getBoundingClientRect();
+      const start = { x: b.x + b.width * 0.55, y: b.y + b.height * 0.55 };
+      const end = { x: start.x + 80, y: start.y + 80 };
+      for (const p of [start, end])
+        if (!(document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement))
+          throw Error("Fog path is obstructed");
+      return { start, end };
+    });
+    const drag = async (cancel: boolean) => {
+      await page.keyboard.down("Shift");
+      try {
+        await page.mouse.move(points.start.x, points.start.y);
+        await page.mouse.down();
+        await page.mouse.move(points.end.x, points.end.y, { steps: 8 });
+        if (cancel) {
+          await map.focus();
+          await page.keyboard.press("Escape");
+        }
+      } finally {
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+      }
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+    };
+    await drag(true);
+    await expect(page.locator('.map-tool[data-tool="PAN"]')).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(writes).toEqual([]);
+    await control.click();
+    await drag(false);
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]).toMatchObject({
+      path: "/api/fog-reveals",
+      body: { sceneId, operation: tool === "COVER" ? "COVER" : "REVEAL" },
+    });
+    expect(Number(writes[0].body.width)).toBeGreaterThan(8);
+    expect(Number(writes[0].body.height)).toBeGreaterThan(8);
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное" }),
+    ).toHaveCount(0);
+    await testInfo.attach("shift-fog-contract", {
+      body: JSON.stringify({ tool, writes }),
+      contentType: "application/json",
+    });
+  });
+}

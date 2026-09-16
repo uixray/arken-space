@@ -127,3 +127,25 @@ No speculative tool-mode change, full suite, build, push or deploy. This resolve
 Escape cancellation, not the entire Draw/Fog/Ruler/SCENE_REGION/context-menu
 conflict matrix, live permission/recovery acceptance, or the separate token-popup
 observer error. Untracked selection-recovery test preserved unchanged.
+
+### 2026-09-16 — Shift fog gestures and cancelled fog drafts
+
+Two new actual-App scenarios cover FOG and COVER with Shift held. Each cancels an
+80px rectangle via Escape before pointerup, asserts PAN and zero writes, then
+repeats it without Escape and requires exactly one fog API request with the
+intended REVEAL/COVER operation and nontrivial bounds. No bulk-delete action may
+appear. HTTP boundaries are mocked; no live campaign was changed.
+
+RED on the original FOG scenario: cancelled gesture still POSTed a REVEAL rectangle
+to `/api/fog-reveals`. Cause: Escape cleared the selection marquee but left
+`fogStart`/`fogDraft`; pointerup unconditionally finalized that retained draft.
+The clear-map-state Escape branch now clears both fog fields. This is not an error
+filter or a change to the completed fog operation, permissions or server contract.
+
+Final connected browser gate: **10/10 PASS**, Chromium/Firefox, one worker, no
+retries: four new FOG/COVER cases plus existing GM/PLAYER selection and DRAW Escape
+cases. TypeScript, scoped ESLint, Prettier and diff checks passed. Original red
+request evidence retained. This covers rectangular fog, not every brush/polygon,
+Ruler or SCENE_REGION lifecycle; UIX-507 remains under its original acceptance
+criteria. The separate popup observer error remains unresolved. No build, push,
+deploy or Linear completion. Untracked recovery test unchanged.

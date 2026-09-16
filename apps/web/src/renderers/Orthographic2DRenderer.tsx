@@ -1067,6 +1067,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       dispatchInteraction({ type: "escape" });
       // Do not let the later pointerup commit a cancelled rectangle.
       setMarquee(null);
+      setFogStart(null);
+      setFogDraft(null);
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
