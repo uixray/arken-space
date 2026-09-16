@@ -87,3 +87,18 @@ QA assets and original build artifacts are retained separately in the checkpoint
 - Migrate shell/chat/character/GM/canvas-adjacent surfaces in connected pools.
 
 Source-level checks or a Storybook screenshot alone do not close UIX-317.
+
+## 2026-09-16 — deterministic token contrast guard
+
+`tests/player-theme-contrast.test.ts` now guards all seven configured palettes.
+It composites rgba surfaces before sRGB linear-luminance comparison, enforces
+4.5:1 for normal/muted/faint/error text on canvas/surface/overlay/raised roles,
+field text, enabled primary default/hover/active text and filled-danger text;
+focus-to-surrounding-surface and field-border contrast must reach 3:1.
+Black/white, equal colors, translucent black and a below-threshold gray calibrate
+the calculation. All eight focused cases passed, plus scoped lint and format.
+No palette, generated output, runtime stylesheet or identity preference changed.
+
+This is steady-state configured-color evidence only. It does not establish actual
+cascade, textures, animated transitions, focus geometry, disabled/read-only
+semantics or shared-PC privacy. Existing runtime and persistence gaps remain.
