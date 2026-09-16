@@ -3436,3 +3436,105 @@ for (const width of [1280, 390]) {
     });
   });
 }
+for (const width of [1280, 390]) {
+  for (const change of ["revoked", "locked", "role", "removed"] as const) {
+    test(`UIX-644 live menu focus survives ${change} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 850 });
+      const current: GameSnapshot = structuredClone(snapshot);
+      current.me.role = change === "role" ? "GM" : "PLAYER";
+      current.tokens[0].controllerMembershipIds = [current.me.id];
+      current.tokens[0].ownerMembershipId = current.me.id;
+      current.fogReveals = [
+        { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+      ];
+      const writes: string[] = [],
+        errors: string[] = [];
+      let publish: (() => void) | undefined;
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.route("**/api/**", (route) => {
+        const request = route.request();
+        if (
+          !["GET", "HEAD"].includes(request.method()) &&
+          !request.url().includes("/chat/read")
+        )
+          writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+        return route.fulfill({ json: [] });
+      });
+      await installCanvasReviewRoutes(page);
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({ json: current }),
+      );
+      await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+        socket.onMessage((message) => {
+          if (message.toString() === "40") {
+            socket.send('40{"sid":"menu-access"}');
+            publish = () =>
+              socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+          }
+        });
+        socket.send(
+          '0{"sid":"menu-access","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+        );
+      });
+      await page.goto("/");
+      await expect.poll(() => Boolean(publish)).toBe(true);
+      const map = page.getByRole("region", {
+        name: "Интерактивная карта сцены",
+      });
+      await map
+        .getByRole("button", { name: "Объекты карты", exact: true })
+        .click();
+      await map
+        .getByRole("button", { name: "Selected token", exact: true })
+        .click();
+      await map.press("Escape");
+      await page.keyboard.press("Enter");
+      const menu = map.getByRole("menu");
+      await expect(menu).toBeVisible();
+      await expect(menu.locator("button").first()).toBeFocused();
+      // No token revision bump: permission-only changes also remove controls.
+      if (change === "locked") current.tokens[0].locked = true;
+      if (change === "revoked" || change === "role")
+        current.tokens[0].controllerMembershipIds = [];
+      if (change === "role") current.me.role = "PLAYER";
+      if (change === "removed") current.tokens = [];
+      current.scenes[0].name = "Menu access updated";
+      publish!();
+      await expect(page.locator(".topbar")).toContainText(
+        "Menu access updated",
+      );
+      if (change === "removed") {
+        await expect(menu).toHaveCount(0);
+        await expect(map).toBeFocused();
+      } else {
+        await expect(menu).toBeVisible();
+        await expect(
+          menu.getByRole("menuitem", { name: "Удалить с карты", exact: true }),
+        ).toHaveCount(0);
+        await expect(menu.getByRole("menuitemcheckbox")).toHaveCount(0);
+        await expect(menu.getByRole("menuitemradio")).toHaveCount(0);
+        await expect(
+          menu.getByRole("button", { name: "Отмена", exact: true }),
+        ).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(menu).toHaveCount(0);
+        await expect(map).toBeFocused();
+      }
+      await page.keyboard.press("Delete");
+      await expect(
+        page.getByRole("dialog", {
+          name: "Убрать токен с карты?",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("menu-access-receipt", {
+        body: JSON.stringify({ width, change, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
+}

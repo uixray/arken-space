@@ -274,6 +274,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     y: number;
   } | null>(null);
   const tokenMenuRef = useRef<HTMLDivElement>(null);
+  const tokenMenuFocusRef = useRef<HTMLElement | null>(null);
   const menuToken = props.tokens.find(
     (token) => token.id === tokenMenu?.token.id,
   );
@@ -294,6 +295,29 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         ?.querySelector<HTMLButtonElement>("button:not(:disabled)")
         ?.focus({ preventScroll: true });
   }, [tokenMenuOpen]);
+  useLayoutEffect(() => {
+    const previous = tokenMenuFocusRef.current;
+    if (!tokenMenu) {
+      tokenMenuFocusRef.current = null;
+      return;
+    }
+    // A snapshot may remove the focused action (permissions) or the entire
+    // token. Recover only focus lost with that detached node, never an
+    // intentional Tab/click to another owner or a native input's focus.
+    if (
+      !previous ||
+      previous.isConnected ||
+      document.activeElement !== document.body
+    )
+      return;
+    tokenMenuFocusRef.current = null;
+    const target =
+      tokenMenuRef.current?.querySelector<HTMLElement>(
+        "button:not(:disabled)",
+      ) ?? containerRef.current;
+    if (target?.getClientRects().length && !target.closest("[hidden], [inert]"))
+      target.focus({ preventScroll: true });
+  });
   useEffect(() => {
     if (tokenMenu && !menuToken) closeTokenMenu();
   }, [tokenMenu, menuToken, closeTokenMenu]);
@@ -3268,6 +3292,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           style={{ left: tokenMenu.x, top: tokenMenu.y }}
           role="menu"
           aria-label={`Действия токена «${menuToken.name}»`}
+          onFocusCapture={(event) => {
+            tokenMenuFocusRef.current = event.target;
+          }}
           onBlur={(event) => {
             // Let Tab/Shift+Tab choose the next native focus target. Closing
             // this layer must neither pull focus back nor clear map selection.
