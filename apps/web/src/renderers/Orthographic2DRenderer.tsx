@@ -218,6 +218,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     canvasEditMode,
     onCanvasEditCancel,
     onBulkMove,
+    onBulkMovePreview,
+    onBulkMoveDiscard,
     onBulkMoveFailure,
     onToolSelect,
   } = props;
@@ -240,11 +242,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     [],
   );
   useEffect(() => {
-    moveQueue.setExecutor(async ({ targets, delta }) => {
+    moveQueue.setExecutor(async ({ intentId, targets, delta }) => {
       if (!onBulkMove) throw new Error("MOVE_UNAVAILABLE");
-      return onBulkMove(targets, delta);
+      return onBulkMove(intentId, targets, delta);
     });
   }, [moveQueue, onBulkMove]);
+  useEffect(() => {
+    moveQueue.setPreviewHandler(({ intentId, targets, delta }) =>
+      onBulkMovePreview?.(intentId, targets, delta),
+    );
+  }, [moveQueue, onBulkMovePreview]);
+  useEffect(() => {
+    moveQueue.setDiscardHandler((intentIds) => onBulkMoveDiscard?.(intentIds));
+  }, [moveQueue, onBulkMoveDiscard]);
   useEffect(() => {
     moveQueue.setFailureHandler(async (reason) => {
       await onBulkMoveFailure?.(reason);

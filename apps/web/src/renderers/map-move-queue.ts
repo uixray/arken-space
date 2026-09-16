@@ -11,12 +11,18 @@ export type MapMoveAck = {
     drawings: Record<string, number>;
   };
 };
-export type MapMoveRequest = { targets: MapMoveTarget[]; delta: MapMoveDelta };
+export type MapMoveRequest = {
+  intentId: string;
+  targets: MapMoveTarget[];
+  delta: MapMoveDelta;
+};
 export type MapMoveExecutor = (request: MapMoveRequest) => Promise<MapMoveAck>;
 export type MapMoveFailureHandler = (
   reason: unknown,
   request: MapMoveRequest,
 ) => void | Promise<void>;
+export type MapMovePreviewHandler = (request: MapMoveRequest) => void;
+export type MapMoveDiscardHandler = (intentIds: readonly string[]) => void;
 
 const selectionKey = (targets: readonly MapMoveTarget[]) =>
   [...targets]
@@ -24,9 +30,13 @@ const selectionKey = (targets: readonly MapMoveTarget[]) =>
     .sort()
     .join("|");
 
+let nextMapMoveQueueId = 0;
+
 /** Serializes optimistic bulk moves so every request uses the previous ack revision. */
 export class MapMoveQueue {
+  private readonly queueId = ++nextMapMoveQueueId;
   private generation = 0;
+  private nextIntentId = 0;
   private scope = "";
   private inFlight = false;
   private pending: MapMoveRequest | null = null;
@@ -36,6 +46,8 @@ export class MapMoveQueue {
   constructor(
     private execute: MapMoveExecutor,
     private onFailure?: MapMoveFailureHandler,
+    private onPreview?: MapMovePreviewHandler,
+    private onDiscard?: MapMoveDiscardHandler,
   ) {}
 
   setExecutor(execute: MapMoveExecutor) {
@@ -44,6 +56,14 @@ export class MapMoveQueue {
 
   setFailureHandler(onFailure?: MapMoveFailureHandler) {
     this.onFailure = onFailure;
+  }
+
+  setPreviewHandler(onPreview?: MapMovePreviewHandler) {
+    this.onPreview = onPreview;
+  }
+
+  setDiscardHandler(onDiscard?: MapMoveDiscardHandler) {
+    this.onDiscard = onDiscard;
   }
 
   reset(scope: string, targets: readonly MapMoveTarget[]) {
@@ -60,6 +80,7 @@ export class MapMoveQueue {
     }
     this.scope = scope;
     this.generation += 1;
+    if (this.pending) this.onDiscard?.([this.pending.intentId]);
     this.pending = null;
     this.revisions = new Map(incoming);
   }
@@ -72,7 +93,6 @@ export class MapMoveQueue {
         this.revisions.get(`${target.targetType}:${target.targetId}`) ??
         target.revision,
     }));
-    const request = { targets: hydrated, delta: { ...delta } };
     if (
       this.pending &&
       selectionKey(this.pending.targets) === selectionKey(hydrated)
@@ -80,8 +100,20 @@ export class MapMoveQueue {
       this.pending.delta.x += delta.x;
       this.pending.delta.y += delta.y;
     } else {
-      this.pending = request;
+      this.pending = {
+        intentId: `${this.queueId}:${this.generation}:${++this.nextIntentId}`,
+        targets: hydrated,
+        delta: { ...delta },
+      };
     }
+    // This is deliberately an enqueue-side signal. A second gesture can wait
+    // behind an in-flight request, but the whole selected group still needs to
+    // move together immediately rather than only when that request is sent.
+    this.onPreview?.({
+      ...this.pending,
+      targets: this.pending.targets.map((target) => ({ ...target })),
+      delta: { ...this.pending.delta },
+    });
     void this.drain(this.generation);
   }
 
@@ -98,16 +130,27 @@ export class MapMoveQueue {
       for (const [id, revision] of Object.entries(ack.revisions.drawings))
         this.revisions.set(`DRAWING:${id}`, revision);
       const pending = this.pending as MapMoveRequest | null;
-      if (pending)
+      if (pending) {
         pending.targets = pending.targets.map((target: MapMoveTarget) => ({
           ...target,
           revision:
             this.revisions.get(`${target.targetType}:${target.targetId}`) ??
             target.revision,
         }));
+        // Replace the pending preview with the baseline it will actually send.
+        // This lets it stack on the acknowledged projection without guessing
+        // a revision in App.
+        this.onPreview?.({
+          ...pending,
+          targets: pending.targets.map((target) => ({ ...target })),
+          delta: { ...pending.delta },
+        });
+      }
     } catch (reason) {
       // Conflicts and other failures are terminal for this gesture: never retry.
       if (generation === this.generation) {
+        const pending = this.pending as MapMoveRequest | null;
+        if (pending) this.onDiscard?.([pending.intentId]);
         this.pending = null;
         this.revisions = new Map(this.latestScopeRevisions);
         await this.onFailure?.(reason, request);

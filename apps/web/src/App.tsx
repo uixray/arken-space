@@ -54,7 +54,15 @@ import {
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { canvasHistoryVersion } from "./canvas-history-label";
 import { normalizeClientDiceResult } from "./dice-result";
-import { applyBulkMoveResult } from "./canvas-bulk-move";
+import {
+  acknowledgeBulkMoveIntent,
+  appendBulkMoveIntent,
+  projectBulkMoveIntents,
+  reconcileBulkMoveIntents,
+  rejectBulkMoveIntent,
+  retainBulkMoveIntentsForScene,
+  type CanvasBulkMoveIntent,
+} from "./canvas-bulk-move";
 import { useMutationRunners } from "./use-mutation-runners";
 import { useSceneActions } from "./use-scene-actions";
 import { useWorldMapActions } from "./use-world-map-actions";
@@ -169,6 +177,20 @@ function emitSceneViewIfNeeded(
 
 export function App() {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
+  const [bulkMoveIntents, setBulkMoveIntents] = useState<
+    readonly CanvasBulkMoveIntent[]
+  >([]);
+  useEffect(() => {
+    setBulkMoveIntents((current) =>
+      snapshot
+        ? reconcileBulkMoveIntents(
+            current,
+            snapshot.tokens,
+            snapshot.drawings ?? [],
+          )
+        : [],
+    );
+  }, [snapshot]);
   const [mapRollVisibility, setMapRollVisibility] =
     useState<import("@arken/contracts").MessageVisibility>("PUBLIC");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -1254,6 +1276,11 @@ export function App() {
       ? (view.scenes.find((scene) => scene.id === viewedSceneId) ?? broadcast)
       : broadcast;
   }, [previewSnapshot, snapshot, viewedSceneId]);
+  useEffect(() => {
+    setBulkMoveIntents((current) =>
+      retainBulkMoveIntentsForScene(current, activeSceneValue?.id),
+    );
+  }, [activeSceneValue?.id]);
   /**
    * UIX-408 — сервер должен знать, какую сцену рассматривает мастер.
    *
@@ -1378,7 +1405,16 @@ export function App() {
 
   const viewSnapshot = previewSnapshot ?? {
     ...snapshot,
-    tokens: tokenMutations.project(snapshot.tokens),
+    tokens: projectBulkMoveIntents(
+      tokenMutations.project(snapshot.tokens),
+      "TOKEN",
+      bulkMoveIntents,
+    ) as GameSnapshot["tokens"],
+    drawings: projectBulkMoveIntents(
+      snapshot.drawings ?? [],
+      "DRAWING",
+      bulkMoveIntents,
+    ) as GameSnapshot["drawings"],
   };
   const broadcastScene =
     viewSnapshot.scenes.find((scene) => scene.active) ?? viewSnapshot.scenes[0];
@@ -2179,51 +2215,77 @@ export function App() {
                         }),
                       )
                     }
-                    onBulkMove={async (targets, delta) => {
-                      const acknowledgement = await runResult(() =>
-                        api<{
-                          revisions: {
-                            tokens: Record<string, number>;
-                            drawings: Record<string, number>;
-                          };
-                        }>("/api/canvas/bulk", {
-                          method: "POST",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            sceneId: activeScene.id,
-                            operation: "MOVE",
-                            deltaX: delta.x,
-                            deltaY: delta.y,
-                            targets,
-                          }),
+                    onBulkMovePreview={(intentId, targets, delta) => {
+                      setBulkMoveIntents((current) =>
+                        appendBulkMoveIntent(current, {
+                          actionId: intentId,
+                          sceneId: activeScene.id,
+                          targets,
+                          delta,
                         }),
                       );
-                      // UIX-396 stage 2: the response carries the new revision for
-                      // every moved entity and used to be thrown away, so a second
-                      // drag before the broadcast landed still sent the superseded
-                      // one and was rejected with a 409 -- losing the move on the
-                      // app's most frequent action. See canvas-bulk-move.ts.
-                      const revisions = acknowledgement?.revisions;
-                      setSnapshot((current) =>
-                        current
-                          ? {
-                              ...current,
-                              tokens: applyBulkMoveResult(
-                                current.tokens,
-                                revisions?.tokens,
-                                delta,
-                              ) as GameSnapshot["tokens"],
-                              drawings: applyBulkMoveResult(
-                                current.drawings ?? [],
-                                revisions?.drawings,
-                                delta,
-                              ) as GameSnapshot["drawings"],
-                            }
-                          : current,
-                      );
-                      return acknowledgement;
                     }}
-                    onBulkMoveFailure={recoverFromCanvasMutation}
+                    onBulkMoveDiscard={(intentIds) => {
+                      const discarded = new Set(intentIds);
+                      setBulkMoveIntents((current) => {
+                        const next = current.filter(
+                          (intent) => !discarded.has(intent.actionId),
+                        );
+                        return next.length === current.length ? current : next;
+                      });
+                    }}
+                    onBulkMove={async (intentId, targets, delta) => {
+                      try {
+                        const acknowledgement = await runResult(() =>
+                          api<{
+                            revisions: {
+                              tokens: Record<string, number>;
+                              drawings: Record<string, number>;
+                            };
+                          }>("/api/canvas/bulk", {
+                            method: "POST",
+                            body: JSON.stringify({
+                              actionId: crypto.randomUUID(),
+                              sceneId: activeScene.id,
+                              operation: "MOVE",
+                              deltaX: delta.x,
+                              deltaY: delta.y,
+                              targets,
+                            }),
+                          }),
+                        );
+                        setBulkMoveIntents((current) => {
+                          const acknowledged = acknowledgeBulkMoveIntent(
+                            current,
+                            intentId,
+                            acknowledgement.revisions,
+                          );
+                          const canonical = snapshotRef.current;
+                          return canonical
+                            ? reconcileBulkMoveIntents(
+                                acknowledged,
+                                canonical.tokens,
+                                canonical.drawings ?? [],
+                              )
+                            : acknowledged;
+                        });
+                        return acknowledgement;
+                      } catch (reason) {
+                        // Remove the failed draft before the queue remounts the
+                        // Konva stage. Canonical state was never changed, so
+                        // rollback cannot overwrite a newer socket revision.
+                        setBulkMoveIntents((current) =>
+                          rejectBulkMoveIntent(current, intentId),
+                        );
+                        throw reason;
+                      }
+                    }}
+                    onBulkMoveFailure={async (reason) => {
+                      // The executor removes the rejected intent, and the queue
+                      // discards its unsent tail. Preserve earlier acknowledged
+                      // moves until their canonical socket snapshot arrives.
+                      await recoverFromCanvasMutation(reason);
+                    }}
                     onBulkDelete={(selection) =>
                       run(() =>
                         api("/api/canvas/bulk", {

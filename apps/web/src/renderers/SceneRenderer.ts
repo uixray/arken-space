@@ -141,7 +141,14 @@ export interface SceneRendererProps {
   ) => Promise<void>;
   onDrawingDelete?: (drawingId: string, revision: number) => Promise<void>;
   onDrawingCopy?: (drawingId: string, revision: number) => Promise<void>;
+  onBulkMovePreview?: (
+    intentId: string,
+    targets: MapMoveTarget[],
+    delta: { x: number; y: number },
+  ) => void;
+  onBulkMoveDiscard?: (intentIds: readonly string[]) => void;
   onBulkMove?: (
+    intentId: string,
     targets: MapMoveTarget[],
     delta: { x: number; y: number },
   ) => Promise<MapMoveAck>;

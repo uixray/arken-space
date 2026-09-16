@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MapMoveQueue } from "./map-move-queue";
+import { MapMoveQueue, type MapMoveRequest } from "./map-move-queue";
 
 const token = (revision = 1) => [
   { targetType: "TOKEN" as const, targetId: "t1", revision },
@@ -32,10 +32,12 @@ describe("MapMoveQueue", () => {
     expect(execute).toHaveBeenCalledTimes(1);
     first.resolve(ack(2));
     await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
-    expect(execute.mock.calls[1]![0]).toEqual({
-      targets: token(2),
-      delta: { x: 5, y: 1 },
-    });
+    expect(execute.mock.calls[1]![0]).toEqual(
+      expect.objectContaining({
+        targets: token(2),
+        delta: { x: 5, y: 1 },
+      }),
+    );
   });
 
   it("does not retry conflicts and discards queued movement", async () => {
@@ -61,10 +63,13 @@ describe("MapMoveQueue", () => {
     queue.reset("scene:TOKEN:t1", token());
     queue.enqueue(token(), { x: 3, y: 4 });
     await vi.waitFor(() => expect(onFailure).toHaveBeenCalledTimes(1));
-    expect(onFailure).toHaveBeenCalledWith(reason, {
-      targets: token(),
-      delta: { x: 3, y: 4 },
-    });
+    expect(onFailure).toHaveBeenCalledWith(
+      reason,
+      expect.objectContaining({
+        targets: token(),
+        delta: { x: 3, y: 4 },
+      }),
+    );
   });
 
   it("drops pending work when scene or selection scope changes", async () => {
@@ -95,10 +100,12 @@ describe("MapMoveQueue", () => {
     expect(execute).toHaveBeenCalledTimes(1);
     old.resolve(ack(2));
     await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
-    expect(execute.mock.calls[1]![0]).toEqual({
-      targets: token(8),
-      delta: { x: 0, y: 4 },
-    });
+    expect(execute.mock.calls[1]![0]).toEqual(
+      expect.objectContaining({
+        targets: token(8),
+        delta: { x: 0, y: 4 },
+      }),
+    );
   });
 
   it("refreshes same-scope revisions after a terminal conflict", async () => {
@@ -145,9 +152,54 @@ describe("MapMoveQueue", () => {
     expect(execute).toHaveBeenCalledTimes(1);
     first.resolve(ack(2));
     await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
-    expect(execute.mock.calls[1]![0]).toEqual({
-      targets: token(2),
-      delta: { x: 5, y: 0 },
-    });
+    expect(execute.mock.calls[1]![0]).toEqual(
+      expect.objectContaining({
+        targets: token(2),
+        delta: { x: 5, y: 0 },
+      }),
+    );
+  });
+  it("previews queued moves immediately and rehydrates the pending baseline", async () => {
+    const first = deferred<ReturnType<typeof ack>>();
+    const previews: MapMoveRequest[] = [];
+    const execute = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(ack(3));
+    const queue = new MapMoveQueue(execute, undefined, (request) =>
+      previews.push(request),
+    );
+    queue.reset("scene:TOKEN:t1", token());
+    queue.enqueue(token(), { x: 64, y: 0 });
+    queue.enqueue(token(), { x: 64, y: 0 });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(previews).toHaveLength(2);
+    expect(previews[0]?.delta).toEqual({ x: 64, y: 0 });
+    expect(previews[1]?.delta).toEqual({ x: 64, y: 0 });
+    expect(previews[1]?.intentId).not.toBe(previews[0]?.intentId);
+
+    first.resolve(ack(2));
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
+    expect(previews.at(-1)?.targets).toEqual(token(2));
+    expect(execute.mock.calls[1]?.[0].targets).toEqual(token(2));
+  });
+
+  it("discards an unsent optimistic request when the selection scope changes", () => {
+    const first = deferred<ReturnType<typeof ack>>();
+    const discarded = vi.fn();
+    const queue = new MapMoveQueue(
+      vi.fn().mockReturnValueOnce(first.promise),
+      undefined,
+      undefined,
+      discarded,
+    );
+    queue.reset("scene:TOKEN:t1", token());
+    queue.enqueue(token(), { x: 1, y: 0 });
+    queue.enqueue(token(), { x: 2, y: 0 });
+    queue.reset("scene:TOKEN:t2", [
+      { targetType: "TOKEN", targetId: "t2", revision: 1 },
+    ]);
+    expect(discarded).toHaveBeenCalledWith([expect.any(String)]);
   });
 });
