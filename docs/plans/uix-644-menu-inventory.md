@@ -968,3 +968,7 @@ Source `23ed18709b378bb493721c549e00fe7e4e2bcff8`: decorative initials no longer
 ## Scene editor map selector — 2026-09-16
 
 Evidence `bbf0206a72babfa3636415b91cd02ae94ceb88e7`:4/4 GM1280/390 Chrome/Firefox PASS, real App nested scene editor map dropdown. Pointer choice, keyboard reset, Escape closes dropdown only/returns focus and retains name draft, resize-open360x480 bounds, cancel/reopen original values. No runtime change, no server writes/save/upload/publish. Artifacts `scene-editor-map-gate/results.json` and checkpoint. Shared Select original RO remains unresolved; this caller PASS is scoped, not whole UIX-644 acceptance.
+
+## Connected remaining-menu gate — 2026-09-16
+
+Observed revision `b7cfc77fc7ecbff20d409badd8909996c71dcf19`:24/24 existing tests PASS106.068s after accumulated App/styles changes, one worker/no retries. Activity command list8, Activity stickers8, background details8 (compact session and desktop volume). No new duplicate specs or runtime modifications. Session/scene/tray evidence now reconciled per caller; second ChatPanel list remains unaccepted. Legacy fixtures do not uniformly audit client logs/pageerrors/all HTTP writes: do not claim a clean telemetry/production gate. Artifacts `remaining-menu-gate/results.json` and checkpoint. Original sharedSelectRO remains unresolved, broader UIX-644 incomplete.

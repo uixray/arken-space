@@ -88,6 +88,12 @@
       "revision": "bbf0206a72babfa3636415b91cd02ae94ceb88e7",
       "artifact": "scene-editor-map-gate/results.json",
       "scope": "Four GM1280/390 Chrome/Firefox cases, actual workspace→editor→Select: pointer choice, keyboard Home/Enter, first Escape retains editor/name draft, open-popup resize360x480 bounds, cancel/reopen original draft. No save/upload/publish or real persistence."
+    },
+    "remainingMenus": {
+      "status": "PASS",
+      "revision": "b7cfc77fc7ecbff20d409badd8909996c71dcf19",
+      "artifact": "remaining-menu-gate/results.json",
+      "scope": "24 existing named cases current App/styles: composer8 Activity (one mocked roll each), details8 (compact session/desktop volume plus foreign owner), sticker8 Activity including resize/scroll/owner. Chrome/Firefox GM/PLAYER1280/390. Legacy fixture limitations: no comprehensive telemetry/pageerror/write audit."
     }
   },
   "sites": [
@@ -105,11 +111,11 @@
       "file": "apps/web/src/App.tsx",
       "kind": "tag:details",
       "count": 3,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Scene picker eight scoped cases and token-tray eight lifecycle plus four geometry cases. Session menu historical Escape/responsive evidence not yet reconciled into this combined bucket.",
-      "evidence": ["scenePicker", "tokenTray"],
-      "next": "Reconcile existing session-menu evidence, not rerun scene/tray from chat change; full bucket acceptance still incomplete."
+      "scope": "Three source buckets with limited caller evidence: scene picker8, token tray8 plus geometry4, compact GM/PLAYER session foreign/own Escape and pointer layer from details cases.",
+      "evidence": ["scenePicker", "tokenTray", "remainingMenus"],
+      "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
     },
     {
       "file": "apps/web/src/CatalogEntryForm.tsx",
@@ -165,21 +171,21 @@
       "file": "apps/web/src/StickerPicker.tsx",
       "kind": "role:listbox",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Nested sticker list inside same Popup, not a second independent overlay.",
-      "evidence": [],
-      "next": "Reconcile with StickerPicker Popup caller evidence, not duplicate test."
+      "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
+      "evidence": ["remainingMenus"],
+      "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
     },
     {
       "file": "apps/web/src/StickerPicker.tsx",
       "kind": "tag:Popup",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Activity lifecycle spec and old release CI; modal/workspace caller unavailable. Shared source/spec unchanged vs7f28ca3, App/styles changed.",
-      "evidence": [],
-      "next": "Reuse old evidence with explicit caller scope, no hidden Direct/Story UI activation."
+      "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
+      "evidence": ["remainingMenus"],
+      "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
     },
     {
       "file": "apps/web/src/TokenImageGenerator.tsx",
@@ -307,9 +313,9 @@
       "count": 2,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Activity/Chat command-list sites; source and composer spec unchanged vs7f28ca3. Whole shell/style revision differs.",
-      "evidence": [],
-      "next": "Reconcile actual reachable callers with old named/CI evidence; do not rerun from chat change alone."
+      "scope": "Activity command list current eight tests passed; second ChatPanel source occurrence not covered by those Activity tests.",
+      "evidence": ["remainingMenus"],
+      "next": "Reconcile second caller reachability/required acceptance without enabling hidden UI solely for coverage."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
