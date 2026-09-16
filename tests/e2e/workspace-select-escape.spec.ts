@@ -3,8 +3,35 @@ import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 
-async function install(page: Page, role: "GM" | "PLAYER") {
+async function install(
+  page: Page,
+  role: "GM" | "PLAYER",
+  withCharacter = false,
+) {
   const snapshot = buildGameSnapshot(role, { schemaVersion: 2 });
+  if (withCharacter)
+    snapshot.characters = [
+      {
+        id: "1acf0103-1111-4111-8111-111111111111",
+        name: "Страж образец",
+        ownerMembershipId: null,
+        controllerMembershipIds: [],
+        portraitAssetId: null,
+        lifecycle: "ACTIVE",
+        archivedAt: null,
+        archivedByMembershipId: null,
+        stats: {},
+        skills: [],
+        spells: [],
+        notes: "",
+        backstory: "",
+        inventory: [],
+        resources: {},
+        wallet: { gold: 0, silver: 0, copper: 0, sp: 0 },
+        entries: [],
+        revision: 1,
+      },
+    ];
   const assetId = "1acf0101-1111-4111-8111-111111111111";
   snapshot.assets = [
     {
@@ -116,4 +143,93 @@ for (const role of ["GM", "PLAYER"] as const) {
       expect(mutations).toEqual([]);
     });
   }
+}
+
+for (const width of [1280, 360]) {
+  test(`UIX-644 character template modal lifecycle ${width}`, async ({
+    page,
+  }, testInfo) => {
+    const mutations = await install(page, "GM", true);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    await openWorkspaceSection(page, "Персонажи");
+    const create = page.getByRole("button", {
+      name: "Создать персонажа",
+      exact: true,
+    });
+    await create.click();
+    const dialog = page.getByRole("dialog", {
+      name: "Новый персонаж",
+      exact: true,
+    });
+    const name = dialog.getByRole("textbox", { name: "Имя персонажа" });
+    await name.fill("Новый страж");
+    const trigger = dialog.getByRole("combobox", { name: /Шаблон/ });
+    const popup = page.locator(".arken-form-select-popup");
+    await trigger.click();
+    const template = popup.getByRole("option", {
+      name: "На основе «Страж образец»",
+      exact: true,
+    });
+    await expect(template).toBeVisible();
+    await expect
+      .poll(() =>
+        template.evaluate((element) => {
+          const r = element.getBoundingClientRect();
+          return (
+            r.left >= 0 &&
+            r.right <= innerWidth &&
+            r.top >= 0 &&
+            r.bottom <= innerHeight &&
+            element.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            )
+          );
+        }),
+      )
+      .toBe(true);
+    await template.click();
+    await expect(trigger).toContainText("На основе «Страж образец»");
+    await expect(popup).toBeHidden();
+    await trigger.click();
+    await page.setViewportSize({
+      width: width === 360 ? 390 : 1180,
+      height: 640,
+    });
+    await expect(template).toBeVisible();
+    await template.click();
+    await expect(name).toHaveValue("Новый страж");
+    await trigger.click();
+    await page.keyboard.press("Escape");
+    await expect(popup).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(dialog).toBeVisible();
+    await expect(trigger).toContainText("На основе «Страж образец»");
+    await trigger.press("ArrowDown");
+    await expect(popup).toBeVisible();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Enter");
+    await expect(trigger).toContainText("Без шаблона (пустой лист)");
+    await expect(popup).toBeHidden();
+    await trigger.click();
+    await dialog.getByText("Новый персонаж", { exact: true }).click();
+    await expect(popup).toBeHidden();
+    await expect(dialog).toBeVisible();
+    await trigger.focus();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(create).toBeVisible();
+    await create.click();
+    await expect(name).toHaveValue("");
+    await expect(trigger).toContainText("Без шаблона (пустой лист)");
+    await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+    await testInfo.attach("character-template-lifecycle", {
+      body: JSON.stringify({ width, mutations, errors }),
+      contentType: "application/json",
+    });
+    expect(mutations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
 }

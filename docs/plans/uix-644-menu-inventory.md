@@ -93,8 +93,8 @@
 | `WorldEncyclopediaWorkspace.tsx:112` (1)               | Фильтр опубликованного содержимого в reader W. Навигация только для GM; прямая ветка reader в Sidebar не имеет isGm. Прокрутка панели деталей, main overflow:hidden.                                       | E1; не серверный ACL и не новое разрешение reader.                                                   |
 | `sidebar/CharacterMediaGallery.tsx:484,509` (2)        | AttachMediaForm: GM/разрешённый владелец персонажа, варианты видимости по роли; в потоке внутри портала персонажа в body → **B**.                                                                          | Компонент удаления CharacterMediaGallery + E1 не доказывают размещение этих select.                  |
 | `CharacterMediaGallery.tsx:619,644` (2)                | EditMediaDialog того же пользователя; вложенный M.                                                                                                                                                         | Общий E1; отдельный протокол проверки вложенного popup отсутствует.                                  |
-| `sidebar/CharacterWorkspace.tsx:482` (1)               | GM, модальное окно создания персонажа / выбор шаблона; M.                                                                                                                                                  | Общий E1; сценарии персонажа — не адресный контрольный этап проверки popup overlay.                  |
-| `CharacterWorkspace.tsx:1206` (1)                      | Условный выбор персонажа GM (`showCharacterPicker`); в потоке листа → B.                                                                                                                                   | Общий E1; условное место использования не надо считать постоянно видимым.                            |
+| `sidebar/CharacterWorkspace.tsx:482` (1)               | GM, модальное окно создания персонажа / выбор шаблона; M.                                                                                                                                                  | Адресная матрица шаблона GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/outside/resize/reset PASS; см. дополнение ниже.                  |
+| `CharacterWorkspace.tsx:1206` (1)                      | Условный выбор персонажа GM (`showCharacterPicker`); в потоке листа → B.                                                                                                                                   | Неактивное место: единственный production-вызов CharacterPanel передаёт showCharacterPicker=false; не включать ради теста.                            |
 | `sidebar/ChatPanels.tsx:584` (1)                       | GM в ActivityPanel, «Персонаж для броска» при непустом availableRollCharacters; B в боковой панели.                                                                                                        | E12; overflow владельца отдельно от портала Select.                                                  |
 | `sidebar/SetupPanel.tsx:310,411,433` (3)               | GM: предпросмотр игрока, персонаж токена, персонаж приглашения; W в workspace настроек Sidebar. Видимость секции зависит от вкладки настроек.                                                              | Общий E1 + настройка concept; не отдельные hit-test.                                                 |
 | `SetupPanel.tsx:174,335,356` (3)                       | GM, **устаревшие hidden/aria-hidden** секции: вид каталога, прежняя активная сцена/карта; W, сами элементы управления не должны стать интерактивными/видимыми.                                             | Только реестр; не создавать новые пути выполнения ради покрытия скрытой устаревшей функциональности. |
@@ -577,3 +577,36 @@ an obsolete registry role claim pass. Artifacts: world-map-native-gate/results.j
 contains named outcomes and four native-world-map-controls attachments.
 Scoped ESLint, Prettier and git diff --check PASS. No build or full CI rerun for
 this test/documentation-only pool; own Vite stopped after verification.
+## 2026-09-16 — create-character template lifecycle
+
+New cases in existing workspace-select-escape.spec.ts cover the actual GM
+"Новый персонаж" dialog, not a preview or a synthetic standalone Select:
+
+-1280/360, Chromium/Firefox: open template popup, hit-test the real template
+option at its center and within viewport, click it and observe selected label.
+-Reopen, resize to1180/390 and height640 while open, select with a real pointer;
+entered character name remains intact.
+-First Escape closes only the popup, returns focus to its trigger and keeps the
+selected template/dialog. Keyboard ArrowDown/Home/Enter then selects empty-sheet.
+-An outside click on the actual dialog title closes the popup, not its owner.
+Escape from the closed trigger dismisses the dialog; character workspace and
+creation control remain available. Reopening clears name/template; cancel writes
+nothing. No save, template-copy correctness or backend persistence claim.
+
+Final connected file gate:12/12PASS57.989713s, one worker, retries0, skipped0,
+flaky0. Includes the existing8 GM/PLAYER outer-token-select Escape cases and4 new
+character-template cases. Decoded all4 named attachments: mutations[]/errors[].
+Existing React console guard retained. Scope is page errors/guarded React errors,
+not every possible browser warning. ESLint/Prettier/diff PASS; no runtime source
+change, build, full-suite run, new CI or deployment.
+
+Registry correction: current production JSX has only one CharacterPanel call,
+inside CharacterWorkspace, explicitly showCharacterPicker=false. The conditional
+legacy sheet selector is inactive, not an untested GM feature to enable. Keep
+its source entry for future drift auditing; no runtime PASS invented for it.
+
+Remaining for template site: browser zoom, scroll-specific positioning and
+higher/nested competing modal ownership beyond this actual character dialog.
+The full UIX-644 matrix and current integrated release gate remain open.
+Evidence: character-template-gate/results.json with named outcomes and four
+character-template-lifecycle attachments; results-new-01.json keeps initial4PASS.
