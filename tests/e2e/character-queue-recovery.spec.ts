@@ -138,6 +138,11 @@ test("canonical removal rejects queued character edit without phantom PATCH and 
     await expect.poll(() => sockets.size).toBeGreaterThan(0);
     for (const socket of sockets)
       socket.send(`42${JSON.stringify(["game:snapshot", canonical])}`);
+    // Removal closes the sheet. Restoring the roster does not reopen it.
+    await page
+      .getByRole("navigation", { name: "Персонажи кампании" })
+      .getByRole("button", { name: character.name, exact: true })
+      .click();
     await expect(heading).toBeVisible();
     await expect(strength).toHaveValue("1");
     await strength.fill("9");

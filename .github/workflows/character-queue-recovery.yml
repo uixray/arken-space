@@ -1,0 +1,60 @@
+name: Character queue browser recovery
+
+# Bounded verification of the isolated candidate, not a release gate.
+# No PR is needed just to run these two synthetic browser cases.
+on:
+  push:
+    branches: [codex/uix-645-417-ui-polish]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: character-queue-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - project: chromium
+            installBrowser: chrome
+          - project: firefox
+            installBrowser: firefox
+    env:
+      CI: "true"
+      NODE_OPTIONS: --max-old-space-size=2048
+      E2E_PORT: "5173"
+      PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/queue-result.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Actual App served by Vite; only HTTP/WebSocket boundaries are synthetic.
+      # No database, Docker, production requests, or full application build.
+      - run: pnpm --filter @arken/contracts --filter @arken/system build
+      - run: pnpm exec playwright install --with-deps ${{ matrix.installBrowser }}
+      - name: Verify queue removal and recovery through real character fields
+        run: >-
+          pnpm exec playwright test tests/e2e/character-queue-recovery.spec.ts
+          --project=${{ matrix.project }} --workers=1 --retries=0
+          --fail-on-flaky-tests --reporter=line,json
+      - name: Retain synthetic browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: character-queue-${{ matrix.project }}-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: warn
