@@ -262,3 +262,61 @@ it("keeps native textarea change and paste handlers on the inner control", () =>
   expect(pasted).toHaveBeenCalledTimes(1);
   expect(pasteCurrentTarget).toBe(textarea);
 });
+
+it("preserves checkbox native identity, validation, descriptions, ref and real events", () => {
+  const ref = createRef<HTMLInputElement>();
+  const changed = vi.fn();
+  const focused = vi.fn();
+  const blurred = vi.fn();
+  const keyed = vi.fn();
+  renderComponent(
+    <>
+      <p id="check-hint">Нужно подтверждение перед продолжением.</p>
+      <FormInput
+        type="checkbox"
+        id="confirmation"
+        name="confirmation"
+        value="accepted"
+        controlRef={ref}
+        required
+        aria-invalid
+        aria-describedby="check-hint"
+        onFocus={focused}
+        onBlur={blurred}
+        onKeyDown={keyed}
+        onChange={(event) =>
+          changed(
+            event.target,
+            event.currentTarget,
+            event.target.checked,
+            event.target.value,
+          )
+        }
+      >
+        Подтверждаю
+      </FormInput>
+    </>,
+  );
+  const input = screen.getByRole("checkbox", { name: "Подтверждаю" });
+  expect(ref.current).toBe(input);
+  expect(input).toHaveAttribute("id", "confirmation");
+  expect(input).toHaveAttribute("name", "confirmation");
+  expect(input).toHaveAccessibleDescription(
+    "Нужно подтверждение перед продолжением.",
+  );
+  expect(input).toBeRequired();
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  fireEvent.focus(input);
+  fireEvent.keyDown(input, { key: " " });
+  fireEvent.click(input);
+  fireEvent.blur(input);
+  expect(changed).toHaveBeenCalledExactlyOnceWith(
+    input,
+    input,
+    true,
+    "accepted",
+  );
+  expect(focused).toHaveBeenCalledOnce();
+  expect(blurred).toHaveBeenCalledOnce();
+  expect(keyed).toHaveBeenCalledOnce();
+});

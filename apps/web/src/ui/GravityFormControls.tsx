@@ -46,17 +46,19 @@ export function FormInput({
          подписи: он снова переключает флажок. */
       <Checkbox
         className={props.className}
+        style={props.style}
+        title={props.title}
+        id={props.id}
+        value={value}
+        controlRef={controlRef}
+        controlProps={{ ...props, className: undefined, style: undefined }}
         checked={checked}
         defaultChecked={defaultChecked}
         disabled={props.disabled}
         name={props.name}
-        aria-label={props["aria-label"]}
-        onUpdate={(next) =>
-          onChange?.({
-            target: { checked: next, value: next ? "on" : "" },
-            currentTarget: { checked: next, value: next ? "on" : "" },
-          } as ChangeEvent<HTMLInputElement>)
-        }
+        onFocus={props.onFocus}
+        onBlur={props.onBlur}
+        onChange={onChange}
       >
         {children}
       </Checkbox>
