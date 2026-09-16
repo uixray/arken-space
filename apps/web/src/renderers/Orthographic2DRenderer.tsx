@@ -77,7 +77,10 @@ import {
   TOKEN_CONDITION_BADGE,
 } from "./token-condition-badges";
 import { persistDrawingDraft, releaseDrawingDraft } from "./drawing-draft";
-import { isDirectTokenDrag } from "./token-drag-event";
+import {
+  createTokenDragGuard,
+  runNonPingPointerAction,
+} from "./token-drag-event";
 import { mapWorldPointFromDrop } from "../token-placement";
 import { getTokenImageMask } from "./token-image-mask";
 import {
@@ -222,6 +225,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const objectListRef = useRef<HTMLDivElement>(null);
   const objectListTriggerRef = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
+  const [tokenDragGuard] = useState(createTokenDragGuard);
   const [interaction, dispatchInteraction] = useReducer(
     mapInteractionReducer,
     undefined,
@@ -1939,65 +1943,81 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       onDragMove: () => undefined,
       onDragEnd: () => undefined,
     };
-    const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
-      if (!isDirectTokenDrag(event.target, event.currentTarget)) return;
+    const restoreDragPosition = (origin: { x: number; y: number }) => {
       setDragPositions((current) => ({
         ...current,
-        [token.id]: {
-          x: event.target.x(),
-          y: event.target.y(),
-          revision: token.revision,
-        },
+        [token.id]: { ...origin, revision: token.revision },
       }));
-      props.socket?.emit("token:moving", {
-        actionId: crypto.randomUUID(),
-        tokenId: token.id,
-        x: event.target.x(),
-        y: event.target.y(),
-        z: token.z,
-        levelId: token.levelId,
-        revision: token.revision,
-      });
+    };
+    const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
+      tokenDragGuard.run(
+        event,
+        () => {
+          setDragPositions((current) => ({
+            ...current,
+            [token.id]: {
+              x: event.target.x(),
+              y: event.target.y(),
+              revision: token.revision,
+            },
+          }));
+          props.socket?.emit("token:moving", {
+            actionId: crypto.randomUUID(),
+            tokenId: token.id,
+            x: event.target.x(),
+            y: event.target.y(),
+            z: token.z,
+            levelId: token.levelId,
+            revision: token.revision,
+          });
+        },
+        restoreDragPosition,
+      );
     };
     const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
-      if (!isDirectTokenDrag(event.target, event.currentTarget)) return;
-      const x = snap(event.target.x());
-      const y = snap(event.target.y());
-      if (
-        selectedTokenIds.includes(token.id) &&
-        selectedTokenIds.length + selectedDrawingIds.length > 1 &&
-        props.onBulkMove
-      ) {
-        event.target.position({ x, y });
-        enqueueMove({ x: x - token.x, y: y - token.y });
-        return;
-      }
-      event.target.position({ x, y });
-      setDragPositions((current) => ({
-        ...current,
-        [token.id]: { x, y, revision: token.revision },
-      }));
-      props.socket?.emit(
-        "token:moved",
-        {
-          actionId: crypto.randomUUID(),
-          tokenId: token.id,
-          x,
-          y,
-          z: token.z,
-          levelId: token.levelId,
-          revision: token.revision,
-        },
-        (ack) => {
-          if (!ack.ok) {
-            setDragPositions((current) => {
-              const next = { ...current };
-              delete next[token.id];
-              return next;
-            });
-            props.socket?.emit("game:resync", ack.sequence);
+      tokenDragGuard.run(
+        event,
+        () => {
+          const x = snap(event.target.x());
+          const y = snap(event.target.y());
+          if (
+            selectedTokenIds.includes(token.id) &&
+            selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+            props.onBulkMove
+          ) {
+            event.target.position({ x, y });
+            enqueueMove({ x: x - token.x, y: y - token.y });
+            return;
           }
+          event.target.position({ x, y });
+          setDragPositions((current) => ({
+            ...current,
+            [token.id]: { x, y, revision: token.revision },
+          }));
+          props.socket?.emit(
+            "token:moved",
+            {
+              actionId: crypto.randomUUID(),
+              tokenId: token.id,
+              x,
+              y,
+              z: token.z,
+              levelId: token.levelId,
+              revision: token.revision,
+            },
+            (ack) => {
+              if (!ack.ok) {
+                setDragPositions((current) => {
+                  const next = { ...current };
+                  delete next[token.id];
+                  return next;
+                });
+                props.socket?.emit("game:resync", ack.sequence);
+              }
+            },
+          );
         },
+        restoreDragPosition,
       );
     };
     return (
@@ -2006,6 +2026,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         x={dragPosition?.x ?? token.x}
         y={dragPosition?.y ?? token.y}
         draggable={canMove}
+        onMouseDown={(event) =>
+          tokenDragGuard.recordPointerDown(event.currentTarget, event.evt)
+        }
+        onTouchStart={(event) =>
+          tokenDragGuard.recordTouchStart(event.currentTarget, event.evt)
+        }
+        onDragStart={(event) => tokenDragGuard.begin(event)}
         onDragMove={onDragMove}
         onDragEnd={onDragEnd}
         onMouseEnter={() => setHoveredTokenId(token.id)}
@@ -2013,8 +2040,6 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onClick={(event) => {
           if (
             token.id.startsWith("pending:") ||
-            event.evt.button !== 0 ||
-            event.evt.ctrlKey ||
             !canSelectToken(token, {
               role: props.role,
               membershipId: props.membershipId,
@@ -2024,9 +2049,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             })
           )
             return;
-          selectObject(
-            { kind: "token", objectId: token.id, revision: token.revision },
-            event.evt.shiftKey,
+          runNonPingPointerAction(props.tool, event.evt, () =>
+            selectObject(
+              { kind: "token", objectId: token.id, revision: token.revision },
+              event.evt.shiftKey,
+            ),
           );
         }}
         onContextMenu={(event) => {
@@ -2273,14 +2300,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           !(event.target instanceof HTMLCanvasElement)
         )
           return;
-        stageRef.current?.setPointersPositions(event.nativeEvent);
-        const point = pointerInWorld();
-        if (!point) return;
-        const bounded = clampToWorld(point);
-        const points = [bounded.x, bounded.y];
-        drawingActiveRef.current = true;
-        drawingPointsRef.current = points;
-        setDrawingPoints(points);
+        runNonPingPointerAction(props.tool, event, () => {
+          stageRef.current?.setPointersPositions(event.nativeEvent);
+          const point = pointerInWorld();
+          if (!point) return;
+          const bounded = clampToWorld(point);
+          const points = [bounded.x, bounded.y];
+          drawingActiveRef.current = true;
+          drawingPointsRef.current = points;
+          setDrawingPoints(points);
+        });
       }}
       onFocus={() => dispatchInteraction({ type: "focus" })}
       onBlur={(event) => {
