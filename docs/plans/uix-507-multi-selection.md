@@ -266,3 +266,28 @@ completion. The untracked recovery spec is unchanged.
 - Final connected20/20 browser PASS119.0s, workers1/retries0: bulk lifecycle8, single lifecycle8, GM/PLAYER selection/move/delete4. Unit scope6/6 PASS; web types PASS after explicit fixture-array guard. Lint exit0 with two warnings in unchanged App effects (359/513, missing snapshot dependency); formatting/diff PASS. No full-suite/build/CI rerun/push/deploy.
 - New source files map-delete.ts and map-delete.test.ts; changed SceneRenderer callback contract, App bulk handler and renderer. Evidence in current-session bulk-delete-gate. selection-recovery.spec.ts remains untouched/untracked.
 - Limits: mocks prove browser/socket/HTTP intent, not full live multiplayer/physical-device acceptance. Role/scene scope changes covered by pure tests, not all runtime permutations. Open-menu dynamic focus and fresh GM appearance/layer actions remain; independent token-popup ResizeObserver gate remains open. No Linear closure or new cards.
+
+### 2026-09-17 — bulk approval invalidates on eligibility changes
+
+Live UIX-507 remains In Review. Extended the existing exact-target confirmation
+scenario, without touching the preserved untracked recovery test or product code.
+New cases: GM token lock / MAP-layer transfer; PLAYER visibility revoked /
+GM-layer transfer. Each explicitly keeps token and drawing revisions unchanged,
+so an incidental version change cannot substitute for permission revalidation.
+
+Actual App receives the changed snapshot over the synthetic Socket.IO boundary;
+the scene title confirms consumption before asserting that the old confirmation
+has disappeared and no deletion was sent. Restoring eligible revision2 objects
+does not revive that approval. A fresh marquee and confirmation then delete
+exactly the original token and drawing with their new revisions. The cases retain
+zero unexpected-write/pageerror assertions and original confirmation counts.
+
+Connected gate: 16/16 PASS, Chrome/Firefox desktop1280, one worker/no retries:
+eight new eligibility cases plus eight existing version/removal/control cases.
+E2E types, scoped ESLint, formatting and diffcheck PASS. Evidence:
+`bulk-eligibility-gate/final-results.json` and its attached receipts/checkpoint.
+Own hidden Vite child stopped after the terminal result. No source fix was needed.
+
+This proves client approval invalidation/reconfirmation, not real-server ACL,
+physical touch, scene/actor switch permutations or whole UIX-507 acceptance.
+No full suite/build/CI, publication, Linear writes or status closure.

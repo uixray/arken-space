@@ -3165,13 +3165,23 @@ for (const change of [
   "drawing-revision",
   "drawing-removed",
   "control-revoked",
+  "token-locked",
+  "map-layer",
+  "visibility-revoked",
+  "gm-layer",
 ] as const) {
   test(`UIX-507 bulk confirmation keeps exact targets on ${change}`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 850 });
     const current: GameSnapshot = structuredClone(snapshot);
-    current.me.role = change === "control-revoked" ? "PLAYER" : "GM";
+    current.me.role = [
+      "control-revoked",
+      "visibility-revoked",
+      "gm-layer",
+    ].includes(change)
+      ? "PLAYER"
+      : "GM";
     current.tokens[0].controllerMembershipIds = [current.me.id];
     current.tokens[0].ownerMembershipId = current.me.id;
     current.fogReveals = [
@@ -3271,6 +3281,19 @@ for (const change of [
     if (change === "drawing-removed") current.drawings = [];
     if (change === "control-revoked")
       current.tokens[0].controllerMembershipIds = [];
+    if (change === "token-locked") current.tokens[0].locked = true;
+    if (change === "map-layer") current.tokens[0].layer = "MAP";
+    if (change === "visibility-revoked") current.tokens[0].visible = false;
+    if (change === "gm-layer") current.tokens[0].layer = "GM";
+    // Eligibility changes must invalidate approval without relying on a revision bump.
+    if (
+      ["token-locked", "map-layer", "visibility-revoked", "gm-layer"].includes(
+        change,
+      )
+    ) {
+      expect(current.tokens[0].revision).toBe(originalToken.revision);
+      expect(current.drawings[0].revision).toBe(originalDrawing.revision);
+    }
     current.scenes[0].name = "Bulk snapshot updated";
     publish!();
     await expect(page.locator(".topbar")).toContainText(
