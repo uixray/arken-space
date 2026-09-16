@@ -436,3 +436,113 @@ for (const role of ["GM", "PLAYER"] as const)
       });
     });
   }
+
+for (const width of [1280, 390])
+  test(`UIX-644 scene editor map owner ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 800 });
+    const snapshot = await install(page);
+    snapshot.assets = ["Лесная карта", "Карта башни"].map((name, i) => ({
+      id: `scene-map-${i}`,
+      kind: "MAP" as const,
+      name,
+      mimeType: "image/svg+xml",
+      sizeBytes: 128,
+      width: 1600,
+      height: 1000,
+      durationSeconds: null,
+      url: `/api/assets/scene-map-${i}/content`,
+      createdAt: new Date(0).toISOString(),
+    }));
+    await page.route("**/api/assets/*/content", (r) =>
+      r.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><rect width="1600" height="1000" fill="#637d72"/></svg>',
+      }),
+    );
+    const errors: string[] = [],
+      writes: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("request", (r) => {
+      const p = new URL(r.url()).pathname;
+      if (
+        p.startsWith("/api/") &&
+        !["GET", "HEAD"].includes(r.method()) &&
+        p !== "/api/chat/read"
+      )
+        writes.push(`${r.method()} ${p}`);
+    });
+    await page.goto("/");
+    await openWorkspaceSection(page, "Сцены");
+    const workspace = page.getByRole("dialog", { name: "Сцены", exact: true });
+    const configure = workspace
+      .locator(".scene-manager-card")
+      .filter({ hasText: "Начальная сцена" })
+      .getByRole("button", { name: "Настроить", exact: true });
+    await configure.click();
+    const editor = page.getByRole("dialog", {
+      name: "Настройка: Начальная сцена",
+      exact: true,
+    });
+    const name = editor.getByRole("textbox", { name: "Название", exact: true });
+    await name.fill("Черновик леса");
+    const trigger = editor.getByRole("combobox", {
+      name: "Карта",
+      exact: true,
+    });
+    await trigger.click();
+    const popup = page.locator(".arken-form-select-popup");
+    const forest = popup.getByRole("option", {
+      name: "Лесная карта",
+      exact: true,
+    });
+    await assertHitTarget(forest);
+    await forest.click();
+    await expect(trigger).toContainText("Лесная карта");
+    await trigger.click();
+    await expect(popup).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(popup).toBeHidden();
+    await expect(editor).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await expect(name).toHaveValue("Черновик леса");
+    await trigger.press("ArrowDown");
+    await expect(popup).toBeVisible();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Enter");
+    await expect(trigger).toContainText("Без карты");
+    await expect(name).toHaveValue("Черновик леса");
+    await trigger.click();
+    await page.setViewportSize({ width: 360, height: 480 });
+    await expect
+      .poll(() =>
+        popup.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return (
+            r.left >= -1 &&
+            r.right <= innerWidth + 1 &&
+            r.top >= -1 &&
+            r.bottom <= innerHeight + 1
+          );
+        }),
+      )
+      .toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(popup).toBeHidden();
+    await expect(editor).toBeVisible();
+    await editor.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(editor).toBeHidden();
+    await expect(workspace).toBeVisible();
+    await configure.click();
+    await expect(name).toHaveValue("Начальная сцена");
+    await expect(trigger).toContainText("Без карты");
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeHidden();
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("scene-editor-map-receipt", {
+      body: JSON.stringify({ width, writes, errors }),
+      contentType: "application/json",
+    });
+  });
