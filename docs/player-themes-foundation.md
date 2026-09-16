@@ -109,8 +109,8 @@ An explicit `selectedThemeId: "system"` wins over any supplied personal default.
 
 ## Semantic contrast guard — 2026-09-17
 
-`player-theme-contrast.test.ts` checks 44 declared role pairs for each of the seven
-palettes (308 comparisons): primary/muted/faint/accent text over seven flat
+`tests/player-theme-contrast.test.ts` checks 47 declared role pairs for each of the seven
+palettes (329 comparisons): primary/muted/faint/accent text over seven flat
 surfaces; focus over those surfaces; error copy over form/raised/overlay surfaces;
 field text/border/focus; primary button text on default/hover/active fills. Text
 uses 4.5:1 and the checked non-text roles 3:1, without rounding passing values up.
@@ -129,3 +129,14 @@ on the hover/active/selected tint composited over `color-surface` measures about
 Do not put small error text on those tinted surfaces without a rendered check and
 a contrast-safe treatment. Keep this open in the component migration; do not
 claim that every possible combination of the approved tokens is accessible.
+
+### Consolidation, preserving prior coverage
+
+The earlier root test already guarded theme contrast. The later overlapping test
+under `apps/web/src/design-system` was merged back into that original root suite,
+not left running twice. The unified 47-pair matrix retains the original extra
+cases: error text on canvas, field border against its surrounding surface, and
+filled destructive-button text. Equal-color and black-alpha calibration cases
+are retained alongside the new negative/missing-token cases. No palette changed,
+no prior acceptance scope was removed, and the conditional light error-on-tint
+risk remains open.
