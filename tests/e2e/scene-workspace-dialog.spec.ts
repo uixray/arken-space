@@ -533,3 +533,134 @@ test("UIX-621 raw Gravity select receives pointer above feedback modal", async (
   await option.click();
   await expect(dialog.locator(".g-select")).toContainText("Идея");
 });
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-644 feedback selector lifecycle ${role}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    const writes: string[] = [],
+      errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const r = route.request(),
+        path = new URL(r.url()).pathname;
+      if (!["GET", "HEAD"].includes(r.method()) && path !== "/api/chat/read")
+        writes.push(`${r.method()} ${path}`);
+      if (path === "/api/bootstrap") return route.fulfill({ json: current });
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40")
+          socket.send('40{"sid":"feedback-menu"}');
+      });
+      socket.send(
+        '0{"sid":"feedback-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const session = page.getByLabel("Меню сеанса", { exact: true });
+    await session.click();
+    await page.getByRole("button", { name: "Сообщить", exact: true }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "Сообщить о проблеме или идее",
+      exact: true,
+    });
+    const select = dialog.getByRole("combobox");
+    await expect(dialog).toBeVisible();
+    await dialog
+      .locator("input")
+      .first()
+      .fill("Локальный черновик без отправки");
+    const geometry: unknown[] = [];
+    for (const size of [
+      { width: 1280, height: 850 },
+      { width: 390, height: 850 },
+      { width: 360, height: 480 },
+      { width: 1280, height: 850 },
+    ]) {
+      await select.click();
+      const idea = page.getByRole("option", { name: "Идея", exact: true });
+      await expect(idea).toBeVisible();
+      await page.setViewportSize(size);
+      await expect(idea).toBeVisible();
+      await expect
+        .poll(() =>
+          idea.evaluate((el) => {
+            const b = el.getBoundingClientRect();
+            return (
+              b.left >= 0 &&
+              b.top >= 0 &&
+              b.right <= innerWidth &&
+              b.bottom <= innerHeight &&
+              el.contains(
+                document.elementFromPoint(
+                  b.x + b.width / 2,
+                  b.y + b.height / 2,
+                ),
+              )
+            );
+          }),
+        )
+        .toBe(true);
+      geometry.push({ size, option: await idea.boundingBox() });
+      await idea.click();
+      await expect(select).toContainText("Идея");
+      await expect(idea).toBeHidden();
+      await expect(select).toBeFocused();
+      await select.press("Enter");
+      await expect(idea).toBeVisible();
+      await page.keyboard.press("Home");
+      await page.keyboard.press("Enter");
+      await expect(select).toContainText("Ошибка");
+      await select.press("Enter");
+      await expect(idea).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(idea).toBeHidden();
+      await expect(dialog).toBeVisible();
+      await expect(select).toBeFocused();
+      await select.click();
+      await expect(idea).toBeVisible();
+      await dialog.locator("textarea").first().click();
+      await expect(idea).toBeHidden();
+      await expect(dialog.locator("textarea").first()).toBeFocused();
+      await expect(dialog.locator("input").first()).toHaveValue(
+        "Локальный черновик без отправки",
+      );
+    }
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const el = document.activeElement as HTMLElement | null;
+          return Boolean(
+            el &&
+            el !== document.body &&
+            el.getClientRects().length &&
+            !el.closest("[hidden],[inert]"),
+          );
+        }),
+      )
+      .toBe(true);
+    await session.click();
+    await page.getByRole("button", { name: "Сообщить", exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await expect(select).toContainText("Ошибка");
+    await expect(dialog.locator("input").first()).toHaveValue("");
+    await page.keyboard.press("Escape");
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("feedback-selector-receipt", {
+      body: JSON.stringify({ role, geometry, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}

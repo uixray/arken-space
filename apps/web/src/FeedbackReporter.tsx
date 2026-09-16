@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
-import { Button, Select, TextArea, TextInput } from "@gravity-ui/uikit";
+import { Button, TextArea, TextInput } from "@gravity-ui/uikit";
 import { api } from "./api";
 import { createFeedbackDiagnostics } from "./feedback-diagnostics";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ImageUploadField } from "./ui/ImageUploadField";
 import { notify } from "./ui/notifications";
-import { useOverlayPopupClassName } from "./ui/overlay-owner";
+import { FormSelect } from "./ui/GravityFormControls";
 
 type Props = {
   buildVersion: string;
   buildRevision?: string;
   connection: string;
+  onOpen?: () => void;
 };
 
 const initialDraft = {
@@ -27,18 +28,18 @@ function FeedbackCategorySelect({
   value: string;
   onUpdate: (value: string) => void;
 }) {
-  const popupClassName = useOverlayPopupClassName();
   return (
-    <Select
-      label="Тип сообщения"
-      popupClassName={popupClassName}
-      value={[value]}
-      options={[
-        { value: "BUG", content: "Ошибка" },
-        { value: "IDEA", content: "Идея" },
-      ]}
-      onUpdate={(next) => onUpdate(next[0] ?? "BUG")}
-    />
+    <label className="feedback-field">
+      <span>Тип сообщения</span>
+      <FormSelect
+        aria-label="Тип сообщения"
+        value={value}
+        onChange={(event) => onUpdate(event.target.value)}
+      >
+        <option value="BUG">Ошибка</option>
+        <option value="IDEA">Идея</option>
+      </FormSelect>
+    </label>
   );
 }
 
@@ -156,7 +157,14 @@ export function FeedbackReporter(props: Props) {
 
   return (
     <>
-      <Button size="s" view="flat" onClick={() => setOpen(true)}>
+      <Button
+        size="s"
+        view="flat"
+        onClick={() => {
+          props.onOpen?.();
+          setOpen(true);
+        }}
+      >
         Сообщить
       </Button>
       <ArkenDialog

@@ -1717,6 +1717,15 @@ export function App() {
                   </button>
                   {!previewSnapshot && (
                     <FeedbackReporter
+                      onOpen={() => {
+                        // The dialog must restore focus to the persistent menu
+                        // entry, not a report button hidden after menu dismissal.
+                        const menu = accountMenuRef.current;
+                        if (menu) {
+                          menu.open = false;
+                          menu.querySelector<HTMLElement>("summary")?.focus();
+                        }
+                      }}
                       buildVersion={snapshot.buildVersion}
                       buildRevision={snapshot.buildRevision}
                       connection={connection}

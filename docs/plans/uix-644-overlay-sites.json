@@ -19,7 +19,7 @@
     },
     {
       "file": "apps/web/src/FeedbackReporter.tsx",
-      "kind": "tag:Select",
+      "kind": "tag:FormSelect",
       "count": 1
     },
     {
