@@ -349,3 +349,22 @@ scoped ESLint, Prettier and diffcheck passed. This proves browser DOM semantics
 and mocked-network recovery, not spoken VoiceOver/NVDA output, real-server outage
 recovery, music upload failure behavior or completion of the full state matrix.
 No full suite/build/CI/deployment was performed.
+
+## Image intake error association — 2026-09-17
+
+ImageUploadField now associates its hint and current validation error with the
+native file input, visible picker button and enabled empty-state dropzone using
+instance-local IDs. The native input exposes aria-invalid only while an intake
+error exists. The existing alert remains; no MIME policy, preview lifecycle,
+file callback, network request or layout changed.
+
+The connected component gate passed 17/17 tests (44.41s, one worker), including
+new accessible-description assertions before rejection, after rejection, after
+successful recovery and after removing a retained file. Rejecting an invalid
+replacement preserves the previous image. The existing cancellation, repeated
+file, picker/drop/paste, disabled and object-URL cleanup tests also passed.
+Scoped ESLint, web TypeScript, formatting and diffcheck passed.
+
+Scope: jsdom with the existing native-button Gravity mock, not real browser
+accessibility-tree or spoken screen-reader verification. No full suite/build,
+production upload, publication or Linear completion is claimed.
