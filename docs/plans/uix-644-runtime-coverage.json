@@ -70,6 +70,12 @@
       "revision": "b048921c2220ece0efb42c492b3b424859a258e2",
       "artifact": "character-image-gate/results.json",
       "scope": "Eight GM/PLAYER-owner1280/390 Chrome/Firefox cases: portrait-only eligible assets, pointer hit, independent portrait PATCH and resource counters PATCH, keyboard focus-only then removal, preserved current/maximum/recoverable, reload mock-backed state. Not live persistence, non-owner ACL or failure recovery."
+    },
+    "musicOwner": {
+      "status": "PASS",
+      "revision": "20b48de69676539db3ebc5816ddfbc0b5a3cd47e",
+      "artifact": "music-owner-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/1024 Chrome/Firefox cases: GM empty-library transition twice and visible return focus; PLAYER overflow absent; volume Escape/outside/hidden-anchor390 resize. No audio playback/upload/track command test."
     }
   },
   "sites": [
@@ -127,11 +133,11 @@
       "file": "apps/web/src/MusicBar.tsx",
       "kind": "tag:details",
       "count": 2,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Volume popup historical Escape/resize evidence; music overflow/library transition not fully reconciled.",
-      "evidence": [],
-      "next": "Reconcile two different callers, not one generic details PASS."
+      "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target.",
+      "evidence": ["musicOwner"],
+      "next": "Track selection command focus, real audio and compact music entry remain separate; compact foundation currently hides music-topbar."
     },
     {
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
