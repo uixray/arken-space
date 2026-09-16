@@ -188,3 +188,29 @@ PR #58 устраняет видимый дефект: внешний Floating U
   новая регрессия подготовлена для следующей GitHub-интеграции. Сам этот
   локальный пул не публиковался и не менял production. Широкий UIX-644
   и отдельные задачи ручной/mobile-приёмки этим не закрываются.
+
+## 2026-09-16 — revalidation using existing release evidence
+
+Live UIX-502 remains In Review. Existing exact-main CI `35043939211` was read,
+not restarted: SHA `7f28ca399ec0530e55e6bd41d4427ea23150522b`, both browser jobs
+successful (Chromium239 passed/2 skipped; Firefox238 passed/3 skipped).
+The modal-owner contract, close-lifecycle and token-generator scenarios, dialog
+ownership implementation and styles have no diff from that released revision.
+The current form-wrapper change is confined to checkbox forwarding, not Select.
+
+Downloaded modal-owner receipts from that run contain all eight combinations of
+sibling/nested ×1280/390 ×Chrome/Firefox. Each final diagnostic has zero page
+errors, zero unexpected API requests, zero leftover layers and29 focus events.
+The existing assertions cover actual overlapping hit targets, focus cycles,
+Arrow/Enter, Escape levels, owner focus return and cleanup. This reuses release
+evidence rather than re-running browser tests because the chat changed.
+
+The generic synthetic-acceptance artifacts were also inspected: they do not
+contain token-modal-character-popup PNGs. Do not claim those images were viewed
+in this audit. The historical September8 App acceptance report and unchanged
+source remain available; the downloaded CI log uses summary output and does not
+individually name the token-modal cases. Whole UIX-644, arbitrary nesting depth
+and physical-device acceptance are not inferred from the owner-fixture receipts.
+No Linear state change was attempted because the earlier external-write approval
+is unresolved. This evidence audit is not an assertion that every open project
+issue is ready for closure.
