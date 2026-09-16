@@ -260,3 +260,28 @@
   не доказываются. Исторический авторский контент не переписан.
 - **Дальше:** локальная фиксация и общий release gate связанного пула.
   UIX-417 остаётся In Progress: этот срез не закрывает весь English-error audit.
+
+## 2026-09-16 — remaining system-role labels
+
+- Live UIX-417 is still In Progress; original all-screen Russian criterion remains
+  broader than this slice. Source scan found raw `GM` in the session identity and
+  the map master-layer checkbox. Only their display labels became `Мастер`;
+  role values, predicates, permissions, user display names and authored content
+  are unchanged.
+- New actual-App `russian-system-roles.spec.ts`: old desktop GM case failed on
+  expected `Мастер` / actual `GM`. After the two-label change, 8/8 PASS (36.6s),
+  Chromium/Firefox × GM/PLAYER ×1280×850/360×640. It preserves deliberately Latin
+  names `GM Smith` and `Player One`, checks exact system captions, checkbox-label
+  viewport bounds and no game HTTP mutations. Synthetic transport, not auth proof.
+- Investigated `Imported stickers require provenance`: it is a server Zod issue.
+  The production error handler replaces validation details with Russian
+  `Некорректные данные запроса`; the non-production handler exposes diagnostic
+  details. This source trace is not an executed API test or a reason to rewrite
+  internal machine codes/logs. No server change in this pool.
+- Evidence `russian-roles-gate/browser-red.log`, `browser-01.log` and screenshots
+  under the current local artifact root. Formatter/diffcheck PASS; scoped ESLint
+  exits0 with two pre-existing unchanged App effect-dependency warnings at359/513,
+  not a warning-free lint claim. No full typecheck/build/34-case replay for two
+  text literals; the prior integrated8504fea build is not this exact runtime.
+- No push/deploy/Linear state change. Remaining error/conditional-screen coverage
+  and complete UI417 acceptance are still open; do not close from these8 cases.

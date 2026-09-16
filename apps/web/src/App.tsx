@@ -1685,7 +1685,7 @@ export function App() {
                       ? `Просмотр: ${viewSnapshot.me.displayName}`
                       : snapshot.me.role === "PLAYER"
                         ? `Вы играете как: ${snapshot.me.displayName}`
-                        : `${snapshot.me.displayName} · ${snapshot.me.role}`}
+                        : `${snapshot.me.displayName} · Мастер`}
                   </span>
                   <span
                     className="account-menu__build"

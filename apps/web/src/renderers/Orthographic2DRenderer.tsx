@@ -3492,7 +3492,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               checked={showGmLayer}
               onChange={(event) => setShowGmLayer(event.target.checked)}
             />
-            GM
+            Мастер
           </label>
         )}
       </div>
