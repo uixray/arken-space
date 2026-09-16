@@ -368,3 +368,28 @@ Follow-up to `43c67b1`, not a replay of its eight Escape/layer cases.
 - Scoped lint, web typecheck, formatter and whitespace checks PASS. Evidence in
   `details-responsive-gate` under the current local artifact root. No full tests,
   build, CI restart, push or deploy. UIX-644 and the full mobile audit remain open.
+## 2026-09-16 — character gallery dropdown runtime slice
+
+Four previously inventory-only FormSelect sites now have targeted runtime smoke:
+AttachMediaForm category/visibility (sheet) and EditMediaDialog category/visibility
+(blocking modal), each GM/PLAYER at1280/360 in Chromium/Firefox.
+
+- New cases in `tests/e2e/character-media-detach.spec.ts` reuse the existing
+  media fixture. `browser-04.log`: 8/8PASS, one worker/no retries. Pointer open,
+  second option center hit and click, selected label, reopening, Escape,
+  trigger focus return and owner still visible; cancel modal, zero mutations.
+- Separate consecutive-Escape regression: 2/2PASS14.3s (PLAYER360, both browsers).
+  First Escape closes only the dropdown, second closes the character sheet.
+- Found actual FAIL: sheet closed with its Select on the first Escape.
+  defaultPrevented alone and a bubble-time aria-expanded check both failed.
+  CharacterWorkspace now remembers open Select/listbox ownership during native
+  capture in a WeakSet; the existing bubble listener leaves that event alone.
+  No stopPropagation, gameplay/save/auth change or new z-index. Both listeners
+  are removed when the sheet becomes inactive/unmounts. Existing editable/IME
+  and dialog exemptions remain; defaultPrevented is now respected too.
+- Evidence directory: local `gallery-menus-gate` for this continuation; first
+  three browser logs preserve failures, fourth preserves the corrected matrix.
+- This resolves runtime-smoke absence for these four sites only. The full site
+  matrix still has unverified outside-click, resize/browser-zoom, keyboard
+  option selection, nested-modal and other registry rows. No whole UIX-644 PASS.
+  API is mocked; this is not actual file upload/persistence/ACL proof.

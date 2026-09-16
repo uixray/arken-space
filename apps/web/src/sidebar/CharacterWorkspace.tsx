@@ -152,14 +152,44 @@ export function CharacterWorkspace({
   }, [active, state.activeId]);
   useEffect(() => {
     if (!active) return;
+    // Gravity may synchronously collapse the Select before the window bubble
+    // listener runs. Remember ownership in capture, without intercepting the
+    // event: the Select still closes itself; a second Escape closes the sheet.
+    const selectEscapes = new WeakSet<KeyboardEvent>();
+    const rememberSelectEscape = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        event.target instanceof Element &&
+        event.target.closest(
+          '[role="listbox"], [role="combobox"][aria-expanded="true"]',
+        )
+      ) {
+        selectEscapes.add(event);
+      }
+    };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.isComposing || isEditableEventTarget(event.target)) return;
+      if (
+        selectEscapes.has(event) ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        isEditableEventTarget(event.target)
+      )
+        return;
       if (event.key !== "Escape") return;
-      if ((event.target as Element | null)?.closest('[role="dialog"]')) return;
+      if (
+        (event.target as Element | null)?.closest(
+          '[role="dialog"], [role="listbox"], [role="combobox"][aria-expanded="true"]',
+        )
+      )
+        return;
       onClose();
     };
+    window.addEventListener("keydown", rememberSelectEscape, true);
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", rememberSelectEscape, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [active, onClose]);
 
   const openCount = state.openIds.length;
