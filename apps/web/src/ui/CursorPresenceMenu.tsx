@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Popup, Switch } from "@gravity-ui/uikit";
 import type { CursorPreference } from "../cursor-preference";
 import { AppIcon } from "./AppIcon";
@@ -29,6 +29,20 @@ export function CursorPresenceMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!open || !anchor || typeof IntersectionObserver === "undefined") return;
+    // A scrollable toolbar can clip the anchor after resize or scrolling.
+    // Do not leave its portalled settings detached from a reachable trigger.
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry && !entry.isIntersecting) setOpen(false);
+      },
+      { threshold: 0 },
+    );
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, [open, anchor]);
 
   if (role !== "GM")
     return (
@@ -79,7 +93,11 @@ export function CursorPresenceMenu({
         open={open}
         onOpenChange={setOpen}
         anchorElement={anchor}
-        placement="bottom-start"
+        placement={["bottom-start", "top-start"]}
+        strategy="fixed"
+        role="dialog"
+        aria-label="Видимость курсоров"
+        initialFocus={0}
       >
         <div className="cursor-presence-menu" role="group">
           <Switch

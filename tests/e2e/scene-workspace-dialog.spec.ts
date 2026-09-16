@@ -664,3 +664,140 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
   });
 }
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-644 cursor visibility menu lifecycle ${role}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    const writes: string[] = [],
+      errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const r = route.request(),
+        path = new URL(r.url()).pathname;
+      if (!["GET", "HEAD"].includes(r.method()) && path !== "/api/chat/read")
+        writes.push(`${r.method()} ${path}`);
+      if (path === "/api/bootstrap") return route.fulfill({ json: current });
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((m) => {
+        if (m.toString() === "40") socket.send('40{"sid":"cursor-menu"}');
+      });
+      socket.send(
+        '0{"sid":"cursor-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const trigger = page.locator('button[data-tool="CURSOR_PRESENCE"]');
+    const panel = page.locator(".cursor-presence-menu");
+    const receive = page.getByRole("switch", {
+      name: "Показывать чужие курсоры",
+      exact: true,
+    });
+    const send = page.getByRole("switch", {
+      name: "Показывать мой курсор игрокам",
+      exact: true,
+    });
+    const geometry: unknown[] = [];
+    for (const size of [
+      { width: 1280, height: 850 },
+      { width: 390, height: 850 },
+      { width: 360, height: 480 },
+    ]) {
+      if (role === "GM") {
+        await trigger.click();
+        await expect(panel).toBeVisible();
+        await expect(receive).toBeFocused();
+        await expect(send).not.toBeChecked();
+        await page.setViewportSize(size);
+        if (size.height === 480) {
+          // The shorter viewport clips the anchor in the scrollable toolbar;
+          // its popup must dismiss, not float without a reachable owner.
+          await expect(panel).toBeHidden();
+          await trigger.scrollIntoViewIfNeeded();
+          await trigger.click();
+          await expect(panel).toBeVisible();
+        }
+        await expect
+          .poll(() =>
+            panel.evaluate((el) => {
+              const b = el.getBoundingClientRect();
+              return (
+                b.left >= 0 &&
+                b.top >= 0 &&
+                b.right <= innerWidth &&
+                b.bottom <= innerHeight
+              );
+            }),
+          )
+          .toBe(true);
+        await expect
+          .poll(() =>
+            receive.evaluate((input) => {
+              const el = input.closest("label");
+              if (!el) return false;
+              const b = el.getBoundingClientRect();
+              return el.contains(
+                document.elementFromPoint(
+                  b.x + b.width / 2,
+                  b.y + b.height / 2,
+                ),
+              );
+            }),
+          )
+          .toBe(true);
+        geometry.push({ size, panel: await panel.boundingBox() });
+        await panel
+          .getByText("Показывать чужие курсоры", { exact: true })
+          .click();
+        await expect(receive).not.toBeChecked();
+        await receive.press("Space");
+        await expect(receive).toBeChecked();
+        await page.keyboard.press("Tab");
+        await expect(send).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(panel).toBeHidden();
+        await expect(trigger).toBeFocused();
+        await trigger.press("Enter");
+        await expect(panel).toBeVisible();
+        await page.getByLabel("Меню сеанса", { exact: true }).click();
+        await expect(panel).toBeHidden();
+        await expect(
+          page.getByLabel("Меню сеанса", { exact: true }),
+        ).toBeFocused();
+        await page.keyboard.press("Escape");
+      } else {
+        await page.setViewportSize(size);
+        await expect(trigger).toHaveAttribute("aria-pressed", "true");
+        await trigger.click();
+        await expect(trigger).toHaveAttribute("aria-pressed", "false");
+        await trigger.press("Space");
+        await expect(trigger).toHaveAttribute("aria-pressed", "true");
+        await expect(panel).toHaveCount(0);
+      }
+    }
+    if (role === "GM") {
+      await trigger.click();
+      await expect(panel).toBeVisible();
+      await page.locator("#compact-nav-journal").click();
+      await expect(panel).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(trigger).toBeVisible();
+      await expect(panel).toBeHidden();
+    }
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("cursor-menu-receipt", {
+      body: JSON.stringify({ role, geometry, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
