@@ -385,7 +385,13 @@
     overscroll-behavior: contain;
   }
 
+  .character-workspace[data-compact="true"] .character-sheet-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .character-workspace[data-compact="true"] .character-sheet-card__body {
+    /* Visible overflow must not restore the grid item min-content width. */
+    min-width: 0;
     overflow: visible;
   }
 
@@ -431,6 +437,7 @@
   }
 
   .character-workspace[data-compact="true"] :is(button, summary, .g-button) {
+    min-width: 44px;
     min-height: 44px;
   }
 

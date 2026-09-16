@@ -174,3 +174,33 @@ Follow-up to `5ea2c0f`, not acceptance by extrapolation from the 850px-tall scre
   character surfaces, all input touch targets, zoom-value interaction, or a real
   multiplayer session. The tests start in each viewport; they do not prove a
   live in-session rotation retained state. No publication/deploy or Linear Done.
+## 2026-09-16 — PLAYER sheet, pending text and inner overflow
+
+Local continuation from `e9d8017`. Real App/CharacterWorkspace with an owned
+PLAYER character, name, one stat, wallet values and backstory; not a full
+inventory/skills/media/authorization fixture.
+
+- New `compact-player-sheet.spec.ts` found wallet +/- controls at 40×44; compact
+  sheet buttons/summaries now have the full 44×44 minimum, not only height.
+- The first green geometry pass did NOT prove visual fit: screenshot inspection
+  revealed backstory clipped beyond the right edge. Document scrollWidth was
+  360, but the sheet's inner body was ~406 and textarea right edge ~398.
+  Added actual control bounds and inner ancestor scroll-width checks.
+- Setting only body min-width did not fix the implicit grid track. Compact sheet
+  cards now explicitly use `grid-template-columns: minmax(0, 1fr)`, with body
+  min-width:0; text reflows within the card instead of masking overflow.
+- Final 2/2 PASS (24.3s), Chromium/Firefox. Both actually resize the same session
+  360×640→640×360→360×640, audit enabled visible sheet buttons/summaries via
+  dimensions and center hit-testing after scrolling, then type backstory,
+  hold its PATCH response, visit Journal and return after resize. Text remains
+  intact, exactly one captured backstory request precedes return, no unexpected
+  writes. The held response is released only for cleanup: no durable-server save
+  or post-ack convergence claim. Ownership is ordinary fixture data, not ACL bypass.
+- Final PLAYER Chromium screenshot visually checked: field fits and wraps.
+  Evidence `compact-player-gate/browser-01` (40px red), `browser-02` (earlier weak
+  pass), `browser-03` (inner clipping red), `browser-04` (body-only fix insufficient),
+  `browser-05` (final2 PASS). One PowerShell quote syntax failure ran no test.
+- Scoped ESLint/Prettier/diffcheck PASS; no full suite/build/typecheck rerun for
+  the CSS-only runtime change. Existing character queue regression not replayed.
+  No publication/deploy/Linear Done. All-skills/inventory/dialog controls, real
+  device keyboard/touch, other roles/characters and integrated CI remain open.
