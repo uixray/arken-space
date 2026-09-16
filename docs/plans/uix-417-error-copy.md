@@ -132,3 +132,32 @@ pnpm exec playwright test tests/e2e/russian-error-copy.spec.ts --workers=1 --ret
   сохраняются в JSON receipt; PNG делается до assertions. Production CSS,
   source, timers, timeouts/retries не меняются. Изменены только новый spec
   и этот checkpoint; повторный общий 36-case gate принадлежит root.
+
+## 2026-09-17 — actionable generic rate-limit guidance
+
+Source tracing corrected the initial suspicion: the production server already
+replaces plugin English errors with Russian generic REQUEST_FAILED, not raw
+English. However a429 then says only «Не удалось выполнить запрос» and hides
+why the action failed and how long to wait.
+
+Client api.ts now clarifies only generic429/REQUEST_FAILED responses whose
+message is absent or that exact generic fallback. It uses a positive safe-integer
+Retry-After delta-seconds header for «Повторите попытку через N с.»; missing,zero,
+negative,fractional,malformed/unsafe values fall back to a plain wait-and-retry
+explanation. HTTP-date values are not interpreted. Specific server messages,
+other codes/statuses, details, request/action IDs and request behavior are retained.
+There is no automatic retry, countdown, disabled timer or limiter-policy change.
+
+Verification:api.test.ts30/30PASS433ms (nine added cases), web/E2E TypeScript,
+scoped ESLint/Prettier/diffPASS. Four new real-AuthGate browser cases in Chrome/
+Firefox at1280/360 passed17.4s with mocked401bootstrap/429invite responses:
+Russian alert with60seconds, retained nickname, enabled retry; explicit Enter
+sends exactly the second request, missing header yields safe fallback. Error
+horizontal bounds fit; no pageerrors. This is response-presentation evidence,
+not a live rate-limit threshold test, real authentication or physical-device QA.
+
+Artifacts:rate-limit-copy/results.json and receipts/logs. Own Vite ran as hidden
+child inside the test shell's try/finally and stopped after the terminal result.
+No backend run, full suite/build/CI, publication or Linear closure. Existing
+UIX-417 remains broader than these messages; no product claim based on initial
+mistaken raw-English hypothesis and no intended baseline RED was recorded.

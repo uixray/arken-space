@@ -158,8 +158,20 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       headers.get("x-action-id") ??
       undefined;
     const code = data?.error ?? "REQUEST_FAILED";
-    const message =
-      code === "INSUFFICIENT_CHARACTER_RESOURCE"
+    const genericRateLimit =
+      response.status === 429 &&
+      code === "REQUEST_FAILED" &&
+      (!data?.message || data.message === "Не удалось выполнить запрос");
+    const retryAfter = response.headers.get("retry-after");
+    const retrySeconds =
+      retryAfter && /^\d+$/.test(retryAfter) ? Number(retryAfter) : NaN;
+    const rateLimitMessage =
+      Number.isSafeInteger(retrySeconds) && retrySeconds > 0
+        ? `Слишком много запросов. Повторите попытку через ${retrySeconds} с.`
+        : "Слишком много запросов. Подождите немного и повторите попытку.";
+    const message = genericRateLimit
+      ? rateLimitMessage
+      : code === "INSUFFICIENT_CHARACTER_RESOURCE"
         ? // UIX-424, шаг 9: «магической силы» и «физической силы» — имена, от
           // которых мастер отказался. Раскладки кампании здесь нет (это общий
           // разбор ответов, а не компонент), поэтому подставляются нейтральные

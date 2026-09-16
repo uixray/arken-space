@@ -316,3 +316,67 @@ describe("UIX-417 malformed response copy", () => {
     await expect(api("/api/example")).rejects.toBe(cancelled);
   });
 });
+
+describe("UIX-417 rate limit recovery copy", () => {
+  it.each(["60", "0", null, "invalid", "-1", "1.5", "9007199254740992"])(
+    "explains generic 429 without retrying: %s",
+    async (retryAfter) => {
+      const body = {
+        error: "REQUEST_FAILED",
+        message: "Не удалось выполнить запрос",
+      };
+      const headers = new Headers({
+        "content-type": "application/json",
+        "x-request-id": "rate-request",
+      });
+      if (retryAfter !== null) headers.set("retry-after", retryAfter);
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(body), { status: 429, headers }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const error = await api("/api/auth/invite", {
+        method: "POST",
+        headers: { "x-action-id": "rate-action" },
+        body: JSON.stringify({ displayName: "Игрок" }),
+      }).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).toMatchObject({
+        status: 429,
+        code: "REQUEST_FAILED",
+        requestId: "rate-request",
+        actionId: "rate-action",
+        details: body,
+        message:
+          retryAfter === "60"
+            ? "Слишком много запросов. Повторите попытку через 60 с."
+            : "Слишком много запросов. Подождите немного и повторите попытку.",
+      });
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
+  it.each([429, 403])(
+    "retains specific server guidance and status %s",
+    async (status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                error: "REQUEST_FAILED",
+                message: "Повторная выдача приглашения временно недоступна",
+              }),
+              { status, headers: { "retry-after": "60" } },
+            ),
+          ),
+      );
+      await expect(api("/api/bootstrap")).rejects.toMatchObject({
+        status,
+        message: "Повторная выдача приглашения временно недоступна",
+      });
+    },
+  );
+});
