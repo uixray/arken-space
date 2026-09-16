@@ -76,11 +76,11 @@ AST/CSS-проверку: список защищённых файлов явн�
 курсор, сетка/история, музыка/пауза, App shell, персонажи/характеристики,
 режимы/панели бросков, ресурсы/статусы участников, world/media галереи,
 маркеры world map, selected token condition/layer/zoom, upload/selection/
-foundation preview, StickerPicker, ChatPanels и icon entrypoint;
+foundation preview, StickerPicker, ChatPanels, initiative panel и icon entrypoint;
 CSS только toolbar/grid/resize.
 Обычные сообщения, формулы, хоткеи и непройденные области не фильтруются этим
 списком. При следующем migration-пуле явно расширять список вместе с тестом,
-не делать вид, что двадцать восемь файлов покрывают все интерфейсы.
+не делать вид, что тридцать файлов покрывают все интерфейсы.
 
 Отдельные ASCII `+`/`-` внутри `button`/`Button` тоже проверяются как изображения
 контрола; операторы в формулах, переменных и обычной прозе остаются текстом.

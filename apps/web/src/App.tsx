@@ -1043,17 +1043,21 @@ export function App() {
             }
           : current,
       );
-      const previous =
-        characterMutationQueuesRef.current.get(id) ??
-        Promise.resolve(undefined);
+      const previousQueue = characterMutationQueuesRef.current.get(id);
+      const previous = previousQueue ?? Promise.resolve(undefined);
       const operation = previous.then(async (previousCharacter) => {
         const { revision: _revision, ...updates } = patch;
-        const base =
-          previousCharacter ??
-          snapshotRef.current?.characters.find(
-            (character) => character.id === id,
+        // An existing tail resolving undefined confirms canonical absence;
+        // only a new queue may read the current snapshot as its initial base.
+        const base = previousQueue
+          ? previousCharacter
+          : snapshotRef.current?.characters.find(
+              (character) => character.id === id,
+            );
+        if (!base)
+          throw new Error(
+            "Персонаж больше недоступен. Обновите список персонажей.",
           );
-        if (!base) throw new Error("CHARACTER_NOT_FOUND");
         const response = await api<unknown>(`/api/characters/${id}`, {
           method: "PATCH",
           body: JSON.stringify({
@@ -1070,7 +1074,10 @@ export function App() {
             refreshed.characters.find((character) => character.id === id) ??
             null;
         }
-        if (!updated) throw new Error("CHARACTER_NOT_FOUND");
+        if (!updated)
+          throw new Error(
+            "Персонаж больше недоступен. Обновите список персонажей.",
+          );
         setSnapshot((current) =>
           applyCharacterMutationToSnapshot(current, updated),
         );

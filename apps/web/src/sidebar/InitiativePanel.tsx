@@ -1,6 +1,14 @@
 import { useState } from "react";
 import type { InitiativeParticipantDto } from "@arken/contracts";
 import { Button, TextInput } from "@gravity-ui/uikit";
+import { AppIcon } from "../ui/AppIcon";
+import {
+  DeleteIcon,
+  MoveDownIcon,
+  MoveUpIcon,
+  NormalRollIcon,
+  PingIcon,
+} from "../ui/icons";
 
 /**
  * UIX-431 — очередь ходов боя.
@@ -184,7 +192,7 @@ export function InitiativePanel({
                     title="Открепить: строка снова встанет по броску"
                     aria-label={`Открепить «${participant.name}»`}
                   >
-                    <span aria-hidden="true">📌</span>
+                    <AppIcon icon={PingIcon} />
                   </Button>
                 ) : (
                   <span
@@ -192,7 +200,7 @@ export function InitiativePanel({
                     title="Место задано мастером"
                     aria-label={`«${participant.name}» — место задано мастером`}
                   >
-                    <span aria-hidden="true">📌</span>
+                    <AppIcon icon={PingIcon} />
                   </span>
                 ))}
               {isGm && (
@@ -204,7 +212,7 @@ export function InitiativePanel({
                     title="Поставить выше и закрепить"
                     aria-label={`Переместить «${participant.name}» выше`}
                   >
-                    <span aria-hidden="true">↑</span>
+                    <AppIcon icon={MoveUpIcon} />
                   </Button>
                   <Button
                     view="flat"
@@ -213,7 +221,7 @@ export function InitiativePanel({
                     title="Поставить ниже и закрепить"
                     aria-label={`Переместить «${participant.name}» ниже`}
                   >
-                    <span aria-hidden="true">↓</span>
+                    <AppIcon icon={MoveDownIcon} />
                   </Button>
                 </>
               )}
@@ -228,7 +236,7 @@ export function InitiativePanel({
                   title="Бросить инициативу и записать в строку"
                   aria-label={`Бросить инициативу за «${participant.name}»`}
                 >
-                  <span aria-hidden="true">🎲</span>
+                  <AppIcon icon={NormalRollIcon} />
                 </Button>
               )}
               {isGm && (
@@ -243,7 +251,7 @@ export function InitiativePanel({
                   aria-label={`Вывести «${participant.name}» из боя`}
                   title="Вывести из боя"
                 >
-                  <span aria-hidden="true">×</span>
+                  <AppIcon icon={DeleteIcon} />
                 </Button>
               )}
             </div>

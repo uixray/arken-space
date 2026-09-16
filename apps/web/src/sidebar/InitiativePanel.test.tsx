@@ -180,6 +180,28 @@ describe("очередь ходов", () => {
     ]);
   });
 
+  it("keeps initiative action names and handlers on Lucide controls", async () => {
+    const { onRoll, onUpdate } = renderPanel({ participants: withPinnedLloyd });
+    const controls = [
+      "Открепить «Ллойд»",
+      "Переместить «Тэйн» выше",
+      "Переместить «Ллойд» ниже",
+      "Бросить инициативу за «Ллойд»",
+      "Вывести «Ллойд» из боя",
+    ];
+    for (const label of controls)
+      expect(
+        screen.getByLabelText(label).querySelector("svg.arken-icon"),
+      ).toBeTruthy();
+
+    await userEvent.click(
+      screen.getByLabelText("Бросить инициативу за «Ллойд»"),
+    );
+    await userEvent.click(screen.getByLabelText("Вывести «Ллойд» из боя"));
+    expect(onRoll).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }));
+    expect(onUpdate.mock.calls.at(-1)?.[0]).toMatchObject([{ id: "b" }]);
+  });
+
   it("игроку булавка объясняет порядок, но ручкой не становится", async () => {
     // Без неё чужой ход, не поднявшийся после большого броска, выглядит как
     // ошибка. Нажимать её игроку при этом нечего: состав ведёт мастер.
