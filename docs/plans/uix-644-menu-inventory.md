@@ -420,3 +420,29 @@ AttachMediaForm category/visibility (sheet) and EditMediaDialog category/visibil
   exact visible title text, not a weakened hit test or forced click.
 - Still not browser zoom, physical touch, nested-modal completeness or a full
   all-site UIX-644 gate. Resize is actual viewport resize, not called zoom.
+
+## 2026-09-16 — world editor/reader Select sites
+
+Five inventory sites now have runtime smoke in russian-world-copy.spec.ts:
+editor type/lifecycle filters, relation target, create-entity type inside its
+blocking dialog, and reader type filter. GM navigation only,1280/360 in both
+Chromium/Firefox:4/4PASS44.8s (world-menus-gate/browser-03.log).
+
+- Each site: actual pointer open/second-option center hit/click, visible chosen
+  label, reopening, Escape with focus and owner retained, ArrowDown/Home/Enter
+  keyboard selection and label update. Create canceled, workspace changed to
+  reader, no entity/relation mutations. Two-entity fixture makes the relation
+  target a real enabled candidate, not an empty fallback option.
+- Found and fixed missing accessible name on relation target; it is now
+  "Сущность для связи". browser-01 preserves the original empty-name failure.
+- browser-02 caught technical UUID replacing chosen relation name. Native
+  option children here are multiple text expressions; Gravity getOptionText
+  falls back to value for non-string content unless text is provided.
+  FormSelect now provides joined string/number child text as Gravity text hint,
+  retaining original content and values. Two real-Gravity DOM regressions cover
+  compound name/type and numeric0 labels. Rich element children remain on the
+  existing path; this change does not render arbitrary components to text.
+- Limits: synthetic GET list does not implement filter semantics, so this proves
+  controls/layers/selected labels, not backend filtering/ACL or saved links.
+  No outside/scroll/resize/zoom matrix for these five sites yet; a workspace plus
+  create dialog is not two nested blocking dialogs. No entire UIX-644 PASS.

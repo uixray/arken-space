@@ -379,3 +379,27 @@ it("retains an uncontrolled Select choice without selecting the create utility a
   expect(changed).toHaveBeenCalledTimes(1);
   expect(trigger).toHaveTextContent("Маркер");
 });
+
+it.each([
+  {
+    value: "entity-id",
+    label: ["Silverymoon", " (", "Локация", ")"],
+    expected: "Silverymoon (Локация)",
+  },
+  { value: "zero-id", label: ["Зарядов: ", 0], expected: "Зарядов: 0" },
+])(
+  "keeps compound option text instead of exposing $value",
+  ({ value, label, expected }) => {
+    renderComponent(
+      <FormSelect aria-label="Цель" value={value}>
+        <option value={value}>{label}</option>
+      </FormSelect>,
+    );
+    expect(screen.getByRole("combobox", { name: "Цель" })).toHaveTextContent(
+      expected,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Цель" }),
+    ).not.toHaveTextContent(value);
+  },
+);

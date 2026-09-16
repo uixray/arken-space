@@ -141,6 +141,16 @@ export function FormTextArea({
 }
 
 type OptionProps = { value?: string | number; children?: ReactNode };
+// Native option labels may be JSX arrays of text/number expressions. Gravity
+// needs a plain text hint for the collapsed label and type-ahead search.
+function optionText(children: ReactNode): string | undefined {
+  const parts = Children.toArray(children);
+  return parts.every(
+    (part) => typeof part === "string" || typeof part === "number",
+  )
+    ? parts.join("")
+    : undefined;
+}
 
 type FormSelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
   emptyMessage?: ReactNode;
@@ -181,6 +191,7 @@ export function FormSelect({
     .map((child) => ({
       value: String(child.props.value ?? ""),
       content: child.props.children,
+      text: optionText(child.props.children),
       disabled: Boolean(
         (child.props as OptionProps & { disabled?: boolean }).disabled,
       ),

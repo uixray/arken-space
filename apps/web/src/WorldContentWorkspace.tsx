@@ -819,6 +819,7 @@ function RelationsSection({
       )}
       <div className="world-content-workspace__relation-form">
         <FormSelect
+          aria-label="Сущность для связи"
           value={targetId}
           disabled={busy}
           onChange={(event) => setTargetId(event.target.value)}

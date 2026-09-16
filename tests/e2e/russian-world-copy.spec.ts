@@ -355,9 +355,16 @@ async function attachCopyReceipts(
   });
 }
 
-async function installCopyApi(page: Page) {
+async function installCopyApi(page: Page, withRelated = false) {
   const snapshot = copySnapshot();
   const content = [structuredClone(publishedContent)];
+  if (withRelated)
+    content.push({
+      ...structuredClone(publishedContent),
+      id: ids.createdContent,
+      slug: "silverymoon",
+      name: "Silverymoon",
+    });
   const writes: RecordedWrite[] = [];
   const blockedWrites: string[] = [];
   const pageErrors: string[] = [];
@@ -824,5 +831,99 @@ for (const width of [1280, 390]) {
     } finally {
       await attachCopyReceipts(testInfo, mock);
     }
+  });
+}
+
+for (const width of [1280, 360]) {
+  test(`world dropdown registry lifecycle ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    const mock = await installCopyApi(page, true);
+    await page.goto("/");
+    await openWorkspaceSection(page, "Редактор мира");
+    const editor = page.getByRole("dialog", {
+      name: "Редактор мира",
+      exact: true,
+    });
+    async function check(trigger: Locator, owner: Locator) {
+      await trigger.scrollIntoViewIfNeeded();
+      await trigger.click();
+      const list = page.getByRole("listbox");
+      await expect(list).toBeVisible();
+      const option = list.getByRole("option").nth(1);
+      await option.scrollIntoViewIfNeeded();
+      const label = (await option.innerText()).trim();
+      expect(
+        await option.evaluate((node) => {
+          const r = node.getBoundingClientRect();
+          return node.contains(
+            document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+          );
+        }),
+      ).toBe(true);
+      await option.click();
+      await expect(list).toBeHidden();
+      await expect(trigger).toContainText(label);
+      await trigger.click();
+      await expect(list).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(list).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await expect(owner).toBeVisible();
+      await trigger.press("ArrowDown");
+      await expect(list).toBeVisible();
+      const first = (await list.getByRole("option").first().innerText()).trim();
+      await page.keyboard.press("Home");
+      await page.keyboard.press("Enter");
+      await expect(list).toBeHidden();
+      await expect(trigger).toContainText(first);
+    }
+    await check(
+      editor.getByRole("combobox", { name: "Тип", exact: true }),
+      editor,
+    );
+    await check(
+      editor.getByRole("combobox", { name: "Статус", exact: true }),
+      editor,
+    );
+    await editor
+      .locator(".world-content-workspace__row")
+      .filter({ hasText: "Waterdeep" })
+      .click();
+    const relation = editor
+      .locator(".world-content-workspace__relation-form")
+      .getByRole("combobox");
+    await expect(relation).toHaveAccessibleName("Сущность для связи");
+    await check(relation, editor);
+    await editor
+      .getByRole("button", { name: "Создать сущность", exact: true })
+      .click();
+    const create = page.getByRole("dialog", {
+      name: "Новая сущность энциклопедии",
+      exact: true,
+    });
+    await check(
+      create.getByRole("combobox", { name: "Тип", exact: true }),
+      create,
+    );
+    await create.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(create).toBeHidden();
+    await expect(editor).toBeVisible();
+    await editor
+      .getByRole("button", { name: "Закрыть окно", exact: true })
+      .click();
+    await openWorkspaceSection(page, "Справочник мира");
+    const reader = page.getByRole("dialog", {
+      name: "Справочник мира",
+      exact: true,
+    });
+    await check(
+      reader.getByRole("combobox", { name: "Тип", exact: true }),
+      reader,
+    );
+    expect(mock.writes).toEqual([]);
+    expect(mock.pageErrors).toEqual([]);
+    expect(
+      mock.blockedWrites.filter((write) => write !== "POST /api/chat/read"),
+    ).toEqual([]);
   });
 }
