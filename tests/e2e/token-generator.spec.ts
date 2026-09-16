@@ -1520,3 +1520,78 @@ test("UIX-589 compact accessible zoom controls clamp sync reset and remain touch
     contentType: "image/png",
   });
 });
+
+for (const width of [1280, 360]) {
+  test(`UIX-644 native token source lifecycle ${width}`, async ({
+    page,
+  }, testInfo) => {
+    const writes: string[] = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (
+        path.startsWith("/api/") &&
+        request.method() !== "GET" &&
+        !["/api/chat/read", "/api/client-logs"].includes(path)
+      )
+        writes.push(`${request.method()} ${path}`);
+    });
+    await page.setViewportSize({ width, height: 800 });
+    const { editor, preview } = await openCropEditor(page, 800, 600);
+    const name = editor.getByLabel("Название", { exact: true });
+    await name.fill("Портрет для стража");
+    const source = editor.getByRole("combobox", {
+      name: "Исходное изображение",
+      exact: true,
+    });
+    const zoom = editor.getByRole("spinbutton", {
+      name: "Масштаб изображения токена, проценты",
+      exact: true,
+    });
+    await zoom.fill("200");
+    await zoom.press("Tab");
+    await expect(zoom).toHaveValue("200");
+    await page.setViewportSize({
+      width: width === 360 ? 390 : 1180,
+      height: 640,
+    });
+    await expect(name).toHaveValue("Портрет для стража");
+    await expect(source).toHaveValue(sourceAsset.id);
+    await expect(zoom).toHaveValue("200");
+    await source.scrollIntoViewIfNeeded();
+    expect(
+      await source.evaluate((element) => {
+        const r = element.getBoundingClientRect();
+        return (
+          r.left >= 0 &&
+          r.right <= innerWidth &&
+          r.top >= 0 &&
+          r.bottom <= innerHeight &&
+          document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) ===
+            element
+        );
+      }),
+    ).toBe(true);
+    await source.focus();
+    await source.press("Home");
+    await expect(source).toHaveValue("");
+    await expect(source).toBeFocused();
+    await expect(zoom).toHaveValue("100");
+    await expect(preview.locator("img")).toHaveCount(0);
+    await expect(name).toHaveValue("Портрет для стража");
+    await source.press("End");
+    await expect(source).toHaveValue(sourceAsset.id);
+    await expect(source).toBeFocused();
+    await expect(preview.locator("img")).toBeVisible();
+    await expect(zoom).toHaveValue("100");
+    await editor.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(editor).toBeHidden();
+    await testInfo.attach("native-token-source", {
+      body: JSON.stringify({ width, writes, errors }),
+      contentType: "application/json",
+    });
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}

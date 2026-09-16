@@ -112,7 +112,7 @@
 | `PlayerRequestsWorkspace.tsx:249,263,280` (3)                                   | Фильтры GM/PLAYER внутри W; роли меняют доступный набор заявок.                                                                                                                                                            | Реальный сервер: сочетания трёх фильтров PLAYER/GM и сброс после повторного открытия GM; исторический CI, см. аудит ниже.                                     |
 | `WorldMapsWorkspace.tsx:283` (1)                                                | Текущая карта, W на весь холст. Текущая навигация открывает workspace только GM; PLAYER-вход не создавать ради реестра.                                                                                                                                                        | `tests/e2e/world-maps.spec.ts` сценарий работы, не весь жизненный цикл нативного popup.                  |
 | `WorldMapsWorkspace.tsx:341,618,684,699,751,768` (6)                            | GM: фон черновика / связанная сцена / варианты в формах создания карты и локации; W. Компоновка stage/detail и прокрутка принадлежат workspace.                                                                            | Сценарий world-maps; размещение/клавиатура каждого вхождения ещё не проверены.                           |
-| `TokenImageGenerator.tsx:231` (1)                                               | Выбор исходного ресурса внутри модального редактора TokenPalette GM → M. Сам генератор — секция в потоке, не popup.                                                                                                        | `tests/e2e/token-generator.spec.ts`; нативный элемент выбора нельзя смешивать с E1 Gravity Select.       |
+| `TokenImageGenerator.tsx:231` (1)                                               | Выбор исходного ресурса внутри модального редактора TokenPalette GM → M. Сам генератор — секция в потоке, не popup.                                                                                                        | Адресный native source lifecycle GM1280/360 Chromium/Firefox PASS; см. дополнение ниже. Не Gravity popup.       |
 | `sidebar/ChatPanels.tsx:1088` (1)                                               | Выбор собеседника DirectChatPanel; компонент GM/PLAYER, но текущий Sidebar скрывает точку входа Direct. Страница/боковая панель.                                                                                           | `tests/e2e/concept.spec.ts` исторические сценарии Direct; скрытую точку входа не активировать в UIX-644. |
 | `FeedbackReporter.tsx:32` Gravity без общей обёртки                             | GM/PLAYER, аккаунт→обратная связь M, локальная обёртка с учётом владельца.                                                                                                                                                 | E1, описан в A.                                                                                          |
 | `ui/GravityFoundationPreview.tsx:149,178` Select без общей обёртки; `:66` Popup | Страница предпросмотра B и форма предпросмотра M; Select без общей обёртки не назначает класс владельца. В `main.tsx/App.tsx` место использования в production не найдено; **только предпросмотр**, не живой workspace GM. | Только реестр, проверка во время выполнения BLOCKED.                                                     |
@@ -648,3 +648,26 @@ Evidence: setup-select-gate/results-red-01.json and browser-01 screenshot/trace
 preserve failure; results-new-02.json preserves4PASS; results.json and connected-03
 hold final named20PASS. Own Vite stopped. UIX-644 remains open for remaining sites,
 scroll/browser zoom/competing owners and complete exact-current integration.
+## 2026-09-16 — native token-image source selector
+
+Four new cases in the existing token-generator.spec.ts exercise the actual
+embedded generator in GM "Новый токен", using the existing image fixture/helper.
+1280/360 in Chromium/Firefox: enter a token name, set crop zoom200%, resize to
+1180/390 and height640, retain name/source/zoom; scroll source into view and verify
+viewport bounds/control-center hit. Native keyboard Home selects empty source,
+keeps focus, clears preview and resets zoom100% without clearing the name.
+End reselects the source and restores visible preview with zoom100%; cancel closes
+editor. No force click, generated image, new token definition or placement.
+
+4/4PASS27.821637s, one worker/retries0/skipped0/flaky0; all four named native-token-
+source attachments decoded: writes[]/errors[]. Write audit explicitly excludes
+only ordinary /api/chat/read and /api/client-logs; it is not a claim of zero total
+HTTP POSTs. Existing React console guard retained; Konva layer warning not hidden.
+Scoped ESLint/Prettier/diff PASS. Test-only addition: no source/build/full crop
+suite or new CI run. Earlier preview/real-renderer parity evidence is not replaced
+or newly asserted by these four tests.
+
+Remaining: native OS popup appearance/pointer selection, Escape/outside lifecycle,
+full browser zoom and competing modal acceptance. CSS viewport resize and token
+crop zoom are NOT browser zoom. Evidence: token-source-gate/results.json and
+browser-01 named results. UIX-644 overall remains open.
