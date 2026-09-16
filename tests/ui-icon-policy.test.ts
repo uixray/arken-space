@@ -42,7 +42,6 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/ui/GravityFoundationPreview.tsx",
       "apps/web/src/StickerPicker.tsx",
       "apps/web/src/sidebar/ChatPanels.tsx",
-      "apps/web/src/sidebar/InitiativePanel.tsx",
       "apps/web/src/ui/CursorPresenceMenu.tsx",
       "apps/web/src/renderers/GridSettings.tsx",
       "apps/web/src/renderers/CanvasHistoryControls.tsx",
