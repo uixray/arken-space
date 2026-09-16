@@ -234,3 +234,39 @@ The stated UIX-502 local acceptance matrix passes for this candidate. Wider
 UIX-644 menus, personal themes, arbitrary nesting and physical devices remain
 outside that conclusion. Linear remains In Review pending the previously blocked
 external write; this report does not silently update the task. No deployment.
+## 2026-09-16 — current Review acceptance revalidated at ca7b579
+
+Live UIX-502 remains In Review with its original eight acceptance criteria.
+The earlier0e3e3c7 gate predates23lines added to the shared Select adapter (popup
+open/closed list reset and composite labels). Therefore the separate current
+54-case bundle gate does not silently replace nested/sibling owner acceptance.
+
+Existing tests, unchanged:18/18PASS106.997247s, Chromium/Firefox, one worker,
+retries0/skipped0/flaky0. Evidence revisionca7b579bb0e03ad8c557f9dc555b1a231e08c144;
+runtime sourcee8daadcb357ceb456d789b7964ec69bea267fb38. No new test or product edit
+was needed. Special fixture intentionally runs on Vite dev and is excluded from
+production; do not relabel this as the production-dist54-case gate.
+
+| Original criterion | Current evidence and boundary |
+| --- | --- |
+| Token image/character picker above token modal |4real App token-generator cases: inline asset picker and character dropdown,1280/390, pointer hits; narrow Chromium screenshot inspected. Image picker is inline, not a fabricated popup. |
+| Consistent dialog-owned dropdown/combobox/popover handling | Existing shared owner context and actual Select;8owner cases plus4App cases. Unrelated UIX-644 custom menu types remain their own scope. |
+| Explicit overlay order |8sibling/nested fixtures capture layers before/after B and with B popup, plus overlap hit targets. |
+| No clipping by modal/ancestors | Actual option-center hits and viewport bounds in real App and owner fixture widths. |
+| Outside/Escape/focus/keyboard | Existing App cases and owner cycles verify pointer outside, Arrow/Enter, Escape levels, trigger/base-opener focus return. |
+| Old menu below newer modal | B opens from held async completion after verified A popup, no intervening pointer/forced-open/state mutation; overlap and focus cycles reject stale A pointer/focus ownership. Both sibling and nested topology. |
+| Regression for token modal | Existing token-generator.spec.ts actual image/character path retained,4cases. |
+| Narrow and desktop |1280/390 in both browsers for owner/App; close-lifecycle390 in both. |
+
+Additionally4natural close-lifecycle cases verify immediate hidden/inert state;
+2held-close-attribute cases explicitly test CSS state, not natural lifecycle.
+Read all8modal-owner-diagnostics.json: zero pageErrors, unexpectedApiRequests,
+bPopupFocusViolations and finalLayers. Screenshot inspection shows the character
+menu visible over the inline asset area within narrow token dialog. No viewport
+or assertion weakened to pass. Konva layer warning remains separate.
+
+Artifacts modal-current-gate/results.json,browser.log,browser-01/ contain named
+results, diagnostics and screenshots. Own Vite stopped. Scoped local UIX-502
+acceptance remains PASS for this candidate; backend ACL, arbitrary-depth menus,
+physical devices and full UIX-644 are not inferred. Linear mutation was not
+attempted: previous external-write permission remains unresolved. No deploy.
