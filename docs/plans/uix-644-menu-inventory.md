@@ -948,3 +948,7 @@ The historical B–E tables above are discovery snapshots, not current PASS stat
 ## Navigation return owner — 2026-09-16
 
 Source `226533ae0cb33e0585f52a770ede01c5a21ee4ad`: desktop More now captures a visible return target before opening a destination. Six navigation cases and eight connected scene-picker cases PASS in Chrome/Firefox (one worker, no retries). Compact return to Map is the existing contract, not a new Sections-focus behavior. Experimental App/ArkenDialog changes were discarded. Evidence: `navigation-owner-gate/results.json`, `related-results.json`, checkpoint under the runtime ledger artifactBase. Mocked backend; not whole UIX-644 acceptance or production release.
+
+## World image callers — 2026-09-16
+
+Evidence revision `fa54b9a27b15ff2c4d339e2c413632be857b015f`: four GM1280/390 Chrome/Firefox cases cover both inline AssetPicker callers in the world editor. Name filtering, real pointer hit, keyboard selection/removal, independent cover/gallery selection, exact save/attach requests and reloaded mock state passed. No product source changes required. `world-image-gate/results.json` and checkpoint under artifactBase; not live persistence, PLAYER ACL, failure recovery or whole UIX-644 acceptance.

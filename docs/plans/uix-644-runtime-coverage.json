@@ -58,6 +58,12 @@
       "revision": "226533ae0cb33e0585f52a770ede01c5a21ee4ad",
       "artifact": "navigation-owner-gate/related-results.json",
       "scope": "Eight Chrome/Firefox pointer/keyboard scene picker cases at1024/1440, compact hidden owner/PLAYER read-only, short-height option scrolling. Mocked backend, not server scene persistence."
+    },
+    "worldImages": {
+      "status": "PASS",
+      "revision": "fa54b9a27b15ff2c4d339e2c413632be857b015f",
+      "artifact": "world-image-gate/results.json",
+      "scope": "Four GM1280/390 Chrome/Firefox actual-App cases:14-image name filter, pointer hit-test, keyboard cover selection/removal, isolated cover PATCH and gallery POST, clear-after-attach, reload of mock-backed saved selection/caption. Not real backend persistence or PLAYER ACL."
     }
   },
   "sites": [
@@ -175,11 +181,11 @@
       "file": "apps/web/src/WorldContentWorkspace.tsx",
       "kind": "tag:AssetPicker",
       "count": 2,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Two world-content inline asset pickers, distinct from its four FormSelect sites.",
-      "evidence": [],
-      "next": "Reconcile each conditional picker caller, not infer from adjacent dropdown tests."
+      "scope": "Both inline callers: entity cover and gallery attachment, independent selected assets and exact request payloads.",
+      "evidence": ["worldImages"],
+      "next": "Real persistence/authorization, request-failure recovery and physical-device checks remain outside this scoped acceptance."
     },
     {
       "file": "apps/web/src/WorldContentWorkspace.tsx",
