@@ -1,4 +1,9 @@
-import type { AssetDto, GameSnapshot, TokenDto } from "@arken/contracts";
+import type {
+  AssetDto,
+  ChatReadCursorDto,
+  GameSnapshot,
+  TokenDto,
+} from "@arken/contracts";
 import type { Locator, Page, Route, TestInfo } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { expect, test } from "./react-console-guard";
@@ -184,10 +189,28 @@ async function installBoundary(page: Page) {
       // Separate allowlist for automatic read receipts/diagnostics. Still
       // intercepted locally; neither can reach an authenticated backend.
       background.push(`${method} ${path}`);
-      return route.fulfill({
-        status: path === "/api/client-logs" ? 202 : 204,
-        body: "",
-      });
+      if (path === "/api/client-logs")
+        return route.fulfill({ status: 202, body: "" });
+      const body = request.postDataJSON() as {
+        threadId: string;
+        sequence: number;
+      };
+      const state = snapshot.chatThreadStates.find(
+        (entry) => entry.threadId === body.threadId,
+      );
+      expect(state, "Read receipt belongs to a fixture thread").toBeDefined();
+      expect(Number.isInteger(body.sequence) && body.sequence >= 0).toBe(true);
+      if (!state) throw new Error("Unknown synthetic read thread");
+      const cursor: ChatReadCursorDto = {
+        campaignId: snapshot.campaign.id,
+        threadId: body.threadId,
+        lastReadSequence: Math.max(
+          state.lastReadSequence,
+          Math.min(body.sequence, state.latestSequence),
+        ),
+        updatedAt: snapshot.serverTime,
+      };
+      return route.fulfill({ status: 200, json: cursor });
     }
     if (
       method === "POST" &&
@@ -276,15 +299,9 @@ type Boundary = Awaited<ReturnType<typeof installBoundary>>;
 const editorFor = (page: Page) =>
   page.getByRole("dialog", { name: "Новый токен", exact: true });
 const nameInput = (editor: Locator) =>
-  editor
-    .locator("form.entity-form > label")
-    .filter({ hasText: /^Название/ })
-    .locator("input");
+  editor.getByRole("textbox", { name: "Название", exact: true });
 const sizeInput = (editor: Locator, label: string) =>
-  editor
-    .locator(".token-dimensions label")
-    .filter({ hasText: label })
-    .locator('input[type="number"]');
+  editor.getByRole("spinbutton", { name: label, exact: true });
 const placementButton = (editor: Locator) =>
   editor.getByRole("button", { name: "Создать и поставить", exact: true });
 
@@ -303,51 +320,80 @@ async function fillDraft(
   generate: boolean,
 ) {
   await nameInput(editor).fill(name);
-  const character = editor
-    .locator("form.entity-form > label")
-    .filter({ hasText: /^Персонаж/ })
-    .getByRole("combobox");
+  const character = editor.getByRole("combobox", {
+    name: "Персонаж",
+    exact: true,
+  });
   await character.click();
   await page
     .getByRole("option", { name: "Тестовый персонаж", exact: true })
     .click();
   await expect(character).toContainText("Тестовый персонаж");
+  const images = editor.getByRole("group", {
+    name: "Изображение токена из файлов",
+    exact: true,
+  });
+  const noImage = images.getByRole("button", {
+    name: "Без изображения",
+    exact: true,
+  });
+  const sourceSelect = editor.getByRole("combobox", {
+    name: "Исходное изображение",
+    exact: true,
+  });
+  await expect(sourceSelect).toHaveValue("");
+  await expect(noImage).toHaveAttribute("aria-pressed", "true");
   if (generate) {
-    await editor
-      .getByRole("button", { name: "Создать изображение токена", exact: true })
-      .click();
+    await sourceSelect.selectOption(ids.source);
+    await expect(sourceSelect).toHaveValue(ids.source);
+  } else {
+    const tile = images.getByRole("button", {
+      name: derived.name,
+      exact: true,
+    });
+    await tile.click();
+    await expect(tile).toHaveAttribute("aria-pressed", "true");
+    await expect(tile.locator("img")).toHaveJSProperty("complete", true);
+    await expect
+      .poll(() =>
+        tile
+          .locator("img")
+          .evaluate((image) => (image as HTMLImageElement).naturalWidth),
+      )
+      .toBeGreaterThan(0);
   }
-  const tile = editor
-    .getByRole("group", { name: "Изображение токена из файлов" })
-    .getByRole("button", { name: derived.name, exact: true });
-  if (!generate) await tile.click();
-  await expect(tile).toHaveAttribute("aria-pressed", "true");
-  await expect(tile.locator("img")).toHaveJSProperty("complete", true);
-  await expect
-    .poll(() =>
-      tile
-        .locator("img")
-        .evaluate((image) => (image as HTMLImageElement).naturalWidth),
-    )
-    .toBeGreaterThan(0);
+  await expect(noImage).toHaveAttribute("aria-pressed", "false");
   await editor.getByRole("checkbox", { name: "Сохранять пропорции" }).uncheck();
   await sizeInput(editor, "Ширина, клетки").fill("2");
   await sizeInput(editor, "Высота, клетки").fill("3");
   await editor.getByRole("checkbox", { name: "Игрок для проверки" }).check();
 }
 
-async function expectDraft(editor: Locator, name: string) {
+async function expectDraft(
+  editor: Locator,
+  name: string,
+  generatedSource = true,
+) {
   await expect(editor).toBeVisible();
   await expect(nameInput(editor)).toHaveValue(name);
   await expect(
-    editor
-      .locator("form.entity-form > label")
-      .filter({ hasText: /^Персонаж/ })
-      .getByRole("combobox"),
+    editor.getByRole("combobox", { name: "Персонаж", exact: true }),
   ).toContainText("Тестовый персонаж");
+  if (generatedSource) {
+    await expect(
+      editor.getByRole("combobox", {
+        name: "Исходное изображение",
+        exact: true,
+      }),
+    ).toHaveValue(ids.source);
+  } else {
+    await expect(
+      editor.getByRole("button", { name: derived.name, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  }
   await expect(
-    editor.getByRole("button", { name: derived.name, exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+    editor.getByRole("button", { name: "Без изображения", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
   await expect(sizeInput(editor, "Ширина, клетки")).toHaveValue("2");
   await expect(sizeInput(editor, "Высота, клетки")).toHaveValue("3");
   await expect(
@@ -414,8 +460,19 @@ async function capture(
 
 async function finish(page: Page, testInfo: TestInfo, mock: Boundary) {
   try {
-    await capture(page, testInfo, mock, "final");
-    await expect.soft(page.locator("vite-error-overlay")).toHaveCount(0);
+    try {
+      await capture(page, testInfo, mock, "final");
+    } catch (error) {
+      if (!page.isClosed()) throw error;
+      // Diagnostic capture must not replace the primary failure if Playwright
+      // already closed the page after a timeout. Keep the JSON receipt below.
+      mock.evidence.push({
+        phase: "final",
+        details: { captureUnavailable: true, pageClosed: page.isClosed() },
+      });
+    }
+    if (!page.isClosed())
+      await expect.soft(page.locator("vite-error-overlay")).toHaveCount(0);
     expect.soft(mock.pageErrors).toEqual([]);
     expect
       .soft(
@@ -559,7 +616,7 @@ for (const close of ["header", "Escape"] as const) {
         "Отменить: токен добавлен — Первый страж A",
       );
       await nameInput(editorB).fill("Второй страж B сохранён");
-      await expectDraft(editorB, "Второй страж B сохранён");
+      await expectDraft(editorB, "Второй страж B сохранён", false);
       await expect(placementButton(editorB)).toBeEnabled();
       await expect(editorB.locator(".field-error")).toHaveCount(0);
       await expect(editorFor(page)).toHaveCount(1);

@@ -395,6 +395,7 @@ async function installCopyApi(page: Page) {
         "/api/world-maps/locations",
         "/api/world-content",
         `/api/assets/${ids.image}/token`,
+        "/api/token-definitions",
       ].includes(path);
     if (!allowed) {
       blockedWrites.push(`${method} ${path}`);
@@ -444,6 +445,29 @@ async function installCopyApi(page: Page) {
       };
       content.push(created);
       return route.fulfill({ status: 201, json: created });
+    }
+    if (path === "/api/token-definitions") {
+      const definition = {
+        id: "copy-token-definition",
+        name: String(body.name),
+        ownName: body.name === null ? null : String(body.name),
+        characterId:
+          typeof body.characterId === "string" ? body.characterId : null,
+        defaultAssetId:
+          typeof body.defaultAssetId === "string" ? body.defaultAssetId : null,
+        defaultWidth: Number(body.defaultWidth),
+        defaultHeight: Number(body.defaultHeight),
+        controllerMembershipIds: Array.isArray(body.controllerMembershipIds)
+          ? body.controllerMembershipIds.map(String)
+          : [],
+        revision: 1,
+      };
+      snapshot.tokenDefinitions = [
+        ...(snapshot.tokenDefinitions ?? []),
+        definition,
+      ];
+      snapshot.snapshotVersion += 1;
+      return route.fulfill({ status: 201, json: definition });
     }
     // This is a DTO response stub, not actual image transformation/storage.
     const generated: AssetDto = {
@@ -742,6 +766,10 @@ for (const width of [1280, 390]) {
         name: "Исходное изображение",
         exact: true,
       });
+      // The embedded crop intentionally starts with no source: choosing an
+      // IMAGE is preparation, while Save remains the single confirmation.
+      await expect(source).toHaveValue("");
+      await source.selectOption(ids.image);
       await expect(source).toHaveValue(ids.image);
       await expect(source.locator("option:checked")).toHaveText(
         "Elminster.png",
@@ -749,13 +777,16 @@ for (const width of [1280, 390]) {
       await generator
         .getByRole("button", { name: "Сбросить", exact: true })
         .click();
-      const generate = generator.getByRole("button", {
-        name: "Создать изображение токена",
+      await tokenEditor
+        .getByRole("textbox", { name: "Название", exact: true })
+        .fill("Токен Эльминстера");
+      const save = tokenEditor.getByRole("button", {
+        name: "Сохранить",
         exact: true,
       });
-      await capture("token-generate-button", generate);
-      await generate.click();
-      await expect.poll(() => mock.writes.length).toBe(2);
+      await capture("token-save-one-confirm", save);
+      await save.click();
+      await expect.poll(() => mock.writes.length).toBe(3);
       expect(mock.writes[1]).toEqual({
         method: "POST",
         path: `/api/assets/${ids.image}/token`,
@@ -768,12 +799,23 @@ for (const width of [1280, 390]) {
           name: "Elminster",
         },
       });
-      await expect(
-        tokenEditor
-          .getByRole("group", { name: "Изображение токена из файлов" })
-          .getByRole("button", { name: "Elminster", exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
-      // No token definition, placement, publication or real upload is submitted.
+      const createdNotice = page
+        .locator(".token-palette [role='status']")
+        .filter({ hasText: /^Токен создан\.$/ });
+      await expect(createdNotice).toHaveText(/^Токен создан\.$/);
+      expect(mock.writes[2]).toEqual({
+        method: "POST",
+        path: "/api/token-definitions",
+        actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        body: expect.objectContaining({
+          name: "Токен Эльминстера",
+          defaultAssetId: ids.token,
+          defaultWidth: 64,
+          defaultHeight: 64,
+          controllerMembershipIds: [],
+        }),
+      });
+      await expect(tokenEditor).toBeHidden();
       await expect(page.locator("vite-error-overlay")).toHaveCount(0);
       expect(
         mock.blockedWrites.filter((write) => write !== "POST /api/chat/read"),
