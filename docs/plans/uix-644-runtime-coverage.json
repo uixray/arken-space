@@ -112,6 +112,12 @@
       "revision": "7b4af10beef8ec1cbd59d96ecce49c88622cf2c2",
       "artifact": "drawing-palette-gate/results.json",
       "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox cases: red preset/native input value, width12 and keyboard1/50,360x480 map-bound containment and internal scroll to top/bottom controls, tool/journal state retention. No actual drawing or OS color dialog."
+    },
+    "workspaceCurrent": {
+      "status": "PASS",
+      "revision": "75a7e37e90b8eefb7b55ce080e935832ebd78e6f",
+      "artifact": "workspace-current-gate/results.json",
+      "scope": "16 actual-App mocked cases: outer token image Escape GM/PLAYER1280/390 (8), GM template1280/360 (4), GM Setup three active controls1280/360 (4). Client-log POST no longer exempt from unexpected writes. Not original first-open TokenPalette RO fix or server acceptance."
     }
   },
   "sites": [
@@ -311,8 +317,8 @@
       "count": 2,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Template modal PASS four built cases. Second showCharacterPicker source occurrence inactive; do not count a template PASS as both callers.",
-      "evidence": ["built"],
+      "scope": "Template modal PASS four current cases; second showCharacterPicker source occurrence inactive, not silently counted as runtime PASS.",
+      "evidence": ["built", "workspaceCurrent"],
       "next": "Retain explicit inactive exclusion; no new UI route for coverage."
     },
     {
@@ -391,8 +397,8 @@
       "count": 6,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Three live controls PASS four built cases; three legacy hidden occurrences excluded, never reactivate for tests.",
-      "evidence": ["built"],
+      "scope": "Three live controls PASS four current cases; three legacy hidden occurrences explicitly excluded, never reactivate for tests.",
+      "evidence": ["built", "workspaceCurrent"],
       "next": "Keep active/hidden split explicit at next combined gate."
     },
     {
