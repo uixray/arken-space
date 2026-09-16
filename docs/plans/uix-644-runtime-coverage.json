@@ -82,6 +82,12 @@
       "revision": "23ed18709b378bb493721c549e00fe7e4e2bcff8",
       "artifact": "token-tray-gate/results.json",
       "scope": "Eight GM/PLAYER1280/390 lifecycle cases: Chromium4 PASS in chromium-pass-firefox-tab-results.json, Firefox4 PASS in results.json after native scroll-container Tab adjustment. Related geometry4 PASS in related-results.json. No placement commands; mocked backend."
+    },
+    "sceneEditorMap": {
+      "status": "PASS",
+      "revision": "bbf0206a72babfa3636415b91cd02ae94ceb88e7",
+      "artifact": "scene-editor-map-gate/results.json",
+      "scope": "Four GM1280/390 Chrome/Firefox cases, actual workspace→editor→Select: pointer choice, keyboard Home/Enter, first Escape retains editor/name draft, open-popup resize360x480 bounds, cancel/reopen original draft. No save/upload/publish or real persistence."
     }
   },
   "sites": [
@@ -439,11 +445,11 @@
       "file": "apps/web/src/ui/SceneManagerDialog.tsx",
       "kind": "tag:FormSelect",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Scene editor map/background selector under workspace→modal.",
-      "evidence": [],
-      "next": "Reconcile exact editor caller and original Review criteria; shared FormSelect PASS alone insufficient."
+      "scope": "Scene editor map selector under workspace→modal, keyboard/pointer and draft ownership through compact short-height resize.",
+      "evidence": ["sceneEditorMap"],
+      "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect."
     }
   ],
   "supplementalSites": [

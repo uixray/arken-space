@@ -964,3 +964,7 @@ Source `20b48de69676539db3ebc5816ddfbc0b5a3cd47e`: reproduced lost return focus 
 ## Token tray lifecycle — 2026-09-16
 
 Source `23ed18709b378bb493721c549e00fe7e4e2bcff8`: decorative initials no longer duplicate accessible names; open tray layer26 above persistent tools24, below token menus40/pause45. Real compact screenshot/hit-test reproduced tool occlusion. Eight lifecycle cases passed across retained Chromium4/Firefox4 reports, plus four existing geometry/quick-roll cases. Tab through24 entries, actual pointer hit, inner scroll, Escape/focus, outside menu and Journal/Map transition; no token placement requests. Artifacts `token-tray-gate/` checkpoint/results. Shared App details bucket remains partial pending session evidence reconciliation, not whole UIX-644 acceptance.
+
+## Scene editor map selector — 2026-09-16
+
+Evidence `bbf0206a72babfa3636415b91cd02ae94ceb88e7`:4/4 GM1280/390 Chrome/Firefox PASS, real App nested scene editor map dropdown. Pointer choice, keyboard reset, Escape closes dropdown only/returns focus and retains name draft, resize-open360x480 bounds, cancel/reopen original values. No runtime change, no server writes/save/upload/publish. Artifacts `scene-editor-map-gate/results.json` and checkpoint. Shared Select original RO remains unresolved; this caller PASS is scoped, not whole UIX-644 acceptance.
