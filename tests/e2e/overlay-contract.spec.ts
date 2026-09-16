@@ -727,6 +727,8 @@ for (const role of ["GM", "PLAYER"] as const)
         .poll(() =>
           panel.evaluate((el) => {
             const r = el.getBoundingClientRect();
+            const map = el.closest(".map-shell")!.getBoundingClientRect();
+            if (r.top < map.top || r.bottom > map.bottom) return false;
             return (
               r.left >= -1 &&
               r.top >= -1 &&
@@ -736,6 +738,10 @@ for (const role of ["GM", "PLAYER"] as const)
           }),
         )
         .toBe(true);
+      await red.scrollIntoViewIfNeeded();
+      await assertHitTarget(red);
+      await slider.scrollIntoViewIfNeeded();
+      await assertHitTarget(slider);
       await testInfo.attach("drawing-palette-short", {
         body: await page.screenshot(),
         contentType: "image/png",

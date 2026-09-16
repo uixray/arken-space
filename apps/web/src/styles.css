@@ -823,7 +823,11 @@ code {
   left: calc(8px + var(--map-toolbar-width, 48px) + 8px);
   width: max-content;
   max-width: calc(100% - var(--map-toolbar-width, 48px) - 32px);
-  overflow-x: auto;
+  /* Keep every setting reachable inside short maps, not behind the topbar. */
+  box-sizing: border-box;
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
