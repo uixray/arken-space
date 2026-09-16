@@ -112,3 +112,36 @@ docs/plans/uix-624-mobile-foundation.md
 - **Next action:** exact push только **codex/uix-624-mobile-foundation**, draft PR с базой **codex/uix-502-modal-popovers**, затем обязательные GitHub checks/e2e/multiplayer. В стабильном окружении выполнить полный E2E, а не переносить агрегат отдельных PASS как готовый gate. До его результата задача не считается готовой. После интеграции текущих PR требуется отдельный exact-main release gate со свежим backup/restore и rollback. Production GO не означает, что эти проверки пройдены. Physical-device/full-touch и human UIX-217 acceptance остаются явно отложенными.
 
 Следующий пул опирается на этот checkpoint, Linear и Git history. Решение — P1 foundation; code revision — **0e558df**; changes — 23 файла плюс docs-only receipt; verification — §4; открытые gates — стабильный full E2E, PR/CI, integrated release и отдельное hardware/full-touch acceptance. P2–P6 не начинаются автоматически.
+
+## 2026-09-16 — 360 px map action targets (local continuation)
+
+Candidate based on `d451abe`; this does not replace the full P1/mobile acceptance.
+
+- Actual App audit of enabled visible buttons, summaries and tabs in the map and
+  journal exposed map actions at 24–36 px wide / 28–32 px high. The prior journal
+  rules did not cover the map's separate dice tray, toolbar and HUD.
+- Compact main-content actions now use a 44×44 minimum, with no desktop change.
+  Zoom starts below the enlarged object-list trigger; its vertical range target
+  is widened. The tool column reserves the bottom token row and scrolls within
+  its existing bounds instead of intercepting the token trigger.
+- Compact tool menus use fixed viewport-bounded positioning outside that scroll
+  column, with the existing popup tier while open (below workspace/modal tiers).
+  They are not moved to a new portal or made globally topmost.
+- `compact-action-targets.spec.ts`: 4/4 PASS, GM/PLAYER at 360×850, Chrome/Firefox.
+  Enumerates every enabled visible button/summary/tab in these fixture surfaces,
+  scrolls each into view, checks >=44 dimensions and center hit-testing, checks
+  document horizontal overflow and zero game HTTP writes. GM also opens the real
+  More menu, hit-tests its checkbox and closes it with Escape/focus return.
+- Red evidence preserved: initial undersized actions; first CSS selector missed
+  sibling controls; corrected scope exposed token-trigger interception. The first
+  added popup check mistakenly expected a button where the actual GM-only menu
+  has checkboxes; corrected fixture checks the real existing input, no role bypass.
+- Final evidence: `compact-targets-gate/browser-05.log` (4 PASS,31s) and screenshots.
+  The PLAYER Chromium map screenshot was visually inspected; the fixture has no
+  map image/characters, so this is not visual/content acceptance of a full game.
+  Prettier, scoped test ESLint and git whitespace checks pass. CSS-only runtime
+  change: no repeated web typecheck, production build or full CI in this slice.
+- Open: short-height/landscape, character/invite/handoff and populated workspaces,
+  disabled controls, checkbox/range targets beyond this scope, every tool popup,
+  physical touch/browser zoom, desktop and integrated release gate. No task Done,
+  Linear write, push or deploy. Selection-recovery remains untracked and untouched.
