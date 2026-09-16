@@ -172,3 +172,22 @@ implement a theme, and do not alias classic-v1 to the mutable `system` fallback.
 Registration, selection persistence and actual-theme comparison with these
 reference screenshots remain unimplemented. The archive alone does not close
 UIX-317 or the owner's “keep the old appearance selectable” requirement.
+
+## Reused-story state gate — 2026-09-17
+
+`apps/web/tests/fixtures/player-themes` mounts the existing
+`PlayerThemes.stories.tsx` component with the application stylesheet order.
+It does not implement a second theme UI or activate themes in the main app.
+The former isolated preview covered field focus and settled colors; the new
+`tests/e2e/player-theme-states.spec.ts` covers the missing semantic/keyboard states.
+
+Chrome and Firefox each exercised all seven themes at 390px: read-only owner
+remains focusable and immutable; empty/duplicate resource disables Add with an
+accessible reason; loading Save is disabled and skipped by Tab; valid resource
+makes Add focusable; Cancel resets the field; Space toggles the labeled checkbox.
+Theme changes preserve the read-only value, system reset removes the opt-in
+attribute, and no API requests/pageerrors occur. Two tests/14 theme-browser
+combinations passed in 18.1 seconds. No new contrast or screenshot acceptance is
+claimed by this state-only test; inherited opacity, textures and visual distinction
+of all states still need rendered measurements. No account/profile persistence or
+GM/PLAYER permission boundary is modeled by this story.
