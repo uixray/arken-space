@@ -530,6 +530,15 @@
     padding-block: 12px;
   }
 
+  .landing-shell :is(.landing-header .wordmark, .beta-player-list a) {
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .landing-shell .landing-header .wordmark {
+    display: inline-flex;
+  }
   .landing-shell .landing-hero {
     padding-block: 24px;
   }
