@@ -149,3 +149,25 @@ request evidence retained. This covers rectangular fog, not every brush/polygon,
 Ruler or SCENE_REGION lifecycle; UIX-507 remains under its original acceptance
 criteria. The separate popup observer error remains unresolved. No build, push,
 deploy or Linear completion. Untracked recovery test unchanged.
+
+### 2026-09-16 — Escape cancels fog brush strokes too
+
+Extended the existing fog matrix with FOG_BRUSH/COVER_BRUSH. The original
+FOG_BRUSH run reproduced the same unsafe outcome through a different state path:
+Escape then mouse release still submitted a BRUSH REVEAL payload. Rectangular
+fog cleanup alone could not cancel `brushActiveRef`/`brushPointsRef`.
+
+Escape now resets brush activity, stored points and visible draft points before
+any late release handler can submit them. Completed stroke behavior is unchanged.
+The new positive controls require BRUSH geometry, multiple distinct points,
+positive radius and the correct REVEAL/COVER operation; cancel still requires
+zero writes. An initial new-test expectation mistakenly treated COVER_BRUSH as
+REVEAL; the application correctly returned COVER, so only that expectation was
+corrected. That intermediate failure is not reported as a product defect.
+
+Final connected **14/14 PASS** Chromium/Firefox, workers1/retries0: eight fog
+rectangle/brush cases plus six existing selection/DRAW Escape cases. Web types,
+scoped lint, formatting and diff checks passed. No full suite/build/publication.
+Polygon, Ruler, SCENE_REGION and interrupted-device gestures are not thereby
+accepted. Existing Review criteria and unrelated popup observer failure remain
+open; the preserved untracked selection recovery test is unchanged.

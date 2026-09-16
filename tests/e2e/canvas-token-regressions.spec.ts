@@ -2175,7 +2175,7 @@ for (const tool of ["PAN", "DRAW"] as const) {
   });
 }
 
-for (const tool of ["FOG", "COVER"] as const) {
+for (const tool of ["FOG", "COVER", "FOG_BRUSH", "COVER_BRUSH"] as const) {
   test(`UIX-507 Shift fog gesture and Escape cancellation ${tool}`, async ({
     page,
   }, testInfo) => {
@@ -2239,10 +2239,25 @@ for (const tool of ["FOG", "COVER"] as const) {
     await expect.poll(() => writes.length).toBe(1);
     expect(writes[0]).toMatchObject({
       path: "/api/fog-reveals",
-      body: { sceneId, operation: tool === "COVER" ? "COVER" : "REVEAL" },
+      body: {
+        sceneId,
+        operation: tool.startsWith("COVER") ? "COVER" : "REVEAL",
+      },
     });
-    expect(Number(writes[0].body.width)).toBeGreaterThan(8);
-    expect(Number(writes[0].body.height)).toBeGreaterThan(8);
+    if (tool.endsWith("BRUSH")) {
+      const geometry = writes[0].body.geometry as {
+        type: string;
+        points: Array<{ x: number; y: number }>;
+        radius: number;
+      };
+      expect(geometry.type).toBe("BRUSH");
+      expect(geometry.points.length).toBeGreaterThan(1);
+      expect(geometry.radius).toBeGreaterThan(0);
+      expect(geometry.points.at(-1)).not.toEqual(geometry.points[0]);
+    } else {
+      expect(Number(writes[0].body.width)).toBeGreaterThan(8);
+      expect(Number(writes[0].body.height)).toBeGreaterThan(8);
+    }
     await expect(
       page.getByRole("button", { name: "Удалить выбранное" }),
     ).toHaveCount(0);

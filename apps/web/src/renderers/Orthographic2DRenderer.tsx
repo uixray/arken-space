@@ -1069,6 +1069,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       setMarquee(null);
       setFogStart(null);
       setFogDraft(null);
+      brushActiveRef.current = false;
+      brushPointsRef.current = [];
+      setBrushPoints([]);
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
