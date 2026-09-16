@@ -192,3 +192,27 @@ This verifies that the new test detects the relevant tool conflict. No dependenc
 full suite, build, publication or Linear completion; recovery spec unchanged.
 Remaining Draw/polygon/SCENE_REGION/context-menu and live acceptance criteria are
 not replaced by these four cases. The separate popup observer error remains open.
+
+### 2026-09-16 — Shift drawing keeps its own gesture
+
+Added an actual-App DRAW regression for GM and PLAYER. With Shift held, Escape
+before release must emit no write and return to PAN. Repeating the same stroke
+without cancellation must send exactly one `/api/drawings` request with finite,
+nontrivial points and positive stroke width, then reconcile the returned drawing
+into the actual object list. No bulk-selection action or page error is allowed.
+
+**4/4 PASS**, Chromium/Firefox x GM/PLAYER, workers1/retries0; lint, formatting
+and diff checks passed. Product source unchanged. This is a mocked HTTP boundary
+and client reconciliation check, not live backend persistence/authorization.
+No additional mutation-control run, full suite, build or publication was needed.
+Untracked recovery test is unchanged.
+
+Remaining SCENE_REGION criterion was inspected without enabling dormant UI:
+current App.tsx has neither SCENE_REGION selection nor region commit callbacks;
+MapToolbar.tsx has no SCENE_REGION entry. The renderer and optional SceneRenderer
+callback contract remain, and the shortcut type explicitly excludes SCENE_REGION.
+Therefore current actual-App acceptance for that path is not established by
+these tests. Do not enable an old encounter workflow simply to turn a test green
+or silently mark that original criterion accepted. Context-menu interference and
+other outstanding original criteria still need their own evidence. The separate
+popup observer error remains unresolved.

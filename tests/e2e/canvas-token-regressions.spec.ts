@@ -2388,3 +2388,117 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
   });
 }
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-507 Shift drawing preserves stroke and cancels cleanly ${role}`, async ({
+    page,
+  }, testInfo) => {
+    const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => route.fulfill({ json: [] }));
+    await installCanvasReviewRoutes(page);
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    current.fogReveals = [
+      { id: "revealed", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (["GET", "HEAD"].includes(request.method())) return route.fallback();
+      if (path === "/api/chat/read") return route.fulfill({ json: {} });
+      const body = request.postDataJSON() as Record<string, unknown>;
+      writes.push({ path, body });
+      if (path === "/api/drawings")
+        return route.fulfill({
+          status: 201,
+          json: {
+            id: "d5400000-0000-4000-8000-000000000001",
+            sceneId,
+            authorMembershipId: current.me.id,
+            points: body.points,
+            color: body.color,
+            strokeWidth: body.strokeWidth,
+            x: 0,
+            y: 0,
+            revision: 0,
+          },
+        });
+      return route.fulfill({
+        status: 405,
+        json: { error: "UNEXPECTED_WRITE" },
+      });
+    });
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    const tool = page.locator('.map-tool[data-tool="DRAW"]');
+    const points = await map.evaluate((node) => {
+      const b = node.getBoundingClientRect();
+      const start = { x: b.x + b.width * 0.55, y: b.y + b.height * 0.55 };
+      const end = { x: start.x + 80, y: start.y + 80 };
+      for (const p of [start, end])
+        if (!(document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement))
+          throw Error("Drawing path obstructed");
+      return { start, end };
+    });
+    for (const cancel of [true, false]) {
+      await tool.click();
+      await expect(tool).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.down("Shift");
+      try {
+        await page.mouse.move(points.start.x, points.start.y);
+        await page.mouse.down();
+        await page.mouse.move(points.end.x, points.end.y, { steps: 8 });
+        if (cancel) {
+          await map.focus();
+          await page.keyboard.press("Escape");
+        }
+      } finally {
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+      }
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      if (cancel) {
+        expect(writes).toEqual([]);
+        await expect(
+          page.locator('.map-tool[data-tool="PAN"]'),
+        ).toHaveAttribute("aria-pressed", "true");
+      }
+    }
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]).toMatchObject({
+      path: "/api/drawings",
+      body: { sceneId },
+    });
+    const stroke = writes[0].body.points as number[];
+    expect(stroke.length).toBeGreaterThanOrEqual(4);
+    expect(stroke.every(Number.isFinite)).toBe(true);
+    expect(stroke.slice(-2)).not.toEqual(stroke.slice(0, 2));
+    expect(Number(writes[0].body.strokeWidth)).toBeGreaterThan(0);
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное" }),
+    ).toHaveCount(0);
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole("region", { name: "Объекты карты", exact: true })
+        .getByRole("button", { name: "Рисунок 1", exact: true }),
+    ).toBeVisible();
+    expect(errors).toEqual([]);
+    await testInfo.attach("shift-drawing-contract", {
+      body: JSON.stringify({ role, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
