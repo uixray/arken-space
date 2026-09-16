@@ -204,3 +204,33 @@ inventory/skills/media/authorization fixture.
   the CSS-only runtime change. Existing character queue regression not replayed.
   No publication/deploy/Linear Done. All-skills/inventory/dialog controls, real
   device keyboard/touch, other roles/characters and integrated CI remain open.
+## 2026-09-16 — integrated built-candidate UI gate
+
+Exact runtime candidate: `8504feac439ec0d68d473b13f7149b53ce47a3ba`.
+This supersedes the older `508167f` compiled UI evidence for the covered cases,
+not the separate production release or whole mobile acceptance.
+
+- One web typecheck (768 MiB) and one Vite production build PASS. Saved the full
+  dist and seven-file SHA256 manifest; copied artifact hashes verified afterward.
+- One sequential browser gate against **vite preview of production dist**, not
+  the development server: 34 expected, 0 skipped, 0 unexpected, 0 flaky;
+  retries0/workers1, Chromium+Firefox, duration167.926s. Existing unchanged CI was
+  not restarted and no backend/full test suite was launched.
+- Covered: compact enabled action dimensions/hit-testing at360×850,360×640,640×360
+  for GM/PLAYER; grid/resize/More popup reachability; actual PLAYER sheet pending
+  backstory and viewport/navigation transitions; Escape ownership vs workspaces
+  and blocking dialogs; responsive menu hidden-state cleanup; desktop/compact
+  SVG/icon-button contracts. These are five existing focused specs, no weakened
+  assertions or newly skipped cases. Synthetic API/socket fixtures throughout.
+- Receipt folder `ui-integrated-8504fea` in the current local artifact root:
+  revision.txt, types.log, build.log, payload-sha256.json, dist/, results.json,
+  browser-01.log and browser-01/ artifacts. JSON results preserve per-test records
+  and diagnostic attachments instead of relying only on a dot-reporter count.
+- MainJS1076454bytes, CSS296536bytes, lazy renderer364587bytes; Vite's >500kB chunk
+  warning remains, not hidden by changing limits. This is build-size evidence,
+  not a device performance/latency acceptance or an optimization claim.
+- Preview stopped after the gate. No source edits during build/QA, no publication,
+  deploy, production mutation or Linear write. Untracked selection test preserved.
+- Still required: remaining original UI624/316 and UI644 inventories/roles/states,
+  physical-device/human acceptance, complete backend/persistence/multiplayer and
+  exact integrated CI/release gates. A local built UI pass does not close these.
