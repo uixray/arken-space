@@ -123,7 +123,12 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           </p>
         </div>
 
-        <form className="auth-panel" onSubmit={submit} aria-label="Вход в игру">
+        <form
+          className="auth-panel"
+          onSubmit={submit}
+          aria-label="Вход в игру"
+          aria-busy={busy}
+        >
           <div>
             <p className="landing-kicker">Присоединиться</p>
             <h2>
@@ -150,6 +155,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               Имя
               <FormInput
                 value={name}
+                readOnly={busy}
                 onChange={(event) => setName(event.target.value)}
                 required
                 maxLength={40}

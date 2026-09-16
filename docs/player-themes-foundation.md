@@ -438,3 +438,28 @@ bundle-scope.json,build.log,checkpoint.md}` in the session artifact directory.
 The owned preview exited successfully and port 5187 has no listener. The original
 untracked selection-recovery test is unchanged and absent from the candidate.
 No GitHub CI restart, publication, deployment or Linear completion is claimed.
+
+## Invitation pending identity — 2026-09-17
+
+The invitation name previously remained editable after its value had already been
+sent, so the visible name could differ from the pending identity request. The
+existing name input is now readonly while busy (still focusable/selectable), and
+the auth form exposes aria-busy. No identity mapping, authentication endpoint,
+payload, session persistence or automatic retry behavior changed.
+
+The new invite-pending browser scenario first failed on the editable input at
+Chrome1280. Final connected gate: 8/8 PASS, 32.38s, Chrome/Firefox1280/360,
+worker1/retries0: four pending invitation cases plus four unchanged rate-limit
+cases. Held submission retains selectable name through Backspace/Enter, disables
+the submit button and sends one request. A503 unlocks the same name; explicit
+editing/retry sends the corrected name, a successful mocked response opens App
+and removes the invitation URL. Exact two payloads, no pageerrors or unexpected
+writes. This is real-control UX with synthetic HTTP/socket, not server identity
+persistence or production authentication acceptance.
+
+Web/E2E types, scoped ESLint, formatting and diffcheck passed. The initial test
+server launch used the wrong root and never ran tests; its logs are retained,
+not counted as a product failure. Corrected owned servers stop in finally.
+Evidence: invite-pending/{baseline-results.json,final-results.json,checkpoint.md}.
+No build/full suite/CI/publication or issue closure. The prior225038e compiled
+gate predates this runtime change and is not evidence for the new pending state.
