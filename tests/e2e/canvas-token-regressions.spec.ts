@@ -3538,3 +3538,154 @@ for (const width of [1280, 390]) {
     });
   }
 }
+
+for (const scenario of [
+  { name: "GM gridless", role: "GM", grid: false, access: "controlled" },
+  { name: "PLAYER grid", role: "PLAYER", grid: true, access: "controlled" },
+  {
+    name: "PLAYER gridless",
+    role: "PLAYER",
+    grid: false,
+    access: "controlled",
+  },
+  {
+    name: "PLAYER owner without control",
+    role: "PLAYER",
+    grid: true,
+    access: "foreign",
+  },
+  { name: "PLAYER locked", role: "PLAYER", grid: true, access: "locked" },
+] as const) {
+  test(`UIX-405 WASD role and grid contract ${scenario.name}`, async ({
+    page,
+  }, info) => {
+    const errors: string[] = [],
+      writes: string[] = [];
+    const moves: Array<Record<string, unknown>> = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await page.route("**/api/**", (route) => {
+      const request = route.request(),
+        path = new URL(request.url()).pathname;
+      // Bootstrap bookkeeping, not a map mutation. Client telemetry is NOT exempt.
+      if (path === "/api/chat/read") return route.fulfill({ json: {} });
+      if (!["GET", "HEAD"].includes(request.method()))
+        writes.push(`${request.method()} ${path}`);
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasRoutes(page);
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = scenario.role;
+    current.scenes[0]!.grid.enabled = scenario.grid;
+    current.tokens[0]!.controllerMembershipIds =
+      scenario.access === "foreign" ? [] : [current.me.id];
+    // Ownership alone permits selection of a revealed token, not movement.
+    // A truly foreign token is absent from the object list, so that would not
+    // exercise the selected-token permission guard at all.
+    current.tokens[0]!.ownerMembershipId = current.me.id;
+    current.tokens[0]!.locked = scenario.access === "locked";
+    current.fogReveals = [
+      { id: "wasd-reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route("**/api/canvas/bulk", (route) => {
+      moves.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: {
+          revisions: { tokens: { [tokenId]: moves.length }, drawings: {} },
+        },
+      });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") socket.send('40{"sid":"wasd-role"}');
+      });
+      socket.send(
+        '0{"sid":"wasd-role-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    const selected = map.getByRole("button", {
+      name: "Selected token",
+      exact: true,
+    });
+    await selected.click();
+    await expect(selected).toHaveAttribute("aria-pressed", "true");
+    await selected.press("Escape");
+    await map.focus();
+    const step = scenario.grid ? 64 : 8;
+    const allowed = scenario.access === "controlled";
+    for (const [key, x, y] of [
+      ["w", 0, -step],
+      ["a", -step, 0],
+      ["s", 0, step],
+      ["d", step, 0],
+    ] as const) {
+      const count = moves.length;
+      await page.keyboard.press(key);
+      if (allowed) {
+        await expect.poll(() => moves.length).toBe(count + 1);
+        expect(moves.at(-1)).toMatchObject({
+          sceneId,
+          operation: "MOVE",
+          deltaX: x,
+          deltaY: y,
+          targets: [{ targetType: "TOKEN", targetId: tokenId }],
+        });
+      }
+    }
+    if (allowed) {
+      const before = moves.length;
+      await page.keyboard.down("Shift");
+      try {
+        await page.keyboard.press("w");
+      } finally {
+        await page.keyboard.up("Shift");
+      }
+      await expect.poll(() => moves.length).toBe(before + 1);
+      expect(moves.at(-1)).toMatchObject({ deltaX: 0, deltaY: -step * 5 });
+      const heldBefore = moves.length;
+      await page.keyboard.down("s");
+      try {
+        await expect.poll(() => moves.length).toBe(heldBefore + 1);
+        for (let i = 0; i < 8; i++) await page.keyboard.down("s");
+      } finally {
+        await page.keyboard.up("s");
+      }
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      expect(moves).toHaveLength(heldBefore + 1);
+      // A new physical press must still work after the repeat guard.
+      await page.keyboard.press("s");
+      await expect.poll(() => moves.length).toBe(heldBefore + 2);
+    } else {
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      expect(moves).toEqual([]);
+    }
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await info.attach("wasd-role-grid", {
+      body: JSON.stringify({ scenario, moves, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
