@@ -302,3 +302,26 @@ inspected: clear uncut focus with no layout displacement. No new all-state contr
 physical-device or every-caller visual acceptance is claimed. No full suite, build,
 CI or deployment. The immutable classic reference archive remains unchanged;
 current shared accessibility fixes are intentionally not rolled back by classic.
+
+## Reduced-motion dialog lifecycle — 2026-09-17
+
+A new case in the existing workspace-select-escape.spec.ts exercises the actual
+App character-creation dialog, not the isolated theme story. With the browser's
+prefers-reduced-motion initially enabled, it types the draft, selects a template
+with Arrow/End/Enter, reopens the menu, changes the preference off/on while open,
+resizes1280×800→360×640, and verifies option hit-testing, Escape at both levels,
+return focus, preserved name and the current2px field ring. No save is submitted.
+
+Both Chromium and Firefox passed (2/2,14.615086s, one worker/retries0). At initial
+open and after live preference change/resize, document.getAnimations reports no
+running DOM animations; dialog/popup computed transition-duration is0s,
+animation-name none and scroll-behavior auto. No additional CSS override, mocked
+matchMedia, forced-open state or animation suppression was installed by the test:
+it exercises the existing product media query. No pageerrors or unexpected API
+mutations occurred. The compact Firefox screenshot was visually inspected: the
+name field, template, explanatory text and footer fit the dialog.
+
+This confirms one real modal/select lifecycle, not every UI or canvas animation,
+physical OS/device settings, a theme transition, or the complete reduced-motion
+acceptance of UIX-317/316. Runtime code did not need changing. Scoped ESLint,
+E2E typecheck, Prettier and diffcheck passed; no full suite/build/CI rerun.

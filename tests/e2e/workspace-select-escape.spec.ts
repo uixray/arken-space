@@ -364,3 +364,116 @@ for (const width of [1280, 360]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("UIX-317 reduced motion preserves actual character dialog and popup lifecycle", async ({
+  page,
+}, info) => {
+  const mutations = await install(page, "GM", true);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await openWorkspaceSection(page, "Персонажи");
+  const create = page.getByRole("button", {
+    name: "Создать персонажа",
+    exact: true,
+  });
+  await create.click();
+  const dialog = page.getByRole("dialog", {
+    name: "Новый персонаж",
+    exact: true,
+  });
+  const name = dialog.getByRole("textbox", { name: "Имя персонажа" });
+  await name.pressSequentially("Страж без анимации");
+  const trigger = dialog.getByRole("combobox", { name: /Шаблон/ });
+  await name.press("Tab");
+  await expect(trigger).toBeFocused();
+  await trigger.press("ArrowDown");
+  const popup = page.locator(".arken-form-select-popup");
+  await expect(popup).toBeVisible();
+  const sample = async (phase: string) => {
+    const state = await page.evaluate(() => ({
+      reduce: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      running: document
+        .getAnimations()
+        .filter((a) => a.playState === "running")
+        .map((a) => ({ state: a.playState, type: a.constructor.name })),
+      styles: Array.from(
+        document.querySelectorAll(
+          '[role="dialog"],.arken-form-select-popup,[data-floating-ui-status]',
+        ),
+      ).map((node) => {
+        const css = getComputedStyle(node);
+        return {
+          className: node.className,
+          transition: css.transitionDuration,
+          animation: css.animationName,
+          scroll: css.scrollBehavior,
+        };
+      }),
+    }));
+    expect(state.reduce).toBe(true);
+    expect(state.running).toEqual([]);
+    expect(state.styles.length).toBeGreaterThan(1);
+    for (const style of state.styles) {
+      expect(style.transition).toBe("0s");
+      expect(style.animation).toBe("none");
+      expect(style.scroll).toBe("auto");
+    }
+    await info.attach(phase, {
+      body: JSON.stringify(state),
+      contentType: "application/json",
+    });
+  };
+  await sample("reduced-at-open");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await expect(trigger).toContainText("На основе «Страж образец»");
+  await expect(popup).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(popup).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 360, height: 640 });
+  await expect(popup).toBeVisible();
+  await sample("reduced-after-live-toggle-and-resize");
+  const option = popup.getByRole("option", {
+    name: "На основе «Страж образец»",
+    exact: true,
+  });
+  await expect
+    .poll(() =>
+      option.evaluate((node) => {
+        const r = node.getBoundingClientRect();
+        return (
+          r.left >= 0 &&
+          r.right <= innerWidth &&
+          r.top >= 0 &&
+          r.bottom <= innerHeight &&
+          node.contains(
+            document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+          )
+        );
+      }),
+    )
+    .toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(popup).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await expect(trigger).toBeFocused();
+  await expect(name).toHaveValue("Страж без анимации");
+  await trigger.press("Shift+Tab");
+  await expect(name).toBeFocused();
+  await expect(name.locator("..")).toHaveCSS("outline-width", "2px");
+  await info.attach("reduced-compact-dialog", {
+    body: await page.screenshot(),
+    contentType: "image/png",
+  });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(create).toBeFocused();
+  expect(errors).toEqual([]);
+  expect(mutations).toEqual([]);
+});
