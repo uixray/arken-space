@@ -32,7 +32,19 @@ async function install(page: Page, role: "GM" | "PLAYER" = "GM") {
   current.me.role = role;
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/story/posts")
+      return route.fulfill({ json: { posts: [], nextCursor: null } });
+    if (path === "/api/operator/feedback/capability")
+      return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
     return route.fulfill({ json: path === "/api/bootstrap" ? current : [] });
+  });
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((m) => {
+      if (m.toString() === "40") socket.send('40{"sid":"navigation"}');
+    });
+    socket.send(
+      '0{"sid":"navigation","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
   });
   return current;
 }
@@ -172,3 +184,82 @@ test("UIX-644 short viewport scrolls options without dismissing and keeps focus 
   await expect(trigger).toContainText("Сцена 20");
   await expect(list).toBeHidden();
 });
+
+for (const { role, width, target } of [
+  { role: "GM", width: 1024, target: "Сцены" },
+  { role: "GM", width: 390, target: "Сцены" },
+  { role: "PLAYER", width: 390, target: "Токены" },
+] as const) {
+  test(`UIX-644 navigation return owner ${role} ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 800 });
+    await install(page, role);
+    const errors: string[] = [],
+      writes: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("request", (r) => {
+      const p = new URL(r.url()).pathname;
+      if (
+        p.startsWith("/api/") &&
+        !["GET", "HEAD"].includes(r.method()) &&
+        p !== "/api/chat/read"
+      )
+        writes.push(`${r.method()} ${p}`);
+    });
+    await page.goto("/");
+    const trigger =
+      width === 1024
+        ? page.getByLabel("Ещё разделы", { exact: true })
+        : page.getByRole("button", { name: "Разделы", exact: true });
+    const menu =
+      width === 1024
+        ? page.locator(".workspace-nav__menu")
+        : page.getByRole("dialog", { name: "Разделы", exact: true });
+    for (let round = 0; round < 2; round++) {
+      await trigger.click();
+      await expect(menu).toBeVisible();
+      const option = menu.getByRole("button", { name: target, exact: true });
+      await assertHitTarget(option);
+      await option.click();
+      const dialog = page.getByRole("dialog", { name: target, exact: true });
+      await expect(dialog).toBeVisible();
+      await expect(menu).toBeHidden();
+      await expect
+        .poll(() =>
+          dialog.evaluate((el) => el.contains(document.activeElement)),
+        )
+        .toBe(true);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      if (width === 1024) await expect(trigger).toBeFocused();
+      else {
+        // Compact navigation intentionally restores the previous map surface,
+        // not Sections. Preserve that existing owner contract.
+        await expect(page.locator("#compact-nav-map")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const map = document.querySelector(".map-shell");
+              return Boolean(
+                map &&
+                (map === document.activeElement ||
+                  map.contains(document.activeElement)),
+              );
+            }),
+          )
+          .toBe(true);
+      }
+      await expect(trigger).toBeVisible();
+    }
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("navigation-return-receipt", {
+      body: JSON.stringify({ role, width, target, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}

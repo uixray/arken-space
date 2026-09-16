@@ -128,8 +128,14 @@ export function WorkspaceNav({
       data-workspace={item.id}
       aria-pressed={active === item.id}
       onClick={() => {
+        if (moreRef.current) {
+          moreRef.current.open = false;
+          // The destination window must remember a visible return target,
+          // not the menu item that is about to become hidden.
+          if (inMenu)
+            moreRef.current.querySelector<HTMLElement>("summary")?.focus();
+        }
         onSelect(item.id);
-        if (moreRef.current) moreRef.current.open = false;
       }}
     >
       {item.label}
