@@ -10,13 +10,14 @@ import {
   scanScopedCss,
   scanUiSource,
 } from "../scripts/ui-icon-policy.mjs";
+import { collectUiSourceClosure } from "../scripts/ui-source-closure.mjs";
 
 function expectFinding(source: string, expected: string, file?: string) {
   expect(scanUiSource(source, file).join("\n")).toContain(expected);
 }
 
 describe("UIX-645 icon source policy", () => {
-  it("guards the exact migrated sources and scoped CSS selectors", () => {
+  it("retains migration previews and guards the reachable product UI", () => {
     expect(protectedSourceFiles).toEqual([
       "apps/web/src/App.tsx",
       "apps/web/src/ui/ArkenDialog.tsx",
@@ -48,7 +49,97 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/ui/icons.ts",
       "apps/web/src/ui/AppIcon.tsx",
     ]);
+    const closure = collectUiSourceClosure(process.cwd());
+    expect(closure.findings).toEqual([]);
+    expect(closure.files).toEqual(
+      expect.arrayContaining([
+        "apps/web/src/SkillCards.tsx",
+        "apps/web/src/sidebar/TokenPalette.tsx",
+        "apps/web/src/TokenImageGenerator.tsx",
+        "apps/web/src/styles.css",
+      ]),
+    );
+    expect(closure.files).not.toContain(
+      "apps/web/src/sidebar/InitiativePanel.tsx",
+    );
     expect(scanProtectedSources()).toEqual([]);
+  });
+
+  it("allows the exact noninteractive skill-use result, not new arrow controls", () => {
+    const file = "apps/web/src/SkillCards.tsx";
+    const prose =
+      '<p className="skill-chat-card__uses">Использования: {card.uses.before} → {card.uses.after}/{card.uses.max}</p>';
+    expect(scanUiSource(`const view = ${prose};`, file)).toEqual([]);
+    expect(
+      scanUiSource(readFileSync(path.join(process.cwd(), file), "utf8"), file),
+    ).toEqual([]);
+    for (const source of [
+      `const view = <button>${prose}</button>;`,
+      `const view = <div role="button">${prose}</div>;`,
+      `const view = <div onClick={activate}>${prose}</div>;`,
+      `const view = <div tabIndex={0} onKeyDown={activate}>${prose}</div>;`,
+      `const view = ${prose.replace("card.uses.before", "different.before")};`,
+      'const view = <p className="skill-chat-card__uses">→</p>;',
+      'const view = <button className="skill-chat-card__uses">→</button>;',
+    ]) {
+      expect(scanUiSource(source, file).join("\n")).toContain("text glyph");
+    }
+    expect(
+      scanUiSource(`const view = ${prose};`, "another-screen.tsx").join("\n"),
+    ).toContain("text glyph");
+    expect(
+      scanUiSource(
+        `const view = <section onKeyDown={closeOnEscape}>${prose}</section>;`,
+        file,
+      ),
+    ).toEqual([]);
+  });
+
+  it("allows documented keycaps, not glyph icon configs disguised as guide content", () => {
+    const file = "apps/web/src/landing-guide-content.ts";
+    const keycaps =
+      'const shortcuts = [{ keys: ["−", "←", "→", "↑", "↓"], action: "Управление картой" }];';
+    expect(scanUiSource(keycaps, file)).toEqual([]);
+    expect(
+      scanUiSource(readFileSync(path.join(process.cwd(), file), "utf8"), file),
+    ).toEqual([]);
+    for (const source of [
+      'const shortcuts = [{ icon: "↑", action: "Переместить" }];',
+      'const shortcuts = [{ keys: ["⚔"], action: "Атаковать" }];',
+      'const shortcuts = [{ keys: ["↑"] }];',
+      'const shortcuts = [{ keys: ["↑"], action: "" }];',
+    ])
+      expect(scanUiSource(source, file).join("\n")).toContain("glyph");
+    expect(scanUiSource(keycaps, "screen-config.ts").join("\n")).toContain(
+      "glyph",
+    );
+  });
+
+  it("checks CSS glyphs outside the original toolbar selectors", () => {
+    expect(
+      scanScopedCss('.auth-button::after { content: "→"; }').join("\n"),
+    ).toContain("glyph content");
+    expect(
+      scanScopedCss(
+        '@media (width < 600px) { .new-menu::before { content: "\\2192 "; } }',
+      ).join("\n"),
+    ).toContain("glyph content");
+    expect(
+      scanScopedCss(
+        '.help::after { content: "Дальше →"; } .list::before { content: counter(item); }',
+      ),
+    ).toEqual([]);
+  });
+
+  it("scans standalone glyph configs in typed helper modules without TSX parsing", () => {
+    const source =
+      'const identity = <T>(value: T) => value; const item = { icon: "↑" };';
+    expect(scanUiSource(source, "screen-config.ts").join("\n")).toContain(
+      "literal glyph",
+    );
+    expect(scanUiSource(source, "screen-config.ts").join("\n")).not.toContain(
+      "invalid TypeScript",
+    );
   });
 
   it("UIX645_APP_SHELL_GLYPH_RETURN detects a diversion of the actual source", () => {

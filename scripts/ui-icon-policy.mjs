@@ -1,12 +1,13 @@
 /**
- * Narrow source guard for UIX-645's Lucide migration.  This intentionally
- * protects only the listed migration files; it is not a repository-wide icon
- * linter and does not try to classify ordinary prose, hotkeys, or formulae.
+ * Source guard for UIX-645's Lucide migration: the actual entry-point closure
+ * plus explicitly retained migration previews. Not a dormant-source glob;
+ * embedded prose, hotkeys and formulae remain outside glyph-only detection.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import ts from "typescript";
+import { collectUiSourceClosure } from "./ui-source-closure.mjs";
 
 export const protectedSourceFiles = [
   "apps/web/src/App.tsx",
@@ -140,14 +141,123 @@ function isControlOperator(value, node) {
   return false;
 }
 
-/** Scan TSX source AST; comments are not AST nodes and are intentionally ignored. */
+// One result sentence, not a file-wide prose or arrow exception. Require the
+// exact semantic field bindings on both sides and the dedicated paragraph.
+function isSkillUsesResultArrow(node, file, tree) {
+  if (
+    !file.replaceAll("\\", "/").endsWith("apps/web/src/SkillCards.tsx") ||
+    !ts.isJsxText(node) ||
+    decodeHtmlEntities(node.getText(tree)).trim() !== "→"
+  )
+    return false;
+  const parent = node.parent;
+  if (
+    !ts.isJsxElement(parent) ||
+    parent.openingElement.tagName.getText(tree) !== "p"
+  )
+    return false;
+  for (let ancestor = parent; ancestor; ancestor = ancestor.parent) {
+    const opening = ts.isJsxElement(ancestor)
+      ? ancestor.openingElement
+      : ts.isJsxSelfClosingElement(ancestor)
+        ? ancestor
+        : null;
+    if (!opening) continue;
+    const tag = opening.tagName.getText(tree);
+    if (
+      /^(?:button|a|input|select|textarea|summary|Button|Link|Control)$/i.test(
+        tag,
+      )
+    )
+      return false;
+    if (
+      opening.attributes.properties.some((attribute) => {
+        if (!ts.isJsxAttribute(attribute)) return false;
+        if (
+          /^on(?:click|pointerdown|pointerup|mousedown|mouseup)$/i.test(
+            attribute.name.text,
+          )
+        )
+          return true;
+        if (/^onkey(?:down|up)$/i.test(attribute.name.text)) {
+          return (
+            ancestor === parent ||
+            opening.attributes.properties.some(
+              (candidate) =>
+                ts.isJsxAttribute(candidate) &&
+                candidate.name.text === "tabIndex",
+            )
+          );
+        }
+        if (attribute.name.text !== "role") return false;
+        const role =
+          attribute.initializer && ts.isJsxExpression(attribute.initializer)
+            ? literalValue(attribute.initializer.expression)
+            : literalValue(attribute.initializer);
+        return /^(?:button|link|checkbox|radio|switch|menuitem|option|tab|slider|spinbutton)$/i.test(
+          role ?? "",
+        );
+      })
+    )
+      return false;
+  }
+  const className = parent.openingElement.attributes.properties.find(
+    (attribute) =>
+      ts.isJsxAttribute(attribute) && attribute.name.text === "className",
+  );
+  if (literalValue(className?.initializer) !== "skill-chat-card__uses")
+    return false;
+  const siblings = parent.children;
+  const index = siblings.indexOf(node);
+  const expression = (child) =>
+    child && ts.isJsxExpression(child) ? child.expression?.getText(tree) : null;
+  return (
+    expression(siblings[index - 1]) === "card.uses.before" &&
+    expression(siblings[index + 1]) === "card.uses.after"
+  );
+}
+
+// Documented physical keyboard caps, never icon/glyph configuration values.
+function isLandingGuideKeycap(node, file) {
+  if (
+    !file
+      .replaceAll("\\", "/")
+      .endsWith("apps/web/src/landing-guide-content.ts") ||
+    !ts.isStringLiteral(node) ||
+    !["−", "←", "→", "↑", "↓"].includes(node.text)
+  )
+    return false;
+  const array = node.parent;
+  if (!ts.isArrayLiteralExpression(array)) return false;
+  const property = array.parent;
+  if (
+    !ts.isPropertyAssignment(property) ||
+    propertyName(property) !== "keys" ||
+    property.initializer !== array
+  )
+    return false;
+  const object = property.parent;
+  if (!ts.isObjectLiteralExpression(object)) return false;
+  return object.properties.some(
+    (candidate) =>
+      ts.isPropertyAssignment(candidate) &&
+      propertyName(candidate) === "action" &&
+      (literalValue(candidate.initializer)?.trim().length ?? 0) > 0,
+  );
+}
+
+/** Scan TS/JS/TSX source AST; comments are intentionally ignored. */
 export function scanUiSource(source, file = "<inline>.tsx") {
   const tree = ts.createSourceFile(
     file,
     source,
     ts.ScriptTarget.Latest,
     true,
-    ts.ScriptKind.TSX,
+    /\.[cm]?ts$/i.test(file)
+      ? ts.ScriptKind.TS
+      : /\.[cm]?js$/i.test(file)
+        ? ts.ScriptKind.JS
+        : ts.ScriptKind.TSX,
   );
   const findings = [];
   if (tree.parseDiagnostics.length > 0) {
@@ -157,6 +267,7 @@ export function scanUiSource(source, file = "<inline>.tsx") {
   const visit = (node) => {
     if (
       ts.isJsxText(node) &&
+      !isSkillUsesResultArrow(node, file, tree) &&
       (isStandaloneUiGlyph(node.getText(tree)) ||
         isControlOperator(node.getText(tree), node))
     ) {
@@ -173,6 +284,7 @@ export function scanUiSource(source, file = "<inline>.tsx") {
     const value = literalValue(node);
     if (
       value !== null &&
+      !isLandingGuideKeycap(node, file) &&
       (isStandaloneUiGlyph(value) || isControlOperator(value, node))
     ) {
       findings.push(
@@ -325,15 +437,13 @@ function stripCssComments(source) {
   return source.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-/** Bounded rule scanner: only migration-related toolbar/grid/resize selectors. */
+/** Scan glyph content in every selector of a closure-reachable stylesheet. */
 export function scanScopedCss(source, file = "apps/web/src/styles.css") {
   const findings = [];
   const css = stripCssComments(source);
   const rule = /([^{}]+)\{([^{}]*)\}/g;
   for (let match; (match = rule.exec(css));) {
     const [, selectors, declarations] = match;
-    if (!protectedCssSelectors.some((selector) => selectors.includes(selector)))
-      continue;
     const content = /\bcontent\s*:\s*(["'])(.*?)\1/giu;
     for (let declaration; (declaration = content.exec(declarations));) {
       const raw = declaration[2];
@@ -351,12 +461,22 @@ export function scanScopedCss(source, file = "apps/web/src/styles.css") {
 }
 
 export function scanProtectedSources(root = process.cwd()) {
-  const findings = protectedSourceFiles.flatMap((relative) =>
-    scanUiSource(readFileSync(path.join(root, relative), "utf8"), relative),
-  );
-  const cssFile = "apps/web/src/styles.css";
-  findings.push(
-    ...scanScopedCss(readFileSync(path.join(root, cssFile), "utf8"), cssFile),
-  );
+  const closure = collectUiSourceClosure(root);
+  const findings = [...closure.findings];
+  for (const relative of [
+    ...new Set([...closure.files, ...protectedSourceFiles]),
+  ].sort()) {
+    if (!/\.(?:[cm]?[jt]sx?|css)$/i.test(relative)) continue;
+    try {
+      const source = readFileSync(path.join(root, relative), "utf8");
+      findings.push(
+        ...(relative.endsWith(".css")
+          ? scanScopedCss(source, relative)
+          : scanUiSource(source, relative)),
+      );
+    } catch {
+      findings.push(`${relative}: protected source could not be read`);
+    }
+  }
   return findings;
 }
