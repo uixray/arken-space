@@ -477,3 +477,34 @@ and a value through UI, not by making hidden branches artificially visible.
   ResizeObserver notification error; six others logged none. Error-free runtime
   gate remains FAIL, not rescued by the green menu assertions. Next action is
   targeted observer ownership diagnosis on that reproduced setup1280 path.
+
+## 2026-09-16 — catalog ResizeObserver error root cause
+
+The desktop SetupPanel creation error is no longer treated as an unexplained
+observer warning. A temporary diagnostic copy wrapped native ResizeObserver
+without changing callback scheduling, capturing constructor stacks and entries
+at window.error. `resize-observer-gate/trace-01` reproduced the error:
+
+- Immediately before the error, Gravity TextArea observers saw the two empty
+  catalog textareas at width638/content-height0, then content-height16 in the
+  same delivery cycle. WorkspaceNav observations were earlier and unchanged.
+- Installed Gravity TextAreaControl.resizeHeight measures/writes its own height
+  inside its resize callback when rows are absent. The form had been measured
+  while its SetupPanel section was hidden. No evidence called for altering all
+  observers, the canvas, nav measurements or suppressing window.error.
+- CatalogEntryForm now has a scoped class; only its textareas get minimum height
+  from the existing size-control-height token. Automatic growth remains enabled
+  (no forced rows, max-height or fixed-height workaround). Compact44px rules
+  retain their higher-specificity minimum.
+- trace-02 repeated the diagnostic path: zero window errors and zero client logs.
+  Diagnostic source retained in artifacts and removed from the test tree.
+- The normal catalog-owner test now asserts clientLogs is empty after writing
+  its receipt, and checks initial field height, expansion for12lines and shrink
+  back to original text/height. This restores a failing error-free runtime gate,
+  rather than leaving telemetry outside assertions.
+- Final normal (uninstrumented) matrix:12/12PASS2.1min. Read all12receipts:
+  zero client logs and zero gameplay mutations across edit/picker/setup,
+  1280/360, Chromium/Firefox; auto-grow/shrink checks passed. The previously
+  failing catalog error-free slice is now PASS, not the whole UIX-644 gate.
+- Scoped lint/format/diff, web typecheck768MiB and one production build1.93s
+  PASS; large main-chunk warning retained. No full suite or CI restart.

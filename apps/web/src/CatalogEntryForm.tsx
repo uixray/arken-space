@@ -295,6 +295,7 @@ export function CatalogEntryForm({
 
   return (
     <form
+      className="catalog-entry-form"
       onSubmit={submit}
       aria-label={
         existing ? "Редактирование записи каталога" : "Новая запись каталога"

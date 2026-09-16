@@ -523,6 +523,26 @@ for (const owner of ["edit", "picker", "setup"] as const) {
           .getByRole("button", { name: "Добавить бросок", exact: true })
           .click();
       }
+      const description = form.getByRole("textbox", {
+        name: "Описание",
+        exact: true,
+      });
+      await description.scrollIntoViewIfNeeded();
+      const initialText = await description.inputValue();
+      const initialHeight = (await description.boundingBox())!.height;
+      expect(initialHeight).toBeGreaterThanOrEqual(28);
+      await description.fill(
+        Array.from({ length: 12 }, (_, i) => `Строка описания ${i + 1}`).join(
+          "\n",
+        ),
+      );
+      await expect
+        .poll(async () => (await description.boundingBox())!.height)
+        .toBeGreaterThan(initialHeight + 100);
+      await description.fill(initialText);
+      await expect
+        .poll(async () => (await description.boundingBox())!.height)
+        .toBeLessThanOrEqual(initialHeight + 2);
       async function choose(
         trigger: import("@playwright/test").Locator,
         text: string,
@@ -610,8 +630,8 @@ for (const owner of ["edit", "picker", "setup"] as const) {
         path: receipt,
         contentType: "application/json",
       });
-      // Telemetry is retained for the separate error-free runtime gate, not
-      // misclassified as a gameplay mutation or silently discarded.
+      // Preserve diagnostics and fail the runtime gate; never suppress observer errors.
+      expect(clientLogs).toEqual([]);
       expect(unexpected).toEqual([]);
     });
   }

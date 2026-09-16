@@ -5122,3 +5122,9 @@ code {
 .workspace-nav__count {
   flex: 0 0 auto;
 }
+
+/* Auto-growing catalog fields must start at a usable height even when the
+ * dialog was measured while its setup section was hidden. Keep growth enabled. */
+.catalog-entry-form .g-text-area__control {
+  min-height: var(--size-control-height);
+}
