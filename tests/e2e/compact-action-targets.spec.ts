@@ -2,11 +2,15 @@ import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 
 for (const role of ["GM", "PLAYER"] as const)
-  for (const width of [360]) {
-    test(`UIX-624 compact action targets ${role} ${width}`, async ({
+  for (const { width, height } of [
+    { width: 360, height: 850 },
+    { width: 360, height: 640 },
+    { width: 640, height: 360 },
+  ]) {
+    test(`UIX-624 compact action targets ${role} ${width}x${height}`, async ({
       page,
     }, testInfo) => {
-      await page.setViewportSize({ width, height: 850 });
+      await page.setViewportSize({ width, height });
       const snapshot = buildGameSnapshot(role);
       snapshot.scenes = [
         {
@@ -66,7 +70,7 @@ for (const role of ["GM", "PLAYER"] as const)
         );
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth),
-        ).toBeLessThanOrEqual(360);
+        ).toBeLessThanOrEqual(width);
         const controls = page.locator(
           "button:visible, summary:visible, [role=tab]:visible",
         );
@@ -102,6 +106,36 @@ for (const role of ["GM", "PLAYER"] as const)
       }
       await page.locator("#compact-nav-map").click();
       if (role === "GM") {
+        for (const selector of [".grid-settings", ".resize-settings"]) {
+          const owner = page.locator(`.map-toolbar ${selector}`);
+          const trigger = owner.locator("summary");
+          await trigger.click();
+          const control = owner
+            .locator(
+              selector === ".resize-settings"
+                ? "button:visible:not(:disabled)"
+                : "input:visible:not(:disabled)",
+            )
+            .first();
+          await expect(control).toBeVisible();
+          await expect
+            .poll(() =>
+              control.evaluate((node) => {
+                const r = node.getBoundingClientRect();
+                return node.contains(
+                  document.elementFromPoint(
+                    r.x + r.width / 2,
+                    r.y + r.height / 2,
+                  ),
+                );
+              }),
+            )
+            .toBe(true);
+          await control.focus();
+          await page.keyboard.press("Escape");
+          await expect(control).toBeHidden();
+          await expect(trigger).toBeFocused();
+        }
         const more = page.locator(".toolbar-overflow summary");
         await more.click();
         const moreAction = page
@@ -127,7 +161,7 @@ for (const role of ["GM", "PLAYER"] as const)
         await expect(more).toBeFocused();
       }
       await page.screenshot({
-        path: testInfo.outputPath("compact-map-360.png"),
+        path: testInfo.outputPath(`compact-map-${width}x${height}.png`),
       });
       await testInfo.attach("compact-action-targets", {
         body: JSON.stringify({ role, width, measurements, failures }, null, 2),

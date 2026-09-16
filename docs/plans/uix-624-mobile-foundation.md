@@ -145,3 +145,32 @@ Candidate based on `d451abe`; this does not replace the full P1/mobile acceptanc
   disabled controls, checkbox/range targets beyond this scope, every tool popup,
   physical touch/browser zoom, desktop and integrated release gate. No task Done,
   Linear write, push or deploy. Selection-recovery remains untracked and untouched.
+## 2026-09-16 — short portrait and landscape map controls
+
+Follow-up to `5ea2c0f`, not acceptance by extrapolation from the 850px-tall screen.
+
+- At 360×640, the map dice panel intercepted Minus and Fit. At 640×360,
+  non-scrolling toolbar chrome consumed the available height and left the inner
+  tool group effectively unreachable. Both failed real center hit-testing.
+- Compact map dice remain complete in a single independently scrolling row,
+  rather than a tall overlay. At <=480px viewport height, zoom uses a horizontal
+  range/row. The whole compact toolbar scrolls, including its chrome, instead of
+  shrinking only the tool group. Popup placement outside the scrollport remains.
+- Existing target spec now includes 360×640 and 640×360. Only the eight new
+  role/browser cases ran in the final slice: 8/8 PASS (59s), Chromium/Firefox,
+  GM/PLAYER, map+journal enabled visible buttons/summaries/tabs >=44 and hit-test,
+  no document horizontal overflow or game HTTP mutation. Every control is
+  scrolled into view before measurement; this does not mean all are simultaneous.
+- GM cases additionally use actual grid numeric input, resize-mode button and
+  More checkbox: open by ordinary pointer click, hit-test, Escape, trigger focus.
+  Initial added resize test wrongly expected an input; corrected against actual
+  source, not by skipping the menu or using force.
+- PLAYER Chromium landscape screenshot was inspected (the empty scene is a
+  fixture, not a full game visual acceptance). Evidence: `compact-short-gate`,
+  browser-01/02 reproductions, browser-03 selector error, browser-04 final8 PASS.
+  Prettier, scoped ESLint and whitespace checks PASS. CSS-only runtime change;
+  typecheck/build/full CI deferred to the connected delivery gate, not waived.
+- Not yet proven: physical orientation changes/software keyboard, populated
+  character surfaces, all input touch targets, zoom-value interaction, or a real
+  multiplayer session. The tests start in each viewport; they do not prove a
+  live in-session rotation retained state. No publication/deploy or Linear Done.
