@@ -2396,7 +2396,7 @@ export function App() {
                           {asset ? (
                             <img src={asset.url} alt="" />
                           ) : (
-                            <span>
+                            <span aria-hidden="true">
                               {definition.name.slice(0, 2).toUpperCase()}
                             </span>
                           )}

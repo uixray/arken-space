@@ -350,3 +350,89 @@ for (const role of ["GM", "PLAYER"] as const)
       });
     });
   }
+
+for (const role of ["GM", "PLAYER"] as const)
+  for (const width of [1280, 390]) {
+    test(`UIX-644 token tray owner lifecycle ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      const snapshot = await install(page, role);
+      snapshot.tokenDefinitions = Array.from({ length: 24 }, (_, i) => ({
+        id: `tray-definition-${i}`,
+        characterId: null,
+        defaultAssetId: null,
+        name: `Страж ${String(i + 1).padStart(2, "0")}`,
+        ownName: null,
+        defaultWidth: 1,
+        defaultHeight: 1,
+        controllerMembershipIds: [snapshot.me.id],
+        revision: 1,
+      }));
+      const errors: string[] = [],
+        writes: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        const p = new URL(r.url()).pathname;
+        if (
+          p.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(r.method()) &&
+          p !== "/api/chat/read"
+        )
+          writes.push(`${r.method()} ${p}`);
+      });
+      await page.goto("/");
+      const tray = page.locator(".token-tray"),
+        summary = tray.locator("summary"),
+        list = tray.locator(".token-tray-list");
+      await summary.click();
+      await expect(tray).toHaveAttribute("open", "");
+      await page.keyboard.press("Tab");
+      // Firefox includes the scrollable list itself in native tab order.
+      // Do not skip arbitrary controls or programmatically focus a token.
+      if (await list.evaluate((el) => el === document.activeElement))
+        await page.keyboard.press("Tab");
+      await expect(list.getByRole("button").first()).toBeFocused();
+      for (let i = 1; i < 24; i++) await page.keyboard.press("Tab");
+      const last = list.getByRole("button", { name: "Страж 24", exact: true });
+      await expect(last).toBeFocused();
+      await assertHitTarget(last);
+      await expect
+        .poll(() => list.evaluate((el) => el.scrollTop))
+        .toBeGreaterThan(0);
+      expect(writes).toEqual([]);
+      await page.keyboard.press("Escape");
+      await expect(tray).not.toHaveAttribute("open", "");
+      await expect(summary).toBeFocused();
+      await summary.press("Enter");
+      await expect(list).toBeVisible();
+      await last.scrollIntoViewIfNeeded();
+      await assertHitTarget(last);
+      await expect(tray).toHaveAttribute("open", "");
+      await page.getByLabel("Меню сеанса", { exact: true }).click();
+      await expect(tray).not.toHaveAttribute("open", "");
+      await expect(
+        page.getByLabel("Меню сеанса", { exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await summary.click();
+      await expect(tray).toHaveAttribute("open", "");
+      if (width === 1280)
+        await page.setViewportSize({ width: 390, height: 800 });
+      await page.locator("#compact-nav-journal").click();
+      await expect(tray).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(summary).toBeVisible();
+      await expect(tray).not.toHaveAttribute("open", "");
+      await summary.click();
+      await expect(tray).toHaveAttribute("open", "");
+      await page.keyboard.press("Escape");
+      await expect(summary).toBeFocused();
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("token-tray-receipt", {
+        body: JSON.stringify({ role, width, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }

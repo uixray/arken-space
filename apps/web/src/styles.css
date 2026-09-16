@@ -1020,6 +1020,11 @@ code {
   background: var(--surface);
   box-shadow: 0 8px 24px #0008;
 }
+.token-tray[open] {
+  /* An active picker sits above persistent canvas tools (24), but stays
+     below token menus (40), pause (45), and workspace/modal owners. */
+  z-index: 26;
+}
 .token-tray summary {
   flex: 0 0 auto;
   padding: 7px 10px;
