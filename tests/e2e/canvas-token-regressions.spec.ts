@@ -1408,6 +1408,30 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   });
   const marqueeStart = screenPoint(350, 285);
   const marqueeEnd = screenPoint(560, 415);
+
+  // Escape cancels the in-flight rectangle, not just the previous selection.
+  // The later pointerup must not resurrect this group.
+  await page.keyboard.down("Shift");
+  await page.mouse.move(marqueeStart.x, marqueeStart.y);
+  await page.mouse.down();
+  await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
+  await map.focus();
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Delete");
+  await expect(
+    page.getByRole("dialog", {
+      name: /Удалить выбранные объекты|Убрать токен с карты/,
+    }),
+  ).toHaveCount(0);
+  expect(bulkRequests).toHaveLength(0);
+  await expectStableSelectionChrome(page, zoomBaseline);
+
+  // Positive control: the same rectangle without cancellation selects both.
   await page.keyboard.down("Shift");
   await page.mouse.move(marqueeStart.x, marqueeStart.y);
   await page.mouse.down();

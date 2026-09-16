@@ -106,3 +106,24 @@ This proves the 640x360 emulated viewport scenario, not physical-device touch,
 every possible short viewport, live ACL, the full tool-conflict matrix, or the
 unrelated intermittent token-popup observer error. No build, push, deploy or
 Linear completion. The untracked recovery test remains unchanged.
+
+### 2026-09-16 — Escape cancels an unfinished selection rectangle
+
+The tool/gesture audit found that Escape cleared selected IDs but retained the
+active marquee rectangle. A real-App regression reproduced the consequence:
+Shift-drag across the token/drawing, Escape before releasing the mouse, then
+pointerup selected the cancelled group again. The original test failed because
+`Удалить выбранное` reappeared (expected zero, received one).
+
+The map-state Escape branch now also clears the marquee. The object-list-first
+Escape branch stays unchanged. The same GM test then draws the same rectangle
+without cancellation as a positive control and continues through token/drawing
+Shift-toggle, ordinary replacement, empty-click/Delete, group move and deletion.
+
+Connected verification: **6/6 PASS** Chromium/Firefox: extended GM flow, existing
+PLAYER permission/pruning flow and existing DRAW-to-PAN Escape flow. One worker,
+no retries; web TypeScript, scoped ESLint, Prettier and diff checks passed.
+No speculative tool-mode change, full suite, build, push or deploy. This resolves
+Escape cancellation, not the entire Draw/Fog/Ruler/SCENE_REGION/context-menu
+conflict matrix, live permission/recovery acceptance, or the separate token-popup
+observer error. Untracked selection-recovery test preserved unchanged.
