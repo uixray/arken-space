@@ -216,3 +216,25 @@ these tests. Do not enable an old encounter workflow simply to turn a test green
 or silently mark that original criterion accepted. Context-menu interference and
 other outstanding original criteria still need their own evidence. The separate
 popup observer error remains unresolved.
+
+### 2026-09-16 — context menu Escape preserves the selected group
+
+The existing GM mixed-selection flow now right-clicks the selected token with
+map keyboard focus, verifies its real context menu, then closes it with Escape
+and checks the original two-object confirmation without a mutation. The original
+code failed: Escape closed the menu and also cleared the entire group, leaving
+no group-delete action to click. The failing trace is retained.
+
+`resolveMapEscapeIntent` now models `close-token-menu` before object-list closure
+and general map-state clearing. The renderer supplies actual token-menu state and
+closes only that top layer. Default callers without a token menu keep their prior
+behavior; unrelated keys remain ignored. No menu styling or mutation logic changed.
+
+Verification: **8/8 browser PASS** Chromium/Firefox: extended GM flow, PLAYER
+permission/pruning flow, existing DRAW Escape and token-condition menu actions
+including server rejection. **6/6 pure Escape tests PASS**, web types, scoped lint,
+format and diff checks PASS. These do not establish keyboard focus restoration
+from inside the menu, all narrow menu geometry, native Shift-right-click behavior
+or live server authorization. UIX-507/UIX-644 and unrelated observer failure remain
+open under their full criteria. No build, full CI restart, push, deploy or Linear
+completion. The untracked recovery spec is unchanged.

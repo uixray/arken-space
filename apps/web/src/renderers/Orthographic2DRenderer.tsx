@@ -1054,10 +1054,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const escapeIntent = resolveMapEscapeIntent({
       key: event.key,
       objectListOpen: interaction.objectListOpen,
+      tokenMenuOpen: Boolean(tokenMenu),
     });
     if (tokenMove) {
       if (tokenMove.delta)
         moveQueue.enqueue(keyboardTokenTargets, tokenMove.delta);
+    } else if (escapeIntent === "close-token-menu") {
+      setTokenMenu(null);
     } else if (escapeIntent === "close-object-list") {
       // The list is the top-most map layer. Let the reducer close only that
       // layer; clearing the renderer's parallel selection arrays here would

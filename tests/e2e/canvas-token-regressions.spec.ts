@@ -1446,6 +1446,30 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   );
   expect(bulkRequests).toHaveLength(0);
 
+  // A context menu belongs above the mixed selection: opening/closing it
+  // must neither replace that group nor consume the next destructive action.
+  const contextPoint = screenPoint(416, 352);
+  await map.focus();
+  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+  const contextMenu = page.getByRole("menu");
+  await expect(contextMenu).toBeVisible();
+  await expect(contextMenu).toContainText("Selected token");
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toBeVisible();
+  expect(bulkRequests).toHaveLength(0);
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Удалить выбранное" }).click();
+  await inspectBulkConfirmation(
+    page,
+    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+  );
+  expect(bulkRequests).toHaveLength(0);
+
   // Shift+click toggles one drawing without replacing the token selection.
   const drawingPoint = screenPoint(512, 352);
   await page.keyboard.down("Shift");
