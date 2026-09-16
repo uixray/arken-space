@@ -325,3 +325,27 @@ This confirms one real modal/select lifecycle, not every UI or canvas animation,
 physical OS/device settings, a theme transition, or the complete reduced-motion
 acceptance of UIX-317/316. Runtime code did not need changing. Scoped ESLint,
 E2E typecheck, Prettier and diffcheck passed; no full suite/build/CI rerun.
+
+## Startup error semantics and recovery — 2026-09-17
+
+The shared ErrorState now exposes `role="alert"` and `aria-atomic="true"` on
+its existing root, so asynchronous failures have explicit important-message
+semantics. EmptyState stays non-live; LoadingState keeps its existing status
+semantics. No extra wrapper, CSS, focus movement, retry implementation or server
+behavior was added. The same ErrorState is used by campaign bootstrap and music
+upload failure; this gate exercises bootstrap, not audio upload.
+
+A new real-App startup-recovery.spec.ts holds the retry response: a503bootstrap
+failure renders the error title/message and retry; Enter starts exactly one
+retry, error/retry disappear while loading status is present; releasing a valid
+snapshot opens the application and removes the old loading/error screen.
+Chrome and Firefox at1280/390 passed4/4 in17.26082s. Every receipt records one
+retry, no pageerrors and no writes. The fixture explicitly permits diagnostic
+client-logs for the deliberately induced API failure and bootstrap chat/read;
+neither was emitted in these four runs. Other writes are blocked/rejected.
+
+Initial Chromium RED confirmed the missing alert role. Final web/E2E typechecks,
+scoped ESLint, Prettier and diffcheck passed. This proves browser DOM semantics
+and mocked-network recovery, not spoken VoiceOver/NVDA output, real-server outage
+recovery, music upload failure behavior or completion of the full state matrix.
+No full suite/build/CI/deployment was performed.
