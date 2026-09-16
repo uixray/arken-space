@@ -784,3 +784,25 @@ results-diagnostic-04.json,results-fix-dev-05.json (4PASS),owner-results.json an
 owner-06/trace. Next diagnose observer stack/entries on this exact App path,
 not broad canvas rewrites or warning suppression. Working code kept for bounded
 continuation; UIX-644 and full release remain open.
+
+### UIX-644: open field resizing regression (2026-09-16)
+
+Added `tests/e2e/select-element-resize.spec.ts` to the existing E2E test directory.
+The existing modal-owner fixture supplies the real FormSelect and ArkenDialog;
+only the fixture field width is animated, without changing the popup, observer,
+owner or focus implementation. This is a component layout contract, not a new
+actual-App acceptance claim or a substitute for real browser zoom.
+
+- Chromium + Firefox, 1280px + 390px: **4/4 PASS**, one worker, no retries.
+- While the popup is open, its field shrinks to 160px and returns to 320/240px.
+  The popup follows the trigger within 2px, stays inside the viewport, preserves
+  selection, accepts a real pointer selection, and restores focus after Escape
+  without closing its owning dialog. All window error events are collected;
+  zero recorded, with no ResizeObserver-error filter.
+- Sensitivity check: temporarily omitting only the trigger observer registration
+  makes the desktop Chromium case fail on a **160px width mismatch**. Source was
+  restored byte-for-byte in `finally`; no product change is included in this pool.
+- This strengthens resize regression coverage but does **not** resolve the earlier
+  intermittent token-popup ResizeObserver error. UIX-502/UIX-644 error-free gate
+  remains open; neither the four passes nor the controlled negative test prove
+  that original error fixed. No production release or Linear completion claimed.
