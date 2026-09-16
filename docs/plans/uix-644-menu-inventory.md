@@ -720,3 +720,35 @@ This is mechanism validation only: no Arken menu or Firefox zoom acceptance yet.
 Next run must exercise actual app menus while browser zoom changes, retain real
 pointer/focus/viewport evidence and verify100% restoration. Do not turn these
 probe metrics into a PASS for the missing UIX-644 browser-zoom criterion.
+## 2026-09-16 — real app browser zoom FAIL, reproduced
+
+Added a separate explicit QA config playwright.browser-zoom.config.ts and
+ tests/browser-qa/real-browser-zoom.spec.ts. This is NOT silently added to normal
+Chromium/Firefox E2E collection: it launches its own isolated Chrome profiles,
+viewport:null, uses the browser settings zoom API, and audits DPR/layout plus
+CSSzoom1/visualViewport.scale1. GM/PLAYER×window1600/1280 are defined; one worker.
+Run against the unchanged saved production bundle from ui-integrated-dcc3977.
+
+Actual result browser-01: GM1600PASS for100/125/150/100%; GM1280FAIL at150%;
+PLAYER cases not run after maxFailures1. Diagnostic-02 reproduces GM1280FAIL.
+At125% width1006/DPR1.25, triggerwidth905.2; after150% width839/DPR1.5,
+triggerwidth738 but popup/optionwidth937.198 startsx10, beyond right viewport.
+Actual popup visibility is not acceptance: strict viewport/center-hit fails.
+Name/value and workspace remain visible, no page errors or gameplay writes.
+
+Installed Gravity SelectPopup sameWidthMiddleware provides the concrete cache
+mechanism: for nonnumeric popupWidth, apply returns when floating.style.maxWidth
+already exists; it retains minWidth from previous anchor measurement. FormSelect
+currently supplies no popupWidth. Existing open/closed Fragment reset affects
+List children, not this floating element's cached size. No vendor file modified.
+
+Next fix must refresh/constrain actual popup width during anchor/browser resize,
+using supported Select sizing/ref behavior, preserving control focus and overlay
+owner. Do not solve by weakening viewport assertions, force clicks, CSSzoom or
+turning a closed popup into a false retained-open PASS. The new test records
+retainedOpen explicitly and allows safe reopen on layout-mode dismissal.
+
+Artifacts true-browser-zoom-gate/results-red-01.json, results.json (diagnostic),
+browser-01/,diagnostic-02/ contain metrics/geometry receipts and screenshots.
+No zoom gate PASS claimed. Scope lint/format/diff passed; no app source change,
+new build, CI or deployment. Profiles restore100%/close in finally; preview stopped.
