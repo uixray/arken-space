@@ -1021,3 +1021,26 @@ Existing FormSelect/TokenPalette ledger FAIL entries remain unresolved.
 Next useful diagnostic: correlate Dialog.Body observe/unobserve and microtask/rAF
 height transitions with a real error, rather than repeat width/font/warm loops
 or patch the dependency speculatively. No full suite/build/CI/deploy/Linear write.
+
+## Deferred observer audit — 2026-09-17
+
+The follow-up diagnostic records observe/unobserve stacks, active observer ID,
+frame epoch and microtask/next-rAF geometry, preserving native callback delivery.
+One original desktop token-popup scenario passed6.8s:31callbacks,44observation
+operations,0errors. Dialog.Body had two initial observe calls while hidden,
+one delivered size entry, no unobserve, no inline height/overflow writes and no
+body geometry difference from microtask to sampled next frame. Its self-height
+animation path therefore did not execute in this run; the source candidate must
+not be promoted to a demonstrated cause or patched based on the prior review.
+
+Floating UI did execute three callback-local unobserves for the floating wrapper,
+followed by size deliveries in later frames as trigger width changed
+132.765625→139.203125→139.25 and popup98.765625→105.203125→105.25. No error occurred.
+This records normal resize sequencing, not a repro. The diagnostic's rect reads
+can alter scheduling, and no sample proves every intervening layout state.
+
+Evidence in observer-deferred-audit, including decoded diagnostic.json and full
+source/config. No production or dependency edits, no weakened gate. Original
+observer FAIL remains. Temporary spec removed, own Vite stopped. Stop repeating
+this unchanged scenario: return to other original acceptance work unless a new
+actual failing trace or distinct layout transition justifies further diagnosis.
