@@ -264,7 +264,8 @@
   }
 
   .app-shell--compact #activity-sidebar .activity-quick-rolls > .g-button,
-  .app-shell--compact #activity-sidebar .dice-tray-panel__toolbar button {
+  .app-shell--compact #activity-sidebar .dice-tray-panel__toolbar button,
+  .app-shell--compact #activity-sidebar .skill-chat-card button {
     min-width: 44px;
     min-height: 44px;
   }

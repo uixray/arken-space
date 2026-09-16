@@ -1,4 +1,4 @@
-﻿import { type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -297,113 +297,142 @@ async function openCharacterWorkspace(page: Page) {
   await expect(page.locator(".character-action-card")).toBeVisible();
 }
 
-test("an owner executes an active ability once and its decremented card survives reload", async ({
-  page,
-}) => {
-  let current = snapshotFor(entry("Arcane Shot"));
-  let postCount = 0;
-  await mockApp(page, () => current);
-  await page.route(
-    `**/api/characters/${ids.character}/catalog/${ids.entry}/roll`,
-    async (route) => {
-      postCount += 1;
-      expect(route.request().method()).toBe("POST");
-      expect(route.request().postDataJSON()).toMatchObject({
-        entryRevision: 3,
-        rollActionId: "strike",
-        visibility: "PUBLIC",
-      });
-      expect(route.request().postDataJSON().mode).toBeUndefined();
-      current = snapshotFor(entry("Arcane Shot", 1), [
-        skillMessage("Arcane Shot", "EXECUTED", null, 1),
-      ]);
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "{}",
-      });
-    },
-  );
+for (const width of [1280, 360]) {
+  test(`an owner executes an active ability once and its decremented card survives reload at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 360 ? 640 : 900 });
+    let current = snapshotFor(entry("Arcane Shot"));
+    let postCount = 0;
+    await mockApp(page, () => current);
+    await page.route(
+      `**/api/characters/${ids.character}/catalog/${ids.entry}/roll`,
+      async (route) => {
+        postCount += 1;
+        expect(route.request().method()).toBe("POST");
+        expect(route.request().postDataJSON()).toMatchObject({
+          entryRevision: 3,
+          rollActionId: "strike",
+          visibility: "PUBLIC",
+        });
+        expect(route.request().postDataJSON().mode).toBeUndefined();
+        current = snapshotFor(entry("Arcane Shot", 1), [
+          skillMessage("Arcane Shot", "EXECUTED", null, 1),
+        ]);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "{}",
+        });
+      },
+    );
 
-  await page.goto("/");
-  await openCharacterWorkspace(page);
-  await page.locator(".character-action-card__action button").click();
-  await expect.poll(() => postCount).toBe(1);
-  await expect(page.locator(".character-action-card__uses")).toHaveText("1/2");
+    await page.goto("/");
+    await openCharacterWorkspace(page);
+    await page.locator(".character-action-card__action button").click();
+    await expect.poll(() => postCount).toBe(1);
+    await expect(page.locator(".character-action-card__uses")).toHaveText(
+      "1/2",
+    );
 
-  await page.getByRole("button", { name: "Закрыть персонажей" }).click();
-  await page.locator("#chat-tab-activity").click();
-  const card = page
-    .locator(".skill-chat-card")
-    .filter({ hasText: "Arcane Shot" });
-  await expect(card).toHaveCount(1);
-  await expect(card.locator(".skill-chat-card__uses")).toContainText(/2.*1\/2/);
-  await expect(card.locator(".skill-chat-card__result > strong")).toHaveText(
-    "16",
-  );
+    await page.getByRole("button", { name: "Закрыть персонажей" }).click();
+    if (width === 360) await page.locator("#compact-nav-journal").click();
+    await page.locator("#chat-tab-activity").click();
+    const card = page
+      .locator(".skill-chat-card")
+      .filter({ hasText: "Arcane Shot" });
+    await expect(card).toHaveCount(1);
+    expect(
+      await card.evaluate((node) => node.scrollWidth <= node.clientWidth),
+    ).toBe(true);
+    await expect(card.locator(".skill-chat-card__uses")).toContainText(
+      /2.*1\/2/,
+    );
+    await expect(card.locator(".skill-chat-card__result > strong")).toHaveText(
+      "16",
+    );
 
-  await page.reload();
-  await page.locator("#chat-tab-activity").click();
-  await expect(
-    page.locator(".skill-chat-card").filter({ hasText: "Arcane Shot" }),
-  ).toHaveCount(1);
-  await openWorkspaceSection(page, "Персонажи");
-  await expect(page.locator(".character-action-card__uses")).toHaveText("1/2");
-});
+    await page.reload();
+    if (width === 360) await page.locator("#compact-nav-journal").click();
+    await page.locator("#chat-tab-activity").click();
+    await expect(
+      page.locator(".skill-chat-card").filter({ hasText: "Arcane Shot" }),
+    ).toHaveCount(1);
+    await openWorkspaceSection(page, "Персонажи");
+    await expect(page.locator(".character-action-card__uses")).toHaveText(
+      "1/2",
+    );
+  });
+}
 
-test("sharing is passive and a deleted-source card remains keyboard-safe at 960px", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 960, height: 900 });
-  let current = snapshotFor(entry("Quiet Veil", 2, "deleted-catalog-entry"));
-  let postCount = 0;
-  await mockApp(page, () => current);
-  await page.route(
-    `**/api/characters/${ids.character}/catalog/${ids.entry}/roll`,
-    async (route) => {
-      postCount += 1;
-      const body = route.request().postDataJSON();
-      expect(body).toMatchObject({
-        mode: "SHARE",
-        entryRevision: 3,
-        visibility: "PUBLIC",
-      });
-      expect(body.rollActionId).toBeUndefined();
-      current = snapshotFor(entry("Quiet Veil", 2, "deleted-catalog-entry"), [
-        skillMessage("Quiet Veil", "SHARED", "deleted-catalog-entry", 1),
-      ]);
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "{}",
-      });
-    },
-  );
+for (const width of [960, 360]) {
+  test(`sharing is passive and a deleted-source card remains keyboard-safe at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 360 ? 640 : 900 });
+    let current = snapshotFor(entry("Quiet Veil", 2, "deleted-catalog-entry"));
+    let postCount = 0;
+    await mockApp(page, () => current);
+    await page.route(
+      `**/api/characters/${ids.character}/catalog/${ids.entry}/roll`,
+      async (route) => {
+        postCount += 1;
+        const body = route.request().postDataJSON();
+        expect(body).toMatchObject({
+          mode: "SHARE",
+          entryRevision: 3,
+          visibility: "PUBLIC",
+        });
+        expect(body.rollActionId).toBeUndefined();
+        current = snapshotFor(entry("Quiet Veil", 2, "deleted-catalog-entry"), [
+          skillMessage("Quiet Veil", "SHARED", "deleted-catalog-entry", 1),
+        ]);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "{}",
+        });
+      },
+    );
 
-  await page.goto("/");
-  await openCharacterWorkspace(page);
-  await page.locator(".character-action-card__controls button").last().click();
-  await expect.poll(() => postCount).toBe(1);
-  await expect(page.locator(".character-action-card__uses")).toHaveText("2/2");
+    await page.goto("/");
+    await openCharacterWorkspace(page);
+    await page
+      .locator(".character-action-card__controls button")
+      .last()
+      .click();
+    await expect.poll(() => postCount).toBe(1);
+    await expect(page.locator(".character-action-card__uses")).toHaveText(
+      "2/2",
+    );
 
-  await page.getByRole("button", { name: "Закрыть персонажей" }).click();
-  await page.locator("#compact-nav-journal").click();
-  await page.locator("#chat-tab-activity").click();
-  const card = page
-    .locator(".skill-chat-card")
-    .filter({ hasText: "Quiet Veil" });
-  await expect(card).toHaveCount(1);
-  await expect(card.locator(".skill-chat-card__result")).toHaveCount(0);
-  await expect(card.locator(".skill-chat-card__uses")).toContainText(/2.*2\/2/);
-  expect(
-    await card.evaluate(
-      (element) => element.scrollWidth <= element.clientWidth,
-    ),
-  ).toBe(true);
+    await page.getByRole("button", { name: "Закрыть персонажей" }).click();
+    await page.locator("#compact-nav-journal").click();
+    await page.locator("#chat-tab-activity").click();
+    const card = page
+      .locator(".skill-chat-card")
+      .filter({ hasText: "Quiet Veil" });
+    await expect(card).toHaveCount(1);
+    await expect(card.locator(".skill-chat-card__result")).toHaveCount(0);
+    await expect(card.locator(".skill-chat-card__uses")).toContainText(
+      /2.*2\/2/,
+    );
+    expect(
+      await card.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
 
-  const details = card.locator("button");
-  await details.focus();
-  await page.keyboard.press("Enter");
-  await expect(details).toHaveAttribute("aria-expanded", "true");
-  await expect(card.locator(".skill-chat-card__details .muted")).toBeVisible();
-});
+    const details = card.locator("button");
+    await details.scrollIntoViewIfNeeded();
+    const box = await details.boundingBox();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    await details.focus();
+    await page.keyboard.press("Enter");
+    await expect(details).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      card.locator(".skill-chat-card__details .muted"),
+    ).toBeVisible();
+  });
+}
