@@ -2948,3 +2948,109 @@ for (const width of [1280, 390]) {
     });
   });
 }
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 390]) {
+    test(`UIX-644 token menu Tab exits without losing selection ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 850 });
+      const current: GameSnapshot = structuredClone(snapshot);
+      current.me.role = role;
+      current.tokens[0].controllerMembershipIds = [current.me.id];
+      current.tokens[0].ownerMembershipId = current.me.id;
+      const writes: string[] = [];
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.route("**/api/**", (route) => {
+        const request = route.request();
+        if (
+          !["GET", "HEAD"].includes(request.method()) &&
+          !request.url().includes("/chat/read")
+        )
+          writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+        return route.fulfill({ json: [] });
+      });
+      await installCanvasReviewRoutes(page);
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({ json: current }),
+      );
+      await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+        socket.onMessage((message) => {
+          if (message.toString() === "40") socket.send('40{"sid":"menu-tab"}');
+        });
+        socket.send(
+          '0{"sid":"menu-tab","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+        );
+      });
+      await page.goto("/");
+      const map = page.getByRole("region", {
+        name: "Интерактивная карта сцены",
+      });
+      await map
+        .getByRole("button", { name: "Объекты карты", exact: true })
+        .click();
+      await map
+        .getByRole("button", { name: "Selected token", exact: true })
+        .click();
+      await map.press("Escape");
+      const menu = map.getByRole("menu");
+      const destinations: unknown[] = [];
+      for (const key of ["Shift+Tab", "Tab"]) {
+        await map.press("Enter");
+        await expect(menu).toBeVisible();
+        if (key === "Tab") {
+          await page.keyboard.press("End");
+          await expect(
+            menu.getByRole("button", { name: "Отмена", exact: true }),
+          ).toBeFocused();
+        }
+        await page.keyboard.press(key);
+        const destination = await page.evaluateHandle(
+          () => document.activeElement,
+        );
+        await expect(menu).toHaveCount(0);
+        await expect
+          .poll(() =>
+            destination.evaluate(
+              (node) =>
+                node === document.activeElement &&
+                node instanceof HTMLElement &&
+                node !== document.body &&
+                node.getClientRects().length > 0 &&
+                !node.closest("[hidden], [inert]"),
+            ),
+          )
+          .toBe(true);
+        destinations.push(
+          await destination.evaluate(
+            (node, { key }) => ({
+              key,
+              tag: node?.tagName,
+              label:
+                node?.getAttribute("aria-label") ??
+                node?.textContent?.trim().slice(0, 80),
+            }),
+            { key },
+          ),
+        );
+        await destination.dispose();
+      }
+      // Leaving the menu is not deselection. Delete still opens the original
+      // token confirmation, and cancelling it must not issue a mutation.
+      await map.press("Delete");
+      const dialog = page.getByRole("dialog", {
+        name: "Убрать токен с карты?",
+        exact: true,
+      });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("menu-tab-receipt", {
+        body: JSON.stringify({ role, width, destinations, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
+}

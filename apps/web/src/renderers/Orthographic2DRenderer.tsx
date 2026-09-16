@@ -3223,6 +3223,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           style={{ left: tokenMenu.x, top: tokenMenu.y }}
           role="menu"
           aria-label={`Действия токена «${menuToken.name}»`}
+          onBlur={(event) => {
+            // Let Tab/Shift+Tab choose the next native focus target. Closing
+            // this layer must neither pull focus back nor clear map selection.
+            if (
+              event.relatedTarget instanceof Node &&
+              !event.currentTarget.contains(event.relatedTarget)
+            )
+              setTokenMenu(null);
+          }}
           onKeyDown={(event) => {
             if (
               event.altKey ||

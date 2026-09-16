@@ -849,3 +849,11 @@ resolve the separate first-open token-popup ResizeObserver error.
 - Финальный связанный gate22/22 PASS, workers1/retries0; GM keyboard/conditions/resize, GM+PLAYER selection, DRAW Escape и compact action targets сохранены. Один unit-файл13/13 (6 новых проверок предиката); web types, scoped lint/format/diff PASS. Без full-suite/build/CI rerun/push/deploy/Linear closure.
 - Артефакты: player-menu-gate текущей сессии, исходный RED и финальный green-03/results.json. Неотслеживаемый selection-recovery.spec.ts не изменён и не добавлен.
 - Остаток: Tab-выход/семантика смешанного menu, смена прав при уже открытом меню и подтверждении, актуальная revision последующих GM-команд, реальная server/device приёмка. Общие UIX-644/507 и независимый token-popup ResizeObserver gate не закрыты.
+
+## 2026-09-16 — Tab-выход из меню без потери выбора
+
+- RED: после Shift+Tab фокус уже ушёл к внешней кнопке, но меню оставалось открытым. Исходное падение сохранено в menu-tab-gate/red-01.
+- Меню закрывается на blur только при известном внешнем DOM-адресате. Tab не перехватывается, фокус не возвращается принудительно; переходы между внутренними контролами и временный relatedTarget=null не закрывают его. Выделение карты не изменяется.
+- GM/PLAYER1280/390 × Chromium/Firefox: Shift+Tab от первого действия и Tab от «Отмена» закрывают меню; внешний видимый не-inert адресат сохраняет фокус. После обоих выходов Delete открывает подтверждение исходного токена; отмена не записывает данные. 8 receipts, по 2 направления, 0 команд/ошибок. Для GM1280 Chrome фактические адресаты — «Объекты карты» и «Увеличить масштаб».
+- Финальный связанный gate24/24 PASS132.7s, workers1/retries0: Tab + прежние keyboard/PLAYER permissions/resize/conditions/GM+PLAYER selection. Несвязанные DRAW и compact dice не повторялись. Web types/scoped lint/format/diff PASS. Нет full-suite/build/CI rerun/push/deploy.
+- Не полная ARIA/screen-reader/device приёмка смешанного menu. Динамическое отозванное управление, открытое подтверждение и актуальная revision последующих GM-команд требуют следующего lifecycle-пула; прежний token-popup ResizeObserver gate остаётся открытым. selection-recovery.spec.ts сохранён вне коммита.
