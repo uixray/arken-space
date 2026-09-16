@@ -972,3 +972,7 @@ Evidence `bbf0206a72babfa3636415b91cd02ae94ceb88e7`:4/4 GM1280/390 Chrome/Firefo
 ## Connected remaining-menu gate — 2026-09-16
 
 Observed revision `b7cfc77fc7ecbff20d409badd8909996c71dcf19`:24/24 existing tests PASS106.068s after accumulated App/styles changes, one worker/no retries. Activity command list8, Activity stickers8, background details8 (compact session and desktop volume). No new duplicate specs or runtime modifications. Session/scene/tray evidence now reconciled per caller; second ChatPanel list remains unaccepted. Legacy fixtures do not uniformly audit client logs/pageerrors/all HTTP writes: do not claim a clean telemetry/production gate. Artifacts `remaining-menu-gate/results.json` and checkpoint. Original sharedSelectRO remains unresolved, broader UIX-644 incomplete.
+
+## Track selection focus — 2026-09-16
+
+Source `9f91183cebd1e63c42f36b2325977f11ca6180d0`: existing audio rejection test strengthened to detect focus lost on hidden track. RED reproduced; track click now closes overflow and focuses visible summary, wire/ACK behavior unchanged. Four Chrome/Firefox cases PASS16.4s: desktop action, delayed conflict receipt at1280/390, Russian toast geometry, exact command and no optimistic playback. `music-command-gate/results.json`, red-results.json/checkpoint. No success playback or compact music availability claim.

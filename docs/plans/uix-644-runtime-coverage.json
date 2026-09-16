@@ -94,6 +94,12 @@
       "revision": "b7cfc77fc7ecbff20d409badd8909996c71dcf19",
       "artifact": "remaining-menu-gate/results.json",
       "scope": "24 existing named cases current App/styles: composer8 Activity (one mocked roll each), details8 (compact session/desktop volume plus foreign owner), sticker8 Activity including resize/scroll/owner. Chrome/Firefox GM/PLAYER1280/390. Legacy fixture limitations: no comprehensive telemetry/pageerror/write audit."
+    },
+    "musicCommand": {
+      "status": "PASS",
+      "revision": "9f91183cebd1e63c42f36b2325977f11ca6180d0",
+      "artifact": "music-command-gate/results.json",
+      "scope": "Four Chrome/Firefox cases: desktop1280 SELECT returns focus to visible summary before delayed conflict ACK; rejection notification at1280/390, exact command/revision/actionId, no optimistic selection/playback. No successful audio/media playback or compact music entry."
     }
   },
   "sites": [
@@ -153,9 +159,9 @@
       "count": 2,
       "status": "PASS",
       "classification": "reachable",
-      "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target.",
-      "evidence": ["musicOwner"],
-      "next": "Track selection command focus, real audio and compact music entry remain separate; compact foundation currently hides music-topbar."
+      "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target. Track SELECT now also returns visible focus; conflict ACK notifications verified by four existing cases.",
+      "evidence": ["musicOwner", "musicCommand"],
+      "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch."
     },
     {
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
