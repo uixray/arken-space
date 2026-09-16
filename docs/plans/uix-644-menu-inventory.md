@@ -96,7 +96,7 @@
 | `sidebar/CharacterWorkspace.tsx:482` (1)               | GM, модальное окно создания персонажа / выбор шаблона; M.                                                                                                                                                  | Адресная матрица шаблона GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/outside/resize/reset PASS; см. дополнение ниже.                  |
 | `CharacterWorkspace.tsx:1206` (1)                      | Условный выбор персонажа GM (`showCharacterPicker`); в потоке листа → B.                                                                                                                                   | Неактивное место: единственный production-вызов CharacterPanel передаёт showCharacterPicker=false; не включать ради теста.                            |
 | `sidebar/ChatPanels.tsx:584` (1)                       | GM в ActivityPanel, «Персонаж для броска» при непустом availableRollCharacters; B в боковой панели.                                                                                                        | E12; overflow владельца отдельно от портала Select.                                                  |
-| `sidebar/SetupPanel.tsx:310,411,433` (3)               | GM: предпросмотр игрока, персонаж токена, персонаж приглашения; W в workspace настроек Sidebar. Видимость секции зависит от вкладки настроек.                                                              | Общий E1 + настройка concept; не отдельные hit-test.                                                 |
+| `sidebar/SetupPanel.tsx:310,411,433` (3)               | GM: предпросмотр игрока, персонаж токена, персонаж приглашения; W в workspace настроек Sidebar. Видимость секции зависит от вкладки настроек.                                                              | Адресные три списка GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/resize/tab-switch PASS; исправлен desktop hidden, см. ниже.                                                 |
 | `SetupPanel.tsx:174,335,356` (3)                       | GM, **устаревшие hidden/aria-hidden** секции: вид каталога, прежняя активная сцена/карта; W, сами элементы управления не должны стать интерактивными/видимыми.                                             | Только реестр; не создавать новые пути выполнения ради покрытия скрытой устаревшей функциональности. |
 | `sidebar/TokenPalette.tsx:138` (1)                     | GM/PLAYER «Изображение токена» для доступного определения внутри workspace палитры; W. Не путать с доступной только GM кнопкой открытия редактора.                                                         | E1: hit-test workspace normal/cap.                                                                   |
 | `TokenPalette.tsx:441` (1)                             | GM, редактор токена из палитры; M.                                                                                                                                                                         | E1: модальное окно токена на настольном/узком экране.                                                |
@@ -610,3 +610,41 @@ higher/nested competing modal ownership beyond this actual character dialog.
 The full UIX-644 matrix and current integrated release gate remain open.
 Evidence: character-template-gate/results.json with named outcomes and four
 character-template-lifecycle attachments; results-new-01.json keeps initial4PASS.
+## 2026-09-16 — SetupPanel visibility defect and three live selects
+
+The new real SetupPanel tab-switch test exposed a product defect, not merely
+missing coverage: desktop .subsection {display:flex} overrode native [hidden].
+The browser-01 screenshot shows Overview selected while Characters/invite forms
+and retired scene controls remain rendered. Therefore historical source-only
+claims that hidden legacy sections were noninteractive were not runtime proof.
+Compact already had a stronger hidden rule; desktop did not.
+
+Fix: .subsection[hidden] {display:none} beside the base subsection rule. This
+restores intended hidden semantics, rather than enabling legacy controls or
+changing permissions. Current matching JSX is SetupPanel sections and an
+unhidden character details section; ordinary visible flex layout is unchanged.
+
+Four new1280/360 Chromium/Firefox cases in workspace-select-escape.spec.ts:
+-Actual player-preview, token-character and invite-character selects each open,
+center-hit a visible in-viewport option, select by pointer, close/reopen, consume
+Escape with focus returned, and select by ArrowDown/End/Enter.
+-Invite popup survives resize and remains pointer-selectable; switching to
+Overview closes it and removes the hidden invite trigger. Switching back retains
+selections. No preview operation, token creation or invite publication executed.
+-All .subsection[hidden] have no layout rects; attempted focus of their controls
+leaves document.activeElement unchanged. Checked initial Overview and return.
+-Mocked API fixture blocks gameplay writes; four named receipts show no mutations
+or page errors. Existing React console guard is retained.
+
+Final connected gate:20/20PASS128.030287s, one worker/retries0/skipped0/flaky0.
+Includes new4, existing12 outer-select/template cases and4 actual Setup catalog
+cases. Decoded all4 Setup receipts and all4 catalog receipts: zero logged catalog
+errors/unexpected mutations (the earlier textarea fix remains intact).
+Scoped ESLint/Prettier/diff PASS. One production build PASS2.81s; main1077.15kB
+chunk warning remains, not suppressed. Browser evidence is Vite dev, not a claim
+that the built payload or production was visually accepted. No new CI/deploy.
+
+Evidence: setup-select-gate/results-red-01.json and browser-01 screenshot/trace
+preserve failure; results-new-02.json preserves4PASS; results.json and connected-03
+hold final named20PASS. Own Vite stopped. UIX-644 remains open for remaining sites,
+scroll/browser zoom/competing owners and complete exact-current integration.

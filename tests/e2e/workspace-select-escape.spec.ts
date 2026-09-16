@@ -7,6 +7,7 @@ async function install(
   page: Page,
   role: "GM" | "PLAYER",
   withCharacter = false,
+  withSetup = false,
 ) {
   const snapshot = buildGameSnapshot(role, { schemaVersion: 2 });
   if (withCharacter)
@@ -32,6 +33,19 @@ async function install(
         revision: 1,
       },
     ];
+  if (withSetup) {
+    snapshot.members.push({
+      id: "1acf0104-1111-4111-8111-111111111111",
+      role: "PLAYER",
+      displayName: "Игрок для проверки",
+      characterId: null,
+    });
+    snapshot.characters.push({
+      ...snapshot.characters[0]!,
+      id: "1acf0105-1111-4111-8111-111111111111",
+      name: "Маг образец",
+    });
+  }
   const assetId = "1acf0101-1111-4111-8111-111111111111";
   snapshot.assets = [
     {
@@ -227,6 +241,120 @@ for (const width of [1280, 360]) {
     await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
     await testInfo.attach("character-template-lifecycle", {
       body: JSON.stringify({ width, mutations, errors }),
+      contentType: "application/json",
+    });
+    expect(mutations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const width of [1280, 360]) {
+  test(`UIX-644 setup select registry ${width}`, async ({ page }, testInfo) => {
+    const mutations = await install(page, "GM", true, true);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    await openWorkspaceSection(page, "Подготовка");
+    const popup = page.locator(".arken-form-select-popup");
+    const tabs = page.getByRole("navigation", { name: "Разделы подготовки" });
+    async function expectHiddenSectionsInert() {
+      expect(
+        await page.locator(".subsection[hidden]").evaluateAll((sections) => {
+          if (!sections.length) return false;
+          const before = document.activeElement;
+          return sections.every((section) => {
+            if (section.getClientRects().length) return false;
+            return [
+              ...section.querySelectorAll<HTMLElement>(
+                "button, input, select, textarea, [tabindex]",
+              ),
+            ].every((control) => {
+              control.focus();
+              return document.activeElement === before;
+            });
+          });
+        }),
+      ).toBe(true);
+    }
+    await expectHiddenSectionsInert();
+    const receipts: string[] = [];
+    for (const [label, selected] of [
+      ["Игрок", "Игрок для проверки"],
+      ["Персонаж для токена", "Маг образец"],
+      ["Персонаж", "Маг образец"],
+    ]) {
+      if (label === "Персонаж для токена")
+        await tabs
+          .getByRole("button", { name: "Персонажи и доступ", exact: true })
+          .click();
+      const trigger = page.getByRole("combobox", { name: label, exact: true });
+      await trigger.click();
+      const option = popup.getByRole("option", { name: selected, exact: true });
+      await expect
+        .poll(() =>
+          option.evaluate((element) => {
+            const r = element.getBoundingClientRect();
+            return (
+              r.left >= 0 &&
+              r.right <= innerWidth &&
+              r.top >= 0 &&
+              r.bottom <= innerHeight &&
+              element.contains(
+                document.elementFromPoint(
+                  r.x + r.width / 2,
+                  r.y + r.height / 2,
+                ),
+              )
+            );
+          }),
+        )
+        .toBe(true);
+      await option.click();
+      await expect(popup).toBeHidden();
+      await expect(trigger).toContainText(selected!);
+      await trigger.click();
+      await page.keyboard.press("Escape");
+      await expect(popup).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await trigger.press("ArrowDown");
+      await expect(popup).toBeVisible();
+      await page.keyboard.press("End");
+      await page.keyboard.press("Enter");
+      await expect(trigger).toContainText(selected!);
+      await expect(popup).toBeHidden();
+      receipts.push(label!);
+    }
+    const invite = page.getByRole("combobox", {
+      name: "Персонаж",
+      exact: true,
+    });
+    await invite.click();
+    await page.setViewportSize({
+      width: width === 360 ? 390 : 1180,
+      height: 640,
+    });
+    await popup
+      .getByRole("option", { name: "Маг образец", exact: true })
+      .click();
+    await expect(invite).toContainText("Маг образец");
+    await invite.click();
+    await tabs.getByRole("button", { name: "Обзор", exact: true }).click();
+    await expect(popup).toBeHidden();
+    await expect(invite).toBeHidden();
+    await expectHiddenSectionsInert();
+    await expect(
+      page.getByRole("combobox", { name: "Игрок", exact: true }),
+    ).toContainText("Игрок для проверки");
+    await tabs
+      .getByRole("button", { name: "Персонажи и доступ", exact: true })
+      .click();
+    await expect(invite).toContainText("Маг образец");
+    await expect(
+      page.getByRole("combobox", { name: "Персонаж для токена", exact: true }),
+    ).toContainText("Маг образец");
+    await testInfo.attach("setup-select-registry", {
+      body: JSON.stringify({ width, receipts, mutations, errors }),
       contentType: "application/json",
     });
     expect(mutations).toEqual([]);

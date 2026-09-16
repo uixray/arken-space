@@ -1132,6 +1132,10 @@ code {
   padding-top: var(--space-lg);
   border-top: 1px solid var(--line);
 }
+/* Keep inactive setup tabs and retired controls hidden on desktop too. */
+.subsection[hidden] {
+  display: none;
+}
 .field {
   display: flex;
   flex-direction: column;
