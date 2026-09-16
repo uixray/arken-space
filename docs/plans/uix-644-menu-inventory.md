@@ -110,7 +110,7 @@
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `PlayerRequestsWorkspace.tsx:169,189,209` (3)                                   | PLAYER, поля выбора при создании черновика внутри W: horizon, audience, character. При редактировании эти три поля скрыты.                                                                                                 | Реальный сервер: клавиатура/фокус трёх полей, черновик при 390→360 и отправка; исторический CI, см. аудит ниже. Не протокол системного popup.                                              |
 | `PlayerRequestsWorkspace.tsx:249,263,280` (3)                                   | Фильтры GM/PLAYER внутри W; роли меняют доступный набор заявок.                                                                                                                                                            | Реальный сервер: сочетания трёх фильтров PLAYER/GM и сброс после повторного открытия GM; исторический CI, см. аудит ниже.                                     |
-| `WorldMapsWorkspace.tsx:283` (1)                                                | Текущая карта, прямой reader GM/PLAYER; W, workspace на весь холст.                                                                                                                                                        | `tests/e2e/world-maps.spec.ts` сценарий работы, не весь жизненный цикл нативного popup.                  |
+| `WorldMapsWorkspace.tsx:283` (1)                                                | Текущая карта, W на весь холст. Текущая навигация открывает workspace только GM; PLAYER-вход не создавать ради реестра.                                                                                                                                                        | `tests/e2e/world-maps.spec.ts` сценарий работы, не весь жизненный цикл нативного popup.                  |
 | `WorldMapsWorkspace.tsx:341,618,684,699,751,768` (6)                            | GM: фон черновика / связанная сцена / варианты в формах создания карты и локации; W. Компоновка stage/detail и прокрутка принадлежат workspace.                                                                            | Сценарий world-maps; размещение/клавиатура каждого вхождения ещё не проверены.                           |
 | `TokenImageGenerator.tsx:231` (1)                                               | Выбор исходного ресурса внутри модального редактора TokenPalette GM → M. Сам генератор — секция в потоке, не popup.                                                                                                        | `tests/e2e/token-generator.spec.ts`; нативный элемент выбора нельзя смешивать с E1 Gravity Select.       |
 | `sidebar/ChatPanels.tsx:1088` (1)                                               | Выбор собеседника DirectChatPanel; компонент GM/PLAYER, но текущий Sidebar скрывает точку входа Direct. Страница/боковая панель.                                                                                           | `tests/e2e/concept.spec.ts` исторические сценарии Direct; скрытую точку входа не активировать в UIX-644. |
@@ -543,3 +543,37 @@ OS popup geometry/z-index, full outside/Escape/scroll/browser-zoom lifecycle,
 or the complete UIX-644 gate. No CI rerun, local server, database, or browser
 was started for this evidence-only reconciliation. Raw existing job logs are
 retained in the local native-menu-ci-audit artifact directory.
+## 2026-09-16 — world-map native controls, current browser evidence
+
+Extended the existing world-maps spec instead of duplicating its create/publish
+scenario. Five unique native controls now have keyboard/focus and viewport
+hit-test evidence at1280/360 in Chromium/Firefox: current map (two real fixture
+options, switch and return), new-map scope/visibility, new-location kind/visibility.
+The two nested forms preserve entered names and changed selections across
+1280→1180 or360→390 and height800→640 (then back). Cancel returns to the owner
+without a world-map write. These are rendered UI tests against mocked APIs, not
+server persistence, backend ACL or production publication evidence.
+
+Final connected file run:8/8PASS42.5s, one worker, zero retries/skips/flaky.
+Includes the four new cases and both existing GM create/complete/publish and
+PLAYER navigation-denial cases in each browser. The existing GM path still
+exercises draft background and linked-scene selects through selectOption; do
+not misreport those two sites as keyboard-tested or tested at compact width.
+All four new named receipts were decoded: zero page errors, zero world-map
+writes, expected values for all five sites. Existing React console guard kept.
+
+Initial test failure was exact getByLabel("Карта") matching the label's full text
+(including option text), not a broken map selector. Diagnostic Chromium native
+accessibility tree independently named the dialog "Карты мира" and resolved its
+unique heading. Final test keeps the original named dialog locator and uses
+combobox role/name for exact select labels. No production component was changed
+for a test lookup failure. Diagnostic runs remain separate from final receipts.
+
+Remaining: OS popup rendering/selection by pointer is not proven by DOM control
+center-hit and keyboard checks. Escape/outside/scroll/browser zoom lifecycle,
+compact background/scene-link paths and full integrated UIX-644 acceptance remain
+open. PLAYER navigation is intentionally unavailable; do not add access to make
+an obsolete registry role claim pass. Artifacts: world-map-native-gate/results.json
+contains named outcomes and four native-world-map-controls attachments.
+Scoped ESLint, Prettier and git diff --check PASS. No build or full CI rerun for
+this test/documentation-only pool; own Vite stopped after verification.

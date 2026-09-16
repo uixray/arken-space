@@ -1,4 +1,4 @@
-import { type Page } from "@playwright/test";
+import { type Locator, type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
@@ -294,3 +294,160 @@ test("UIX-243: PLAYER cannot enter the GM-only world-map workspace from navigati
   await expect(page.getByText("Сторожевая башня")).toHaveCount(0);
   await expect(page.getByText("Открытая карта")).toHaveCount(0);
 });
+
+for (const width of [1280, 360]) {
+  test(`UIX-644: world-map native controls and nested drafts ${width}`, async ({
+    page,
+  }, testInfo) => {
+    const state = snapshotFor("GM");
+    const secondMap = "55555555-5555-4555-8555-555555555555";
+    state.worldMaps!.maps = [ids.map, secondMap].map((id, index) => ({
+      id,
+      name: index ? "Южные земли" : "Северные земли",
+      scope: "REGION",
+      visibility: "CAMPAIGN",
+      lifecycle: "DRAFT",
+      backgroundAssetId: null,
+      revision: 0,
+    }));
+    const writes: string[] = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname.startsWith("/api/world-maps") &&
+        request.method() !== "GET"
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    });
+    await page.route("**/api/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "[]",
+      }),
+    );
+    await mockWorldMapApi(page, state);
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    const workspace = await openWorldMaps(page);
+    const receipts: { label: string; value: string }[] = [];
+    // Native OS option windows are not DOM listboxes. Check the rendered control
+    // and keyboard state, without pretending to measure OS popup geometry.
+    async function choose(
+      control: Locator,
+      label: string,
+      key: "End" | "Home",
+      expected: string,
+    ) {
+      await control.scrollIntoViewIfNeeded();
+      await expect(control).toBeVisible();
+      expect(
+        await control.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return (
+            box.left >= 0 &&
+            box.right <= innerWidth &&
+            box.top >= 0 &&
+            box.bottom <= innerHeight &&
+            document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            ) === element
+          );
+        }),
+      ).toBe(true);
+      await control.focus();
+      await control.press(key);
+      await expect(control).toHaveValue(expected);
+      await expect(control).toBeFocused();
+      receipts.push({ label, value: expected });
+    }
+    await choose(
+      workspace.getByRole("combobox", { name: "Карта", exact: true }),
+      "current-map",
+      "End",
+      secondMap,
+    );
+    await choose(
+      workspace.getByRole("combobox", { name: "Карта", exact: true }),
+      "current-map",
+      "Home",
+      ids.map,
+    );
+    await workspace
+      .getByRole("button", { name: "Создать карту", exact: true })
+      .click();
+    const mapEditor = page.getByRole("dialog", {
+      name: "Новая карта",
+      exact: true,
+    });
+    await mapEditor
+      .getByLabel("Название", { exact: true })
+      .fill("Несохранённая карта");
+    await choose(mapEditor.getByLabel("Охват"), "map-scope", "End", "WORLD");
+    await choose(
+      mapEditor.getByLabel("Видимость"),
+      "map-visibility",
+      "End",
+      "GM_ONLY",
+    );
+    await page.setViewportSize({
+      width: width === 360 ? 390 : 1180,
+      height: 640,
+    });
+    await expect(mapEditor.getByLabel("Охват")).toHaveValue("WORLD");
+    await expect(mapEditor.getByLabel("Видимость")).toHaveValue("GM_ONLY");
+    await expect(mapEditor.getByLabel("Название", { exact: true })).toHaveValue(
+      "Несохранённая карта",
+    );
+    await mapEditor
+      .getByRole("button", { name: "Отмена", exact: true })
+      .click();
+    await expect(mapEditor).toBeHidden();
+    await expect(workspace).toBeVisible();
+    await workspace
+      .getByRole("button", { name: "Добавить локацию", exact: true })
+      .click();
+    const locationEditor = page.getByRole("dialog", {
+      name: "Новая локация",
+      exact: true,
+    });
+    await locationEditor
+      .getByLabel("Название", { exact: true })
+      .fill("Несохранённая локация");
+    const kind = locationEditor.getByRole("combobox", {
+      name: "Тип",
+      exact: true,
+    });
+    const firstKind = await kind
+      .locator("option")
+      .first()
+      .getAttribute("value");
+    expect(firstKind).toBeTruthy();
+    await choose(kind, "location-kind", "Home", firstKind!);
+    await choose(
+      locationEditor.getByLabel("Видимость"),
+      "location-visibility",
+      "Home",
+      "PUBLIC",
+    );
+    await page.setViewportSize({ width, height: 800 });
+    await expect(kind).toHaveValue(firstKind!);
+    await expect(locationEditor.getByLabel("Видимость")).toHaveValue("PUBLIC");
+    await expect(
+      locationEditor.getByLabel("Название", { exact: true }),
+    ).toHaveValue("Несохранённая локация");
+    await locationEditor
+      .getByRole("button", { name: "Отмена", exact: true })
+      .click();
+    await expect(locationEditor).toBeHidden();
+    await expect(workspace).toBeVisible();
+    await testInfo.attach("native-world-map-controls", {
+      body: JSON.stringify({ receipts, writes, errors }),
+      contentType: "application/json",
+    });
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}
