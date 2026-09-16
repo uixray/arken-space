@@ -70,6 +70,65 @@ describe("механизм закрытия поповера", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves an already consumed Escape and its focus with the child control", () => {
+    const onDismiss = vi.fn();
+    const details = render(onDismiss);
+    const child = details.querySelector("button")!;
+    child.focus();
+    child.addEventListener("keydown", (event) => event.preventDefault());
+
+    fireEvent.keyDown(child, { key: "Escape" });
+
+    expect(details.open).toBe(true);
+    expect(child).toHaveFocus();
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("does not steal Escape or focus from a different dialog", () => {
+    const onDismiss = vi.fn();
+    const details = render(onDismiss);
+    const view = renderComponent(
+      <section role="dialog" aria-label="Другое окно">
+        <button>В другом окне</button>
+      </section>,
+    );
+    const button = screen.getByRole("button", { name: "В другом окне" });
+    button.focus();
+
+    fireEvent.keyDown(button, { key: "Escape" });
+
+    expect(details.open).toBe(true);
+    expect(button).toHaveFocus();
+    expect(onDismiss).not.toHaveBeenCalled();
+    view.unmount();
+  });
+  it("still closes its own menu inside a dialog", () => {
+    renderComponent(
+      <section role="dialog" aria-label="Владелец">
+        <Popover />
+      </section>,
+    );
+    const details =
+      document.querySelector<HTMLDetailsElement>("details.probe")!;
+    fireEvent.keyDown(details.querySelector("button")!, { key: "Escape" });
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")).toHaveFocus();
+  });
+
+  it("cleans up a hidden menu without taking focus or consuming Escape", () => {
+    const details = render();
+    details.hidden = true;
+    const outside = screen.getByText("Открыть").parentElement!.parentElement!;
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(outside, event);
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")).not.toHaveFocus();
+    expect(event.defaultPrevented).toBe(false);
+  });
   it("не трогает уже закрытый поповер", () => {
     // Иначе Escape в любом месте приложения дёргал бы `onDismiss` у каждого
     // смонтированного поповера разом.

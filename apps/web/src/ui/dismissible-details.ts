@@ -71,6 +71,17 @@ export function useDismissibleDetails(
           close(false);
           return;
         }
+        // A child control may have handled this Escape before the document
+        // listener. Likewise, a different dialog owns its keyboard interaction;
+        // a background menu must not pull focus out of it.
+        if (event.defaultPrevented) return;
+        const target = event.target instanceof Element ? event.target : null;
+        const targetDialog = target?.closest('[role="dialog"], dialog');
+        if (
+          targetDialog &&
+          targetDialog !== ref.current.closest('[role="dialog"], dialog')
+        )
+          return;
         event.preventDefault();
         close(true);
       }

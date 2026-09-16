@@ -302,3 +302,43 @@ not a new PASS for the complete B–E inventory.
   against the combined candidate; mock APIs do not prove backend permissions.
 - First-Escape containment, reopen and scope transitions must pass alongside the
   existing sticker/workspace/overlay and published draft/action-context pool.
+
+## 2026-09-16 — shell popup stacking and Escape ownership
+
+Verified on the candidate based on `0649487`; this is a bounded UIX-644 slice,
+not acceptance of the entire historical inventory above.
+
+- Two new DOM regressions failed before the change: an already consumed Escape
+  still dismissed a details popup, and Escape in a different dialog dismissed a
+  background popup and moved focus to its summary. The shared handler now honors
+  `defaultPrevented` and the event target's dialog owner. Hidden/inert cleanup,
+  the popup's own Escape, and outside-pointer dismissal remain intact.
+- The first new compact browser case incorrectly targeted the music bar, which
+  is deliberately hidden in this layout. The corrected case uses the visible
+  session menu. Its hit-test then exposed a real stacking defect: the menu was
+  behind the token workspace (failure screenshot retained).
+- While a topbar details menu is explicitly open, its stacking context uses the
+  existing `--arken-layer-workspace-popup` tier (1999), above capped non-modal
+  workspaces (1998 max) and below blocking dialogs (2000). Changing only the
+  descendant's z-index cannot escape the topbar's original 1000 context. No new
+  numeric tier or portal implementation was introduced.
+- `details-escape-ownership.spec.ts`: 8/8 PASS, Chromium/Firefox, GM/PLAYER,
+  1280/390. Actual App, music menu on desktop and session menu on compact,
+  ordinary trigger clicks and popup-control hit-testing; Escape in the token
+  workspace does not steal focus to the background menu, and the menu's own
+  Escape restores its trigger. GM cases also open the real new-token modal,
+  compare layer ordering, cancel by real pointer click, and reopen the menu.
+  No game mutation HTTP requests were observed in the mocked fixture.
+- Four focused unit/DOM suites: 42/42 PASS. Web typecheck (768 MiB), scoped ESLint,
+  Prettier and diff whitespace checks PASS. No full test/build/CI restart.
+- Evidence: `details-escape-gate/tests.log`, `browser-01.log` (fixture mistake),
+  `browser-02.log` (actual compact hit-test failure), `browser-03.log` (8 PASS),
+  `types.log`, `lint.log`, and checkpoint in the current local artifact root.
+- Limits: not all topbar/details consumers, browser zoom, physical devices,
+  arbitrary popup nesting, or live authorization. No publication/deploy and no
+  Linear state change; the earlier external-write approval remains pending.
+  The untracked selection-recovery test is unchanged and excluded.
+
+Next: continue the remaining unique menu owners and viewport/scroll lifecycle
+cases in this same issue; retain failures rather than replacing them with DOM
+visibility checks or closing the whole audit from this slice.

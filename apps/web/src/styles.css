@@ -176,6 +176,12 @@ code {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
+/* An explicitly opened shell menu is a transient popup above non-modal
+ * workspaces, not a blocking dialog. Raising its topbar stacking context (not
+ * merely the nested menu) uses the reserved popup tier below all modals. */
+.topbar:has(details[open]) {
+  z-index: var(--arken-layer-workspace-popup, 1999);
+}
 .brand,
 .status-line {
   display: flex;
