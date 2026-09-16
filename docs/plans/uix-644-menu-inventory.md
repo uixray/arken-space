@@ -702,3 +702,21 @@ historical evidence; they were NOT silently included in this mocked-UI gate.
 Physical devices, multiplayer/backend durability and full product release
 acceptance are not established by54passed. Older8504fea34-case bundle gate stays
 historical and is not relabelled as this current revision.
+## 2026-09-16 — genuine browser zoom test mechanism, not menu acceptance
+
+A bounded probe in an isolated persistent headless Chrome profile established a
+way to test real full-page browser zoom without touching the user's profile.
+The browser's own settings appearance page exposes settingsPrivate.getDefaultZoom
+and setDefaultZoom. Changed only the disposable profile100%→125%→100%, using a
+local ephemeral HTTP probe and no CSS zoom, CDP device/pinch emulation or resize.
+
+Measured baseline innerWidth1258/innerHeight802/DPR1; at125%1006/642/DPR1.25;
+restored1258/802/DPR1. CSS zoom1 and visualViewport.scale1 throughout;100CSSpx
+probe width remains100CSSpx. Script asserts DPR ratio, inverse layout width and
+restoration. Context and HTTP listener close in finally; zoom restored as well.
+Artifacts browser-zoom-probe/metrics.json, before.png, after.png, probe.mjs.
+
+This is mechanism validation only: no Arken menu or Firefox zoom acceptance yet.
+Next run must exercise actual app menus while browser zoom changes, retain real
+pointer/focus/viewport evidence and verify100% restoration. Do not turn these
+probe metrics into a PASS for the missing UIX-644 browser-zoom criterion.
