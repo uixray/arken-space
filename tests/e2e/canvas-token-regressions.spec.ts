@@ -2267,3 +2267,124 @@ for (const tool of ["FOG", "COVER", "FOG_BRUSH", "COVER_BRUSH"] as const) {
     });
   });
 }
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-507 Shift ruler remains measurement and cancels cleanly ${role}`, async ({
+    page,
+  }, testInfo) => {
+    const writes: string[] = [];
+    const events: Array<{
+      event: string;
+      payload: { sceneId: string; points?: Array<{ x: number; y: number }> };
+    }> = [];
+    let connected = false;
+    await page.route("**/api/**", (route) => {
+      const r = route.request();
+      const path = new URL(r.url()).pathname;
+      if (!["GET", "HEAD"].includes(r.method()) && path !== "/api/chat/read")
+        writes.push(`${r.method()} ${path}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    current.fogReveals = [
+      { id: "revealed", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        const raw = message.toString();
+        if (raw === "40") {
+          socket.send('40{"sid":"shift-ruler"}');
+          connected = true;
+          return;
+        }
+        if (!raw.startsWith("42")) return;
+        const index = raw.indexOf("[");
+        if (index < 0) return;
+        const [event, payload] = JSON.parse(raw.slice(index));
+        if (["ruler:update", "ruler:clear", "map:ping"].includes(event))
+          events.push({ event, payload });
+        const ack = raw.slice(2, index);
+        if (ack) socket.send(`43${ack}[{"ok":true}]`);
+      });
+      socket.send(
+        '0{"sid":"shift-ruler-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect.poll(() => connected).toBe(true);
+    const map = page.locator(".map-viewport");
+    const tool = page.locator('.map-tool[data-tool="RULER"]');
+    const points = await map.evaluate((node) => {
+      const b = node.getBoundingClientRect();
+      const start = { x: b.x + b.width * 0.55, y: b.y + b.height * 0.55 };
+      const end = { x: start.x + 80, y: start.y + 80 };
+      for (const p of [start, end])
+        if (!(document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement))
+          throw Error("Ruler path obstructed");
+      return { start, end };
+    });
+    for (const cancel of [false, true]) {
+      await tool.click();
+      await expect(tool).toHaveAttribute("aria-pressed", "true");
+      const beginning = events.length;
+      await page.keyboard.down("Shift");
+      try {
+        await page.mouse.move(points.start.x, points.start.y);
+        await page.mouse.down();
+        await page.mouse.move(points.end.x, points.end.y, { steps: 8 });
+        await expect
+          .poll(
+            () =>
+              events.slice(beginning).filter((e) => e.event === "ruler:update")
+                .length,
+          )
+          .toBeGreaterThan(0);
+        const update = events
+          .slice(beginning)
+          .filter((e) => e.event === "ruler:update")
+          .at(-1)!;
+        expect(update.payload.sceneId).toBe(sceneId);
+        expect(update.payload.points).toHaveLength(2);
+        expect(update.payload.points![0]).not.toEqual(
+          update.payload.points![1],
+        );
+        if (cancel) {
+          await map.focus();
+          await page.keyboard.press("Escape");
+        }
+      } finally {
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+      }
+      await expect
+        .poll(() => events.slice(beginning).at(-1)?.event)
+        .toBe("ruler:clear");
+      await page.mouse.move(points.end.x + 20, points.end.y);
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      expect(events.slice(beginning).at(-1)?.event).toBe("ruler:clear");
+      await expect(
+        page.getByRole("button", { name: "Удалить выбранное" }),
+      ).toHaveCount(0);
+      if (cancel)
+        await expect(
+          page.locator('.map-tool[data-tool="PAN"]'),
+        ).toHaveAttribute("aria-pressed", "true");
+    }
+    expect(events.filter((e) => e.event === "map:ping")).toEqual([]);
+    expect(writes).toEqual([]);
+    await testInfo.attach("shift-ruler-contract", {
+      body: JSON.stringify({ role, events, writes }),
+      contentType: "application/json",
+    });
+  });
+}

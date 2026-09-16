@@ -171,3 +171,24 @@ scoped lint, formatting and diff checks passed. No full suite/build/publication.
 Polygon, Ruler, SCENE_REGION and interrupted-device gestures are not thereby
 accepted. Existing Review criteria and unrelated popup observer failure remain
 open; the preserved untracked selection recovery test is unchanged.
+
+### 2026-09-16 — Shift remains a ruler gesture for GM and PLAYER
+
+Added an actual-App/socket-boundary regression for both roles. With Shift held,
+the ruler sends a two-point measurement with distinct endpoints in the current
+scene instead of starting marquee selection. Ordinary release and Escape both
+end in `ruler:clear`; a later hover does not restart updates. Escape restores PAN.
+No map ping, bulk-selection action or HTTP mutation occurs.
+
+Verification: **4/4 PASS**, Chromium/Firefox x GM/PLAYER, one worker, no retries.
+The socket server is a test boundary, so this proves emitted gesture messages,
+not cross-client delivery or live multiplayer authorization. Scoped ESLint,
+Prettier and Git diff checks passed. Product source unchanged.
+
+Negative control: temporarily allowing the Shift marquee outside PAN caused the
+GM Chromium scenario to fail on missing `ruler:update` (0, expected >0). The
+production source was restored byte-for-byte in `finally` and its diff is empty.
+This verifies that the new test detects the relevant tool conflict. No dependency,
+full suite, build, publication or Linear completion; recovery spec unchanged.
+Remaining Draw/polygon/SCENE_REGION/context-menu and live acceptance criteria are
+not replaced by these four cases. The separate popup observer error remains open.
