@@ -801,3 +801,184 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
   });
 }
+
+for (const width of [1280, 360]) {
+  test(`UIX-644 map toolbar settings lifecycle ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: width === 360 ? 480 : 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    const writes: string[] = [],
+      errors: string[] = [];
+    const saves: unknown[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/api/**", (route) => {
+      const r = route.request(),
+        p = new URL(r.url()).pathname;
+      if (!["GET", "HEAD"].includes(r.method()) && p !== "/api/chat/read")
+        writes.push(`${r.method()} ${p}`);
+      if (p === "/api/bootstrap") return route.fulfill({ json: current });
+      if (p === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (p === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await page.route("**/api/scenes/scene-1/canvas", (route) => {
+      const body = route.request().postDataJSON();
+      saves.push(body.grid);
+      current.scenes[0].grid = body.grid;
+      current.scenes[0].revision = (current.scenes[0].revision ?? 0) + 1;
+      return route.fulfill({ json: current.scenes[0] });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((m) => {
+        if (m.toString() === "40") socket.send('40{"sid":"toolbar-settings"}');
+      });
+      socket.send(
+        '0{"sid":"toolbar-settings","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const grid = page.locator(".grid-settings"),
+      g = grid.locator("summary"),
+      step = grid.getByRole("spinbutton", { name: "Шаг", exact: true });
+    await g.click();
+    await step.fill("96");
+    for (let i = 0; i < 5; i++) await page.keyboard.press("Tab");
+    await expect(
+      grid.getByRole("button", { name: "Отмена", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(grid).not.toHaveAttribute("open", "");
+    await expect(g).toBeFocused();
+    expect(saves).toEqual([]);
+    await page.keyboard.press("Enter");
+    await expect(step).toHaveValue("64");
+    await step.fill("80");
+    for (let i = 0; i < 4; i++) await page.keyboard.press("Tab");
+    await expect(
+      grid.getByRole("button", { name: "Сохранить", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => saves.length).toBe(1);
+    await expect(grid).not.toHaveAttribute("open", "");
+    await expect(g).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(step).toHaveValue("80");
+    await page.keyboard.press("Escape");
+    const resize = page.locator(".resize-settings"),
+      r = resize.locator("summary");
+    await r.click();
+    await page.keyboard.press("Tab");
+    const image = resize.getByRole("button", {
+      name: "Изображение",
+      exact: true,
+    });
+    await expect(image).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(image).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Tab");
+    const world = resize.getByRole("button", { name: "Область", exact: true });
+    await expect(world).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(world).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Tab");
+    await expect(
+      resize.getByRole("button", { name: "Готово", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(resize).not.toHaveAttribute("open", "");
+    await expect(r).toBeFocused();
+    const more = page.locator(".toolbar-overflow"),
+      m = more.locator("summary");
+    await m.click();
+    await page.keyboard.press("Tab");
+    const toggle = more.getByRole("checkbox", {
+      name: "Показывать сетку",
+      exact: true,
+    });
+    await expect(toggle).toBeFocused();
+    await expect(toggle).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(toggle).not.toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(toggle).toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(m).toBeFocused();
+    expect(saves).toEqual([{ ...snapshot.scenes[0].grid, size: 80 }]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("toolbar-settings-receipt", {
+      body: JSON.stringify({ width, saves, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+test("UIX-644 pending grid save preserves newer outside focus", async ({
+  page,
+}, testInfo) => {
+  const current: GameSnapshot = structuredClone(snapshot);
+  const errors: string[] = [],
+    writes: string[] = [];
+  let release: (() => void) | undefined;
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/api/**", (route) => {
+    const r = route.request(),
+      p = new URL(r.url()).pathname;
+    if (!["GET", "HEAD"].includes(r.method()) && p !== "/api/chat/read")
+      writes.push(`${r.method()} ${p}`);
+    if (p === "/api/bootstrap") return route.fulfill({ json: current });
+    if (p === "/api/story/posts")
+      return route.fulfill({ json: { posts: [], nextCursor: null } });
+    if (p === "/api/operator/feedback/capability")
+      return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+    return route.fulfill({ json: [] });
+  });
+  await page.route("**/api/scenes/scene-1/canvas", async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.grid.size).toBe(96);
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    current.scenes[0].grid = body.grid;
+    current.scenes[0].revision = 1;
+    await route.fulfill({ json: current.scenes[0] });
+  });
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((m) => {
+      if (m.toString() === "40") socket.send('40{"sid":"grid-pending"}');
+    });
+    socket.send(
+      '0{"sid":"grid-pending","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.goto("/");
+  const settings = page.locator(".grid-settings");
+  await settings.locator("summary").click();
+  await settings
+    .getByRole("spinbutton", { name: "Шаг", exact: true })
+    .fill("96");
+  const save = settings.getByRole("button", {
+    name: "Сохранить",
+    exact: true,
+    includeHidden: true,
+  });
+  await save.click();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  const outside = page.getByLabel("Меню сеанса", { exact: true });
+  await outside.click();
+  await expect(settings).not.toHaveAttribute("open", "");
+  await expect(outside).toBeFocused();
+  release!();
+  await expect(save).toBeEnabled();
+  await expect(outside).toBeFocused();
+  await expect(settings).not.toHaveAttribute("open", "");
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+  await testInfo.attach("grid-pending-receipt", {
+    body: JSON.stringify({ writes, errors, grid: current.scenes[0].grid }),
+    contentType: "application/json",
+  });
+});
