@@ -12,7 +12,8 @@ import {
   renderComponent as renderBase,
   screen,
 } from "../test-support/render";
-import { FormInput, FormTextArea } from "./GravityFormControls";
+import { FormInput, FormSelect, FormTextArea } from "./GravityFormControls";
+import userEvent from "@testing-library/user-event";
 
 // Real production provider; only the browser API missing from jsdom is shimmed.
 beforeEach(() => {
@@ -319,4 +320,62 @@ it("preserves checkbox native identity, validation, descriptions, ref and real e
   expect(focused).toHaveBeenCalledOnce();
   expect(blurred).toHaveBeenCalledOnce();
   expect(keyed).toHaveBeenCalledOnce();
+});
+
+it("keeps Select identity, accessible error and validation on its trigger", () => {
+  const { rerender } = renderComponent(
+    <>
+      <span id="select-name">Изображение</span>
+      <p id="select-error">Выберите изображение.</p>
+      <FormSelect
+        id="image-choice"
+        aria-labelledby="select-name"
+        aria-describedby="select-error"
+        aria-invalid
+        value=""
+      >
+        <option value="">Нет</option>
+      </FormSelect>
+    </>,
+  );
+  const trigger = screen.getByRole("combobox", { name: "Изображение" });
+  expect(trigger).toHaveAttribute("id", "image-choice");
+  expect(trigger).toHaveAccessibleDescription("Выберите изображение.");
+  expect(trigger).toHaveAttribute("aria-invalid", "true");
+  rerender(
+    <FormSelect aria-label="Изображение" aria-invalid="false" value="">
+      <option value="">Нет</option>
+    </FormSelect>,
+  );
+  expect(
+    screen.getByRole("combobox", { name: "Изображение" }),
+  ).not.toHaveAttribute("aria-invalid", "true");
+});
+
+it("retains an uncontrolled Select choice without selecting the create utility action", async () => {
+  const user = userEvent.setup();
+  const changed = vi.fn();
+  const create = vi.fn();
+  renderComponent(
+    <FormSelect
+      aria-label="Изображение"
+      defaultValue="portrait"
+      onChange={changed}
+      createAction={{ label: "Создать", onSelect: create }}
+    >
+      <option value="portrait">Портрет</option>
+      <option value="marker">Маркер</option>
+    </FormSelect>,
+  );
+  const trigger = screen.getByRole("combobox", { name: "Изображение" });
+  await user.click(trigger);
+  await user.click(screen.getByRole("option", { name: "Маркер" }));
+  expect(trigger).toHaveTextContent("Маркер");
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(changed.mock.lastCall?.[0].target.value).toBe("marker");
+  await user.click(trigger);
+  await user.click(screen.getByRole("option", { name: "Создать" }));
+  expect(create).toHaveBeenCalledOnce();
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(trigger).toHaveTextContent("Маркер");
 });

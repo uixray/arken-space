@@ -1,6 +1,7 @@
 import {
   Children,
   isValidElement,
+  useState,
   type ChangeEvent,
   type InputHTMLAttributes,
   type ReactElement,
@@ -155,7 +156,17 @@ export function FormSelect({
   "aria-label": ariaLabel,
   emptyMessage,
   createAction,
+  id,
+  title,
+  className,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
+  "aria-details": ariaDetails,
+  "aria-invalid": ariaInvalid,
 }: FormSelectProps) {
+  const [uncontrolledValue, setUncontrolledValue] = useState(() =>
+    String(defaultValue ?? ""),
+  );
   const popupClassName = useOverlayPopupClassName("arken-form-select-popup");
   const childOptions = Children.toArray(children)
     .filter(
@@ -173,12 +184,21 @@ export function FormSelect({
     ...childOptions,
     ...buildFormSelectUtilityOptions(emptyMessage, createAction?.label),
   ];
-  const selected = value ?? defaultValue ?? "";
+  const selected = value ?? uncontrolledValue;
 
   return (
     <Select
       name={name}
+      id={id}
+      title={title}
+      className={className}
       aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      aria-describedby={ariaDescribedBy}
+      aria-details={ariaDetails}
+      validationState={
+        ariaInvalid && ariaInvalid !== "false" ? "invalid" : undefined
+      }
       disabled={disabled}
       popupClassName={popupClassName}
       options={options}
@@ -188,6 +208,7 @@ export function FormSelect({
           createAction?.onSelect();
           return;
         }
+        if (value === undefined) setUncontrolledValue(next[0] ?? "");
         onChange?.({
           target: { value: next[0] ?? "" },
           currentTarget: { value: next[0] ?? "" },
