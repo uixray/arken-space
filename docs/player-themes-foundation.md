@@ -412,3 +412,29 @@ not inbox persistence, spoken screen reader or real network failure acceptance.
 Web/E2E types, scoped ESLint, format and diff checks passed. Own hidden child Vite
 stopped in finally. Evidence:feedback-pending/{results.json,final-results.json}.
 No full suite/build/CI/publication or task completion; existing UI317 remains open.
+
+## Connected production-bundle gate — 2026-09-17
+
+Built exact runtime revision `225038effe94ad6cde9f1c23565c4439f042e203`
+into the separate local artifact `ui-built-225038e/dist`; no older bundle was
+replaced. Vite build passed in 6.83s. The existing main-chunk warning remains
+(1,079.18 kB before compression); this gate does not establish a performance fix.
+
+Thirty real-App scenarios passed against the static production preview in
+Chrome and Firefox (101.87s, one worker, no retries, skips or flaky results):
+startup recovery, invite rate-limit guidance, pending feedback draft protection,
+image intake validation/recovery, character modal lifecycle, reduced motion and
+shell SVG contracts. HTTP/socket responses are synthetic: these results do not
+replace real-server persistence, physical-device or spoken screen-reader gates.
+
+All five served HTML/CSS/JS/image payload hashes matched the built files; all
+seven artifact hashes, including source maps, remained unchanged after the run.
+The HTML contains no Vite development client. Source-map audit covered 722
+sources and found no test/Storybook fixtures or personal-theme runtime bridge.
+This is not delivery of personal-theme selection or persistence.
+
+Evidence: `ui-built-225038e/{results.json,manifest.json,served-payloads.json,
+bundle-scope.json,build.log,checkpoint.md}` in the session artifact directory.
+The owned preview exited successfully and port 5187 has no listener. The original
+untracked selection-recovery test is unchanged and absent from the candidate.
+No GitHub CI restart, publication, deployment or Linear completion is claimed.
