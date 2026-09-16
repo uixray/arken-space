@@ -319,9 +319,9 @@
       "count": 2,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Activity command list current eight tests passed; second ChatPanel source occurrence not covered by those Activity tests.",
+      "scope": "Activity list current8 cases passed. Second ChatPanel list excluded from current production navigation: allowed feeds only ACTIVITY/STORY, handled by ActivityPanel/StoryChannel. Source applicability audit records chain.",
       "evidence": ["remainingMenus"],
-      "next": "Reconcile second caller reachability/required acceptance without enabling hidden UI solely for coverage."
+      "next": "Retain two static occurrences; revisit second only if feed policy changes. Do not activate dead route for coverage; full shared lifecycle gate still separate."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
@@ -487,5 +487,10 @@
       "next": "Other compact destinations, resize while open and physical devices not covered.",
       "evidence": ["navigation"]
     }
-  ]
+  ],
+  "applicabilityAudit": {
+    "revision": "c8d76655e737ec48ad2dcc4becc331b912ac379d",
+    "document": "docs/plans/uix-644-applicability.md",
+    "scope": "Source reachability only; preserves all static buckets, not runtime acceptance."
+  }
 }
