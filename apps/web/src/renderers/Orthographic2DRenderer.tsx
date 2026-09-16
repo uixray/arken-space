@@ -1435,6 +1435,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (shouldBeginMapPan(event.evt.button, props.tool, targetIsCanvas)) {
       beginPan(event);
       if (event.evt.button === 0) {
+        dispatchInteraction({ type: "clear-selection" });
         setSelectedTokenIds([]);
         setSelectedDrawingIds([]);
         setSelectedDrawingId(null);
@@ -3460,50 +3461,52 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           </aside>
         );
       })()}
-      <div className="map-scale">
-        <button
-          aria-label="Увеличить масштаб"
-          onClick={() => zoomAtCenter(scale + 0.1)}
-        >
-          <AppIcon icon={AddIcon} />
-        </button>
-        <input
-          aria-label="Масштаб карты"
-          type="range"
-          min="0.25"
-          max="3"
-          step="0.05"
-          value={scale}
-          onChange={(event) => zoomAtCenter(Number(event.target.value))}
-        />
-        <button
-          aria-label="Уменьшить масштаб"
-          onClick={() => zoomAtCenter(scale - 0.1)}
-        >
-          <AppIcon icon={DecreaseIcon} />
-        </button>
-        {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
-        {props.role === "GM" && (
-          <label>
-            <input
-              aria-label="Показывать скрытый слой мастера"
-              title="Показывать скрытый слой мастера"
-              type="checkbox"
-              checked={showGmLayer}
-              onChange={(event) => setShowGmLayer(event.target.checked)}
-            />
-            Мастер
-          </label>
+      <div className="map-scale-anchor">
+        <div className="map-scale">
+          <button
+            aria-label="Увеличить масштаб"
+            onClick={() => zoomAtCenter(scale + 0.1)}
+          >
+            <AppIcon icon={AddIcon} />
+          </button>
+          <input
+            aria-label="Масштаб карты"
+            type="range"
+            min="0.25"
+            max="3"
+            step="0.05"
+            value={scale}
+            onChange={(event) => zoomAtCenter(Number(event.target.value))}
+          />
+          <button
+            aria-label="Уменьшить масштаб"
+            onClick={() => zoomAtCenter(scale - 0.1)}
+          >
+            <AppIcon icon={DecreaseIcon} />
+          </button>
+          {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
+          {props.role === "GM" && (
+            <label>
+              <input
+                aria-label="Показывать скрытый слой мастера"
+                title="Показывать скрытый слой мастера"
+                type="checkbox"
+                checked={showGmLayer}
+                onChange={(event) => setShowGmLayer(event.target.checked)}
+              />
+              Мастер
+            </label>
+          )}
+        </div>
+        {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
+          <button
+            className="map-selection-action"
+            onClick={() => setBulkDeleteRequested(true)}
+          >
+            Удалить выбранное
+          </button>
         )}
       </div>
-      {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
-        <button
-          className="map-selection-action"
-          onClick={() => setBulkDeleteRequested(true)}
-        >
-          Удалить выбранное
-        </button>
-      )}
     </div>
   );
 }

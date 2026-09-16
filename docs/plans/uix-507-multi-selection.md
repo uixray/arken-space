@@ -50,3 +50,35 @@ Local implementation now projects queued mixed token/drawing moves over the cano
 Verification: full web TypeScript check passed; 18 focused unit tests passed across projection and queue suites (10 queue + 8 projection). Chrome and Firefox passed all 8 isolated real-App cases: drag from token, drag from drawing, rapid queued acknowledgement, and deletion pruning. These tests use synthetic API/socket boundaries, not live backend permission acceptance. Existing two App hook lint warnings remain; no lint errors. No full suite or existing GitHub CI restarted.
 
 The recovery browser spec remains deliberately untracked and excluded from publication. This pool does not close all original UIX-507 criteria: GM/PLAYER permission, fog/locked layers, full tool-conflict matrix and device acceptance still need their original gates. No new production deployment.
+
+## 2026-09-16 — empty-map deselection and zoom separation
+
+Re-read live UIX-507 In Review criteria. Extended the existing GM browser flow
+with token Shift-toggle (alongside its drawing toggle), ordinary-click replacement,
+and empty-map click followed directly by Delete, without visiting another picker.
+The preserved untracked recovery spec was not edited or added to Git.
+
+Two product failures were reproduced:
+
+1. The group-delete button overlapped the actual zoom panel by roughly 2px: its
+   fixed right offset did not account for the current panel width. The panel now
+   has a positioning wrapper; the action sits 8px beyond its actual left edge,
+   outside normal flow, so selection cannot change zoom geometry. Compact short
+   screens keep the horizontal panel and put the action below it.
+2. Plain empty-map pan/click cleared selection arrays but not the interaction
+   model's selected object. Delete could reopen confirmation for the old token.
+   That same empty-pan branch now dispatches clear-selection as well. Group and
+   single-object deletion confirmations remain distinct; the test cancels both.
+
+Verification: 16/16 PASS, Chromium/Firefox, workers1, retries0: eight GM/PLAYER
+1280/390 selection-and-zoom cases, four original UIX-507 GM/PLAYER cases, four
+640x360 compact action-target cases. The extended GM flow checks no bulk mutation
+until deliberate group move/delete. Web TypeScript, scoped ESLint, Prettier and
+Git whitespace checks passed. Desktop screenshot inspected: visible 8px gap.
+The short-screen action-target cases do not create a selected group; short-screen
+bulk-action hit-testing remains a distinct gap. Fixtures do not prove live server
+ACL or multiplayer recovery, and no full CI/build/publication was performed.
+
+UIX-507 remains In Review pending the rest of its original acceptance matrix.
+The unrelated intermittent token-popup ResizeObserver gate remains unresolved;
+these map fixes do not turn that gate green.

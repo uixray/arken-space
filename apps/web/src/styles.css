@@ -774,10 +774,13 @@ code {
     linear-gradient(90deg, #292823 1px, transparent 1px);
   background-size: 24px 24px;
 }
-.map-scale {
+.map-scale-anchor {
   position: absolute;
   right: 8px;
   top: 44px;
+  pointer-events: none;
+}
+.map-scale {
   padding: 3px 6px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -804,10 +807,12 @@ code {
 }
 .map-selection-action {
   position: absolute;
-  top: 44px;
-  right: 80px;
+  top: 0;
+  right: calc(100% + 8px);
   z-index: 24;
-  max-width: calc(100% - 160px);
+  width: max-content;
+  max-width: calc(100vw - 160px);
+  pointer-events: auto;
 }
 .drawing-color-panel {
   position: absolute;

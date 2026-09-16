@@ -1402,8 +1402,66 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   );
   expect(bulkRequests).toHaveLength(0);
 
-  // Dragging either selected member uses the existing queued mixed bulk move.
+  // Toggle a token as well as a drawing: neither may replace its selected peer.
   const tokenCenter = screenPoint(416, 352);
+  await page.keyboard.down("Shift");
+  await page.mouse.click(tokenCenter.x, tokenCenter.y);
+  await page.keyboard.up("Shift");
+  await map.focus();
+  await page.keyboard.press("Delete");
+  await inspectBulkConfirmation(
+    page,
+    "Выбрано объектов: 1. Токенов: 0. Рисунков: 1.",
+  );
+  await page.keyboard.down("Shift");
+  await page.mouse.click(tokenCenter.x, tokenCenter.y);
+  await page.keyboard.up("Shift");
+  await page.getByRole("button", { name: "Удалить выбранное" }).click();
+  await inspectBulkConfirmation(
+    page,
+    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+  );
+
+  // An unmodified object click replaces the group and uses single-object deletion.
+  await page.mouse.click(tokenCenter.x, tokenCenter.y);
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toHaveCount(0);
+  await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+  await map.focus();
+  await page.keyboard.press("Delete");
+  const singleDelete = page.getByRole("dialog", {
+    name: "Убрать токен с карты?",
+  });
+  await expect(singleDelete).toBeVisible();
+  await singleDelete
+    .getByRole("button", { name: "Отмена", exact: true })
+    .click();
+  await expect(singleDelete).toBeHidden();
+  await page.mouse.click(marqueeStart.x, marqueeStart.y);
+  await expect(map).not.toHaveAttribute("data-resize-handle-x");
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toHaveCount(0);
+  await map.focus();
+  await page.keyboard.press("Delete");
+  await expect(
+    page.getByRole("dialog", { name: "Удалить выбранные объекты?" }),
+  ).toHaveCount(0);
+  await expectStableSelectionChrome(page, zoomBaseline);
+  expect(bulkRequests).toHaveLength(0);
+
+  await expect(singleDelete).toHaveCount(0);
+
+  // Restore the mixed group for the existing move/delete checks below.
+  await page.keyboard.down("Shift");
+  await page.mouse.move(marqueeStart.x, marqueeStart.y);
+  await page.mouse.down();
+  await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+
+  // Dragging either selected member uses the existing queued mixed bulk move.
   await page.mouse.move(tokenCenter.x, tokenCenter.y);
   await page.mouse.down();
   await page.mouse.move(tokenCenter.x + 64 * scale, tokenCenter.y, {

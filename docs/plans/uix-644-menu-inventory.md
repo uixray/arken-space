@@ -806,3 +806,15 @@ actual-App acceptance claim or a substitute for real browser zoom.
   intermittent token-popup ResizeObserver error. UIX-502/UIX-644 error-free gate
   remains open; neither the four passes nor the controlled negative test prove
   that original error fixed. No production release or Linear completion claimed.
+
+### Map selection controls — 2026-09-16
+
+The UIX-507 original flow exposed a real overlap between `.map-selection-action`
+and `.map-scale` (fixed `right: 80px` versus actual zoom width). Positioning now
+uses `.map-scale-anchor` and an out-of-flow sibling action at `right: calc(100% +
+8px)`. Zoom coordinates and size remain independent of selection; no permanent
+selection counts were added. Compact short-screen placement uses a lower row.
+
+Connected gate: 16/16 PASS across selection/zoom/compact action targets in Chrome
+and Firefox; details and limits in `uix-507-multi-selection.md`. This does not
+resolve the separate first-open token-popup ResizeObserver error.

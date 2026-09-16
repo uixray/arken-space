@@ -645,7 +645,7 @@
     flex-shrink: 0;
   }
 
-  .app-shell--compact .map-scale {
+  .app-shell--compact .map-scale-anchor {
     top: 60px;
   }
 
@@ -711,10 +711,16 @@
 
 @media (max-width: 1023px) and (max-height: 480px) {
   /* A vertical zoom slider cannot fit between header and navigation in landscape. */
+  .app-shell--compact .map-scale-anchor {
+    width: min(420px, calc(100% - var(--map-toolbar-width, 48px) - 32px));
+  }
+  .app-shell--compact .map-selection-action {
+    top: calc(100% + 8px);
+    right: 0;
+  }
   .app-shell--compact .map-scale {
     grid-template-columns: 44px minmax(44px, 1fr) 44px auto auto;
     align-items: center;
-    width: min(420px, calc(100% - var(--map-toolbar-width, 48px) - 32px));
   }
 
   .app-shell--compact .map-scale input[type="range"] {
