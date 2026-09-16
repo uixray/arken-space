@@ -367,6 +367,54 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(list).toBeHidden();
         await expect(trigger).toBeFocused();
         await expect(scope).toBeVisible();
+        // Keyboard selection must update the real controlled field, not merely
+        // expose an option in the DOM.
+        await trigger.press("ArrowDown");
+        await expect(list).toBeVisible();
+        const firstText = (
+          await list.getByRole("option").first().innerText()
+        ).trim();
+        await page.keyboard.press("Home");
+        await page.keyboard.press("Enter");
+        await expect(list).toBeHidden();
+        await expect(trigger).toContainText(firstText);
+        await expect(trigger).toBeFocused();
+
+        await trigger.click();
+        await expect(list).toBeVisible();
+        const resizedWidth = width === 360 ? 390 : 1180;
+        await page.setViewportSize({ width: resizedWidth, height: 640 });
+        await expect(list).toBeVisible();
+        const resizedOption = list.getByRole("option").first();
+        await resizedOption.scrollIntoViewIfNeeded();
+        await expect
+          .poll(() =>
+            resizedOption.evaluate((node) => {
+              const r = node.getBoundingClientRect();
+              return (
+                r.left >= 0 &&
+                r.right <= innerWidth &&
+                r.top >= 0 &&
+                r.bottom <= innerHeight &&
+                node.contains(
+                  document.elementFromPoint(
+                    r.x + r.width / 2,
+                    r.y + r.height / 2,
+                  ),
+                )
+              );
+            }),
+          )
+          .toBe(true);
+        // A dropdown intentionally overlays the following field. Its owner
+        // heading is an actual outside point, not a click through the menu.
+        await scope
+          .getByText(/^(Добавить в галерею|Изменить запись галереи)$/)
+          .first()
+          .click();
+        await expect(list).toBeHidden();
+        await expect(scope).toBeVisible();
+        await page.setViewportSize({ width, height: 800 });
       }
       await exercise(attach, "Категория");
       await exercise(attach, "Видимость");

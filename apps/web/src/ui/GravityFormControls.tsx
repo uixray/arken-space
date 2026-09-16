@@ -1,5 +1,6 @@
 import {
   Children,
+  Fragment,
   isValidElement,
   useState,
   type ChangeEvent,
@@ -167,6 +168,10 @@ export function FormSelect({
   const [uncontrolledValue, setUncontrolledValue] = useState(() =>
     String(defaultValue ?? ""),
   );
+  // The fading popup can retain Gravity List active-index state after close.
+  // Give each open/closed phase its own list to avoid replaying that state
+  // into a keyboard reopen. Selection stays in the Select, not this subtree.
+  const [open, setOpen] = useState(false);
   const popupClassName = useOverlayPopupClassName("arken-form-select-popup");
   const childOptions = Children.toArray(children)
     .filter(
@@ -201,6 +206,13 @@ export function FormSelect({
       }
       disabled={disabled}
       popupClassName={popupClassName}
+      onOpenChange={setOpen}
+      renderPopup={({ renderFilter, renderList }) => (
+        <Fragment key={open ? "open" : "closed"}>
+          {renderFilter()}
+          {renderList()}
+        </Fragment>
+      )}
       options={options}
       value={[String(selected)]}
       onUpdate={(next) => {

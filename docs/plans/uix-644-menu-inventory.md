@@ -393,3 +393,30 @@ AttachMediaForm category/visibility (sheet) and EditMediaDialog category/visibil
   matrix still has unverified outside-click, resize/browser-zoom, keyboard
   option selection, nested-modal and other registry rows. No whole UIX-644 PASS.
   API is mocked; this is not actual file upload/persistence/ACL proof.
+
+## 2026-09-16 — gallery keyboard reopen and resize lifecycle
+
+- The same four gallery Select sites now additionally cover ArrowDown open,
+  Home/Enter selecting the first option and updating the real trigger label,
+  keyboard focus return, visible open-menu hit/viewport bounds after resizing
+  1280→1180 or360→390 and800→640, outside click on the visible owner title,
+  owner retained and size restored. Eight role/viewport/browser cases PASS
+  (gallery-lifecycle-gate/browser-04.log,1.6min), no mutations.
+- Real FAIL preserved in browser-02: keyboard reopening after pointer selection
+  raised React Maximum update depth exceeded in Gravity List.activateItem /
+  componentDidUpdate, recovering via AppErrorBoundary. Not suppressed as noise.
+- FormSelect now keys the renderPopup subtree by open/closed phase through
+  Gravity public onOpenChange/renderPopup APIs. The selected value remains in
+  Select/the existing wrapper state; internal active-item state cannot persist
+  from the closing phase into the next open. No dependency patch or upgrade.
+  The fading-popup state explanation is source-based diagnosis; the measured
+  evidence is the original error and passing lifecycle on the new boundary.
+- Existing workspace-select-escape.spec.ts:8/8PASS42.2s on the changed adapter,
+  GM/PLAYER desktop/compact in Chromium/Firefox; retained first/second Escape.
+- Test corrections are separate from product failures: browser-01 attempted to
+  click the caption through an intentionally visible dropdown; screenshot
+  inspection confirmed the overlay. Outside click now targets the title.
+  Browser-03 used a heading role absent from Gravity Dialog title; fixed to
+  exact visible title text, not a weakened hit test or forced click.
+- Still not browser zoom, physical touch, nested-modal completeness or a full
+  all-site UIX-644 gate. Resize is actual viewport resize, not called zoom.
