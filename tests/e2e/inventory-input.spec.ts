@@ -254,3 +254,99 @@ test("diagnostics redact printable keys across layout variants", async ({
   expect(serialized).not.toMatch(/"(?:value|data)"/);
   await expect(inventory).toBeFocused();
 });
+
+test("compact PLAYER inventory commits normalized lines and survives acknowledged reload", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  const current = structuredClone(snapshot);
+  current.me = {
+    ...current.me,
+    role: "PLAYER",
+    characterId: current.characters[0].id,
+  };
+  current.members = [current.me];
+  current.characters[0].ownerMembershipId = current.me.id;
+  const patches: Record<string, unknown>[] = [];
+  const unexpected: string[] = [];
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (
+      request.method() === "PATCH" &&
+      path === `/api/characters/${current.characters[0].id}`
+    ) {
+      const body = request.postDataJSON();
+      patches.push(body);
+      expect(body).toMatchObject({
+        inventory: ["Rope", "Факел", "Верёвка с крюком"],
+        revision: 1,
+      });
+      current.characters[0] = {
+        ...current.characters[0],
+        inventory: body.inventory,
+        revision: 2,
+      };
+      return route.fulfill({ json: current.characters[0] });
+    }
+    if (request.method() !== "GET" && path !== "/api/client-logs") {
+      unexpected.push(`${request.method()} ${path}`);
+      return route.fulfill({ status: 405, json: {} });
+    }
+    if (path === "/api/bootstrap") return route.fulfill({ json: current });
+    if (path === "/api/story/posts")
+      return route.fulfill({ json: { posts: [], nextCursor: null } });
+    if (path === "/api/operator/feedback/capability")
+      return route.fulfill({ status: 403, json: {} });
+    return route.fulfill({ json: [] });
+  });
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString() === "40")
+        socket.send('40{"sid":"inventory-socket"}');
+    });
+    socket.send(
+      '0{"sid":"inventory-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.goto("/");
+  const { inventory, workspace } = await openInventory(page);
+  await expect(inventory).toBeEnabled();
+  await inventory.focus();
+  await page.keyboard.press("End");
+  await inventory.pressSequentially("\n  Факел  \n\nВерёвка с крюком");
+  await expect(inventory).toHaveValue("Rope\n  Факел  \n\nВерёвка с крюком");
+  await expect(inventory).toBeFocused();
+  expect(patches).toHaveLength(0);
+  await page.keyboard.press("Escape");
+  await expect(inventory).toBeFocused();
+  await expect(workspace).toBeVisible();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      new URL(response.url()).pathname ===
+        `/api/characters/${current.characters[0].id}`,
+  );
+  await page.getByRole("button", { name: "Журнал", exact: true }).click();
+  expect((await saved).status()).toBe(200);
+  await expect.poll(() => patches.length).toBe(1);
+  await page.reload();
+  const reopened = await openInventory(page);
+  await expect(reopened.inventory).toHaveValue("Rope\nФакел\nВерёвка с крюком");
+  await reopened.inventory.scrollIntoViewIfNeeded();
+  const geometry = await reopened.inventory.evaluate((node) => {
+    const r = node.getBoundingClientRect();
+    const overflow: string[] = [];
+    for (let e: HTMLElement | null = node; e; e = e.parentElement) {
+      if (e.scrollWidth > e.clientWidth + 1) overflow.push(e.className);
+      if (e.classList.contains("character-workspace")) break;
+    }
+    return { left: r.left, right: r.right, height: r.height, overflow };
+  });
+  expect(geometry.left).toBeGreaterThanOrEqual(0);
+  expect(geometry.right).toBeLessThanOrEqual(360);
+  expect(geometry.height).toBeGreaterThanOrEqual(44);
+  expect(geometry.overflow).toEqual([]);
+  expect(patches).toHaveLength(1);
+  expect(unexpected).toEqual([]);
+});
