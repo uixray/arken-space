@@ -214,3 +214,23 @@ and physical-device acceptance are not inferred from the owner-fixture receipts.
 No Linear state change was attempted because the earlier external-write approval
 is unresolved. This evidence audit is not an assertion that every open project
 issue is ready for closure.
+
+## 2026-09-16 — current Select integration acceptance
+
+After the shared Select contract fix, the existing connected browser pool was
+run against `0e3e3c723207b980082214217b3c4e1b9cb32399`: 12/12 PASS in 1.4 minutes,
+Chrome/Firefox, desktop/390px, one worker and zero retries. This is a fresh local
+candidate gate, not a claim that old CI covered the new Select code.
+
+Eight sibling/nested owner cases report zero popup-focus violations, page errors,
+unexpected API requests and leftover layers. Four real App token-editor cases
+verify the inline image picker and character popup, hit testing and viewport
+bounds, outside click, keyboard selection, Escape and focus return. The narrow
+Chrome token-popup screenshot was visually inspected. No assertion or runtime
+code was changed to obtain these passes. Source and test fixtures are the existing
+ones; synthetic API does not establish backend permissions or production playtest.
+
+The stated UIX-502 local acceptance matrix passes for this candidate. Wider
+UIX-644 menus, personal themes, arbitrary nesting and physical devices remain
+outside that conclusion. Linear remains In Review pending the previously blocked
+external write; this report does not silently update the task. No deployment.
