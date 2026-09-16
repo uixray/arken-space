@@ -446,3 +446,34 @@ Chromium/Firefox:4/4PASS44.8s (world-menus-gate/browser-03.log).
   controls/layers/selected labels, not backend filtering/ACL or saved links.
   No outside/scroll/resize/zoom matrix for these five sites yet; a workspace plus
   create dialog is not two nested blocking dialogs. No entire UIX-644 PASS.
+
+## 2026-09-16 — catalog form conditional sites and owners
+
+All seven CatalogEntryForm Select sites are now exercised through actual GM
+entry edit, CatalogEntryPicker CREATE and SetupPanel new-catalog dialog, at
+1280/360 in Chromium/Firefox. Existing SKILL/ABILITY fixture was extended with
+an actual stat-layout characteristic; creation paths enable uses and add a roll
+and a value through UI, not by making hidden branches artificially visible.
+
+- Fields: entry kind, recharge, roll kind, modifier source, characteristic,
+  entry-value key, resource. Each selects an actual enabled option by real
+  center hit/click, asserts the selected label, reopens and Escape-dismisses
+  while retaining dialog/focus. No save/assign/roll requests; forms canceled.
+- Edit-only run:4/4PASS42.3s. New owner matrix and telemetry receipts are in
+  catalog-menus-gate. Not new production/runtime code; unchanged exact source
+  retains the previous6ea1f0f type/build evidence.
+- IMPORTANT: the first setup-owner run recorded browser window.error:
+  ResizeObserver loop completed with undelivered notifications. The trace
+  contains the exact client-log payload. This is not a gameplay mutation, nor
+  evidence that the whole error-free runtime gate passed. Tests now retain
+  clientLogs separately in catalog-receipts.json instead of silently dropping
+  diagnostics or treating them as save requests. Root cause remains open under
+  this issue; no new card and no broad error suppression.
+- This is site-level pointer/open/select/Escape smoke, not all keyboard options,
+  outside/resize/browser zoom or full nested-blocking-modal acceptance. GM paths
+  only; no new PLAYER permission or actual catalog persistence claim.
+- Final owner run:8/8 menu cases PASS1.6min, zero gameplay mutations. Read all
+  eight receipts: setup1280 in BOTH Chromium and Firefox logged one identical
+  ResizeObserver notification error; six others logged none. Error-free runtime
+  gate remains FAIL, not rescued by the green menu assertions. Next action is
+  targeted observer ownership diagnosis on that reproduced setup1280 path.

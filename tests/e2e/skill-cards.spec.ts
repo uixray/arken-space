@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
@@ -435,4 +436,183 @@ for (const width of [960, 360]) {
       card.locator(".skill-chat-card__details .muted"),
     ).toBeVisible();
   });
+}
+
+for (const owner of ["edit", "picker", "setup"] as const) {
+  for (const width of [1280, 360]) {
+    test(`catalog ${owner} conditional dropdown registry ${width}`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(90000);
+      await page.setViewportSize({ width, height: 800 });
+      const current = snapshotFor(entry("Проверочная способность"));
+      current.me.role = "GM";
+      current.members = current.members.map((member) => ({
+        ...member,
+        role: "GM",
+      }));
+      current.campaign.statLayout = [
+        {
+          id: "characteristics",
+          label: "Характеристики",
+          rows: [{ key: "strength", label: "Сила", source: "STAT" }],
+        },
+      ];
+      const unexpected: string[] = [];
+      const clientLogs: unknown[] = [];
+      await page.route("**/api/**", (route) => {
+        const request = route.request();
+        if (new URL(request.url()).pathname === "/api/client-logs") {
+          clientLogs.push(request.postDataJSON());
+          return route.fulfill({ json: { ok: true } });
+        }
+        if (request.method() !== "GET")
+          unexpected.push(
+            `${request.method()} ${new URL(request.url()).pathname}`,
+          );
+        return route.fulfill({ json: [] });
+      });
+      await page.routeWebSocket(/\/socket\.io\//, (socket) => socket.close());
+      await mockApp(page, () => current);
+      await page.goto("/");
+      await openCharacterWorkspace(page);
+      if (owner === "edit") {
+        await page
+          .getByRole("button", { name: "Редактировать", exact: true })
+          .click();
+      } else if (owner === "picker") {
+        await page
+          .getByRole("button", { name: "+ Добавить способность…", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "+ Создать новую запись", exact: true })
+          .click();
+      } else {
+        await openWorkspaceSection(page, "Подготовка");
+        await page
+          .getByRole("button", { name: "Общий каталог", exact: true })
+          .click();
+        await page
+          .getByRole("button", {
+            name: "Добавить навык или способность",
+            exact: true,
+          })
+          .click();
+      }
+      const dialog = page.getByRole("dialog", {
+        name:
+          owner === "edit"
+            ? "Редактирование Проверочная способность"
+            : "Новая запись каталога",
+        exact: true,
+      });
+      await expect(dialog).toBeVisible();
+      const form = dialog.getByRole("form", {
+        name:
+          owner === "edit"
+            ? "Редактирование записи каталога"
+            : "Новая запись каталога",
+      });
+      if (owner !== "edit") {
+        await form
+          .getByRole("checkbox", {
+            name: "Ограничить количество использований",
+          })
+          .check();
+        await form
+          .getByRole("button", { name: "Добавить бросок", exact: true })
+          .click();
+      }
+      async function choose(
+        trigger: import("@playwright/test").Locator,
+        text: string,
+      ) {
+        await trigger.scrollIntoViewIfNeeded();
+        await trigger.click();
+        const list = page.getByRole("listbox");
+        await expect(list).toBeVisible();
+        const option = list.getByRole("option", { name: text, exact: true });
+        await option.scrollIntoViewIfNeeded();
+        expect(
+          await option.evaluate((node) => {
+            const r = node.getBoundingClientRect();
+            return node.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            );
+          }),
+        ).toBe(true);
+        await option.click();
+        await expect(list).toBeHidden();
+        await expect(trigger).toContainText(text);
+        await trigger.click();
+        await expect(list).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(list).toBeHidden();
+        await expect(trigger).toBeFocused();
+        await expect(dialog).toBeVisible();
+      }
+      await choose(
+        form.getByRole("combobox", { name: "Тип", exact: true }).first(),
+        "Навык",
+      );
+      await choose(
+        form.getByRole("combobox", { name: "Перезарядка", exact: true }),
+        "В неделю",
+      );
+      const action = form.getByRole("group", { name: "Бросок 1", exact: true });
+      await choose(
+        action.getByRole("combobox", { name: "Тип", exact: true }),
+        "Урон",
+      );
+      const source = action.getByRole("combobox", {
+        name: "Источник модификатора",
+        exact: true,
+      });
+      await choose(source, "Характеристика");
+      await choose(
+        action.getByRole("combobox", { name: "Характеристика", exact: true }),
+        "Сила",
+      );
+      await form
+        .getByRole("button", { name: "Добавить значение", exact: true })
+        .click();
+      await form
+        .getByRole("textbox", { name: "Ключ", exact: true })
+        .fill("power");
+      await choose(source, "Значение записи");
+      await choose(
+        action.getByRole("combobox", { name: "Ключ значения", exact: true }),
+        "power",
+      );
+      const resource = action.getByRole("combobox", {
+        name: "Ресурс",
+        exact: true,
+      });
+      await resource.scrollIntoViewIfNeeded();
+      await resource.click();
+      const resourceLabel = (
+        await page.getByRole("listbox").getByRole("option").nth(1).innerText()
+      ).trim();
+      await page.keyboard.press("Escape");
+      await choose(resource, resourceLabel);
+      await form.getByRole("button", { name: "Отмена", exact: true }).click();
+      await expect(dialog).toBeHidden();
+      if (owner === "edit")
+        await expect(page.locator(".character-action-card")).toContainText(
+          "Проверочная способность",
+        );
+      const receipt = testInfo.outputPath("catalog-receipts.json");
+      await writeFile(
+        receipt,
+        JSON.stringify({ owner, width, clientLogs, unexpected }, null, 2),
+      );
+      await testInfo.attach("catalog-receipts", {
+        path: receipt,
+        contentType: "application/json",
+      });
+      // Telemetry is retained for the separate error-free runtime gate, not
+      // misclassified as a gameplay mutation or silently discarded.
+      expect(unexpected).toEqual([]);
+    });
+  }
 }
