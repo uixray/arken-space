@@ -106,3 +106,26 @@ semantics or shared-PC privacy. Existing runtime and persistence gaps remain.
 ## Explicit baseline preference — 2026-09-17
 
 An explicit `selectedThemeId: "system"` wins over any supplied personal default. Clearing the override is `null`/absence, not `"system"`: only clearing returns to the personal default. This distinction is tested for all seven theme defaults, including a serialized preference round trip. It is a configuration-resolution test, not proof of database persistence or shared-PC handoff. `system` continues to mean no data-player-theme attribute; it is not a separately versioned frozen legacy theme. The requested permanently selectable old appearance still requires that distinct preservation/migration gate. Account-versus-membership persistence remains unresolved and is not chosen by this fix.
+
+## Semantic contrast guard — 2026-09-17
+
+`player-theme-contrast.test.ts` checks 44 declared role pairs for each of the seven
+palettes (308 comparisons): primary/muted/faint/accent text over seven flat
+surfaces; focus over those surfaces; error copy over form/raised/overlay surfaces;
+field text/border/focus; primary button text on default/hover/active fills. Text
+uses 4.5:1 and the checked non-text roles 3:1, without rounding passing values up.
+RGBA layers are composited onto the declared surface before luminance is measured.
+Missing tokens, low-contrast field ink and lost focus are negative test cases;
+black/white, near-threshold gray and alpha arithmetic validate the calculation.
+
+This is a configuration guard, not WCAG certification or rendered-pixel acceptance.
+It does not cover images/textures, opacity inherited from ancestors, animation
+intermediates, all disabled/read-only states, actual focus-ring geometry, or the
+whole CSS cascade. Palette source and generated outputs were not changed.
+
+**Known conditional risk, not a current screen failure:** light `state-error-ink`
+on the hover/active/selected tint composited over `color-surface` measures about
+4.1866:1. Those are not the current error-copy surface contract checked above.
+Do not put small error text on those tinted surfaces without a rendered check and
+a contrast-safe treatment. Keep this open in the component migration; do not
+claim that every possible combination of the approved tokens is accessible.
