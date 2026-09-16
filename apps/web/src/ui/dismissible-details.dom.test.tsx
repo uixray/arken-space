@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, renderComponent, screen } from "../test-support/render";
+import {
+  fireEvent,
+  renderComponent,
+  screen,
+  waitFor,
+} from "../test-support/render";
 import { useDismissibleDetails } from "./dismissible-details";
 
 /**
@@ -128,6 +133,31 @@ describe("механизм закрытия поповера", () => {
     expect(details.open).toBe(false);
     expect(details.querySelector("summary")).not.toHaveFocus();
     expect(event.defaultPrevented).toBe(false);
+  });
+  it("dismisses an open menu when resize hides its trigger", async () => {
+    const onDismiss = vi.fn();
+    const details = render(onDismiss);
+    const trigger = details.querySelector("summary")!;
+    vi.spyOn(trigger, "getClientRects").mockReturnValue(
+      [] as unknown as DOMRectList,
+    );
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(details.open).toBe(false));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(trigger).not.toHaveFocus();
+  });
+
+  it("keeps a still-visible mixed-control menu open during resize", async () => {
+    const details = render();
+    const trigger = details.querySelector("summary")!;
+    vi.spyOn(trigger, "getClientRects").mockReturnValue([
+      {},
+    ] as unknown as DOMRectList);
+    fireEvent(window, new Event("resize"));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
+    expect(details.open).toBe(true);
   });
   it("не трогает уже закрытый поповер", () => {
     // Иначе Escape в любом месте приложения дёргал бы `onDismiss` у каждого

@@ -342,3 +342,29 @@ not acceptance of the entire historical inventory above.
 Next: continue the remaining unique menu owners and viewport/scroll lifecycle
 cases in this same issue; retain failures rather than replacing them with DOM
 visibility checks or closing the whole audit from this slice.
+## 2026-09-16 — responsive dismissal of hidden shell menus
+
+Follow-up to `43c67b1`, not a replay of its eight Escape/layer cases.
+
+- A regression showed that the shared details hook left a popup open when its
+  trigger disappeared after a responsive layout change. Besides stale menu
+  state on returning to desktop, this could retain the promoted topbar layer.
+- All details users now check trigger layout after resize/visualViewport resize,
+  on one coalesced animation frame after responsive React state can commit.
+  A trigger without rendered rectangles closes its menu without moving focus.
+  The frame is cancelled on cleanup. Existing opt-in unconditional resize and
+  ancestor-scroll dismissal is unchanged.
+- Visible mixed-control menus are intentionally kept open: a height-only resize
+  must not discard an in-progress setting just because the viewport changed.
+  This is not a claim about a physical software keyboard or all browser zoom.
+- Two focused suites: 15/15 PASS. New regression failed on prior code (open
+  remained true); the first updated test needed to wait for the animation frame,
+  and that test correction is retained in evidence rather than hidden.
+- `details-responsive-lifecycle.spec.ts`: 4/4 PASS, GM/PLAYER in Chromium/Firefox.
+  Actual music menu opens, 1280→390 hides its trigger and closes it, the topbar
+  returns to its ordinary layer; 390→1280 does not reopen it. Reopening and a
+  height-only resize retain the menu, slider value and focus; Escape still works.
+  Synthetic API fixture observed no game mutations. No forced clicks.
+- Scoped lint, web typecheck, formatter and whitespace checks PASS. Evidence in
+  `details-responsive-gate` under the current local artifact root. No full tests,
+  build, CI restart, push or deploy. UIX-644 and the full mobile audit remain open.

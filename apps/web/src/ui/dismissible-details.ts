@@ -119,7 +119,22 @@ export function useDismissibleDetails(
       if (listbox && shouldDismissDetails(ref.current, event.target))
         close(false);
     };
-    const onViewportChange = () => close(false);
+    let visibilityFrame: number | null = null;
+    const onViewportChange = () => {
+      if (closeOnViewportChange) {
+        close(false);
+        return;
+      }
+      if (!ref.current?.open) return;
+      if (visibilityFrame !== null) cancelAnimationFrame(visibilityFrame);
+      // Responsive React state can update the owning surface after the resize
+      // event. Check the committed layout, not the previous breakpoint's DOM.
+      visibilityFrame = requestAnimationFrame(() => {
+        visibilityFrame = null;
+        const summary = ref.current?.querySelector("summary");
+        if (summary && summary.getClientRects().length === 0) close(false);
+      });
+    };
     const onAncestorScroll = (event: Event) => {
       // Scrolling the option list is expected; moving its anchor invalidates placement.
       const details = ref.current;
@@ -141,9 +156,9 @@ export function useDismissibleDetails(
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("focusin", onFocusIn);
+    window.addEventListener("resize", onViewportChange);
+    window.visualViewport?.addEventListener("resize", onViewportChange);
     if (closeOnViewportChange) {
-      window.addEventListener("resize", onViewportChange);
-      window.visualViewport?.addEventListener("resize", onViewportChange);
       document.addEventListener("scroll", onAncestorScroll, true);
     }
     return () => {
@@ -152,9 +167,10 @@ export function useDismissibleDetails(
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("focusin", onFocusIn);
+      window.removeEventListener("resize", onViewportChange);
+      window.visualViewport?.removeEventListener("resize", onViewportChange);
+      if (visibilityFrame !== null) cancelAnimationFrame(visibilityFrame);
       if (closeOnViewportChange) {
-        window.removeEventListener("resize", onViewportChange);
-        window.visualViewport?.removeEventListener("resize", onViewportChange);
         document.removeEventListener("scroll", onAncestorScroll, true);
       }
     };
