@@ -26,6 +26,14 @@
   --arken-layer-toast: 3000;
 }
 
+/* Text controls need UIKit's dedicated outline hooks. Native input focus
+ * styles alone are overridden by the component stylesheet. Keep one mapping
+ * for baseline, classic and personal themes; the semantic color is inherited. */
+.g-root {
+  --g-text-input-focus-outline-color: var(--color-focus);
+  --g-text-area-focus-outline-color: var(--color-focus);
+}
+
 /* Gravity portals default to z-index 1000. Blocking editors opened from a
  * workspace window must stay above their 1200 parent layer. */
 .g-modal {

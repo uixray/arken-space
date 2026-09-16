@@ -25,8 +25,4 @@ html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {
   --g-color-line-generic-hover: var(--color-focus);
   --g-color-line-generic-active: var(--color-focus);
   --g-color-line-danger: var(--state-error-ink);
-  /* Text controls use their own outline hooks, not --g-color-line-focus.
-   * Without these, keyboard focus falls back to UIKit's low-contrast border. */
-  --g-text-input-focus-outline-color: var(--color-focus);
-  --g-text-area-focus-outline-color: var(--color-focus);
 }

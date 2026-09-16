@@ -178,6 +178,12 @@ for (const width of [1280, 360]) {
     const name = dialog.getByRole("textbox", { name: "Имя персонажа" });
     await name.fill("Новый страж");
     const trigger = dialog.getByRole("combobox", { name: /Шаблон/ });
+    await name.press("Tab");
+    await expect(trigger).toBeFocused();
+    await trigger.press("Shift+Tab");
+    await expect(name).toBeFocused();
+    await expect(name.locator("..")).toHaveCSS("outline-style", "solid");
+    await expect(name.locator("..")).toHaveCSS("outline-width", "2px");
     const popup = page.locator(".arken-form-select-popup");
     await trigger.click();
     const template = popup.getByRole("option", {

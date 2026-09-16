@@ -276,3 +276,64 @@ test("UIX-317 classic preserves baseline controls and ignores mutable system col
   expect(errors).toEqual([]);
   expect(api).toEqual([]);
 });
+
+test("UIX-317 editable fields expose the shared keyboard focus ring in every theme", async ({
+  page,
+}, info) => {
+  const errors: string[] = [],
+    api: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/api/**", (route) => {
+    api.push(route.request().url());
+    return route.abort();
+  });
+  await page.goto("/tests/fixtures/player-themes/");
+  const theme = page.getByRole("combobox", { name: "Тема", exact: true });
+  const name = page.getByRole("textbox", { name: "Имя", exact: true });
+  const backstory = page.getByRole("textbox", {
+    name: "Предыстория",
+    exact: true,
+  });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 850 });
+    for (const palette of [
+      "Системная",
+      ...PLAYER_THEMES.map((item) => item.name),
+    ]) {
+      await theme.click();
+      await page.getByRole("option", { name: palette, exact: true }).click();
+      await theme.press("Tab");
+      await expect(name).toBeFocused();
+      for (const field of [name, backstory]) {
+        await expect(field).toBeFocused();
+        const content = field.locator("..");
+        await expect(content).toHaveCSS("outline-style", "solid");
+        await expect(content).toHaveCSS("outline-width", "2px");
+        const token = await content.evaluate((node) =>
+          getComputedStyle(node).getPropertyValue("--color-focus").trim(),
+        );
+        expect(token).toMatch(/^#[0-9a-f]{6}$/i);
+        const rgb = [1, 3, 5]
+          .map((start) => parseInt(token.slice(start, start + 2), 16))
+          .join(", ");
+        await expect(content).toHaveCSS("outline-color", `rgb(${rgb})`);
+        await expect(content).toHaveCSS("opacity", "1");
+        await expect(content).toHaveCSS("border-top-style", "solid");
+        const box = (await content.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(width);
+        if (width === 390 && ["Системная", "Светлая"].includes(palette))
+          await info.attach(
+            `focus-${palette}-${await field.getAttribute("aria-label")}`,
+            { body: await page.screenshot(), contentType: "image/png" },
+          );
+        await field.press("Tab");
+        await expect(content).toHaveCSS("outline-style", "none");
+      }
+    }
+  }
+  await expect(name).toHaveValue("Астра");
+  await expect(backstory).toHaveValue("Следопыт северного леса.");
+  expect(errors).toEqual([]);
+  expect(api).toEqual([]);
+});

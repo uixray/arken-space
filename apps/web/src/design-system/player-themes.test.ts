@@ -128,12 +128,19 @@ describe("player theme configuration", () => {
     expect(bridge).toContain(
       'html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {',
     );
+    expect(bridge).toContain(
+      "--g-color-line-generic-active: var(--color-focus);",
+    );
+    const foundation = await readFile(
+      new URL("../ui/gravity-foundation.css", import.meta.url),
+      "utf8",
+    );
     for (const name of [
-      "g-color-line-generic-active",
       "g-text-input-focus-outline-color",
       "g-text-area-focus-outline-color",
     ]) {
-      expect(bridge).toContain(`--${name}: var(--color-focus);`);
+      expect(foundation).toContain(`--${name}: var(--color-focus);`);
+      expect(bridge).not.toContain(`--${name}:`);
     }
     for (const name of ["g-color-text-danger", "g-color-line-danger"]) {
       expect(bridge).toContain(`--${name}: var(--state-error-ink);`);

@@ -267,3 +267,38 @@ classic typography/materials/component styles, comparison to the archived full
 application screenshots, user-facing application selection, account storage and
 reload/relogin remain open. The application entry still does not activate themes.
 The classic archive is unchanged; new accessibility fixes are not rolled back.
+
+## Baseline text-control focus — 2026-09-17
+
+A native Tab regression confirmed that baseline editable TextInput had no computed
+wrapper outline: UIKit's dedicated focus hooks were mapped only in the opt-in
+personal-theme bridge. The native input selector in styles.css did not provide the
+component wrapper's ring. This was not merely a missing theme-preview assertion.
+
+The two dedicated outline-color hooks now live once in the shared Gravity
+foundation's `.g-root`, referencing `--color-focus`. Removed the duplicate mappings
+from the opt-in bridge. This applies to the currently loaded application without
+activating themes; theme colors are inherited normally. Readonly-specific dashed
+frames and focus geometry, control sizes, palette values and permissions remain
+unchanged. Blur removes the outline. No focus-management JavaScript was added.
+
+Verification: initial Chromium RED (native Tab reached Name, outline none), then
+8/8 connected browser cases PASS68.274089s in Chrome/Firefox, one worker/retries0:
+
+- New real-controls case checks input and textarea native Tab focus, solid2px ring,
+  canonical focus color, full opacity, solid editable border, viewport horizontal
+  fit and no lingering ring after Tab leaves. Covers system plus8registry choices
+  at1280/390 in both browsers (36appearance/viewport/browser combinations).
+- Existing actual-App GM character-template cases additionally check keyboard
+  return to the name field and2px ring, at1280/360 in both browsers, preserving
+  the original popup/resize/Escape assertions.
+- Existing actual-App PLAYER pending-backstory cases additionally check native
+  Tab from disclosure into textarea and2px ring, preserving journal/rotation,
+  target-size and pending-draft assertions.
+
+26focused registry/contrast tests, scoped lint, E2E typecheck and format/diff checks
+passed. Baseline Chrome name and light Firefox textarea screenshots were visually
+inspected: clear uncut focus with no layout displacement. No new all-state contrast,
+physical-device or every-caller visual acceptance is claimed. No full suite, build,
+CI or deployment. The immutable classic reference archive remains unchanged;
+current shared accessibility fixes are intentionally not rolled back by classic.

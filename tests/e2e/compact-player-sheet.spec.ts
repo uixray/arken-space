@@ -127,6 +127,10 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
       name: "Предыстория",
       exact: true,
     });
+    await summary.press("Tab");
+    await expect(story).toBeFocused();
+    await expect(story.locator("..")).toHaveCSS("outline-style", "solid");
+    await expect(story.locator("..")).toHaveCSS("outline-width", "2px");
     const draft =
       "Арина ищет пропавших путников. Этот текст ещё ожидает сохранения.";
     await story.fill(draft);
