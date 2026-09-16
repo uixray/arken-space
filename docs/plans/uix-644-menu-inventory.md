@@ -980,3 +980,7 @@ Source `9f91183cebd1e63c42f36b2325977f11ca6180d0`: existing audio rejection test
 ## Controlled Select transition diagnosis — 2026-09-16
 
 Observed `16a1ae63a6ed0188da59d97cd440b471f6b9768d`: two diagnostic first-open control width transitions220→400px and400→220px passed without ResizeObserver errors.40 sampled frames and90/93 observer callbacks confirm the change. This is NOT an original bug fix: imposed diagnostic flex/CSS and environment differ; original FAIL remains. First two attempts did not establish the required control geometry/timing and are retained separately, not accepted causal evidence. Product source unchanged; temporary spec removed. Artifacts `token-transition-diagnosis/results.json`, `pointer-summary.json`, `pointer-diagnostic-spec.ts`, `config.mjs`, checkpoint under artifactBase. Do not repeat this same stress/warm-cold condition; original first-layout/font/Floating UI interaction remains unproven.
+
+## Object list lifecycle — 2026-09-16
+
+Evidence `5311000403d01e9c96ec6fcf9f03888c0fa2c60c`:8/8 GM/PLAYER1280/390 Chrome/Firefox PASS40.5s. Real keyboard local token selection survives Escape and Journal/Map transitions; scroll24rows, last pointer hit and bounds at360x480, outside session focus. Eight receipts no writes/pageerrors; eight screenshots retained, first GM short screenshot visually checked. No runtime change. No mixed object kinds, clone/delete or liveACL acceptance. `object-list-gate/results.json`, short.png/checkpoint; supplemental bucket only, not complete UIX644.

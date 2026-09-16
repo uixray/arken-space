@@ -100,6 +100,12 @@
       "revision": "9f91183cebd1e63c42f36b2325977f11ca6180d0",
       "artifact": "music-command-gate/results.json",
       "scope": "Four Chrome/Firefox cases: desktop1280 SELECT returns focus to visible summary before delayed conflict ACK; rejection notification at1280/390, exact command/revision/actionId, no optimistic selection/playback. No successful audio/media playback or compact music entry."
+    },
+    "objectList": {
+      "status": "PASS",
+      "revision": "5311000403d01e9c96ec6fcf9f03888c0fa2c60c",
+      "artifact": "object-list-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox actual-App cases: keyboard selects first of24 tokens, Escape retains selection/returns trigger,360x480 list scroll/last hit and bounds, outside session focus, Journal/Map hidden owner and retained selection. No clone/delete/move/placement payload."
     }
   },
   "sites": [
@@ -468,9 +474,10 @@
     {
       "id": "map-object-list",
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
-      "status": "BLOCKED",
-      "scope": "Custom object-list popover not discovered by static tags/roles. Selection tests exist, not a complete unique overlay protocol.",
-      "next": "Reconcile actual object-list open/close/focus/resize separately."
+      "status": "PASS",
+      "scope": "Supplemental custom object-list lifecycle tested for token rows and local selection, both roles/viewport modes.",
+      "next": "Mixed drawing/region rows, clone/delete action flows, live permission updates and real server behavior remain separate from this scoped menu protocol.",
+      "evidence": ["objectList"]
     },
     {
       "id": "drawing-color-panel",
