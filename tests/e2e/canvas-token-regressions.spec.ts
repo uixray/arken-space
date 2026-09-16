@@ -1959,3 +1959,92 @@ test("UIX-621 rapid conditions render before delayed server confirmation and sta
     page.getByRole("group", { name: "Состояния токена" }),
   ).toBeHidden();
 });
+
+for (const tool of ["PAN", "DRAW"] as const) {
+  test(`UIX-405 Ctrl ping in ${tool} does not mutate or move a selected token`, async ({
+    page,
+  }) => {
+    const writes: string[] = [];
+    const pings: Array<{ sceneId: string; x: number; y: number }> = [];
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (request.method() !== "GET" && path !== "/api/client-logs")
+        writes.push(`${request.method()} ${path}`);
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasRoutes(page);
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        const raw = message.toString();
+        if (raw === "40") {
+          socket.send('40{"sid":"ctrl-ping-socket"}');
+          return;
+        }
+        if (!raw.startsWith("42")) return;
+        const start = raw.indexOf("[");
+        if (start < 0) return;
+        const [event, payload] = JSON.parse(raw.slice(start));
+        if (event !== "map:ping") return;
+        pings.push(payload);
+        const ackId = raw.slice(2, start);
+        if (ackId) socket.send(`43${ackId}[{"ok":true}]`);
+      });
+      socket.send(
+        '0{"sid":"ctrl-ping-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    const bounds = (await map.boundingBox())!;
+    const scale = Number(
+      await map.getByRole("slider", { name: "Масштаб карты" }).inputValue(),
+    );
+    const right = Number(await map.getAttribute("data-resize-handle-x"));
+    const bottom = Number(await map.getAttribute("data-resize-handle-y"));
+    const token = {
+      x: bounds.x + right - 32 * scale,
+      y: bounds.y + bottom - 32 * scale,
+    };
+    if (tool === "DRAW")
+      await page
+        .getByRole("button", { name: "Рисование", exact: true })
+        .click();
+    await page.keyboard.down("Control");
+    try {
+      await page.mouse.click(token.x, token.y);
+      await expect.poll(() => pings.length).toBe(1);
+      expect(pings[0]).toMatchObject({ sceneId });
+      expect(pings[0]!.x).toBeCloseTo(416, 0);
+      expect(pings[0]!.y).toBeCloseTo(352, 0);
+      await page.mouse.click(token.x + 200 * scale, token.y);
+      await expect.poll(() => pings.length).toBe(2);
+      expect(pings[1]!.x).toBeCloseTo(616, 0);
+    } finally {
+      await page.keyboard.up("Control");
+    }
+    // Give any mistakenly completed drawing/move request a rendering turn.
+    await map.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    expect(writes).toEqual([]);
+    if (tool === "PAN")
+      await expect(map).toHaveAttribute("data-resize-handle-x", String(right));
+  });
+}
