@@ -263,3 +263,90 @@ for (const { role, width, target } of [
     });
   });
 }
+
+for (const role of ["GM", "PLAYER"] as const)
+  for (const width of [1280, 1024]) {
+    test(`UIX-644 music library return owner ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      await install(page, role);
+      const errors: string[] = [],
+        writes: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        const p = new URL(r.url()).pathname;
+        if (
+          p.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(r.method()) &&
+          p !== "/api/chat/read"
+        )
+          writes.push(`${r.method()} ${p}`);
+      });
+      await page.goto("/");
+      const music = page.getByRole("region", { name: "Музыка", exact: true });
+      const menu = music.getByLabel("Меню музыки", { exact: true });
+      if (role === "GM")
+        for (let round = 0; round < 2; round++) {
+          await menu.click();
+          const open = music.getByRole("button", {
+            name: "Открыть библиотеку",
+            exact: true,
+          });
+          await assertHitTarget(open);
+          await open.click();
+          const dialog = page.getByRole("dialog", {
+            name: "Музыкальная библиотека",
+            exact: true,
+          });
+          await expect(dialog).toBeVisible();
+          await expect(page.locator(".music-overflow")).not.toHaveAttribute(
+            "open",
+            "",
+          );
+          await expect
+            .poll(() =>
+              dialog.evaluate((el) => el.contains(document.activeElement)),
+            )
+            .toBe(true);
+          await page.keyboard.press("Escape");
+          await expect(dialog).toBeHidden();
+          await expect(menu).toBeFocused();
+        }
+      else await expect(menu).toHaveCount(0);
+      const volume = music.getByLabel("Громкость", { exact: true });
+      await volume.click();
+      const slider = music.getByRole("slider");
+      await expect(slider).toBeVisible();
+      await assertHitTarget(slider);
+      await slider.focus();
+      await page.keyboard.press("ArrowLeft");
+      await page.keyboard.press("Escape");
+      await expect(slider).toBeHidden();
+      await expect(volume).toBeFocused();
+      await volume.press("Enter");
+      await expect(slider).toBeVisible();
+      await page.getByLabel("Меню сеанса", { exact: true }).click();
+      await expect(slider).toBeHidden();
+      // Compact foundation deliberately hides music controls; verify hidden owner
+      // closes, not pretend the desktop library is a reachable phone feature.
+      await page.keyboard.press("Escape");
+      await volume.click();
+      await expect(slider).toBeVisible();
+      await page.setViewportSize({ width: 390, height: 800 });
+      await expect(page.locator(".music-topbar")).toBeHidden();
+      await expect(page.locator(".music-volume-control")).not.toHaveAttribute(
+        "open",
+        "",
+      );
+      await page.setViewportSize({ width, height: 800 });
+      await expect(volume).toBeVisible();
+      await expect(slider).toBeHidden();
+      expect(errors).toEqual([]);
+      expect(writes).toEqual([]);
+      await testInfo.attach("music-owner-receipt", {
+        body: JSON.stringify({ role, width, errors, writes }),
+        contentType: "application/json",
+      });
+    });
+  }

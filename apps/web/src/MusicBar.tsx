@@ -268,11 +268,16 @@ export function MusicBar({
               )}
               <button
                 type="button"
-                onClick={(event) => {
+                onClick={() => {
+                  // Capture a visible return target before the dialog mounts.
+                  // The library item becomes hidden when its details closes.
+                  if (overflowRef.current) {
+                    overflowRef.current.open = false;
+                    overflowRef.current
+                      .querySelector<HTMLElement>("summary")
+                      ?.focus();
+                  }
                   setLibraryOpen(true);
-                  event.currentTarget
-                    .closest("details")
-                    ?.removeAttribute("open");
                 }}
               >
                 Открыть библиотеку
