@@ -715,8 +715,11 @@
     width: min(420px, calc(100% - var(--map-toolbar-width, 48px) - 32px));
   }
   .app-shell--compact .map-selection-action {
-    top: calc(100% + 8px);
-    right: 0;
+    /* The lower map lane belongs to dice; keep group actions above zoom. */
+    top: auto;
+    bottom: calc(100% + 8px);
+    right: auto;
+    left: 0;
   }
   .app-shell--compact .map-scale {
     grid-template-columns: 44px minmax(44px, 1fr) 44px auto auto;

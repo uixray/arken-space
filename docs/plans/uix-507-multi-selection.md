@@ -82,3 +82,27 @@ ACL or multiplayer recovery, and no full CI/build/publication was performed.
 UIX-507 remains In Review pending the rest of its original acceptance matrix.
 The unrelated intermittent token-popup ResizeObserver gate remains unresolved;
 these map fixes do not turn that gate green.
+
+### 2026-09-16 — selected group survives short-landscape rotation
+
+The earlier compact action-target tests had no selected group. Extending the
+existing real-App selection/zoom flow to rotate 390x850 -> 640x360 with a mixed
+four-object group reproduced a real failure: the dice tray intercepted the group
+Delete button placed below zoom. The new unforced center hit-test failed.
+
+The short-screen group action now sits above the zoom anchor, leaving the lower
+map lane for dice. Production change is CSS-only; selection and deletion behavior
+are unchanged. Chromium GM screenshot inspected: action, objects trigger, zoom,
+dice and bottom navigation are separate at 640x360.
+
+Final connected selection/zoom matrix: **8/8 PASS**, Chrome/Firefox, GM/PLAYER,
+1280/390. Four narrow cases additionally rotate with the group, require a fully
+in-viewport 44px action with real center hit, open the confirmation for 2 tokens
+and 2 drawings, cancel without API writes, retain zoom bounds and restore portrait
+geometry before completing the existing owner/popover checks. ESLint, Prettier,
+Git whitespace checks PASS. Original red output and screenshots retained.
+
+This proves the 640x360 emulated viewport scenario, not physical-device touch,
+every possible short viewport, live ACL, the full tool-conflict matrix, or the
+unrelated intermittent token-popup observer error. No build, push, deploy or
+Linear completion. The untracked recovery test remains unchanged.

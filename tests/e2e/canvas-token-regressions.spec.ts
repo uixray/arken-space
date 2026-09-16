@@ -1198,6 +1198,50 @@ for (const role of ["GM", "PLAYER"] as const) {
         name: "Удалить выбранное",
         exact: true,
       });
+      if (width === 390) {
+        // Rotate with an existing mixed group: the short-screen action must
+        // remain reachable without covering zoom or dropping selected objects.
+        await page.setViewportSize({ width: 640, height: 360 });
+        await expect(bulkAction).toBeVisible();
+        const landscapeZoom = await zoomBounds(page);
+        await expectStableSelectionChrome(page, landscapeZoom);
+        await expect
+          .poll(() =>
+            bulkAction.evaluate((node) => {
+              const r = node.getBoundingClientRect();
+              return (
+                r.left >= 0 &&
+                r.top >= 0 &&
+                r.right <= innerWidth &&
+                r.bottom <= innerHeight &&
+                r.width >= 44 &&
+                r.height >= 44 &&
+                node.contains(
+                  document.elementFromPoint(
+                    r.x + r.width / 2,
+                    r.y + r.height / 2,
+                  ),
+                )
+              );
+            }),
+          )
+          .toBe(true);
+        await page.screenshot({
+          path: testInfo.outputPath(
+            `selection-landscape-${role.toLowerCase()}.png`,
+          ),
+          fullPage: true,
+        });
+        await bulkAction.click();
+        await inspectBulkConfirmation(
+          page,
+          "Выбрано объектов: 4. Токенов: 2. Рисунков: 2.",
+        );
+        expect(requests).toHaveLength(0);
+        await expectStableSelectionChrome(page, landscapeZoom);
+        await page.setViewportSize({ width, height: 850 });
+        await expectStableSelectionChrome(page, baseline);
+      }
       await openObjectList();
       await expect(bulkAction).toHaveCount(1);
       await closeObjectList();
