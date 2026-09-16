@@ -46,6 +46,18 @@
       "revision": "d1908c20bba3cdfeb6ae88e7fe28e36825ac6ddb",
       "artifact": "activity-selectors-gate/results.json",
       "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox cases; actual App mocked backend, no messages/rolls submitted."
+    },
+    "navigation": {
+      "status": "PASS",
+      "revision": "226533ae0cb33e0585f52a770ede01c5a21ee4ad",
+      "artifact": "navigation-owner-gate/results.json",
+      "scope": "Six Chrome/Firefox cases: GM1024 More to Scenes returns focus to visible More; compact GM Scenes/PLAYER Tokens390 restores Map. Two cycles, mocked backend, no unexpected writes/pageerrors."
+    },
+    "scenePicker": {
+      "status": "PASS",
+      "revision": "226533ae0cb33e0585f52a770ede01c5a21ee4ad",
+      "artifact": "navigation-owner-gate/related-results.json",
+      "scope": "Eight Chrome/Firefox pointer/keyboard scene picker cases at1024/1440, compact hidden owner/PLAYER read-only, short-height option scrolling. Mocked backend, not server scene persistence."
     }
   },
   "sites": [
@@ -53,11 +65,11 @@
       "file": "apps/web/src/App.tsx",
       "kind": "role:listbox",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
       "scope": "Scene picker in shell; GM interaction, PLAYER read-only, compact hidden path.",
-      "evidence": [],
-      "next": "Reconcile scene-picker unique runtime cases; generic session menu PASS is insufficient."
+      "evidence": ["scenePicker"],
+      "next": "Real multiplayer persistence and physical devices remain separate gates."
     },
     {
       "file": "apps/web/src/App.tsx",
@@ -153,11 +165,11 @@
       "file": "apps/web/src/WorkspaceNav.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "More navigation menu; compact uses a separate modal.",
-      "evidence": [],
-      "next": "Reconcile navigation transition/focus and hidden desktop owner; no repeat of unrelated token menus."
+      "scope": "GM1024 More destination opening/closing and visible return focus, twice, Chrome/Firefox.",
+      "evidence": ["navigation"],
+      "next": "Other destinations and responsive owner changes remain outside this scoped result."
     },
     {
       "file": "apps/web/src/WorldContentWorkspace.tsx",
@@ -428,9 +440,10 @@
     {
       "id": "compact-navigation",
       "file": "apps/web/src/App.tsx",
-      "status": "BLOCKED",
-      "scope": "Compact Sections modal is destination selection, not WorkspaceNav details.",
-      "next": "Reconcile compact owner transitions and focus; do not count desktop More as equivalent."
+      "status": "PASS",
+      "scope": "GM Scenes and PLAYER Tokens390: destination owns focus then Escape returns to Map; twice in Chrome/Firefox.",
+      "next": "Other compact destinations, resize while open and physical devices not covered.",
+      "evidence": ["navigation"]
     }
   ]
 }

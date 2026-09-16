@@ -85,38 +85,38 @@
 
 Каждое вхождение наследует общий `FormSelect` через портал, но **не** автоматически успешную проверку всех владельцев. `W` = workspace popup1999; `M` = modal popup2001; `B` = base/default Gravity popup. Overflow/transform владельца описан в A; дочерние элементы в потоке могут иметь дополнительные контейнеры прокрутки.
 
-| Место использования / все строки                       | Роль / владелец и вложенность                                                                                                                                                                              | Доказательства / пробел                                                                              |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `CatalogEntryForm.tsx:305,366,407,432,449,468,508` (7) | GM: модальное окно нового каталога SetupPanel; модальное окно редактирования каталога CharacterWorkspace; CatalogEntryPicker CREATE в его модальном окне. Все M. Условия полей зависят от модели kind/use. | Общий E1; тесты формы каталога/карточки навыка — не адресная проверка владельца popup каждого поля.  |
-| `WorldContentWorkspace.tsx:152,168,784` (3)            | GM, workspace редактора: фильтры типа/жизненного цикла, цель связи; W. Основное содержимое overflow:hidden, панель деталей overflow:auto.                                                                  | E1 — только общий механизм; отдельного hit-test overlay этих мест использования нет.                 |
-| `WorldContentWorkspace.tsx:383` (1)                    | GM CreateEntityDialog под редактором: **M**, не W.                                                                                                                                                         | E1; одновременный вложенный popup workspace→modal ещё не проверен.                                   |
-| `WorldEncyclopediaWorkspace.tsx:112` (1)               | Фильтр опубликованного содержимого в reader W. Навигация только для GM; прямая ветка reader в Sidebar не имеет isGm. Прокрутка панели деталей, main overflow:hidden.                                       | E1; не серверный ACL и не новое разрешение reader.                                                   |
-| `sidebar/CharacterMediaGallery.tsx:484,509` (2)        | AttachMediaForm: GM/разрешённый владелец персонажа, варианты видимости по роли; в потоке внутри портала персонажа в body → **B**.                                                                          | Компонент удаления CharacterMediaGallery + E1 не доказывают размещение этих select.                  |
-| `CharacterMediaGallery.tsx:619,644` (2)                | EditMediaDialog того же пользователя; вложенный M.                                                                                                                                                         | Общий E1; отдельный протокол проверки вложенного popup отсутствует.                                  |
-| `sidebar/CharacterWorkspace.tsx:482` (1)               | GM, модальное окно создания персонажа / выбор шаблона; M.                                                                                                                                                  | Адресная матрица шаблона GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/outside/resize/reset PASS; см. дополнение ниже.                  |
-| `CharacterWorkspace.tsx:1206` (1)                      | Условный выбор персонажа GM (`showCharacterPicker`); в потоке листа → B.                                                                                                                                   | Неактивное место: единственный production-вызов CharacterPanel передаёт showCharacterPicker=false; не включать ради теста.                            |
-| `sidebar/ChatPanels.tsx:584` (1)                       | GM в ActivityPanel, «Персонаж для броска» при непустом availableRollCharacters; B в боковой панели.                                                                                                        | E12; overflow владельца отдельно от портала Select.                                                  |
-| `sidebar/SetupPanel.tsx:310,411,433` (3)               | GM: предпросмотр игрока, персонаж токена, персонаж приглашения; W в workspace настроек Sidebar. Видимость секции зависит от вкладки настроек.                                                              | Адресные три списка GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/resize/tab-switch PASS; исправлен desktop hidden, см. ниже.                                                 |
-| `SetupPanel.tsx:174,335,356` (3)                       | GM, **устаревшие hidden/aria-hidden** секции: вид каталога, прежняя активная сцена/карта; W, сами элементы управления не должны стать интерактивными/видимыми.                                             | Только реестр; не создавать новые пути выполнения ради покрытия скрытой устаревшей функциональности. |
-| `sidebar/TokenPalette.tsx:138` (1)                     | GM/PLAYER «Изображение токена» для доступного определения внутри workspace палитры; W. Не путать с доступной только GM кнопкой открытия редактора.                                                         | E1: hit-test workspace normal/cap.                                                                   |
-| `TokenPalette.tsx:441` (1)                             | GM, редактор токена из палитры; M.                                                                                                                                                                         | E1: модальное окно токена на настольном/узком экране.                                                |
-| `ui/SceneManagerDialog.tsx:220` (1)                    | GM, модальное окно SceneEditor из workspace менеджера сцен; выбор карты M; ниже вложенная загрузка изображения/выбор цвета.                                                                                | E1, E2; не все одновременно открытые вложенные владельцы.                                            |
+| Место использования / все строки                       | Роль / владелец и вложенность                                                                                                                                                                              | Доказательства / пробел                                                                                                              |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `CatalogEntryForm.tsx:305,366,407,432,449,468,508` (7) | GM: модальное окно нового каталога SetupPanel; модальное окно редактирования каталога CharacterWorkspace; CatalogEntryPicker CREATE в его модальном окне. Все M. Условия полей зависят от модели kind/use. | Общий E1; тесты формы каталога/карточки навыка — не адресная проверка владельца popup каждого поля.                                  |
+| `WorldContentWorkspace.tsx:152,168,784` (3)            | GM, workspace редактора: фильтры типа/жизненного цикла, цель связи; W. Основное содержимое overflow:hidden, панель деталей overflow:auto.                                                                  | E1 — только общий механизм; отдельного hit-test overlay этих мест использования нет.                                                 |
+| `WorldContentWorkspace.tsx:383` (1)                    | GM CreateEntityDialog под редактором: **M**, не W.                                                                                                                                                         | E1; одновременный вложенный popup workspace→modal ещё не проверен.                                                                   |
+| `WorldEncyclopediaWorkspace.tsx:112` (1)               | Фильтр опубликованного содержимого в reader W. Навигация только для GM; прямая ветка reader в Sidebar не имеет isGm. Прокрутка панели деталей, main overflow:hidden.                                       | E1; не серверный ACL и не новое разрешение reader.                                                                                   |
+| `sidebar/CharacterMediaGallery.tsx:484,509` (2)        | AttachMediaForm: GM/разрешённый владелец персонажа, варианты видимости по роли; в потоке внутри портала персонажа в body → **B**.                                                                          | Компонент удаления CharacterMediaGallery + E1 не доказывают размещение этих select.                                                  |
+| `CharacterMediaGallery.tsx:619,644` (2)                | EditMediaDialog того же пользователя; вложенный M.                                                                                                                                                         | Общий E1; отдельный протокол проверки вложенного popup отсутствует.                                                                  |
+| `sidebar/CharacterWorkspace.tsx:482` (1)               | GM, модальное окно создания персонажа / выбор шаблона; M.                                                                                                                                                  | Адресная матрица шаблона GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/outside/resize/reset PASS; см. дополнение ниже.        |
+| `CharacterWorkspace.tsx:1206` (1)                      | Условный выбор персонажа GM (`showCharacterPicker`); в потоке листа → B.                                                                                                                                   | Неактивное место: единственный production-вызов CharacterPanel передаёт showCharacterPicker=false; не включать ради теста.           |
+| `sidebar/ChatPanels.tsx:584` (1)                       | GM в ActivityPanel, «Персонаж для броска» при непустом availableRollCharacters; B в боковой панели.                                                                                                        | E12; overflow владельца отдельно от портала Select.                                                                                  |
+| `sidebar/SetupPanel.tsx:310,411,433` (3)               | GM: предпросмотр игрока, персонаж токена, персонаж приглашения; W в workspace настроек Sidebar. Видимость секции зависит от вкладки настроек.                                                              | Адресные три списка GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/resize/tab-switch PASS; исправлен desktop hidden, см. ниже. |
+| `SetupPanel.tsx:174,335,356` (3)                       | GM, **устаревшие hidden/aria-hidden** секции: вид каталога, прежняя активная сцена/карта; W, сами элементы управления не должны стать интерактивными/видимыми.                                             | Только реестр; не создавать новые пути выполнения ради покрытия скрытой устаревшей функциональности.                                 |
+| `sidebar/TokenPalette.tsx:138` (1)                     | GM/PLAYER «Изображение токена» для доступного определения внутри workspace палитры; W. Не путать с доступной только GM кнопкой открытия редактора.                                                         | E1: hit-test workspace normal/cap.                                                                                                   |
+| `TokenPalette.tsx:441` (1)                             | GM, редактор токена из палитры; M.                                                                                                                                                                         | E1: модальное окно токена на настольном/узком экране.                                                                                |
+| `ui/SceneManagerDialog.tsx:220` (1)                    | GM, модальное окно SceneEditor из workspace менеджера сцен; выбор карты M; ниже вложенная загрузка изображения/выбор цвета.                                                                                | E1, E2; не все одновременно открытые вложенные владельцы.                                                                            |
 
 ## D. Нативные select и Gravity без общей обёртки
 
 Нативное окно вариантов рисует браузер/ОС: CSS z-index страницы не является способом поднять его список. Обрезание родителем/фокус/disabled всё равно проверяются в браузере. Ниже перечислены **все 15 нативных вхождений**.
 
-| Место использования / строки                                                    | Роль / владелец                                                                                                                                                                                                            | Доказательства / пробел                                                                                  |
-| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `PlayerRequestsWorkspace.tsx:169,189,209` (3)                                   | PLAYER, поля выбора при создании черновика внутри W: horizon, audience, character. При редактировании эти три поля скрыты.                                                                                                 | Реальный сервер: клавиатура/фокус трёх полей, черновик при 390→360 и отправка; исторический CI, см. аудит ниже. Не протокол системного popup.                                              |
-| `PlayerRequestsWorkspace.tsx:249,263,280` (3)                                   | Фильтры GM/PLAYER внутри W; роли меняют доступный набор заявок.                                                                                                                                                            | Реальный сервер: сочетания трёх фильтров PLAYER/GM и сброс после повторного открытия GM; исторический CI, см. аудит ниже.                                     |
-| `WorldMapsWorkspace.tsx:283` (1)                                                | Текущая карта, W на весь холст. Текущая навигация открывает workspace только GM; PLAYER-вход не создавать ради реестра.                                                                                                                                                        | `tests/e2e/world-maps.spec.ts` сценарий работы, не весь жизненный цикл нативного popup.                  |
-| `WorldMapsWorkspace.tsx:341,618,684,699,751,768` (6)                            | GM: фон черновика / связанная сцена / варианты в формах создания карты и локации; W. Компоновка stage/detail и прокрутка принадлежат workspace.                                                                            | Сценарий world-maps; размещение/клавиатура каждого вхождения ещё не проверены.                           |
-| `TokenImageGenerator.tsx:231` (1)                                               | Выбор исходного ресурса внутри модального редактора TokenPalette GM → M. Сам генератор — секция в потоке, не popup.                                                                                                        | Адресный native source lifecycle GM1280/360 Chromium/Firefox PASS; см. дополнение ниже. Не Gravity popup.       |
-| `sidebar/ChatPanels.tsx:1088` (1)                                               | Выбор собеседника DirectChatPanel; компонент GM/PLAYER, но текущий Sidebar скрывает точку входа Direct. Страница/боковая панель.                                                                                           | `tests/e2e/concept.spec.ts` исторические сценарии Direct; скрытую точку входа не активировать в UIX-644. |
-| `FeedbackReporter.tsx:32` Gravity без общей обёртки                             | GM/PLAYER, аккаунт→обратная связь M, локальная обёртка с учётом владельца.                                                                                                                                                 | E1, описан в A.                                                                                          |
-| `ui/GravityFoundationPreview.tsx:149,178` Select без общей обёртки; `:66` Popup | Страница предпросмотра B и форма предпросмотра M; Select без общей обёртки не назначает класс владельца. В `main.tsx/App.tsx` место использования в production не найдено; **только предпросмотр**, не живой workspace GM. | Только реестр, проверка во время выполнения BLOCKED.                                                     |
-| `ui/FuturePoolDialogs.tsx:43` Select без общей обёртки                          | Только место использования GravityFoundationPreview `:137`, предпросмотр токена M; класс владельца не назначен.                                                                                                            | Только реестр. Не переносить предпросмотр/не удалять без отдельного решения.                             |
+| Место использования / строки                                                    | Роль / владелец                                                                                                                                                                                                            | Доказательства / пробел                                                                                                                       |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PlayerRequestsWorkspace.tsx:169,189,209` (3)                                   | PLAYER, поля выбора при создании черновика внутри W: horizon, audience, character. При редактировании эти три поля скрыты.                                                                                                 | Реальный сервер: клавиатура/фокус трёх полей, черновик при 390→360 и отправка; исторический CI, см. аудит ниже. Не протокол системного popup. |
+| `PlayerRequestsWorkspace.tsx:249,263,280` (3)                                   | Фильтры GM/PLAYER внутри W; роли меняют доступный набор заявок.                                                                                                                                                            | Реальный сервер: сочетания трёх фильтров PLAYER/GM и сброс после повторного открытия GM; исторический CI, см. аудит ниже.                     |
+| `WorldMapsWorkspace.tsx:283` (1)                                                | Текущая карта, W на весь холст. Текущая навигация открывает workspace только GM; PLAYER-вход не создавать ради реестра.                                                                                                    | `tests/e2e/world-maps.spec.ts` сценарий работы, не весь жизненный цикл нативного popup.                                                       |
+| `WorldMapsWorkspace.tsx:341,618,684,699,751,768` (6)                            | GM: фон черновика / связанная сцена / варианты в формах создания карты и локации; W. Компоновка stage/detail и прокрутка принадлежат workspace.                                                                            | Сценарий world-maps; размещение/клавиатура каждого вхождения ещё не проверены.                                                                |
+| `TokenImageGenerator.tsx:231` (1)                                               | Выбор исходного ресурса внутри модального редактора TokenPalette GM → M. Сам генератор — секция в потоке, не popup.                                                                                                        | Адресный native source lifecycle GM1280/360 Chromium/Firefox PASS; см. дополнение ниже. Не Gravity popup.                                     |
+| `sidebar/ChatPanels.tsx:1088` (1)                                               | Выбор собеседника DirectChatPanel; компонент GM/PLAYER, но текущий Sidebar скрывает точку входа Direct. Страница/боковая панель.                                                                                           | `tests/e2e/concept.spec.ts` исторические сценарии Direct; скрытую точку входа не активировать в UIX-644.                                      |
+| `FeedbackReporter.tsx:32` Gravity без общей обёртки                             | GM/PLAYER, аккаунт→обратная связь M, локальная обёртка с учётом владельца.                                                                                                                                                 | E1, описан в A.                                                                                                                               |
+| `ui/GravityFoundationPreview.tsx:149,178` Select без общей обёртки; `:66` Popup | Страница предпросмотра B и форма предпросмотра M; Select без общей обёртки не назначает класс владельца. В `main.tsx/App.tsx` место использования в production не найдено; **только предпросмотр**, не живой workspace GM. | Только реестр, проверка во время выполнения BLOCKED.                                                                                          |
+| `ui/FuturePoolDialogs.tsx:43` Select без общей обёртки                          | Только место использования GravityFoundationPreview `:137`, предпросмотр токена M; класс владельца не назначен.                                                                                                            | Только реестр. Не переносить предпросмотр/не удалять без отдельного решения.                                                                  |
 
 ## E. Элементы выбора в потоке/модальные/системные и все места использования
 
@@ -342,6 +342,7 @@ not acceptance of the entire historical inventory above.
 Next: continue the remaining unique menu owners and viewport/scroll lifecycle
 cases in this same issue; retain failures rather than replacing them with DOM
 visibility checks or closing the whole audit from this slice.
+
 ## 2026-09-16 — responsive dismissal of hidden shell menus
 
 Follow-up to `43c67b1`, not a replay of its eight Escape/layer cases.
@@ -368,6 +369,7 @@ Follow-up to `43c67b1`, not a replay of its eight Escape/layer cases.
 - Scoped lint, web typecheck, formatter and whitespace checks PASS. Evidence in
   `details-responsive-gate` under the current local artifact root. No full tests,
   build, CI restart, push or deploy. UIX-644 and the full mobile audit remain open.
+
 ## 2026-09-16 — character gallery dropdown runtime slice
 
 Four previously inventory-only FormSelect sites now have targeted runtime smoke:
@@ -508,6 +510,7 @@ at window.error. `resize-observer-gate/trace-01` reproduced the error:
   failing catalog error-free slice is now PASS, not the whole UIX-644 gate.
 - Scoped lint/format/diff, web typecheck768MiB and one production build1.93s
   PASS; large main-chunk warning retained. No full suite or CI restart.
+
 ## 2026-09-16 — native player-request evidence reconciliation
 
 The six native selects are not untested merely because they have no Gravity
@@ -543,6 +546,7 @@ OS popup geometry/z-index, full outside/Escape/scroll/browser-zoom lifecycle,
 or the complete UIX-644 gate. No CI rerun, local server, database, or browser
 was started for this evidence-only reconciliation. Raw existing job logs are
 retained in the local native-menu-ci-audit artifact directory.
+
 ## 2026-09-16 — world-map native controls, current browser evidence
 
 Extended the existing world-maps spec instead of duplicating its create/publish
@@ -577,6 +581,7 @@ an obsolete registry role claim pass. Artifacts: world-map-native-gate/results.j
 contains named outcomes and four native-world-map-controls attachments.
 Scoped ESLint, Prettier and git diff --check PASS. No build or full CI rerun for
 this test/documentation-only pool; own Vite stopped after verification.
+
 ## 2026-09-16 — create-character template lifecycle
 
 New cases in existing workspace-select-escape.spec.ts cover the actual GM
@@ -610,6 +615,7 @@ higher/nested competing modal ownership beyond this actual character dialog.
 The full UIX-644 matrix and current integrated release gate remain open.
 Evidence: character-template-gate/results.json with named outcomes and four
 character-template-lifecycle attachments; results-new-01.json keeps initial4PASS.
+
 ## 2026-09-16 — SetupPanel visibility defect and three live selects
 
 The new real SetupPanel tab-switch test exposed a product defect, not merely
@@ -648,6 +654,7 @@ Evidence: setup-select-gate/results-red-01.json and browser-01 screenshot/trace
 preserve failure; results-new-02.json preserves4PASS; results.json and connected-03
 hold final named20PASS. Own Vite stopped. UIX-644 remains open for remaining sites,
 scroll/browser zoom/competing owners and complete exact-current integration.
+
 ## 2026-09-16 — native token-image source selector
 
 Four new cases in the existing token-generator.spec.ts exercise the actual
@@ -671,6 +678,7 @@ Remaining: native OS popup appearance/pointer selection, Escape/outside lifecycl
 full browser zoom and competing modal acceptance. CSS viewport resize and token
 crop zoom are NOT browser zoom. Evidence: token-source-gate/results.json and
 browser-01 named results. UIX-644 overall remains open.
+
 ## 2026-09-16 — connected production-bundle gate at dcc3977
 
 54/54PASS307.25028s, Chromium/Firefox, workers1/retries0/skipped0/flaky0.
@@ -702,6 +710,7 @@ historical evidence; they were NOT silently included in this mocked-UI gate.
 Physical devices, multiplayer/backend durability and full product release
 acceptance are not established by54passed. Older8504fea34-case bundle gate stays
 historical and is not relabelled as this current revision.
+
 ## 2026-09-16 — genuine browser zoom test mechanism, not menu acceptance
 
 A bounded probe in an isolated persistent headless Chrome profile established a
@@ -720,10 +729,11 @@ This is mechanism validation only: no Arken menu or Firefox zoom acceptance yet.
 Next run must exercise actual app menus while browser zoom changes, retain real
 pointer/focus/viewport evidence and verify100% restoration. Do not turn these
 probe metrics into a PASS for the missing UIX-644 browser-zoom criterion.
+
 ## 2026-09-16 — real app browser zoom FAIL, reproduced
 
 Added a separate explicit QA config playwright.browser-zoom.config.ts and
- tests/browser-qa/real-browser-zoom.spec.ts. This is NOT silently added to normal
+tests/browser-qa/real-browser-zoom.spec.ts. This is NOT silently added to normal
 Chromium/Firefox E2E collection: it launches its own isolated Chrome profiles,
 viewport:null, uses the browser settings zoom API, and audits DPR/layout plus
 CSSzoom1/visualViewport.scale1. GM/PLAYER×window1600/1280 are defined; one worker.
@@ -752,6 +762,7 @@ Artifacts true-browser-zoom-gate/results-red-01.json, results.json (diagnostic),
 browser-01/,diagnostic-02/ contain metrics/geometry receipts and screenshots.
 No zoom gate PASS claimed. Scope lint/format/diff passed; no app source change,
 new build, CI or deployment. Profiles restore100%/close in finally; preview stopped.
+
 ## 2026-09-16 — zoom sizing repaired, related owner gate still RED
 
 Current working fix observes the open trigger with ResizeObserver/window resize,
@@ -886,7 +897,6 @@ resolve the separate first-open token-popup ResizeObserver error.
 - Live Linear readonly: UIX-644 In Progress, UIX-642 In Review. Не закрывать эти задачи по данному пулу; внешние записи не повторялись. Original ResizeObserver issue и полная cross-application matrix остаются открыты. Native OS color picker не принимался. Нет push/deploy.
 - Сохранённый selection-recovery.spec.ts не изменён и не добавлен. Следующий пул: сверить оставшиеся уникальные overlay sites с runtime evidence и исходными Review AC, а не продолжать повторять уже закрытые token-menu проверки.
 
-
 ## Feedback selector — shared lifecycle and visible return target, 2026-09-16
 
 - Historical D row FeedbackReporter raw Select is superseded: now tag:FormSelect1 in AST registry (source FormSelect sites total29). It reuses shared popup owner/width/open-list lifecycle, not a new local size/observer solution. Label remains visible above the selector.
@@ -929,8 +939,12 @@ The historical B–E tables above are discovery snapshots, not current PASS stat
 ## Activity selectors and filters — 2026-09-16, d1908c2
 
 - Runtime code unchanged from parent849837f / sourcecd99d3d. Added only a separate scenario to existing composer spec; old command-list cases were not rerun or modified.
--8/8 PASS37.3s: GM/PLAYER1280/390 ×Chrome/Firefox. GM actual selected character changes skill buttons (Следопыт/Поиск следов versus Картограф/Наблюдение), popup pointer bounds/hit, keyboard Home/Enter reset and Escape/focus. PLAYER cannot choose another character and only own skill displayed; mocked snapshot does not establish server ACL.
--All3 filter controls keyboard off/pointer on, accessible summary names hidden streams, own Escape/outside focus, draft preserved. Real rendered REFERENCE event hidden then restored; no claim ROLLS/STORY fixture events were tested. No dice/message/resource mutation.8 receipts no unexpected writes/pageerror.
--First run failed only due a wrong test word «Скрыты» versus existing correct «Скрыто». Fixed exact expected existing string; no product text changed. Initial report/trace retained, final retries0/skips0/flaky0.
--Scoped ESLint/Prettier/diff PASS. No full typecheck/build/CI rerun or publication for unchanged runtime. Ledger binds both ChatPanels control buckets to exact test revision and scoped evidence; does not close UIX644/originalRO issue. Saved selection-recovery.spec.ts untouched.
--Next: remaining scene/navigation or inline-asset caller evidence reconciliation; include journal in next connected gate, not immediate repetition of these8cases.
+  -8/8 PASS37.3s: GM/PLAYER1280/390 ×Chrome/Firefox. GM actual selected character changes skill buttons (Следопыт/Поиск следов versus Картограф/Наблюдение), popup pointer bounds/hit, keyboard Home/Enter reset and Escape/focus. PLAYER cannot choose another character and only own skill displayed; mocked snapshot does not establish server ACL.
+  -All3 filter controls keyboard off/pointer on, accessible summary names hidden streams, own Escape/outside focus, draft preserved. Real rendered REFERENCE event hidden then restored; no claim ROLLS/STORY fixture events were tested. No dice/message/resource mutation.8 receipts no unexpected writes/pageerror.
+  -First run failed only due a wrong test word «Скрыты» versus existing correct «Скрыто». Fixed exact expected existing string; no product text changed. Initial report/trace retained, final retries0/skips0/flaky0.
+  -Scoped ESLint/Prettier/diff PASS. No full typecheck/build/CI rerun or publication for unchanged runtime. Ledger binds both ChatPanels control buckets to exact test revision and scoped evidence; does not close UIX644/originalRO issue. Saved selection-recovery.spec.ts untouched.
+  -Next: remaining scene/navigation or inline-asset caller evidence reconciliation; include journal in next connected gate, not immediate repetition of these8cases.
+
+## Navigation return owner — 2026-09-16
+
+Source `226533ae0cb33e0585f52a770ede01c5a21ee4ad`: desktop More now captures a visible return target before opening a destination. Six navigation cases and eight connected scene-picker cases PASS in Chrome/Firefox (one worker, no retries). Compact return to Map is the existing contract, not a new Sections-focus behavior. Experimental App/ArkenDialog changes were discarded. Evidence: `navigation-owner-gate/results.json`, `related-results.json`, checkpoint under the runtime ledger artifactBase. Mocked backend; not whole UIX-644 acceptance or production release.
