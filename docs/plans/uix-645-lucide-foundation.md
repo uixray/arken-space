@@ -201,3 +201,11 @@ security boundary. Никакие новые runtime PASS не заявляют�
   anti-regression guard. До интеграции обновить известную main-базу, проверить
   пересечения с параллельной работой и пройти общий gate. Не закрывать задачу
   по одному установленному пакету или первым двум иконкам.
+
+## Current built shell / compact gate — 2026-09-17
+
+Build source `1ea7051b56092551423546ae9a507a22069f9f62`; test strengthening `2283d26bf36d77e225e5816b46d1fb8e93abb1a5`. One local production build3.28s,20/20 Chrome/Firefox cases PASS83.894s: shell SVG8 (GM/PLAYER1280/390, decorative accessibility/currentColor/stroke2/named controls/min24px) and compact actions12 (GM/PLAYER360x850,360x640,640x360,44px targets/hit/keyboard according to existing scope). Shell fixtures now reject unexpected writes including client error telemetry and capture pageerrors. No API/server/physical-device acceptance implied.
+
+Served HTML/CSS/main/lazy-renderer payloads4/4 SHA256 match saved build; no dev client. Sourcemaps contain47 Lucide icon modules out of2066 package modules and no dynamic Lucide module. This is not an import of the entire catalogue. Source maps are local diagnostic artifacts, not deployment. Main chunk1,078,380-ish bytes remains above500kB warning (see exact manifest); do not suppress warning. Inter still uses remote Google Fonts: no icon CDN does not mean no remote fonts.
+
+Artifacts under `icons-built-1ea7051` in current artifactBase: build.log,dist,manifest.json,bundle-audit.json,results.json,case-index.json,browser-output. GM390 and PLAYER1280 Chromium screenshots visually inspected; SVGs render/align in sampled controls, compact toolbar and dice remain scrollable/partially outside initial view. Not all themes, contrast/disabled-state matrix, full UI migration or formal Done. Reuse this exact build while app source is unchanged; original UIX-644 ResizeObserver FAIL remains.
