@@ -279,3 +279,42 @@ Limits: development/source runtime, not current production bundle/GitHubPG17 CI,
 physical touch/Safari/software keyboard, full P2–P6, new-player cross-session privacy
 matrix or release acceptance. No product/test changes, full suite/build/release
 rerun, publication or Linear write; UIX-624 remains under original full criteria.
+
+## 2026-09-17 — full shared-browser A→B real-server gate
+
+Extended the existing multiplayer shared-browser test, rather than duplicating
+authentication: manually created browser context now honors the configured
+viewport; per-run names are unique and remain under the40-character input limit.
+PlayerA types an unsent composer draft before handoff; after PlayerB enters the
+same browser with their own invitation, the composer must be empty. Wait for the
+actual shell before choosing compact navigation, not a one-shot visibility query
+while login is still pending. Original session/socket/projection assertions remain.
+
+Final4/4PASS40.685s:Chrome/Firefox ×1280/360,worker1,retries0,real isolated API/PG.
+All receipts prove actor identity changed, prior private note absent, old action
+401, new action201 and empty new draft. Existing assertions also verify A socket
+disconnect, bootstrap401 after logout, B-only full character data and the deliberate
+public identity-only projection of A. This is not a promise to hide character
+names that the campaign intentionally exposes.
+
+Harness corrections, not product failures: initial retained DB lacked the static
+multiplayer credential; preparation now used a separate synthetic campaign without
+changing existing credentials. An inline tsx command silently did not prepare it;
+an explicit file did. First unique names exceeded40chars and were truncated by the
+real input; shortened tags preserve exact identity assertions. Compact test initially
+queried navigation before shell readiness. Two later attempts lost their Vite process
+(exit1, cause not established). Final gate owned a hidden Vite child in the same
+PowerShell try/finally as the test, with separate stdout/stderr and guaranteed stop;
+it was alive until intentional cleanup. Retained earlier reports are not product REDs.
+
+Targeted TypeScript exposed pre-existing multiplayer helper errors: expectOk now
+retains the generic response type while requiring only used ok/status/text methods
+(browser Response as well as APIResponse); two encounter predicates treat an absent
+optional collection as not-yet-matched, retaining the required ACTIVE/ENDED predicate.
+Scoped tsc/ESLint/format/diffPASS. Full GM+6 scenario was not rerun or claimed covered.
+
+Evidence:shared-mobile-gate/owned-results.json,receipts.json,configs and logs.
+Own API/PG stopped; frontend stopped in finally; ports15439/14109/5189 absent and
+user PostgreSQL service remainsRunning. No product code, deployment, full suite,
+new cards or Linear write. This covers real A→B entry/privacy at two viewport sizes,
+not physical hardware, every private surface or personal-theme persistence.

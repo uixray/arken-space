@@ -39,7 +39,9 @@ const imageBuffer = Buffer.from(
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type GameConnection = { socket: GameSocket; snapshot: GameSnapshot };
 
-async function expectOk(response: APIResponse) {
+async function expectOk<T extends Pick<APIResponse, "ok" | "status" | "text">>(
+  response: T,
+): Promise<T> {
   if (!response.ok())
     throw new Error(response.status() + " " + (await response.text()));
   return response;
@@ -1173,7 +1175,7 @@ test("GM and six isolated players recover authoritative state without security l
         (candidate) =>
           candidate.campaign.battleActive &&
           candidate.campaign.battleCounter === battleCounterBefore + 1 &&
-          candidate.encounters.some(
+          (candidate.encounters ?? []).some(
             (encounter) => encounter.status === "ACTIVE",
           ),
       ),
@@ -1211,7 +1213,7 @@ test("GM and six isolated players recover authoritative state without security l
         (candidate) =>
           !candidate.campaign.battleActive &&
           candidate.campaign.battleCounter === battleCounterBefore + 1 &&
-          candidate.encounters.some(
+          (candidate.encounters ?? []).some(
             (encounter) =>
               encounter.id === startedEncounter.id &&
               encounter.status === "ENDED",
@@ -1869,14 +1871,15 @@ test("GM and six isolated players recover authoritative state without security l
 
 test("a shared browser handoff revokes player A before player B uses their own invite", async ({
   browser,
+  viewport,
 }, testInfo) => {
-  const runTag = "shared-handoff-" + testInfo.retry;
+  const runTag = "shared-handoff-" + actionId().slice(0, 8);
   const playerAName = runTag + " Player A";
   const playerBName = runTag + " Player B";
   const playerAPrivateNote = runTag + " private note A";
   const playerBPrivateNote = runTag + " private note B";
   const gm = await browser.newContext();
-  const sharedBrowser = await browser.newContext();
+  const sharedBrowser = await browser.newContext({ viewport });
   let playerAConnection: GameConnection | null = null;
 
   try {
@@ -1953,6 +1956,11 @@ test("a shared browser handoff revokes player A before player B uses their own i
     await page.goto(playerAInviteUrl);
     await page.getByLabel("Имя").fill(playerAName);
     await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page.locator(".app-shell")).toBeVisible();
+    if (await page.locator("#compact-nav-journal").isVisible())
+      await page.locator("#compact-nav-journal").click();
+    const draft = page.locator("#activity-sidebar .chat-compose textarea");
+    await draft.fill("Личный несохранённый черновик игрока A");
     await page.getByLabel("Меню сеанса").click();
     await expect(
       page.getByText("Вы играете как: " + playerAName),
@@ -2008,6 +2016,11 @@ test("a shared browser handoff revokes player A before player B uses their own i
       page.getByText("Вы играете как: " + playerBName),
     ).toBeVisible();
 
+    await page.getByLabel("Меню сеанса").click();
+    await expect(page.locator(".app-shell")).toBeVisible();
+    if (await page.locator("#compact-nav-journal").isVisible())
+      await page.locator("#compact-nav-journal").click();
+    await expect(draft).toHaveValue("");
     const playerBSnapshot = await bootstrap(sharedBrowser);
     expect(playerBSnapshot.me).toMatchObject({
       displayName: playerBName,
@@ -2051,6 +2064,18 @@ test("a shared browser handoff revokes player A before player B uses their own i
       },
     );
     await expectOk(playerBAction);
+    await testInfo.attach("shared-handoff-receipt", {
+      body: JSON.stringify({
+        viewport: page.viewportSize(),
+        actorChanged: playerASnapshot.me.id !== playerBSnapshot.me.id,
+        privateNotesExcluded:
+          !JSON.stringify(playerBSnapshot).includes(playerAPrivateNote),
+        oldActionStatus: playerAActionAfterHandoff.status(),
+        newActionStatus: playerBAction.status(),
+        newDraft: await draft.inputValue(),
+      }),
+      contentType: "application/json",
+    });
   } finally {
     playerAConnection?.socket.disconnect();
     await Promise.all([gm.close(), sharedBrowser.close()]);
