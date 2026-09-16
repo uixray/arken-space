@@ -118,6 +118,12 @@
       "revision": "75a7e37e90b8eefb7b55ce080e935832ebd78e6f",
       "artifact": "workspace-current-gate/results.json",
       "scope": "16 actual-App mocked cases: outer token image Escape GM/PLAYER1280/390 (8), GM template1280/360 (4), GM Setup three active controls1280/360 (4). Client-log POST no longer exempt from unexpected writes. Not original first-open TokenPalette RO fix or server acceptance."
+    },
+    "requestsCurrent": {
+      "status": "PASS",
+      "revision": "b65f3c046dd102b100c3e02dd5fa0759d567ded9",
+      "artifact": "request-server-gate/results.json",
+      "scope": "4 existing real API/PostgreSQL18.1 cases Chrome/Firefox: PLAYER native draft/keyboard/compact resize/submit and GM filter combinations/reopen. Six persisted request rows/hash unchanged across isolated DB restart. Source-mode server, loopback-only entry copy; not CI PostgreSQL17 or production bundle/full matrix."
     }
   },
   "sites": [
@@ -185,11 +191,11 @@
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
       "kind": "tag:select",
       "count": 6,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Six native controls have historical real-server CI35043939211 evidence; see native-menu-ci-audit/checkpoint.md. Not newly rerun/current acceptance.",
-      "evidence": [],
-      "next": "Reuse audited CI evidence; integrate exact-current named cases only in next approved server gate."
+      "scope": "Six native controls through existing PLAYER compact draft/submit and GM filter/reopen cases against current real local API/PostgreSQL18.1.",
+      "evidence": ["requestsCurrent"],
+      "next": "Native OS popup visual/physical-device matrix, CI PostgreSQL17 and production bundle remain separate; no full menu acceptance claim."
     },
     {
       "file": "apps/web/src/StickerPicker.tsx",
