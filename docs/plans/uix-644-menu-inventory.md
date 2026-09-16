@@ -960,3 +960,7 @@ Evidence `b048921c2220ece0efb42c492b3b424859a258e2`:8/8 GM/PLAYER-owner1280/390 
 ## Music owner transition — 2026-09-16
 
 Source `20b48de69676539db3ebc5816ddfbc0b5a3cd47e`: reproduced lost return focus after library close, fixed by focusing visible overflow summary before dialog mount. Eight GM/PLAYER1280/1024 Chrome/Firefox cases PASS including volume Escape/outside and resize390 dismissal. Compact foundation hides music-topbar: no claim of available mobile playback/library entry. No track commands/upload/audio tested. Artifacts `music-owner-gate/results.json`, red-results.json, checkpoint. Not whole UIX-644 acceptance.
+
+## Token tray lifecycle — 2026-09-16
+
+Source `23ed18709b378bb493721c549e00fe7e4e2bcff8`: decorative initials no longer duplicate accessible names; open tray layer26 above persistent tools24, below token menus40/pause45. Real compact screenshot/hit-test reproduced tool occlusion. Eight lifecycle cases passed across retained Chromium4/Firefox4 reports, plus four existing geometry/quick-roll cases. Tab through24 entries, actual pointer hit, inner scroll, Escape/focus, outside menu and Journal/Map transition; no token placement requests. Artifacts `token-tray-gate/` checkpoint/results. Shared App details bucket remains partial pending session evidence reconciliation, not whole UIX-644 acceptance.

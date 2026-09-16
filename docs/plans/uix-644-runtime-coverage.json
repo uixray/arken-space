@@ -76,6 +76,12 @@
       "revision": "20b48de69676539db3ebc5816ddfbc0b5a3cd47e",
       "artifact": "music-owner-gate/results.json",
       "scope": "Eight GM/PLAYER1280/1024 Chrome/Firefox cases: GM empty-library transition twice and visible return focus; PLAYER overflow absent; volume Escape/outside/hidden-anchor390 resize. No audio playback/upload/track command test."
+    },
+    "tokenTray": {
+      "status": "PASS",
+      "revision": "23ed18709b378bb493721c549e00fe7e4e2bcff8",
+      "artifact": "token-tray-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/390 lifecycle cases: Chromium4 PASS in chromium-pass-firefox-tab-results.json, Firefox4 PASS in results.json after native scroll-container Tab adjustment. Related geometry4 PASS in related-results.json. No placement commands; mocked backend."
     }
   },
   "sites": [
@@ -95,9 +101,9 @@
       "count": 3,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Scene/session/token-tray buckets; details Escape8 + responsive4 historical scopes do not accept all3 callers.",
-      "evidence": [],
-      "next": "Reconcile token-tray lifecycle separately; do not replay passed session/music tests."
+      "scope": "Scene picker eight scoped cases and token-tray eight lifecycle plus four geometry cases. Session menu historical Escape/responsive evidence not yet reconciled into this combined bucket.",
+      "evidence": ["scenePicker", "tokenTray"],
+      "next": "Reconcile existing session-menu evidence, not rerun scene/tray from chat change; full bucket acceptance still incomplete."
     },
     {
       "file": "apps/web/src/CatalogEntryForm.tsx",
