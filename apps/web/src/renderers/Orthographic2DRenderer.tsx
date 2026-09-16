@@ -272,6 +272,23 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     y: number;
   } | null>(null);
   const tokenMenuRef = useRef<HTMLDivElement>(null);
+  const tokenMenuOpen = Boolean(tokenMenu);
+  const closeTokenMenu = useCallback(() => {
+    const owner = containerRef.current;
+    if (
+      tokenMenuRef.current?.contains(document.activeElement) &&
+      owner?.getClientRects().length &&
+      !owner.closest("[hidden], [inert]")
+    )
+      owner.focus({ preventScroll: true });
+    setTokenMenu(null);
+  }, []);
+  useLayoutEffect(() => {
+    if (tokenMenuOpen)
+      tokenMenuRef.current
+        ?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+        ?.focus({ preventScroll: true });
+  }, [tokenMenuOpen]);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
     null,
   );
@@ -532,20 +549,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (!tokenMenu) return;
     const close = (event: KeyboardEvent | PointerEvent) => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
-      if (
-        event instanceof KeyboardEvent &&
-        tokenMenuRef.current?.contains(document.activeElement)
-      ) {
-        const owner = containerRef.current;
-        // Restore only keyboard dismissal from this menu, never an outside
-        // pointer target or an owner that has become hidden/inert.
-        if (
-          owner?.getClientRects().length &&
-          !owner.closest("[hidden], [inert]")
-        )
-          owner.focus({ preventScroll: true });
-      }
-      setTokenMenu(null);
+      if (event instanceof KeyboardEvent) closeTokenMenu();
+      else setTokenMenu(null);
     };
     window.addEventListener("keydown", close);
     window.addEventListener("pointerdown", close);
@@ -553,7 +558,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       window.removeEventListener("keydown", close);
       window.removeEventListener("pointerdown", close);
     };
-  }, [tokenMenu]);
+  }, [tokenMenu, closeTokenMenu]);
   useEffect(() => {
     if (!interaction.objectListOpen) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
@@ -1168,6 +1173,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       });
     else if (event.key.toLowerCase() === "o")
       dispatchInteraction({ type: "toggle-object-list" });
+    else if (
+      event.key === "ContextMenu" ||
+      (event.shiftKey && event.key === "F10")
+    )
+      openSelectedAction();
     else if (event.key === "Enter") {
       if (isPolygonTool && polygonPoints.length >= 3)
         void handlePolygonComplete();
@@ -3197,6 +3207,42 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           className="token-context-menu"
           style={{ left: tokenMenu.x, top: tokenMenu.y }}
           role="menu"
+          aria-label={`Действия токена «${tokenMenu.token.name}»`}
+          onKeyDown={(event) => {
+            if (
+              event.altKey ||
+              event.ctrlKey ||
+              event.metaKey ||
+              event.shiftKey ||
+              !(event.target instanceof HTMLButtonElement) ||
+              !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+            )
+              return;
+            // Native appearance inputs keep their own arrow/Tab behavior.
+            const items = Array.from(
+              event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                "button:not(:disabled)",
+              ),
+            ).filter(
+              (item) =>
+                item.getClientRects().length &&
+                !item.closest("[hidden], [inert]"),
+            );
+            if (!items.length) return;
+            const current = items.indexOf(event.target);
+            const next =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? items.length - 1
+                  : (current +
+                      (event.key === "ArrowDown" ? 1 : -1) +
+                      items.length) %
+                    items.length;
+            event.preventDefault();
+            event.stopPropagation();
+            items[next]?.focus();
+          }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <strong>{tokenMenu.token.name}</strong>
@@ -3239,7 +3285,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     tokenMenu.token.revision,
                     layer,
                   );
-                setTokenMenu(null);
+                closeTokenMenu();
               }}
             >
               {tokenMenu.token.layer === layer && (
@@ -3312,7 +3358,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           >
             Удалить с карты
           </button>
-          <button onClick={() => setTokenMenu(null)}>Отмена</button>
+          <button onClick={closeTokenMenu}>Отмена</button>
         </div>
       )}
       {/* UIX-470: спрашивают теперь только про токен — рисунок удаляется сразу.

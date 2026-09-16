@@ -2692,3 +2692,123 @@ test("UIX-644 token menu remains reachable across viewport resize", async ({
     contentType: "application/json",
   });
 });
+
+for (const width of [1280, 390]) {
+  test(`UIX-644 token menu keyboard entry and actions ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    const writes: string[] = [];
+    const conditions: string[][] = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route(`**/api/tokens/${tokenId}/conditions`, async (route) => {
+      const body = route.request().postDataJSON();
+      expect(body.revision).toBe(current.tokens[0].revision);
+      conditions.push(body.conditions);
+      current.tokens[0].conditions = body.conditions;
+      current.tokens[0].revision += 1;
+      await route.fulfill({ json: current.tokens[0] });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40")
+          socket.send('40{"sid":"menu-keyboard"}');
+      });
+      socket.send(
+        '0{"sid":"menu-keyboard","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await map.press("Escape");
+    // From here on only physical keyboard input, no locator.focus().
+    await page.keyboard.press("Enter");
+    const menu = map.getByRole("menu");
+    const first = menu.getByRole("menuitemcheckbox", {
+      name: "Отравлен",
+      exact: true,
+    });
+    const last = menu.getByRole("button", { name: "Отмена", exact: true });
+    await expect(first).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(first).toHaveAttribute("aria-checked", "true");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(first).toHaveAttribute("aria-checked", "false");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(
+      menu.getByRole("menuitemcheckbox", { name: "Без сознания", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(last).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(last).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+
+    await page.keyboard.press("Shift+F10");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("End");
+    for (let step = 0; step < 4; step++) await page.keyboard.press("ArrowUp");
+    const layer = menu.getByRole("menuitemradio", {
+      name: "Игровой слой",
+      exact: true,
+    });
+    await expect(layer).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+
+    await page.keyboard.press("ContextMenu");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("End");
+    for (let step = 0; step < 3; step++) await page.keyboard.press("ArrowUp");
+    await expect(
+      menu.getByRole("menuitemradio", { name: "Слой мастера", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    const color = menu.getByLabel("Цвет", { exact: true });
+    await expect(color).toBeFocused();
+    // Native fields keep their own navigation; menu arrows must not hijack them.
+    await page.keyboard.press("ArrowDown");
+    await expect(color).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+    expect(conditions).toEqual([["POISONED"], []]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("keyboard-menu-receipt", {
+      body: JSON.stringify({ width, conditions, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
