@@ -123,3 +123,11 @@ runtime-кода внешних компонентов или визуально
 
 Публикация ветки/PR и production — отдельные разрешения и gates. Текущее
 состояние UIX-645 не даёт разрешения выкладывать весь дизайн на production.
+
+## 2026-09-16 — current bundle gate
+
+Production-mode web build for `508167fed063242241a8a5e40a6169a9fb87c74d` passed (Vite 8.2.1, heap cap 768 MiB). Source maps contain 47 distinct Lucide icon modules (45 main + 2 renderer) and no dynamic icon registry; the retained full package is not shipped wholesale. HTML points to local asset files. This does not substitute for a complete runtime network audit.
+
+The existing eight shell icon cases also passed against this built output in Chrome/Firefox × GM/PLAYER × 1280/390px, rather than just the development server. This is synthetic session data and default dark theme only. Source maps and payload hashes are retained in the local bundle-gate receipt. No deploy or CI rerun occurred. Typecheck evidence remains the prior current application-source check; no claim of a new full test-suite pass.
+
+Personal-theme configuration exists separately; main.tsx currently mounts a fixed dark Gravity ThemeProvider and does not import the player-theme styles. Therefore this gate cannot prove personal-theme UI acceptance. Keep UIX-317 and the remaining UIX-645 focus/menu/contrast criteria open.
