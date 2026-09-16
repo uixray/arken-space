@@ -119,3 +119,35 @@ Audit payload хранит `assetId`, предыдущий и новый version
 - **Блокеры / дальше:** root выполняет единый pooled gate после freeze,
   указанную source-диверсию и проверку восстановления. До этого UIX-609 не
   объявляется принятой или готовой к публикации по этому checkpoint.
+
+## 2026-09-17 — missing replacement UI: client intent foundation (UIX-293)
+
+Live UIX-293 is In Progress and still requires a user-facing replacement action.
+UIX-610 is Done but its original criteria cover usage/delete, not replacement.
+Current MediaPanel and AssetActions expose no replacement action. The server PUT
+and ETag contract already exist; do not change storage/version policy or create
+another issue to fill this gap.
+
+New isolated asset-replacement.ts captures a fresh authenticated HEAD version
+(no file download), selected File and one action ID in an immutable intent.
+Missing/weak/malformed versions and HTTP failures fail closed with Russian text.
+Cancellation retains its original reason. Commit sends multipart PUT with that
+exact If-Match and action ID through the existing api helper. It never fetches
+a newer version or retries automatically. An explicit retry of the same intent
+keeps the same file/action ID; a409 remains a409 for the future review UI.
+The response preserves replay and old-blob-cleanup flags.
+
+13 new protocol tests plus30 unchanged api tests PASS (43 total,637ms,worker1),
+web TypeScript and scoped ESLint/Prettier/diff PASS. Fetch is mocked; this is not
+an executed HEAD/PUT server, browser, file replacement or finished UI acceptance.
+No caller imports this module yet. No new dependency, backend change, build,
+full suite, CI, publication or Linear write.
+
+Next connected pool: integrate GM-only replacement review in the existing file
+row using this intent, show existing usage/impact and selected replacement,
+require explicit confirmation, retain the same intent after ambiguous transport
+failure, require fresh review on version conflict, and distinguish committed
+replacement from later catalog-refresh failure. Reuse ImageUploadField/
+AudioUploadField without losing asset ID/name/kind; no force overwrite or
+implicit retry. Add component and actual-App browser success/cancel/conflict/
+retained-draft checks before claiming that masters can use the feature.
