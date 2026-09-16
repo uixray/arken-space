@@ -1014,22 +1014,39 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const container = containerRef.current;
     const menu = tokenMenuRef.current;
     if (!container || !menu) return;
-    const padding = 8;
-    const maxLeft = Math.max(
-      padding,
-      container.clientWidth - menu.offsetWidth - padding,
-    );
-    const maxTop = Math.max(
-      padding,
-      container.clientHeight - menu.offsetHeight - padding,
-    );
-    const left = Math.min(Math.max(padding, tokenMenu.x), maxLeft);
-    const top = Math.min(Math.max(padding, tokenMenu.y), maxTop);
-    if (left !== tokenMenu.x || top !== tokenMenu.y) {
-      setTokenMenu((current) =>
-        current ? { ...current, x: left, y: top } : current,
+    const clampMenu = () => {
+      const padding = 8;
+      const maxLeft = Math.max(
+        padding,
+        container.clientWidth - menu.offsetWidth - padding,
       );
-    }
+      const maxTop = Math.max(
+        padding,
+        container.clientHeight - menu.offsetHeight - padding,
+      );
+      setTokenMenu((current) => {
+        if (!current) return current;
+        const x = Math.min(Math.max(padding, current.x), maxLeft);
+        const y = Math.min(Math.max(padding, current.y), maxTop);
+        return x === current.x && y === current.y
+          ? current
+          : { ...current, x, y };
+      });
+    };
+    clampMenu();
+    // Track the actual owner box, including compact heights below the canvas
+    // viewport's minimum. Defer observer writes to avoid resize feedback loops.
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(clampMenu);
+    });
+    observer.observe(container);
+    observer.observe(menu);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
   }, [tokenMenu]);
 
   const openSelectedAction = () => {

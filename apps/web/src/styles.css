@@ -5101,7 +5101,9 @@ code {
   position: absolute;
   right: 8px;
   bottom: 8px;
-  z-index: 46;
+  /* Canvas chrome: below the object list (25), token menu (40), and pause
+     overlay (45). Persistent dice must not intercept menu actions. */
+  z-index: 24;
   width: max-content;
   max-width: min(420px, calc(50% - 18px));
 }

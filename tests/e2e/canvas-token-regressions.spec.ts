@@ -2548,3 +2548,147 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
   });
 }
+
+test("UIX-644 token menu remains reachable across viewport resize", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes: string[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/api/**", (route) => {
+    const request = route.request();
+    if (
+      !["GET", "HEAD"].includes(request.method()) &&
+      !request.url().includes("/chat/read")
+    )
+      writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    return route.fulfill({ json: [] });
+  });
+  await installCanvasReviewRoutes(page);
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString() === "40") socket.send('40{"sid":"menu-resize"}');
+    });
+    socket.send(
+      '0{"sid":"menu-resize","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.goto("/");
+  const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+  const trigger = map.getByRole("button", {
+    name: "Объекты карты",
+    exact: true,
+  });
+  await trigger.click();
+  await map
+    .getByRole("button", { name: "Selected token", exact: true })
+    .click();
+  await map.press("Escape");
+  await map.press("Enter");
+  const menu = map.getByRole("menu");
+  await expect(menu).toBeVisible();
+  const measurements: unknown[] = [];
+  for (const size of [
+    { width: 1280, height: 900 },
+    { width: 1280, height: 480 },
+    { width: 390, height: 850 },
+    { width: 640, height: 360 },
+    { width: 640, height: 320 },
+    { width: 1280, height: 900 },
+  ]) {
+    await page.setViewportSize(size);
+    await expect(menu).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          menu.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            const owner = node
+              .closest(".map-viewport")!
+              .getBoundingClientRect();
+            return (
+              rect.left >= Math.max(0, owner.left) &&
+              rect.top >= Math.max(0, owner.top) &&
+              rect.right <= Math.min(innerWidth, owner.right) + 1 &&
+              rect.bottom <= Math.min(innerHeight, owner.bottom) + 1
+            );
+          }),
+        {
+          message: `Menu must fit map and viewport at ${size.width}x${size.height}`,
+        },
+      )
+      .toBe(true);
+    const item = menu.getByRole("menuitemradio", {
+      name: "Игровой слой",
+      exact: true,
+    });
+    await item.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() =>
+        item.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          return node.contains(
+            document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            ),
+          );
+        }),
+      )
+      .toBe(true);
+    measurements.push({
+      size,
+      menu: await menu.boundingBox(),
+      map: await map.boundingBox(),
+    });
+    if (size.width === 640 && size.height === 360)
+      await page.screenshot({
+        path: testInfo.outputPath("menu-landscape.png"),
+      });
+    // Real pointer selection, dismissal and reopen at every size. The next
+    // resize starts with the menu open, not a freshly opened post-resize menu.
+    await item.click();
+    await expect(menu).toHaveCount(0);
+    await map.press("Enter");
+    await expect(menu).toBeVisible();
+    const cancel = menu.getByRole("button", { name: "Отмена", exact: true });
+    await cancel.scrollIntoViewIfNeeded();
+    await expect
+      .poll(
+        () =>
+          cancel.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            return [0.1, 0.5, 0.9].every((ratio) =>
+              node.contains(
+                document.elementFromPoint(
+                  rect.x + rect.width * ratio,
+                  rect.y + rect.height / 2,
+                ),
+              ),
+            );
+          }),
+        { message: "Bottom menu action must not be covered by the dice tray" },
+      )
+      .toBe(true);
+    await cancel.click();
+    await expect(menu).toHaveCount(0);
+    await map.press("Enter");
+    await expect(menu).toBeVisible();
+  }
+  // A real action remains clickable after all retained-open resizes.
+  await menu
+    .getByRole("menuitemradio", { name: "Игровой слой", exact: true })
+    .click();
+  await expect(menu).toHaveCount(0);
+  await map.press("Enter");
+  await expect(menu).toBeVisible();
+  await map.press("Escape");
+  await expect(menu).toHaveCount(0);
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+  await testInfo.attach("menu-resize-receipt", {
+    body: JSON.stringify({ measurements, writes, errors }),
+    contentType: "application/json",
+  });
+});

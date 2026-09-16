@@ -818,3 +818,13 @@ selection counts were added. Compact short-screen placement uses a lower row.
 Connected gate: 16/16 PASS across selection/zoom/compact action targets in Chrome
 and Firefox; details and limits in `uix-507-multi-selection.md`. This does not
 resolve the separate first-open token-popup ResizeObserver error.
+
+## 2026-09-16 — Меню токена при resize и слои костей
+
+- Две подтверждённые причины: открытое меню не пересчитывало координаты после изменения размеров карты; панель костей (46) перекрывала нижние действия меню (40).
+- Позиция ограничивается фактическими размерами владельца и меню, в том числе когда высота карты меньше минимальной внутренней высоты canvas. ResizeObserver объединяет обновления через animation frame и отключается при закрытии. Неизменённые координаты не вызывают обновление состояния.
+- Постоянная панель костей возвращена в слой canvas chrome (24), под списком объектов (25), меню токена (40) и паузой (45). Меню не поднимается над workspace/dialog.
+- Сценарий GM: открытие через выбранный объект и Enter; retained-open resize 1280x900 → 1280x480 → 390x850 → 640x360 → 640x320 → 1280x900. На каждом размере — bounds, hit-testing, реальный клик по текущему слою, повторное открытие, прокрутка к «Отмена», hit-testing в трёх точках кнопки и реальный клик.
+- Финальный связанный gate: 14/14 Chromium/Firefox, один worker, без retries. Включает GM/PLAYER selection, меню состояний с отказом сервера, Escape из DRAW и compact action targets GM/PLAYER 640x360. Typecheck renderer после изменения прошёл; финальные lint/format/diff прошли. Скриншот landscape проверен визуально.
+- Ранние 10 PASS были недостаточны: скриншот выявил перекрытие части меню; усиленный тест дал RED, затем исправление слоя дало финальные 14 PASS. Исходные RED и промежуточные результаты сохранены в артефактах `context-resize-gate` текущей сессии.
+- Ограничения: это не полная приёмка UIX-644; natural Tab/arrow navigation, вся owner/zoom матрица, независимый token-popup ResizeObserver FAIL и физические устройства остаются открыты. Никакой публикации, deployment или закрытия Linear. Неотслеживаемый тест selection-recovery не изменён.
