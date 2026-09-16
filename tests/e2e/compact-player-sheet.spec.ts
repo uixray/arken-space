@@ -127,6 +127,9 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
     await sheetNav.click();
     await expect(story).toHaveValue(draft);
     const layout = await story.evaluate((node) => {
+      if (!(node instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected character story textarea");
+      }
       const nodes: Array<{
         className: string;
         width: number;

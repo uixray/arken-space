@@ -335,6 +335,9 @@ test("compact PLAYER inventory commits normalized lines and survives acknowledge
   await expect(reopened.inventory).toHaveValue("Rope\nФакел\nВерёвка с крюком");
   await reopened.inventory.scrollIntoViewIfNeeded();
   const geometry = await reopened.inventory.evaluate((node) => {
+    if (!(node instanceof HTMLTextAreaElement)) {
+      throw new Error("Expected character inventory textarea");
+    }
     const r = node.getBoundingClientRect();
     const overflow: string[] = [];
     for (let e: HTMLElement | null = node; e; e = e.parentElement) {

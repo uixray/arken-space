@@ -11,7 +11,7 @@ for (const width of [1280, 390]) {
     await page.addInitScript(() => {
       window.addEventListener("error", (event) => {
         const report = (
-          window as Window & {
+          window as unknown as Window & {
             recordSelectResizeError: (message: string) => Promise<void>;
           }
         ).recordSelectResizeError;
