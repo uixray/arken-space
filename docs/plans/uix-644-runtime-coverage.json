@@ -40,6 +40,12 @@
       "revision": "cd99d3d30b23a0ba70baa0bc302e820c20faf2c5",
       "artifact": "toolbar-settings-gate/results.json",
       "scope": "Four GM1280/360short grid/resize/overflow keyboard cases, one mocked save each; related eight cases across two retained reports, including delayed outside focus and rejection."
+    },
+    "activity": {
+      "status": "PASS",
+      "revision": "d1908c20bba3cdfeb6ae88e7fe28e36825ac6ddb",
+      "artifact": "activity-selectors-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox cases; actual App mocked backend, no messages/rolls submitted."
     }
   },
   "sites": [
@@ -267,21 +273,21 @@
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
       "kind": "tag:FormSelect",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "GM roll character selector in Activity controls.",
-      "evidence": [],
-      "next": "Reconcile keyboard/selection/context ownership separately from command suggestions."
+      "scope": "GM selection changes available skill buttons, pointer hit/bounds, keyboard reset/Escape/focus; PLAYER selector absent, own skill only. Actual dice request target not tested.",
+      "evidence": ["activity"],
+      "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Activity history filters popup.",
-      "evidence": [],
-      "next": "Reconcile filters pointer/keyboard, draft context and compact dismissal."
+      "scope": "All3 filter checkboxes keyboard off/pointer on, accessible hidden-summary, Escape/outside focus and unsent draft preserved. REFERENCE event disappearance/restoration verified; ROLLS/STORY timeline fixtures absent.",
+      "evidence": ["activity"],
+      "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
