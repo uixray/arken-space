@@ -1,0 +1,424 @@
+{
+  "schemaVersion": 1,
+  "inventoryRevision": "d7ef50a2eb5795bd3959021e32c4d44143c11f07",
+  "overallAcceptance": "INCOMPLETE",
+  "statusMeaning": "PASS = only stated scope at evidence revision, not current HEAD/full issue. FAIL = unresolved known defect. BLOCKED = evidence or applicability unresolved, not whole-project blocked.",
+  "artifactBase": "C:/Users/UIXRay/.codex/visualizations/2026/09/16/01a0a7d5-b072-7022-8e9d-4538c0a92b07",
+  "evidence": {
+    "built": {
+      "status": "PASS",
+      "revision": "edb70ce01db62eb6fa18e82dec25fb51d381c6dc",
+      "artifact": "ui-built-edb70ce/results.json",
+      "scope": "58 actual-App cases, Chromium/Firefox; mocked API. Not dev-only owner fixtures or whole registry."
+    },
+    "feedback": {
+      "status": "PASS",
+      "revision": "d1872099a3b0c4cee207cbb0aceb491441e2fc00",
+      "artifact": "feedback-selector-gate/results.json",
+      "scope": "GM/PLAYER responsive selector and focus; 4 cases, no submission."
+    },
+    "cursor": {
+      "status": "PASS",
+      "revision": "d7ef50a2eb5795bd3959021e32c4d44143c11f07",
+      "artifact": "cursor-menu-gate/results.json",
+      "scope": "GM popup and PLAYER direct toggle, 4 cases; not actual remote cursor payload."
+    },
+    "token": {
+      "status": "PASS",
+      "revision": "43d0fee8f2b791ab9176e69e3d8a70f153eb4816",
+      "artifact": "menu-access-gate/results.json",
+      "scope": "16 access-change cases; adjacent20 in related-results.json; only token menu."
+    },
+    "ro": {
+      "status": "FAIL",
+      "revision": "452f5f162da51f10fbafcedef92f5d85fc9d36cf",
+      "artifact": "true-browser-zoom-gate/owner-06/token-generator-UIX-272-UI-05f7b--picker-at-desktop-viewport-chromium/trace.zip",
+      "scope": "Token modal opening emitted ResizeObserver loop completed with undelivered notifications. Subsequent non-reproduction is not a fix; see token-resize-diagnosis/checkpoint.md."
+    }
+  },
+  "sites": [
+    {
+      "file": "apps/web/src/App.tsx",
+      "kind": "role:listbox",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Scene picker in shell; GM interaction, PLAYER read-only, compact hidden path.",
+      "evidence": [],
+      "next": "Reconcile scene-picker unique runtime cases; generic session menu PASS is insufficient."
+    },
+    {
+      "file": "apps/web/src/App.tsx",
+      "kind": "tag:details",
+      "count": 3,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Scene/session/token-tray buckets; details Escape8 + responsive4 historical scopes do not accept all3 callers.",
+      "evidence": [],
+      "next": "Reconcile token-tray lifecycle separately; do not replay passed session/music tests."
+    },
+    {
+      "file": "apps/web/src/CatalogEntryForm.tsx",
+      "kind": "tag:FormSelect",
+      "count": 7,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Seven conditional controls in edit/picker/setup callers; catalog tests12/58.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/FeedbackReporter.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "One feedback category selector, GM/PLAYER, 1280→390→360 short→1280; keyboard/pointer/Escape/outside and visible close focus.",
+      "evidence": ["feedback"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/MapToolbar.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Size settings and toolbar overflow are two different callers.",
+      "evidence": [],
+      "next": "Next connected map-toolbar pool: keyboard/open/close, clipped owner, short viewport; preserve tool actions."
+    },
+    {
+      "file": "apps/web/src/MusicBar.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Volume popup historical Escape/resize evidence; music overflow/library transition not fully reconciled.",
+      "evidence": [],
+      "next": "Reconcile two different callers, not one generic details PASS."
+    },
+    {
+      "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 6,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Six native controls have historical real-server CI35043939211 evidence; see native-menu-ci-audit/checkpoint.md. Not newly rerun/current acceptance.",
+      "evidence": [],
+      "next": "Reuse audited CI evidence; integrate exact-current named cases only in next approved server gate."
+    },
+    {
+      "file": "apps/web/src/StickerPicker.tsx",
+      "kind": "role:listbox",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Nested sticker list inside same Popup, not a second independent overlay.",
+      "evidence": [],
+      "next": "Reconcile with StickerPicker Popup caller evidence, not duplicate test."
+    },
+    {
+      "file": "apps/web/src/StickerPicker.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Activity lifecycle spec and old release CI; modal/workspace caller unavailable. Shared source/spec unchanged vs7f28ca3, App/styles changed.",
+      "evidence": [],
+      "next": "Reuse old evidence with explicit caller scope, no hidden Direct/Story UI activation."
+    },
+    {
+      "file": "apps/web/src/TokenImageGenerator.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "One native source selector; desktop/narrow four cases. OS picker UI not inspected.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/WorkspaceNav.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "More navigation menu; compact uses a separate modal.",
+      "evidence": [],
+      "next": "Reconcile navigation transition/focus and hidden desktop owner; no repeat of unrelated token menus."
+    },
+    {
+      "file": "apps/web/src/WorldContentWorkspace.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Two world-content inline asset pickers, distinct from its four FormSelect sites.",
+      "evidence": [],
+      "next": "Reconcile each conditional picker caller, not infer from adjacent dropdown tests."
+    },
+    {
+      "file": "apps/web/src/WorldContentWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 4,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Four filters/link/create controls in world dropdown tests; 4 combined editor/reader cases.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/WorldEncyclopediaWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Reader filter in world dropdown tests; current navigation GM-only, no invented PLAYER route.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/WorldMapsWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 7,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Seven native map/draft selectors; 8 world-map cases incl PLAYER navigation exclusion. Not OS popup visuals.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/renderers/GridSettings.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM grid settings owned by map toolbar.",
+      "evidence": [],
+      "next": "Group with size/overflow map-toolbar gate, not whole-suite replay."
+    },
+    {
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "kind": "role:menu",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Token menu live permissions/focus lifecycle; previous geometry/actions in inventory checkpoints. Not object-list/drawing-color controls.",
+      "evidence": ["token"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterMediaGallery.tsx",
+      "kind": "tag:FormSelect",
+      "count": 4,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Four attach/edit controls GM/PLAYER; ten gallery cases including sheet Escape.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Two character-workspace asset picker occurrences, separate from template Select.",
+      "evidence": [],
+      "next": "Reconcile actual accessible caller and picker actions per occurrence."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Template modal PASS four built cases. Second showCharacterPicker source occurrence inactive; do not count a template PASS as both callers.",
+      "evidence": ["built"],
+      "next": "Retain explicit inactive exclusion; no new UI route for coverage."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "in-flow",
+      "scope": "Disclosure section in document flow, not floating popup.",
+      "evidence": [],
+      "next": "Keep ordinary disclosure/accessibility criteria separate from popup layering."
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "role:listbox",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Activity/Chat command-list sites; source and composer spec unchanged vs7f28ca3. Whole shell/style revision differs.",
+      "evidence": [],
+      "next": "Reconcile actual reachable callers with old named/CI evidence; do not rerun from chat change alone."
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM roll character selector in Activity controls.",
+      "evidence": [],
+      "next": "Reconcile keyboard/selection/context ownership separately from command suggestions."
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Activity history filters popup.",
+      "evidence": [],
+      "next": "Reconcile filters pointer/keyboard, draft context and compact dismissal."
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "inactive",
+      "scope": "Direct-chat recipient select; production Direct entry hidden.",
+      "evidence": [],
+      "next": "Do not enable hidden Direct to satisfy inventory."
+    },
+    {
+      "file": "apps/web/src/sidebar/InitiativePanel.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "in-flow",
+      "scope": "Disclosure section in document flow, not floating popup.",
+      "evidence": [],
+      "next": "Keep ordinary disclosure/accessibility criteria separate from popup layering."
+    },
+    {
+      "file": "apps/web/src/sidebar/ResourceCounters.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "in-flow",
+      "scope": "Disclosure section in document flow, not floating popup.",
+      "evidence": [],
+      "next": "Keep ordinary disclosure/accessibility criteria separate from popup layering."
+    },
+    {
+      "file": "apps/web/src/sidebar/SetupPanel.tsx",
+      "kind": "tag:FormSelect",
+      "count": 6,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Three live controls PASS four built cases; three legacy hidden occurrences excluded, never reactivate for tests.",
+      "evidence": ["built"],
+      "next": "Keep active/hidden split explicit at next combined gate."
+    },
+    {
+      "file": "apps/web/src/sidebar/TokenPalette.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Inline image picker in four actual token-modal cases. Shared owner error separately remains open.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/sidebar/TokenPalette.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2,
+      "status": "FAIL",
+      "classification": "reachable",
+      "scope": "Outer image and modal character controls: built tests passed, but original modal ResizeObserver error is unresolved.",
+      "evidence": ["built", "ro"],
+      "next": "Capture offending observer at actual failure; do not repeat identical warm runs or filter client logs."
+    },
+    {
+      "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "GM keyboard/pointer/focus/resize/clipped anchor; PLAYER direct toggle is not another popup.",
+      "evidence": ["cursor"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/ui/FuturePoolDialogs.tsx",
+      "kind": "tag:Select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "preview-only",
+      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
+      "evidence": [],
+      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+    },
+    {
+      "file": "apps/web/src/ui/GravityFormControls.tsx",
+      "kind": "tag:Select",
+      "count": 1,
+      "status": "FAIL",
+      "classification": "shared-implementation",
+      "scope": "Shared implementation, not another caller. Built tests and true zoom passed, unresolved original RO still prevents complete acceptance.",
+      "evidence": ["built", "ro"],
+      "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence."
+    },
+    {
+      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "preview-only",
+      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
+      "evidence": [],
+      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+    },
+    {
+      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
+      "kind": "tag:Select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "preview-only",
+      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
+      "evidence": [],
+      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+    },
+    {
+      "file": "apps/web/src/ui/SceneManagerDialog.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Scene editor map/background selector under workspace→modal.",
+      "evidence": [],
+      "next": "Reconcile exact editor caller and original Review criteria; shared FormSelect PASS alone insufficient."
+    }
+  ],
+  "supplementalSites": [
+    {
+      "id": "map-object-list",
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "status": "BLOCKED",
+      "scope": "Custom object-list popover not discovered by static tags/roles. Selection tests exist, not a complete unique overlay protocol.",
+      "next": "Reconcile actual object-list open/close/focus/resize separately."
+    },
+    {
+      "id": "drawing-color-panel",
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "status": "BLOCKED",
+      "scope": "Inline drawing palette plus native color chooser; not a custom listbox/menu AST occurrence.",
+      "next": "Keep palette accessibility separate from OS color-dialog acceptance."
+    },
+    {
+      "id": "compact-navigation",
+      "file": "apps/web/src/App.tsx",
+      "status": "BLOCKED",
+      "scope": "Compact Sections modal is destination selection, not WorkspaceNav details.",
+      "next": "Reconcile compact owner transitions and focus; do not count desktop More as equivalent."
+    }
+  ]
+}
