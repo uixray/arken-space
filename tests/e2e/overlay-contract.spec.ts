@@ -659,3 +659,106 @@ for (const role of ["GM", "PLAYER"] as const)
         contentType: "application/json",
       });
     });
+
+for (const role of ["GM", "PLAYER"] as const)
+  for (const width of [1280, 390])
+    test(`UIX-644 drawing palette lifecycle ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      await install(page, role);
+      const writes: string[] = [],
+        errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        const p = new URL(r.url()).pathname;
+        if (
+          p.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(r.method()) &&
+          p !== "/api/chat/read"
+        )
+          writes.push(`${r.method()} ${p}`);
+      });
+      await page.goto("/");
+      const draw = page.getByRole("button", { name: "Рисование", exact: true });
+      await draw.click();
+      const panel = page.getByRole("complementary", {
+        name: "Панель параметров рисунка",
+        exact: true,
+      });
+      await expect(panel).toBeVisible();
+      const red = panel.getByRole("button", {
+        name: "Красный: #ef4444",
+        exact: true,
+      });
+      await red.scrollIntoViewIfNeeded();
+      await assertHitTarget(red);
+      await red.click();
+      await expect(red).toHaveAttribute("aria-pressed", "true");
+      const color = panel.getByLabel("Цвет рисунка", { exact: true });
+      await expect(color).toHaveAttribute("type", "color");
+      await expect(color).toHaveValue("#ef4444");
+      const thick = panel.getByRole("button", {
+        name: "Толщина 12px",
+        exact: true,
+      });
+      await thick.scrollIntoViewIfNeeded();
+      await assertHitTarget(thick);
+      await thick.click();
+      await expect(thick).toHaveAttribute("aria-pressed", "true");
+      const slider = panel.getByRole("slider", {
+        name: "Толщина линии",
+        exact: true,
+      });
+      await expect(slider).toHaveValue("12");
+      await slider.focus();
+      await page.keyboard.press("Home");
+      await expect(slider).toHaveValue("1");
+      await expect(
+        panel.getByRole("button", { name: "Толщина 1px", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("End");
+      await expect(slider).toHaveValue("50");
+      await expect(red).toHaveAttribute("aria-pressed", "true");
+      await page.setViewportSize({ width: 360, height: 480 });
+      await slider.scrollIntoViewIfNeeded();
+      await assertHitTarget(slider);
+      await expect
+        .poll(() =>
+          panel.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return (
+              r.left >= -1 &&
+              r.top >= -1 &&
+              r.right <= innerWidth + 1 &&
+              r.bottom <= innerHeight + 1
+            );
+          }),
+        )
+        .toBe(true);
+      await testInfo.attach("drawing-palette-short", {
+        body: await page.screenshot(),
+        contentType: "image/png",
+      });
+      const move = page.getByRole("button", {
+        name: "Перемещение",
+        exact: true,
+      });
+      await move.click();
+      await expect(panel).toBeHidden();
+      await draw.click();
+      await expect(red).toHaveAttribute("aria-pressed", "true");
+      await expect(slider).toHaveValue("50");
+      await page.locator("#compact-nav-journal").click();
+      await expect(panel).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(panel).toBeVisible();
+      await expect(slider).toHaveValue("50");
+      await expect(red).toHaveAttribute("aria-pressed", "true");
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("drawing-palette-receipt", {
+        body: JSON.stringify({ role, width, writes, errors }),
+        contentType: "application/json",
+      });
+    });
