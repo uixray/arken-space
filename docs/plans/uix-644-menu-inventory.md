@@ -671,3 +671,34 @@ Remaining: native OS popup appearance/pointer selection, Escape/outside lifecycl
 full browser zoom and competing modal acceptance. CSS viewport resize and token
 crop zoom are NOT browser zoom. Evidence: token-source-gate/results.json and
 browser-01 named results. UIX-644 overall remains open.
+## 2026-09-16 — connected production-bundle gate at dcc3977
+
+54/54PASS307.25028s, Chromium/Firefox, workers1/retries0/skipped0/flaky0.
+This was a single connected pool against saved production dist, NOT Vite dev:
+10gallery cases,4world-content,12catalog owners,4native token source,
+16outer-select/character-template/setup,8world-map cases. Named case-index and
+original results retained;28JSON attachments decoded with no entries in their
+audited errors/clientLogs/unexpected/mutations/writes arrays. This does not imply
+all tests audit every network mutation or every warning (see per-site limits).
+
+Evidence revision dcc397712d4b6e262178cc8d35d2afc9b0b61bab, runtime source unchanged
+from e8daadcb357ceb456d789b7964ec69bea267fb38. Reused the existing2.81s build after
+that CSS change, rather than rebuilding for test-only commits. Saved entire dist
+and SHA256 manifest. HTTP-fetched HTML, CSS, mainJS and lazy renderer all4/4hashes
+match saved files; HTML contains no /@vite/client, built CSS contains the hidden
+subsection fix. No production/public endpoint or backend database was used.
+
+Artifacts ui-integrated-dcc3977: revision.txt, dist/,payload-sha256.json,
+served-payload-verification.json,results.json,case-index.json,decoded-receipts.json,
+browser.log,browser-01/. Test config retained (its relative import expects the
+worktree's existing .tmp-wasd-browser.mjs). FreeRAM2631MiB at start; one worker.
+Own preview stopped after completion. No CI restart, new build or deployment.
+
+This upgrades the connected acceptance evidence for the listed owners beyond
+separate dev-server slices. It does NOT close UIX-644: native OS popup appearance,
+browser zoom, remaining scroll/competing-owner/site axes and full original
+registry contract remain incomplete. Real-server request scenarios retain their
+historical evidence; they were NOT silently included in this mocked-UI gate.
+Physical devices, multiplayer/backend durability and full product release
+acceptance are not established by54passed. Older8504fea34-case bundle gate stays
+historical and is not relabelled as this current revision.
