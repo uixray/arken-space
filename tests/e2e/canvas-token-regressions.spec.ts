@@ -757,6 +757,20 @@ test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats",
   page,
 }) => {
   await installCanvasRoutes(page);
+  await page.route("**/api/story/posts**", (route) =>
+    route.fulfill({ json: { posts: [], nextCursor: null } }),
+  );
+  await page.route("**/api/operator/feedback/capability", (route) =>
+    route.fulfill({ status: 403, json: { error: "FORBIDDEN" } }),
+  );
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString() === "40") socket.send('40{"sid":"wasd-socket"}');
+    });
+    socket.send(
+      '0{"sid":"wasd-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
   await page.route("**/api/canvas/history**", (route) =>
     route.fulfill({ json: [] }),
   );
@@ -813,6 +827,32 @@ test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats",
   await page.waitForTimeout(50);
   expect(moves).toHaveLength(beforeHeldKey + 1);
 
+  // Exercise real key events while a movable token is still selected in PAN.
+  // fill() alone emits input, not keydown, and testing after deselection would
+  // pass even if the map incorrectly stole editable WASD events.
+  await map.evaluate((element) => {
+    for (const tag of ["input", "textarea", "div"]) {
+      const input = document.createElement(tag);
+      input.setAttribute("aria-label", `Проверка ввода ${tag}`);
+      if (tag === "div") {
+        input.setAttribute("contenteditable", "true");
+        input.setAttribute("role", "textbox");
+      }
+      element.append(input);
+    }
+  });
+  for (const tag of ["input", "textarea", "div"]) {
+    const input = page.getByRole("textbox", {
+      name: `Проверка ввода ${tag}`,
+      exact: true,
+    });
+    await input.pressSequentially("wasd");
+    if (tag === "div") await expect(input).toHaveText("wasd");
+    else await expect(input).toHaveValue("wasd");
+    expect(moves).toHaveLength(beforeHeldKey + 1);
+  }
+  await map.focus();
+
   // Without a movable selection, D keeps its established tool shortcut.
   await page.keyboard.press("Escape");
   await page.keyboard.press("d");
@@ -820,17 +860,6 @@ test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats",
     "aria-pressed",
     "true",
   );
-  expect(moves).toHaveLength(beforeHeldKey + 1);
-
-  // Editable descendants own their keys and never leak WASD to the map.
-  await map.evaluate((element) => {
-    const input = document.createElement("input");
-    input.setAttribute("aria-label", "Проверка ввода на карте");
-    element.append(input);
-  });
-  const input = page.getByRole("textbox", { name: "Проверка ввода на карте" });
-  await input.fill("wasd");
-  await expect(input).toHaveValue("wasd");
   expect(moves).toHaveLength(beforeHeldKey + 1);
 });
 
