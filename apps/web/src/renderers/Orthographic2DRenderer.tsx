@@ -61,6 +61,7 @@ import {
   type RulerDraft,
 } from "./map-interaction";
 import {
+  canDeleteSelectedToken,
   canSelectToken,
   resolveTokenStacks,
   selectMapObjects,
@@ -272,6 +273,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     y: number;
   } | null>(null);
   const tokenMenuRef = useRef<HTMLDivElement>(null);
+  const menuToken = props.tokens.find(
+    (token) => token.id === tokenMenu?.token.id,
+  );
   const tokenMenuOpen = Boolean(tokenMenu);
   const closeTokenMenu = useCallback(() => {
     const owner = containerRef.current;
@@ -289,6 +293,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         ?.querySelector<HTMLButtonElement>("button:not(:disabled)")
         ?.focus({ preventScroll: true });
   }, [tokenMenuOpen]);
+  useEffect(() => {
+    if (tokenMenu && !menuToken) closeTokenMenu();
+  }, [tokenMenu, menuToken, closeTokenMenu]);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
     null,
   );
@@ -987,6 +994,14 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
   const requestDelete = (ref: MapObjectRef) => {
     const current = resolveCurrentRef(ref);
+    if (
+      current?.kind === "token" &&
+      !canDeleteSelectedToken(
+        props.tokens.find((token) => token.id === current.objectId),
+        props,
+      )
+    )
+      return;
     if (current) dispatchInteraction({ type: "request-delete", ref: current });
     else dispatchInteraction({ type: "clear-selection" });
   };
@@ -3201,13 +3216,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           })}
         </Layer>
       </Stage>
-      {tokenMenu && (
+      {tokenMenu && menuToken && (
         <div
           ref={tokenMenuRef}
           className="token-context-menu"
           style={{ left: tokenMenu.x, top: tokenMenu.y }}
           role="menu"
-          aria-label={`Действия токена «${tokenMenu.token.name}»`}
+          aria-label={`Действия токена «${menuToken.name}»`}
           onKeyDown={(event) => {
             if (
               event.altKey ||
@@ -3245,119 +3260,119 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <strong>{tokenMenu.token.name}</strong>
-          {props.tokens.find((token) => token.id === tokenMenu.token.id) && (
-            <TokenConditionMenu
-              token={props.tokens.find(
-                (token) => token.id === tokenMenu.token.id,
-              )!}
-              role={props.role}
-              onChange={props.onTokenConditionsChange}
-              onClose={() => setTokenMenu(null)}
-            />
-          )}
-          {tokenMenu.token.characterId && props.onOpenCharacter && (
+          <strong>{menuToken.name}</strong>
+          <TokenConditionMenu
+            token={menuToken}
+            role={props.role}
+            onChange={props.onTokenConditionsChange}
+            onClose={() => setTokenMenu(null)}
+          />
+          {menuToken.characterId && props.onOpenCharacter && (
             <button
               role="menuitem"
               onClick={() => {
-                props.onOpenCharacter?.(tokenMenu.token.characterId!);
+                props.onOpenCharacter?.(menuToken.characterId!);
                 setTokenMenu(null);
               }}
             >
               Открыть карточку
             </button>
           )}
-          {(
-            [
-              ["MAP", "Слой карты"],
-              ["PLAYER", "Игровой слой"],
-              ["GM", "Слой мастера"],
-            ] as const
-          ).map(([layer, label]) => (
+          {props.role === "GM" && (
+            <>
+              {(
+                [
+                  ["MAP", "Слой карты"],
+                  ["PLAYER", "Игровой слой"],
+                  ["GM", "Слой мастера"],
+                ] as const
+              ).map(([layer, label]) => (
+                <button
+                  role="menuitemradio"
+                  aria-checked={menuToken.layer === layer}
+                  key={layer}
+                  onClick={() => {
+                    if (menuToken.layer !== layer)
+                      void props.onTokenLayerChange?.(
+                        menuToken.id,
+                        menuToken.revision,
+                        layer,
+                      );
+                    closeTokenMenu();
+                  }}
+                >
+                  {menuToken.layer === layer && (
+                    <AppIcon icon={SelectedOptionIcon} />
+                  )}
+                  {label}
+                </button>
+              ))}
+              <label>
+                Цвет
+                <input
+                  type="color"
+                  value={menuToken.baseColor}
+                  onChange={(event) => {
+                    setTokenMenu(null);
+                    void props.onTokenAppearanceChange?.(
+                      menuToken.id,
+                      menuToken.revision,
+                      {
+                        baseColor: event.target.value,
+                        frameColor: menuToken.frameColor,
+                      },
+                    );
+                  }}
+                />
+              </label>
+              <label>
+                Рамка
+                <input
+                  type="color"
+                  value={menuToken.frameColor ?? visual.color.tokenFrameDefault}
+                  onChange={(event) => {
+                    setTokenMenu(null);
+                    void props.onTokenAppearanceChange?.(
+                      menuToken.id,
+                      menuToken.revision,
+                      {
+                        baseColor: menuToken.baseColor,
+                        frameColor: event.target.value,
+                      },
+                    );
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTokenMenu(null);
+                    void props.onTokenAppearanceChange?.(
+                      menuToken.id,
+                      menuToken.revision,
+                      { baseColor: menuToken.baseColor, frameColor: null },
+                    );
+                  }}
+                >
+                  Без рамки
+                </button>
+              </label>
+            </>
+          )}
+          {canDeleteSelectedToken(menuToken, props) && (
             <button
-              role="menuitemradio"
-              aria-checked={tokenMenu.token.layer === layer}
-              key={layer}
+              role="menuitem"
               onClick={() => {
-                if (tokenMenu.token.layer !== layer)
-                  void props.onTokenLayerChange?.(
-                    tokenMenu.token.id,
-                    tokenMenu.token.revision,
-                    layer,
-                  );
-                closeTokenMenu();
+                requestDelete({
+                  kind: "token",
+                  objectId: menuToken.id,
+                  revision: menuToken.revision,
+                });
+                setTokenMenu(null);
               }}
             >
-              {tokenMenu.token.layer === layer && (
-                <AppIcon icon={SelectedOptionIcon} />
-              )}
-              {label}
+              Удалить с карты
             </button>
-          ))}
-          <label>
-            Цвет
-            <input
-              type="color"
-              value={tokenMenu.token.baseColor}
-              onChange={(event) => {
-                setTokenMenu(null);
-                void props.onTokenAppearanceChange?.(
-                  tokenMenu.token.id,
-                  tokenMenu.token.revision,
-                  {
-                    baseColor: event.target.value,
-                    frameColor: tokenMenu.token.frameColor,
-                  },
-                );
-              }}
-            />
-          </label>
-          <label>
-            Рамка
-            <input
-              type="color"
-              value={
-                tokenMenu.token.frameColor ?? visual.color.tokenFrameDefault
-              }
-              onChange={(event) => {
-                setTokenMenu(null);
-                void props.onTokenAppearanceChange?.(
-                  tokenMenu.token.id,
-                  tokenMenu.token.revision,
-                  {
-                    baseColor: tokenMenu.token.baseColor,
-                    frameColor: event.target.value,
-                  },
-                );
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setTokenMenu(null);
-                void props.onTokenAppearanceChange?.(
-                  tokenMenu.token.id,
-                  tokenMenu.token.revision,
-                  { baseColor: tokenMenu.token.baseColor, frameColor: null },
-                );
-              }}
-            >
-              Без рамки
-            </button>
-          </label>
-          <button
-            role="menuitem"
-            onClick={() => {
-              requestDelete({
-                kind: "token",
-                objectId: tokenMenu.token.id,
-                revision: tokenMenu.token.revision,
-              });
-              setTokenMenu(null);
-            }}
-          >
-            Удалить с карты
-          </button>
+          )}
           <button onClick={closeTokenMenu}>Отмена</button>
         </div>
       )}

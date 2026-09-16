@@ -2812,3 +2812,139 @@ for (const width of [1280, 390]) {
     });
   });
 }
+
+for (const width of [1280, 390]) {
+  test(`UIX-644 PLAYER menu offers only permitted token actions ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = "PLAYER";
+    const playerId = current.me.id;
+    current.fogReveals = [
+      { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    current.tokens = [
+      {
+        ...current.tokens[0],
+        name: "Controlled token",
+        controllerMembershipIds: [playerId],
+        ownerMembershipId: playerId,
+      },
+      {
+        ...current.tokens[0],
+        id: "45f46186-2ebc-4cf8-bce7-870097305a6b",
+        name: "Locked controlled token",
+        x: 480,
+        locked: true,
+        controllerMembershipIds: [playerId],
+        ownerMembershipId: playerId,
+      },
+      {
+        ...current.tokens[0],
+        id: "55f46186-2ebc-4cf8-bce7-870097305a6b",
+        name: "Owner without control",
+        x: 576,
+        controllerMembershipIds: [],
+        ownerMembershipId: playerId,
+      },
+    ];
+    const writes: string[] = [];
+    const deleted: string[] = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route(`**/api/tokens/${tokenId}`, async (route) => {
+      expect(route.request().method()).toBe("DELETE");
+      expect(route.request().postDataJSON()).toMatchObject({ revision: 0 });
+      deleted.push(tokenId);
+      current.tokens = current.tokens.filter((token) => token.id !== tokenId);
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") socket.send('40{"sid":"player-menu"}');
+      });
+      socket.send(
+        '0{"sid":"player-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    const trigger = map.getByRole("button", {
+      name: "Объекты карты",
+      exact: true,
+    });
+    const menu = map.getByRole("menu");
+    const dialog = page.getByRole("dialog", {
+      name: "Убрать токен с карты?",
+      exact: true,
+    });
+    for (const name of [
+      "Controlled token",
+      "Locked controlled token",
+      "Owner without control",
+    ]) {
+      await trigger.click();
+      await map.getByRole("button", { name, exact: true }).click();
+      await map.press("Escape");
+      await page.keyboard.press("Enter");
+      await expect(menu).toBeVisible();
+      await expect(menu.getByRole("menuitemradio")).toHaveCount(0);
+      await expect(menu.getByRole("menuitemcheckbox")).toHaveCount(0);
+      await expect(menu.locator('input[type="color"]')).toHaveCount(0);
+      await expect(
+        menu.getByRole("button", { name: "Без рамки", exact: true }),
+      ).toHaveCount(0);
+      const remove = menu.getByRole("menuitem", {
+        name: "Удалить с карты",
+        exact: true,
+      });
+      if (name === "Controlled token") {
+        await expect(remove).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(dialog).toBeVisible();
+        await dialog
+          .getByRole("button", { name: "Отмена", exact: true })
+          .click();
+        expect(deleted).toEqual([]);
+        await map.press("Enter");
+        await expect(remove).toBeFocused();
+        await page.keyboard.press("Enter");
+        await dialog
+          .getByRole("button", { name: "Удалить", exact: true })
+          .click();
+        await expect.poll(() => deleted.length).toBe(1);
+        await expect(dialog).toHaveCount(0);
+      } else {
+        await expect(remove).toHaveCount(0);
+        await expect(
+          menu.getByRole("button", { name: "Отмена", exact: true }),
+        ).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(map).toBeFocused();
+        await page.keyboard.press("Delete");
+        await expect(dialog).toHaveCount(0);
+      }
+    }
+    expect(deleted).toEqual([tokenId]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("player-menu-receipt", {
+      body: JSON.stringify({ width, deleted, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
