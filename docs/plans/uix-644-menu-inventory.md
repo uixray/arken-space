@@ -976,3 +976,7 @@ Observed revision `b7cfc77fc7ecbff20d409badd8909996c71dcf19`:24/24 existing test
 ## Track selection focus — 2026-09-16
 
 Source `9f91183cebd1e63c42f36b2325977f11ca6180d0`: existing audio rejection test strengthened to detect focus lost on hidden track. RED reproduced; track click now closes overflow and focuses visible summary, wire/ACK behavior unchanged. Four Chrome/Firefox cases PASS16.4s: desktop action, delayed conflict receipt at1280/390, Russian toast geometry, exact command and no optimistic playback. `music-command-gate/results.json`, red-results.json/checkpoint. No success playback or compact music availability claim.
+
+## Controlled Select transition diagnosis — 2026-09-16
+
+Observed `16a1ae63a6ed0188da59d97cd440b471f6b9768d`: two diagnostic first-open control width transitions220→400px and400→220px passed without ResizeObserver errors.40 sampled frames and90/93 observer callbacks confirm the change. This is NOT an original bug fix: imposed diagnostic flex/CSS and environment differ; original FAIL remains. First two attempts did not establish the required control geometry/timing and are retained separately, not accepted causal evidence. Product source unchanged; temporary spec removed. Artifacts `token-transition-diagnosis/results.json`, `pointer-summary.json`, `pointer-diagnostic-spec.ts`, `config.mjs`, checkpoint under artifactBase. Do not repeat this same stress/warm-cold condition; original first-layout/font/Floating UI interaction remains unproven.
