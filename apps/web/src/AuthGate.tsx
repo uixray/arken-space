@@ -239,11 +239,16 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
             </Button>
           </div>
         ) : (
-          <form className="feedback-form" onSubmit={submitFeedback}>
+          <form
+            className="feedback-form"
+            onSubmit={submitFeedback}
+            aria-busy={feedbackStatus === "sending"}
+          >
             <label>
               Предложение
               <FormTextArea
                 name="message"
+                readOnly={feedbackStatus === "sending"}
                 required
                 minLength={5}
                 maxLength={4000}
@@ -254,6 +259,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               Контакт <span className="optional">необязательно</span>
               <FormInput
                 name="contact"
+                readOnly={feedbackStatus === "sending"}
                 maxLength={160}
                 placeholder="Telegram или почта"
               />

@@ -391,3 +391,24 @@ Error description and initial horizontal bounds are asserted in the browser.
 This is synthetic HTTP/socket transport, not server validation, durable upload,
 spoken screen-reader output, physical mobile or complete UIX-317 acceptance.
 The development server was stopped. No build, full-suite or release rerun.
+
+## Feedback pending draft protection — 2026-09-17
+
+The landing suggestion form previously stayed editable while its captured request
+was pending, then reset/unmounted on success: later edits could be discarded even
+though they were not in the submitted payload. Pending message/contact fields now
+use native readonly (not disabled), preserving focus and selectable text. The form
+exposes aria-busy. Failure unlocks the same retained draft; success keeps the existing
+confirmation/new-message lifecycle. Endpoint, payload, auth and send button behavior
+are unchanged; no retry or local persistence was added.
+
+Initial Chrome1280RED confirms the pending textarea was still editable. Final
+feedback-pending.spec.ts4/4PASS18s, Chrome/Firefox1280/360,worker1/retries0: hold
+response, check both fields readonly and send disabled, select text/Backspace does
+not erase it;503unlocks retained text/contact; edit/retry201 shows confirmation;
+«Отправить ещё» returns empty editable fields. Exactly two explicit payloads and
+zero pageerrors. HTTP/bootstrap mocked, so this is real-control UX/DOM evidence,
+not inbox persistence, spoken screen reader or real network failure acceptance.
+Web/E2E types, scoped ESLint, format and diff checks passed. Own hidden child Vite
+stopped in finally. Evidence:feedback-pending/{results.json,final-results.json}.
+No full suite/build/CI/publication or task completion; existing UI317 remains open.
