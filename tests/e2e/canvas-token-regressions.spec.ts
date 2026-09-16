@@ -3159,3 +3159,151 @@ for (const change of ["revision", "locked", "revoked", "removed"] as const) {
     });
   });
 }
+
+for (const change of [
+  "token-revision",
+  "drawing-revision",
+  "drawing-removed",
+  "control-revoked",
+] as const) {
+  test(`UIX-507 bulk confirmation keeps exact targets on ${change}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = change === "control-revoked" ? "PLAYER" : "GM";
+    current.tokens[0].controllerMembershipIds = [current.me.id];
+    current.tokens[0].ownerMembershipId = current.me.id;
+    current.fogReveals = [
+      { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    const drawingId = "c5f46186-2ebc-4cf8-bce7-870097305a6b";
+    current.drawings = [
+      {
+        id: drawingId,
+        sceneId,
+        authorMembershipId: current.me.id,
+        points: [0, 0, 64, 64],
+        color: "#ef4444",
+        strokeWidth: 8,
+        x: 480,
+        y: 320,
+        revision: 0,
+      },
+    ];
+    const originalToken = structuredClone(current.tokens[0]);
+    const originalDrawing = structuredClone(current.drawings[0]);
+    const writes: string[] = [];
+    const requests: unknown[] = [];
+    const errors: string[] = [];
+    let publish: (() => void) | undefined;
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route("**/api/canvas/bulk", async (route) => {
+      const body = route.request().postDataJSON();
+      expect(body.operation).toBe("DELETE");
+      expect(body.sceneId).toBe(sceneId);
+      requests.push(body.targets);
+      current.tokens = [];
+      current.drawings = [];
+      await route.fulfill({
+        json: { revisions: { tokens: {}, drawings: {} } },
+      });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") {
+          socket.send('40{"sid":"bulk-lifecycle"}');
+          publish = () =>
+            socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+        }
+      });
+      socket.send(
+        '0{"sid":"bulk-lifecycle","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect.poll(() => Boolean(publish)).toBe(true);
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    const selectBoth = async () => {
+      await page.getByRole("button", { name: "Вписать", exact: true }).click();
+      const box = (await map.boundingBox())!;
+      const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, box);
+      const point = (x: number, y: number) => ({
+        x: box.x + fitted.position.x + x * fitted.scale,
+        y: box.y + fitted.position.y + y * fitted.scale,
+      });
+      const start = point(350, 290),
+        end = point(565, 410);
+      await page.keyboard.down("Shift");
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(end.x, end.y, { steps: 6 });
+      await page.mouse.up();
+      await page.keyboard.up("Shift");
+      await expect(
+        page.getByRole("button", { name: "Удалить выбранное", exact: true }),
+      ).toBeVisible();
+    };
+    await selectBoth();
+    await page
+      .getByRole("button", { name: "Удалить выбранное", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Удалить выбранные объекты?",
+      exact: true,
+    });
+    await expect(dialog).toContainText("Токенов: 1. Рисунков: 1.");
+    if (change === "token-revision") current.tokens[0].revision = 1;
+    if (change === "drawing-revision") current.drawings[0].revision = 1;
+    if (change === "drawing-removed") current.drawings = [];
+    if (change === "control-revoked")
+      current.tokens[0].controllerMembershipIds = [];
+    current.scenes[0].name = "Bulk snapshot updated";
+    publish!();
+    await expect(page.locator(".topbar")).toContainText(
+      "Bulk snapshot updated",
+    );
+    await expect(dialog).toHaveCount(0);
+    expect(requests).toEqual([]);
+    current.tokens = [{ ...originalToken, revision: 2 }];
+    current.drawings = [{ ...originalDrawing, revision: 2 }];
+    current.scenes[0].name = "Bulk snapshot restored";
+    publish!();
+    await expect(page.locator(".topbar")).toContainText(
+      "Bulk snapshot restored",
+    );
+    await expect(dialog).toHaveCount(0);
+    await selectBoth();
+    await page
+      .getByRole("button", { name: "Удалить выбранное", exact: true })
+      .click();
+    await expect(dialog).toContainText("Токенов: 1. Рисунков: 1.");
+    await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests).toEqual([
+      [
+        { targetType: "TOKEN", targetId: tokenId, revision: 2 },
+        { targetType: "DRAWING", targetId: drawingId, revision: 2 },
+      ],
+    ]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("bulk-lifecycle-receipt", {
+      body: JSON.stringify({ change, requests, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}

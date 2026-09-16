@@ -1,3 +1,4 @@
+import { mapDeleteScope, type MapDeleteRequest } from "./map-delete";
 import {
   useCallback,
   useEffect,
@@ -307,10 +308,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     onSelectionChangeRef.current?.(selectedTokenIds);
   }, [selectedTokenIds, onSelectionChangeRef]);
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([]);
-  const [bulkDeleteRequested, setBulkDeleteRequested] = useState(false);
+  const [bulkDeleteRequested, setBulkDeleteRequested] = useState<{
+    scope: string;
+    request: MapDeleteRequest;
+  } | null>(null);
   useEffect(() => {
     if (selectedTokenIds.length + selectedDrawingIds.length === 0)
-      setBulkDeleteRequested(false);
+      setBulkDeleteRequested(null);
   }, [selectedTokenIds.length, selectedDrawingIds.length]);
   const [marquee, setMarquee] = useState<{
     startX: number;
@@ -974,6 +978,32 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       props.membershipId,
     ],
   );
+  const bulkDeleteScope = mapDeleteScope(
+    { sceneId: props.scene.id, targets: movableTargets },
+    props.role,
+    props.membershipId,
+  );
+  const bulkDeleteValid = Boolean(
+    bulkDeleteRequested && bulkDeleteRequested.scope === bulkDeleteScope,
+  );
+  useEffect(() => {
+    if (bulkDeleteRequested && !bulkDeleteValid) setBulkDeleteRequested(null);
+  }, [bulkDeleteRequested, bulkDeleteValid]);
+  const requestBulkDelete = () => {
+    if (
+      !movableTargets.length ||
+      movableTargets.length !==
+        selectedTokenIds.length + selectedDrawingIds.length
+    )
+      return;
+    setBulkDeleteRequested({
+      scope: bulkDeleteScope,
+      request: {
+        sceneId: props.scene.id,
+        targets: movableTargets.map((target) => ({ ...target })),
+      },
+    });
+  };
   const keyboardTokenTargets = movableTargets.filter(
     (target) => target.targetType === "TOKEN",
   );
@@ -1025,20 +1055,17 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
   const requestSelectedDelete = () => {
     if (selectedTokenIds.length + selectedDrawingIds.length > 1) {
-      setBulkDeleteRequested(true);
+      requestBulkDelete();
     } else if (interaction.selectedObject)
       requestDelete(interaction.selectedObject);
     else if (selectedTokenIds.length + selectedDrawingIds.length === 1)
-      setBulkDeleteRequested(true);
+      requestBulkDelete();
   };
   const confirmBulkDelete = async () => {
-    if (!props.onBulkDelete) return;
+    if (!props.onBulkDelete || !bulkDeleteRequested || !bulkDeleteValid) return;
     try {
-      await props.onBulkDelete({
-        tokenIds: selectedTokenIds,
-        drawingIds: selectedDrawingIds,
-      });
-      setBulkDeleteRequested(false);
+      await props.onBulkDelete(bulkDeleteRequested.request);
+      setBulkDeleteRequested(null);
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
@@ -3420,13 +3447,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         }
       />
       <ConfirmDialog
-        open={bulkDeleteRequested}
+        open={bulkDeleteRequested !== null && bulkDeleteValid}
         title="Удалить выбранные объекты?"
         message={selectionSummary({
-          tokenIds: selectedTokenIds,
-          drawingIds: selectedDrawingIds,
+          tokenIds:
+            bulkDeleteRequested?.request.targets
+              .filter((target) => target.targetType === "TOKEN")
+              .map((target) => target.targetId) ?? [],
+          drawingIds:
+            bulkDeleteRequested?.request.targets
+              .filter((target) => target.targetType === "DRAWING")
+              .map((target) => target.targetId) ?? [],
         })}
-        onClose={() => setBulkDeleteRequested(false)}
+        onClose={() => setBulkDeleteRequested(null)}
         onConfirm={() => void confirmBulkDelete()}
       />
       {props.canvasEditMode === "BACKGROUND" && (
@@ -3633,7 +3666,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
           <button
             className="map-selection-action"
-            onClick={() => setBulkDeleteRequested(true)}
+            onClick={() => requestBulkDelete()}
           >
             Удалить выбранное
           </button>

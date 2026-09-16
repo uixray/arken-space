@@ -2286,44 +2286,15 @@ export function App() {
                       // moves until their canonical socket snapshot arrives.
                       await recoverFromCanvasMutation(reason);
                     }}
-                    onBulkDelete={(selection) =>
+                    onBulkDelete={(request) =>
                       run(() =>
                         api("/api/canvas/bulk", {
                           method: "POST",
                           body: JSON.stringify({
                             actionId: crypto.randomUUID(),
-                            sceneId: activeScene.id,
+                            sceneId: request.sceneId,
                             operation: "DELETE",
-                            targets: [
-                              ...selection.tokenIds.flatMap((id) => {
-                                const token = activeTokens.find(
-                                  (item) => item.id === id,
-                                );
-                                return token
-                                  ? [
-                                      {
-                                        targetType: "TOKEN" as const,
-                                        targetId: id,
-                                        revision: token.revision,
-                                      },
-                                    ]
-                                  : [];
-                              }),
-                              ...selection.drawingIds.flatMap((id) => {
-                                const drawing = activeDrawings.find(
-                                  (item) => item.id === id,
-                                );
-                                return drawing
-                                  ? [
-                                      {
-                                        targetType: "DRAWING" as const,
-                                        targetId: id,
-                                        revision: drawing.revision,
-                                      },
-                                    ]
-                                  : [];
-                              }),
-                            ],
+                            targets: request.targets,
                           }),
                         }),
                       )

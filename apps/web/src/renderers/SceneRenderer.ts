@@ -1,3 +1,4 @@
+import type { MapDeleteRequest } from "./map-delete";
 import type {
   AssetDto,
   DrawingDto,
@@ -153,10 +154,7 @@ export interface SceneRendererProps {
     delta: { x: number; y: number },
   ) => Promise<MapMoveAck>;
   onBulkMoveFailure?: (reason: unknown) => Promise<void>;
-  onBulkDelete?: (selection: {
-    tokenIds: string[];
-    drawingIds: string[];
-  }) => Promise<void>;
+  onBulkDelete?: (request: MapDeleteRequest) => Promise<void>;
   gmFogOpacity?: number;
   gmFogVisible?: boolean;
   gmGridVisible?: boolean;
