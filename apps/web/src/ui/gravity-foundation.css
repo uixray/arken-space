@@ -365,6 +365,8 @@
 .arken-form-select-popup__content {
   display: flex;
   flex-direction: column;
+  /* The trigger is a minimum, not a cap on readable option labels. */
+  width: max-content;
   max-width: calc(100vw - 20px);
   max-height: inherit;
 }

@@ -404,7 +404,7 @@ it.each([
   },
 );
 
-it("refreshes open popup content width after the trigger resizes without losing selection", async () => {
+it("refreshes open popup minimum width after the trigger resizes without losing selection", async () => {
   const user = userEvent.setup();
   const { container } = renderComponent(
     <FormSelect aria-label="Размер списка" defaultValue="one">
@@ -421,10 +421,11 @@ it("refreshes open popup content width after the trigger resizes without losing 
     await user.click(trigger);
     const content = () =>
       document.querySelector<HTMLElement>(".arken-form-select-popup__content");
-    await expect.poll(() => content()?.style.width).toBe("320px");
+    await expect.poll(() => content()?.style.minWidth).toBe("320px");
+    expect(content()?.style.width).toBe("");
     width = 160;
     fireEvent(window, new Event("resize"));
-    await expect.poll(() => content()?.style.width).toBe("160px");
+    await expect.poll(() => content()?.style.minWidth).toBe("160px");
     expect(trigger).toHaveTextContent("Первый");
     expect(trigger).toHaveFocus();
     await user.keyboard("{Escape}");

@@ -296,3 +296,26 @@ rendered-text regression and review shared popup content sizing, preserving the
 zoom-width fix and viewport bound. Do not silently count whole UIX-644 as done.
 Owned Vite stopped; protected selection recovery file unchanged. Existing Linear
 write/publication gates unchanged, no status mutation or deployment.
+
+## 2026-09-17 — UIX-644 readable shared Select options
+
+The clipped action from the preceding screenshot is fixed in the shared adapter,
+not by widening the token form alone. Measured trigger width is now a minimum;
+popup content uses intrinsic max-content width, still capped by the existing
+viewport limit. ResizeObserver/resize scheduling and portal/owner rules remain
+unchanged. The native selector is not replaced.
+
+Added a rendered overflow assertion for guidance and create-action labels to the
+existing token-modal browser scenario. It failed on the original narrow Chrome
+popup (RED); no assertion was weakened. Fixed18/18 connected owner/App cases
+passed93.884s on Chrome/Firefox. Four existing real Chrome zoom cases passed23.7s
+(GM/PLAYER,1600/1280 windows,100/125/150/100 percent,isolated profiles). Current
+component13/13,web/E2E types and scoped ESLint passed. One production build2.38s;
+four served HTML/JS/CSS hashes matched local files; real App token-modal cases
+passed4/4 in20.1s against that bundle. Compact Chrome screenshot visually confirms
+full «Персонажей пока нет» and «Создать персонажа» labels.
+
+Artifacts:select-readable-labels/red,fixed,zoom,built-results.json,manifest.json.
+This connected pool does not replace the whole UIX-644 registry gate, all long
+user-authored labels, physical devices or backend acceptance. No publication,
+Linear write or new card. Protected untracked selection test unchanged.

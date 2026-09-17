@@ -257,7 +257,7 @@ export function FormSelect({
         <div
           key={open ? "open" : "closed"}
           className="arken-form-select-popup__content"
-          style={{ width: popupWidth }}
+          style={{ minWidth: popupWidth }}
         >
           {renderFilter()}
           {renderList()}

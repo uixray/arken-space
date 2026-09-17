@@ -755,6 +755,15 @@ for (const viewport of [
     }
     for (const item of [guidance, create]) {
       await expect(item).toBeVisible();
+      // Full DOM text and a clickable centre do not prove the action is
+      // readable: a narrow trigger used to force ellipsis on every option.
+      await expect
+        .poll(() =>
+          item.evaluate(
+            (element) => element.scrollWidth <= element.clientWidth + 1,
+          ),
+        )
+        .toBe(true);
       await expect
         .poll(() =>
           item.evaluate((element) => {
