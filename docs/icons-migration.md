@@ -36,6 +36,8 @@
 
 | Режимы панели карты | map-tool-icon-states/combined-evidence.json, 8 (5 + 3) | GM/PLAYER 1280/360, expanded/collapsed, точные имена/разные SVG, один активный режим, 44px compact, selected normal/hover ≥12.05:1, Tab, GM details/Escape | Рисование/туман на canvas, серверные мутации, все темы, физический touch |
 
+| Чат: отправка/стикеры/фильтр | chat-icon-states/ordered-results.json, 8; client-settled, 2 дополнительных | GM/PLAYER1280/360, exact names/SVG/Tab, 44px, normal/hover, hidden-filter badge; сохранение нового черновика | Серверная доставка, reject/restore, другие ветки композера, все темы |
+
 Корень receipts:
 `C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07`.
 Точные SHA/runtime и changed-files находятся в checkpoint/manifest каждой папки.
@@ -593,3 +595,42 @@ npm-пакет не импортируется целиком. Это не по�
 персональные темы не объявляются проверенными. Рисование/изменение тумана,
 history mutations, music/chat и полная исходная UIX-645 остаются отдельно.
 Приложение не менялось; новый scoped regression test/docs сохранены локально.
+
+## 2026-09-17 — иконки и состояния композера событий
+
+На неизменном runtime `2fbf179` (`world-marker-edges/dist`, четыре served SHA256)
+добавлен `tests/e2e/chat-icon-states.spec.ts`. Восемь случаев Chrome/Firefox ×
+GM/PLAYER ×1280/360 прошли за44.9s: `chat-icon-states/ordered-results.json`,
+unexpected/skipped/flaky=0. Это реальный ActivityPanel с синтетическими API и
+WebSocket; других веток чата и реальной доставки сообщений проверка не доказывает.
+
+Отправка, Стикеры и summary фильтра имеют точные доступные имена, три разных
+Lucide SVG с декоративным currentColor/stroke2 contract. Область ≥24px desktop,
+≥44px compact, центр доступен указателю. Настоящий Tab от вкладки событий
+достигает всех трёх с focus-visible и видимым indicator.40 samples normal/hover:
+минимумы6.6456:1 и7.3743:1 при пороге3:1. Это computed-color, не pixel/AT audit.
+После отключения «Броски» summary сообщает «Скрыто: Броски», badge показывает1;
+иконка и hit-area сохранены. Sticker показывается только при пустом вводе;
+короткая Enter/Escape-проверка не заменяет прежний полный lifecycle receipt.
+
+Пустая отправка валидируется локально, без POST. После отправки введённого текста
+черновик очищается, стикеры возвращаются; во время отложенного ответа Send остаётся
+**enabled по действующему контракту**, можно набирать новый черновик. Не вводился
+искусственный disabled. Зафиксирован один разрешённый synthetic POST PUBLIC/TABLE,
+без неожиданных записей/pageerror. После усиления ожидания fetch completion и двух
+animation frames выполнены только два дополнительных GM360 Chrome/Firefox —
+`client-settled-results.json`,2PASS14.8s; новый текст сохранён после ответа.
+Не складывать8+2 как десять уникальных случаев. Rejection/restore отдельно.
+
+Диагностический Firefox FAIL был вызван маршрутом, начинавшимся после фильтра
+и ожидавшим циклический обход через browser chrome. Сохранён focus-trail:
+после последней Send document traversal не возвращался к фильтру. Итоговый
+тест входит из предыдущей вкладки и проверяет естественный прямой Tab-путь.
+Один промежуточный probe ошибочно повторил старую точку входа из-за неприменившейся
+текстовой замены; это не evidence исправления приложения.
+
+E2E types/lint/format PASS. Compact PLAYER Firefox screenshot просмотрен.
+Существующий mobile CSS уже обеспечивает44px; source-only предположение о30px
+опровергнуто фактическим каскадом и browser geometry. Приложение не менялось,
+пересборки/fullsuite/CI/push/deploy нет. UIX-645 и UIX-624 остаются открытыми;
+следующий связанный scope — музыка/пауза, не повтор этого композера.
