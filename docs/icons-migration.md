@@ -375,3 +375,22 @@ does not prove successful server persistence or multi-client atomic ordering.
 One build1.67s/four served hashes; web/E2E types, scoped lint/format/diff PASS.
 Evidence: character-gallery-busy/{fixed-results.json,manifest.json,checkpoint.md}.
 Protected selection test unchanged; no full suite/CI rerun/publication.
+
+## 2026-09-17 — full-size gallery image/caption fit
+
+New large-image fixture exposed horizontal overflow in the viewer: a valid
+long unbroken caption produced scroll964px inside client656px on desktop.
+Caption now has max-width100% and overflow-wrap:anywhere, matching the existing
+thumbnail metadata wrapping rule. Text is preserved rather than truncated.
+
+Browser8/8 PASS29.8s: Chrome/Firefox GM/PLAYER1280/360, rendered1600x900 landscape
+and900x1600 portrait SVG fixtures, decoded image present, long caption, viewer
+and dialog within horizontal viewport, no viewer horizontal overflow. Next
+button is center-hittable after scrolling into view; Escape restores thumbnail
+focus. No writes/client-log errors/page errors. Both compact screenshots viewed:
+whole bordered images and navigation fit; long caption wraps. This covers fixed
+dimension visual fixtures, not user-upload codecs or all viewport heights/themes.
+
+One build1.62s/four served hashes. E2E types and scoped lint/format/diff PASS.
+Evidence: character-gallery-fit/{red-results.json,fixed-results.json,manifest.json,
+checkpoint.md}. CSS-only product change; no repeated full unit suite/CI/deploy.

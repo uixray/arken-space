@@ -4894,6 +4894,8 @@ code {
   color: var(--text-muted, #999);
 }
 .character-media-viewer__caption {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   text-align: center;
 }
 .character-media-viewer__nav {
