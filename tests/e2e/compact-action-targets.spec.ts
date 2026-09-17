@@ -135,6 +135,41 @@ for (const role of ["GM", "PLAYER"] as const)
           await page.keyboard.press("Escape");
           await expect(control).toBeHidden();
           await expect(trigger).toBeFocused();
+          // Switching by keyboard does not emit the outside pointerdown that
+          // dismisses a native details menu. Hiding its owner must still close it.
+          await trigger.press("Enter");
+          await expect(owner).toHaveAttribute("open", "");
+          const journalNav = page.locator("#compact-nav-journal");
+          await journalNav.focus();
+          await journalNav.press("Enter");
+          await expect(journalNav).toHaveAttribute("aria-pressed", "true");
+          await expect(owner).toBeHidden();
+          await expect(owner).not.toHaveAttribute("open", "");
+          await expect
+            .poll(() =>
+              page.evaluate(() =>
+                Boolean(
+                  document.activeElement?.closest("#activity-sidebar") &&
+                  !document.activeElement?.closest("[hidden], [inert]"),
+                ),
+              ),
+            )
+            .toBe(true);
+          const mapNav = page.locator("#compact-nav-map");
+          await mapNav.focus();
+          await mapNav.press("Enter");
+          await expect(mapNav).toHaveAttribute("aria-pressed", "true");
+          await expect
+            .poll(() =>
+              page.evaluate(() =>
+                Boolean(
+                  document.activeElement?.closest("#main-content") &&
+                  !document.activeElement?.closest("[hidden], [inert]"),
+                ),
+              ),
+            )
+            .toBe(true);
+          await expect(owner).not.toHaveAttribute("open", "");
         }
         const more = page.locator(".toolbar-overflow summary");
         await more.click();

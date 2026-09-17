@@ -26,6 +26,7 @@ export function useDismissibleDetails(
   } = {},
 ) {
   useEffect(() => {
+    let ownerVisibilityObserver: MutationObserver | null = null;
     const options = () =>
       Array.from(
         ref.current?.querySelectorAll<HTMLElement>(
@@ -57,10 +58,36 @@ export function useDismissibleDetails(
     const close = (returnFocus: boolean) => {
       const details = ref.current;
       if (!details?.open) return;
+      ownerVisibilityObserver?.disconnect();
+      ownerVisibilityObserver = null;
       details.open = false;
       syncListbox();
       onDismiss?.();
       if (returnFocus) details.querySelector<HTMLElement>("summary")?.focus();
+    };
+    const watchOwnerVisibility = () => {
+      ownerVisibilityObserver?.disconnect();
+      ownerVisibilityObserver = null;
+      const details = ref.current;
+      if (!details?.open) return;
+      if (details.closest("[hidden], [inert]")) {
+        close(false);
+        return;
+      }
+      // Keyboard navigation can hide a mounted owner without a pointerdown or
+      // viewport event. Watch only the relevant attributes while this menu is
+      // open; never observe layout, descendants, or unrelated document changes.
+      // Open details keep their owner chain until the next toggle/unmount.
+      // A stale queued record must never close a replacement ref.
+      ownerVisibilityObserver = new MutationObserver(() => {
+        if (ref.current !== details) return;
+        if (details.closest("[hidden], [inert]")) close(false);
+      });
+      for (let node: Element | null = details; node; node = node.parentElement)
+        ownerVisibilityObserver.observe(node, {
+          attributes: true,
+          attributeFilter: ["hidden", "inert"],
+        });
     };
     const onPointerDown = (event: PointerEvent) => {
       if (shouldDismissDetails(ref.current, event.target)) close(false);
@@ -147,9 +174,13 @@ export function useDismissibleDetails(
         close(false);
     };
     const onToggle = (event: Event) => {
-      if (event.target === ref.current) syncListbox();
+      if (event.target === ref.current) {
+        syncListbox();
+        watchOwnerVisibility();
+      }
     };
     syncListbox();
+    watchOwnerVisibility();
     // The control can mount after bootstrap without changing the ref object.
     document.addEventListener("toggle", onToggle, true);
     document.addEventListener("keydown", onListboxKeyDown);
@@ -162,6 +193,7 @@ export function useDismissibleDetails(
       document.addEventListener("scroll", onAncestorScroll, true);
     }
     return () => {
+      ownerVisibilityObserver?.disconnect();
       document.removeEventListener("toggle", onToggle, true);
       document.removeEventListener("keydown", onListboxKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);

@@ -318,3 +318,40 @@ Own API/PG stopped; frontend stopped in finally; ports15439/14109/5189 absent an
 user PostgreSQL service remainsRunning. No product code, deployment, full suite,
 new cards or Linear write. This covers real A→B entry/privacy at two viewport sizes,
 not physical hardware, every private surface or personal-theme persistence.
+
+## 2026-09-17 — close native map settings when their owner is hidden
+
+A real built-app regression was reproduced at 360×850 GM: open grid settings,
+focus compact Journal navigation and press Enter. The map becomes hidden/inert,
+but `<details open>` survived because keyboard navigation emits no outside
+pointerdown and no resize. This could revive stale settings on returning to Map.
+
+`useDismissibleDetails` now observes only `hidden`/`inert` on the details element
+and its current ancestor chain, and only while open. Initial hidden owners close
+immediately; removal of an attribute does not close a visible menu. Toggle/close/
+unmount disconnect the observer; stale ref callbacks cannot close a replacement.
+The observer never focuses a hidden summary. Existing Escape ownership and
+viewport behavior remain unchanged; no ResizeObserver or whole-document subtree
+watcher was added. No gameplay mutations, layout redesign or new navigation.
+
+Focused helper/DOM gate: **19/19 PASS**, including hidden and inert changes,
+reopen, initial hidden owner, removal-only records and focus preservation.
+Web/E2E types, scoped lint and diff checks passed. One fresh web build4.29s;
+four served runtime hashes verified in the pool. Browser results are recorded in
+compact-owner-hide/checkpoint.md and the final report under the current artifact
+base, separate from the initial red and intermediate harness failure.
+
+The intermediate fixed run passed the closing assertion but exposed an incorrect
+new test expectation: compact navigation intentionally restores focus inside the
+new surface (useCompactNavigation), not permanently on its navigation button.
+The test now verifies focus inside the active non-hidden/non-inert surface and
+that the old settings remain closed after return. Product focus policy was not
+changed or weakened. No full-suite/remote CI rerun, publication or Linear update;
+UIX-624 and UIX-644 retain their remaining original gates.
+
+Final connected browser gate: **24/24 PASS** Chrome/Firefox, one worker,
+retries0/skipped0/flaky0. Includes compact GM/PLAYER map/journal targets at
+360×850,360×640,640×360 (12 cases), mixed popup/modal Escape ownership at
+1280/390 (8), desktop→compact→desktop lifecycle (4). New keyboard hiding cases
+cover both grid and resize settings, active-surface focus and no stale reopening.
+This is synthetic App/browser behavior, not live multiplayer or physical devices.

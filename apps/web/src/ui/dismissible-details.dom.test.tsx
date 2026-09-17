@@ -242,3 +242,64 @@ describe("UIX-644 opt-in details listbox", () => {
     expect(document.querySelector("details")?.open).toBe(false);
   });
 });
+
+it.each(["hidden", "inert"])(
+  "closes a mounted owner on %s without moving focus, and watches a later reopen",
+  async (attribute) => {
+    const onDismiss = vi.fn();
+    const rendered = renderComponent(
+      <>
+        <button type="button">Next surface</button>
+        <section data-testid="owner">
+          <Popover onDismiss={onDismiss} />
+        </section>
+      </>,
+    );
+    const owner = rendered.getByTestId("owner");
+    const details = owner.querySelector("details")!;
+    const next = screen.getByRole("button", { name: "Next surface" });
+    next.focus();
+    owner.setAttribute(attribute, "");
+    await waitFor(() => expect(details.open).toBe(false));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(next).toHaveFocus();
+    owner.removeAttribute(attribute);
+    expect(details.open).toBe(false);
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    owner.setAttribute(attribute, "");
+    await waitFor(() => expect(details.open).toBe(false));
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+    expect(next).toHaveFocus();
+  },
+);
+
+it("closes an initially open details already under a hidden owner", async () => {
+  const onDismiss = vi.fn();
+  const rendered = renderComponent(
+    <section hidden>
+      <Popover onDismiss={onDismiss} />
+    </section>,
+  );
+  expect(rendered.container.querySelector("details")!.open).toBe(false);
+  expect(onDismiss).toHaveBeenCalledTimes(1);
+});
+
+it("rechecks current visibility rather than dismissing on a removed attribute record", async () => {
+  const onDismiss = vi.fn();
+  const rendered = renderComponent(
+    <section>
+      <Popover onDismiss={onDismiss} />
+    </section>,
+  );
+  const owner = rendered.container.querySelector("section")!;
+  const details = owner.querySelector("details")!;
+  owner.hidden = true;
+  owner.hidden = false;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(details.open).toBe(true);
+  expect(onDismiss).not.toHaveBeenCalled();
+  details.hidden = true;
+  await waitFor(() => expect(details.open).toBe(false));
+  expect(onDismiss).toHaveBeenCalledTimes(1);
+});
