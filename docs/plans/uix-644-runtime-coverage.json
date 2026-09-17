@@ -65,6 +65,12 @@
       "artifact": "menu-access-gate/results.json",
       "scope": "16 access-change cases; adjacent20 in related-results.json; only token menu."
     },
+    "tokenFirstOpenResize": {
+      "status": "PASS",
+      "revision": "5d7d548d0ad69c67139333039f170ecc88cca708",
+      "artifact": "token-first-open-resize/current-results.json",
+      "scope": "4 Chrome/Firefox desktop1280→1120→1280 and compact390→360→390 cases PASS20.4s: resize during FIRST token character popup, before Escape/Setup; bounds and actual create-character target hit checks at each width, prior inline-image/pointer/keyboard/owner assertions retained, no unexpected API writes inclclientlogs. Same4 on pre-fix984c1fe alsoPASS20.7s: NOT an old-red/new-green demonstration and does not resolve original RO failure."
+    },
     "ro": {
       "status": "FAIL",
       "revision": "452f5f162da51f10fbafcedef92f5d85fc9d36cf",
@@ -481,8 +487,8 @@
       "count": 2,
       "status": "FAIL",
       "classification": "reachable",
-      "scope": "Outer image and modal character controls: built tests passed, but original modal ResizeObserver error is unresolved.",
-      "evidence": ["built", "ro"],
+      "scope": "Outer image and modal character controls: first-open width-transition gate now also passes on5d7d548, but original modal ResizeObserver error is unresolved.",
+      "evidence": ["built", "ro", "tokenFirstOpenResize"],
       "next": "Capture offending observer at actual failure; do not repeat identical warm runs or filter client logs."
     },
     {

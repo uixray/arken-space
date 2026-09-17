@@ -718,6 +718,41 @@ for (const viewport of [
     await expect(menu).toBeVisible();
     const guidance = menu.getByText("Персонажей пока нет");
     const create = menu.getByText("Создать персонажа", { exact: true });
+    // Resize while the FIRST character popup is open, before Escape or the
+    // transition to Setup. This keeps the original failure phase observable.
+    for (const width of [
+      viewport.name === "desktop" ? 1120 : 360,
+      viewport.width,
+    ]) {
+      await page.setViewportSize({ width, height: viewport.height });
+      await expect(menu).toBeVisible();
+      await expect
+        .poll(() =>
+          menu.evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            return (
+              box.left >= 0 &&
+              box.top >= 0 &&
+              box.right <= innerWidth &&
+              box.bottom <= innerHeight
+            );
+          }),
+        )
+        .toBe(true);
+      await expect
+        .poll(() =>
+          create.evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            return node.contains(
+              document.elementFromPoint(
+                box.x + box.width / 2,
+                box.y + box.height / 2,
+              ),
+            );
+          }),
+        )
+        .toBe(true);
+    }
     for (const item of [guidance, create]) {
       await expect(item).toBeVisible();
       await expect
