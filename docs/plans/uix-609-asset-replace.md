@@ -273,3 +273,23 @@ that is not playback/decode proof: mounted audio remains the next required gate.
 Evidence: mounted-asset-images/initial-results.json and attached pixel receipts.
 HTTP/socket are synthetic; real backend replacement evidence is the separate
 asset-replacement-http gate. No full suite/build/CI/publication or issue closure.
+
+## 2026-09-17 — mounted native audio and local consent
+
+Four new real-App cases passed18.7s: Chrome/Firefox ×GM/PLAYER at1280, one worker,
+no retries. The native audio element decodes the valid0.7s Vorbis fixture, sees
+successive versioned URLs at the same asset ID, and remains the same DOM element.
+Before local consent, source replacement stays paused despite server playing=true.
+Using the real volume UI, gain is set to0 before enabling sound; playback advances
+without audible laptop output. Replacing the active source reloads/decodes it and
+playback resumes with gain0. After explicit local opt-out, another replacement
+stays paused; saved consent=false and volume=0 remain. No audio:set commands,
+HTTP game writes or pageerrors; server audio state/revision remain unchanged.
+
+E2E types, scoped lint/format/diff PASS; owned Vite stopped after the run. Evidence:
+mounted-asset-audio/initial-results.json and native-media receipts. HTTP/socket
+are mocked but native decoding/currentSrc/readiness/time progression are real.
+The same valid Ogg payload is served under each version: this proves source reload
+and playback/consent preservation, not different-song audibility, a changed
+shorter duration, production delivery, Safari or physical speakers. No full suite,
+build/CI/publication or automatic UIX-293 closure.
