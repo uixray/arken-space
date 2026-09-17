@@ -128,6 +128,64 @@ it("does not write a late export to the clipboard after close", async () => {
   expect(write).not.toHaveBeenCalled();
 });
 
+it.each(
+  [401, 403].flatMap((status) =>
+    ["export", "attachment", "reveal", "transition"].map((action) => ({
+      status,
+      action,
+    })),
+  ),
+)(
+  "clears revealed data and images when $action loses authorization ($status)",
+  async ({ status, action }) => {
+    const view = await setup();
+    vi.mocked(feedback.fetchFeedbackDetail).mockResolvedValueOnce({
+      ...detail,
+      contact: "PRIVATE-CONTACT",
+    });
+    await view.user.click(
+      screen.getByRole("button", { name: "Показать чувствительные данные" }),
+    );
+    await screen.findByText("PRIVATE-CONTACT");
+    vi.mocked(feedback.fetchAttachment).mockResolvedValueOnce(
+      new Blob(["image"], { type: "image/png" }),
+    );
+    await view.user.click(
+      screen.getByRole("button", { name: "Открыть изображение" }),
+    );
+    await screen.findByRole("img");
+    const denied = new ApiError(status, "DENIED", "Denied");
+    const label =
+      action === "export"
+        ? "Копировать обезличенную версию"
+        : action === "attachment"
+          ? "Открыть изображение"
+          : action === "reveal"
+            ? "Показать чувствительные данные"
+            : "Принято";
+    if (action === "export")
+      vi.mocked(feedback.fetchRedactedExport).mockRejectedValueOnce(denied);
+    if (action === "attachment")
+      vi.mocked(feedback.fetchAttachment).mockRejectedValueOnce(denied);
+    if (action === "reveal")
+      vi.mocked(feedback.fetchFeedbackDetail).mockRejectedValueOnce(denied);
+    if (action === "transition")
+      vi.mocked(feedback.updateFeedback).mockRejectedValueOnce(denied);
+    const write = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue();
+    await view.user.click(screen.getByRole("button", { name: label }));
+    expect(view.onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByText("PRIVATE-CONTACT")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Ошибка/ }),
+    ).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:private-preview");
+    expect(write).not.toHaveBeenCalled();
+  },
+);
+
 it("does not allocate a private image URL after unmount", async () => {
   const view = await setup();
   const pending = deferred<Blob>();

@@ -104,3 +104,28 @@ Evidence:
 - Local artifact folder `operator-list-gate`; own Vite stopped after every round.
   No full suite/build/CI/publication or production request. Original host-trust and
   other unverified UIX-318 criteria remain separate.
+
+## 2026-09-17 — clear the viewer on any observed authorization loss
+
+Previously only list failures handled401/403 as loss of access. A denied export
+left already revealed contact/diagnostics and an open attachment visible. Two
+new component cases reproduced this on the original source (both failed).
+
+A shared authorization-failure handler now invalidates the viewer scope, clears
+detail/list/cursor/link drafts/notices, revokes the image URL and requests dialog
+closure for list, detail, reveal, export, attachment and status-transition errors.
+Each caller still checks its captured scope first: stale failures do not close a
+newer viewer. Attachment fetching preserves HTTP status in ApiError without
+reading the failure response body. Non401/403 errors retain their existing retry
+behavior. No server permission/endpoint changes.
+
+Verification:25/25 connected component/client tests passed18.40s, including
+401/403 for reveal/export/attachment/transition and attachment status propagation.
+Chrome/Firefox:4/4 actual App/Dialog cases passed19.7s, synthetic HTTP/socket:
+explicit close before a late export and server403 on export after revealing a
+synthetic contact. Both close/clear without invoking clipboard; reopening does
+not restore detail. Actual server ACL and host identity remain separate gates.
+Web/E2E types pass after removing an unsupported RTL-only test option; scoped
+lint passes. No claim of revocation detection before the next server response,
+undoing an already completed clipboard write, or clearing browser/network history.
+No production, full suite/build/CI or external Linear write.

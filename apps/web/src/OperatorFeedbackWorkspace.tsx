@@ -67,6 +67,25 @@ export const OperatorFeedbackWorkspace = memo(
       setBusy(false);
       closeImage();
     }, [closeImage]);
+    const closeIfUnauthorized = useCallback(
+      (reason: unknown) => {
+        if (
+          !(reason instanceof ApiError) ||
+          ![401, 403].includes(reason.status)
+        )
+          return false;
+        clearSensitive();
+        setItems([]);
+        setNextCursor(null);
+        setListBusy(false);
+        setListError(false);
+        setError("");
+        setNotice("");
+        onClose();
+        return true;
+      },
+      [clearSensitive, onClose],
+    );
     const refreshList = useCallback(async (cursor?: string) => {
       const requestScope = scope.current;
       setListBusy(true);
@@ -99,17 +118,10 @@ export const OperatorFeedbackWorkspace = memo(
         const requestScope = scope.current;
         void refreshList(cursor).catch((reason) => {
           if (requestScope !== scope.current) return;
-          if (
-            reason instanceof ApiError &&
-            [401, 403].includes(reason.status)
-          ) {
-            clearSensitive();
-            setItems([]);
-            onClose();
-          } else setListError(true);
+          if (!closeIfUnauthorized(reason)) setListError(true);
         });
       },
-      [refreshList, clearSensitive, onClose],
+      [refreshList, closeIfUnauthorized],
     );
     useEffect(
       () => () => {
@@ -142,8 +154,9 @@ export const OperatorFeedbackWorkspace = memo(
       try {
         const next = await fetchFeedbackDetail(id);
         if (requestScope === scope.current) setDetail(next);
-      } catch {
-        if (requestScope === scope.current) setError(safeError);
+      } catch (reason) {
+        if (requestScope === scope.current && !closeIfUnauthorized(reason))
+          setError(safeError);
       } finally {
         if (requestScope === scope.current) setBusy(false);
       }
@@ -171,8 +184,9 @@ export const OperatorFeedbackWorkspace = memo(
         if (requestScope !== scope.current) return;
         setLinearKey("");
         setLinearUrl("");
-      } catch {
+      } catch (reason) {
         if (requestScope !== scope.current) return;
+        if (closeIfUnauthorized(reason)) return;
         setDetail(null);
         setError(safeError);
       } finally {
@@ -188,8 +202,9 @@ export const OperatorFeedbackWorkspace = memo(
       try {
         const next = await fetchFeedbackDetail(detail.id, true);
         if (requestScope === scope.current) setDetail(next);
-      } catch {
+      } catch (reason) {
         if (requestScope !== scope.current) return;
+        if (closeIfUnauthorized(reason)) return;
         setDetail(null);
         setError(safeError);
       } finally {
@@ -208,8 +223,8 @@ export const OperatorFeedbackWorkspace = memo(
         await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
         if (requestScope === scope.current)
           setNotice("Обезличенная копия скопирована.");
-      } catch {
-        if (requestScope === scope.current)
+      } catch (reason) {
+        if (requestScope === scope.current && !closeIfUnauthorized(reason))
           setError("Не удалось скопировать. Попробуйте снова.");
       } finally {
         if (requestScope === scope.current) setBusy(false);
@@ -226,8 +241,8 @@ export const OperatorFeedbackWorkspace = memo(
         if (requestScope !== scope.current) return;
         image.current = URL.createObjectURL(blob);
         setImageUrl(image.current);
-      } catch {
-        if (requestScope === scope.current)
+      } catch (reason) {
+        if (requestScope === scope.current && !closeIfUnauthorized(reason))
           setError("Не удалось открыть изображение.");
       } finally {
         if (requestScope === scope.current) setBusy(false);

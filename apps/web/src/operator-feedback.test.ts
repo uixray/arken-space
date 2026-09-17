@@ -1,12 +1,35 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   allowedImageMimeTypes,
   transitionPayload,
   transitions,
   validLinearLink,
   feedbackListPath,
+  fetchAttachment,
 } from "./operator-feedback";
 describe("operator feedback client boundary", () => {
+  it.each([401, 403, 503])(
+    "preserves attachment failure status %s without consuming private response bodies",
+    async (status) => {
+      const body = vi.fn();
+      const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: false,
+        status,
+        blob: body,
+        json: body,
+        text: body,
+      } as unknown as Response);
+      try {
+        await expect(fetchAttachment("report", "image")).rejects.toMatchObject({
+          status,
+          code: "ATTACHMENT_FAILED",
+        });
+        expect(body).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    },
+  );
   it("encodes existing bounded filter and opaque cursor query values", () => {
     expect(feedbackListPath()).toBe("/api/operator/feedback");
     const url = new URL(
