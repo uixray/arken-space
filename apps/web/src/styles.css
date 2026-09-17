@@ -3300,6 +3300,8 @@ code {
 }
 .world-map-marker {
   position: absolute;
+  width: max-content;
+  max-width: 100%;
   transform: translate(-50%, -50%);
 }
 .world-map-marker {

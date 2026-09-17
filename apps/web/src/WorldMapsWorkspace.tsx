@@ -1,4 +1,13 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import type {
   GameSnapshot,
   WorldMapDto,
@@ -63,6 +72,49 @@ const toDraft = (
   x: location.x,
   y: location.y,
 });
+
+// Observe the canvas once, not every marker. Translation percentages refer to
+// each marker's own box; the pixel bounds refer to the canvas. Resizing changes
+// only presentation, never the location's normalized coordinates.
+function WorldMapStageCanvas({
+  aspectRatio,
+  children,
+}: {
+  aspectRatio: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const measure = () => {
+      // A hidden dialog can briefly report zero; keep the last usable bounds.
+      if (!canvas.clientWidth || !canvas.clientHeight) return;
+      canvas.style.setProperty("--world-map-width", `${canvas.clientWidth}px`);
+      canvas.style.setProperty(
+        "--world-map-height",
+        `${canvas.clientHeight}px`,
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={ref} className="world-map-stage__canvas" style={{ aspectRatio }}>
+      {children}
+    </div>
+  );
+}
+
+function markerTranslation(position: number, dimension: "width" | "height") {
+  return `clamp(calc(${-position} * var(--world-map-${dimension})), -50%, calc(${1 - position} * var(--world-map-${dimension}) - 100%))`;
+}
 
 export function WorldMapsWorkspace({
   open,
@@ -432,14 +484,12 @@ export function WorldMapsWorkspace({
                 className="world-map-stage"
                 aria-label={`Карта: ${map.name}`}
               >
-                <div
-                  className="world-map-stage__canvas"
-                  style={{
-                    aspectRatio:
-                      background?.width && background?.height
-                        ? `${background.width} / ${background.height}`
-                        : "16 / 9",
-                  }}
+                <WorldMapStageCanvas
+                  aspectRatio={
+                    background?.width && background?.height
+                      ? `${background.width} / ${background.height}`
+                      : "16 / 9"
+                  }
                 >
                   {background ? (
                     <img src={background.url} alt={`Фон карты «${map.name}»`} />
@@ -458,6 +508,7 @@ export function WorldMapsWorkspace({
                       style={{
                         left: `${location.x * 100}%`,
                         top: `${location.y * 100}%`,
+                        transform: `translate(${markerTranslation(location.x, "width")}, ${markerTranslation(location.y, "height")})`,
                       }}
                       aria-pressed={location.id === selectedLocation?.id}
                       aria-label={`Локация: ${location.name}`}
@@ -491,7 +542,7 @@ export function WorldMapsWorkspace({
                       </span>
                     </button>
                   ))}
-                </div>
+                </WorldMapStageCanvas>
               </section>
               <aside className="world-map-detail" aria-label="Локации карты">
                 <div
