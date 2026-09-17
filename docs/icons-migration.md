@@ -335,6 +335,24 @@ scoped lint/format/diff PASS. One build1.67s/four served hashes verified. Eviden
 character-gallery-navigation/{red-results.json,fixed-results.json,manifest.json,
 checkpoint.md}. Protected selection test unchanged; no full suite/CI/publication.
 
+## 2026-09-17 — live participant status presentation
+
+GM preparation shows both connected and disconnected players; its misleading
+heading "Игроки онлайн" now reads "Игроки". No change to membership filtering,
+presence protocol, permissions or rename behavior.
+
+Actual-App4/4 PASS15.8s Chrome/Firefox1280/360: mocked socket presence events
+switch offline→online→offline, accessible names follow status and icon shapes
+differ, SVG stays decorative/nonfocusable/currentColor. Focus survives updates;
+Enter opens rename and Escape returns to the same member. Minimum24/44px bounds
+and corrected heading checked. No writes/client-log or page errors. Baseline
+compact screenshot revealed the heading mismatch while otherwise passing the
+status flow. This is UI subscription evidence, not live-server presence delivery.
+
+One build1.69s/four served hashes; web/E2E types, scoped lint/format/diff PASS.
+Evidence: participant-status-icons/{baseline-results.json,fixed-results.json,
+manifest.json,checkpoint.md}. Protected selection test unchanged; no publication.
+
 ## 2026-09-17 — shared quick-roll privacy visual gate
 
 Reused50290e5 built runtime; no product changes/rebuild. Actual-App fixture
