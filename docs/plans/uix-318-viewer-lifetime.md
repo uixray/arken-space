@@ -45,3 +45,25 @@ verification, production acceptance and all other original criteria require thei
 own evidence. No infrastructure identifiers, actual reports or private attachment
 paths are included here. No full project rerun, external write, publication or
 deployment was performed. The protected untracked selection test is unchanged.
+
+## Follow-up — link draft belongs to one report
+
+The existing viewer retained `linearKey`/`linearUrl` when selecting another report.
+With two acknowledged reports, a valid draft for the first immediately enabled
+the second report's Link action. A focused regression on `bb4f203` reproduced the
+wrong carried value (`UIX-318` instead of empty); no server write was performed.
+
+Clearing the viewing scope now also clears both draft fields. The new test verifies
+that switching requires fresh input, linking remains disabled meanwhile, and the
+eventual mutation contains only the second report ID and its newly entered link.
+Existing server link validation and user-authored values are not rewritten.
+
+Connected component/client pool: **9/9 PASS**, 14.20s, one worker; evidence in local
+`operator-link-draft/baseline.log` and `fixed.log`. This is component/mock evidence,
+not an actual Linear write or backend integration. No repeated browser/full suite.
+
+Next original-criteria gap found by source inspection: backend list supports bounded
+`from/to/kind/status/build/cursor/limit` and returns `nextCursor`, but the current
+viewer only calls the unfiltered first page and discards `nextCursor`. A later UI
+pool should expose those existing controls without adding new endpoints or changing
+authorization, privacy or task scope.

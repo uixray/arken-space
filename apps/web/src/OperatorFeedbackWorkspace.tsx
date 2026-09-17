@@ -54,6 +54,8 @@ export const OperatorFeedbackWorkspace = memo(
     const clearSensitive = useCallback(() => {
       scope.current += 1;
       setDetail(null);
+      setLinearKey("");
+      setLinearUrl("");
       setBusy(false);
       closeImage();
     }, [closeImage]);

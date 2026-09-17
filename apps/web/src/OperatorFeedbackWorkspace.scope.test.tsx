@@ -164,3 +164,51 @@ it("ignores a previous open's list failure rather than closing a new session", a
   await act(async () => pending.reject(new Error("old request failed")));
   expect(onClose).not.toHaveBeenCalled();
 });
+
+it("requires a fresh Linear link after switching reports and submits only the chosen report", async () => {
+  const first: FeedbackDetail = { ...detail, status: "ACKNOWLEDGED" };
+  const second: FeedbackDetail = {
+    ...first,
+    id: "second",
+    kind: "IDEA",
+    title: "Второй отчёт",
+  };
+  vi.mocked(feedback.fetchFeedbackList).mockResolvedValue({
+    items: [first, second],
+    nextCursor: null,
+  });
+  vi.mocked(feedback.fetchFeedbackDetail).mockImplementation(async (id) =>
+    id === first.id ? first : second,
+  );
+  vi.mocked(feedback.updateFeedback).mockResolvedValue(undefined);
+  const view = await setup();
+  await view.user.type(screen.getByLabelText("Ключ Linear"), "UIX-318");
+  await view.user.type(
+    screen.getByLabelText("URL задачи Linear"),
+    "https://linear.app/uixray/issue/UIX-318/first",
+  );
+  expect(
+    screen.getByRole("button", { name: "Связано с задачей" }),
+  ).toBeEnabled();
+  await view.user.click(screen.getByRole("button", { name: /Идея/ }));
+  await screen.findByText(second.title);
+  expect(screen.getByLabelText("Ключ Linear")).toHaveValue("");
+  expect(screen.getByLabelText("URL задачи Linear")).toHaveValue("");
+  expect(
+    screen.getByRole("button", { name: "Связано с задачей" }),
+  ).toBeDisabled();
+  expect(feedback.updateFeedback).not.toHaveBeenCalled();
+  await view.user.type(screen.getByLabelText("Ключ Linear"), "UIX-293");
+  await view.user.type(
+    screen.getByLabelText("URL задачи Linear"),
+    "https://linear.app/uixray/issue/UIX-293/second",
+  );
+  await view.user.click(
+    screen.getByRole("button", { name: "Связано с задачей" }),
+  );
+  expect(feedback.updateFeedback).toHaveBeenCalledExactlyOnceWith("second", {
+    status: "LINKED",
+    linearKey: "UIX-293",
+    linearUrl: "https://linear.app/uixray/issue/UIX-293/second",
+  });
+});
