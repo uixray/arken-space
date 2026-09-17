@@ -467,7 +467,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     x: number;
     y: number;
   } | null>(null);
+  const polygonLastClickRef = useRef<{
+    x: number;
+    y: number;
+    at: number;
+  } | null>(null);
+  const polygonRepeatClickRef = useRef(false);
   const cancelPolygonDraft = () => {
+    polygonLastClickRef.current = null;
+    polygonRepeatClickRef.current = false;
     setPolygonPoints([]);
     setPolygonPreview(null);
   };
@@ -1431,6 +1439,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const point = pointerInWorld();
     if (!point) return;
     const bounded = clampToWorld(point);
+    const previousClick = polygonLastClickRef.current;
+    const at = performance.now();
+    polygonRepeatClickRef.current = Boolean(
+      previousClick &&
+      at - previousClick.at <= Konva.dblClickWindow &&
+      // Small hand jitter must not turn a double-click into another vertex.
+      // Measure in screen pixels so camera zoom does not change the gesture.
+      Math.hypot(previousClick.x - bounded.x, previousClick.y - bounded.y) *
+        scale <=
+        4,
+    );
+    polygonLastClickRef.current = { ...bounded, at };
+    if (polygonRepeatClickRef.current) return;
     setPolygonPoints((current) => {
       const last = current[current.length - 1];
       // A double-click's second mousedown lands on the same point as the
@@ -2686,7 +2707,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onClick={handleClick}
-        onDblClick={() => void handlePolygonComplete()}
+        onDblClick={() => {
+          // Konva may synthesize dblclick for rapid clicks at different points
+          // on the same hit plane. Only a repeated final vertex completes it.
+          if (polygonRepeatClickRef.current) void handlePolygonComplete();
+        }}
       >
         <Layer
           clipX={0}

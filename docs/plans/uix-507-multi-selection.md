@@ -312,3 +312,33 @@ Synthetic snapshot scope changes are not authentication/handoff or real server
 role-change proof; the separate real shared-browser gate remains the evidence
 for handoff. Scene replacement proves renderer-scope cleanup, not every scene
 picker workflow. No whole-issue closure, build, full suite, CI or publication.
+
+### 2026-09-17 — polygon fog cannot commit from rapid distinct vertices
+
+Closed the previously untested FOG_POLYGON/COVER_POLYGON tool-conflict branch.
+The original source failed before Escape: three rapid clicks at distinct vertices
+already sent a REVEAL polygon. Konva synthesizes dblclick on the shared hit plane
+without requiring the same coordinates; the unconditional completion handler
+therefore mistook adding vertices for finishing the shape. The failure was not
+an Escape cleanup regression. Separate pre-Escape assertion retained the red proof.
+
+Completion now requires a repeated final vertex within4 CSS pixels and Konva's
+double-click window; this tolerance is screen-space, independent of camera scale.
+Such a repeat does not add a degenerate edge. Cancel/completion/tool departure
+reset the remembered click. A deliberately separate nearby vertex after the
+double-click interval still adds a point. Enter completion remains unchanged.
+
+Final gate:8/8PASS45.0s, Chrome/Firefox × REVEAL/COVER × Shift/plain clicks.
+Each case checks no write from rapid distinct vertices, Escape/right-click
+cancellation of a three-point draft, correct scene/operation/geometry on Enter,
+exact double-click and a2px/1px jittered double-click, plus an intentional nearby
+fourth vertex after450ms. No selection delete control or page errors. All writes
+are captured synthetic API requests; this is not connected server/fog persistence
+or physical-device acceptance. One intermediate test accidentally sent three
+clicks via clickCount2 and left a new draft vertex; corrected to exactly two
+down/up pairs, without hiding that failed receipt.
+
+Web/E2E types, scoped lint, formatting and diff checks pass. Protected untracked
+selection-recovery.spec.ts remains unchanged. No full suite/build/CI, production
+or Linear write. Original connected backend rejection/recovery and multiplayer
+acceptance remain open. SCENE_REGION stays dormant, not enabled just for a test.
