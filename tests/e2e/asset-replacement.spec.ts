@@ -216,6 +216,65 @@ for (const [width, longTitle] of [
         await expect(
           files.getByRole("button", { name: "Заменить файл", exact: true }),
         ).toBeFocused();
+        const row = files.locator(".asset-row");
+        await row.scrollIntoViewIfNeeded();
+        await expect(row.locator("strong")).toHaveText(asset.name);
+        const catalogGeometry = await row.evaluate((node) => {
+          const card = node.getBoundingClientRect();
+          const owner = node.closest('[role="dialog"]')!;
+          return {
+            card: card.toJSON(),
+            owner: owner.getBoundingClientRect().toJSON(),
+            overflow: owner.scrollWidth - owner.clientWidth,
+            controls: [...node.querySelectorAll("button")].map((button) => {
+              const rect = button.getBoundingClientRect();
+              return {
+                name: button.textContent?.trim(),
+                rect: rect.toJSON(),
+                hit: button.contains(
+                  document.elementFromPoint(
+                    rect.x + rect.width / 2,
+                    rect.y + rect.height / 2,
+                  ),
+                ),
+              };
+            }),
+            name: {
+              width: node.querySelector("strong")!.clientWidth,
+              contentWidth: node.querySelector("strong")!.scrollWidth,
+            },
+          };
+        });
+        await info.attach("long-filename-catalog", {
+          body: JSON.stringify(catalogGeometry),
+          contentType: "application/json",
+        });
+        expect(catalogGeometry.overflow).toBeLessThanOrEqual(1);
+        expect(catalogGeometry.card.left).toBeGreaterThanOrEqual(
+          catalogGeometry.owner.left,
+        );
+        expect(catalogGeometry.card.right).toBeLessThanOrEqual(
+          catalogGeometry.owner.right,
+        );
+        expect(catalogGeometry.name.contentWidth).toBeGreaterThan(
+          catalogGeometry.name.width,
+        );
+        expect(catalogGeometry.controls).toHaveLength(2);
+        for (const control of catalogGeometry.controls) {
+          expect(control.rect.left).toBeGreaterThanOrEqual(
+            catalogGeometry.card.left,
+          );
+          expect(control.rect.right).toBeLessThanOrEqual(
+            catalogGeometry.card.right,
+          );
+          expect(control.rect.height).toBeGreaterThanOrEqual(
+            width === 360 ? 44 : 24,
+          );
+          expect(control.hit).toBe(true);
+        }
+        await page.screenshot({
+          path: info.outputPath("long-filename-catalog.png"),
+        });
         expect(commands).toHaveLength(0);
         expect(errors).toEqual([]);
         expect(unexpected).toEqual([]);

@@ -40,6 +40,23 @@
 
 | Музыка и перерыв | music-pause-icons/reviewed-results.json, 4 | Desktop GM/PLAYER play/pause/volume/menu, visible SVG/normal-hover-focus, роли; compact44px pause/pending, закрытие скрытого music popup | Реальное аудио/server ACL, compact MusicBar намеренно скрыт P1, все темы |
 
+Дополнение к сводке после последних связанных пулов:
+
+- **Масштаб токена:** `token-zoom-icons/initial-results.json`, Chrome/Firefox с
+  resize1280/360; +/- SVG/контраст/Tab/Enter/границы/pending upload. GM synthetic,
+  не серверная генерация и не все темы.
+- **Удаление файла:** `audio-draft-icons/aligned-results.json`5PASS +
+  `atomic-remaining-results.json`3PASS, восемь уникальных IMAGE/AUDIO случаев.
+  Возврат фокуса, 44px, контраст, центрирование, review/cancel; никакого нового
+  доказательства playback/server persistence. Исходные RED и unit33 — предыдущий пул.
+- **Заголовки модальных окон:** `dialog-title-layout/fixed-results.json`1PASS +
+  `settled-results.json`7PASS, восемь уникальных коротких/длинных GM случаев;
+  полный перенос, gap8px, close44px, клавиатурное закрытие/возврат. Не все consumer-ы.
+- **Длинные имена в каталоге:** `catalog-filename-layout/initial-results.json`4PASS;
+  GM IMAGE,1280/360, Chrome/Firefox, overflow≤1px, ellipsis при сохранённом полном
+  имени в DOM, обе кнопки внутри карточки/center-hit/≥24/44. Полное имя доступно
+  в ранее проверенном диалоге замены. Нового изменения приложения не потребовалось.
+
 Корень receipts:
 `C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07`.
 Точные SHA/runtime и changed-files находятся в checkpoint/manifest каждой папки.
