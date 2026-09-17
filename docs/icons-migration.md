@@ -13,6 +13,35 @@
 
 ## Текущая сводка приёмки — 2026-09-17
 
+### Сверка общих gates на source/runtime `6f28bb2`
+
+`icon-final-gates/policy-results.json`:28/28 PASS,0 skipped/failed. Проверены
+`ui-icon-policy.test.ts` и `ui-source-closure.test.ts`, в том числе отрицательные
+JSX/config/HTML/CSS/escaped-glyph примеры и замены настоящих source anchors.
+`checks.yml → pnpm test → vitest.config.ts tests/**/*.test.ts` включает оба файла
+в обычный CI. Это подтверждённое wiring, не новый GitHub CI run.
+
+`icon-final-gates/bundle-report.json`: SHA256 всех4 HTML/JS/CSS совпали с manifest
+проверенной сборки `object-list-icons/dist`, verifiedRevision `6f28bb2`.
+Source maps содержат47 уникальных Lucide icon modules:45main+2renderer, против2066
+в установленном каталоге. Нет dynamicIconImports/DynamicIcon в emitted Lucide sources
+и вызовов fetch/XHR/WebSocket в этих модулях; HTML ссылается только на локальные assets.
+Это статическая сверка **иконок**, не blanket-аудит всех сетевых запросов приложения.
+Новую сборку или браузерные micropools ради этой сверки не запускали.
+
+| Исходный критерий | Фактическая граница доказательства |
+| --- | --- |
+| Точная dependency/лицензия, общий слой | Ранее проверены; свежий bundle содержит реальные Lucide SVG modules, не пустую dependency |
+| Миграция и запрет возврата glyphs | Reachable local-source closure + текущие28 tests и negative examples; vendor internals/игровой контент не выдаются за авторский UI |
+| Выравнивание, состояния, имена, keyboard/hit-area | Датированные scoped receipts ниже; разные ревизии и роли, не один общий прогон на HEAD |
+| Все поддерживаемые темы | Не завершено: main.tsx по-прежнему ThemeProvider dark, generated player-theme styles не импортированы в entry; решение о владении темой ожидается |
+| Без полного registry/иконного CDN | Emitted47/2066, no dynamic registry/network calls в Lucide sources, local HTML assets; общий runtime network audit не заявлен |
+| Exact-candidate integration/release | Нет нового полного CI/push/deploy; широкая локальная ветка не опубликована, UIX-645 остаётся In Progress |
+
+Live список Linear на этой сверке:21 Review/In Progress, без изменений статусов
+и новых карточек. Запрет повторного внешнего write после предыдущего отказа соблюдён.
+Завершение scoped icon-пулов не заменяет исходные общие AC.
+
 Исторические «browser не выполнен» ниже **не означают отсутствие новых
 проверок**: они сохранены как исходная карта. Для продолжения сначала используйте
 эту сводку и подробные receipts в датированных разделах, не повторяйте миграцию.
