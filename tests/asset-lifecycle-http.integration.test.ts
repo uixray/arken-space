@@ -624,7 +624,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("replaces referenced MAP, TOKEN, PORTRAIT, IMAGE, and AUDIO without changing their relation rows or content URLs", async () => {
+  it("replaces referenced MAP, TOKEN, PORTRAIT, IMAGE, and AUDIO without changing their relation rows or canonical content paths", async () => {
     // Existing self-authored Vorbis fixture, also used by media-smoke.spec.ts.
     const audio = await readFile(
       new URL("./multiplayer/uix642-synthetic-tone.ogg", import.meta.url),
@@ -798,7 +798,12 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       });
       expect(replaced.statusCode, replaced.body).toBe(200);
       expect(replaced.json()).toMatchObject({
-        asset: { id, kind, name: beforeRow.name, url: contentUrl },
+        asset: {
+          id,
+          kind,
+          name: beforeRow.name,
+          url: `${contentUrl}?v=${replaced.json().version.slice(1, -1)}`,
+        },
         oldBlobCleanupPending: false,
         replayed: false,
       });
@@ -938,7 +943,10 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     });
     expect(retry.statusCode, retry.body).toBe(200);
     expect(retry.json()).toMatchObject({
-      asset: { id: ids.unused, url: contentUrl },
+      asset: {
+        id: ids.unused,
+        url: `${contentUrl}?v=${retry.json().version.slice(1, -1)}`,
+      },
       replayed: false,
       oldBlobCleanupPending: false,
     });
@@ -958,6 +966,26 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       headers: headers(secrets.gm),
     });
     expect(before.statusCode, before.body).toBe(200);
+    const head = await app.inject({
+      method: "HEAD",
+      url: contentUrl,
+      headers: headers(secrets.gm),
+    });
+    expect(head.statusCode).toBe(200);
+    expect(head.body).toBe("");
+    expect(head.headers.etag).toBe(before.headers.etag);
+    const initialBootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(initialBootstrap.statusCode, initialBootstrap.body).toBe(200);
+    const beforeProjected = initialBootstrap
+      .json()
+      .assets.find((item: { id: string }) => item.id === ids.unused);
+    expect(beforeProjected.url).toBe(
+      `${contentUrl}?v=${String(head.headers.etag).slice(1, -1)}`,
+    );
     const beforeVersion = before.headers.etag;
     expect(beforeVersion).toMatch(/^"[a-f0-9]{64}"$/);
 
@@ -995,7 +1023,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
         kind: beforeRow.kind,
         name: beforeRow.name,
         createdAt: beforeRow.createdAt.toISOString(),
-        url: contentUrl,
+        url: `${contentUrl}?v=${replaced.json().version.slice(1, -1)}`,
         mimeType: "image/webp",
         width: 1,
         height: 1,
@@ -1064,6 +1092,65 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     });
     expect(notModified.statusCode).toBe(304);
 
+    const projectedUrl = replaced.json().asset.url as string;
+    expect(new URL(projectedUrl, "http://localhost").pathname).toBe(contentUrl);
+    expect(projectedUrl).not.toBe(beforeProjected.url);
+    const bootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(bootstrap.statusCode, bootstrap.body).toBe(200);
+    expect(
+      bootstrap
+        .json()
+        .assets.find((item: { id: string }) => item.id === ids.unused),
+    ).toEqual(replaced.json().asset);
+    const projectedContent = await app.inject({
+      method: "GET",
+      url: projectedUrl,
+      headers: headers(secrets.gm),
+    });
+    expect(projectedContent.statusCode).toBe(200);
+    expect(projectedContent.rawPayload).toEqual(storedBytes);
+    const projectedHead = await app.inject({
+      method: "HEAD",
+      url: projectedUrl,
+      headers: headers(secrets.gm),
+    });
+    expect(projectedHead.statusCode).toBe(200);
+    expect(projectedHead.body).toBe("");
+    expect(projectedHead.headers.etag).toBe(afterVersion);
+    const cached = await app.inject({
+      method: "GET",
+      url: projectedUrl,
+      headers: { ...headers(secrets.gm), "if-none-match": afterVersion },
+    });
+    expect(cached.statusCode).toBe(304);
+    const oldLink = await app.inject({
+      method: "GET",
+      url: beforeProjected.url,
+      headers: headers(secrets.gm),
+    });
+    expect(oldLink.statusCode).toBe(200);
+    expect(oldLink.rawPayload).toEqual(storedBytes);
+    for (const method of ["HEAD", "GET"] as const) {
+      const anonymous = await app.inject({ method, url: projectedUrl });
+      expect(anonymous.statusCode).toBe(401);
+      const playerDenied = await app.inject({
+        method,
+        url: projectedUrl,
+        headers: { ...headers(secrets.player), "if-none-match": afterVersion },
+      });
+      expect(playerDenied.statusCode).toBe(404);
+      expect(playerDenied.headers.etag).toBeUndefined();
+      const foreign = await app.inject({
+        method,
+        url: `/api/assets/${ids.foreign}/content?v=${afterVersion.slice(1, -1)}`,
+        headers: headers(secrets.gm),
+      });
+      expect(foreign.statusCode).toBe(404);
+    }
     const inventoryAfterReplacement = await fileInventory();
     const replayForm = multipartFile();
     const replay = await app.inject({

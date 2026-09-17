@@ -218,3 +218,38 @@ Next mandatory gate: actual backend HEAD/PUT/bootstrap and versioned content ACL
 304 behavior, then already-mounted map/token/audio consumers and PLAYER exclusion.
 The current four cases are image/media-row GM UI, not audio playback or complete
 UIX-293 acceptance. Do not repeat only these passing image cases as substitute.
+
+## 2026-09-17 — executed HTTP/database replacement gate
+
+Extended the existing asset-lifecycle HTTP suite rather than creating a second
+backend harness. Real registerRoutes, Fastify injection, isolated PGlite with the
+current migration chain, real multipart normalization/storage and temporary files:
+7/7 PASS14.46s, one worker. This is executed server behavior, not mocked API, but
+it is not a deployed server/TCP/multiplayer or physical playback test.
+
+New assertions cover empty-body authenticated HEAD and strong ETag; real bootstrap
+URLs before/after replacement; exact match between replacement DTO and bootstrap;
+versioned GET bytes/HEAD/304; old versioned links still resolve authorized latest
+content, not historical blobs; anonymous401 and foreign404 for GET/HEAD; PLAYER
+cannot bypass hidden-content ACL using a known version and If-None-Match (404,
+no ETag). Existing PLAYER PUT403, foreign PUT404, stale-version409, action reuse,
+exact replay, audit privacy and blob inventory assertions remain.
+
+All five MAP/TOKEN/PORTRAIT/IMAGE/AUDIO replacements retain identity and relation
+rows. A forced audit-insert failure still rolls back metadata and removes the new
+blob, and a later same-action retry succeeds. Assertions formerly demanding an
+unversioned projected URL now require the canonical path plus the exact returned
+version token; reference and identity assertions are unchanged.
+
+First launch collected no tests because @arken/db/dist was absent. A local Vitest
+config aliases @arken/db to its current source (same path as TypeScript), avoiding
+a dependency build. The first three-case run passed replacement/cache but found
+one remaining obsolete URL expectation in the rollback test; corrected that
+contract assertion, then ran all seven connected cases. Earlier reports retained.
+Focused test TypeScript including server imports, scoped lint/format/diff PASS.
+No production DB/service, full suite/build, CI, publication or issue closure.
+Evidence: asset-replacement-http/{results.json,source-results.json,final-results.json}.
+
+Next: mounted canvas/token/audio browser consumers and PLAYER navigation exclusion.
+The real HTTP gate does not prove that changing a URL actually refreshes those
+consumers or that an audio replacement plays. Keep those acceptance gaps explicit.
