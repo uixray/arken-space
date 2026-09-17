@@ -671,3 +671,26 @@ snapshot перерыва. Compact GM Firefox screenshot просмотрен; p
 Валидный silent WAV служит только metadata; consent выключен, реальный playback
 **не заявляется**. Приложение не менялось, fullsuite/CI/push/deploy не запускались.
 UIX-645 остаётся открытой по общим gates и оставшимся потребителям/темам.
+
+## 2026-09-17 — масштаб в настоящем редакторе токена
+
+Расширен существующий `token-upload-source-selection.spec.ts`, без отдельного
+демо и изменения приложения. `token-zoom-icons/initial-results.json`: два случая
+Chrome/Firefox,28.2s, unexpected/skipped/flaky=0. Каждый проходит1280 и360px на
+неизменном runtime2fbf179; четыре served hashes проверены, новой сборки нет.
+
+Для «Уменьшить масштаб» и «Увеличить масштаб» проверены точные доступные имена,
+два разных видимых decorative Lucide SVG/currentColor/stroke2, hit-area≥24/44px
+и доступность центра. Normal/hover/focus computed contrast≥3:1, настоящий
+ShiftTab/Tab возвращает focus-visible с indicator. Enter меняет1→1.1 и8→7.9;
+на1 недоступен минус, на8 плюс. При отложенной загрузке другого исходника обе
+кнопки disabled; после принятия нового изображения масштаб1, плюс снова enabled.
+Продолжение прежнего сценария сохраняет именно полученный TOKEN и не добавляет
+неожиданных записей/pageerror. Compact Firefox screenshot просмотрен.
+
+Это GM-сценарий с synthetic transport, не серверная генерация/persistence,
+физический телефон, OS file picker или все темы. Перед выбором источника
+генератор отсутствует: не приписывать ему проверку несуществующих disabled-кнопок.
+Удаление файла из черновика этим расширением не проверено. E2Etypes/lint/format
+и diff-check PASS; protected selection recovery test сохранён без изменений.
+UIX-645 повторно прочитана, остаётся In Progress по исходным критериям.

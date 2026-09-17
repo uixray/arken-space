@@ -16,6 +16,10 @@ import { deflateSync } from "node:zlib";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import {
+  paintedIconContrast,
+  settleIconState,
+} from "./helpers/painted-icon-contrast";
 
 // Actual App/Palette/Editor/Generator/upload/actions. Only HTTP and realtime
 // transport boundaries are synthetic. Valid PNG files exercise browser image
@@ -485,6 +489,94 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
       name: "Масштаб изображения токена",
       exact: true,
     });
+    const decrease = editor.getByRole("button", {
+      name: "Уменьшить масштаб",
+      exact: true,
+    });
+    const increase = editor.getByRole("button", {
+      name: "Увеличить масштаб",
+      exact: true,
+    });
+    // UIX-645: use the real editor and decoded source, not a component demo.
+    for (const width of [1280, 360]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(zoom).toHaveValue("1");
+      await expect(decrease).toBeDisabled();
+      await expect(increase).toBeEnabled();
+      await increase.focus();
+      await increase.press("Enter");
+      await expect(zoom).toHaveValue("1.1");
+      const glyphs: string[] = [];
+      for (const control of [decrease, increase]) {
+        await expect(control).toBeEnabled();
+        const svg = control.locator("svg.arken-icon");
+        await expect(svg).toHaveCount(1);
+        await expect(svg).toBeVisible();
+        for (const [attribute, value] of [
+          ["aria-hidden", "true"],
+          ["focusable", "false"],
+          ["stroke", "currentColor"],
+          ["stroke-width", "2"],
+        ])
+          await expect(svg).toHaveAttribute(attribute, value);
+        glyphs.push(await svg.innerHTML());
+        await control.scrollIntoViewIfNeeded();
+        const box = (await control.boundingBox())!;
+        for (const size of [box.width, box.height])
+          expect(Number(size.toFixed(3))).toBeGreaterThanOrEqual(
+            width === 360 ? 44 : 24,
+          );
+        expect(
+          await control.evaluate((node) => {
+            const r = node.getBoundingClientRect();
+            return node.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            );
+          }),
+        ).toBe(true);
+        await control.evaluate((node) => (node as HTMLElement).blur());
+        await page.mouse.move(1, 899);
+        await settleIconState(control);
+        expect(await control.evaluate((node) => node.matches(":hover"))).toBe(
+          false,
+        );
+        expect(await paintedIconContrast(svg)).toBeGreaterThanOrEqual(3);
+        await control.hover();
+        await settleIconState(control);
+        expect(await paintedIconContrast(svg)).toBeGreaterThanOrEqual(3);
+        await page.mouse.move(1, 899);
+        await control.focus();
+        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
+        await expect(control).toBeFocused();
+        expect(
+          await control.evaluate((node) => {
+            const s = getComputedStyle(node);
+            return (
+              node.matches(":focus-visible") &&
+              ((s.outlineStyle !== "none" &&
+                parseFloat(s.outlineWidth) > 0 &&
+                s.outlineColor !== "rgba(0, 0, 0, 0)") ||
+                s.boxShadow !== "none")
+            );
+          }),
+        ).toBe(true);
+        await settleIconState(control);
+        expect(await paintedIconContrast(svg)).toBeGreaterThanOrEqual(3);
+      }
+      expect(new Set(glyphs).size).toBe(2);
+      await zoom.fill("8");
+      await expect(increase).toBeDisabled();
+      await expect(decrease).toBeEnabled();
+      await decrease.focus();
+      await decrease.press("Enter");
+      await expect(zoom).toHaveValue("7.9");
+      await expect(increase).toBeEnabled();
+      await capture(page, testInfo, `zoom-icons-${width}`);
+      await zoom.fill("1");
+      await expect(decrease).toBeDisabled();
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
     await zoom.fill("2");
     await preview.focus();
     await preview.press("Shift+ArrowRight");
@@ -505,6 +597,8 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     await expect(source).toBeDisabled();
     await expect(zoom).toHaveValue("2");
     await expect(zoom).toBeDisabled();
+    await expect(decrease).toBeDisabled();
+    await expect(increase).toBeDisabled();
     await expect(editor.getByRole("status")).toHaveText(
       "Загрузка исходного изображения…",
     );
@@ -539,6 +633,8 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     await expect(source).toHaveValue(b.id);
     await expect(noImage).toHaveAttribute("aria-pressed", "false");
     await expect(zoom).toHaveValue("1");
+    await expect(decrease).toBeDisabled();
+    await expect(increase).toBeEnabled();
     await expect(
       editor.getByRole("radio", { name: "Без рамки", exact: true }),
     ).toBeChecked();
