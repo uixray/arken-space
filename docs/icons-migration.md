@@ -175,3 +175,41 @@ The compact Chromium menu screenshot was visually inspected. E2E typecheck,
 scoped lint, formatting and diff checks passed. Original keyboard actions and
 focus-return assertions remain; condition writes go to a synthetic mocked API,
 not a live campaign. No production or Linear status change.
+
+## 2026-09-17 — settled shell icon contrast
+
+At runtime `fd64ef2` (retained world-consumer-live/dist, four served hashes
+verified), the strengthened shell gate passes Chrome/Firefox × GM/PLAYER ×
+1280/390: eight application cases plus two contrast-oracle cases, **10/10 PASS
+in 88.11s**, one worker, retries0/skipped0/flaky0. It measures every visible SVG
+in each sampled enabled button/summary, after pointer-leave/hover transitions
+settle, and asserts the actual hover state. 168 per-case icon measurements:
+minimum computed normal contrast **6.00:1**, hover **5.21:1** (required3:1).
+Existing name/decorative SVG/stroke/min24px/keyboard focus checks remain.
+
+The measurement composites plain RGBA ancestor surfaces and the verified Gravity
+flat-button inset ::before backing, including its own transition. It rejects
+unknown painted pseudos, overlapping media surfaces, image backgrounds,
+filter/blend/mask/group-opacity and SVG descendant paint overrides. Gravity
+support requires identity transform stacking context, inset0/z-1, no border or
+effects and icon bounds fully in the unclipped central band. A synthetic browser
+oracle verifies black/white21:1 and settled half-black backing5.2808:1, then
+negative descendant stroke, group opacity, gradient and canvas cases.
+
+The initial8/8 run used an incomplete oracle (unsettled transitions/pseudo
+background omission) and is **not final acceptance evidence**. Independent review
+found those false-positive paths; stricter single-case diagnostics exposed the
+real Gravity pseudo backing and conservative geometry assumption. The final
+measurement supports that actual paint contract rather than skipping controls.
+All diagnostic reports are retained in shell-icon-contrast. No product palette,
+components, runtime or dependency changed; no new build was needed.
+
+GM390 screenshot visually inspected: sampled SVG/focus outline visible; compact
+canvas remains crowded by tools. This is computed-color evidence, not sampled
+antialiased pixel contrast or full compact-layout acceptance. Inactive controls
+are explicitly recorded but not assigned a passing contrast score. Only current
+dark shell, initially visible sampled controls, no whole menu/dialog/theme
+matrix or all disabled/loading visual certification. Personal theme integration
+and UIX-645 remain open. Types/lint/format/diff PASS; protected selection test
+untouched, owned preview stopped. No full suite, CI rerun, push/deploy or Linear
+mutation.

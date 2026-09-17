@@ -1,3 +1,7 @@
+import {
+  paintedIconContrast,
+  settleIconState,
+} from "./helpers/painted-icon-contrast";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 
@@ -79,6 +83,49 @@ for (const role of ["GM", "PLAYER"] as const)
         expect(box!.width).toBeGreaterThanOrEqual(24);
         expect(box!.height).toBeGreaterThanOrEqual(24);
       }
+      const contrastStates: { label: string; normal: number; hover: number }[] =
+        [];
+      const disabledControls: string[] = [];
+      for (const control of await controls.all()) {
+        const label = await control.evaluate(
+          (el) =>
+            el.getAttribute("aria-label") ??
+            el.getAttribute("title") ??
+            el.textContent?.trim() ??
+            "",
+        );
+        if (!(await control.isEnabled())) {
+          disabledControls.push(label);
+          continue; // Inactive controls are exempt from non-text contrast; not a PASS for their legibility.
+        }
+        for (const icon of await control
+          .locator("svg.arken-icon:visible")
+          .all()) {
+          await page.mouse.move(width - 1, 849);
+          await settleIconState(control);
+          expect(
+            await control.evaluate((el) => el.matches(":hover")),
+            `${label}: normal state`,
+          ).toBe(false);
+          const normal = await paintedIconContrast(icon);
+          expect(
+            normal,
+            `${label}: settled normal icon contrast`,
+          ).toBeGreaterThanOrEqual(3);
+          await control.hover();
+          await settleIconState(control);
+          expect(await control.evaluate((el) => el.matches(":hover"))).toBe(
+            true,
+          );
+          const hover = await paintedIconContrast(icon);
+          expect(
+            hover,
+            `${label}: settled hover icon contrast`,
+          ).toBeGreaterThanOrEqual(3);
+          contrastStates.push({ label, normal, hover });
+        }
+      }
+      await page.mouse.move(width - 1, 849);
       // Traverse the real tab order, not HTMLElement.focus(): SVG must never
       // take focus, disabled controls must be skipped, and enabled icon
       // controls must retain a visible keyboard indicator.
@@ -142,6 +189,8 @@ for (const role of ["GM", "PLAYER"] as const)
           icons: await icons.count(),
           controls: await controls.count(),
           keyboardControls,
+          contrastStates,
+          disabledControls,
           errors,
           writes,
         }),
