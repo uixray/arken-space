@@ -1044,3 +1044,47 @@ source/config. No production or dependency edits, no weakened gate. Original
 observer FAIL remains. Temporary spec removed, own Vite stopped. Stop repeating
 this unchanged scenario: return to other original acceptance work unless a new
 actual failing trace or distinct layout transition justifies further diagnosis.
+
+## Integrated current production-bundle gate — 2026-09-17
+
+On1d00a8db83f4663a679d4d13d78f5d3dd580b125, one local build followed the
+accumulated UI pools, not each micro-change. Build4.35s; JS1090.11kB/gzip321.15kB
+retains the >500kB warning. All4 runtime HTML/JS/CSS payload hashes matched the
+saved manifest through the loopback preview and remained unchanged after tests.
+
+**204/204PASS862.051s**, Chrome/Firefox, one worker, zero retries/skips/flaky.
+The14-file case-index covers canvas menus/selection chrome, gallery, compact
+sheet/disclosures, chat suggestions/activity selectors, details ownership,
+navigation/music library/token tray/map editor/object list/drawing palette,
+world dropdowns, feedback/cursor/map toolbar, catalog controls, sticker picker,
+token modal/native source and workspace/Setup/world-map selectors. These are
+actual bundled App flows with mocked API, not real backend or persistence proof.
+
+Explicit omissions from this combined gate: dedicated world-image-callers and
+character-image-callers specs, real-server player-requests-controls, music-command
+ACK cases from russian-error-copy, shared dev-only select-element-resize fixture
+and true browser-zoom/device axes. Existing evidence for them is not relabelled
+as current. Inactive preview/legacy controls remain excluded, not activated.
+
+The previously empty ledger evidence for CharacterWorkspace/ResourceCounters
+details was a documentation omission: cbac5b3 added their tests but changed only
+the InitiativePanel JSON row. Both native disclosure cases passed again inside
+this gate; their rows now reference precise PLAYER compact/desktop evidence,
+not GM/non-owner/full-matrix acceptance.
+
+Original TokenPalette/shared Select observer FAIL remains unresolved despite
+non-reproduction here. No error filtering or dependency changes, no claim of
+whole-registry acceptance. Evidence: menu-integrated-1d00a8d/{results.json,
+case-index.json,manifest.json,payload-checks.json,build.log,checkpoint.md} under
+artifactBase. Preview stopped; protected untracked selection test unchanged.
+No full application suite, CI restart, Linear write, publication or deploy.
+
+The post-pool AST guard then correctly failed: OperatorFeedbackFilters.tsx added
+two native selects since the last reviewed source registry. Source review found
+only those two additions, no removals. Type/status controls are inside the
+authorized operator viewer's labeled form and disabled fieldset; their popup is
+browser-owned, not a custom portal/stacking context. Added both to the static
+index and a BLOCKED runtime row, rather than changing the guard. Existing
+operator-accessibility/focused-results.json proves filtering via selectOption,
+not native pointer/keyboard lifecycle; operator-feedback-list.spec.ts was not in
+the204 gate. This is another explicit remaining scope, not evidence-free PASS.

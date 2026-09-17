@@ -1,10 +1,28 @@
 {
   "schemaVersion": 1,
-  "inventoryRevision": "d7ef50a2eb5795bd3959021e32c4d44143c11f07",
+  "inventoryRevision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
   "overallAcceptance": "INCOMPLETE",
   "statusMeaning": "PASS = only stated scope at evidence revision, not current HEAD/full issue. FAIL = unresolved known defect. BLOCKED = evidence or applicability unresolved, not whole-project blocked.",
   "artifactBase": "C:/Users/UIXRay/.codex/visualizations/2026/09/16/01a0a7d5-b072-7022-8e9d-4538c0a92b07",
   "evidence": {
+    "operatorFilters": {
+      "status": "PASS",
+      "revision": "176485ba82eada952fc37f2cd86b6b350eefa754",
+      "artifact": "operator-accessibility/focused-results.json",
+      "scope": "Four Chrome/Firefox1280/390 mocked operator list/detail cases include type/status selectOption and filter request assertions. Native pointer/keyboard open/select/close was not asserted; not OS picker visuals or backend trust acceptance. Not included in current204 gate."
+    },
+    "integratedCurrent": {
+      "status": "PASS",
+      "revision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
+      "artifact": "menu-integrated-1d00a8d/results.json",
+      "scope": "204 existing actual-App cases in one local production-bundle run, Chrome/Firefox worker1/retries0, 862.051s; mocked API. Explicit case-index covers14files. Excludes dedicated world/character image callers, real-server request controls, music command ACK, shared dev Select fixture and true browser zoom. Original RO FAIL remains; not complete registry acceptance."
+    },
+    "disclosureCurrent": {
+      "status": "PASS",
+      "revision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
+      "artifact": "menu-integrated-1d00a8d/results.json",
+      "scope": "Four cases within204 integrated run: PLAYER compact backstory Enter/Space/pointer and pending draft after reopen/Journal; PLAYER desktop resources retain pending value through native toggles and existing batching/rebase/conflict sequence. No GM/non-owner full matrix or real persistence."
+    },
     "built": {
       "status": "PASS",
       "revision": "edb70ce01db62eb6fa18e82dec25fb51d381c6dc",
@@ -188,6 +206,16 @@
       "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch."
     },
     {
+      "file": "apps/web/src/OperatorFeedbackFilters.tsx",
+      "kind": "tag:select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Authorized operator viewer: two native selects, type and status, inside labeled form/disabled fieldset. Browser-native popup owner; no custom portal/z-index. Existing filter tests use selectOption, not full native keyboard/pointer lifecycle.",
+      "evidence": ["operatorFilters"],
+      "next": "Extend existing operator-feedback-list.spec.ts with native keyboard/pointer semantics; keep OS popup inspection and independent host authorization outside synthetic UI acceptance."
+    },
+    {
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
       "kind": "tag:select",
       "count": 6,
@@ -331,11 +359,11 @@
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "in-flow",
-      "scope": "Disclosure section in document flow, not floating popup.",
-      "evidence": [],
-      "next": "Keep ordinary disclosure/accessibility criteria separate from popup layering."
+      "scope": "PLAYER compact backstory native Enter/Space/pointer close/reopen and pending draft retention; ordinary in-flow disclosure, not floating popup.",
+      "evidence": ["disclosureCurrent"],
+      "next": "GM/non-owner and full viewport matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
@@ -391,11 +419,11 @@
       "file": "apps/web/src/sidebar/ResourceCounters.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "BLOCKED",
+      "status": "PASS",
       "classification": "in-flow",
-      "scope": "Disclosure section in document flow, not floating popup.",
-      "evidence": [],
-      "next": "Keep ordinary disclosure/accessibility criteria separate from popup layering."
+      "scope": "PLAYER desktop resources native Enter/Space/pointer toggles preserve pending value and do not create additional writes; ordinary in-flow disclosure.",
+      "evidence": ["disclosureCurrent"],
+      "next": "GM/non-owner and compact full matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
     },
     {
       "file": "apps/web/src/sidebar/SetupPanel.tsx",
