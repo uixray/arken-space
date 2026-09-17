@@ -38,6 +38,8 @@
 
 | Чат: отправка/стикеры/фильтр | chat-icon-states/ordered-results.json, 8; client-settled, 2 дополнительных | GM/PLAYER1280/360, exact names/SVG/Tab, 44px, normal/hover, hidden-filter badge; сохранение нового черновика | Серверная доставка, reject/restore, другие ветки композера, все темы |
 
+| Музыка и перерыв | music-pause-icons/reviewed-results.json, 4 | Desktop GM/PLAYER play/pause/volume/menu, visible SVG/normal-hover-focus, роли; compact44px pause/pending, закрытие скрытого music popup | Реальное аудио/server ACL, compact MusicBar намеренно скрыт P1, все темы |
+
 Корень receipts:
 `C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07`.
 Точные SHA/runtime и changed-files находятся в checkpoint/manifest каждой папки.
@@ -634,3 +636,38 @@ E2E types/lint/format PASS. Compact PLAYER Firefox screenshot просмотре
 опровергнуто фактическим каскадом и browser geometry. Приложение не менялось,
 пересборки/fullsuite/CI/push/deploy нет. UIX-645 и UIX-624 остаются открытыми;
 следующий связанный scope — музыка/пауза, не повтор этого композера.
+
+## 2026-09-17 — музыка и перерыв: разные действия и роли
+
+`tests/e2e/music-pause-icons.spec.ts`, receipt `music-pause-icons/reviewed-results.json`:
+четыре случая Chrome/Firefox × GM/PLAYER,21.4s, unexpected/skipped/flaky=0.
+Неизменный runtime2fbf179 / world-marker-edges/dist,4served hashes; без сборки.
+На1280px проверены visible decorative Lucide SVG, exact имена, stroke2/currentColor,
+≥24px, center-hit, settled normal/hover и keyboard focus-visible/indicator/contrast≥3:1.
+Helper сначала снимает прежний focus, чтобы normal/hover не подменялись focused paint.
+
+До выбора трека «Играть» disabled для обеих ролей. После synthetic audio state
+GM управляет ровно PLAY→PAUSE с разными glyph/именами; PLAYER остаётся disabled,
+хотя shared playing-state меняет glyph/name. GM видит меню/трек, у PLAYER меню
+отсутствует. Личная громкость у обеих ролей меняется клавиатурой и сохраняет0.05
+в localStorage, без изменения общего звукового состояния. Popup закрывается
+Escape с возвратом фокуса. Desktop GM Firefox screenshot просмотрен.
+
+На resize360 MusicBar **намеренно скрыт контрактом P1**, открытый volume details
+закрывается, focus не остаётся в скрытом контроле. Это не PASS доступности
+управления музыкой на телефоне. Не добавлялись новая навигация, второй аудиоплеер
+или выход за утверждённый P1. Исходный контракт: uix-624-mobile-foundation.md§2.
+
+На360 у GM явно свёрнута панель: visible Pause glyph и скрытая текстовая подпись,
+кнопка≥44px с normal/hover/focus. Во время единственного deferred synthetic POST
+перерыва кнопка disabled. Проверены count/body/revision/actionId, после bootstrap
+виден overlay и «Продолжить игру». PLAYER не имеет Start/Continue, получает только
+snapshot перерыва. Compact GM Firefox screenshot просмотрен; page overflow нет.
+Неожиданных API writes/pageerror нет. Resume и серверная авторизация не проверялись.
+
+Независимый review устранил слабости первой4PASS-проверки (невидимый SVG мог пройти,
+не было focus-paint и desktop image, pause POST учитывался boolean вместо count/body).
+Для приёмки использовать reviewed, не складывать с baseline. E2Etypes/lint/format PASS.
+Валидный silent WAV служит только metadata; consent выключен, реальный playback
+**не заявляется**. Приложение не менялось, fullsuite/CI/push/deploy не запускались.
+UIX-645 остаётся открытой по общим gates и оставшимся потребителям/темам.
