@@ -253,3 +253,23 @@ Evidence: asset-replacement-http/{results.json,source-results.json,final-results
 Next: mounted canvas/token/audio browser consumers and PLAYER navigation exclusion.
 The real HTTP gate does not prove that changing a URL actually refreshes those
 consumers or that an audio replacement plays. Keep those acceptance gaps explicit.
+
+## 2026-09-17 — mounted map/token pixels, both roles
+
+Added four actual-App browser cases (GM/PLAYER × Chrome/Firefox,1280): a visible
+map image and token start with distinct solid RGB PNGs, then a socket snapshot
+changes only their asset URLs to new content versions. Scene/token identity,
+placement/revision and canvas DOM instance are retained. After actual image GETs,
+composited Konva-layer pixels change from the old map/token colors to the exact
+new colors without a page reload or renderer remount. No HTTP gameplay writes
+or pageerrors. PLAYER uses an explicit full-scene fog reveal; this is not a new
+fog/visibility authorization test.
+
+4/4PASS18.4s,worker1/retries0; E2E types, scoped ESLint/format/diff PASS. The valid
+PNG builder was moved unchanged to a shared test helper, also used by the earlier
+replacement-modal test; that unchanged workflow was not replayed. Runtime source
+unchanged. Source analysis of MusicBar found it passes current.url to audio, but
+that is not playback/decode proof: mounted audio remains the next required gate.
+Evidence: mounted-asset-images/initial-results.json and attached pixel receipts.
+HTTP/socket are synthetic; real backend replacement evidence is the separate
+asset-replacement-http gate. No full suite/build/CI/publication or issue closure.

@@ -1,3 +1,4 @@
+import { makePng } from "./helpers/generated-png";
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
@@ -3726,6 +3727,175 @@ for (const scenario of [
     expect(errors).toEqual([]);
     await info.attach("wasd-role-grid", {
       body: JSON.stringify({ scenario, moves, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-293 mounted map and token consume replaced image versions ${role}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    current.scenes[0].grid.enabled = false;
+    current.scenes[0].mapAssetId = stackAlphaId;
+    current.fogReveals = [
+      { id: "all", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    const originalToken = structuredClone(current.tokens[0]);
+    current.assets = [
+      {
+        ...current.assets[0],
+        id: stackAlphaId,
+        kind: "MAP",
+        width: 1,
+        height: 1,
+        url: `/api/assets/${stackAlphaId}/content?v=old`,
+      },
+      {
+        ...current.assets[0],
+        width: 1,
+        height: 1,
+        url: `${portraitUrl}?v=old`,
+      },
+    ];
+    const colors = {
+      map: { old: [30, 60, 90], next: [180, 80, 40] },
+      token: { old: [150, 30, 80], next: [30, 160, 80] },
+    } as const;
+    const requests: string[] = [],
+      writes: string[] = [],
+      errors: string[] = [];
+    let publish: (() => void) | undefined;
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/api/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (!["GET", "HEAD"].includes(route.request().method())) {
+        if (path === "/api/chat/read")
+          return route.fulfill({ json: { ok: true } });
+        writes.push(`${route.request().method()} ${path}`);
+        return route.abort();
+      }
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route("**/api/assets/*/content?*", (route) => {
+      const url = new URL(route.request().url());
+      const type = url.pathname.includes(stackAlphaId) ? "map" : "token";
+      const version = url.searchParams.get("v") === "next" ? "next" : "old";
+      requests.push(`${type}:${version}`);
+      return route.fulfill({
+        contentType: "image/png",
+        body: makePng(1, 1, [...colors[type][version]]),
+      });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((m) => {
+        if (m.toString() === "40") {
+          socket.send('40{"sid":"images"}');
+          publish = () =>
+            socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+        }
+      });
+      socket.send(
+        '0{"sid":"images-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect(
+      page.getByRole("region", { name: "Интерактивная карта сцены" }),
+    ).toBeVisible();
+    await expect.poll(() => Boolean(publish)).toBe(true);
+    await page.getByRole("button", { name: "Вписать", exact: true }).click();
+    const stage = page.locator(".konvajs-content");
+    const stageHandle = await stage.elementHandle();
+    const bounds = (await stage.boundingBox())!;
+    const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, bounds);
+    const sample = async (x: number, y: number) =>
+      stage.evaluate(
+        (node, { x, y }) => {
+          const output = document.createElement("canvas");
+          output.width = 1;
+          output.height = 1;
+          const context = output.getContext("2d")!;
+          for (const canvas of node.querySelectorAll("canvas")) {
+            const rect = canvas.getBoundingClientRect();
+            if (
+              !rect.width ||
+              !rect.height ||
+              getComputedStyle(canvas).display === "none"
+            )
+              continue;
+            context.drawImage(
+              canvas,
+              (x * canvas.width) / rect.width,
+              (y * canvas.height) / rect.height,
+              1,
+              1,
+              0,
+              0,
+              1,
+              1,
+            );
+          }
+          return [...context.getImageData(0, 0, 1, 1).data];
+        },
+        {
+          x: fitted.position.x + x * fitted.scale,
+          y: fitted.position.y + y * fitted.scale,
+        },
+      );
+    await expect.poll(() => sample(100, 100)).toEqual([...colors.map.old, 255]);
+    await expect
+      .poll(() => sample(416, 352))
+      .toEqual([...colors.token.old, 255]);
+    current.assets = current.assets.map((asset) => ({
+      ...asset,
+      url: asset.url.replace("v=old", "v=next"),
+    }));
+    current.scenes[0].name = "Изображения обновлены";
+    publish!();
+    await expect(page.locator(".topbar")).toContainText(
+      "Изображения обновлены",
+    );
+    await expect
+      .poll(() => sample(100, 100))
+      .toEqual([...colors.map.next, 255]);
+    await expect
+      .poll(() => sample(416, 352))
+      .toEqual([...colors.token.next, 255]);
+    expect(
+      await stage.evaluate((node, original) => node === original, stageHandle),
+    ).toBe(true);
+    expect(current.tokens[0]).toEqual(originalToken);
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        "map:old",
+        "token:old",
+        "map:next",
+        "token:next",
+      ]),
+    );
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await info.attach("mounted-image-receipt", {
+      body: JSON.stringify({
+        role,
+        requests,
+        map: await sample(100, 100),
+        token: await sample(416, 352),
+        writes,
+        errors,
+      }),
       contentType: "application/json",
     });
   });
