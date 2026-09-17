@@ -1,4 +1,5 @@
 import { makePng } from "./helpers/generated-png";
+import { expectSelectedMenuIcon } from "./helpers/selected-menu-icon";
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
@@ -2757,9 +2758,14 @@ for (const width of [1280, 390]) {
     await page.keyboard.press("Enter");
     await expect(first).toHaveAttribute("aria-checked", "true");
     await expect(first).toBeFocused();
+    const conditionContrast = await expectSelectedMenuIcon(first);
+    await first.hover();
+    const conditionHoverContrast = await expectSelectedMenuIcon(first);
+    await page.mouse.move(0, 0);
     await page.keyboard.press("Space");
     await expect(first).toHaveAttribute("aria-checked", "false");
     await expect(first).toBeFocused();
+    await expect(first.locator("svg.arken-icon")).toHaveCount(0);
     await page.keyboard.press("ArrowDown");
     await expect(
       menu.getByRole("menuitemcheckbox", { name: "Без сознания", exact: true }),
@@ -2786,6 +2792,13 @@ for (const width of [1280, 390]) {
       exact: true,
     });
     await expect(layer).toBeFocused();
+    const layerContrast = await expectSelectedMenuIcon(layer);
+    await layer.hover();
+    const layerHoverContrast = await expectSelectedMenuIcon(layer);
+    await menu.screenshot({
+      path: testInfo.outputPath(`selected-menu-${width}.png`),
+    });
+    await page.mouse.move(0, 0);
     await page.keyboard.press("Enter");
     await expect(menu).toHaveCount(0);
     await expect(map).toBeFocused();
@@ -2810,7 +2823,16 @@ for (const width of [1280, 390]) {
     expect(writes).toEqual([]);
     expect(errors).toEqual([]);
     await testInfo.attach("keyboard-menu-receipt", {
-      body: JSON.stringify({ width, conditions, writes, errors }),
+      body: JSON.stringify({
+        width,
+        conditions,
+        conditionContrast,
+        conditionHoverContrast,
+        layerContrast,
+        layerHoverContrast,
+        writes,
+        errors,
+      }),
       contentType: "application/json",
     });
   });

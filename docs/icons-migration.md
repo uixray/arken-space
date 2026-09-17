@@ -152,3 +152,26 @@ visible; the narrow map remains crowded by its tool panels. This is not compact
 layout acceptance, quantitative contrast proof, physical-device testing, or
 coverage of unopened menus/dialogs, every disabled state, or personal themes.
 Those original criteria remain open; no deployment or full CI rerun occurred.
+
+## 2026-09-17 — selected token-menu contrast repair
+
+Extended the existing token-menu keyboard scenario rather than duplicating its
+fixture. Chrome/Firefox at 1280/390px: four cases passed, including condition
+toggle, selected layer, decorative SVG semantics, 24px control bounds and
+computed foreground/background contrast in normal and hover states.
+
+The original accent measured 4.446:1: enough for the mark alone, not the
+normal-size label sharing its color. The lighter accent candidate still failed
+on hover (4.207:1). Selected labels and marks now use the existing primary-text
+token with semibold weight; checked semantics and the Lucide check remain.
+Final contrast is 12.865:1 normally and 10.094:1 on hover for both controls in
+both browsers. No new palette value or global token change was introduced.
+
+Measurement composites transparent backgrounds to the nearest opaque backing,
+ignoring obscured map imagery; it rejects unsupported colors, exposed background
+images and ancestor group opacity rather than asserting a false pass. This is
+computed-color evidence, not pixel/antialiasing or all-theme certification.
+The compact Chromium menu screenshot was visually inspected. E2E typecheck,
+scoped lint, formatting and diff checks passed. Original keyboard actions and
+focus-return assertions remain; condition writes go to a synthetic mocked API,
+not a live campaign. No production or Linear status change.

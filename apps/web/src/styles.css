@@ -1009,7 +1009,10 @@ code {
   text-align: left;
 }
 .token-context-menu button[aria-checked="true"] {
-  color: var(--accent);
+  /* Accent colors fail normal-size label contrast, including on hover.
+     The check mark and weight preserve a non-color selection indicator. */
+  color: var(--text);
+  font-weight: 600;
 }
 .token-tray {
   position: absolute;
