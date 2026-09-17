@@ -102,12 +102,14 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
         <a className="wordmark" href="/" aria-label="Arken Space — на главную">
           arken-space
         </a>
-        <span className="landing-badge">MVP · ранний доступ</span>
+        <span className="landing-badge">Ранний доступ</span>
       </header>
 
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-intro">
-          <p className="landing-kicker">Виртуальный стол для домашних RPG</p>
+          <p className="landing-kicker">
+            Виртуальный стол для домашних настольных ролевых игр
+          </p>
           <h1 id="landing-title">
             Всё необходимое для игры — в одном пространстве
           </h1>

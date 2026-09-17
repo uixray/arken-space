@@ -19,6 +19,10 @@ for (const width of [360, 820]) {
       });
     });
     await page.goto("/");
+    await expect(page.locator(".landing-badge")).toHaveText("Ранний доступ");
+    await expect(page.locator(".landing-intro .landing-kicker")).toHaveText(
+      "Виртуальный стол для домашних настольных ролевых игр",
+    );
     await expect(
       page.getByRole("heading", { name: "Выберите игрока", exact: true }),
     ).toBeVisible();

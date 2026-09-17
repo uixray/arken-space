@@ -64,7 +64,7 @@ describe("api telemetry and correlation", () => {
       formatApiError(
         new ApiError(409, "CONFLICT", "Conflict", "request-1", "action_2"),
       ),
-    ).toBe("Conflict (requestId: request-1, actionId: action_2)");
+    ).toBe("Conflict (Код запроса: request-1, Код действия: action_2)");
   });
 
   it("omits unsafe or oversized correlation ids", () => {

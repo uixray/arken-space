@@ -486,8 +486,10 @@ test("cold token resize conflict keeps socket authority and exposes only safe co
     .locator("[data-toast]")
     .filter({ hasText: safeMessage });
   await expect(notification).toBeVisible();
-  await expect(notification).toContainText(`requestId: ${safeRequestId}`);
-  await expect(notification).toContainText(`actionId: ${canonicalActionId}`);
+  await expect(notification).toContainText(`Код запроса: ${safeRequestId}`);
+  await expect(notification).toContainText(
+    `Код действия: ${canonicalActionId}`,
+  );
   const visibleText = await notification.innerText();
   expect(visibleText).not.toContain(tokenId);
   expect(visibleText).not.toContain(`/api/tokens/${tokenId}/size`);

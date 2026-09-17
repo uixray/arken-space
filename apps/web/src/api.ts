@@ -47,10 +47,10 @@ export function formatApiError(
     return reason instanceof Error ? reason.message : fallback;
   const correlation = [
     safeCorrelationIdPattern.test(reason.requestId ?? "")
-      ? `requestId: ${reason.requestId}`
+      ? `Код запроса: ${reason.requestId}`
       : null,
     safeCorrelationIdPattern.test(reason.actionId ?? "")
-      ? `actionId: ${reason.actionId}`
+      ? `Код действия: ${reason.actionId}`
       : null,
   ].filter(Boolean);
   return correlation.length > 0

@@ -285,3 +285,26 @@
   text literals; the prior integrated8504fea build is not this exact runtime.
 - No push/deploy/Linear state change. Remaining error/conditional-screen coverage
   and complete UI417 acceptance are still open; do not close from these8 cases.
+
+## 2026-09-17 — entry copy and diagnostic captions
+
+Live original UIX-417 reread. Removed remaining product-owned English captions:
+landing badge MVP → «Ранний доступ»; RPG kicker → «настольных ролевых игр»;
+catalog machine-key placeholder magic → «Код латиницей». Input pattern, entered
+keys and payload stay unchanged. API error correlation captions are now «Код
+запроса» / «Код действия»; actual IDs, wire fields, telemetry and safe-ID filtering
+are unchanged. Server-authored messages and user/proper names are not translated
+by guessing from their content.
+
+Connected API + real-form component pool31/31PASS15.13s; form submits unchanged
+values.magic=3. Real App Chrome/Firefox six casesPASS23.9s: landing360/820 including
+expanded-guide overflow/action checks, plus actual canvas-conflict toast retaining
+safe correlation IDs, one canonical PATCH, no rebootstrap and no private request
+body/URL leakage. HTTP/socket mocked, not production or device acceptance.
+Initial browser run1PASS/1FAIL/4notrun: new kicker selector matched six sections;
+scoped to landing intro, no app change. Initial typecheck caught test-only RTL
+exact option/index nullability; changed to exact name regex and justified non-null
+assertion after called-once assertion. Final web/E2E types and scoped lint/diffPASS.
+Evidence: russian-entry-errors in current artifact root. Own Vite stopped. No full
+suite/build/CI/push/deploy or premature UIX-417 closure; all-screen criterion remains
+broader than this copy pool. Protected selection recovery file unchanged.
