@@ -291,3 +291,25 @@ physical-device acceptance. Existing resource intent tests remain separate.
 Evidence: resource-counter-icons/{final-results.json,payload-checks.json,
 checkpoint.md}. E2E types, scoped lint/format/diff PASS; protected selection test
 unchanged. No full suite, CI rerun, publication or Linear write.
+
+## 2026-09-17 — collapsed character rail overflow repair
+
+Actual desktop GM rail reproduced horizontal overflow: client55px, scroll107px.
+Archive-list and per-character archive text had not followed the existing narrow
+rail treatment; initial buttons also retained unnecessary horizontal padding.
+Collapsed archive actions now use the existing Lucide Archive icon, while their
+accessible text remains intact. Expanded text/actions and compact hidden-rail
+behavior are preserved. No changes to archive requests, permissions or data.
+
+New actual-App fixture gate8/8 PASS26.0s: Chrome/Firefox GM/PLAYER1280/360.
+Keyboard collapse/expand retains trigger focus; desktop rail has no horizontal
+overflow and visible buttons have names/minimum24px bounds; compact rail hides
+and restores; GM-only actions absent for PLAYER. No HTTP/client-log writes or
+page errors. Desktop GM screenshot inspected: centered initial, visible add and
+archive icons fit the narrow rail. Initial locator-name failure was a harness
+error, not the product reproduction; geometry-red is the actual failing gate.
+
+One build1.70s, four served payload hashes checked. Web/E2E types, scoped
+lint/format/diff PASS. Evidence: character-rail-icons/{geometry-red-results.json,
+fixed-results.json,manifest.json,checkpoint.md}. This is not archive mutation,
+all-theme contrast or full character-workspace acceptance. No publication.

@@ -350,6 +350,9 @@ export function CharacterWorkspace({
                       title="Архивировать персонажа"
                       onClick={() => setArchiveTarget(character)}
                     >
+                      <span className="character-rail__archive-icon">
+                        <AppIcon icon={CharacterArchiveIcon} />
+                      </span>
                       Архивировать
                     </button>
                   )}

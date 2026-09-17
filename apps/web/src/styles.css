@@ -1971,13 +1971,30 @@ code {
 .character-workspace__body.is-rail-collapsed .character-rail {
   padding-inline: 6px;
 }
-.character-workspace__body.is-rail-collapsed .character-rail__create {
+.character-workspace__body.is-rail-collapsed
+  :is(
+    .character-rail__create,
+    .character-rail__restore-archived,
+    .character-rail__archive
+  ) {
   min-width: 0;
   padding-inline: 0;
   font-size: 0;
 }
 .character-workspace__body.is-rail-collapsed .character-rail__item {
   grid-template-columns: 1fr;
+}
+.character-workspace__body.is-rail-collapsed
+  .character-rail__item
+  > button:first-child {
+  padding-inline: 0;
+  justify-items: center;
+}
+.character-rail__archive-icon {
+  display: none;
+}
+.character-workspace__body.is-rail-collapsed .character-rail__archive-icon {
+  display: inline-flex;
 }
 .character-workspace__body.is-rail-collapsed .character-rail__item strong,
 .character-workspace__body.is-rail-collapsed .character-rail__status,
