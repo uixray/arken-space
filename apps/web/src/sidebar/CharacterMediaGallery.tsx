@@ -701,8 +701,10 @@ function MediaViewer({
   }, [item.id, src]);
 
   useEffect(() => {
+    // Enter the viewer once. Paging must not steal focus from its navigation
+    // buttons: repeated Enter/Space should continue using the same control.
     containerRef.current?.focus();
-  }, [item.id]);
+  }, []);
 
   return (
     <ArkenDialog

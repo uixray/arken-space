@@ -313,3 +313,24 @@ One build1.70s, four served payload hashes checked. Web/E2E types, scoped
 lint/format/diff PASS. Evidence: character-rail-icons/{geometry-red-results.json,
 fixed-results.json,manifest.json,checkpoint.md}. This is not archive mutation,
 all-theme contrast or full character-workspace acceptance. No publication.
+
+## 2026-09-17 — gallery paging keyboard focus repair
+
+Actual-App old-runtime regression: Enter on Next changed the image but moved
+focus from the button to the viewer container, preventing repeated Enter paging.
+Viewer entry focus now runs on mount only, not on every item change. Image-error
+reset still tracks item/source independently; close/remount retains entry behavior.
+No changes to image permissions, URLs, ordering, persistence or dialog ownership.
+
+New browser gate8/8 PASS27.0s: Chrome/Firefox GM/PLAYER1280/360, two-entry fixture.
+Repeated Enter wraps images while preserving the Next button focus; ArrowRight
+also preserves focus; Escape closes and returns to the original thumbnail.
+Both navigation SVGs are decorative/nonfocusable, button bounds meet24px desktop
+and44px compact. No HTTP/client-log writes or page errors. Compact screenshot
+inspected: both controls fit and Next has a visible focus outline. The fixture
+uses a1px PNG; this proves control behavior, not realistic image-fit acceptance.
+
+Existing gallery removal/component regressions11/11 PASS3.86s. Web/E2E types,
+scoped lint/format/diff PASS. One build1.67s/four served hashes verified. Evidence:
+character-gallery-navigation/{red-results.json,fixed-results.json,manifest.json,
+checkpoint.md}. Protected selection test unchanged; no full suite/CI/publication.
