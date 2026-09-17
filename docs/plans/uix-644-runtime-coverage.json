@@ -47,6 +47,12 @@
       "artifact": "cursor-menu-gate/results.json",
       "scope": "GM popup and PLAYER direct toggle, 4 cases; not actual remote cursor payload."
     },
+    "cursorStableObserver": {
+      "status": "PASS",
+      "revision": "984c1fec452f2cfd09cc1645ab4fd52db5775d74 plus WorkspaceNav stable observer subscription; see cursor-observer-cause/checkpoint.md",
+      "artifact": "cursor-observer-cause/connected-results.json",
+      "scope": "16/16 Chrome/Firefox connected cases PASS52.5s: all8 previously split cursor cases,6 navigation-owner and2 desktop overflow pointer cases. New keyboard cases include named dialog/controls, two Journal/Map cycles, Escape/focus, no client-log writes. Instrumented same Firefox360 case now1 stable workspace observer versus22 before,0errors versus2; extra1case PASS6.2s. Unit10PASS preserves render/resize/observer measurement and unmount cleanup. Scoped repair of WorkspaceNav re-observation during popup resize; original TokenPalette RO not separately resolved."
+    },
     "cursorOwnerNaming": {
       "status": "FAIL",
       "revision": "d67d683cb79d06a8c788b68ebb359a11873b2efb plus CursorPresenceMenu naming fix; see cursor-owner-navigation/checkpoint.md",
@@ -483,11 +489,11 @@
       "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
       "kind": "tag:Popup",
       "count": 1,
-      "status": "FAIL",
+      "status": "PASS",
       "classification": "reachable",
-      "scope": "Historical lifecycle PASS retained. New named-dialog/keyboard-owner gate exposes ResizeObserver errors in Firefox hidden-owner navigation and Chromium resize. PLAYER remains a direct toggle, not another popup.",
-      "evidence": ["cursor", "cursorOwnerNaming"],
-      "next": "Diagnose reproducible Firefox keyboard-owner error and captured Chromium observer deliveries before accepting gate. Do not rerun unrelated menu matrix or suppress client-log writes."
+      "scope": "Named-dialog/keyboard-owner gate repaired by stable WorkspaceNav subscription; all8 cursor cases now PASS within connected16. Historical red evidence retained. PLAYER remains a direct toggle, not another popup.",
+      "evidence": ["cursor", "cursorOwnerNaming", "cursorStableObserver"],
+      "next": "Retain scoped cursor/owner acceptance; original TokenPalette observer failure, full registry and physical-device acceptance remain separate."
     },
     {
       "file": "apps/web/src/ui/FuturePoolDialogs.tsx",
