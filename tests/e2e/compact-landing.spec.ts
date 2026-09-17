@@ -23,6 +23,25 @@ for (const width of [360, 820]) {
     await expect(page.locator(".landing-intro .landing-kicker")).toHaveText(
       "Виртуальный стол для домашних настольных ролевых игр",
     );
+    const textColor = await page.evaluate(() => {
+      const hex = getComputedStyle(document.documentElement)
+        .getPropertyValue("--color-text-accent")
+        .trim();
+      if (!/^#[0-9a-f]{6}$/i.test(hex))
+        throw new Error(`Unexpected baseline text token: ${hex}`);
+      return `rgb(${[1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)).join(", ")})`;
+    });
+    await expect(page.locator(".landing-intro .landing-kicker")).toHaveCSS(
+      "color",
+      textColor,
+    );
+    const roadmapColors = await page
+      .locator(".landing-roadmap li")
+      .evaluateAll((items) =>
+        items.map((item) => getComputedStyle(item, "::before").color),
+      );
+    expect(roadmapColors.length).toBeGreaterThan(0);
+    expect(roadmapColors.every((color) => color === textColor)).toBe(true);
     await expect(
       page.getByRole("heading", { name: "Выберите игрока", exact: true }),
     ).toBeVisible();

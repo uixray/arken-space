@@ -57,6 +57,38 @@ function ratio(a: Color, b: Color) {
     y = luminance(b);
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
+
+it("baseline text accent stays readable on every base surface, unlike fill accent", async () => {
+  const base = JSON.parse(
+    await readFile(
+      new URL("../tokens/color.tokens.json", import.meta.url),
+      "utf8",
+    ),
+  ) as {
+    color: Tokens;
+    palette: Record<string, Tokens>;
+  };
+  const resolve = (role: string) => {
+    const reference = /^\{palette\.([^.]+)\.([^}]+)\}$/.exec(
+      base.color[role].$value,
+    );
+    if (!reference) throw new Error(`Unsupported baseline reference: ${role}`);
+    return color(base.palette[reference[1]][reference[2]].$value);
+  };
+  for (const surface of [
+    "canvas",
+    "surface",
+    "surface-raised",
+    "surface-hover",
+    "surface-active",
+  ])
+    expect(
+      ratio(resolve("text-accent"), resolve(surface)),
+      surface,
+    ).toBeGreaterThanOrEqual(4.5);
+  // Negative control: the actual original fill accent is unsuitable for text.
+  expect(ratio(resolve("accent"), resolve("surface"))).toBeLessThan(4.5);
+});
 function matrix(tokens: Tokens) {
   const get = (key: string) => {
     const token = tokens[key];
@@ -119,6 +151,35 @@ function matrix(tokens: Tokens) {
     check("button-primary-ink", background, 4.5);
   return checks;
 }
+
+it("migrated small labels use text accent, leaving selected resize borders decorative", async () => {
+  const css = await readFile(
+    new URL("../apps/web/src/styles.css", import.meta.url),
+    "utf8",
+  );
+  const selectors = [
+    '.resize-settings-popover button[aria-pressed="true"]',
+    ".slash-command-suggestions code",
+    ".message-character",
+    ".landing-kicker",
+    ".landing-roadmap li::before",
+    ".story-post__media-fallback",
+    ".quick-roll-panel__gm-only",
+  ];
+  for (const selector of selectors) {
+    const block = css
+      .split(`${selector} {`)
+      .slice(1)
+      .map((part) => part.split("}")[0])
+      .join(";");
+    expect(block, selector).toMatch(
+      /(?:^|;)\s*color: var\(--color-text-accent\);/,
+    );
+  }
+  expect(css.split(`${selectors[0]} {`)[1]?.split("}")[0]).toContain(
+    "border-color: var(--accent);",
+  );
+});
 function requireContrast(tokens: Tokens) {
   const failed = matrix(tokens).filter((check) => check.ratio < check.minimum);
   if (failed.length) throw new Error(JSON.stringify(failed));

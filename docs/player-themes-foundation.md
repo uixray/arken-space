@@ -463,3 +463,27 @@ not counted as a product failure. Corrected owned servers stop in finally.
 Evidence: invite-pending/{baseline-results.json,final-results.json,checkpoint.md}.
 No build/full suite/CI/publication or issue closure. The prior225038e compiled
 gate predates this runtime change and is not evidence for the new pending state.
+
+## 2026-09-17 — separate small text from accent fills
+
+Added the existing theme role `color-text-accent` to the canonical baseline DTCG
+source, resolving to the existing primary-text palette value. No new raw color,
+theme activation or preference storage decision. Generated baseline CSS updated;
+the immutable classic source/archive is untouched.
+
+Migrated seven small-text consumers: selected resize mode, slash-command names,
+chat character names, landing kicker/roadmap numbers, story media fallback and
+GM-only quick-roll notice. Borders, icon-only send/marker controls and large roll
+results retain their decorative accent. Personal themes already define their own
+contrast-checked text-accent role; this pool does not claim runtime theme support.
+
+Evidence: 14/14 contrast/source tests (including five base surfaces and the existing
+seven-theme matrix); the old fill accent is an explicit negative text-contrast
+control. Chrome/Firefox at360/820:4/4 landing cases passed17.2s with actual token
+resolution for text/pseudo-content plus prior links, guide and overflow checks.
+Other five consumers have source/token coverage, not new browser-flow acceptance.
+E2E typecheck, scoped ESLint and diff checks passed. Initial browser assertion
+mistakenly compared with Gravity's body color, corrected to canonical token;
+initial source assertion missed a selector's later color block, corrected to
+inspect its multiple blocks. Neither failure was relabeled as a product pass.
+No full suite/build/CI/deploy or Linear write. UIX-317 remains open.

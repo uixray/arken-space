@@ -733,7 +733,7 @@ code {
 }
 .resize-settings-popover button[aria-pressed="true"] {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--color-text-accent);
 }
 .aspect-lock {
   position: absolute;
@@ -1837,7 +1837,7 @@ code {
 
 .slash-command-suggestions code {
   grid-column: 1 / -1;
-  color: var(--accent);
+  color: var(--color-text-accent);
 }
 .chat-compose {
   display: grid;
@@ -2526,7 +2526,7 @@ code {
 }
 .landing-kicker {
   margin: 0;
-  color: var(--accent);
+  color: var(--color-text-accent);
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -2617,7 +2617,7 @@ code {
 }
 .landing-roadmap li::before {
   content: counter(roadmap, decimal-leading-zero);
-  color: var(--accent);
+  color: var(--color-text-accent);
   font-size: 0.75rem;
 }
 .feedback-form {
@@ -2821,7 +2821,7 @@ code {
 }
 
 .message-character {
-  color: var(--accent);
+  color: var(--color-text-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3642,7 +3642,7 @@ code {
 }
 .story-post__media-fallback {
   width: fit-content;
-  color: var(--accent);
+  color: var(--color-text-accent);
 }
 .story-composer {
   display: grid;
@@ -4410,7 +4410,7 @@ code {
   align-items: center;
   gap: var(--space-xs);
   margin: 0;
-  color: var(--accent);
+  color: var(--color-text-accent);
   font-size: 0.78rem;
 }
 .activity-filters {
