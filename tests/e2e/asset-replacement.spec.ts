@@ -9,8 +9,13 @@ import {
 } from "./helpers/painted-icon-contrast";
 const originalPng = makePng(1, 1, [30, 60, 90]);
 const png = makePng(1, 1, [180, 80, 40]);
-for (const width of [1280, 360]) {
-  test(`UIX-293 replacement review conflict retry and success ${width}`, async ({
+for (const [width, longTitle] of [
+  [1280, false],
+  [1280, true],
+  [360, false],
+  [360, true],
+] as const) {
+  test(`UIX-293 replacement review conflict retry and success ${width}${longTitle ? " long title" : ""}`, async ({
     page,
   }, info) => {
     const current = gmSnapshot({ schemaVersion: 2 });
@@ -18,7 +23,7 @@ for (const width of [1280, 360]) {
     const asset = {
       id,
       kind: "IMAGE" as const,
-      name: "Карта зала.png",
+      name: longTitle ? `${"ДревняяБашня".repeat(15)}.png` : "Карта зала.png",
       mimeType: "image/png",
       sizeBytes: png.length,
       width: 1,
@@ -148,6 +153,74 @@ for (const width of [1280, 360]) {
     };
     try {
       await open();
+      const caption = dialog.locator(".g-dialog-header__caption");
+      const close = dialog.locator(".g-dialog-btn-close button");
+      await expect(caption).toHaveText(`Заменить файл «${asset.name}»`);
+      await expect(close).toHaveAccessibleName("Закрыть диалоговое окно");
+      await expect(close).toBeVisible();
+      await settleIconState(close);
+      const headerGeometry = await dialog.evaluate((node) => {
+        const title = node.querySelector(".g-dialog-header__caption")!;
+        const button = node.querySelector(".g-dialog-btn-close button")!;
+        const box = title.getBoundingClientRect(),
+          target = button.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(title);
+        return {
+          caption: box.toJSON(),
+          close: target.toJSON(),
+          text: [...range.getClientRects()].map((rect) => rect.toJSON()),
+          hit: button.contains(
+            document.elementFromPoint(
+              target.x + target.width / 2,
+              target.y + target.height / 2,
+            ),
+          ),
+        };
+      });
+      await info.attach("dialog-header-geometry", {
+        body: JSON.stringify(headerGeometry),
+        contentType: "application/json",
+      });
+      expect(headerGeometry.caption.right).toBeLessThanOrEqual(
+        headerGeometry.close.left - 8,
+      );
+      for (const line of headerGeometry.text) {
+        expect(line.right).toBeLessThanOrEqual(
+          headerGeometry.caption.right + 1,
+        );
+        expect(line.left).toBeGreaterThanOrEqual(
+          headerGeometry.caption.left - 1,
+        );
+      }
+      expect(headerGeometry.hit).toBe(true);
+      expect(headerGeometry.close.width).toBeGreaterThanOrEqual(
+        width === 360 ? 44 : 24,
+      );
+      expect(headerGeometry.close.height).toBeGreaterThanOrEqual(
+        width === 360 ? 44 : 24,
+      );
+      await close.focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await expect(close).toBeFocused();
+      expect(
+        await close.evaluate((node) => node.matches(":focus-visible")),
+      ).toBe(true);
+      await page.screenshot({
+        path: info.outputPath("replacement-header.png"),
+      });
+      if (longTitle) {
+        await close.press("Enter");
+        await expect(dialog).toHaveCount(0);
+        await expect(
+          files.getByRole("button", { name: "Заменить файл", exact: true }),
+        ).toBeFocused();
+        expect(commands).toHaveLength(0);
+        expect(errors).toEqual([]);
+        expect(unexpected).toEqual([]);
+        return;
+      }
       await dialog
         .getByLabel("Новое изображение", { exact: true })
         .setInputFiles({

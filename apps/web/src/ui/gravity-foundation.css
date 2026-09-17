@@ -40,6 +40,24 @@
   z-index: var(--arken-layer-dialog);
 }
 
+/* A filename can be one long word. Keep the full caption readable without
+ * allowing its flex min-content width to cover the independently placed close
+ * control: 14px inset + 44px target + 8px gap. Scope to our modal wrapper. */
+.arken-dialog .g-dialog-header {
+  padding-inline-end: 66px;
+}
+
+.arken-dialog .g-dialog-header__caption {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.arken-dialog .g-dialog-btn-close__btn {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
 /* Select renders its menu in a document-level portal. Lift only the popup
  * owned by the corresponding layered surface; a select underneath a modal
  * must never jump above that modal merely because it uses Gravity UI. */

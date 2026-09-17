@@ -762,3 +762,33 @@ IMAGE: прежний conflict/retry/success плюс новый centered-glyph 
 соответствовали двум связанным CSS-исправлениям; fullsuite/CI/push/deploy нет.
 Прежний untracked тест группового выделения неизменён. Аудиофайл валидный fixture,
 но playback, реальный сервер, все темы и физический телефон здесь не проверялись.
+
+## 2026-09-17 — длинное имя в заголовке модального окна
+
+В реальном AssetReplacementDialog имя файла без пробелов (184 символа) растягивало
+caption за экран: Chrome360 RED right1867px вместо допустимого~285px.
+Это не только предположение по тесному короткому заголовку. Первый probe сначала
+исправлен под фактическое имя Gravity-кнопки «Закрыть диалоговое окно»; несовпадение
+ожидаемого имени само по себе не считалось дефектом приложения.
+
+ArkenDialog теперь маркирует только свои modal-окна классом `arken-dialog`.
+Scoped CSS разрешает перенос любого длинного слова без обрезки полного имени,
+снимает flex min-content ограничение и резервирует справа66px: inset14+target44+gap8.
+Кнопка закрытия44×44, библиотечная обработка закрытия/фокуса не менялась.
+Workspace-вариант и сторонние Gravity-dialogs этим CSS не затронуты.
+
+На `dialog-title-layout/dist` подтверждены8 уникальных случаев Chrome/Firefox ×
+1280/360 × короткое/длинное имя:1PASS из fixed и7PASS41.6s из settled.
+Caption и каждое текстовое line rect остаются в своей области, gap≥8px,
+close center-hit, target≥24/44, exact accessible name, ShiftTab/Tab focus-visible.
+Для длинного имени Enter закрывает окно и возвращает фокус на opener без команд;
+короткие случаи продолжают полный conflict/retry/success сценарий. Compact Firefox
+screenshot с полным длинным именем и отдельной кнопкой закрытия просмотрен.
+
+Один промежуточный замер попал в штатный scale-transition Gravity и получил gap7.55;
+после ожидания transition+двух кадров исходный порог8px сохранён, продукт не менялся.
+Две вложенные параметризации затем сведены к эквивалентной таблице четырёх пар,
+чтобы не переотступать весь существующий тест; повторять browser из-за этого не нужно.
+Web/E2E types, lint, format, diff-check PASS; одна build1.98s,4served hashes.
+Protected selection test неизменён; fullsuite/CI/push/deploy не запускались.
+Это GM synthetic-dialog evidence, не все модальные consumer-ы/темы/RTL/hardware.
