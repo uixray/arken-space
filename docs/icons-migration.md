@@ -394,3 +394,22 @@ dimension visual fixtures, not user-upload codecs or all viewport heights/themes
 One build1.62s/four served hashes. E2E types and scoped lint/format/diff PASS.
 Evidence: character-gallery-fit/{red-results.json,fixed-results.json,manifest.json,
 checkpoint.md}. CSS-only product change; no repeated full unit suite/CI/deploy.
+
+## 2026-09-17 — world editor gallery touch controls
+
+Old-runtime actual-App gate passed desktop but failed compact: reorder button
+width32px instead of44px. World media action buttons now have minimum44px bounds
+under1024px and their row may wrap instead of overflowing a narrow grid column.
+No changes to media order, permissions, requests or the world reader.
+
+Browser4/4 PASS17.7s: GM editor only, Chrome/Firefox1280/360. Both image entries,
+long caption without horizontal grid overflow, first/last disabled reorder
+boundaries, names, four decorative nonfocusable currentColor SVGs, button bounds
+and enabled center hit areas verified. No writes/client-log or page errors.
+Compact screenshot inspected: labels wrap and touch controls fit. PLAYER editor
+access is intentionally absent; this does not invent a player route or establish
+full mobile GM/editor acceptance. No mutation/keyboard reorder proof claimed.
+
+One build1.74s/four served hashes; E2E types, scoped lint/format/diff PASS. Evidence:
+world-media-controls/{baseline-results.json,fixed-results.json,manifest.json,
+checkpoint.md}. Protected selection test unchanged; no full suite/CI/publication.

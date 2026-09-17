@@ -165,8 +165,16 @@
 }
 .world-content-workspace__media-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
+}
+
+@media (max-width: 1023px) {
+  .world-content-workspace__media-actions .g-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* Match the compact workspace shell; do not keep two desktop-sized panes
