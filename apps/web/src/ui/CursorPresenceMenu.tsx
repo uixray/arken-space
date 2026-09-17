@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Popup, Switch } from "@gravity-ui/uikit";
 import type { CursorPreference } from "../cursor-preference";
 import { AppIcon } from "./AppIcon";
@@ -29,6 +29,7 @@ export function CursorPresenceMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+  const dialogId = useId();
 
   useEffect(() => {
     if (!open || !anchor || typeof IntersectionObserver === "undefined") return;
@@ -81,6 +82,7 @@ export function CursorPresenceMenu({
         aria-label="Настроить видимость курсоров"
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-controls={open ? dialogId : undefined}
         title="Настроить видимость курсоров"
         className="map-tool"
         data-tool="CURSOR_PRESENCE"
@@ -95,11 +97,16 @@ export function CursorPresenceMenu({
         anchorElement={anchor}
         placement={["bottom-start", "top-start"]}
         strategy="fixed"
-        role="dialog"
-        aria-label="Видимость курсоров"
         initialFocus={0}
       >
-        <div className="cursor-presence-menu" role="group">
+        {/* Popup places its role and labeling props on different elements.
+            Keep the dialog semantics together on the actual content owner. */}
+        <div
+          id={dialogId}
+          className="cursor-presence-menu"
+          role="dialog"
+          aria-label="Видимость курсоров"
+        >
           <Switch
             checked={preference.receiveEnabled}
             onUpdate={(receiveEnabled) =>

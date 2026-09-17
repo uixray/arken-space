@@ -47,6 +47,12 @@
       "artifact": "cursor-menu-gate/results.json",
       "scope": "GM popup and PLAYER direct toggle, 4 cases; not actual remote cursor payload."
     },
+    "cursorOwnerNaming": {
+      "status": "FAIL",
+      "revision": "d67d683cb79d06a8c788b68ebb359a11873b2efb plus CursorPresenceMenu naming fix; see cursor-owner-navigation/checkpoint.md",
+      "artifact": "cursor-owner-navigation/owner-contract-results.json",
+      "scope": "Connected8-case matrix split across owner-contract-results.json and remaining-results.json:5PASS3FAIL. Named dialog/control relationship, two keyboard Journal/Map cycles, no revival and Escape focus assertions pass in both browsers; Firefox new360/640 cases fail on ResizeObserver telemetry, existing GM Chromium resize case also fails. Old d67d683 Firefox360 baseline independently reproduces two same errors. Naming fix is not observer repair; do not accept this gate or discard telemetry."
+    },
     "token": {
       "status": "PASS",
       "revision": "43d0fee8f2b791ab9176e69e3d8a70f153eb4816",
@@ -477,11 +483,11 @@
       "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
       "kind": "tag:Popup",
       "count": 1,
-      "status": "PASS",
+      "status": "FAIL",
       "classification": "reachable",
-      "scope": "GM keyboard/pointer/focus/resize/clipped anchor; PLAYER direct toggle is not another popup.",
-      "evidence": ["cursor"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "scope": "Historical lifecycle PASS retained. New named-dialog/keyboard-owner gate exposes ResizeObserver errors in Firefox hidden-owner navigation and Chromium resize. PLAYER remains a direct toggle, not another popup.",
+      "evidence": ["cursor", "cursorOwnerNaming"],
+      "next": "Diagnose reproducible Firefox keyboard-owner error and captured Chromium observer deliveries before accepting gate. Do not rerun unrelated menu matrix or suppress client-log writes."
     },
     {
       "file": "apps/web/src/ui/FuturePoolDialogs.tsx",
