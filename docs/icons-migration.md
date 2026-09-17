@@ -270,3 +270,24 @@ lint/format/diff pass. Evidence: character-stat-controls/{label-contract-results
 enabled-hit-results.json,unit.log,manifest.json,checkpoint.md}. Initial harness
 failures are retained, not acceptance evidence. Protected selection test unchanged;
 preview stopped. Local only, no full suite, CI rerun, publication or Linear write.
+
+## 2026-09-17 — resource counter controls
+
+Existing built application38e859c, no rebuild/product changes: actual-App
+fixture gate8/8 PASS26.4s, Chrome/Firefox × GM/PLAYER ×1280/360. Empty mana
+disables spending while full endurance disables adding/restoration; non-boundary
+actions remain enabled. All six buttons have accessible names, minimum24px
+desktop/44px compact bounds and remain in the viewport. Enabled centers are
+unobscured. Exactly four decorative nonfocusable currentColor SVGs required;
+regen amounts remain mathematical text, not substituted icons.
+
+Real Tab traversal from the resource summary reaches each enabled button/input
+in DOM order with focus-visible; Enter collapses/reopens the section. No edits,
+spending, HTTP/client-log writes or page errors. Compact GM screenshot inspected:
+labels, values, maximums and dimmed boundary actions are readable and aligned.
+This is not mutation/persistence, read-only character, all-theme contrast or
+physical-device acceptance. Existing resource intent tests remain separate.
+
+Evidence: resource-counter-icons/{final-results.json,payload-checks.json,
+checkpoint.md}. E2E types, scoped lint/format/diff PASS; protected selection test
+unchanged. No full suite, CI rerun, publication or Linear write.
