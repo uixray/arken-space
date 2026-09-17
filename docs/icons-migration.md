@@ -131,3 +131,24 @@ Production-mode web build for `508167fed063242241a8a5e40a6169a9fb87c74d` passed 
 The existing eight shell icon cases also passed against this built output in Chrome/Firefox × GM/PLAYER × 1280/390px, rather than just the development server. This is synthetic session data and default dark theme only. Source maps and payload hashes are retained in the local bundle-gate receipt. No deploy or CI rerun occurred. Typecheck evidence remains the prior current application-source check; no claim of a new full test-suite pass.
 
 Personal-theme configuration exists separately; main.tsx currently mounts a fixed dark Gravity ThemeProvider and does not import the player-theme styles. Therefore this gate cannot prove personal-theme UI acceptance. Keep UIX-317 and the remaining UIX-645 focus/menu/contrast criteria open.
+
+## 2026-09-17 — shell keyboard acceptance
+
+Extended `tests/e2e/icon-shell-contract.spec.ts` against application source
+`22d3af88bdb304a4887f094c3cf818fd515e3e33`: Chrome/Firefox × GM/PLAYER ×
+1280/390px, eight cases passed. All initially visible enabled Lucide controls
+are reached by real Tab navigation or ArrowRight in the three-option roll-mode
+radio group. Each reached control has `:focus-visible` and a nontransparent
+outline or box shadow; SVGs do not receive keyboard focus. Existing accessible
+name, decorative SVG, currentColor, stroke and minimum 24px hit-area checks
+remain in place. No HTTP writes or uncaught page errors occurred.
+
+The first harness iteration incorrectly required a DOM focus target while Tab
+crossed browser chrome; the second incorrectly required every radio option in
+the Tab sequence. Both were corrected to test actual browser and radio-group
+behavior, without changing product code. E2E typecheck and scoped lint passed.
+The compact GM screenshot was inspected: the zoom-minus focus outline is
+visible; the narrow map remains crowded by its tool panels. This is not compact
+layout acceptance, quantitative contrast proof, physical-device testing, or
+coverage of unopened menus/dialogs, every disabled state, or personal themes.
+Those original criteria remain open; no deployment or full CI rerun occurred.

@@ -79,12 +79,69 @@ for (const role of ["GM", "PLAYER"] as const)
         expect(box!.width).toBeGreaterThanOrEqual(24);
         expect(box!.height).toBeGreaterThanOrEqual(24);
       }
+      // Traverse the real tab order, not HTMLElement.focus(): SVG must never
+      // take focus, disabled controls must be skipped, and enabled icon
+      // controls must retain a visible keyboard indicator.
+      const pending = new Set<number>();
+      for (const [index, control] of (await controls.all()).entries()) {
+        await control.evaluate((element, id) => {
+          element.setAttribute("data-icon-keyboard-gate", String(id));
+        }, index);
+        if (await control.isEnabled()) pending.add(index);
+      }
+      const keyboardControls = pending.size;
+      let radioSteps = 0;
+      for (let step = 0; step < 120 && pending.size > 0; step += 1) {
+        await page.keyboard.press(radioSteps > 0 ? "ArrowRight" : "Tab");
+        if (radioSteps > 0) radioSteps -= 1;
+        const focused = page.locator(":focus");
+        // At the end of the document the browser chrome owns focus for a Tab.
+        if ((await focused.count()) === 0) continue;
+        await expect(focused).not.toHaveJSProperty("tagName", "svg");
+        const id = await focused.getAttribute("data-icon-keyboard-gate");
+        if (id === null) continue;
+        // Radio groups deliberately have one Tab stop. Visit their other
+        // options using their actual arrow-key interaction, then leave by Tab.
+        if (
+          (await focused.getAttribute("role")) === "radio" &&
+          pending.has(Number(id))
+        ) {
+          radioSteps = Math.max(radioSteps, 2);
+        }
+        await expect(focused).toBeEnabled();
+        const indicator = await focused.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            visible: element.matches(":focus-visible"),
+            outline:
+              style.outlineStyle !== "none" &&
+              parseFloat(style.outlineWidth) > 0 &&
+              style.outlineColor !== "rgba(0, 0, 0, 0)",
+            shadow: style.boxShadow !== "none",
+          };
+        });
+        expect(indicator.visible).toBe(true);
+        expect(indicator.outline || indicator.shadow).toBe(true);
+        pending.delete(Number(id));
+      }
+      const unreachable = await Promise.all(
+        [...pending].map((id) =>
+          page
+            .locator(`[data-icon-keyboard-gate="${id}"]`)
+            .evaluate((element) => element.outerHTML),
+        ),
+      );
+      expect(
+        unreachable,
+        "Icon controls missing from keyboard tab order",
+      ).toEqual([]);
       await testInfo.attach("shell-icon-contract", {
         body: JSON.stringify({
           role,
           width,
           icons: await icons.count(),
           controls: await controls.count(),
+          keyboardControls,
           errors,
           writes,
         }),
