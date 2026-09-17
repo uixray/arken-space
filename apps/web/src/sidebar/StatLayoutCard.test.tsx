@@ -163,6 +163,35 @@ describe("карточка группы характеристик", () => {
     }
   });
 
+  it.each([true, false])(
+    "names the stat value without action labels (layout editing=%s)",
+    async (canEditLayout) => {
+      renderCard({ canEditLayout });
+      const input = screen.getByRole("spinbutton", {
+        name: "Сила",
+      });
+      await userEvent.click(screen.getByText("Сила", { exact: true }));
+      expect(input).toHaveFocus();
+      expect(
+        input.closest(".stat-field")?.querySelector("label button"),
+      ).toBeNull();
+    },
+  );
+
+  it("keeps labels attached to their own fields across two cards", async () => {
+    renderCard();
+    renderCard();
+    const inputs = screen.getAllByRole("spinbutton", {
+      name: "Сила",
+    });
+    expect(new Set(inputs.map((input) => input.id)).size).toBe(2);
+    const labels = screen.getAllByText("Сила", { exact: true });
+    for (const [index, label] of labels.entries()) {
+      await userEvent.click(label);
+      expect(inputs[index]).toHaveFocus();
+    }
+  });
+
   it("не предлагает игроку править раскладку", () => {
     // Раскладка общая на кампанию: переименование игроком поменяло бы подпись
     // всем за столом. Значения при этом править можно — это его персонаж.

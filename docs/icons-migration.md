@@ -246,3 +246,27 @@ hashes verified. Evidence: disabled-shell-icons/{fixed-results.json,receipts.jso
 red-unit.log,unit.log,manifest.json,checkpoint.md}. Earlier failures are retained,
 not counted as acceptance. Local only; no full suite, CI rerun, publication or
 Linear write. UIX-645 retains the remaining original cross-product/theme gates.
+
+## 2026-09-17 — characteristic field labels and action controls
+
+The actual character card exposed a label bug: a characteristic input inherited
+the names of every adjacent roll/reorder/rename/delete button because the entire
+row was a label. Each field now has a unique useId-based input id and a dedicated
+caption label; actions remain outside that label. Layout, values, persistence and
+permissions are unchanged. The browser assertion failed on the old runtime.
+
+Targeted component tests:19/19 PASS, including exact input names, caption-click
+focus and unique ids across two cards. Actual-App fixture browser checks:
+8/8 PASS28.529s, Chrome/Firefox × GM/PLAYER ×1280/360. Named action buttons,
+decorative SVG, currentColor and minimum24px desktop/44px compact checked;
+center hit checks apply only to enabled buttons (Gravity disabled buttons do not
+receive pointer events). GM rename/delete dialogs cancel with Escape and return
+focus; PLAYER layout-edit actions absent. No unexpected API/client-log writes
+or page errors. Desktop and compact screenshots inspected. No actual mutations,
+server persistence, physical-device or all-theme acceptance claimed.
+
+One build1.71s and four served payload hashes verified; web/E2E types and scoped
+lint/format/diff pass. Evidence: character-stat-controls/{label-contract-results.json,
+enabled-hit-results.json,unit.log,manifest.json,checkpoint.md}. Initial harness
+failures are retained, not acceptance evidence. Protected selection test unchanged;
+preview stopped. Local only, no full suite, CI rerun, publication or Linear write.
