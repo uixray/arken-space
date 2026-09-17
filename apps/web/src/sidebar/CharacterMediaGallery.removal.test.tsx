@@ -189,6 +189,71 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it("refreshes mounted gallery images and recovers failed images on a new asset version", async () => {
+  const element = (version: string) => {
+    const props = {
+      characterId: media.characterId,
+      characterName: "Аркен",
+      editable: true,
+      isGm: false,
+      onUpload: vi.fn(),
+      assets: [
+        {
+          id: media.assetId,
+          url: `/api/assets/${media.assetId}/content?v=${version}`,
+        },
+      ],
+    };
+    return <CharacterMediaGallery {...props} />;
+  };
+  const view = renderComponent(element("old"));
+  const thumb = await screen.findByRole("img", {
+    name: "Портрет у костра",
+  });
+  expect(thumb).toHaveAttribute(
+    "src",
+    `/api/assets/${media.assetId}/content?v=old`,
+  );
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: "Открыть в полном размере: Портрет у костра",
+    }),
+  );
+  expect(screen.getAllByRole("img", { name: "Портрет у костра" })).toHaveLength(
+    2,
+  );
+  view.rerender(element("new"));
+  for (const image of screen.getAllByRole("img", {
+    name: "Портрет у костра",
+  })) {
+    expect(image).toHaveAttribute(
+      "src",
+      `/api/assets/${media.assetId}/content?v=new`,
+    );
+    act(() => image.dispatchEvent(new Event("error")));
+  }
+  expect(
+    screen.getAllByRole("img", { name: "Изображение недоступно" }),
+  ).toHaveLength(2);
+  view.rerender(element("recovered"));
+  await waitFor(() =>
+    expect(
+      screen.queryAllByRole("img", {
+        name: "Изображение недоступно",
+      }),
+    ).toHaveLength(0),
+  );
+  for (const image of screen.getAllByRole("img", {
+    name: "Портрет у костра",
+  })) {
+    expect(image).toHaveAttribute(
+      "src",
+      `/api/assets/${media.assetId}/content?v=recovered`,
+    );
+  }
+  expect(apiMock).toHaveBeenCalledTimes(1);
+});
+
 describe("подтверждение удаления изображения из галереи персонажа", () => {
   it("объясняет назначение пустой галереи и форму добавления", async () => {
     apiMock.mockResolvedValueOnce([]);

@@ -23,6 +23,7 @@ import {
   catalogEntries,
   characterCatalogEntries,
   characterControllers,
+  characterMedia,
   characters,
   chatMessages,
   chatReadCursors,
@@ -54,6 +55,7 @@ import { normalizeTokenConditions } from "./token-conditions.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
 import { normalizeSystemRegenStatRows } from "./stat-layout.js";
+import { canViewCharacterMedia } from "./character-media.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -80,6 +82,40 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
  * маршрутом `/api/chat/threads/:threadId/messages` по кнопке.
  */
 export const SNAPSHOT_MESSAGES_PER_THREAD = 20;
+
+export interface SnapshotCharacterMediaAssetRow {
+  media: {
+    assetId: string;
+    campaignId: string;
+    detachedAt: Date | null;
+    visibility: "OWNER_GM" | "PARTY" | "GM_ONLY";
+  };
+  characterOwnerMembershipId: string | null;
+}
+
+/**
+ * Asset-content authorization is derived from the same snapshot projection as
+ * the bootstrap payload. Gallery attachments therefore contribute only the
+ * exact asset ids whose attachment is currently visible to this member.
+ */
+export function visibleCharacterMediaAssetIds(
+  auth: AuthContext,
+  rows: readonly SnapshotCharacterMediaAssetRow[],
+): Set<string> {
+  const visible = new Set<string>();
+  for (const row of rows) {
+    if (row.media.campaignId !== auth.campaignId || row.media.detachedAt)
+      continue;
+    if (
+      canViewCharacterMedia(auth, {
+        visibility: row.media.visibility,
+        characterOwnerMembershipId: row.characterOwnerMembershipId,
+      })
+    )
+      visible.add(row.media.assetId);
+  }
+  return visible;
+}
 
 /** Заведомо несуществующая сцена: см. `canvasSceneIds` ниже. */
 const NO_SCENE = "00000000-0000-0000-0000-000000000000";
@@ -117,6 +153,7 @@ export interface CampaignReadSet {
   definitionRows: Awaited<ReturnType<typeof loadTokenDefinitions>>;
   catalogRows: Awaited<ReturnType<typeof loadCatalog>>;
   assignedRows: Awaited<ReturnType<typeof loadAssignedEntries>>;
+  characterMediaRows: Awaited<ReturnType<typeof loadCharacterMedia>>;
   assetRows: Awaited<ReturnType<typeof loadAssets>>;
   sequenceRows: Awaited<ReturnType<typeof loadSequence>>;
   /**
@@ -215,6 +252,21 @@ const loadAssignedEntries = (db: Database, campaignId: string) =>
     )
     .where(eq(characters.campaignId, campaignId));
 
+const loadCharacterMedia = (db: Database, campaignId: string) =>
+  db
+    .select({
+      media: characterMedia,
+      characterOwnerMembershipId: characters.ownerMembershipId,
+    })
+    .from(characterMedia)
+    .innerJoin(characters, eq(characterMedia.characterId, characters.id))
+    .where(
+      and(
+        eq(characterMedia.campaignId, campaignId),
+        eq(characters.campaignId, campaignId),
+      ),
+    );
+
 const loadAssets = (db: Database, campaignId: string) =>
   db
     .select()
@@ -243,6 +295,7 @@ export async function loadCampaignReadSet(
     definitionRows,
     catalogRows,
     assignedRows,
+    characterMediaRows,
     assetRows,
     sequenceRows,
     audioTracks,
@@ -257,6 +310,7 @@ export async function loadCampaignReadSet(
     loadTokenDefinitions(db, campaignId),
     loadCatalog(db, campaignId),
     loadAssignedEntries(db, campaignId),
+    loadCharacterMedia(db, campaignId),
     loadAssets(db, campaignId),
     loadSequence(db, campaignId),
     normalizeAudioTrackDeadlines(db, campaignId),
@@ -273,6 +327,7 @@ export async function loadCampaignReadSet(
     definitionRows,
     catalogRows,
     assignedRows,
+    characterMediaRows,
     assetRows,
     sequenceRows,
     audioTracks,
@@ -357,6 +412,7 @@ export async function buildSnapshot(
     definitionRows,
     catalogRows,
     assignedRows,
+    characterMediaRows,
     assetRows,
     sequenceRows,
     audioTracks: normalizedAudioTracks,
@@ -661,6 +717,8 @@ export async function buildSnapshot(
     if (track.assetId) visibleAssetIds.add(track.assetId);
   }
   for (const assetId of worldMapProjection.backgroundAssetIds)
+    visibleAssetIds.add(assetId);
+  for (const assetId of visibleCharacterMediaAssetIds(auth, characterMediaRows))
     visibleAssetIds.add(assetId);
   const visibleAssets =
     auth.role === "GM"

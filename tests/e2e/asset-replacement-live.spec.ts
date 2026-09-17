@@ -216,7 +216,7 @@ test("UIX-293 real GM replacement reaches connected player and survives reload",
   }
 });
 
-for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
+for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
   test(`UIX-293 real ${kind} replacement changes connected player pixels and retains links`, async ({
     page,
     browser,
@@ -244,16 +244,19 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
     await expect(page.locator(".app-shell")).toBeVisible();
     const initial = await snapshot(page);
     const scene = initial.scenes.find((s) => s.active)!;
-    const upload = await page.request.post(`/api/assets?kind=${kind}`, {
-      headers: { "x-action-id": randomUUID() },
-      multipart: {
-        file: {
-          name: "Изображение замены.png",
-          mimeType: "image/png",
-          buffer: cyan,
+    const upload = await page.request.post(
+      `/api/assets?kind=${kind === "GALLERY" ? "PORTRAIT" : kind}`,
+      {
+        headers: { "x-action-id": randomUUID() },
+        multipart: {
+          file: {
+            name: "Изображение замены.png",
+            mimeType: "image/png",
+            buffer: cyan,
+          },
         },
       },
-    });
+    );
     await expect(upload).toBeOK();
     const asset: AssetDto = await upload.json();
     let linkedScene: SceneDto = scene;
@@ -284,7 +287,7 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
       });
       await expect(placed).toBeOK();
       token = await placed.json();
-    } else {
+    } else if (kind === "PORTRAIT") {
       const character = initial.characters[0];
       const linked = await page.request.patch(
         `/api/characters/${character.id}`,
@@ -293,6 +296,21 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
             actionId: randomUUID(),
             revision: character.revision,
             portraitAssetId: asset.id,
+          },
+        },
+      );
+      await expect(linked).toBeOK();
+    } else {
+      const linked = await page.request.post(
+        `/api/characters/${initial.characters[0].id}/media`,
+        {
+          data: {
+            actionId: randomUUID(),
+            characterId: initial.characters[0].id,
+            assetId: asset.id,
+            category: "CHARACTER_ART",
+            caption: "Проверка галереи",
+            visibility: "OWNER_GM",
           },
         },
       );
@@ -337,6 +355,30 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
         name: `Портрет ${initial.characters[0].name}`,
         exact: true,
       });
+      const galleryImage = player.locator(".character-media-viewer img");
+      const openGallery = async () => {
+        await openWorkspaceSection(player, "Персонажи");
+        await player
+          .getByRole("button", {
+            name: "Открыть в полном размере: Проверка галереи",
+            exact: true,
+          })
+          .click();
+        await expect(galleryImage).toBeVisible();
+        await expect
+          .poll(() =>
+            galleryImage.evaluate((el) => {
+              const box = el.getBoundingClientRect();
+              return (
+                document.elementFromPoint(
+                  box.x + box.width / 2,
+                  box.y + box.height / 2,
+                ) === el
+              );
+            }),
+          )
+          .toBe(true);
+      };
       const openPortrait = async () => {
         await openWorkspaceSection(player, "Персонажи");
         await expect(portrait).toBeVisible();
@@ -356,8 +398,14 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
           .toBe(true);
       };
       if (kind === "PORTRAIT") await openPortrait();
+      if (kind === "GALLERY") await openGallery();
       const consumer =
-        kind === "PORTRAIT" ? portrait : player.locator(".map-viewport");
+        kind === "PORTRAIT"
+          ? portrait
+          : kind === "GALLERY"
+            ? galleryImage
+            : player.locator(".map-viewport");
+      const minimumPixels = kind === "GALLERY" ? 8 : 1000;
       const pixels = () =>
         consumer.evaluate((viewport) => {
           const bounds = viewport.getBoundingClientRect();
@@ -399,9 +447,17 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
         });
       await expect
         .poll(async () => (await pixels()).cyan)
-        .toBeGreaterThan(1000);
+        .toBeGreaterThan(minimumPixels);
       expect((await pixels()).magenta).toBe(0);
       const before = await snapshot(player);
+      const readGallery = async () => {
+        const response = await player.request.get(
+          `/api/characters/${initial.characters[0].id}/media`,
+        );
+        await expect(response).toBeOK();
+        return response.json();
+      };
+      const galleryBefore = kind === "GALLERY" ? await readGallery() : null;
       const oldUrl = before.assets.find((a) => a.id === asset.id)!.url;
       const oldContent = await player.request.get(oldUrl);
       await expect(oldContent).toBeOK();
@@ -434,7 +490,9 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
           ? scene.name
           : kind === "TOKEN"
             ? token!.name
-            : initial.characters[0].name,
+            : kind === "GALLERY"
+              ? "Проверка галереи"
+              : initial.characters[0].name,
       );
       const committed = page.waitForResponse(
         (r) =>
@@ -459,7 +517,7 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
       // No player reload before verifying the real socket-driven visible change.
       await expect
         .poll(async () => (await pixels()).magenta)
-        .toBeGreaterThan(1000);
+        .toBeGreaterThan(minimumPixels);
       await expect.poll(async () => (await pixels()).cyan).toBe(0);
       const after = await snapshot(player);
       expect(after.scenes.find((s) => s.id === scene.id)).toEqual(
@@ -483,7 +541,7 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
         expect(
           after.tokenDefinitions?.find((d) => d.id === token!.definitionId),
         ).toEqual(beforeDefinition);
-      } else {
+      } else if (kind === "PORTRAIT") {
         const original = before.characters.find(
           (c) => c.id === initial.characters[0].id,
         );
@@ -492,6 +550,12 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
           after.characters.find((c) => c.id === initial.characters[0].id),
         ).toEqual(original);
         await expect(portrait).toHaveAttribute("src", result.asset.url);
+      } else {
+        await expect(galleryImage).toHaveAttribute("src", result.asset.url);
+        await expect(
+          player.locator(".character-media-gallery__thumb img"),
+        ).toHaveAttribute("src", result.asset.url);
+        expect(await readGallery()).toEqual(galleryBefore);
       }
       expect(after.scenes.find((s) => s.id === scene.id)?.revision).toBe(
         linkedScene.revision,
@@ -511,9 +575,10 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
       await expect(player.locator(".map-viewport")).toBeVisible();
       await player.locator(".map-viewport").press("f");
       if (kind === "PORTRAIT") await openPortrait();
+      if (kind === "GALLERY") await openGallery();
       await expect
         .poll(async () => (await pixels()).magenta)
-        .toBeGreaterThan(1000);
+        .toBeGreaterThan(minimumPixels);
       expect((await pixels()).cyan).toBe(0);
       const reloadedContent = await player.request.get(result.asset.url);
       await expect(reloadedContent).toBeOK();
@@ -533,6 +598,8 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
         );
         await expect(portrait).toHaveAttribute("src", result.asset.url);
       }
+      if (kind === "GALLERY")
+        expect(await readGallery()).toEqual(galleryBefore);
       expect(errors).toEqual([]);
       await info.attach(`${kind.toLowerCase()}-replacement-visible`, {
         body: await consumer.screenshot(),
@@ -552,6 +619,48 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
         }),
         contentType: "application/json",
       });
+      if (kind === "GALLERY") {
+        const created = await page.request.post("/api/characters", {
+          data: { actionId: randomUUID(), name: "Другой участник" },
+        });
+        await expect(created).toBeOK();
+        const otherInvite = await page.request.post("/api/invites", {
+          data: {
+            actionId: randomUUID(),
+            characterId: (await created.json()).id,
+            label: "Проверка приватности",
+            expiresInHours: 1,
+          },
+        });
+        await expect(otherInvite).toBeOK();
+        const otherContext = await browser.newContext({
+          baseURL: info.project.use.baseURL,
+        });
+        try {
+          const other = await otherContext.newPage();
+          await other.goto(new URL((await otherInvite.json()).url).pathname);
+          await other.getByLabel("Имя", { exact: true }).fill("Другой игрок");
+          await other
+            .getByRole("button", { name: "Войти", exact: true })
+            .click();
+          await expect(other.locator(".app-shell")).toBeVisible();
+          expect(
+            (await snapshot(other)).assets.some((a) => a.id === asset.id),
+          ).toBe(false);
+          expect((await other.request.get(result.asset.url)).status()).toBe(
+            404,
+          );
+          await info.attach("gallery-other-member-denied", {
+            body: JSON.stringify({
+              snapshotExcluded: true,
+              contentStatus: 404,
+            }),
+            contentType: "application/json",
+          });
+        } finally {
+          await otherContext.close();
+        }
+      }
     } finally {
       await context.close();
     }

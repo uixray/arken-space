@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  AssetDto,
   CharacterMediaCategory,
   CharacterMediaDto,
   CharacterMediaVisibility,
@@ -36,10 +37,6 @@ type RemovalTarget = {
   actionId: string;
 };
 
-function assetUrl(assetId: string): string {
-  return `/api/assets/${assetId}/content`;
-}
-
 /**
  * Owner-facing gallery for a single character sheet (UIX-292 Stage 3): an
  * ordered set of media entries alongside the existing single `portraitAssetId`.
@@ -56,13 +53,18 @@ export function CharacterMediaGallery({
   editable,
   isGm,
   onUpload,
+  assets = [],
 }: {
   characterId: string;
   characterName: string;
   editable: boolean;
   isGm: boolean;
   onUpload: AssetActions["uploadAsset"];
+  assets?: ReadonlyArray<Pick<AssetDto, "id" | "url">>;
 }) {
+  const assetUrl = (assetId: string) =>
+    assets.find((asset) => asset.id === assetId)?.url ??
+    `/api/assets/${assetId}/content`;
   const [items, setItems] = useState<CharacterMediaDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -274,7 +276,11 @@ export function CharacterMediaGallery({
                   item.caption || CHARACTER_MEDIA_CATEGORY_LABELS[item.category]
                 }`}
               >
-                <GalleryImage assetId={item.assetId} alt={item.caption ?? ""} />
+                <GalleryImage
+                  key={assetUrl(item.assetId)}
+                  src={assetUrl(item.assetId)}
+                  alt={item.caption ?? ""}
+                />
               </button>
               <div className="character-media-gallery__meta">
                 <span className="character-media-gallery__category">
@@ -347,6 +353,7 @@ export function CharacterMediaGallery({
       {viewerItem && (
         <MediaViewer
           item={viewerItem}
+          src={assetUrl(viewerItem.assetId)}
           characterName={characterName}
           items={sorted}
           onNavigate={(id) => setViewerId(id)}
@@ -395,7 +402,7 @@ export function CharacterMediaGallery({
   );
 }
 
-function GalleryImage({ assetId, alt }: { assetId: string; alt: string }) {
+function GalleryImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   if (failed)
     return (
@@ -407,9 +414,7 @@ function GalleryImage({ assetId, alt }: { assetId: string; alt: string }) {
         Изображение недоступно
       </span>
     );
-  return (
-    <img src={assetUrl(assetId)} alt={alt} onError={() => setFailed(true)} />
-  );
+  return <img src={src} alt={alt} onError={() => setFailed(true)} />;
 }
 
 /** Attach flow: reuses the same file-picker upload pattern as the portrait field, then attaches the resulting asset. */
@@ -675,12 +680,14 @@ function EditMediaDialog({
  */
 function MediaViewer({
   item,
+  src,
   characterName,
   items,
   onNavigate,
   onClose,
 }: {
   item: CharacterMediaDto;
+  src: string;
   characterName: string;
   items: CharacterMediaDto[];
   onNavigate: (id: string) => void;
@@ -691,7 +698,7 @@ function MediaViewer({
 
   useEffect(() => {
     setFailed(false);
-  }, [item.id]);
+  }, [item.id, src]);
 
   useEffect(() => {
     containerRef.current?.focus();
@@ -728,7 +735,7 @@ function MediaViewer({
           </div>
         ) : (
           <img
-            src={assetUrl(item.assetId)}
+            src={src}
             alt={
               item.caption ||
               `${characterName}: ${CHARACTER_MEDIA_CATEGORY_LABELS[item.category]}`

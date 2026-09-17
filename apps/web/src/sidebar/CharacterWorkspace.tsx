@@ -1433,6 +1433,7 @@ export function CharacterPanel({
       <h3 className="character-block-heading">Галерея</h3>
       <CharacterMediaGallery
         characterId={character.id}
+        assets={snapshot.assets}
         characterName={character.name}
         editable={Boolean(canEditMedia)}
         isGm={snapshot.me.role === "GM"}

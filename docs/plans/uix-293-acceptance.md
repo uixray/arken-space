@@ -1,6 +1,7 @@
 # UIX-293 — acceptance evidence, 2026-09-17
 
-Candidate under verification: `843a8812dc00f1edaf2ba1445e20ddffcf8357ed`.
+Initial consolidated candidate (historical): `843a8812dc00f1edaf2ba1445e20ddffcf8357ed`.
+Later candidate-specific evidence and remaining limits are appended below.
 Original Linear issue reread live; status remains In Progress. This document is
 an evidence map, not an issue closure or production acceptance certificate.
 
@@ -233,3 +234,50 @@ Running, protected untracked selection test unchanged. No build/CI/fullsuite,
 production/publication or Linear writes. Gallery, resource-image and world-content
 consumers are not established by this portrait-specific result; ACL/restart/device
 acceptance and separate journal attachment model retain their previous limits.
+
+## Gallery access and mounted image replacement repair — 2026-09-17
+
+The new real GALLERY case exposed an actual earlier defect: an invited character
+owner could list OWNER_GM gallery metadata but received an unavailable image.
+Content authorization relies on snapshot.assets, which omitted gallery-only
+references. Snapshot now loads gallery rows once per campaign and projects asset
+IDs with the existing canViewCharacterMedia policy, filtering detached/foreign
+rows and preserving OWNER_GM/PARTY/GM_ONLY rules. Controller is not owner. This
+does not grant all assets to players or change replacement/deletion permissions.
+
+Independent component RED established the second defect: thumbnail and open
+viewer ignored current versioned asset URLs. CharacterWorkspace now supplies its
+authorized snapshot asset URLs to CharacterMediaGallery. Both consumers use the
+current version; image-failure state resets on replacement, not only navigation.
+Fallback ID URLs remain for callers without snapshot metadata, still governed by
+the content endpoint. Gallery rows, order, captions and visibility are unchanged.
+
+Verification after the connected fix:
+
+- Fresh production web build, four served payload hashes checked; source API
+  includes the snapshot fix, synthetic isolated PG18.1, no mocked transport.
+- **8/8 browser PASS**: MAP/TOKEN/PORTRAIT/GALLERY × Chrome/Firefox, one worker,
+  retries0/skipped0/flaky0. Gallery now initially loads for its owner, open image
+  changes cyan→magenta without reload, thumbnail/viewer receive the new URL,
+  full gallery rows stay equal before/after/reload. A second real player with
+  another character has no asset in bootstrap and GET content returns404.
+- Gallery component **11/11PASS**, including red→green version/reset regression
+  and unchanged deletion confirmation cases. Snapshot policy+metrics **12/12PASS**
+  (bounded Sol task): owner/PARTY/GM positive and nonowner/controller-only,
+  GM_ONLY/player, detached and foreign-campaign negatives. These policy negatives
+  are helper tests; actual owner/other-player HTTP behavior is additionally covered
+  by the browser gate. Not a claim of every role permutation tested over HTTP.
+- Server/web/E2E types, scoped lint, formatting and diffcheck PASS. Initial test
+  typing used unsupported RTL exact options, corrected before final types check.
+
+First real red is retained as red-results.json; after the fix, an intermediate
+run stopped on a test-label mistake (expected character name, actual gallery
+caption), corrected without a product change. Final result in
+gallery-consumer-live/final-results.json; fixed/dist and its hash manifest,
+role-safe receipts, separate other-member-denied receipts and scripts retained.
+The manifest's revision is precommit981f10e plus the recorded dirty source diff;
+checkpoint records the final commit. Owned API/preview/PG stopped; original
+PostgreSQL service and protected selection test untouched. No CI/fullsuite,
+publication, production or Linear writes. This new runtime supersedes ecf66e6
+for future exact-candidate checks; previous broad menu results remain historical.
+Resource/world-content consumers and private journal-upload model are separate.
