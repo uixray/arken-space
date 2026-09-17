@@ -4,6 +4,7 @@
 }
 .operator-feedback__grid {
   display: grid;
+  overflow-wrap: anywhere;
   grid-template-columns: 280px 1fr;
   gap: 16px;
   height: 100%;

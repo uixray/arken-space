@@ -1,4 +1,5 @@
 import { expect, test } from "./react-console-guard";
+import AxeBuilder from "@axe-core/playwright";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 
@@ -49,6 +50,16 @@ for (const width of [1280, 390]) {
             : { items: [first], nextCursor: "opaque+/=" },
         });
       }
+      if (path === "/api/operator/feedback/first")
+        return route.fulfill({
+          json: {
+            ...first,
+            status: "ACKNOWLEDGED",
+            title: "ДлинныйЗаголовок".repeat(8),
+            description: `https://example.invalid/${"fragment".repeat(100)}`,
+            attachments: [],
+          },
+        });
       if (path === "/api/story/posts")
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       return route.fulfill({ json: [] });
@@ -119,6 +130,44 @@ for (const width of [1280, 390]) {
     expect(queries.at(-1)).toEqual({});
     await expect(dialog.getByLabel("Сборка", { exact: true })).toHaveValue("");
     expect(writes).toEqual([]);
+    const accessibility = await new AxeBuilder({ page })
+      .include(".operator-feedback")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    await info.attach("operator-list-accessibility", {
+      body: JSON.stringify({
+        violations: accessibility.violations,
+        incomplete: accessibility.incomplete,
+      }),
+      contentType: "application/json",
+    });
+    expect(accessibility.violations).toEqual([]);
+    await dialog.getByRole("button", { name: /Ошибка/ }).click();
+    await expect(
+      dialog.getByRole("heading", { name: "ДлинныйЗаголовок".repeat(8) }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("heading", { name: "ДлинныйЗаголовок".repeat(8) }),
+    ).toBeFocused();
+    const detailSection = dialog.locator(".operator-feedback__grid > section");
+    expect(
+      await detailSection.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth + 1,
+      ),
+      "Long report titles and URLs must wrap rather than require horizontal scrolling",
+    ).toBe(true);
+    const detailAccessibility = await new AxeBuilder({ page })
+      .include(".operator-feedback")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    await info.attach("operator-detail-accessibility", {
+      body: JSON.stringify({
+        violations: detailAccessibility.violations,
+        incomplete: detailAccessibility.incomplete,
+      }),
+      contentType: "application/json",
+    });
+    expect(detailAccessibility.violations).toEqual([]);
     await info.attach("list-query-receipt", {
       body: JSON.stringify({ width, queries, bounds, writes }),
       contentType: "application/json",

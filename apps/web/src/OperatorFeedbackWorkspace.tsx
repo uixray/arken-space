@@ -53,6 +53,11 @@ export const OperatorFeedbackWorkspace = memo(
     const [notice, setNotice] = useState("");
     const scope = useRef(0);
     const image = useRef<string | null>(null);
+    const detailHeading = useRef<HTMLHeadingElement | null>(null);
+    const selectedReportId = detail?.id;
+    useEffect(() => {
+      if (selectedReportId) detailHeading.current?.focus();
+    }, [selectedReportId]);
 
     const closeImage = useCallback(() => {
       if (image.current) URL.revokeObjectURL(image.current);
@@ -322,7 +327,9 @@ export const OperatorFeedbackWorkspace = memo(
             {notice && <p role="status">{notice}</p>}
             {detail ? (
               <>
-                <h3>{detail.title}</h3>
+                <h3 ref={detailHeading} tabIndex={-1}>
+                  {detail.title}
+                </h3>
                 <p>{detail.description}</p>
                 <p>Статус: {FEEDBACK_STATUS_LABELS[detail.status]}</p>
                 {transitions[detail.status].includes("LINKED") && (

@@ -129,3 +129,24 @@ Web/E2E types pass after removing an unsupported RTL-only test option; scoped
 lint passes. No claim of revocation detection before the next server response,
 undoing an already completed clipboard write, or clearing browser/network history.
 No production, full suite/build/CI or external Linear write.
+
+## 2026-09-17 — reachable long report details and accessibility gate
+
+Extended the existing list scenario with scoped axe WCAG2/2.1 A/AA checks on
+list and selected detail (no disabled rules), a long unbroken title/URL fixture,
+and horizontal-overflow/focus assertions. The long text initially reproduced
+horizontal scrolling at1280; grid content now inherits overflow-wrap:anywhere
+without truncating submitted text. The390 screenshot then exposed another UX
+gap: selecting a report left its detail below the filter panel. New selection
+focuses the detail heading, scrolling it into view and announcing its context;
+the heading is not an extra Tab stop. Re-rendering the same report does not
+re-run this effect merely to reveal more data or change status.
+
+Final Chrome/Firefox1280/390:4/4PASS27.8s, actual App/Dialog with synthetic API.
+Web/E2E types, scoped lint and diffcheck pass. Compact final screenshot inspected:
+selected title and wrapped URL are visible within the dialog. Earlier list-only
+4/4 and wrapping-only4/4 receipts remain separate, not extra product acceptance.
+Axe reports no automatic violations, but incomplete contrast nodes remain in
+receipts (clipped/scrolled content and Gravity pseudo-elements); this is not full
+contrast certification or physical-device/screen-reader QA. No full suite/build,
+CI, production, issue closure or external Linear write.
