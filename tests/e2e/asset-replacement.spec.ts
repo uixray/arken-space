@@ -3,9 +3,13 @@ import type { Route } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import {
+  paintedIconContrast,
+  settleIconState,
+} from "./helpers/painted-icon-contrast";
 const originalPng = makePng(1, 1, [30, 60, 90]);
 const png = makePng(1, 1, [180, 80, 40]);
-for (const width of [1280, 390]) {
+for (const width of [1280, 360]) {
   test(`UIX-293 replacement review conflict retry and success ${width}`, async ({
     page,
   }, info) => {
@@ -144,6 +148,68 @@ for (const width of [1280, 390]) {
     };
     try {
       await open();
+      await dialog
+        .getByLabel("Новое изображение", { exact: true })
+        .setInputFiles({
+          name: "draft.png",
+          mimeType: "image/png",
+          buffer: png,
+        });
+      const remove = dialog.getByRole("button", {
+        name: "Удалить draft.png",
+        exact: true,
+      });
+      const svg = remove.locator("svg.arken-icon");
+      await expect(svg).toBeVisible();
+      for (const [attribute, value] of [
+        ["aria-hidden", "true"],
+        ["focusable", "false"],
+        ["stroke", "currentColor"],
+        ["stroke-width", "2"],
+      ])
+        await expect(svg).toHaveAttribute(attribute, value);
+      await remove.scrollIntoViewIfNeeded();
+      const box = (await remove.boundingBox())!;
+      for (const size of [box.width, box.height])
+        expect(Number(size.toFixed(3))).toBeGreaterThanOrEqual(
+          width === 360 ? 44 : 24,
+        );
+      expect(
+        await remove.evaluate((node) => {
+          const r = node.getBoundingClientRect();
+          return node.contains(
+            document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+          );
+        }),
+      ).toBe(true);
+      await page.mouse.move(1, 1);
+      await settleIconState(remove);
+      expect(await paintedIconContrast(svg)).toBeGreaterThanOrEqual(3);
+      await remove.hover();
+      await settleIconState(remove);
+      expect(await paintedIconContrast(svg)).toBeGreaterThanOrEqual(3);
+      await remove.focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await expect(remove).toBeFocused();
+      await remove.press("Enter");
+      await expect(remove).toHaveCount(0);
+      await expect(
+        dialog.getByRole("button", { name: "Выбрать файл", exact: true }),
+      ).toBeFocused();
+      expect(
+        await dialog
+          .getByRole("button", { name: "Выбрать файл", exact: true })
+          .evaluate((node) => node.matches(":focus-visible")),
+      ).toBe(true);
+      await page.screenshot({
+        path: info.outputPath("draft-removed-focus.png"),
+      });
+      await page.keyboard.press("Tab");
+      await expect(
+        dialog.getByLabel("Новое изображение", { exact: true }),
+      ).toBeFocused();
+      expect(commands).toHaveLength(0);
       await review();
       await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
       await expect(dialog).toHaveCount(0);

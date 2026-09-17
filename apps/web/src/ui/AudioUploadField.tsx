@@ -41,6 +41,7 @@ export function AudioUploadField({
   const hintId = useId();
   const errorId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const pickerRef = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState("");
 
   const acceptFile = (file?: File) => {
@@ -52,6 +53,8 @@ export function AudioUploadField({
 
   const removeFile = () => {
     if (disabled) return;
+    // Move focus before the focused remove button disappears with the draft.
+    pickerRef.current?.focus();
     setError("");
     onUpdate(undefined);
   };
@@ -68,6 +71,7 @@ export function AudioUploadField({
           {hint ? <span id={hintId}>{hint}</span> : null}
         </div>
         <Button
+          ref={pickerRef}
           view="normal"
           disabled={disabled}
           onClick={() => inputRef.current?.click()}

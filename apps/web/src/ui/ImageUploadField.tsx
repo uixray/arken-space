@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useRef,
   useState,
   type DragEvent,
   type ClipboardEvent,
@@ -53,6 +54,7 @@ export function ImageUploadField({
   const inputId = useId();
   const hintId = useId();
   const errorId = useId();
+  const pickerRef = useRef<HTMLButtonElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [intakeError, setIntakeError] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
@@ -66,6 +68,9 @@ export function ImageUploadField({
 
   const removeFile = () => {
     if (disabled) return;
+    // The remove button unmounts with the preview. Keep keyboard navigation
+    // on the persistent picker, without a deferred callback stealing focus.
+    pickerRef.current?.focus();
     setIntakeError("");
     onUpdate(undefined);
   };
@@ -141,6 +146,7 @@ export function ImageUploadField({
           {hint ? <span id={hintId}>{hint}</span> : null}
         </div>
         <Button
+          ref={pickerRef}
           view="normal"
           aria-describedby={describedBy}
           disabled={disabled}

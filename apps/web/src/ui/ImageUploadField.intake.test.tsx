@@ -80,6 +80,22 @@ beforeEach(() => {
 });
 
 describe("UIX-612 — единый intake изображения", () => {
+  it("returns keyboard focus to the picker after removing the draft", async () => {
+    const user = userEvent.setup();
+    renderComponent(<ControlledField />);
+    await user.upload(
+      screen.getByLabelText("Исходник"),
+      new File(["png"], "draft.png", { type: "image/png" }),
+    );
+    screen.getByRole("button", { name: "Удалить draft.png" }).focus();
+    await user.keyboard("{Enter}");
+    expect(
+      screen.queryByRole("button", { name: "Удалить draft.png" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Выбрать файл" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("Исходник")).toHaveFocus();
+  });
   it("links hint and validation to intake controls and clears only the error on recovery", async () => {
     const user = userEvent.setup({ applyAccept: false });
     function Harness() {

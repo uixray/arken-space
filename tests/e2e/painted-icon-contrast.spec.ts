@@ -49,3 +49,31 @@ test("icon contrast oracle models settled Gravity backing and rejects unsupporte
     "crosses a media surface",
   );
 });
+
+test("contrast oracle converts opaque Lab and still rejects unsupported paint", async ({
+  page,
+}) => {
+  await page.setContent(
+    `<div style="background:lab(100 0 0)"><svg style="color:lab(0 0 0)" width="16" height="16"><path d="M0 8H16" stroke="currentColor" fill="none" /></svg></div>`,
+  );
+  const icon = page.locator("svg");
+  expect(await paintedIconContrast(icon)).toBeCloseTo(21, 1);
+  await icon.evaluate((node) => {
+    (node as SVGElement).style.color = "lab(50 0 0)";
+  });
+  expect(await paintedIconContrast(icon)).toBeCloseTo(4.48, 1);
+  await icon.evaluate((node) => {
+    (node as SVGElement).style.color = "lab(0 0 0 / .5)";
+  });
+  await expect(paintedIconContrast(icon)).rejects.toThrow(
+    "Unsupported computed color",
+  );
+  await icon.evaluate((node) => {
+    (node as SVGElement).style.color = "black";
+    (node.parentElement as HTMLElement).style.backgroundImage =
+      "linear-gradient(white, black)";
+  });
+  await expect(paintedIconContrast(icon)).rejects.toThrow(
+    "image/opacity-aware",
+  );
+});

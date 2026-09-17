@@ -271,6 +271,21 @@
   color: var(--arken-ui-muted);
 }
 
+/* Keep the draft-remove glyph legible on the hovered preview surface.
+ * The normal state retains the danger color; use the shared high-contrast
+ * foreground on hover rather than changing the whole application's palette. */
+.arken-upload-field__preview .g-button_view_flat-danger {
+  --g-button-text-color-hover: var(--g-color-text-primary);
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .arken-upload-field__preview .g-button_view_flat-danger {
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+}
+
 .arken-visually-hidden {
   position: absolute;
   width: 1px;

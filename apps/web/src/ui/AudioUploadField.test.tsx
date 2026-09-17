@@ -42,6 +42,22 @@ function ControlledField({ disabled = false }: { disabled?: boolean }) {
 }
 
 describe("AudioUploadField", () => {
+  it("returns keyboard focus to the picker after removing the draft", async () => {
+    const user = userEvent.setup();
+    renderComponent(<ControlledField />);
+    await user.upload(
+      screen.getByLabelText("Аудиофайл"),
+      new File(["mp3"], "draft.mp3", { type: "audio/mpeg" }),
+    );
+    screen.getByRole("button", { name: "Удалить draft.mp3" }).focus();
+    await user.keyboard("{Enter}");
+    expect(
+      screen.queryByRole("button", { name: "Удалить draft.mp3" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Выбрать файл" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("Аудиофайл")).toHaveFocus();
+  });
   it("открывает native picker кнопкой выбора", async () => {
     renderComponent(
       <AudioUploadField label="Аудиофайл" onUpdate={() => undefined} />,

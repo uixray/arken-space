@@ -694,3 +694,38 @@ ShiftTab/Tab возвращает focus-visible с indicator. Enter меняет
 Удаление файла из черновика этим расширением не проверено. E2Etypes/lint/format
 и diff-check PASS; protected selection recovery test сохранён без изменений.
 UIX-645 повторно прочитана, остаётся In Progress по исходным критериям.
+
+## 2026-09-17 — удаление файла из черновика: фокус, контраст, touch
+
+У `ImageUploadField` и `AudioUploadField` подтверждена потеря фокуса после
+удаления: два unit RED получали body вместо picker; старый runtime2fbf179
+также провалил новый assert в настоящем диалоге замены изображения.
+Оба поля теперь синхронно фокусируют постоянную кнопку выбора перед удалением
+preview, без timeout/rAF. Последующий Tab не перехватывается.
+
+В том же сценарии выявлены ещё два дефекта общей корзины: hover contrast2.205:1
+и compact hit-area40px. Scoped CSS сохраняет danger в обычном состоянии, использует
+семантический primary foreground на hover и обеспечивает≥44px без flex shrink
+на compact/coarse pointer. Другие кнопки/общая палитра не менялись.
+
+Receipt `upload-remove-focus/touch-fixed-results.json`:4PASS39.5s,
+Chrome/Firefox ×1280/360, настоящий GM AssetReplacementDialog, synthetic API.
+Видимый декоративный SVG/currentColor/stroke2, exact name, ≥24/44px, center-hit,
+normal/hover contrast≥3; Enter удаляет только local draft, picker получает
+focus-visible, Tab идёт дальше. Повторный выбор, cancel, conflict/review/retry и
+обновление изображения продолжают проходить. Compact Firefox screenshot просмотрен.
+
+Связанные unit33PASS; web/E2E types, lint, format и diff-check PASS.
+Три сборки соответствовали последовательно найденным product fixes;
+финальный runtime `upload-remove-focus/dist-touch`, четыре served hashes в manifest.
+Не запускались fullsuite/CI/push/deploy. Vite предупреждает о крупном основном chunk.
+
+Измеритель сначала отказался от неизвестного Lab serialization поверхности.
+Добавлено только преобразование **opaque Lab** через browser sRGB canvas (8-bit),
+без ослабления запретов на opacity/media/unsupported paint. Сохранён прежний
+oracle и добавлены Lab black/white/gray и отрицательные примеры:
+`oracle-complete-results.json`4PASS6.8s Chrome/Firefox. Первый Lab-only2PASS не
+заменяет полный oracle. Не считать его отдельной приёмкой продукта.
+
+Аудиополе подтверждено unit, но не самостоятельным browser caller; все темы,
+реальный сервер и физический телефон не заявляются. UIX-645 не закрыта.
