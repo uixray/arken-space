@@ -1117,3 +1117,26 @@ NOT the final tested candidate; final runtime is menu-integrated-1d00a8d/dist.
 Original ResizeObserver FAIL remains. No204 rerun, full suite, CI, publication,
 production, Linear write or new cards. Real request-controls and true zoom/device
 axes remain outside this follow-up. No product source changes are retained.
+
+## Built player-request controls with real persistence — 2026-09-17
+
+Closed the production-web/real-server gap for the six existing request controls,
+not by rerunning the old source-mode gate unchanged. Reused verified1d00a8d
+production dist, source API47c475a and a fresh synthetic database in the stopped
+isolated PostgreSQL18.1 cluster. Preview/API/PG bound only to loopback; original
+Windows PostgreSQL service was not stopped or modified. All4 served runtime
+HTML/JS/CSS hashes matched the earlier bundle manifest; no rebuild.
+
+Existing unchanged player-requests-controls.spec.ts: **4/4PASS23.375s**,
+Chrome/Firefox, worker1/retries0. PLAYER native keyboard values/focus, draft
+retention390→360 and real submission; GM status/horizon/audience combinations
+and close/reopen defaults. After stopping API/preview, six full request rows had
+the same count/hash before and after restarting only the isolated database:
+6|3899e3cc206a0702ec0e7d115fd5821b. This is database persistence, not a UI reconnect
+or backup/restore claim. Native OS popup visuals and physical devices remain out
+of scope; original observer FAIL and Firefox native-picker limitation remain.
+
+Evidence: request-built-gate/{final-results.json,persistence.json,
+payload-checks.json,run.ps1,checkpoint.md}. Temporary loopback server entry
+removed; all3 owned listeners stopped. No source/test changes, full suite,
+CI restart, production/deploy, Linear writes or new cards.

@@ -148,6 +148,12 @@
       "revision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
       "artifact": "menu-followup-native/final-runtime-unchanged-results.json",
       "scope": "20/20PASS80.615s retained unchanged production bundle: character image callers8, world image callers4, music command ACK4, operator filters4. Real Home/End/arrows/Tab and Chromium native pointer-open/Escape-close. Firefox native popup axis explicitly unaccepted after plain-HTML headless baseline. No runtime patch retained."
+    },
+    "requestsBuilt": {
+      "status": "PASS",
+      "revision": "47c475a180caef231be246f1c28dc6cbec5ae405",
+      "artifact": "request-built-gate/final-results.json",
+      "scope": "4/4PASS23.375s Chrome/Firefox, actual retained production web bundle1d00a8d + source-mode real API47c475a + fresh isolated PG18.1 database. PLAYER native keys/draft/resize/submit and GM filter/reopen. Four served bundle hashes match; six request rows count/full-row hash survive isolated DB restart. Not production deployment, UI reconnect, OS-native popup visuals or all-role/device matrix."
     }
   },
   "sites": [
@@ -227,8 +233,8 @@
       "count": 6,
       "status": "PASS",
       "classification": "reachable",
-      "scope": "Six native controls through existing PLAYER compact draft/submit and GM filter/reopen cases against current real local API/PostgreSQL18.1.",
-      "evidence": ["requestsCurrent"],
+      "scope": "Six native controls through existing PLAYER compact draft/submit and GM filter/reopen: current production web bundle with real isolated API/PG, four Chrome/Firefox cases. Native values/keys, not OS popup visuals.",
+      "evidence": ["requestsCurrent", "requestsBuilt"],
       "next": "Native OS popup visual/physical-device matrix, CI PostgreSQL17 and production bundle remain separate; no full menu acceptance claim."
     },
     {
