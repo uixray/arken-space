@@ -34,6 +34,8 @@
 | Статусы участников  | participant-status-icons/fixed-results.json, 4                         | Socket-fixture состояния, нецветовые различия, фокус                                                   | Реальная доставка presence с сервера                  |
 | Метки мира          | world-marker-edges: fixed + remaining, 40 уникальных случаев (16 + 24) | Центр, четыре угла и рядом с ними; короткое/длинное имя, resize 1280↔360, SVG, выбор и описание группы | PLAYER/browser, все пропорции карт, полная AT-приёмка |
 
+| Режимы панели карты | map-tool-icon-states/combined-evidence.json, 8 (5 + 3) | GM/PLAYER 1280/360, expanded/collapsed, точные имена/разные SVG, один активный режим, 44px compact, selected normal/hover ≥12.05:1, Tab, GM details/Escape | Рисование/туман на canvas, серверные мутации, все темы, физический touch |
+
 Корень receipts:
 `C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07`.
 Точные SHA/runtime и changed-files находятся в checkpoint/manifest каждой папки.
@@ -554,3 +556,40 @@ format и diff проверены. Просмотрены compact-скриншо
 физических устройств или screen reader. Карта ниже высоты самой кнопки
 математически не может вместить её; экстремальные пропорции этим пулом не
 проверены. Исходная UIX-645 остаётся In Progress; публикации нет.
+
+## 2026-09-17 — связанная приёмка режимов панели карты
+
+Runtime `2fbf179d0fec99425a1f322410d0e2b6c61bf15b`, повторно использован
+`world-marker-edges/dist`; четыре served SHA256 совпали, новой сборки нет.
+`tests/e2e/map-tool-icon-states.spec.ts`: Chrome/Firefox × GM/PLAYER ×1280/360,
+оба состояния панели в каждой сессии. Exact inventory: десять режимов GM,
+четыре PLAYER; имена и glyphs различны. После Enter ровно один режим selected.
+Иконки direct SVG decorative/nonfocusable/currentColor/stroke2; кнопки и
+GM summary/collapse ≥24px desktop и ≥44px compact, центр доступен указателю.
+Все enabled icon controls панели достижимы настоящим Tab с focus-visible и
+видимым indicator. Grid/Resize/More GM раскрываются Enter, закрываются Escape
+с сохранением фокуса; у PLAYER этих элементов нет в DOM.
+
+112 selected-icon samples в expanded/collapsed: normal и hover ≥12.054:1 при
+пороге3:1. Hover-state проверяется после завершения переходов существующим
+paint oracle; это computed contrast, не pixel/AT-сертификация. Горизонтального
+page overflow и неожиданных API writes/pageerror нет. Compact GM screenshot
+просмотрен: панель прокручивается; раскрытые подписи занимают часть карты,
+что не объявляется полноценной mobile-layout приёмкой.
+
+Составное evidence: `reviewed-results.json` — пять PASS, остановка на
+43.999992px Firefox вместо44; после точности0.001px выполнены только оставшиеся
+три в `remaining-results.json`, все PASS. `combined-evidence.json` содержит
+только восемь уникальных прошедших случаев и их измерения. Ранние diagnostic
+runs не используются для полной приёмки: mode selector включал Undo/Redo;
+программный focus после pointer input ошибочно считался keyboard focus-visible.
+Независимый review усилил exact-name, exclusive-selected и summary/collapse
+assertions до итогового запуска. E2E types/lint/format PASS.
+
+Source maps того же кандидата: 47 уникальных Lucide icon modules (45main+2renderer),
+нет dynamic registry в Lucide sources, HTML с локальными JS/CSS. Полный сохранённый
+npm-пакет не импортируется целиком. Это не полная runtime network-проверка.
+`main.tsx` всё ещё фиксирует dark ThemeProvider, player-theme styles не подключены;
+персональные темы не объявляются проверенными. Рисование/изменение тумана,
+history mutations, music/chat и полная исходная UIX-645 остаются отдельно.
+Приложение не менялось; новый scoped regression test/docs сохранены локально.
