@@ -361,17 +361,15 @@ describe("UIX-417 rate limit recovery copy", () => {
     async (status) => {
       vi.stubGlobal(
         "fetch",
-        vi
-          .fn()
-          .mockResolvedValueOnce(
-            new Response(
-              JSON.stringify({
-                error: "REQUEST_FAILED",
-                message: "Повторная выдача приглашения временно недоступна",
-              }),
-              { status, headers: { "retry-after": "60" } },
-            ),
+        vi.fn().mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: "REQUEST_FAILED",
+              message: "Повторная выдача приглашения временно недоступна",
+            }),
+            { status, headers: { "retry-after": "60" } },
           ),
+        ),
       );
       await expect(api("/api/bootstrap")).rejects.toMatchObject({
         status,

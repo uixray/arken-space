@@ -43,15 +43,13 @@ for (const width of [1280, 360]) {
         ),
       ).toBe("Добавьте удобные заметки".length);
       expect(payloads).toHaveLength(1);
-      await pending
-        .shift()!
-        .fulfill({
-          status: 503,
-          json: {
-            error: "UNAVAILABLE",
-            message: "Отправка временно недоступна",
-          },
-        });
+      await pending.shift()!.fulfill({
+        status: 503,
+        json: {
+          error: "UNAVAILABLE",
+          message: "Отправка временно недоступна",
+        },
+      });
       await expect(page.getByRole("alert")).toHaveText(
         "Отправка временно недоступна",
       );

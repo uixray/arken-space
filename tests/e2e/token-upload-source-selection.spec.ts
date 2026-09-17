@@ -794,11 +794,9 @@ for (const width of [1280, 390]) {
     const input = dialog.getByLabel("Загрузить новое изображение", {
       exact: true,
     });
-    const field = dialog
-      .locator(".arken-upload-field")
-      .filter({
-        has: page.getByLabel("Загрузить новое изображение", { exact: true }),
-      });
+    const field = dialog.locator(".arken-upload-field").filter({
+      has: page.getByLabel("Загрузить новое изображение", { exact: true }),
+    });
     const picker = field.getByRole("button", {
       name: "Выбрать файл",
       exact: true,
