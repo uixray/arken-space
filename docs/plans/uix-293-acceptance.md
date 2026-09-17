@@ -173,3 +173,33 @@ untracked selection recovery test unchanged. This proves MAP only, not all image
 consumers, non-owner ACL, backend restart/backup restore, Safari or device QA.
 Existing API ACL/dependency tests and earlier AUDIO evidence remain separate.
 No production access, publication, CI/full-suite rerun, Linear write or closure.
+
+## Token definition/placement live image consumer — 2026-09-17
+
+Parameterized the existing real image scenario for MAP and TOKEN rather than
+copying the fixture. TOKEN uploads a cyan image, creates a character-linked
+placement with its definition, then replaces through GM Files with a different
+magenta image after reviewing actual token usage. A connected PLAYER sees the
+new token pixels without reload; old cyan pixels disappear. The complete token
+DTO is equal before/after (including position, dimensions, revision and control
+fields), and the definition's defaultAssetId and full projected DTO are retained.
+The scene DTO is also unchanged. Reload preserves token DTO and the new pixels.
+Canonical WebP bytes agree for GM/PLAYER and after reload, differ from old
+content, and have the acknowledged ETag. This supplements, not replaces, the
+previous HTTP relation/permission tests.
+
+Connected pool **4/4PASS35.680s**, MAP/TOKEN × Chrome/Firefox, one worker,
+retries0/skipped0/flaky0/pageerrors0. MAP repeated because its test fixture was
+refactored, not because the task continued. Existing AUDIO scenario unchanged
+and excluded. Product source unchanged, ecf66e6 production dist reused with four
+payload hashes checked. E2E tsc/scoped ESLint/Prettier/diff pass; Firefox final
+token screenshot visually inspected. No test failures in this pool.
+
+Evidence: image-consumers-live/initial-results.json (successful first run),
+payload-checks.json, four image/receipt pairs and run.ps1. Source API5adaf0f,
+fresh synthetic isolated PG18.1 database. Owned API/preview/PG stopped, ports
+15439/14109/5189 free, unrelated system PostgreSQL Running. Protected untracked
+selection test preserved. No production writes, build/full-suite/CI rerun,
+publication or Linear mutation. Character portrait/gallery, world-content image
+consumers, non-owner ACL and backend restart remain distinct evidence scopes;
+journal attachments still have their separate model described above.
