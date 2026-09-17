@@ -592,6 +592,8 @@ function SidebarContent(props: Props) {
               onUpload={assetActions.uploadAsset}
               onGetUsage={assetActions.getAssetUsage}
               onDelete={assetActions.deleteAsset}
+              onReplace={assetActions.replaceAsset}
+              onRefresh={assetActions.refreshAssets}
             />
           </ArkenDialog>
         )}

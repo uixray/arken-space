@@ -174,6 +174,8 @@ const unusedCampaignActions: Omit<CampaignActions, "token"> = {
     uploadAsset: unusedAction,
     getAssetUsage: unusedAction,
     deleteAsset: unusedAction,
+    replaceAsset: unusedAction,
+    refreshAssets: unusedAction,
     generateTokenImage: unusedAction,
   },
   statLayout: { onUpdateStatLayout: unusedAction },

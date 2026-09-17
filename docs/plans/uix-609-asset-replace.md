@@ -151,3 +151,34 @@ replacement from later catalog-refresh failure. Reuse ImageUploadField/
 AudioUploadField without losing asset ID/name/kind; no force overwrite or
 implicit retry. Add component and actual-App browser success/cancel/conflict/
 retained-draft checks before claiming that masters can use the feature.
+
+## 2026-09-17 — replacement review UI wired, browser gate pending
+
+GM file rows now open a shared-modal replacement review. It uses the existing
+image/audio intake controls, lists server usage, explains the irreversible content
+change, and requires a separate confirmation after the version check. PLAYER rows
+have no entry. File/intent freeze while reviewed or pending; changing the choice
+requires a new review. A409 discards only the old intent, retaining the file;
+ambiguous failure offers an explicit retry with the same intent/action ID.
+
+Commit and catalog refresh are separate stable AssetActions. Acknowledged commit
+moves to success before refresh; a thrown refresh failure never offers PUT again.
+App's existing load catches its own errors and displays the global error; this
+was not changed or misrepresented as a successful fresh catalog. The modal's
+separate refresh warning covers rejected refresh callbacks. Cleanup-pending is
+shown as maintenance, not failed replacement. Async callbacks after unmount are
+ignored; pending preparation is aborted, and modal identity includes campaign,
+actor and asset. No force overwrite or server contract changes.
+
+Connected component gate16/16PASS10.53s (five new dialog scenarios, existing media
+and action tests); then one additional action identity/commit-vs-refresh test plus
+two existing hook tests3/3PASS1.52s. Web types and scoped lint/format/diff PASS.
+Five action-context fixtures gained fail-fast stubs; their behavior tests were
+not rerun. Dialog/intake controls are mocked in the five component cases: these
+are lifecycle assertions, not Gravity portal/focus, actual decoding or browser QA.
+
+Still required before feature acceptance: actual-App GM/PLAYER responsive browser
+flow, cancel/pending/409/explicit retry; real backend HEAD/PUT integration; verify
+already-mounted media consumers refresh after replacement. Current URLs in
+assetDto/snapshot remain stable, so snapshot reload alone must not be assumed to
+refresh rendered pixels/audio. No build/CI/release or full UIX-293 acceptance.

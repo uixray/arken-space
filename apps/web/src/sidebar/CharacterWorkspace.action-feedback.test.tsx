@@ -155,6 +155,8 @@ function actions(
       uploadAsset,
       getAssetUsage: unexpectedAction,
       deleteAsset: unexpectedAction,
+      replaceAsset: unexpectedAction,
+      refreshAssets: unexpectedAction,
       generateTokenImage: unexpectedAction,
     },
     statLayout: { onUpdateStatLayout: unexpectedAction },
