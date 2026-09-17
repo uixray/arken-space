@@ -334,3 +334,21 @@ Existing gallery removal/component regressions11/11 PASS3.86s. Web/E2E types,
 scoped lint/format/diff PASS. One build1.67s/four served hashes verified. Evidence:
 character-gallery-navigation/{red-results.json,fixed-results.json,manifest.json,
 checkpoint.md}. Protected selection test unchanged; no full suite/CI/publication.
+
+## 2026-09-17 — shared quick-roll privacy visual gate
+
+Reused50290e5 built runtime; no product changes/rebuild. Actual-App fixture
+8/8 PASS26.0s, Chrome/Firefox GM/PLAYER1280/360: Space toggles the map dice
+privacy button with pressed state/focus intact; decorative currentColor SVG and
+minimum24/44px bounds verified. Quick-roll panel displays the matching private
+warning. Keyboard collapse hides buttons/warning; reopening restores warning
+and trigger focus. On compact screens, map/journal navigation preserves privacy;
+switching back to public removes the warning without hiding characteristic rolls.
+No HTTP/client-log writes or page errors. PLAYER360 screenshot inspected: private
+warning and disclosure focus outline visible without overlapping roll buttons.
+
+This is shared UI-state evidence, not a roll submission, recipient ACL or reload
+persistence test. Original gameplay/privacy tests remain independent. E2E types,
+scoped lint/format/diff PASS. Four served payload hashes checked; preview stopped.
+Evidence: quick-roll-privacy-icons/{baseline-results.json,payload-checks.json,
+checkpoint.md}. No full suite/CI/publication; all-theme acceptance remains open.
