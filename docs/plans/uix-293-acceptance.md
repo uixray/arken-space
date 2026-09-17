@@ -136,3 +136,40 @@ Safety and reproducibility:
 - This is not server-restart/persistence-restore, physical mobile/Safari or image
   replacement browser-to-server evidence. Earlier API/database and mocked-image
   browser receipts remain separate. No broad rerun, CI, publication or release.
+
+## Real map-image replacement and connected renderer — 2026-09-17
+
+Closed the MAP-specific browser-to-server gap with an additional scenario in
+`tests/e2e/asset-replacement-live.spec.ts`. Existing audio test unchanged and not
+repeated. Actual source API, isolated PG18.1, real cookies/files/socket, and the
+retained production web build from ecf66e6 (`compact-sections-breakpoint/fixed/dist`).
+Four runtime payload hashes verified; no rebuild or mocked transport.
+
+GM uploads a synthetic cyan PNG, links it to the active scene and reveals that
+scene. A separate authenticated PLAYER context sees more than1000 cyan pixels
+on the composited canvas. GM uses Files → Replace → New image → Review usage
+(actual scene name) → Confirm, uploading a different magenta PNG. Without any
+PLAYER reload, cyan pixels disappear and more than1000 magenta pixels appear.
+The asset ID/name and entire projected scene DTO including mapAssetId/revision
+remain unchanged; only the asset version URL changes. Canonical served WebP has
+the same SHA256 for GM and PLAYER, differs from the old content, and ETag agrees
+with the replacement acknowledgement. PLAYER reload preserves new pixels and
+canonical bytes. Firefox final map screenshot visually inspected.
+
+**2/2PASS22.225s**, Chrome/Firefox, one worker, retries0/skipped0/flaky0;
+pageerrors0. E2E types, scoped ESLint, formatting/diff pass. First run failed in
+the new test after successful visible replacement: it compared source PNG bytes
+to delivered bytes. Source inspection confirmed storage.ts intentionally converts
+images to WebP. Corrected oracle compares canonical content across roles/reload
+plus actual pixels; no product changes or weakened normalization. Initial report
+and trace retained. A pre-run TypeScript assertion also distinguished browser
+Response from APIResponse; no browser run was claimed for that type failure.
+
+Evidence: `map-asset-live/final-results.json`, payload-checks.json, two role-safe
+receipts and screenshots, run.ps1; initial-results.json retains the failed oracle.
+Temporary server entry removed, owned API/preview/PG stopped, loopback ports
+15439/14109/5189 free; unrelated system PostgreSQL still Running. Protected
+untracked selection recovery test unchanged. This proves MAP only, not all image
+consumers, non-owner ACL, backend restart/backup restore, Safari or device QA.
+Existing API ACL/dependency tests and earlier AUDIO evidence remain separate.
+No production access, publication, CI/full-suite rerun, Linear write or closure.
