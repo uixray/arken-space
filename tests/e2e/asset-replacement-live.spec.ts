@@ -216,7 +216,7 @@ test("UIX-293 real GM replacement reaches connected player and survives reload",
   }
 });
 
-for (const kind of ["MAP", "TOKEN"] as const) {
+for (const kind of ["MAP", "TOKEN", "PORTRAIT"] as const) {
   test(`UIX-293 real ${kind} replacement changes connected player pixels and retains links`, async ({
     page,
     browser,
@@ -268,7 +268,7 @@ for (const kind of ["MAP", "TOKEN"] as const) {
       });
       await expect(linked).toBeOK();
       linkedScene = await linked.json();
-    } else {
+    } else if (kind === "TOKEN") {
       const placed = await page.request.post("/api/tokens", {
         data: {
           actionId: randomUUID(),
@@ -284,6 +284,19 @@ for (const kind of ["MAP", "TOKEN"] as const) {
       });
       await expect(placed).toBeOK();
       token = await placed.json();
+    } else {
+      const character = initial.characters[0];
+      const linked = await page.request.patch(
+        `/api/characters/${character.id}`,
+        {
+          data: {
+            actionId: randomUUID(),
+            revision: character.revision,
+            portraitAssetId: asset.id,
+          },
+        },
+      );
+      await expect(linked).toBeOK();
     }
     const reveal = await page.request.post("/api/fog-reveals", {
       data: {
@@ -320,13 +333,43 @@ for (const kind of ["MAP", "TOKEN"] as const) {
       await player.getByRole("button", { name: "Войти", exact: true }).click();
       await expect(player.locator(".map-viewport")).toBeVisible();
       await player.locator(".map-viewport").press("f");
+      const portrait = player.getByRole("img", {
+        name: `Портрет ${initial.characters[0].name}`,
+        exact: true,
+      });
+      const openPortrait = async () => {
+        await openWorkspaceSection(player, "Персонажи");
+        await expect(portrait).toBeVisible();
+        await portrait.scrollIntoViewIfNeeded();
+        await expect
+          .poll(() =>
+            portrait.evaluate((el) => {
+              const box = el.getBoundingClientRect();
+              return (
+                document.elementFromPoint(
+                  box.x + box.width / 2,
+                  box.y + box.height / 2,
+                ) === el
+              );
+            }),
+          )
+          .toBe(true);
+      };
+      if (kind === "PORTRAIT") await openPortrait();
+      const consumer =
+        kind === "PORTRAIT" ? portrait : player.locator(".map-viewport");
       const pixels = () =>
-        player.locator(".map-viewport").evaluate((viewport) => {
+        consumer.evaluate((viewport) => {
           const bounds = viewport.getBoundingClientRect();
           const composite = document.createElement("canvas");
           composite.width = Math.ceil(bounds.width);
           composite.height = Math.ceil(bounds.height);
           const ctx = composite.getContext("2d")!;
+          if (viewport instanceof HTMLImageElement) {
+            if (!viewport.complete || !viewport.naturalWidth)
+              return { cyan: 0, magenta: 0 };
+            ctx.drawImage(viewport, 0, 0, bounds.width, bounds.height);
+          }
           for (const canvas of viewport.querySelectorAll("canvas")) {
             const rect = canvas.getBoundingClientRect();
             ctx.drawImage(
@@ -386,7 +429,13 @@ for (const kind of ["MAP", "TOKEN"] as const) {
         .click();
       await expect(
         dialog.getByLabel("Места использования заменяемого файла"),
-      ).toContainText(kind === "MAP" ? scene.name : token!.name);
+      ).toContainText(
+        kind === "MAP"
+          ? scene.name
+          : kind === "TOKEN"
+            ? token!.name
+            : initial.characters[0].name,
+      );
       const committed = page.waitForResponse(
         (r) =>
           r.request().method() === "PUT" &&
@@ -420,7 +469,7 @@ for (const kind of ["MAP", "TOKEN"] as const) {
         expect(after.scenes.find((s) => s.id === scene.id)?.mapAssetId).toBe(
           asset.id,
         );
-      } else {
+      } else if (kind === "TOKEN") {
         const beforeToken = before.tokens.find((t) => t.id === token!.id);
         expect(beforeToken).toBeTruthy();
         expect(beforeToken!.assetId).toBe(asset.id);
@@ -434,6 +483,15 @@ for (const kind of ["MAP", "TOKEN"] as const) {
         expect(
           after.tokenDefinitions?.find((d) => d.id === token!.definitionId),
         ).toEqual(beforeDefinition);
+      } else {
+        const original = before.characters.find(
+          (c) => c.id === initial.characters[0].id,
+        );
+        expect(original?.portraitAssetId).toBe(asset.id);
+        expect(
+          after.characters.find((c) => c.id === initial.characters[0].id),
+        ).toEqual(original);
+        await expect(portrait).toHaveAttribute("src", result.asset.url);
       }
       expect(after.scenes.find((s) => s.id === scene.id)?.revision).toBe(
         linkedScene.revision,
@@ -452,6 +510,7 @@ for (const kind of ["MAP", "TOKEN"] as const) {
       await player.reload();
       await expect(player.locator(".map-viewport")).toBeVisible();
       await player.locator(".map-viewport").press("f");
+      if (kind === "PORTRAIT") await openPortrait();
       await expect
         .poll(async () => (await pixels()).magenta)
         .toBeGreaterThan(1000);
@@ -465,9 +524,18 @@ for (const kind of ["MAP", "TOKEN"] as const) {
           before.tokens.find((t) => t.id === token!.id),
         );
       }
+      if (kind === "PORTRAIT") {
+        const reloaded = await snapshot(player);
+        expect(
+          reloaded.characters.find((c) => c.id === initial.characters[0].id),
+        ).toEqual(
+          before.characters.find((c) => c.id === initial.characters[0].id),
+        );
+        await expect(portrait).toHaveAttribute("src", result.asset.url);
+      }
       expect(errors).toEqual([]);
       await info.attach(`${kind.toLowerCase()}-replacement-visible`, {
-        body: await player.locator(".map-viewport").screenshot(),
+        body: await consumer.screenshot(),
         contentType: "image/png",
       });
       await info.attach(`${kind.toLowerCase()}-replacement-live-receipt`, {

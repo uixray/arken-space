@@ -203,3 +203,33 @@ selection test preserved. No production writes, build/full-suite/CI rerun,
 publication or Linear mutation. Character portrait/gallery, world-content image
 consumers, non-owner ACL and backend restart remain distinct evidence scopes;
 journal attachments still have their separate model described above.
+
+## Open character portrait receives replacement — 2026-09-17
+
+Added PORTRAIT to the same real image-consumer fixture. GM assigns an uploaded
+portrait to a character; the invited PLAYER opens that character's actual sheet.
+The portrait is visible and center-hit-tested before replacement. GM's Files
+dialog reviews the character usage and replaces cyan PNG with magenta PNG. The
+already open PLAYER sheet receives the versioned image URL and decodes the new
+color without reload; the entire projected character DTO, including portrait
+link/revision/other fields, is unchanged. After reload and explicitly reopening
+the sheet, both portrait and character DTO remain correct. Canonical WebP bytes
+match for both roles and after reload; source PNG is not incorrectly equated to
+server-normalized WebP.
+
+**6/6PASS50.020s**, MAP/TOKEN/PORTRAIT × Chrome/Firefox, one worker,
+retries0/skipped0/flaky0/pageerrors0. MAP/TOKEN remain in this connected pool
+because the common rendered-consumer oracle changed; AUDIO was not repeated.
+Portrait oracle reads decoded pixels of the actual visible IMG at its rendered
+dimensions, not hidden React state; map/token use composited canvas layers.
+Firefox portrait-only screenshot inspected, not a claim of complete sheet visual
+acceptance. E2E tsc/scoped ESLint/Prettier/diff pass. No red in this pool.
+
+Evidence: portrait-consumer-live/initial-results.json (successful first run),
+payload-checks.json, six JSON receipts, portrait screenshots and run.ps1. Runtime
+ecf66e6 dist reused unchanged; source API df9f567, fresh isolated PG18.1 database.
+Owned services stopped, ports15439/14109/5189 absent, unrelated PostgreSQL still
+Running, protected untracked selection test unchanged. No build/CI/fullsuite,
+production/publication or Linear writes. Gallery, resource-image and world-content
+consumers are not established by this portrait-specific result; ACL/restart/device
+acceptance and separate journal attachment model retain their previous limits.
