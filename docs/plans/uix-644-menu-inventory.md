@@ -1088,3 +1088,32 @@ index and a BLOCKED runtime row, rather than changing the guard. Existing
 operator-accessibility/focused-results.json proves filtering via selectOption,
 not native pointer/keyboard lifecycle; operator-feedback-list.spec.ts was not in
 the204 gate. This is another explicit remaining scope, not evidence-free PASS.
+
+## Image/music and native-filter follow-up — 2026-09-17
+
+Reused the same1d00a8d production bundle for the final gate:
+**20/20PASS80.615s**, Chrome/Firefox worker1/retries0. Character image callers8,
+world image callers4 and music command ACK4 fill their explicit omissions from
+the204 run. Four operator cases replace selectOption with Home/End/ArrowDown/Tab,
+verify real hit targets/focus, no filtering request until Apply, exact query,
+reset, detail accessibility, owner close/reopen. Chromium also asserts native
+pointer-open via :open, Escape closes only picker, and next Escape closes owner.
+
+Do not count Firefox native popup acceptance. Initial click/Escape incorrectly
+assumed its popup had opened; diagnosis found click :open=false, Alt+Down true.
+An experimental event-ownership patch kept the workspace open, but :open stayed
+true even after Escape. Independent plain HTML select without any app code
+reproduced exactly that headless Firefox behavior, including second Escape;
+Chrome opened/closed normally. Thus no app defect was established. Removed the
+entire experimental ArkenDialog change and its unit test; retained diff and
+failed receipts only in artifacts. The final test explicitly separates supported
+keyboard/filter checks from the unaccepted Firefox native popup axis. Runtime
+row remains BLOCKED, rather than relabelling this limitation as a product fix.
+
+Evidence: menu-followup-native/{final-runtime-unchanged-results.json,
+plain-native-baseline.json,native-open-diagnostic-results.json,checkpoint.md}.
+The experimental dist/results.json in that folder are failed and superseded,
+NOT the final tested candidate; final runtime is menu-integrated-1d00a8d/dist.
+Original ResizeObserver FAIL remains. No204 rerun, full suite, CI, publication,
+production, Linear write or new cards. Real request-controls and true zoom/device
+axes remain outside this follow-up. No product source changes are retained.

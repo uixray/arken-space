@@ -142,6 +142,12 @@
       "revision": "b65f3c046dd102b100c3e02dd5fa0759d567ded9",
       "artifact": "request-server-gate/results.json",
       "scope": "4 existing real API/PostgreSQL18.1 cases Chrome/Firefox: PLAYER native draft/keyboard/compact resize/submit and GM filter combinations/reopen. Six persisted request rows/hash unchanged across isolated DB restart. Source-mode server, loopback-only entry copy; not CI PostgreSQL17 or production bundle/full matrix."
+    },
+    "menuFollowup": {
+      "status": "PASS",
+      "revision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
+      "artifact": "menu-followup-native/final-runtime-unchanged-results.json",
+      "scope": "20/20PASS80.615s retained unchanged production bundle: character image callers8, world image callers4, music command ACK4, operator filters4. Real Home/End/arrows/Tab and Chromium native pointer-open/Escape-close. Firefox native popup axis explicitly unaccepted after plain-HTML headless baseline. No runtime patch retained."
     }
   },
   "sites": [
@@ -202,7 +208,7 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target. Track SELECT now also returns visible focus; conflict ACK notifications verified by four existing cases.",
-      "evidence": ["musicOwner", "musicCommand"],
+      "evidence": ["musicOwner", "musicCommand", "menuFollowup"],
       "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch."
     },
     {
@@ -211,9 +217,9 @@
       "count": 2,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Authorized operator viewer: two native selects, type and status, inside labeled form/disabled fieldset. Browser-native popup owner; no custom portal/z-index. Existing filter tests use selectOption, not full native keyboard/pointer lifecycle.",
-      "evidence": ["operatorFilters"],
-      "next": "Extend existing operator-feedback-list.spec.ts with native keyboard/pointer semantics; keep OS popup inspection and independent host authorization outside synthetic UI acceptance."
+      "scope": "Authorized operator type/status native selects. Both browsers: hit-testing, focus, Home/End/arrows/Tab, no fetch before Apply, exact payloads. Chromium: native pointer-open/Escape-close and next Escape closes workspace. Headless Firefox native popup axis unaccepted; identical behavior reproduced on plain HTML without App.",
+      "evidence": ["operatorFilters", "menuFollowup"],
+      "next": "Verify native popup open/cancel in a supported Firefox environment; do not patch App from headless UA behavior or convert the selector to silence tests. Independent host authorization remains separate."
     },
     {
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
@@ -272,7 +278,7 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both inline callers: entity cover and gallery attachment, independent selected assets and exact request payloads.",
-      "evidence": ["worldImages"],
+      "evidence": ["worldImages", "menuFollowup"],
       "next": "Real persistence/authorization, request-failure recovery and physical-device checks remain outside this scoped acceptance."
     },
     {
@@ -342,7 +348,7 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both actual character-sheet callers: portrait and additional resource image; GM and PLAYER owner on desktop/compact.",
-      "evidence": ["characterImages"],
+      "evidence": ["characterImages", "menuFollowup"],
       "next": "Non-owner/controller restrictions, live payload persistence and rejection/realtime recovery remain outside this scoped evidence."
     },
     {
