@@ -47,8 +47,8 @@ Relative to the local artifact root
   no preload/autoplay, stopping on switch, no game writes. Native `play()` is
   invoked by browser evaluation: native control gestures remain unverified.
 
-These are scoped receipts, not an end-to-end browser-to-live-server replacement
-session, physical device/Safari acceptance or a production release.
+These initial receipts are scoped, not physical device/Safari acceptance or a
+production release. The later live audio gate below connects browser and server.
 
 ## Consolidated gate
 
@@ -85,10 +85,11 @@ No push/deploy or Linear mutation is part of this gate. Protected untracked
   320.07 kB gzip). This is a performance follow-up, not a reason to suppress the
   warning or claim the broader performance goal complete.
 
-Current acceptance boundaries remain: real browser-to-server replacement session,
-native audio-control gestures, physical devices/Safari and exact-candidate remote
-CI/release are not proven by these local gates. The independent journal attachment
-model is recorded above rather than disguised as covered by world-content tests.
+At the consolidated gate, browser-to-server replacement was still unverified;
+the later live audio gate below closes that gap for AUDIO only. Native audio-control
+gestures, physical devices/Safari and exact-candidate remote CI/release remain
+unverified. The independent journal attachment model is recorded above rather
+than disguised as covered by world-content tests.
 
 Focused follow-up: both failing files passed **17/17 in 29.53s**. No product
 runtime was changed to satisfy them. An extra standalone typecheck of the HTTP
@@ -97,3 +98,41 @@ entry point) and surfaced two pre-existing typing issues in the race assertion:
 UUID-array inference and an indexed response known to exist after the preceding
 [200,409] assertion. Only type annotations/non-null assertion were adjusted;
 test runtime is unchanged. No second full suite or build was run.
+
+## Real browser-to-server audio gate
+
+`tests/e2e/asset-replacement-live.spec.ts`: Chrome and Firefox, one worker,
+**2/2 PASS in 30.6s**, desktop, no retries. Base revision `c9e9df0`; product runtime
+unchanged. The test uses campaign-fixture, real GM entry and player invitation,
+actual cookies/API/PostgreSQL/files/socket, no mocked routes or socket messages.
+Initial audio is uploaded via authenticated API and selected via GM music UI.
+Replacement itself uses Files → Replace → review actual audio usage → confirm.
+
+The connected player receives the versioned source in the **same mounted audio
+element**, decodes it without reload, remains paused at saved gain zero; campaign
+audio state stays unchanged. Authenticated content has the expected ETag and exact
+Ogg SHA-256. Reload retains the new source and local consent=false/volume=0.
+The payload before/after is the same existing valid Ogg; this proves real blob
+replacement/delivery and source refresh, not different-song audibility.
+
+The first run failed because the new test assumed automatic dialog dismissal.
+Actual intended UI keeps the success message and explicit Close button; test was
+corrected to verify that message and close it. No production code changed.
+The initial failure receipt is retained; Firefox did not run in that failed round.
+
+Safety and reproducibility:
+
+- Dedicated opt-in `ARKEN_ASSET_LIVE_GATE=isolated-loopback` plus loopback baseURL;
+  skipped outside that explicit environment, not counted as ordinary CI coverage.
+- Installed PG18.1, existing **stopped isolated** `request-server-gate/pgdata`,
+  new timestamped synthetic database per run, ports15439/14109/5189 all loopback.
+  No access to the user's PostgreSQL service or production database.
+- Runner checks free ports/cluster ownership, migrates the isolated database,
+  starts current API source with loopback-only entry and Vite proxy; finally stops
+  only owned processes/cluster and removes its exact temporary entry file.
+- Artifact folder `asset-live-gate` contains `run.ps1`, round environments,
+  reports/traces and retained loopback entry. Server logs can contain synthetic
+  credentials: keep local, do not attach externally. Test databases/media retained.
+- This is not server-restart/persistence-restore, physical mobile/Safari or image
+  replacement browser-to-server evidence. Earlier API/database and mocked-image
+  browser receipts remain separate. No broad rerun, CI, publication or release.
