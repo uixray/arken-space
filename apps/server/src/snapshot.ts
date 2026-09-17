@@ -36,6 +36,8 @@ import {
   tokens,
   tokenControllers,
   tokenDefinitions,
+  worldContent,
+  worldContentMedia,
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
 import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
@@ -184,6 +186,7 @@ export interface CampaignReadSet {
   catalogRows: Awaited<ReturnType<typeof loadCatalog>>;
   assignedRows: Awaited<ReturnType<typeof loadAssignedEntries>>;
   characterMediaRows: Awaited<ReturnType<typeof loadCharacterMedia>>;
+  publishedWorldAssetRows: Awaited<ReturnType<typeof loadPublishedWorldAssets>>;
   assetRows: Awaited<ReturnType<typeof loadAssets>>;
   sequenceRows: Awaited<ReturnType<typeof loadSequence>>;
   /**
@@ -297,6 +300,36 @@ const loadCharacterMedia = (db: Database, campaignId: string) =>
       ),
     );
 
+const loadPublishedWorldAssets = async (db: Database, campaignId: string) => {
+  const [coverRows, mediaRows] = await Promise.all([
+    db
+      .select({ assetId: worldContent.coverAssetId })
+      .from(worldContent)
+      .innerJoin(assets, eq(worldContent.coverAssetId, assets.id))
+      .where(
+        and(
+          eq(worldContent.lifecycle, "PUBLISHED"),
+          eq(assets.campaignId, campaignId),
+        ),
+      ),
+    db
+      .select({ assetId: worldContentMedia.assetId })
+      .from(worldContentMedia)
+      .innerJoin(
+        worldContent,
+        eq(worldContentMedia.worldContentId, worldContent.id),
+      )
+      .innerJoin(assets, eq(worldContentMedia.assetId, assets.id))
+      .where(
+        and(
+          eq(worldContent.lifecycle, "PUBLISHED"),
+          eq(assets.campaignId, campaignId),
+        ),
+      ),
+  ]);
+  return [...coverRows, ...mediaRows];
+};
+
 const loadAssets = (db: Database, campaignId: string) =>
   db
     .select()
@@ -326,6 +359,7 @@ export async function loadCampaignReadSet(
     catalogRows,
     assignedRows,
     characterMediaRows,
+    publishedWorldAssetRows,
     assetRows,
     sequenceRows,
     audioTracks,
@@ -341,6 +375,7 @@ export async function loadCampaignReadSet(
     loadCatalog(db, campaignId),
     loadAssignedEntries(db, campaignId),
     loadCharacterMedia(db, campaignId),
+    loadPublishedWorldAssets(db, campaignId),
     loadAssets(db, campaignId),
     loadSequence(db, campaignId),
     normalizeAudioTrackDeadlines(db, campaignId),
@@ -358,6 +393,7 @@ export async function loadCampaignReadSet(
     catalogRows,
     assignedRows,
     characterMediaRows,
+    publishedWorldAssetRows,
     assetRows,
     sequenceRows,
     audioTracks,
@@ -443,6 +479,7 @@ export async function buildSnapshot(
     catalogRows,
     assignedRows,
     characterMediaRows,
+    publishedWorldAssetRows,
     assetRows,
     sequenceRows,
     audioTracks: normalizedAudioTracks,
@@ -755,6 +792,8 @@ export async function buildSnapshot(
     visibleAssetIds.add(assetId);
   for (const assetId of visibleCharacterMediaAssetIds(auth, characterMediaRows))
     visibleAssetIds.add(assetId);
+  for (const row of publishedWorldAssetRows)
+    if (row.assetId) visibleAssetIds.add(row.assetId);
   const visibleAssets =
     auth.role === "GM"
       ? assetRows

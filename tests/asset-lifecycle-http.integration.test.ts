@@ -585,6 +585,102 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(denied.statusCode).toBe(403);
   });
 
+  it("authorizes only same-campaign published world cover and media content for players", async () => {
+    const assetIds = {
+      publishedCover: crypto.randomUUID(),
+      publishedMedia: crypto.randomUUID(),
+      draft: crypto.randomUUID(),
+      archived: crypto.randomUUID(),
+      foreign: crypto.randomUUID(),
+    };
+    for (const [name, id] of Object.entries(assetIds)) {
+      const storageKey = `world-${name}.webp`;
+      await writeFile(join(mediaRoot, storageKey), Buffer.from(name));
+      await db.insert(schema.assets).values({
+        id,
+        campaignId: name === "foreign" ? ids.foreignCampaign : ids.campaign,
+        uploadedByMembershipId: name === "foreign" ? ids.foreignGm : ids.gm,
+        kind: "IMAGE",
+        name,
+        storageKey,
+        mimeType: "image/webp",
+        sizeBytes: name.length,
+      });
+    }
+    const [published, draft, archived] = await db
+      .insert(schema.worldContent)
+      .values([
+        {
+          slug: `published-${crypto.randomUUID()}`,
+          type: "LOCATION",
+          name: "Published",
+          lifecycle: "PUBLISHED",
+          coverAssetId: assetIds.publishedCover,
+        },
+        {
+          slug: `draft-${crypto.randomUUID()}`,
+          type: "LOCATION",
+          name: "Draft",
+          lifecycle: "DRAFT",
+          coverAssetId: assetIds.draft,
+        },
+        {
+          slug: `archived-${crypto.randomUUID()}`,
+          type: "LOCATION",
+          name: "Archived",
+          lifecycle: "ARCHIVED",
+          coverAssetId: assetIds.archived,
+        },
+        {
+          slug: `foreign-${crypto.randomUUID()}`,
+          type: "LOCATION",
+          name: "Published foreign asset",
+          lifecycle: "PUBLISHED",
+          coverAssetId: assetIds.foreign,
+        },
+      ])
+      .returning();
+    expect(draft).toBeDefined();
+    expect(archived).toBeDefined();
+    await db.insert(schema.worldContentMedia).values({
+      worldContentId: published!.id,
+      assetId: assetIds.publishedMedia,
+      caption: "Published gallery",
+    });
+
+    const bootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(bootstrap.statusCode, bootstrap.body).toBe(200);
+    const visibleIds = new Set(
+      bootstrap.json().assets.map((asset: { id: string }) => asset.id),
+    );
+    expect(visibleIds.has(assetIds.publishedCover)).toBe(true);
+    expect(visibleIds.has(assetIds.publishedMedia)).toBe(true);
+    expect(visibleIds.has(assetIds.draft)).toBe(false);
+    expect(visibleIds.has(assetIds.archived)).toBe(false);
+    expect(visibleIds.has(assetIds.foreign)).toBe(false);
+
+    for (const id of [assetIds.publishedCover, assetIds.publishedMedia]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/assets/${id}/content`,
+        headers: headers(secrets.player),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    for (const id of [assetIds.draft, assetIds.archived, assetIds.foreign]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/assets/${id}/content`,
+        headers: headers(secrets.player),
+      });
+      expect(response.statusCode, response.body).toBe(404);
+    }
+  });
+
   it("blocks deletion of character resource artwork and replacement preserves the resource link", async () => {
     const [character] = await db
       .insert(schema.characters)

@@ -309,3 +309,47 @@ manifest.json, candidate.diff, build.log, initial-results.json and
 transport-check-results.json. World-content consumers and the distinct private
 journal storage scope still remain; this does not complete all UIX-293 criteria.
 No production, push, CI rerun or Linear write.
+
+### Published world artwork and live replacement — 2026-09-17
+
+Fixed an existing mismatch: published world cover/gallery metadata could be read
+by a player, but the world-only asset was absent from the authorized snapshot and
+its content returned 404. The shared campaign read set now includes only artwork
+referenced by PUBLISHED world entries and joined to assets in the current campaign.
+DRAFT, ARCHIVED and foreign-campaign files are not granted by this path. Global
+world metadata remains separate from campaign asset ownership; this does not add
+cross-campaign artwork sharing or extend the deferred encyclopedia program.
+
+Reader cover/gallery and GM editor gallery now consume current snapshot asset
+URLs, rather than retaining an unversioned URL after replacement. A component test
+first reproduced the old URL failure; the connected component file is now 4/4
+PASS, including unchanged copy and no article refetch on asset version updates.
+Sidebar passes the existing authorized assets to the reader; menus are unchanged.
+
+Backend bounded agent evidence: real PGlite bootstrap/content ACL 1 PASS (8 other
+cases skipped), same-campaign published cover/media 200, draft/archived/foreign
+404; read-set parity/isolation 3 PASS (16 other cases skipped); snapshot metrics
+7/7 PASS; server types PASS. Web/E2E types and scoped ESLint also PASS.
+
+Important acceptance boundary: UIX-472 deliberately hides the world reader from
+player navigation. The new browser consumer scenarios therefore use a second GM
+session via the real supported menu; PLAYER content permissions are verified at
+the actual HTTP layer, not claimed as a player browser journey. Initial browser
+fixture incorrectly expected a player menu entry and timed out; a second fixture
+attempt exposed duplicate synthetic names in the global catalog. Both reports are
+retained; unique article names fix test isolation, no product navigation changes
+or weakened selectors. Final browser result is recorded in the pool checkpoint.
+
+Artifacts: world-consumer-live under the current visualization directory, fresh
+compiled dist, manifest, source diff, component/browser evidence. No production,
+push, full suite, CI rerun or Linear write. Private journal storage acceptance and
+other original UIX-293 criteria remain separate; this is not whole-task completion.
+
+Final real browser gate: **4/4 PASS, 39.8s**, cover/gallery × Chrome/Firefox,
+one worker, retries0/skipped0/flaky0/pageerrors0. Second GM sees decoded pixels
+change cyan→magenta without reloading; versioned URL and canonical WebP change;
+world article/media DTOs stay equal before/after/reload. Four served bundle hashes
+match. A third interim fixture failure expected article name for media usage;
+actual caption is correctly used instead, with all reports retained. Product
+bundle was built once; only test fixture corrections followed. Owned API/preview/
+PG stopped, original PostgreSQL service and protected selection test untouched.

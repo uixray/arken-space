@@ -222,8 +222,10 @@ for (const kind of [
   "PORTRAIT",
   "GALLERY",
   "RESOURCE",
+  "WORLD_COVER",
+  "WORLD_MEDIA",
 ] as const) {
-  test(`UIX-293 real ${kind} replacement changes connected player pixels and retains links`, async ({
+  test(`UIX-293 real ${kind} replacement changes connected ${kind.startsWith("WORLD_") ? "GM reader" : "player"} pixels and retains links`, async ({
     page,
     browser,
     gmToken,
@@ -251,7 +253,7 @@ for (const kind of [
     const initial = await snapshot(page);
     const scene = initial.scenes.find((s) => s.active)!;
     const upload = await page.request.post(
-      `/api/assets?kind=${kind === "GALLERY" || kind === "RESOURCE" ? "PORTRAIT" : kind}`,
+      `/api/assets?kind=${kind === "GALLERY" || kind === "RESOURCE" || kind.startsWith("WORLD_") ? "PORTRAIT" : kind}`,
       {
         headers: { "x-action-id": randomUUID() },
         multipart: {
@@ -267,6 +269,7 @@ for (const kind of [
     const asset: AssetDto = await upload.json();
     let linkedScene: SceneDto = scene;
     let token: TokenDto | undefined;
+    let world: { id: string; revision: number; name: string } | undefined;
     if (kind === "MAP") {
       const linked = await page.request.patch(`/api/scenes/${scene.id}`, {
         data: {
@@ -306,6 +309,42 @@ for (const kind of [
         },
       );
       await expect(linked).toBeOK();
+    } else if (kind === "WORLD_COVER" || kind === "WORLD_MEDIA") {
+      const created = await page.request.post("/api/world-content", {
+        data: {
+          actionId: randomUUID(),
+          slug: `asset-test-${randomUUID()}`,
+          type: "LOCATION",
+          name: `Башня замены ${asset.id}`,
+          ...(kind === "WORLD_COVER" ? { coverAssetId: asset.id } : {}),
+        },
+      });
+      await expect(created).toBeOK();
+      world = await created.json();
+      if (kind === "WORLD_MEDIA") {
+        const attached = await page.request.post(
+          `/api/world-content/${world!.id}/media`,
+          {
+            data: {
+              actionId: randomUUID(),
+              assetId: asset.id,
+              caption: "Иллюстрация башни",
+            },
+          },
+        );
+        await expect(attached).toBeOK();
+      }
+      const published = await page.request.post(
+        `/api/world-content/${world!.id}/lifecycle`,
+        {
+          data: {
+            actionId: randomUUID(),
+            revision: world!.revision,
+            lifecycle: "PUBLISHED",
+          },
+        },
+      );
+      await expect(published).toBeOK();
     } else if (kind === "RESOURCE") {
       const character = initial.characters[0];
       const linked = await page.request.patch(
@@ -372,8 +411,17 @@ for (const kind of [
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
       player.on("pageerror", (error) => errors.push(error.message));
-      await player.goto(new URL((await invite.json()).url).pathname);
-      await player.getByLabel("Имя", { exact: true }).fill("Наблюдатель карты");
+      if (world) {
+        // UIX-472 deliberately hides the world reader from player navigation.
+        // Use its real supported GM navigation, not injected React state or
+        // a new player entry point. Player content ACL is an HTTP integration gate.
+        await player.goto(`/gm/${gmToken}`);
+      } else {
+        await player.goto(new URL((await invite.json()).url).pathname);
+        await player
+          .getByLabel("Имя", { exact: true })
+          .fill("Наблюдатель карты");
+      }
       await player.getByRole("button", { name: "Войти", exact: true }).click();
       await expect(player.locator(".map-viewport")).toBeVisible();
       await player.locator(".map-viewport").press("f");
@@ -382,6 +430,44 @@ for (const kind of [
         exact: true,
       });
       const galleryImage = player.locator(".character-media-viewer img");
+      const worldImage = player.locator(
+        kind === "WORLD_COVER"
+          ? ".world-encyclopedia-workspace__cover"
+          : ".world-encyclopedia-workspace__media-grid img",
+      );
+      const openWorld = async () => {
+        await openWorkspaceSection(player, "Справочник мира");
+        await player
+          .locator(".world-encyclopedia-workspace__row")
+          .filter({ hasText: world!.name })
+          .click();
+        await expect(worldImage).toBeVisible();
+        await worldImage.scrollIntoViewIfNeeded();
+        await expect
+          .poll(() =>
+            worldImage.evaluate((el) => {
+              const r = el.getBoundingClientRect();
+              return (
+                document.elementFromPoint(
+                  r.x + r.width / 2,
+                  r.y + r.height / 2,
+                ) === el
+              );
+            }),
+          )
+          .toBe(true);
+      };
+      const readWorld = async () => {
+        const detail = await player.request.get(
+          `/api/world-content/${world!.id}`,
+        );
+        const media = await player.request.get(
+          `/api/world-content/${world!.id}/media`,
+        );
+        await expect(detail).toBeOK();
+        await expect(media).toBeOK();
+        return { detail: await detail.json(), media: await media.json() };
+      };
       const resourceTile = player
         .getByRole("group", { name: "Изображение ресурса Заря", exact: true })
         .getByRole("button", { name: asset.name, exact: true });
@@ -449,6 +535,7 @@ for (const kind of [
       if (kind === "PORTRAIT") await openPortrait();
       if (kind === "GALLERY") await openGallery();
       if (kind === "RESOURCE") await openResource();
+      if (world) await openWorld();
       const consumer =
         kind === "PORTRAIT"
           ? portrait
@@ -456,7 +543,9 @@ for (const kind of [
             ? galleryImage
             : kind === "RESOURCE"
               ? resourceImage
-              : player.locator(".map-viewport");
+              : world
+                ? worldImage
+                : player.locator(".map-viewport");
       const minimumPixels = kind === "GALLERY" ? 8 : 1000;
       const pixels = () =>
         consumer.evaluate((viewport) => {
@@ -502,6 +591,7 @@ for (const kind of [
         .toBeGreaterThan(minimumPixels);
       expect((await pixels()).magenta).toBe(0);
       const before = await snapshot(player);
+      const worldBefore = world ? await readWorld() : null;
       const readGallery = async () => {
         const response = await player.request.get(
           `/api/characters/${initial.characters[0].id}/media`,
@@ -544,7 +634,11 @@ for (const kind of [
             ? token!.name
             : kind === "GALLERY"
               ? "Проверка галереи"
-              : initial.characters[0].name,
+              : kind === "WORLD_MEDIA"
+                ? "Иллюстрация башни"
+                : world
+                  ? world.name
+                  : initial.characters[0].name,
       );
       const committed = page.waitForResponse(
         (r) =>
@@ -602,6 +696,9 @@ for (const kind of [
           after.characters.find((c) => c.id === initial.characters[0].id),
         ).toEqual(original);
         await expect(portrait).toHaveAttribute("src", result.asset.url);
+      } else if (world) {
+        await expect(worldImage).toHaveAttribute("src", result.asset.url);
+        expect(await readWorld()).toEqual(worldBefore);
       } else if (kind === "RESOURCE") {
         const original = before.characters.find(
           (c) => c.id === initial.characters[0].id,
@@ -638,6 +735,7 @@ for (const kind of [
       if (kind === "PORTRAIT") await openPortrait();
       if (kind === "GALLERY") await openGallery();
       if (kind === "RESOURCE") await openResource();
+      if (world) await openWorld();
       await expect
         .poll(async () => (await pixels()).magenta)
         .toBeGreaterThan(minimumPixels);
@@ -664,6 +762,7 @@ for (const kind of [
       }
       if (kind === "GALLERY")
         expect(await readGallery()).toEqual(galleryBefore);
+      if (world) expect(await readWorld()).toEqual(worldBefore);
       expect(errors).toEqual([]);
       await info.attach(`${kind.toLowerCase()}-replacement-visible`, {
         body: await consumer.screenshot(),
@@ -672,6 +771,7 @@ for (const kind of [
       await info.attach(`${kind.toLowerCase()}-replacement-live-receipt`, {
         body: JSON.stringify({
           kind,
+          observerRole: world ? "GM" : "PLAYER",
           oldUrl,
           newUrl: result.asset.url,
           sourcePngSha256: digest(magenta),

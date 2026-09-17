@@ -577,7 +577,11 @@ function SidebarContent(props: Props) {
           />
         )}
         {props.workspace === "world-codex" && (
-          <WorldEncyclopediaWorkspace open onClose={closeWorkspace} />
+          <WorldEncyclopediaWorkspace
+            open
+            assets={props.snapshot.assets}
+            onClose={closeWorkspace}
+          />
         )}
         {props.workspace === "media" && (
           <ArkenDialog

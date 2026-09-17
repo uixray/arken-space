@@ -213,3 +213,101 @@ describe("world editor and reader Russian copy", () => {
     expect(apiMock).toHaveBeenCalledWith(`/api/world-content/${entity.id}`);
   });
 });
+
+it("updates mounted reader cover and gallery URLs without refetching article data", async () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const playerEntity = worldContentPlayerDtoSchema.parse({
+    ...entity,
+    coverAssetId: id,
+  });
+  apiMock.mockImplementation(async (path: string) => {
+    if (path.endsWith("/relations")) return [];
+    if (path.endsWith("/media"))
+      return [
+        {
+          id,
+          worldContentId: entity.id,
+          assetId: id,
+          caption: "Башня",
+          ordering: 0,
+          createdAt: entity.createdAt,
+        },
+      ];
+    return path === `/api/world-content/${entity.id}`
+      ? playerEntity
+      : [playerEntity];
+  });
+  const onClose = vi.fn();
+  const view = (version: string) => (
+    <WorldEncyclopediaWorkspace
+      open
+      onClose={onClose}
+      assets={[{ id, url: `/api/assets/${id}/content?v=${version}` }]}
+    />
+  );
+  const rendered = renderComponent(view("old"));
+  await userEvent.click(
+    await screen.findByRole("button", { name: /Waterdeep/ }),
+  );
+  await screen.findByRole("img", { name: "Башня" });
+  const images = screen.getByRole("article").querySelectorAll("img");
+  expect(images).toHaveLength(2);
+  for (const image of images)
+    expect(image).toHaveAttribute("src", `/api/assets/${id}/content?v=old`);
+  const calls = apiMock.mock.calls.length;
+  rendered.rerender(view("new"));
+  for (const image of images)
+    expect(image).toHaveAttribute("src", `/api/assets/${id}/content?v=new`);
+  expect(apiMock.mock.calls).toHaveLength(calls);
+});
+
+it("refreshes the editor gallery image URL while preserving the open editor", async () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  apiMock.mockImplementation(async (path: string) => {
+    if (path.endsWith("/relations")) return [];
+    if (path.endsWith("/media"))
+      return [
+        {
+          id,
+          worldContentId: entity.id,
+          assetId: id,
+          caption: "Башня",
+          ordering: 0,
+          createdAt: entity.createdAt,
+        },
+      ];
+    return path === `/api/world-content/${entity.id}` ? entity : [entity];
+  });
+  const onClose = vi.fn();
+  const view = (version: string) => (
+    <WorldContentWorkspace
+      open
+      onClose={onClose}
+      assets={[
+        {
+          id,
+          kind: "PORTRAIT",
+          name: "Башня",
+          mimeType: "image/webp",
+          sizeBytes: 123,
+          width: 4,
+          height: 4,
+          durationSeconds: null,
+          createdAt: entity.createdAt,
+          url: `/api/assets/${id}/content?v=${version}`,
+        },
+      ]}
+    />
+  );
+  const rendered = renderComponent(view("old"));
+  await userEvent.click(
+    await screen.findByRole("button", { name: /Waterdeep/ }),
+  );
+  const image = await screen.findByRole("img", { name: "Башня" });
+  expect(image).toHaveAttribute("src", `/api/assets/${id}/content?v=old`);
+  const calls = apiMock.mock.calls.length;
+  rendered.rerender(view("new"));
+  expect(image).toHaveAttribute("src", `/api/assets/${id}/content?v=new`);
+  expect(apiMock.mock.calls).toHaveLength(calls);
+  expect(screen.getByDisplayValue("Private GM note")).toBeVisible();
+});
