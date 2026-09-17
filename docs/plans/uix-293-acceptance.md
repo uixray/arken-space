@@ -353,3 +353,29 @@ match. A third interim fixture failure expected article name for media usage;
 actual caption is correctly used instead, with all reports retained. Product
 bundle was built once; only test fixture corrections followed. Owned API/preview/
 PG stopped, original PostgreSQL service and protected selection test untouched.
+
+## Connected lifecycle regression — fd64ef2, 2026-09-17
+
+After the gallery, resource and world-artwork fixes, one connected gate passed
+**9 files / 71 tests, 35.97s**, single worker with 1GiB Node heap, no skipped tests.
+This includes all 9 real HTTP/PGlite lifecycle tests (not just the newly added
+cases), all 19 snapshot visibility tests, usage registry, snapshot metrics,
+gallery/resource projection helpers, mounted gallery/editor/reader regressions
+and asset action hook tests. No product edits during the run. Receipt:
+`asset-integrated-fd64ef2/results.json` and `tests.log` in the current artifact base.
+No full app suite or unchanged remote CI/browser pool was restarted.
+
+Acceptance reconciliation: the assets-backed original criteria have substantive
+implementation and scoped evidence. The explicit story-media criterion remains
+open: journal attachments are a separate storage/security model and world-content
+images do not substitute for them. Owner was asked once whether to implement a
+separate journal attachment lifecycle preserving existing ACL, without moving it
+into Files or creating new issues. No answer assumed and no migration performed.
+
+World-map row/reference preservation is proved by actual HTTP replacement, but
+its mounted canvas background has no connected browser replacement receipt.
+This is not silently promoted to a new original acceptance requirement. Safari,
+physical-device, production, historical blob versions and every browser-role
+permutation likewise are not invented prerequisites for UIX-293 closure.
+Status stays In Progress because story-media coverage is unresolved, not because
+those optional extensions were added. Existing UI tasks can proceed meanwhile.
