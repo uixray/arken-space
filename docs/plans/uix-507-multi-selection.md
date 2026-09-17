@@ -372,3 +372,40 @@ drag guard and projection tests: 34/34 PASS1.30s. Web/E2E types, scoped lint,
 format and diff checks pass. Receipts are recorded in selection-live-gate/
 checkpoint.md under the current visualization artifact root.
 No production, full suite, CI, Linear write or whole-issue closure is implied.
+
+### 2026-09-17 — original-criteria coverage reconciliation
+
+Read live UIX-507 again: still In Review. Extended the same connected scenario
+to both drag initiators (token and drawing), then GM cancellation and confirmed
+mixed deletion. The player's already-open object list loses the drawing through
+the live connection without reload; both authenticated snapshots lose both
+objects. Cancellation leaves both objects unchanged. Confirmation names exactly
+one token and one drawing; access revocation and atomic rejection remain checked.
+
+Final: **4/4 PASS58.2s**, Chrome/Firefox × token/drawing, worker1/retries0.
+The first extended run wrongly expected a drawing-initiated delta to snap to64;
+drawings intentionally use freehand coordinates. The corrected test bounds the
+pointer-rounding error below1 CSS pixel and requires both canonical positions
+to equal their original positions plus the exact submitted delta. Token-initiated
+movement still requires exactly64. No product change in this pool.
+
+Tracked evidence against the original criteria (not a new full-suite run):
+
+| Original criterion                                                  | Evidence                                                                                                                |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Toggle, intersecting marquee, plain replace/clear/pan               | map-selection.test.ts; existing GM/PLAYER canvas-token-regressions flows                                                |
+| GM/PLAYER visibility, fog, layer, lock and control policy           | map-objects.test.ts; PLAYER selection and bulk eligibility/lifecycle browser cases; connected403                        |
+| Draw, rect/brush/polygon fog, ruler, pan and context-menu conflicts | tracked canvas-token-regressions tool matrix and the checkpoints above                                                  |
+| No permanent selection counters; stable zoom; Escape                | current renderer structure, selection/zoom desktop and rotated compact matrix, counts only inside deletion confirmation |
+| Drag either group element; queued move and rollback                 | map-move-queue.test.ts and canvas-bulk-move.test.ts; connected token/drawing409, retry and GM live convergence          |
+| Count/type confirmation and exact bulk deletion                     | map-delete.test.ts; exact-target and stale-confirmation browser cases; connected cancellation/delete/peer convergence   |
+| Delete, scene, authoritative resync and access pruning              | reducer tests, snapshot/reload and scope/eligibility browser cases, connected revocation/deletion                       |
+
+All reachable criteria now have tracked evidence; this does not revalidate every
+historical permutation on the current HEAD. SCENE_REGION remains an explicitly
+named but unreachable criterion: App passes no encounters/selection callback and
+no toolbar/shortcut activates it. Do not silently delete the criterion or enable
+obsolete gameplay for acceptance. Its disposition remains open. Physical-device
+acceptance is not an original UIX-507 criterion and is not invented as a blocker.
+The unrelated menu observer failure belongs to its existing gate, not this one.
+No Linear status change: external-write gate remains unresolved. No publication.
