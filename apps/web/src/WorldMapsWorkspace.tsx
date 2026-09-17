@@ -461,6 +461,7 @@ export function WorldMapsWorkspace({
                       }}
                       aria-pressed={location.id === selectedLocation?.id}
                       aria-label={`Локация: ${location.name}`}
+                      title={location.name}
                       aria-describedby={
                         partyLocation?.id === location.id
                           ? partyDescriptionId
@@ -485,7 +486,9 @@ export function WorldMapsWorkspace({
                           </span>
                         </span>
                       )}
-                      <span>{location.name}</span>
+                      <span className="world-map-marker__label">
+                        {location.name}
+                      </span>
                     </button>
                   ))}
                 </div>

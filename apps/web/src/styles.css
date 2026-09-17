@@ -3320,6 +3320,11 @@ code {
   font-size: 16px;
   line-height: 1;
 }
+.world-map-marker__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .world-map-marker.is-selected,
 .world-map-marker:focus-visible {
   border-color: #f0bd72;

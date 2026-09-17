@@ -434,6 +434,22 @@ acceptance remains distinct. Evidence: world-marker-description/{fixed-results.j
 manifest.json,checkpoint.md}. Top-level coverage index reconciles ten earlier
 reports with their scope/limits rather than claiming one all-green HEAD run.
 
+## 2026-09-17 — long world-map labels
+
+Extended the same marker gate with short/long location names. Old compact runtime
+failed: label right438.36px while marker right239.5px; clipping the outer button
+did not create the intended text ellipsis. A dedicated label span now shrinks
+within the flex row and ellipsizes independently of the icons. Full location name
+remains in accessible name, detail/list and new title; normalized anchor unchanged.
+
+Browser8/8 PASS26.7s Chrome/Firefox GM1280/360 × short/long names. Location/party
+SVGs remain16/24px; label box stays inside the marker, party/caption do not overlap,
+description/focus/selection/hit checks retained. Compact long-name screenshot
+inspected: visible ellipsis and full name below. No writes/page errors. Map edges
+remain a separate unchecked axis. One build1.65s/four hashes; web/E2E types and
+scoped lint/format/diff PASS. Evidence: world-marker-long-label/{red-results.json,
+fixed-results.json,manifest.json,checkpoint.md}. No full suite/CI/publication.
+
 ## 2026-09-17 — shared quick-roll privacy visual gate
 
 Reused50290e5 built runtime; no product changes/rebuild. Actual-App fixture
