@@ -1,3 +1,4 @@
+import { assetDto } from "./asset-lifecycle.js";
 import {
   and,
   asc,
@@ -919,18 +920,7 @@ export async function buildSnapshot(
         unreadCount: Number(unreadGroups[index]?.[0]?.value ?? 0),
       };
     }),
-    assets: visibleAssets.map((asset) => ({
-      id: asset.id,
-      kind: asset.kind,
-      name: asset.name,
-      mimeType: asset.mimeType,
-      sizeBytes: asset.sizeBytes,
-      width: asset.width,
-      height: asset.height,
-      durationSeconds: asset.durationSeconds,
-      url: `/api/assets/${asset.id}/content`,
-      createdAt: asset.createdAt.toISOString(),
-    })),
+    assets: visibleAssets.map(assetDto),
     audio: audio
       ? {
           assetId: audio.assetId,

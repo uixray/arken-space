@@ -182,3 +182,39 @@ flow, cancel/pending/409/explicit retry; real backend HEAD/PUT integration; veri
 already-mounted media consumers refresh after replacement. Current URLs in
 assetDto/snapshot remain stable, so snapshot reload alone must not be assumed to
 refresh rendered pixels/audio. No build/CI/release or full UIX-293 acceptance.
+
+## 2026-09-17 — actual replacement browser flow and stale-preview correction
+
+New actual-App GM flow1280/390 in Chrome/Firefox exercises real file intake/PNG
+decode, usage review, cancel without PUT, disabled cancel/Escape during held PUT,
+409 retaining the file but requiring new HEAD/review, transport failure and an
+explicit same-action/same-version retry, success and modal closure. Multipart
+contains the selected bytes; exactly three deliberate PUTs, three HEADs and no
+unexpected writes/pageerrors. A new review creates a new action; retry does not.
+
+The first fixture PNG decoded in Chrome but failed Firefox: replaced it with
+valid generated RGB PNG chunks/CRC (test fixture only). Corrected workflow4/4PASS
+29.8s then exposed a REAL rendering gap in all four receipts: after acknowledged
+replacement and bootstrap reload, preview still showed [30,60,90,255], with only
+one GET. New bytes should be [180,80,40,255]. Those green workflow results do not
+mean media freshness passed; the pixel observations contradicted it.
+
+Server assetDto now emits content URLs with the existing opaque version token as
+`?v=...`. Snapshot and generated-token responses reuse that DTO instead of
+separate unversioned projections. Asset ID, canonical endpoint, references,
+If-Match/ETag, no-cache policy and content ACL remain unchanged. Storage keys are
+not exposed, and changing only the display name leaves the URL stable. This
+intentionally supersedes the earlier stable-projected-URL-only assumption.
+
+11 asset-policy/unit tests PASS285ms, including versioned URL identity/privacy;
+server/E2E TypeScript, scoped lint/format/diff PASS. Final browser4/4PASS26.4s now
+asserts an additional GET and actual new preview pixels, not just success copy.
+The synthetic bootstrap/PUT DTO supplies the versioned URL; this does NOT execute
+the changed server snapshot/HTTP routes. Reports initial/corrected/versioned in
+asset-replacement-browser preserve fixture failure, stale evidence and final gate.
+No build/full suite/CI/publication/Linear closure; protected recovery test unchanged.
+
+Next mandatory gate: actual backend HEAD/PUT/bootstrap and versioned content ACL/
+304 behavior, then already-mounted map/token/audio consumers and PLAYER exclusion.
+The current four cases are image/media-row GM UI, not audio playback or complete
+UIX-293 acceptance. Do not repeat only these passing image cases as substitute.

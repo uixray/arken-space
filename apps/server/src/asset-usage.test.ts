@@ -3,6 +3,8 @@ import type { AssetUsageDto } from "@arken/contracts";
 import {
   ASSET_DEPENDENCY_REGISTRY,
   assetUsagePolicy,
+  assetDto,
+  assetContentVersion,
   deleteUnusedAsset,
 } from "./asset-lifecycle.js";
 
@@ -167,4 +169,19 @@ describe("asset deletion orchestration", () => {
       blobCleanupPending: true,
     });
   });
+});
+
+it("changes rendered content URL only when blob version changes, retaining canonical identity and hiding storage keys", () => {
+  const original = assetDto(asset);
+  const renamed = assetDto({ ...asset, name: "New name" });
+  const replaced = assetDto({ ...asset, storageKey: "new-private-blob.webp" });
+  expect(renamed.url).toBe(original.url);
+  expect(replaced.url).not.toBe(original.url);
+  expect(replaced.id).toBe(original.id);
+  const url = new URL(replaced.url, "https://example.invalid");
+  expect(url.pathname).toBe(`/api/assets/${asset.id}/content`);
+  expect(url.searchParams.get("v")).toBe(
+    assetContentVersion("new-private-blob.webp").slice(1, -1),
+  );
+  expect(JSON.stringify(replaced)).not.toContain("new-private-blob");
 });

@@ -147,7 +147,7 @@ import {
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
-import { assetContentVersion } from "./asset-lifecycle.js";
+import { assetContentVersion, assetDto } from "./asset-lifecycle.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
@@ -8505,18 +8505,7 @@ export function registerRoutes(
         .limit(1);
       return asset ?? null;
     };
-    const dto = (asset: typeof assets.$inferSelect) => ({
-      id: asset.id,
-      kind: asset.kind,
-      name: asset.name,
-      mimeType: asset.mimeType,
-      sizeBytes: asset.sizeBytes,
-      width: asset.width,
-      height: asset.height,
-      durationSeconds: asset.durationSeconds,
-      url: `/api/assets/${asset.id}/content`,
-      createdAt: asset.createdAt.toISOString(),
-    });
+    const dto = assetDto;
 
     const replay = await replayAsset();
     if (replay) return reply.code(200).send(dto(replay));

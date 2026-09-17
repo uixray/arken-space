@@ -25,6 +25,7 @@ export const ASSET_DEPENDENCY_REGISTRY = [
 
 export interface AssetMetadata extends Omit<AssetDto, "url" | "createdAt"> {
   createdAt: Date;
+  storageKey: string;
 }
 
 export function assetDto(asset: AssetMetadata): AssetDto {
@@ -37,7 +38,7 @@ export function assetDto(asset: AssetMetadata): AssetDto {
     width: asset.width,
     height: asset.height,
     durationSeconds: asset.durationSeconds,
-    url: `/api/assets/${asset.id}/content`,
+    url: `/api/assets/${asset.id}/content?v=${assetContentVersion(asset.storageKey).slice(1, -1)}`,
     createdAt: asset.createdAt.toISOString(),
   };
 }
