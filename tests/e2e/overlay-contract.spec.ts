@@ -185,6 +185,66 @@ test("UIX-644 short viewport scrolls options without dismissing and keeps focus 
   await expect(list).toBeHidden();
 });
 
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-644 compact Sections breakpoint lifecycle ${role}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await install(page, role);
+    const errors: string[] = [],
+      writes: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (
+        path.startsWith("/api/") &&
+        !["GET", "HEAD"].includes(request.method()) &&
+        path !== "/api/chat/read"
+      )
+        writes.push(`${request.method()} ${path}`);
+    });
+    await page.goto("/");
+    const trigger = page.getByRole("button", { name: "Разделы", exact: true });
+    const sheet = page.getByRole("dialog", { name: "Разделы", exact: true });
+    await trigger.click();
+    await expect(sheet).toBeVisible();
+    await page.setViewportSize({ width: 360, height: 480 });
+    const destinations = sheet.locator(".compact-sections-list button");
+    const labels = await destinations.allTextContents();
+    expect(labels.length).toBeGreaterThanOrEqual(3);
+    for (const option of await destinations.all()) {
+      await option.scrollIntoViewIfNeeded();
+      await assertHitTarget(option);
+    }
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeHidden();
+    await assertHitTarget(
+      page.getByRole("button", { name: "Вписать", exact: true }),
+    );
+    await page.setViewportSize({ width: 390, height: 800 });
+    await expect(trigger).toBeVisible();
+    await expect(sheet).toBeHidden();
+    await assertHitTarget(page.locator("#compact-nav-journal"));
+    await page.locator("#compact-nav-journal").click();
+    await expect(page.locator("#compact-nav-journal")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await trigger.click();
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeFocused();
+    expect(errors).toEqual([]);
+    expect(writes).toEqual([]);
+    await info.attach("compact-sections-breakpoint", {
+      body: JSON.stringify({ role, labels, errors, writes }),
+      contentType: "application/json",
+    });
+  });
+}
+
 for (const { role, width, target } of [
   { role: "GM", width: 1024, target: "Сцены" },
   { role: "GM", width: 390, target: "Сцены" },

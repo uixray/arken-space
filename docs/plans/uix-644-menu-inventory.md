@@ -1140,3 +1140,34 @@ Evidence: request-built-gate/{final-results.json,persistence.json,
 payload-checks.json,run.ps1,checkpoint.md}. Temporary loopback server entry
 removed; all3 owned listeners stopped. No source/test changes, full suite,
 CI restart, production/deploy, Linear writes or new cards.
+
+## Compact Sections breakpoint lifecycle — 2026-09-17
+
+Distinct missing axis, not another unchanged observer probe: opening Sections at
+390px, shrinking to360×480, expanding to1280 and returning to390 revived the
+modal without a user action. Old verified1d00a8d bundle fails the new GM test:
+the restored modal makes the underlying Sections trigger inaccessible; retained
+error-context lists the visible Sections dialog. Source confirmed the open flag
+was cleared only by close/select/identity change, not by hiding its compact owner.
+
+App now discards compactSectionsOpen when leaving compact layout. Workspace,
+campaign state, permissions and other overlays are unchanged. Added GM/PLAYER
+regression to overlay-contract.spec.ts: all available destination buttons can
+be scrolled into view and hit-tested in the short viewport; desktop map remains
+clickable; compact return has no revived sheet; Journal can be selected; explicit
+reopen/Escape returns focus. No force clicks or error filtering.
+
+One fresh local production build after the connected fix (3.09s), four runtime
+payload hashes verified through loopback preview. Connected gate **12/12PASS
+39.6s**, Chrome/Firefox, worker1/retries0/skipped0/flaky0: four new role cases,
+six existing navigation-owner cases and two scene-picker breakpoint cases.
+Scoped ESLint has zero errors and two pre-existing App hook-dependency warnings;
+web/E2E typecheck, Prettier and diffcheck pass. This does not revalidate all204
+previous cases against the new runtime, whole registry or physical devices.
+
+Evidence: compact-sections-breakpoint/results.json (red), browser-output/trace,
+fixed/{results.json,manifest.json,payload-checks.json,build.log}. Fixed manifest
+was captured before commit and its revision names the parent168508e; checkpoint
+records the final commit and exact App diff. This new dist supersedes the old
+bundle only for subsequent checks requiring current runtime. No CI/publish/deploy
+or Linear write; own preview stopped, protected untracked selection test intact.

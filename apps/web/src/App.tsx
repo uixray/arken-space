@@ -306,6 +306,11 @@ export function App() {
     setWorkspace(null);
     setCompactSectionsOpen(false);
   }, [compactIdentity]);
+  useEffect(() => {
+    // The compact trigger disappears on desktop. Discard its open state so
+    // returning to a narrow viewport cannot revive a modal over the map.
+    if (!compact) setCompactSectionsOpen(false);
+  }, [compact]);
   const selectCompactSurface = useCallback(
     (surface: CompactSurface) => {
       selectSurface(surface);

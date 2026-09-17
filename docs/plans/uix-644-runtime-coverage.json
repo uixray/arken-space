@@ -5,6 +5,12 @@
   "statusMeaning": "PASS = only stated scope at evidence revision, not current HEAD/full issue. FAIL = unresolved known defect. BLOCKED = evidence or applicability unresolved, not whole-project blocked.",
   "artifactBase": "C:/Users/UIXRay/.codex/visualizations/2026/09/16/01a0a7d5-b072-7022-8e9d-4538c0a92b07",
   "evidence": {
+    "compactSectionsBreakpoint": {
+      "status": "PASS",
+      "revision": "168508ee2bb5f7703f09675c094f6557cbde7011 plus App compact breakpoint reset; see checkpoint for final commit",
+      "artifact": "compact-sections-breakpoint/fixed/results.json",
+      "scope": "12 Chrome/Firefox production-build cases: new GM/PLAYER Sections390→360x480→1280→390 lifecycle, visible destination hit targets, no spontaneous modal revival, Journal hit/click, reopen/Escape/focus return; existing navigation owner and scene-picker breakpoint regressions. Mocked API, not all destination workspaces or physical devices. Old candidate failed with revived modal; fixed build passed."
+    },
     "operatorFilters": {
       "status": "PASS",
       "revision": "176485ba82eada952fc37f2cd86b6b350eefa754",
@@ -549,9 +555,9 @@
       "id": "compact-navigation",
       "file": "apps/web/src/App.tsx",
       "status": "PASS",
-      "scope": "GM Scenes and PLAYER Tokens390: destination owns focus then Escape returns to Map; twice in Chrome/Firefox.",
-      "next": "Other compact destinations, resize while open and physical devices not covered.",
-      "evidence": ["navigation"]
+      "scope": "GM Scenes and PLAYER Tokens390: destination owns focus then Escape returns to Map. New Sections resize gate verifies all visible destination hit targets, desktop closes sheet without revival on compact return, Journal remains clickable, reopen/Escape/focus; both roles and browsers.",
+      "next": "Other destination workspace internals and physical devices remain separate. This does not resolve original Select RO or whole-registry acceptance.",
+      "evidence": ["navigation", "compactSectionsBreakpoint"]
     }
   ],
   "applicabilityAudit": {
