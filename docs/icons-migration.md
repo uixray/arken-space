@@ -352,3 +352,26 @@ persistence test. Original gameplay/privacy tests remain independent. E2E types,
 scoped lint/format/diff PASS. Four served payload hashes checked; preview stopped.
 Evidence: quick-roll-privacy-icons/{baseline-results.json,payload-checks.json,
 checkpoint.md}. No full suite/CI/publication; all-theme acceptance remains open.
+
+## 2026-09-17 — gallery reorder busy-state repair
+
+Two new component regressions failed on old code: another row's reorder button
+remained enabled during the two-write swap; an old character's failed reorder
+appeared in the newly opened gallery. Row reorder/edit actions now lock across
+the gallery until the operation settles. A synchronous operation ref prevents
+overlap with another reorder/removal and scopes updates/error/finally to the
+initiating gallery instance. An accepted swap continues its existing two requests
+after navigation, but cannot paint results or unlock a different operation.
+No server transaction/ordering API redesign is claimed.
+
+Component13/13 PASS3.80s, including lock through both writes and stale failure
+isolation. Connected browser16/16 PASS47.2s: delayed reorder + gallery paging,
+Chrome/Firefox GM/PLAYER1280/360. All row actions disabled while response waits;
+explicit fixture503 restores editing/reorder with a visible error and only one
+request. Existing repeated paging/focus regression passes. No unexpected writes,
+client logs or page errors. Compact GM busy screenshot inspected. This fixture
+does not prove successful server persistence or multi-client atomic ordering.
+
+One build1.67s/four served hashes; web/E2E types, scoped lint/format/diff PASS.
+Evidence: character-gallery-busy/{fixed-results.json,manifest.json,checkpoint.md}.
+Protected selection test unchanged; no full suite/CI rerun/publication.

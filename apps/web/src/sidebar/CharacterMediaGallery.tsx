@@ -77,6 +77,7 @@ export function CharacterMediaGallery({
   const activeCharacterIdRef = useRef(characterId);
   const loadRequestIdRef = useRef(0);
   const removalOperationRef = useRef<string | null>(null);
+  const reorderOperationRef = useRef<object | null>(null);
 
   const load = async (): Promise<boolean> => {
     const requestId = ++loadRequestIdRef.current;
@@ -105,6 +106,7 @@ export function CharacterMediaGallery({
   useEffect(() => {
     activeCharacterIdRef.current = characterId;
     removalOperationRef.current = null;
+    reorderOperationRef.current = null;
     setLoading(true);
     setViewerId(null);
     setEditingId(null);
@@ -114,6 +116,7 @@ export function CharacterMediaGallery({
     void load();
     return () => {
       loadRequestIdRef.current += 1;
+      reorderOperationRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId]);
@@ -128,8 +131,14 @@ export function CharacterMediaGallery({
   const viewerItem = sorted.find((item) => item.id === viewerId) ?? null;
 
   const reorder = async (id: string, direction: "up" | "down") => {
+    if (reorderOperationRef.current || removalOperationRef.current) return;
     const swap = computeAdjacentSwap(items, id, direction);
     if (!swap) return;
+    const operation = {};
+    reorderOperationRef.current = operation;
+    const isCurrentOperation = () =>
+      reorderOperationRef.current === operation &&
+      activeCharacterIdRef.current === characterId;
     setPendingId(id);
     setError("");
     try {
@@ -145,23 +154,31 @@ export function CharacterMediaGallery({
             }),
           },
         );
-        setItems((current) =>
-          current.map((entry) => (entry.id === updated.id ? updated : entry)),
-        );
+        // Finish the accepted swap, but never paint its result into another
+        // character's gallery after the user navigates away.
+        if (isCurrentOperation()) {
+          setItems((current) =>
+            current.map((entry) => (entry.id === updated.id ? updated : entry)),
+          );
+        }
       }
     } catch (reason) {
+      if (!isCurrentOperation()) return;
       if (reason instanceof ApiError && reason.status === 409) {
         const refreshed = await load();
-        if (!refreshed) return;
+        if (!refreshed || !isCurrentOperation()) return;
       }
       setError(formatApiError(reason, "Не удалось изменить порядок."));
     } finally {
-      setPendingId(null);
+      if (isCurrentOperation()) {
+        reorderOperationRef.current = null;
+        setPendingId(null);
+      }
     }
   };
 
   const remove = async (target: RemovalTarget) => {
-    if (removalOperationRef.current) return;
+    if (removalOperationRef.current || reorderOperationRef.current) return;
     removalOperationRef.current = target.actionId;
     setPendingId(target.item.id);
     setError("");
@@ -292,7 +309,7 @@ export function CharacterMediaGallery({
                 <div className="character-media-gallery__actions">
                   <Button
                     size="s"
-                    disabled={index === 0 || pendingId === item.id}
+                    disabled={index === 0 || pendingId !== null}
                     aria-label="Переместить выше"
                     title="Переместить выше"
                     onClick={() => void reorder(item.id, "up")}
@@ -301,9 +318,7 @@ export function CharacterMediaGallery({
                   </Button>
                   <Button
                     size="s"
-                    disabled={
-                      index === sorted.length - 1 || pendingId === item.id
-                    }
+                    disabled={index === sorted.length - 1 || pendingId !== null}
                     aria-label="Переместить ниже"
                     title="Переместить ниже"
                     onClick={() => void reorder(item.id, "down")}
@@ -312,7 +327,7 @@ export function CharacterMediaGallery({
                   </Button>
                   <Button
                     size="s"
-                    disabled={pendingId === item.id}
+                    disabled={pendingId !== null}
                     onClick={() => setEditingId(item.id)}
                   >
                     Изменить
