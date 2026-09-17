@@ -4,8 +4,30 @@ import {
   transitionPayload,
   transitions,
   validLinearLink,
+  feedbackListPath,
 } from "./operator-feedback";
 describe("operator feedback client boundary", () => {
+  it("encodes existing bounded filter and opaque cursor query values", () => {
+    expect(feedbackListPath()).toBe("/api/operator/feedback");
+    const url = new URL(
+      feedbackListPath({
+        kind: "BUG",
+        status: "NEW",
+        build: "build + &",
+        cursor: "opaque+/=",
+        from: "2026-09-17T00:00:00.000Z",
+      }),
+      "https://test.invalid",
+    );
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      kind: "BUG",
+      status: "NEW",
+      build: "build + &",
+      cursor: "opaque+/=",
+      from: "2026-09-17T00:00:00.000Z",
+    });
+    expect(url.searchParams.has("limit")).toBe(false);
+  });
   it("validates strict Linear links", () => {
     expect(
       validLinearLink(

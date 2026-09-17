@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { ApiError } from "./api";
+import { OperatorFeedbackFilters } from "./OperatorFeedbackFilters";
 import {
   fetchAttachment,
   FEEDBACK_KIND_LABELS,
@@ -15,6 +17,7 @@ import {
   type FeedbackDetail,
   type FeedbackListItem,
   type FeedbackStatus,
+  type FeedbackListQuery,
 } from "./operator-feedback";
 import "./OperatorFeedbackWorkspace.css";
 
@@ -36,6 +39,11 @@ export const OperatorFeedbackWorkspace = memo(
     onClose: () => void;
   }) {
     const [items, setItems] = useState<FeedbackListItem[]>([]);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [listBusy, setListBusy] = useState(false);
+    const [listError, setListError] = useState(false);
+    const filters = useRef<FeedbackListQuery>({});
+    const retryCursor = useRef<string | undefined>(undefined);
     const [detail, setDetail] = useState<FeedbackDetail | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [linearKey, setLinearKey] = useState("");
@@ -59,11 +67,50 @@ export const OperatorFeedbackWorkspace = memo(
       setBusy(false);
       closeImage();
     }, [closeImage]);
-    const refreshList = useCallback(async () => {
+    const refreshList = useCallback(async (cursor?: string) => {
       const requestScope = scope.current;
-      const response = await fetchFeedbackList();
-      if (requestScope === scope.current) setItems(response.items);
+      setListBusy(true);
+      setListError(false);
+      retryCursor.current = cursor;
+      try {
+        const response = await fetchFeedbackList({
+          ...filters.current,
+          ...(cursor ? { cursor } : {}),
+        });
+        if (requestScope !== scope.current) return;
+        setItems((current) =>
+          cursor
+            ? [
+                ...current,
+                ...response.items.filter(
+                  (item) =>
+                    !current.some((existing) => existing.id === item.id),
+                ),
+              ]
+            : response.items,
+        );
+        setNextCursor(response.nextCursor);
+      } finally {
+        if (requestScope === scope.current) setListBusy(false);
+      }
     }, []);
+    const loadList = useCallback(
+      (cursor?: string) => {
+        const requestScope = scope.current;
+        void refreshList(cursor).catch((reason) => {
+          if (requestScope !== scope.current) return;
+          if (
+            reason instanceof ApiError &&
+            [401, 403].includes(reason.status)
+          ) {
+            clearSensitive();
+            setItems([]);
+            onClose();
+          } else setListError(true);
+        });
+      },
+      [refreshList, clearSensitive, onClose],
+    );
     useEffect(
       () => () => {
         scope.current += 1;
@@ -75,18 +122,16 @@ export const OperatorFeedbackWorkspace = memo(
     useEffect(() => {
       if (!open) {
         clearSensitive();
+        filters.current = {};
         setItems([]);
+        setNextCursor(null);
+        setListBusy(false);
+        setListError(false);
         return;
       }
       setError("");
-      const requestScope = scope.current;
-      void refreshList().catch(() => {
-        if (requestScope !== scope.current) return;
-        setError("Доступ к обратной связи потерян.");
-        clearSensitive();
-        onClose();
-      });
-    }, [open, onClose, refreshList, clearSensitive]);
+      loadList();
+    }, [open, loadList, clearSensitive]);
 
     async function select(id: string) {
       clearSensitive();
@@ -203,20 +248,59 @@ export const OperatorFeedbackWorkspace = memo(
       >
         <div className="operator-feedback__grid">
           <nav aria-label={OPERATOR_FEEDBACK_TITLE}>
+            <OperatorFeedbackFilters
+              disabled={busy || listBusy}
+              onApply={(query) => {
+                clearSensitive();
+                filters.current = query;
+                setItems([]);
+                setNextCursor(null);
+                loadList();
+              }}
+            />
+            {listError && (
+              <div role="alert">
+                <p>Не удалось загрузить обращения.</p>
+                <Button
+                  disabled={listBusy}
+                  onClick={() => loadList(retryCursor.current)}
+                >
+                  Повторить загрузку
+                </Button>
+              </div>
+            )}
+            <p role="status">
+              {listBusy ? "Загрузка обращений…" : `Загружено: ${items.length}`}
+            </p>
+            {!listBusy && !listError && items.length === 0 && (
+              <p>По выбранным фильтрам обращений нет.</p>
+            )}
             {items.map((item) => (
               <button
                 type="button"
                 key={item.id}
-                disabled={busy}
+                disabled={busy || listBusy}
                 onClick={() => void select(item.id)}
               >
                 <b>{FEEDBACK_KIND_LABELS[item.kind]}</b>
                 <span>
                   {FEEDBACK_STATUS_LABELS[item.status]} /{" "}
-                  {new Date(item.createdAt).toLocaleString()}
+                  {new Date(item.createdAt).toLocaleString("ru-RU")}
                 </span>
+                <small>
+                  Сборка:{" "}
+                  {item.buildVersion ?? item.buildRevision ?? "Не указана"}
+                </small>
               </button>
             ))}
+            {nextCursor && (
+              <Button
+                disabled={busy || listBusy}
+                onClick={() => loadList(nextCursor)}
+              >
+                Загрузить ещё
+              </Button>
+            )}
           </nav>
           <section>
             {error && <p role="alert">{error}</p>}

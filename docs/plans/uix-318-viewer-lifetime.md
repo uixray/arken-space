@@ -67,3 +67,40 @@ Next original-criteria gap found by source inspection: backend list supports bou
 viewer only calls the unfiltered first page and discards `nextCursor`. A later UI
 pool should expose those existing controls without adding new endpoints or changing
 authorization, privacy or task scope.
+
+## List filters and pagination — 2026-09-17
+
+The gap above is now implemented in the local viewer, reusing the existing GET
+contract. Filters cover local date/time interval (sent as UTC), kind, status and
+build version/revision. Inverted ranges are rejected before a request; build input
+is bounded to 64 characters. Reset returns to the unfiltered first page. Backend
+default page limit remains 25; no new endpoint or authorization change.
+
+Next-page cursor is retained and URL-encoded, rows append with ID de-duplication.
+Page failure preserves loaded rows and offers retry with the same cursor. Initial
+network failure also offers retry rather than pretending that access was revoked.
+Only actual 401/403 clears private detail/list and closes the viewer. New filters
+clear selected detail/link drafts and start from the first page. Close clears list
+filter state and still invalidates pending responses. A status mutation refreshes
+the active filter's first page. Build appears in each row; dates use Russian locale.
+Narrow screens stack list/details instead of forcing the desktop two-column grid.
+
+Evidence:
+
+- Component/client pool **14/14 PASS**, 16.08s: cursor encoding, duplicate guard,
+  filter/draft clearing, exact page retry, revoked authorization, invalid/valid
+  date range and reset, plus earlier privacy and linking safeguards.
+- Chrome/Firefox × desktop1280/narrow390 list flows plus previous close/export
+  scenario: **6/6 PASS**, 24.7s, one worker, no retries. Actual native controls and
+  App/ArkenDialog, mocked API/socket, exact query receipts, no mutations, horizontal
+  field bounds checked. Not physical mobile or server ACL proof.
+- Two earlier rounds stopped on test assumptions, not weakened product gates:
+  first assumed only one initial GET (StrictMode issues another); second used an
+  exact label-text query for a nested select instead of its actual accessible
+  combobox name. Final assertions check the most recent completed query and exact
+  accessible names. Logs/traces retained, failures not relabeled green.
+- Web/E2E types, scoped lint/format/diff PASS; initial desktop failure screenshot
+  inspected for layout. No claim of full visual/device acceptance.
+- Local artifact folder `operator-list-gate`; own Vite stopped after every round.
+  No full suite/build/CI/publication or production request. Original host-trust and
+  other unverified UIX-318 criteria remain separate.

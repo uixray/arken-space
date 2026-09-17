@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { act, renderComponent, screen, userEvent } from "./test-support/render";
+import {
+  act,
+  fireEvent,
+  renderComponent,
+  screen,
+  userEvent,
+} from "./test-support/render";
 import type { ArkenDialogProps } from "./ui/ArkenDialog";
 import type { FeedbackDetail } from "./operator-feedback";
 import * as feedback from "./operator-feedback";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
+import { ApiError } from "./api";
 
 // This suite tests async privacy lifetime, not the real dialog's focus/layout.
 vi.mock("./ui/ArkenDialog", () => ({
@@ -211,4 +218,107 @@ it("requires a fresh Linear link after switching reports and submits only the ch
     linearKey: "UIX-293",
     linearUrl: "https://linear.app/uixray/issue/UIX-293/second",
   });
+});
+
+it("appends the next page once, keeps filters and clears detail when applying new filters", async () => {
+  const second: FeedbackDetail = { ...detail, id: "second", kind: "IDEA" };
+  vi.mocked(feedback.fetchFeedbackList)
+    .mockResolvedValueOnce({ items: [detail], nextCursor: "opaque+/=" })
+    .mockResolvedValueOnce({ items: [detail, second], nextCursor: null })
+    .mockResolvedValueOnce({ items: [], nextCursor: null });
+  const view = await setup();
+  await view.user.click(screen.getByRole("button", { name: "Загрузить ещё" }));
+  await screen.findByRole("button", { name: /Идея/ });
+  expect(screen.getAllByRole("button", { name: /Ошибка/ })).toHaveLength(1);
+  expect(feedback.fetchFeedbackList).toHaveBeenNthCalledWith(2, {
+    cursor: "opaque+/=",
+  });
+  expect(
+    screen.queryByRole("button", { name: "Загрузить ещё" }),
+  ).not.toBeInTheDocument();
+  await view.user.selectOptions(screen.getByLabelText("Тип обращения"), "IDEA");
+  await view.user.selectOptions(
+    screen.getByLabelText("Статус обращения"),
+    "NEW",
+  );
+  await view.user.type(screen.getByLabelText("Сборка"), "build-2");
+  await view.user.click(
+    screen.getByRole("button", { name: "Применить фильтры" }),
+  );
+  await screen.findByText("По выбранным фильтрам обращений нет.");
+  expect(feedback.fetchFeedbackList).toHaveBeenLastCalledWith({
+    kind: "IDEA",
+    status: "NEW",
+    build: "build-2",
+    from: undefined,
+    to: undefined,
+  });
+  expect(screen.queryByText(detail.title)).not.toBeInTheDocument();
+});
+
+it("keeps existing rows and retries the same cursor after a failed next page", async () => {
+  vi.mocked(feedback.fetchFeedbackList)
+    .mockResolvedValueOnce({ items: [detail], nextCursor: "page2" })
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce({ items: [], nextCursor: null });
+  const view = await setup();
+  await view.user.click(screen.getByRole("button", { name: "Загрузить ещё" }));
+  await screen.findByText("Не удалось загрузить обращения.");
+  expect(screen.getByRole("button", { name: /Ошибка/ })).toBeEnabled();
+  await view.user.click(
+    screen.getByRole("button", { name: "Повторить загрузку" }),
+  );
+  expect(feedback.fetchFeedbackList).toHaveBeenNthCalledWith(3, {
+    cursor: "page2",
+  });
+  expect(view.onClose).not.toHaveBeenCalled();
+});
+
+it("closes and clears the viewer if a page reports revoked authorization", async () => {
+  vi.mocked(feedback.fetchFeedbackList)
+    .mockResolvedValueOnce({ items: [detail], nextCursor: "page2" })
+    .mockRejectedValueOnce(new ApiError(403, "FORBIDDEN", "Запрещено"));
+  const view = await setup();
+  await view.user.click(screen.getByRole("button", { name: "Загрузить ещё" }));
+  expect(view.onClose).toHaveBeenCalledOnce();
+  expect(screen.queryByText(detail.title)).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Ошибка/ }),
+  ).not.toBeInTheDocument();
+});
+
+it("rejects an inverted date range locally and sends valid local dates as UTC", async () => {
+  const view = await setup();
+  fireEvent.change(screen.getByLabelText("С даты"), {
+    target: { value: "2026-09-17T12:00" },
+  });
+  fireEvent.change(screen.getByLabelText("По дату"), {
+    target: { value: "2026-09-16T12:00" },
+  });
+  await view.user.click(
+    screen.getByRole("button", { name: "Применить фильтры" }),
+  );
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "начало не позже окончания",
+  );
+  expect(feedback.fetchFeedbackList).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByLabelText("По дату"), {
+    target: { value: "2026-09-18T12:00" },
+  });
+  await view.user.click(
+    screen.getByRole("button", { name: "Применить фильтры" }),
+  );
+  expect(feedback.fetchFeedbackList).toHaveBeenLastCalledWith({
+    from: new Date("2026-09-17T12:00").toISOString(),
+    to: new Date("2026-09-18T12:00").toISOString(),
+    kind: undefined,
+    status: undefined,
+    build: undefined,
+  });
+  await view.user.click(
+    screen.getByRole("button", { name: "Сбросить фильтры" }),
+  );
+  expect(feedback.fetchFeedbackList).toHaveBeenLastCalledWith({});
+  expect(screen.getByLabelText("С даты")).toHaveValue("");
+  expect(screen.getByLabelText("По дату")).toHaveValue("");
 });
