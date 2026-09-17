@@ -2926,10 +2926,16 @@ code {
   min-width: 0;
   text-align: left;
 }
+.map-object-list li > button:first-child {
+  overflow-wrap: anywhere;
+}
 .map-object-list button[aria-pressed="true"] {
   outline: 2px solid var(--accent);
 }
 .map-object-list__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding-inline: 8px;
 }
 .entity-form {

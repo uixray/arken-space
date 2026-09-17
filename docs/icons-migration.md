@@ -42,6 +42,11 @@
 
 Дополнение к сводке после последних связанных пулов:
 
+- **Список объектов карты:** `object-list-icons/fixed-results.json`,8PASS GM/PLAYER
+  Chrome/Firefox1280/360; hidden-until-open Duplicate/Trash, полные имена, разные
+  SVG, центрирование, Tab/Escape, contrast≥9.73, min24/44, перенос длинного имени.
+  Чужие рисунки PLAYER отсутствуют по canSelectDrawing, не disabled. Мутации не проверялись.
+
 - **Масштаб токена:** `token-zoom-icons/initial-results.json`, Chrome/Firefox с
   resize1280/360; +/- SVG/контраст/Tab/Enter/границы/pending upload. GM synthetic,
   не серверная генерация и не все темы.
@@ -809,3 +814,31 @@ screenshot с полным длинным именем и отдельной к�
 Web/E2E types, lint, format, diff-check PASS; одна build1.98s,4served hashes.
 Protected selection test неизменён; fullsuite/CI/push/deploy не запускались.
 Это GM synthetic-dialog evidence, не все модальные consumer-ы/темы/RTL/hardware.
+
+## 2026-09-17 — действия строк списка объектов карты
+
+Read-only review выделил скрытые до открытия popover Duplicate/Trash как оставшийся
+reachable icon consumer. Предположение review о disabled PLAYER-чужом рисунке
+опровергнуто `selectMapObjects → canSelectDrawing`: чужой автор исключается до
+рендера. Gate использует GM обеих строк и PLAYER только своей, не вводит фиктивную
+доступность чужого объекта ради одинаковой матрицы.
+
+В существующий `canvas-token-regressions.spec.ts` добавлены8 адресных случаев,
+без изменения защищённого selection-recovery. Первый GM1280 RED обнаружил552px
+переполнения текстовой кнопки длинным именем без пробелов. Scoped CSS разрешает
+перенос только имени объекта и центрирует Duplicate/Trash flex. Общая compact
+44px-геометрия уже существовала — повторно не переписана.
+
+`object-list-icons/fixed-results.json`8PASS37.6s Chrome/Firefox ×GM/PLAYER ×1280/360.
+Visible distinct decorative/nonfocusable currentColor/stroke2 SVG, exact имена,
+min24/44, центр glyph±1px и center-hit, реальный Tab от имени к Duplicate→Trash,
+focus-visible, Escape→trigger.40 control samples: normal/focus минимум11.044:1,
+hover9.731:1 (computed-color). Список без горизонтального overflow; полный длинный
+текст переносится. Compact PLAYER Firefox screenshot просмотрен: outline виден.
+DisplayName исходного fixture остаётся «GM», но me.role=PLAYER и отсутствие чужой
+строки проверены; надпись не является доказательством роли.
+
+Копирование/удаление не активировались; API mutations/pageerror отсутствуют.
+Это synthetic transport, не серверная авторизация/мутации и не all-themes/hardware.
+Runtime `object-list-icons/dist`, одна build1.82s,4served hashes. E2Etypes/lint/
+format/diff-check PASS. No fullsuite/CI/push/deploy. UIX-645 по общим gates открыта.

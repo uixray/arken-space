@@ -4,6 +4,10 @@ import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { fitRect } from "../../apps/web/src/renderers/camera-fit";
+import {
+  paintedIconContrast,
+  settleIconState,
+} from "./helpers/painted-icon-contrast";
 
 const sceneId = "7376b502-02f8-4cd6-9c55-3816d70d44dc";
 const tokenId = "35f46186-2ebc-4cf8-bce7-870097305a6b";
@@ -143,6 +147,178 @@ async function installCanvasRoutes(page: Page) {
     });
   });
   return { portraitRequestCount: () => portraitRequests };
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 360]) {
+    test(`UIX-645 object list row icons ${role} ${width}`, async ({
+      page,
+    }, info) => {
+      const current: GameSnapshot = structuredClone(snapshot);
+      current.me.role = role;
+      const tokenName = "СтражДревнейБашни".repeat(6);
+      current.tokens[0].name = tokenName;
+      current.tokens[0].controllerMembershipIds = [current.me.id];
+      current.drawings = [
+        current.me.id,
+        "00000000-0000-4000-8000-000000000009",
+      ].map((authorMembershipId, index) => ({
+        id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+        sceneId,
+        authorMembershipId,
+        points: [0, 0, 64, 64],
+        color: "#ef4444",
+        strokeWidth: 8,
+        x: 700 + index * 200,
+        y: 500,
+        revision: 0,
+      }));
+      current.fogReveals = [
+        { id: "revealed", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+      ];
+      const writes: string[] = [],
+        errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.route("**/api/**", (route) => {
+        const req = route.request(),
+          path = new URL(req.url()).pathname;
+        if (req.method() !== "GET") {
+          if (path === "/api/chat/read")
+            return route.fulfill({ json: { ok: true } });
+          writes.push(`${req.method()} ${path}`);
+          return route.abort();
+        }
+        if (path === "/api/story/posts")
+          return route.fulfill({ json: { posts: [], nextCursor: null } });
+        if (path === "/api/operator/feedback/capability")
+          return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+        return route.fulfill({ json: [] });
+      });
+      await installCanvasRoutes(page);
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({ json: current }),
+      );
+      await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+        socket.onMessage((message) => {
+          if (message.toString() === "40")
+            socket.send('40{"sid":"object-icons"}');
+        });
+        socket.send(
+          '0{"sid":"object-icons-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+        );
+      });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      const trigger = page.getByRole("button", {
+        name: "Объекты карты",
+        exact: true,
+      });
+      await trigger.click();
+      const list = page.getByRole("region", {
+        name: "Объекты карты",
+        exact: true,
+      });
+      await expect(list).toBeVisible();
+      const labels =
+        role === "GM"
+          ? [tokenName, "Рисунок 1", "Рисунок 2"]
+          : [tokenName, "Рисунок 1"];
+      await expect(list.locator("li")).toHaveCount(labels.length);
+      if (role === "PLAYER") {
+        // canSelectDrawing filters foreign authors before rendering the list.
+        // Do not invent an unreachable disabled row to satisfy a state matrix.
+        await expect(
+          list.getByRole("button", { name: "Рисунок 2", exact: true }),
+        ).toHaveCount(0);
+      }
+      const samples: unknown[] = [];
+      for (const label of labels) {
+        const select = list.getByRole("button", { name: label, exact: true });
+        await select.scrollIntoViewIfNeeded();
+        expect(
+          await select.evaluate((node) => node.scrollWidth - node.clientWidth),
+        ).toBeLessThanOrEqual(1);
+        await select.focus();
+        const glyphs: string[] = [];
+        for (const action of ["Дублировать", "Удалить"]) {
+          const control = list.getByRole("button", {
+            name: `${action}: ${label}`,
+            exact: true,
+          });
+          await page.keyboard.press("Tab");
+          await expect(control).toBeFocused();
+          expect(
+            await control.evaluate((node) => node.matches(":focus-visible")),
+          ).toBe(true);
+          await expect(control).toBeEnabled();
+          const svg = control.locator(":scope > svg.arken-icon");
+          await expect(svg).toBeVisible();
+          for (const [a, v] of [
+            ["aria-hidden", "true"],
+            ["focusable", "false"],
+            ["stroke", "currentColor"],
+            ["stroke-width", "2"],
+          ])
+            await expect(svg).toHaveAttribute(a, v);
+          glyphs.push(await svg.innerHTML());
+          const offsets = await control.evaluate((node) => {
+            const b = node.getBoundingClientRect();
+            const g = node.querySelector("svg")!.getBoundingClientRect();
+            return [
+              g.x + g.width / 2 - b.x - b.width / 2,
+              g.y + g.height / 2 - b.y - b.height / 2,
+            ];
+          });
+          for (const offset of offsets)
+            expect(Math.abs(offset)).toBeLessThanOrEqual(1);
+          const box = (await control.boundingBox())!;
+          for (const size of [box.width, box.height])
+            expect(Number(size.toFixed(3))).toBeGreaterThanOrEqual(
+              width === 360 ? 44 : 24,
+            );
+          expect(
+            await control.evaluate((node) => {
+              const r = node.getBoundingClientRect();
+              return node.contains(
+                document.elementFromPoint(
+                  r.x + r.width / 2,
+                  r.y + r.height / 2,
+                ),
+              );
+            }),
+          ).toBe(true);
+          await page.mouse.move(1, 899);
+          await settleIconState(control);
+          const focus = await paintedIconContrast(svg);
+          await control.evaluate((node) => (node as HTMLElement).blur());
+          await settleIconState(control);
+          const normal = await paintedIconContrast(svg);
+          await control.hover();
+          await settleIconState(control);
+          const hover = await paintedIconContrast(svg);
+          for (const ratio of [normal, hover, focus])
+            expect(ratio).toBeGreaterThanOrEqual(3);
+          samples.push({ label, action, normal, hover, focus });
+          await page.mouse.move(1, 899);
+          await control.focus();
+        }
+        expect(new Set(glyphs).size).toBe(2);
+      }
+      expect(
+        await list.evaluate((node) => node.scrollWidth - node.clientWidth),
+      ).toBeLessThanOrEqual(1);
+      await page.screenshot({ path: info.outputPath("object-list-icons.png") });
+      await page.keyboard.press("Escape");
+      await expect(list).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await info.attach("object-icon-receipt", {
+        body: JSON.stringify({ role, width, samples, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
 }
 
 for (const role of ["GM", "PLAYER"] as const) {
