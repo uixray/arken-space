@@ -1,4 +1,5 @@
 import { AssetReplacementDialog } from "./AssetReplacementDialog";
+import { AssetAudioPreview } from "./AssetAudioPreview";
 import { useId, useMemo, useState } from "react";
 import type {
   AssetKind,
@@ -28,6 +29,7 @@ export function MediaPanel({
   onRefresh?: AssetActions["refreshAssets"];
 }) {
   const uploadStatusPrefix = useId();
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [replacementId, setReplacementId] = useState<string | null>(null);
   const replacement = snapshot.assets.find(
     (asset) => asset.id === replacementId,
@@ -190,6 +192,25 @@ export function MediaPanel({
                   {ASSET_KIND_LABELS[asset.kind]} ·{" "}
                   {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
                 </small>
+                {asset.kind === "AUDIO" && (
+                  <>
+                    <Button
+                      aria-expanded={previewId === asset.id}
+                      onClick={() =>
+                        setPreviewId(previewId === asset.id ? null : asset.id)
+                      }
+                    >
+                      {previewId === asset.id ? "Закрыть превью" : "Прослушать"}
+                    </Button>
+                    {previewId === asset.id && (
+                      <AssetAudioPreview
+                        key={`${snapshot.campaign.id}:${snapshot.me.id}:${asset.url}`}
+                        url={asset.url}
+                        name={asset.name}
+                      />
+                    )}
+                  </>
+                )}
                 {snapshot.me.role === "GM" && (
                   <div>
                     <Button

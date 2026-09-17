@@ -293,3 +293,32 @@ The same valid Ogg payload is served under each version: this proves source relo
 and playback/consent preservation, not different-song audibility, a changed
 shorter duration, production delivery, Safari or physical speakers. No full suite,
 build/CI/publication or automatic UIX-293 closure.
+
+## 2026-09-17 — local audio catalog preview (UIX-293)
+
+Original AC was reread live: it requires usage status, not an additional asset
+lifecycle status. Existing usage lookup supplies that status. Audio preview was
+missing: catalog rows showed only the Audio label.
+
+Added an explicit local preview toggle to audio rows, with at most one player
+mounted. Native controls load on demand (preload=none), never autoplay, and start
+at the saved personal gain (existing quadratic curve; invalid/unavailable storage
+falls back to slider midpoint). Preview does not save consent/volume or send game
+commands. Closing/switching unmounts the old player; replacement URL or actor scope
+remounts it paused. Playback failures have a Russian alert and close/reopen retry.
+Controls fit the available row width.
+
+Verification: component pool 20/20 PASS (19.37s), including actual MediaPanel upload
+controls, usage/delete role tests and preview gain/error cases. Chrome/Firefox x
+1280/390: 4/4 PASS (20.1s), real App/native Ogg decode/time advancement at gain zero;
+no eager content requests, previous player paused on switching, one preview only,
+no audio:set or unexpected HTTP writes, preferences unchanged. Native play() was
+invoked through browser evaluation; native control gesture usability is not claimed.
+HTTP/socket mocked, GM catalog only, not physical mobile/Safari/production evidence.
+Web and E2E types, scoped ESLint/Prettier, git diff check PASS. Own Vite stopped.
+Evidence: catalog-audio-preview/initial-results.json and attached receipts under
+C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07.
+No full suite/build/CI/push/deploy or Linear closure. Protected untracked selection
+recovery test unchanged and excluded. Next gate: consolidate original UIX-293
+acceptance evidence and remaining release/real interaction gaps without adding
+invented status requirements or repeating unchanged gates.

@@ -2237,6 +2237,11 @@ code {
   color: var(--muted);
 }
 
+.asset-audio-preview audio {
+  width: 100%;
+  min-width: 0;
+}
+
 .music-bar {
   display: flex;
   flex-direction: column;
