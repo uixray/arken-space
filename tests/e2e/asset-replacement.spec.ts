@@ -170,6 +170,16 @@ for (const width of [1280, 360]) {
         await expect(svg).toHaveAttribute(attribute, value);
       await remove.scrollIntoViewIfNeeded();
       const box = (await remove.boundingBox())!;
+      const offsets = await remove.evaluate((node) => {
+        const b = node.getBoundingClientRect();
+        const g = node.querySelector("svg")!.getBoundingClientRect();
+        return [
+          g.x + g.width / 2 - b.x - b.width / 2,
+          g.y + g.height / 2 - b.y - b.height / 2,
+        ];
+      });
+      for (const offset of offsets)
+        expect(Math.abs(offset)).toBeLessThanOrEqual(1);
       for (const size of [box.width, box.height])
         expect(Number(size.toFixed(3))).toBeGreaterThanOrEqual(
           width === 360 ? 44 : 24,

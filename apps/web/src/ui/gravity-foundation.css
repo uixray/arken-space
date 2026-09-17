@@ -258,7 +258,7 @@
   gap: 12px;
   padding: 8px 10px;
 }
-.arken-upload-field__preview figcaption span {
+.arken-upload-field__preview figcaption > span {
   display: grid;
   min-width: 0;
 }
@@ -276,6 +276,12 @@
  * foreground on hover rather than changing the whole application's palette. */
 .arken-upload-field__preview .g-button_view_flat-danger {
   --g-button-text-color-hover: var(--g-color-text-primary);
+}
+
+.arken-upload-field__preview .g-button_view_flat-danger .g-button__text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (max-width: 767px), (pointer: coarse) {

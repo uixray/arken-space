@@ -729,3 +729,36 @@ oracle и добавлены Lab black/white/gray и отрицательные 
 
 Аудиополе подтверждено unit, но не самостоятельным browser caller; все темы,
 реальный сервер и физический телефон не заявляются. UIX-645 не закрыта.
+
+## 2026-09-17 — аудио-черновик и центрирование корзины
+
+Добавлен настоящий GM AssetReplacementDialog AUDIO-сценарий в существующий
+`asset-replacement-audio.spec.ts`, без повторения музыкального playback lifecycle.
+Первый4PASS27.7s подтвердил удаление/фокус, но визуальная проверка обнаружила
+смещение glyph вверх: отдельный Chrome360 RED измерил14px. Поэтому первый PASS
+не является доказательством корректного выравнивания.
+
+Причина — `figcaption span { display:grid }` затрагивал внутренние spans Gravity
+Button. Селектор ограничен непосредственной подписью файла, а icon-only content
+явно центрирован flex. Это общее исправление image/audio preview. Первое сужение
+селектора оставляло1.375px смещения inline SVG относительно текстовой базовой линии;
+дополнительное flex-центрирование устранило его, порог1px не ослаблен.
+
+На новой сборке `audio-draft-icons/dist-aligned` восемь уникальных случаев
+Chrome/Firefox ×1280/360 ×IMAGE/AUDIO подтверждены:5PASS из `aligned-results.json`
+и оставшиеся3PASS23.3s из `atomic-remaining-results.json`. Один Firefox360 замер
+между разными кадрами открытия диалога дал1.183px; чтение двух rect в одном callback
+исключило смещение всего диалога между измерениями, без изменений продукта/порога.
+Compact Firefox изображение после исправления просмотрено, glyph по центру.
+
+AUDIO: normal/focus contrast4.168:1, hover7.317:1; SVG/name/min24/44/center-hit,
+ShiftTab/Tab, Enter remove→picker, следующий Tab→input. Повторный выбор того же OGG
+работает; review выполняет ровно один HEAD и один usage GET, блокирует изменение
+черновика; Cancel возвращает фокус, повторное открытие не хранит файл. Нет upload,
+replacement PUT, audio:set или pageerror. Одна scene:view — обычная навигация.
+IMAGE: прежний conflict/retry/success плюс новый centered-glyph assert проходят.
+
+Четыре served hashes, build1.8s, E2E types/lint/format/diff-check PASS. Две сборки
+соответствовали двум связанным CSS-исправлениям; fullsuite/CI/push/deploy нет.
+Прежний untracked тест группового выделения неизменён. Аудиофайл валидный fixture,
+но playback, реальный сервер, все темы и физический телефон здесь не проверялись.
