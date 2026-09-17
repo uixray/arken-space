@@ -85,7 +85,7 @@ for (const role of ["GM", "PLAYER"] as const)
       }
       const contrastStates: { label: string; normal: number; hover: number }[] =
         [];
-      const disabledControls: string[] = [];
+      const disabledControls: object[] = [];
       for (const control of await controls.all()) {
         const label = await control.evaluate(
           (el) =>
@@ -95,8 +95,57 @@ for (const role of ["GM", "PLAYER"] as const)
             "",
         );
         if (!(await control.isEnabled())) {
-          disabledControls.push(label);
-          continue; // Inactive controls are exempt from non-text contrast; not a PASS for their legibility.
+          await expect(control).toHaveJSProperty("disabled", true);
+          await control.scrollIntoViewIfNeeded();
+          const paint = () =>
+            control.evaluate((node) => {
+              const style = getComputedStyle(node);
+              const icon = node.querySelector("svg.arken-icon");
+              if (!icon) throw new Error("Disabled icon missing");
+              const svg = getComputedStyle(icon);
+              const backing = getComputedStyle(node, "::before");
+              return {
+                color: style.color,
+                background: style.backgroundColor,
+                border: style.borderColor,
+                opacity: style.opacity,
+                stroke: svg.stroke,
+                iconOpacity: svg.opacity,
+                backing: backing.backgroundColor,
+                backingOpacity: backing.opacity,
+              };
+            });
+          await page.mouse.move(width - 1, 849);
+          await settleIconState(control);
+          const normal = await paint();
+          const box = await control.boundingBox();
+          if (!box) throw new Error(`${label}: missing disabled hit area`);
+          expect(
+            await control.evaluate((node) => {
+              const box = node.getBoundingClientRect();
+              return node.contains(
+                document.elementFromPoint(
+                  box.x + box.width / 2,
+                  box.y + box.height / 2,
+                ),
+              );
+            }),
+            `${label}: disabled control is not obscured`,
+          ).toBe(true);
+          // Native disabled buttons cannot be clicked through locator.click.
+          // Use a real pointer at their visible center, never force/dispatchEvent.
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await settleIconState(control);
+          const hovered = await paint();
+          expect(
+            hovered,
+            `${label}: disabled hover must not advertise activation`,
+          ).toEqual(normal);
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          await expect(control).not.toBeFocused();
+          await expect(control).toBeDisabled();
+          disabledControls.push({ label, normal, hovered, box });
+          continue; // Inactive controls have no contrast minimum; do not invent a contrast PASS.
         }
         for (const icon of await control
           .locator("svg.arken-icon:visible")
@@ -126,7 +175,13 @@ for (const role of ["GM", "PLAYER"] as const)
         }
       }
       await page.mouse.move(width - 1, 849);
-      // Traverse the real tab order, not HTMLElement.focus(): SVG must never
+      // Disabled pointer clicks can change the browser's sequential-focus start
+      // point even without focusing the button. Start this independent keyboard
+      // audit at the page entry, not wherever the last pointer probe left it.
+      await page
+        .getByRole("link", { name: "Перейти к карте", exact: true })
+        .focus();
+      // Traverse real Tab/arrow order, never focus each sampled control: SVG must never
       // take focus, disabled controls must be skipped, and enabled icon
       // controls must retain a visible keyboard indicator.
       const pending = new Set<number>();

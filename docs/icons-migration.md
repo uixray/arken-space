@@ -213,3 +213,36 @@ matrix or all disabled/loading visual certification. Personal theme integration
 and UIX-645 remain open. Types/lint/format/diff PASS; protected selection test
 untouched, owned preview stopped. No full suite, CI rerun, push/deploy or Linear
 mutation.
+
+## 2026-09-17 — disabled shell icons and radio focus timing
+
+Actual shell gate now covers native disabled SVG buttons as well as enabled
+controls: GM/PLAYER ×1280/390 ×Chrome/Firefox, **8/8 PASS90.804s** on the new
+local build. Across cases,20 disabled samples (play, undo, redo) retain their
+normal button/SVG/pseudo-background paint on hover, remain disabled/unfocused
+after a real center pointer click, and have unobscured hit areas. Recorded
+opacity0.45 in every sample. No contrast minimum is invented for inactive UI.
+Existing168 enabled normal/hover contrast samples, names/decorative SVG/stroke,
+minimum24px and actual Tab/radio-arrow focus checks remain; no API/client-log
+writes or page errors. DesktopGM screenshot inspected: inactive play/history
+icons are visibly subdued relative to enabled tools. This is not all disabled,
+loading, workspace/menu or personal-theme visual acceptance.
+
+The initial mixed pointer/keyboard harness exposed a sequential-focus-start
+assumption: disabled pointer clicks can move the browser's Tab starting point
+without focusing the button. The independent keyboard phase now starts at the
+page skip link, then traverses by actual Tab/arrow keys, never focusing each
+sample. A second run exposed a real product race: RollModeControl queued focus
+with requestAnimationFrame after an arrow selection. That callback could steal
+focus after the next Tab. All three radio buttons already exist with stable
+refs, so focus now moves synchronously in the key handler, without flushSync or
+changes to roll values/permissions. Seven new DOM regressions fail on old code
+and pass after the fix (plus two existing mapping tests:9/9PASS). They cover all
+arrow/Home/End keys and an outside focus handoff before a queued frame.
+
+Independent read-only review confirmed the ref/controlled-state assumptions.
+Web/E2E types, scoped lint/format/diff pass. One build2.94s, four served payload
+hashes verified. Evidence: disabled-shell-icons/{fixed-results.json,receipts.json,
+red-unit.log,unit.log,manifest.json,checkpoint.md}. Earlier failures are retained,
+not counted as acceptance. Local only; no full suite, CI rerun, publication or
+Linear write. UIX-645 retains the remaining original cross-product/theme gates.

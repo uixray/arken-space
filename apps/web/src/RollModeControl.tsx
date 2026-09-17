@@ -32,7 +32,9 @@ export function RollModeControl({
       (option) => option.value === next,
     );
     onChange(next);
-    requestAnimationFrame(() => optionRefs.current[nextIndex]?.focus());
+    // All options already exist. Keep selection and focus in this key event;
+    // a deferred focus could steal a subsequent Tab from the next control.
+    optionRefs.current[nextIndex]?.focus();
   };
 
   return (
