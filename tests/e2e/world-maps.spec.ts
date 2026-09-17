@@ -451,3 +451,118 @@ for (const width of [1280, 360]) {
     expect(errors).toEqual([]);
   });
 }
+
+for (const width of [1280, 360]) {
+  test(`UIX-645 world marker controls ${width}`, async ({ page }, info) => {
+    const state = snapshotFor("GM");
+    const location = {
+      id: ids.location,
+      mapId: ids.map,
+      name: "Башня",
+      kind: "SETTLEMENT" as const,
+      summary: "",
+      visibility: "PUBLIC" as const,
+      x: 0.5,
+      y: 0.5,
+      revision: 0,
+      sceneIds: [],
+    };
+    state.worldMaps = {
+      maps: [
+        {
+          id: ids.map,
+          name: "Регион",
+          scope: "REGION",
+          visibility: "CAMPAIGN",
+          lifecycle: "PUBLISHED",
+          backgroundAssetId: ids.asset,
+          revision: 3,
+        },
+      ],
+      locations: [location],
+      gmLocations: [{ ...location, gmNotes: "" }],
+      partyPosition: {
+        mapId: ids.map,
+        locationId: ids.location,
+        revision: 0,
+        updatedAt: "2026-07-23T00:00:00.000Z",
+      },
+    };
+    const writes: string[] = [],
+      errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/api/**", (route) => {
+      const r = route.request(),
+        path = new URL(r.url()).pathname;
+      if (r.method() !== "GET" && path !== "/api/chat/read")
+        writes.push(`${r.method()} ${path}`);
+      return route.fulfill({ json: [] });
+    });
+    await mockWorldMapApi(page, state);
+    await page.route("**/map-background.png", (route) =>
+      route.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#40566b"/></svg>',
+      }),
+    );
+    await page.setViewportSize({ width, height: 850 });
+    await page.goto("/");
+    const workspace = await openWorldMaps(page);
+    const marker = workspace.getByRole("button", {
+      name: "Локация: Башня",
+      exact: true,
+    });
+    const party = workspace.getByRole("img", {
+      name: "Текущая позиция группы",
+      exact: true,
+    });
+    await expect(party).toBeVisible();
+    const partyBox = await party.boundingBox();
+    const captionBox = await marker
+      .locator(":scope > span:last-child")
+      .boundingBox();
+    expect(partyBox!.x + partyBox!.width).toBeLessThanOrEqual(captionBox!.x);
+    await marker.scrollIntoViewIfNeeded();
+    const box = await marker.boundingBox();
+    expect(box!.width).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
+    expect(box!.height).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
+    expect(
+      await marker.evaluate((n) => {
+        const r = n.getBoundingClientRect();
+        return n.contains(
+          document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+        );
+      }),
+    ).toBe(true);
+    for (const control of [marker, party]) {
+      await expect(control.locator(":scope > svg.arken-icon")).toHaveCount(1);
+      await expect(control.locator(":scope > svg")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      await expect(control.locator(":scope > svg")).toHaveAttribute(
+        "focusable",
+        "false",
+      );
+      await expect(control.locator(":scope > svg")).toHaveAttribute(
+        "stroke",
+        "currentColor",
+      );
+    }
+    expect(await marker.locator(":scope > svg").innerHTML()).not.toBe(
+      await party.locator("svg").innerHTML(),
+    );
+    await marker.focus();
+    await marker.press("Enter");
+    await expect(marker).toHaveAttribute("aria-pressed", "true");
+    await expect(marker).toBeFocused();
+    await expect(
+      workspace.getByRole("heading", { name: "Башня", exact: true }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: info.outputPath(`world-marker-${width}.png`),
+    });
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}

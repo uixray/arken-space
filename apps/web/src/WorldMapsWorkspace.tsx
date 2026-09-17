@@ -466,22 +466,18 @@ export function WorldMapsWorkspace({
                       }}
                     >
                       <AppIcon icon={WorldLocationIcon} />
+                      {partyLocation?.id === location.id && (
+                        <span
+                          className="world-map-party-marker"
+                          aria-label="Текущая позиция группы"
+                          role="img"
+                        >
+                          <AppIcon icon={PartyLocationIcon} size={24} />
+                        </span>
+                      )}
                       <span>{location.name}</span>
                     </button>
                   ))}
-                  {partyLocation ? (
-                    <span
-                      className="world-map-party-marker"
-                      style={{
-                        left: `${partyLocation.x * 100}%`,
-                        top: `${partyLocation.y * 100}%`,
-                      }}
-                      aria-label="Текущая позиция группы"
-                      role="img"
-                    >
-                      <AppIcon icon={PartyLocationIcon} size={24} />
-                    </span>
-                  ) : null}
                 </div>
               </section>
               <aside className="world-map-detail" aria-label="Локации карты">

@@ -157,7 +157,8 @@ describe("world map localized display copy", () => {
       expect(partyIcon).toHaveAttribute("width", "24");
       expect(partyIcon?.innerHTML).not.toBe(locationIcon?.innerHTML);
       expect(location).toHaveStyle({ left: "10%", top: "30%" });
-      expect(party).toHaveStyle({ left: "10%", top: "30%" });
+      // The party badge shares the location anchor without covering its label.
+      expect(party.closest("button")).toBe(location);
     },
   );
 

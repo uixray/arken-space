@@ -353,6 +353,29 @@ One build1.69s/four served hashes; web/E2E types, scoped lint/format/diff PASS.
 Evidence: participant-status-icons/{baseline-results.json,fixed-results.json,
 manifest.json,checkpoint.md}. Protected selection test unchanged; no publication.
 
+## 2026-09-17 — party marker no longer covers location text
+
+Baseline browser controls passed, but the compact screenshot exposed a visual
+failure: party-position SVG overlaid the location caption at the same coordinates.
+The badge now sits inside the location button beside its icon/caption, sharing
+the unchanged normalized map anchor. It remains a named image with decorative
+inner SVG; no map data, party position or selection behavior changes.
+
+Final4/4 PASS16.4s Chrome/Firefox GM1280/360: no badge/caption intersection,
+distinct decorative currentColor SVGs, minimum24/44 bounds, center hit (including
+the badge area), keyboard selection/pressed state/focus and visible detail.
+No writes/page errors. Corrected compact screenshot inspected; caption readable.
+Existing5 component tests PASS2.83s, including original coordinate assertion on
+the shared location anchor and named GM/PLAYER component presentation. PLAYER
+product navigation remains intentionally unavailable, not enabled by this change.
+
+The first fixed harness still counted nested SVGs as direct location icons;
+direct-child selectors correct that without weakening each icon contract. Old
+independent-coordinate unit expectation replaced by shared-anchor containment.
+One build1.65s/four served hashes, web/E2E types/lint/format/diff PASS. Evidence:
+world-map-markers/{baseline-results.json,direct-icons-results.json,checkpoint.md}.
+Not all map-edge/long-label/theme/contrast acceptance; no full suite/CI/publication.
+
 ## 2026-09-17 — shared quick-roll privacy visual gate
 
 Reused50290e5 built runtime; no product changes/rebuild. Actual-App fixture

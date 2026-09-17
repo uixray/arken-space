@@ -3298,8 +3298,7 @@ code {
   color: var(--muted);
   text-align: center;
 }
-.world-map-marker,
-.world-map-party-marker {
+.world-map-marker {
   position: absolute;
   transform: translate(-50%, -50%);
 }
@@ -3327,7 +3326,8 @@ code {
   outline-color: #f0bd72;
 }
 .world-map-party-marker {
-  z-index: 2;
+  display: inline-flex;
+  flex-shrink: 0;
   color: #f0bd72;
   font-size: 24px;
   line-height: 1;
