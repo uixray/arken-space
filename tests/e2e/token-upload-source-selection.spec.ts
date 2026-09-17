@@ -437,6 +437,88 @@ async function capture(page: Page, info: TestInfo, name: string) {
   await info.attach(name, { path, contentType: "image/png" });
 }
 
+for (const width of [1280, 360]) {
+  test(`UIX-417 damaged token preview recovers after source switch ${width}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    const fixture = await installBoundary(page);
+    let damaged = true;
+    await page.route(`**${a.url}`, (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: damaged
+          ? Buffer.from("INVALID_IMAGE private-error-details")
+          : aBytes,
+        headers: { "cache-control": "no-store" },
+      }),
+    );
+    await page.goto("/");
+    await expect(page.locator(".app-shell")).toBeVisible();
+    await openWorkspaceSection(page, "Токены");
+    await page
+      .locator(".token-palette")
+      .getByRole("button", { name: "Создать токен", exact: true })
+      .click();
+    const editor = page.getByRole("dialog", {
+      name: "Новый токен",
+      exact: true,
+    });
+    const upload = editor.getByLabel("Загрузить новое изображение", {
+      exact: true,
+    });
+    await upload.setInputFiles({
+      name: a.name,
+      mimeType: "image/png",
+      buffer: aBytes,
+    });
+    const previewImage = editor.locator(".token-image-preview img");
+    await expect
+      .poll(() =>
+        previewImage.evaluate((node) => ({
+          complete: (node as HTMLImageElement).complete,
+          width: (node as HTMLImageElement).naturalWidth,
+        })),
+      )
+      .toEqual({ complete: true, width: 0 });
+    const alert = editor.locator(".token-image-generator").getByRole("alert");
+    await expect(alert).toHaveText(
+      "Не удалось загрузить предпросмотр. Выберите другое изображение или откройте редактор заново.",
+    );
+    await alert.scrollIntoViewIfNeeded();
+    const box = (await alert.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(
+      await alert.evaluate((node) => node.scrollWidth <= node.clientWidth + 1),
+    ).toBe(true);
+    await expect(editor).not.toContainText("private-error-details");
+    await capture(page, info, "damaged-source-message");
+    await upload.setInputFiles({
+      name: b.name,
+      mimeType: "image/png",
+      buffer: bBytes,
+    });
+    await expect.poll(() => fixture.heldUploads.length).toBe(1);
+    await fixture.acceptB();
+    const source = editor.getByRole("combobox", {
+      name: "Исходное изображение",
+      exact: true,
+    });
+    await expect(source).toHaveValue(b.id);
+    await imageDecoded(previewImage, 40, 60);
+    await expect(alert).toHaveCount(0);
+    damaged = false;
+    await source.selectOption(a.id);
+    await imageDecoded(previewImage, 60, 40);
+    await expect(alert).toHaveCount(0);
+    expect(fixture.writes).toHaveLength(2);
+    expect(fixture.writes.every((write) => write.upload)).toBe(true);
+    expect(fixture.unexpected).toEqual([]);
+    expect(fixture.pageErrors).toEqual([]);
+  });
+}
+
 test("UIX-611 real App selects uploaded portrait B once and saves only generated TOKEN", async ({
   page,
 }, testInfo) => {

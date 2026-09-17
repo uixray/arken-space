@@ -308,3 +308,25 @@ assertion after called-once assertion. Final web/E2E types and scoped lint/diffP
 Evidence: russian-entry-errors in current artifact root. Own Vite stopped. No full
 suite/build/CI/push/deploy or premature UIX-417 closure; all-screen criterion remains
 broader than this copy pool. Protected selection recovery file unchanged.
+
+## 2026-09-17 — native media failures and recovery
+
+Local audio preview: four unique Chrome/Firefox GM cases at1280/360 passed
+across two runs (Chrome reused; Firefox9.6s). Native media404 produces Russian
+recovery copy without raw response details; close/reopen with valid synthetic OGG
+clears the error and reaches readyState>=2 without playback or shared music
+commands. Removed an invalid PLAYER scenario: Files is intentionally GM-only.
+Evidence: russian-media-errors; local test commit462c184. Not server acceptance.
+
+Token source preview: actual browser decoding of damaged PNG confirmed a silent
+empty frame (RED Chrome1280). Added a Russian alert suggesting a different source
+or reopening the editor. Failure state is keyed by asset ID and URL; successful
+load clears that source's failure. Source switching remounts the image, without
+changing crop, generation, save or authorization contracts. Four Chrome/Firefox
+1280/360 recovery casesPASS16.7s: damagedA → validB → recoveredA, exactly the two
+intentional mocked uploads, no generation/definition writes or page errors.
+Compact Firefox screenshot inspected: message fully visible and wrapped.
+Existing generator component4/4PASS; web/E2E types, scoped lint and diffcheckPASS.
+One build2.91s; four served HTML/JS/CSS hashes matched local bundle. Evidence:
+token-preview-errors. HTTP/socket boundaries mocked, not real server crop output,
+device acceptance or full UIX-417 completion. No push/deploy/Linear writes.

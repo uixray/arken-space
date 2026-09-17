@@ -138,6 +138,9 @@ export function TokenImageGenerator({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [failedPreviews, setFailedPreviews] = useState<Set<string>>(
+    () => new Set(),
+  );
   const dragStart = useRef<{
     pointerId: number;
     x: number;
@@ -149,6 +152,7 @@ export function TokenImageGenerator({
   const consumedUploadId = useRef<string | undefined>(undefined);
   const source =
     imageAssets.find((asset) => asset.id === sourceAssetId) ?? null;
+  const previewKey = source ? `${source.id}:${source.url}` : "";
   const sourceDimensions = {
     width:
       source?.width && Number.isFinite(source.width) && source.width > 0
@@ -407,10 +411,33 @@ export function TokenImageGenerator({
         }}
       >
         {source && (
-          <img src={source.url} alt="" draggable={false} style={imageStyle} />
+          <img
+            key={previewKey}
+            src={source.url}
+            alt=""
+            draggable={false}
+            style={imageStyle}
+            onError={() =>
+              setFailedPreviews((previous) => new Set(previous).add(previewKey))
+            }
+            onLoad={() =>
+              setFailedPreviews((previous) => {
+                if (!previous.has(previewKey)) return previous;
+                const next = new Set(previous);
+                next.delete(previewKey);
+                return next;
+              })
+            }
+          />
         )}
         <TokenFramePreview frame={transform.frame} />
       </div>
+      {source && failedPreviews.has(previewKey) && (
+        <p className="field-error" role="alert">
+          Не удалось загрузить предпросмотр. Выберите другое изображение или
+          откройте редактор заново.
+        </p>
+      )}
       <p className="token-image-generator__hint">{copy.hint}</p>
       <div className="token-image-generator__zoom">
         <span className="token-image-generator__zoom-heading">
