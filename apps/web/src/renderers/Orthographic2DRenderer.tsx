@@ -2127,6 +2127,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               revision: token.revision,
             },
           }));
+          // A mixed/group move is committed atomically by the bulk command.
+          // Relaying only its dragged token would leave other clients with a
+          // partial preview that has no matching token:moved on rejection.
+          if (
+            selectedTokenIds.includes(token.id) &&
+            selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+            props.onBulkMove
+          )
+            return;
           props.socket?.emit("token:moving", {
             actionId: crypto.randomUUID(),
             tokenId: token.id,
@@ -2152,6 +2161,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             props.onBulkMove
           ) {
             event.target.position({ x, y });
+            // App owns the group projection from this point on. A single-token
+            // drag override must not survive its acknowledgement or rollback.
+            setDragPositions((current) => {
+              const next = { ...current };
+              delete next[token.id];
+              return next;
+            });
             enqueueMove({ x: x - token.x, y: y - token.y });
             return;
           }

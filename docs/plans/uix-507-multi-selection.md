@@ -342,3 +342,33 @@ Web/E2E types, scoped lint, formatting and diff checks pass. Protected untracked
 selection-recovery.spec.ts remains unchanged. No full suite/build/CI, production
 or Linear write. Original connected backend rejection/recovery and multiplayer
 acceptance remain open. SCENE_REGION stays dormant, not enabled just for a test.
+
+### 2026-09-17 — connected mixed-move rejection and retry
+
+The real isolated GM/PLAYER gate exposed a renderer defect missed by canonical
+API assertions: a rejected mixed drag retained the dragged token's local
+position at its unchanged revision. Remounting the Konva Stage did not clear
+that renderer state, so a fresh gesture at the canonical position missed the
+visually displaced token. The same gesture also relayed a single-token preview
+to the observer without a compensating token:moved after bulk rejection.
+
+The bulk handoff now deletes the single-token drag override; App's group
+projection owns acknowledgement and rollback. Mixed/group drags do not relay
+the unrelated single-token preview. Ordinary single-token dragging is unchanged.
+
+New opt-in selection-authority-live.spec.ts uses a fresh isolated database and
+two real browser sessions. Only request dispatch is delayed to create a genuine
+revision conflict; responses and snapshots are not mocked. It checks atomic409,
+fresh mixed retry at the original location with the updated drawing revision,
+GM rendered position and live convergence, then controller revocation, UI
+selection pruning and atomic403 on an explicit unauthorized mixed request.
+The protected untracked selection-recovery.spec.ts is not part of this change.
+
+Initial native worker crash and test's incorrect bootstrap wait are retained
+as harness failures, not product failures. Corrected retry reproduced the
+stale-position defect; the first fixed run passed both Chrome and Firefox.
+Final strengthened gate: 2/2 PASS30.5s, Chrome/Firefox, one worker. Targeted queue,
+drag guard and projection tests: 34/34 PASS1.30s. Web/E2E types, scoped lint,
+format and diff checks pass. Receipts are recorded in selection-live-gate/
+checkpoint.md under the current visualization artifact root.
+No production, full suite, CI, Linear write or whole-issue closure is implied.
