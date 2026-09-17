@@ -216,7 +216,13 @@ test("UIX-293 real GM replacement reaches connected player and survives reload",
   }
 });
 
-for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
+for (const kind of [
+  "MAP",
+  "TOKEN",
+  "PORTRAIT",
+  "GALLERY",
+  "RESOURCE",
+] as const) {
   test(`UIX-293 real ${kind} replacement changes connected player pixels and retains links`, async ({
     page,
     browser,
@@ -245,7 +251,7 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
     const initial = await snapshot(page);
     const scene = initial.scenes.find((s) => s.active)!;
     const upload = await page.request.post(
-      `/api/assets?kind=${kind === "GALLERY" ? "PORTRAIT" : kind}`,
+      `/api/assets?kind=${kind === "GALLERY" || kind === "RESOURCE" ? "PORTRAIT" : kind}`,
       {
         headers: { "x-action-id": randomUUID() },
         multipart: {
@@ -296,6 +302,26 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
             actionId: randomUUID(),
             revision: character.revision,
             portraitAssetId: asset.id,
+          },
+        },
+      );
+      await expect(linked).toBeOK();
+    } else if (kind === "RESOURCE") {
+      const character = initial.characters[0];
+      const linked = await page.request.patch(
+        `/api/characters/${character.id}/counters`,
+        {
+          data: {
+            actionId: randomUUID(),
+            revision: character.revision,
+            resources: {
+              Заря: {
+                current: 3,
+                maximum: 5,
+                recoverable: true,
+                imageAssetId: asset.id,
+              },
+            },
           },
         },
       );
@@ -356,6 +382,29 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
         exact: true,
       });
       const galleryImage = player.locator(".character-media-viewer img");
+      const resourceTile = player
+        .getByRole("group", { name: "Изображение ресурса Заря", exact: true })
+        .getByRole("button", { name: asset.name, exact: true });
+      const resourceImage = resourceTile.locator("img");
+      const openResource = async () => {
+        await openWorkspaceSection(player, "Персонажи");
+        await expect(resourceTile).toHaveAttribute("aria-pressed", "true");
+        await resourceImage.scrollIntoViewIfNeeded();
+        await expect(resourceImage).toBeVisible();
+        await expect
+          .poll(() =>
+            resourceImage.evaluate((el) => {
+              const box = el.getBoundingClientRect();
+              return (
+                document.elementFromPoint(
+                  box.x + box.width / 2,
+                  box.y + box.height / 2,
+                ) === el
+              );
+            }),
+          )
+          .toBe(true);
+      };
       const openGallery = async () => {
         await openWorkspaceSection(player, "Персонажи");
         await player
@@ -399,12 +448,15 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
       };
       if (kind === "PORTRAIT") await openPortrait();
       if (kind === "GALLERY") await openGallery();
+      if (kind === "RESOURCE") await openResource();
       const consumer =
         kind === "PORTRAIT"
           ? portrait
           : kind === "GALLERY"
             ? galleryImage
-            : player.locator(".map-viewport");
+            : kind === "RESOURCE"
+              ? resourceImage
+              : player.locator(".map-viewport");
       const minimumPixels = kind === "GALLERY" ? 8 : 1000;
       const pixels = () =>
         consumer.evaluate((viewport) => {
@@ -550,6 +602,15 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
           after.characters.find((c) => c.id === initial.characters[0].id),
         ).toEqual(original);
         await expect(portrait).toHaveAttribute("src", result.asset.url);
+      } else if (kind === "RESOURCE") {
+        const original = before.characters.find(
+          (c) => c.id === initial.characters[0].id,
+        );
+        expect(original?.resources.Заря?.imageAssetId).toBe(asset.id);
+        expect(
+          after.characters.find((c) => c.id === initial.characters[0].id),
+        ).toEqual(original);
+        await expect(resourceImage).toHaveAttribute("src", result.asset.url);
       } else {
         await expect(galleryImage).toHaveAttribute("src", result.asset.url);
         await expect(
@@ -576,6 +637,7 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
       await player.locator(".map-viewport").press("f");
       if (kind === "PORTRAIT") await openPortrait();
       if (kind === "GALLERY") await openGallery();
+      if (kind === "RESOURCE") await openResource();
       await expect
         .poll(async () => (await pixels()).magenta)
         .toBeGreaterThan(minimumPixels);
@@ -589,14 +651,16 @@ for (const kind of ["MAP", "TOKEN", "PORTRAIT", "GALLERY"] as const) {
           before.tokens.find((t) => t.id === token!.id),
         );
       }
-      if (kind === "PORTRAIT") {
+      if (kind === "PORTRAIT" || kind === "RESOURCE") {
         const reloaded = await snapshot(player);
         expect(
           reloaded.characters.find((c) => c.id === initial.characters[0].id),
         ).toEqual(
           before.characters.find((c) => c.id === initial.characters[0].id),
         );
-        await expect(portrait).toHaveAttribute("src", result.asset.url);
+        await expect(
+          kind === "PORTRAIT" ? portrait : resourceImage,
+        ).toHaveAttribute("src", result.asset.url);
       }
       if (kind === "GALLERY")
         expect(await readGallery()).toEqual(galleryBefore);

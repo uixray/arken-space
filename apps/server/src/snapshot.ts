@@ -117,6 +117,36 @@ export function visibleCharacterMediaAssetIds(
   return visible;
 }
 
+interface SnapshotResourceCharacter {
+  campaignId: string;
+  resources: unknown;
+}
+
+/** Extract resource artwork only after character visibility has been applied. */
+export function visibleCharacterResourceAssetIds(
+  campaignId: string,
+  characters: readonly SnapshotResourceCharacter[],
+): Set<string> {
+  const visible = new Set<string>();
+  for (const character of characters) {
+    if (
+      character.campaignId !== campaignId ||
+      !character.resources ||
+      typeof character.resources !== "object" ||
+      Array.isArray(character.resources)
+    )
+      continue;
+    for (const resource of Object.values(character.resources)) {
+      if (!resource || typeof resource !== "object" || Array.isArray(resource))
+        continue;
+      const assetId = (resource as { imageAssetId?: unknown }).imageAssetId;
+      if (typeof assetId === "string" && assetId.length > 0)
+        visible.add(assetId);
+    }
+  }
+  return visible;
+}
+
 /** Заведомо несуществующая сцена: см. `canvasSceneIds` ниже. */
 const NO_SCENE = "00000000-0000-0000-0000-000000000000";
 
@@ -677,6 +707,11 @@ export async function buildSnapshot(
     if (character.portraitAssetId)
       visibleAssetIds.add(character.portraitAssetId);
   }
+  for (const assetId of visibleCharacterResourceAssetIds(
+    auth.campaignId,
+    visibleCharacters,
+  ))
+    visibleAssetIds.add(assetId);
   /**
    * UIX-454 — «кто это бросил» в ленте.
    *

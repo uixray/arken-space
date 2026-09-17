@@ -585,6 +585,82 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(denied.statusCode).toBe(403);
   });
 
+  it("blocks deletion of character resource artwork and replacement preserves the resource link", async () => {
+    const [character] = await db
+      .insert(schema.characters)
+      .values({
+        campaignId: ids.campaign,
+        name: "Resource artwork character",
+        ownerMembershipId: ids.player,
+        resources: {
+          mana: {
+            current: 3,
+            maximum: 5,
+            imageAssetId: ids.unused,
+          },
+        },
+      })
+      .returning();
+
+    const usage = await app.inject({
+      method: "GET",
+      url: `/api/assets/${ids.unused}/usage`,
+      headers: headers(secrets.gm),
+    });
+    expect(usage.statusCode, usage.body).toBe(200);
+    expect(usage.json()).toMatchObject({
+      inUse: true,
+      canDelete: false,
+      usages: [
+        {
+          kind: "CHARACTER_RESOURCE",
+          entityId: character!.id,
+          label: "Resource artwork character",
+          location: "Ресурс персонажа",
+          visibility: "PARTICIPANT",
+          deletionPolicy: "BLOCK",
+        },
+      ],
+    });
+
+    const blocked = await app.inject({
+      method: "DELETE",
+      url: `/api/assets/${ids.unused}`,
+      headers: headers(secrets.gm),
+    });
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json()).toMatchObject({
+      error: "ASSET_IN_USE",
+      usages: [{ kind: "CHARACTER_RESOURCE", entityId: character!.id }],
+    });
+
+    const before = await app.inject({
+      method: "GET",
+      url: `/api/assets/${ids.unused}/content`,
+      headers: headers(secrets.gm),
+    });
+    const form = multipartFile();
+    const replaced = await app.inject({
+      method: "PUT",
+      url: `/api/assets/${ids.unused}/content`,
+      headers: {
+        ...headers(secrets.gm),
+        "x-action-id": crypto.randomUUID(),
+        "if-match": before.headers.etag!,
+        "content-type": form.contentType,
+      },
+      payload: form.body,
+    });
+    expect(replaced.statusCode, replaced.body).toBe(200);
+    const [after] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, character!.id));
+    expect(after!.resources).toMatchObject({
+      mana: { imageAssetId: ids.unused },
+    });
+  });
+
   it("returns 409 for used content and deletes unused metadata plus blob", async () => {
     const blocked = await app.inject({
       method: "DELETE",

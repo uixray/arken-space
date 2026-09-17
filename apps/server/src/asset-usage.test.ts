@@ -37,6 +37,7 @@ describe("asset dependency registry", () => {
       "SCENE_BACKGROUND",
       "TOKEN_DEFINITION",
       "CHARACTER_PORTRAIT",
+      "CHARACTER_RESOURCE",
       "CHARACTER_MEDIA",
       "WORLD_MAP_BACKGROUND",
       "AUDIO_TRACK",

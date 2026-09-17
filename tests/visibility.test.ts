@@ -113,6 +113,40 @@ afterAll(async () => {
 });
 
 describe("role-filtered snapshots", () => {
+  it("projects resource artwork only from characters visible to the player", async () => {
+    const ownResourceAsset = crypto.randomUUID();
+    const otherResourceAsset = crypto.randomUUID();
+    const foreignCampaign = crypto.randomUUID();
+    const foreignGm = crypto.randomUUID();
+    const foreignResourceAsset = crypto.randomUUID();
+    await database.exec(`
+      insert into campaigns (id, name) values ('${foreignCampaign}', 'Foreign');
+      insert into memberships (id, campaign_id, role, display_name) values
+        ('${foreignGm}', '${foreignCampaign}', 'GM', 'Foreign GM');
+      insert into assets (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes) values
+        ('${ownResourceAsset}', '${ids.campaign}', '${ids.gm}', 'IMAGE', 'Own resource', 'own-resource.webp', 'image/webp', 10),
+        ('${otherResourceAsset}', '${ids.campaign}', '${ids.gm}', 'IMAGE', 'Other resource', 'other-resource.webp', 'image/webp', 10),
+        ('${foreignResourceAsset}', '${foreignCampaign}', '${foreignGm}', 'IMAGE', 'Foreign resource', 'foreign-resource.webp', 'image/webp', 10);
+      update characters
+      set resources = jsonb_build_object('mana', jsonb_build_object('current', 2, 'imageAssetId', '${ownResourceAsset}'))
+      where id = '${ids.playerCharacter}';
+      update characters
+      set resources = jsonb_build_object('mana', jsonb_build_object('current', 2, 'imageAssetId', '${otherResourceAsset}'))
+      where id = '${ids.otherCharacter}';
+    `);
+    const db = drizzle(database, { schema });
+    const snapshot = await buildSnapshot(db as never, {
+      membershipId: ids.player,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Player",
+    });
+    const assetIds = snapshot.assets.map((asset) => asset.id);
+    expect(assetIds).toContain(ownResourceAsset);
+    expect(assetIds).not.toContain(otherResourceAsset);
+    expect(assetIds).not.toContain(foreignResourceAsset);
+  });
+
   it("keeps malformed stored dice history readable", async () => {
     await database.exec(`
       update chat_messages

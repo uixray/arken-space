@@ -281,3 +281,31 @@ PostgreSQL service and protected selection test untouched. No CI/fullsuite,
 publication, production or Linear writes. This new runtime supersedes ecf66e6
 for future exact-candidate checks; previous broad menu results remain historical.
 Resource/world-content consumers and private journal-upload model are separate.
+
+### Resource image integrity — 2026-09-17
+
+Resource artwork is now included in player snapshots only through already-visible
+characters (with a campaign boundary guard). A CHARACTER_RESOURCE dependency is
+registered, shown as a character resource in usage, and blocks deletion. Replacing
+the canonical asset preserves the JSON imageAssetId and all character counters.
+
+Evidence: focused helper/registry 13 PASS; real PGlite snapshot ACL 1 PASS
+(18 unrelated skipped), HTTP lifecycle 1 PASS (7 unrelated skipped): own vs other
+character/campaign projection, usage, DELETE 409, replacement preserves reference.
+These are the bounded backend agent results, not an all-API suite claim.
+
+Fresh built runtime plus real isolated PG18/API/socket: RESOURCE replacement
+Chrome and Firefox, 2/2 PASS, 24.8s, one worker, retries0. Invited owner sees the
+selected image tile; rendered decoded pixels change cyan to magenta without
+reload, versioned URL and delivered WebP bytes change; entire character DTO stays
+equal and the changed image survives reload. Four served runtime hashes verified.
+First attempt failed before bootstrap (loopback connection reset after successful
+authentication), not an image assertion; retained separately, no suppression or
+weakened assertions. No claim of browser red-to-green reproduction of the original
+resource defect: backend changes were already present for this browser gate.
+
+Artifacts: resource-consumer-live under the current visualization directory,
+manifest.json, candidate.diff, build.log, initial-results.json and
+transport-check-results.json. World-content consumers and the distinct private
+journal storage scope still remain; this does not complete all UIX-293 criteria.
+No production, push, CI rerun or Linear write.
