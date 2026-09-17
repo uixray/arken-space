@@ -271,3 +271,28 @@ results, diagnostics and screenshots. Own Vite stopped. Scoped local UIX-502
 acceptance remains PASS for this candidate; backend ACL, arbitrary-depth menus,
 physical devices and full UIX-644 are not inferred. Linear mutation was not
 attempted: previous external-write permission remains unresolved. No deploy.
+
+## 2026-09-17 — Review gate after popup sizing and modal header changes
+
+Live original eight criteria reread; issue remains In Review. Revalidation was
+triggered by actual shared code changes after ca7b579: popup sizing452f5f1 and
+modal heading1458f43, not by a chat transition. Current sourcee20c77a:
+18/18 existing connected browser cases passed, Chrome/Firefox, one worker,
+zero retries/skips. Same eight owner, six closing and four real App token-picker
+cases; existing App tests additionally retain their first-open resize assertions.
+No product changes, test weakening, full suite, build or remote CI in this pool.
+
+Eight owner diagnostics have zero page errors, unexpected API requests, popup
+focus violations and leftover layers. Compact Chrome screenshot inspected:
+menu is above the inline picker, within the modal/viewport. Original layering,
+keyboard, outside dismissal and focus-return criteria remain locally accepted.
+This uses the dedicated development fixture, not a production-dist or backend
+acceptance claim. Artifacts: modal-review-final/results.json and owner-summary.json.
+
+Visual inspection also found a separate UIX-644 gap: narrow character menu
+renders the action «Создать персонажа» as «Создать пе…». Full text exists in DOM,
+so the passing layer/hit tests do not prove label readability. Follow up with a
+rendered-text regression and review shared popup content sizing, preserving the
+zoom-width fix and viewport bound. Do not silently count whole UIX-644 as done.
+Owned Vite stopped; protected selection recovery file unchanged. Existing Linear
+write/publication gates unchanged, no status mutation or deployment.
