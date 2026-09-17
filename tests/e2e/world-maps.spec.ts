@@ -517,6 +517,7 @@ for (const width of [1280, 360]) {
       exact: true,
     });
     await expect(party).toBeVisible();
+    await expect(marker).toHaveAccessibleDescription("Текущая позиция группы");
     const partyBox = await party.boundingBox();
     const captionBox = await marker
       .locator(":scope > span:last-child")

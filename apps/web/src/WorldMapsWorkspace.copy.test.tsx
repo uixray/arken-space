@@ -159,6 +159,10 @@ describe("world map localized display copy", () => {
       expect(location).toHaveStyle({ left: "10%", top: "30%" });
       // The party badge shares the location anchor without covering its label.
       expect(party.closest("button")).toBe(location);
+      expect(location).toHaveAccessibleDescription("Текущая позиция группы");
+      expect(
+        screen.getByRole("button", { name: "Локация: Neverwinter 0" }),
+      ).not.toHaveAttribute("aria-describedby");
     },
   );
 

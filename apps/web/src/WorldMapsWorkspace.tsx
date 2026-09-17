@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type {
   GameSnapshot,
   WorldMapDto,
@@ -116,6 +116,7 @@ export function WorldMapsWorkspace({
 }) {
   const isGm = snapshot.me.role === "GM";
   const [mapId, setMapId] = useState<string | null>(null);
+  const partyDescriptionId = useId();
   const [locationId, setLocationId] = useState<string | null>(null);
   const [editor, setEditor] = useState<"NEW" | WorldMapLocationDto | null>(
     null,
@@ -460,6 +461,11 @@ export function WorldMapsWorkspace({
                       }}
                       aria-pressed={location.id === selectedLocation?.id}
                       aria-label={`Локация: ${location.name}`}
+                      aria-describedby={
+                        partyLocation?.id === location.id
+                          ? partyDescriptionId
+                          : undefined
+                      }
                       onClick={() => {
                         setLocationId(location.id);
                         setStatus(`Выбрана локация: ${location.name}.`);
@@ -469,10 +475,14 @@ export function WorldMapsWorkspace({
                       {partyLocation?.id === location.id && (
                         <span
                           className="world-map-party-marker"
+                          id={partyDescriptionId}
                           aria-label="Текущая позиция группы"
                           role="img"
                         >
                           <AppIcon icon={PartyLocationIcon} size={24} />
+                          <span className="visually-hidden">
+                            Текущая позиция группы
+                          </span>
                         </span>
                       )}
                       <span>{location.name}</span>

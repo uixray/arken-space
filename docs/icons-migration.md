@@ -11,6 +11,45 @@
 и не доказательство отсутствия иных мест. Обычный текст, формулы, хоткеи,
 пользовательские emoji/стикеры и игровые данные сохраняются.
 
+## Текущая сводка приёмки — 2026-09-17
+
+Исторические «browser не выполнен» ниже **не означают отсутствие новых
+проверок**: они сохранены как исходная карта. Для продолжения сначала используйте
+эту сводку и подробные receipts в датированных разделах, не повторяйте миграцию.
+Все перечисленные отчёты прочитаны заново; в каждом unexpected/skipped/flaky=0.
+Это разные проверенные ревизии, **не единый прогон всего продукта на HEAD**.
+Не складывайте количество случаев: connected gallery gate включает повтор
+проверок листания. Ни один scoped PASS не закрывает всю строку исходных AC.
+
+| Область | Последняя адресная проверка | Подтверждено | Не доказано этой проверкой |
+| --- | --- | --- | --- |
+| Поля характеристик | character-stat-controls/enabled-hit-results.json, 8 | Имена полей/действий, размеры, отмена диалогов и возврат фокуса | Сохранение на сервере, все темы |
+| Ресурсы | resource-counter-icons/final-results.json, 8 | Граничные disabled, SVG, Tab, compact | Изменение значений/сервер, read-only персонаж |
+| Список персонажей | character-rail-icons/fixed-results.json, 8 | Узкая колонка без переполнения, имена, переключение | Архивация/восстановление данных |
+| Просмотр галереи | character-gallery-navigation/fixed-results.json, 8 | Повторное Enter/стрелки и возврат фокуса | Серверный ACL |
+| Ожидание галереи | character-gallery-busy/fixed-results.json, 16 | Все строки disabled, восстановление после отказа, регрессия просмотра | Атомарная перестановка на сервере/между клиентами |
+| Размеры иллюстраций | character-gallery-fit/fixed-results.json, 8 | Две пропорции, длинная подпись, доступность навигации | Все кодеки/высоты viewport |
+| Приватные броски | quick-roll-privacy-icons/baseline-results.json, 8 | Общее состояние и предупреждение, keyboard disclosure | Доставка броска/права получателей |
+| Галерея мира | world-media-controls/fixed-results.json, 4 | GM desktop/compact, 44px, SVG, подписи | PLAYER editor не существует; мутации не проверены |
+| Статусы участников | participant-status-icons/fixed-results.json, 4 | Socket-fixture состояния, нецветовые различия, фокус | Реальная доставка presence с сервера |
+| Метки мира | world-map-markers/direct-icons-results.json, 4 | Центральная метка, отсутствие перекрытия, выбор | Края карты/длинные имена, полная AT-приёмка |
+
+Корень receipts:
+`C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07`.
+Точные SHA/runtime и changed-files находятся в checkpoint/manifest каждой папки.
+
+**Исходные общие gates остаются открыты:** визуальные состояния всех остальных
+контролов, все поддерживаемые темы и контраст, полная runtime-сверка inventory,
+проверка итогового кандидата без CDN/полного каталога и интеграционный gate.
+Shell contrast/keyboard/disabled имеют собственные более ранние receipts ниже,
+не распространяющиеся автоматически на эти новые области. PLAYER/GM ограничения
+не обходить ради одинаковой матрицы. Ручная/физическая приёмка не заменяется
+синтетическими сессиями. UIX-645 остаётся In Progress; Linear не изменён.
+
+На текущем source дополнительно прошли28 проверок icon-policy/source-closure,
+включая отрицательные примеры. Они доказывают заявленный статический контракт,
+но не отсутствие всех визуальных дефектов и не runtime-код внешних библиотек.
+
 ## Карта интегрированной миграции
 
 | Контрол                                                        | Прежнее представление       | Named Lucide                                                       | Проверка                                                                          |
@@ -375,6 +414,25 @@ independent-coordinate unit expectation replaced by shared-anchor containment.
 One build1.65s/four served hashes, web/E2E types/lint/format/diff PASS. Evidence:
 world-map-markers/{baseline-results.json,direct-icons-results.json,checkpoint.md}.
 Not all map-edge/long-label/theme/contrast acceptance; no full suite/CI/publication.
+
+## 2026-09-17 — party description and evidence consolidation
+
+Independent read-only Sol review found the nested named party image did not
+guarantee an announcement when focusing its explicitly named location button.
+Two new GM/PLAYER component assertions were RED: accessible description empty.
+The current location now describes itself through a stable useId reference to
+the badge's actual visually-hidden text. Other locations have no description;
+location names/coordinates and decorative SVGs are unchanged. Referencing only
+the badge aria-label was insufficient in the DOM description algorithm; that
+intermediate attempt failed and was replaced with real text, not a weaker test.
+
+Final33/33 targeted component/source-policy/closure tests PASS3.07s; browser4/4
+PASS15.1s Chrome/Firefox GM1280/360 asserts the computed description alongside
+existing nonoverlap, SVG, hit and keyboard selection checks. One build1.77s/four
+served hashes; web/E2E types/lint/format/diff PASS. Actual screen-reader device
+acceptance remains distinct. Evidence: world-marker-description/{fixed-results.json,
+manifest.json,checkpoint.md}. Top-level coverage index reconciles ten earlier
+reports with their scope/limits rather than claiming one all-green HEAD run.
 
 ## 2026-09-17 — shared quick-roll privacy visual gate
 
