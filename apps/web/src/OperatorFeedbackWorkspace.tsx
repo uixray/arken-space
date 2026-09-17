@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import {
@@ -43,29 +43,43 @@ export const OperatorFeedbackWorkspace = memo(
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const scope = useRef(0);
+    const image = useRef<string | null>(null);
 
     const closeImage = useCallback(() => {
-      setImageUrl((current) => {
-        if (current) URL.revokeObjectURL(current);
-        return null;
-      });
+      if (image.current) URL.revokeObjectURL(image.current);
+      image.current = null;
+      setImageUrl(null);
     }, []);
     const clearSensitive = useCallback(() => {
+      scope.current += 1;
       setDetail(null);
+      setBusy(false);
       closeImage();
     }, [closeImage]);
     const refreshList = useCallback(async () => {
+      const requestScope = scope.current;
       const response = await fetchFeedbackList();
-      setItems(response.items);
+      if (requestScope === scope.current) setItems(response.items);
     }, []);
-    useEffect(() => () => closeImage(), [closeImage]);
+    useEffect(
+      () => () => {
+        scope.current += 1;
+        if (image.current) URL.revokeObjectURL(image.current);
+        image.current = null;
+      },
+      [],
+    );
     useEffect(() => {
       if (!open) {
         clearSensitive();
+        setItems([]);
         return;
       }
       setError("");
+      const requestScope = scope.current;
       void refreshList().catch(() => {
+        if (requestScope !== scope.current) return;
         setError("Доступ к обратной связи потерян.");
         clearSensitive();
         onClose();
@@ -74,15 +88,17 @@ export const OperatorFeedbackWorkspace = memo(
 
     async function select(id: string) {
       clearSensitive();
+      const requestScope = scope.current;
       setError("");
       setNotice("");
       setBusy(true);
       try {
-        setDetail(await fetchFeedbackDetail(id));
+        const next = await fetchFeedbackDetail(id);
+        if (requestScope === scope.current) setDetail(next);
       } catch {
-        setError(safeError);
+        if (requestScope === scope.current) setError(safeError);
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
     async function transition(status: FeedbackStatus) {
@@ -93,64 +109,81 @@ export const OperatorFeedbackWorkspace = memo(
         return;
       }
       const id = detail.id;
+      const requestScope = scope.current;
       setBusy(true);
       setError("");
       setNotice("");
       closeImage();
       try {
         await updateFeedback(id, payload);
-        setDetail(await fetchFeedbackDetail(id));
+        if (requestScope !== scope.current) return;
+        const next = await fetchFeedbackDetail(id);
+        if (requestScope !== scope.current) return;
+        setDetail(next);
         await refreshList();
+        if (requestScope !== scope.current) return;
         setLinearKey("");
         setLinearUrl("");
       } catch {
+        if (requestScope !== scope.current) return;
         setDetail(null);
         setError(safeError);
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
     async function reveal() {
       if (!detail) return;
+      const requestScope = scope.current;
       setBusy(true);
       setError("");
       closeImage();
       try {
-        setDetail(await fetchFeedbackDetail(detail.id, true));
+        const next = await fetchFeedbackDetail(detail.id, true);
+        if (requestScope === scope.current) setDetail(next);
       } catch {
+        if (requestScope !== scope.current) return;
         setDetail(null);
         setError(safeError);
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
     async function copy() {
       if (!detail) return;
+      const requestScope = scope.current;
       setBusy(true);
       setError("");
       setNotice("");
       try {
         const data = await fetchRedactedExport(detail.id);
+        if (requestScope !== scope.current) return;
         await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-        setNotice("Обезличенная копия скопирована.");
+        if (requestScope === scope.current)
+          setNotice("Обезличенная копия скопирована.");
       } catch {
-        setError("Не удалось скопировать. Попробуйте снова.");
+        if (requestScope === scope.current)
+          setError("Не удалось скопировать. Попробуйте снова.");
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
     async function openAttachment(attachmentId: string) {
       if (!detail) return;
+      const requestScope = scope.current;
       closeImage();
       setBusy(true);
       setError("");
       try {
         const blob = await fetchAttachment(detail.id, attachmentId);
-        setImageUrl(URL.createObjectURL(blob));
+        if (requestScope !== scope.current) return;
+        image.current = URL.createObjectURL(blob);
+        setImageUrl(image.current);
       } catch {
-        setError("Не удалось открыть изображение.");
+        if (requestScope === scope.current)
+          setError("Не удалось открыть изображение.");
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
 
