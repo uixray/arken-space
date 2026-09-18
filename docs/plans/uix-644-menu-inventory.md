@@ -1171,3 +1171,43 @@ was captured before commit and its revision names the parent168508e; checkpoint
 records the final commit and exact App diff. This new dist supersedes the old
 bundle only for subsequent checks requiring current runtime. No CI/publish/deploy
 or Linear write; own preview stopped, protected untracked selection test intact.
+
+## Exact-main ledger reconciliation — 2026-09-18
+
+Reconciled the unchanged static registry against released main
+`cce56397a6b1e91fcf2fc6951e506d64b62647cb` and GitHub Actions E2E run
+`35388600465`. The four retained JSON reports under
+`release-2026-09-18/main-cce5639-e2e` show, in both Chromium and Firefox:
+`modal-owner-contract` 4, `modal-owner-close-lifecycle` 3,
+`workspace-select-escape` 9, `select-element-resize` 2, `token-generator` 22,
+`operator-feedback-list` 2 and `operator-feedback-close` 2 — 44 per browser,
+88 total, zero bad. This refreshes only those seven specs; it does not inspect
+browser-owned Firefox popup UI, physical devices or backend persistence.
+
+All 37 static buckets / 76 JSX occurrences remain the full acceptance
+denominator: 26 PASS, 2 FAIL and 9 BLOCKED. Eight BLOCKED buckets (16
+occurrences) carry applicability uncertainty for mixed inactive, hidden, legacy
+or preview-only code. Some of those buckets also contain reachable siblings, so
+none is silently waived or excluded as a whole. A derived 29-bucket / 60-
+occurrence subset (26 PASS, 2 FAIL, 1 BLOCKED) is useful only for planning work
+that is not applicability-blocked; it is **not** the runtime or acceptance
+denominator. Every applicability-blocked row must remain explicit and be
+reconciled if reachability changes or its reachable sibling lacks evidence.
+
+The two FAIL rows are one unresolved historical defect: reachable caller
+`TokenPalette.tsx::tag:FormSelect` and shared implementation
+`GravityFormControls.tsx::tag:Select`. Exact-main green non-reproduction is not a
+causal red-to-green fix for the owner-06 `ResizeObserver loop completed with
+undelivered notifications` trace. Do not repeat unchanged warm/width/font
+diagnostics; resume only with a fresh failing trace or distinct transition. The
+one live BLOCKED bucket is `OperatorFeedbackFilters.tsx::tag:select`: a headed,
+supported Firefox environment must verify the browser-owned native popup. The
+plain-HTML headless limitation is not an App defect and must not prompt a custom
+select rewrite.
+
+Historical `cursorOwnerNaming` FAIL evidence remains raw and is explicitly
+marked superseded by `cursorStableObserver`; current CursorPresenceMenu remains
+PASS. Overall UIX-644 acceptance stays **INCOMPLETE**. No source/tests, browser
+runs, Linear state, deployment or protected untracked selection-recovery file
+changed. Next: headed Firefox native-popup acceptance; observer work waits for
+new failing evidence rather than another blind replay.

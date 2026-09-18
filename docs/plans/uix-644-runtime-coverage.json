@@ -4,6 +4,47 @@
   "overallAcceptance": "INCOMPLETE",
   "statusMeaning": "PASS = only stated scope at evidence revision, not current HEAD/full issue. FAIL = unresolved known defect. BLOCKED = evidence or applicability unresolved, not whole-project blocked.",
   "artifactBase": "C:/Users/UIXRay/.codex/visualizations/2026/09/16/01a0a7d5-b072-7022-8e9d-4538c0a92b07",
+  "reconciliation": {
+    "revision": "cce56397a6b1e91fcf2fc6951e506d64b62647cb",
+    "workflowRun": "35388600465",
+    "staticInventory": {
+      "buckets": 37,
+      "jsxOccurrences": 76
+    },
+    "fullAcceptanceDenominator": {
+      "buckets": 37,
+      "jsxOccurrences": 76,
+      "passBuckets": 26,
+      "failBuckets": 2,
+      "blockedBuckets": 9
+    },
+    "nonApplicabilityBlockedSubset": {
+      "buckets": 29,
+      "jsxOccurrences": 60,
+      "passBuckets": 26,
+      "failBuckets": 2,
+      "blockedBuckets": 1,
+      "note": "Derived planning subset only, not the full runtime or acceptance denominator. Some applicability-blocked buckets combine reachable siblings with inactive occurrences, so their whole bucket cannot be waived."
+    },
+    "applicabilityBlockedBuckets": [
+      "apps/web/src/sidebar/CharacterWorkspace.tsx::tag:FormSelect",
+      "apps/web/src/sidebar/ChatPanels.tsx::role:listbox",
+      "apps/web/src/sidebar/ChatPanels.tsx::tag:select",
+      "apps/web/src/sidebar/InitiativePanel.tsx::tag:details",
+      "apps/web/src/sidebar/SetupPanel.tsx::tag:FormSelect",
+      "apps/web/src/ui/FuturePoolDialogs.tsx::tag:Select",
+      "apps/web/src/ui/GravityFoundationPreview.tsx::tag:Popup",
+      "apps/web/src/ui/GravityFoundationPreview.tsx::tag:Select"
+    ],
+    "remaining": {
+      "singleRuntimeDefectRepresentedBy": [
+        "apps/web/src/sidebar/TokenPalette.tsx::tag:FormSelect",
+        "apps/web/src/ui/GravityFormControls.tsx::tag:Select"
+      ],
+      "manualEnvironmentBucket": "apps/web/src/OperatorFeedbackFilters.tsx::tag:select"
+    },
+    "scope": "Reconciliation preserves every static row and historical failure. The full acceptance denominator remains all37 buckets/76 occurrences:26PASS,2FAIL,9BLOCKED. Eight applicability-blocked buckets include mixed buckets with reachable siblings and are not N/A, waived or excluded from acceptance. The derived29/60 subset is planning information only. The two FAIL rows describe one unresolved ResizeObserver incident. The other live-environment BLOCKED row requires headed Firefox native-popup acceptance. Overall acceptance remains INCOMPLETE."
+  },
   "evidence": {
     "compactSectionsBreakpoint": {
       "status": "PASS",
@@ -57,7 +98,9 @@
       "status": "FAIL",
       "revision": "984c1fec452f2cfd09cc1645ab4fd52db5775d74",
       "artifact": "cursor-owner-navigation/owner-contract-results.json",
-      "scope": "Connected8-case matrix split across owner-contract-results.json and remaining-results.json:5PASS3FAIL. Named dialog/control relationship, two keyboard Journal/Map cycles, no revival and Escape focus assertions pass in both browsers; Firefox new360/640 cases fail on ResizeObserver telemetry, existing GM Chromium resize case also fails. Old d67d683 Firefox360 baseline independently reproduces two same errors. Naming fix is not observer repair; do not accept this gate or discard telemetry."
+      "scope": "Connected8-case matrix split across owner-contract-results.json and remaining-results.json:5PASS3FAIL. Named dialog/control relationship, two keyboard Journal/Map cycles, no revival and Escape focus assertions pass in both browsers; Firefox new360/640 cases fail on ResizeObserver telemetry, existing GM Chromium resize case also fails. Old d67d683 Firefox360 baseline independently reproduces two same errors. Naming fix is not observer repair; do not accept this historical gate or discard telemetry.",
+      "historical": true,
+      "supersededBy": "cursorStableObserver"
     },
     "token": {
       "status": "PASS",
@@ -173,6 +216,12 @@
       "artifact": "menu-followup-native/final-runtime-unchanged-results.json",
       "scope": "20/20PASS80.615s retained unchanged production bundle: character image callers8, world image callers4, music command ACK4, operator filters4. Real Home/End/arrows/Tab and Chromium native pointer-open/Escape-close. Firefox native popup axis explicitly unaccepted after plain-HTML headless baseline. No runtime patch retained."
     },
+    "exactMainCceMenuRegression": {
+      "status": "PASS",
+      "revision": "cce56397a6b1e91fcf2fc6951e506d64b62647cb",
+      "artifact": "release-2026-09-18/main-cce5639-e2e/{e2e-result-chromium-2,e2e-result-firefox-2}/e2e-report.json",
+      "scope": "GitHub Actions run35388600465 exact-main reports: Chromium and Firefox each PASS modal-owner-contract4, modal-owner-close-lifecycle3, workspace-select-escape9, select-element-resize2, token-generator22, operator-feedback-list2 and operator-feedback-close2:44 per browser,88 total,0 bad. This refreshes only assertions in those seven specs. It does not inspect browser-owned Firefox popup UI, prove physical devices/backend persistence, or turn non-reproduction of the historical TokenPalette ResizeObserver telemetry into a causal fix."
+    },
     "requestsBuilt": {
       "status": "PASS",
       "revision": "47c475a180caef231be246f1c28dc6cbec5ae405",
@@ -248,7 +297,11 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Authorized operator type/status native selects. Both browsers: hit-testing, focus, Home/End/arrows/Tab, no fetch before Apply, exact payloads. Chromium: native pointer-open/Escape-close and next Escape closes workspace. Headless Firefox native popup axis unaccepted; identical behavior reproduced on plain HTML without App.",
-      "evidence": ["operatorFilters", "menuFollowup"],
+      "evidence": [
+        "operatorFilters",
+        "menuFollowup",
+        "exactMainCceMenuRegression"
+      ],
       "next": "Verify native popup open/cancel in a supported Firefox environment; do not patch App from headless UA behavior or convert the selector to silence tests. Independent host authorization remains separate."
     },
     {
@@ -288,7 +341,7 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "One native source selector; desktop/narrow four cases. OS picker UI not inspected.",
-      "evidence": ["built"],
+      "evidence": ["built", "exactMainCceMenuRegression"],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -488,7 +541,12 @@
       "status": "FAIL",
       "classification": "reachable",
       "scope": "Outer image and modal character controls: first-open width-transition gate now also passes on5d7d548, but original modal ResizeObserver error is unresolved.",
-      "evidence": ["built", "ro", "tokenFirstOpenResize"],
+      "evidence": [
+        "built",
+        "ro",
+        "tokenFirstOpenResize",
+        "exactMainCceMenuRegression"
+      ],
       "next": "Capture offending observer at actual failure; do not repeat identical warm runs or filter client logs."
     },
     {
@@ -509,7 +567,7 @@
       "classification": "preview-only",
       "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
       "evidence": [],
-      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+      "next": "Preserve as BLOCKED in the full acceptance denominator; require reachability review if activated."
     },
     {
       "file": "apps/web/src/ui/GravityFormControls.tsx",
@@ -518,7 +576,7 @@
       "status": "FAIL",
       "classification": "shared-implementation",
       "scope": "Shared implementation, not another caller. Built tests and true zoom passed, unresolved original RO still prevents complete acceptance.",
-      "evidence": ["built", "ro"],
+      "evidence": ["built", "ro", "exactMainCceMenuRegression"],
       "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence."
     },
     {
@@ -529,7 +587,7 @@
       "classification": "preview-only",
       "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
       "evidence": [],
-      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+      "next": "Preserve as BLOCKED in the full acceptance denominator; require reachability review if activated."
     },
     {
       "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
@@ -539,7 +597,7 @@
       "classification": "preview-only",
       "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
       "evidence": [],
-      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+      "next": "Preserve as BLOCKED in the full acceptance denominator; require reachability review if activated."
     },
     {
       "file": "apps/web/src/ui/SceneManagerDialog.tsx",

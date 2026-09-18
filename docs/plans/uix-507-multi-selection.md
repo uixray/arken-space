@@ -1,5 +1,7 @@
 # UIX-507 — предсказуемое множественное выделение
 
+Текущая сверка исходных критериев: [19 сентября 2026](#closure-сверка--2026-09-19).
+
 > Разделы «Замер», «План» и первоначальный checkpoint ниже — исторический
 > срез, не текущий backlog. По решению владельца от 06.09 постоянные счётчики
 > выбранных объектов запрещены; количество и типы остаются только в
@@ -409,3 +411,108 @@ obsolete gameplay for acceptance. Its disposition remains open. Physical-device
 acceptance is not an original UIX-507 criterion and is not invented as a blocker.
 The unrelated menu observer failure belongs to its existing gate, not this one.
 No Linear status change: external-write gate remains unresolved. No publication.
+
+## Closure-сверка — 2026-09-19
+
+Источник критериев: read-only Linear UIX-507, все десять исходных пунктов,
+с учётом отмены постоянных счётчиков владельцем. Linear пока **In Review**;
+запись ранее отклонена и не повторяется через другой канал.
+
+Runtime baseline: released main `cce56397a6b1e91fcf2fc6951e506d64b62647cb`.
+Exact-main E2E [35388600465](https://github.com/uixray/arken-space/actions/runs/35388600465)
+содержит 58 PASS selection-cases и отдельно 8 PASS HUD/zoom-cases.
+Четыре opt-in live cases в этом CI пропущены, а не приняты.
+Их отдельный изолированный gate завершился **4/4 PASS**, 0 skipped/flaky/errors,
+76.311 s: Chromium/Firefox × token/drawing initiator, worker 1, retries 0.
+Тестовый HEAD `51a3cf9c5f6cef4ce97199475639bb9c29ef34df` отличается от released
+main только документацией в relevant runtime paths: перед gate Git diff для
+`apps/web/src`, `apps/server/src`, `packages` и live spec был пуст.
+Это **source-equivalent evidence**, не ложная маркировка запуска как exact cce.
+
+| №   | Исходный критерий                                   | Итог и достаточное доказательство                                                                                                         |
+| --- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Shift-toggle токенов и рисунков                     | PASS: pure selection helpers + exact-main GM/PLAYER flows; повторный Shift снимает объект.                                                |
+| 2   | Shift-marquee, пересечение объектов                 | PASS: geometry/reducer и browser marquee/cancel/repeat.                                                                                   |
+| 3   | PLAYER: visibility, fog, control, GM/locked/foreign | PASS: permission/eligibility/pruning tests; live revoke даёт 403 без частичной мутации.                                                   |
+| 4   | GM: editable targets, исключение MAP/locked         | PASS: map-objects, bulk eligibility и stale-confirmation browser cases.                                                                   |
+| 5   | Нет конфликтов с другими инструментами              | PASS: pan, token drag, Draw, rect/brush/polygon Fog, Ruler и context прошли exact-main; SCENE_REGION production-handler fixture 4/4 PASS. |
+| 6   | Нет HUD counters; стабильный zoom; clear/Escape     | PASS: 8 exact-main GM/PLAYER × 1280/390 × Chromium/Firefox; 0/1/mixed, +/−/slider/fit, rotation 640×360, Escape/empty clear.              |
+| 7   | Drag любого члена группы, queued move/recovery      | PASS: queue/projection units + live token/drawing 409, fresh retry и rendered GM convergence.                                             |
+| 8   | Подтверждение bulk delete с количеством/типами      | PASS: exact targets/stale confirmation + live cancel без изменения, подтверждение 1 token + 1 drawing и atomic delete.                    |
+| 9   | Prune после delete/scene/resync/access              | PASS: reducer, reload/snapshot/scope browser cases; live revoke и peer deletion convergence.                                              |
+| 10  | Unit geometry/permissions + GM/PLAYER E2E           | PASS: перечисленные tracked suites и receipts; protected recovery spec не использовался.                                                  |
+
+SCENE_REGION недоступен из actual App: нет toolbar/shortcut/callback wiring.
+Для исходного требования «не конфликтует» достаточно проверки production
+renderer pointer handlers через component fixture; это не требует включать
+будущую функцию в продукт. Такой тест не доказывает Konva hit-testing,
+публикацию regions или backend persistence и не будет выдаваться за них.
+Physical-device и ручная партия не были исходными AC UIX-507; общий остаток
+UIX-644 не превращается в дополнительный критерий этой карточки.
+
+Локальный receipt: `selection-closure-2026-09-18/source-equivalent-main-results.json`
+под artifact base текущей сессии; environment receipt фиксирует HEAD, loopback
+origin и отдельную БД. API/Vite/PostgreSQL остановлены, порты 15439/14109/5189
+освобождены. Никаких production-записей или повторного release gate.
+
+Следующее действие: принять один SCENE_REGION component fixture, затем
+зафиксировать closure-ready отдельно от формального статуса Linear. Не
+повторять 58/8/4 зелёных неизменных cases ради нового чата.
+
+### Адресный gate и ограничение ресурсов
+
+Новый fixture `apps/web/src/renderers/Orthographic2DRenderer.scene-region.test.tsx`
+вызывает реальные renderer handlers через mocked Konva transport. Он проверяет
+plain/Shift region drag, PLAYER denial, запрет token drag и реальные изменения
+camera position при middle/right pan, открытие token context menu. Геометрия
+элементов и `matchMedia` — jsdom stubs, не browser evidence.
+
+- Runtime продукта не менялся. Первый старый fixture падал на неполном token;
+  типизированные `TokenDto`/`SceneDto` это исправили.
+- Первый gate после resume: 21/21 bookkeeping/documentation PASS; 4 component
+  cases упали на отсутствующем `matchMedia` jsdom. Этот browser API добавлен
+  в fixture, production не менялся.
+- Следующий прогон: 2/4 PASS (PLAYER/pan/context), 2/4 FAIL (GM callback).
+  Причина: тест проверял callback до продолжения async pointer-up после
+  `await handleFogUp()`. Добавлен `await act(...)` перед всеми positive и
+  negative assertions, без изменения ожидаемых результатов.
+- Финальная попытка **не стартовала**: preflight показал 595.95 MiB свободной
+  памяти при минимуме 1024 MiB. Не считать исправленный fixture зелёным.
+  Типизация/линт нового файла также ещё не подтверждены.
+- Числовой лимит gate: один worker, 180 s, 896 MiB суммарного working set;
+  остановка при системной свободной памяти ниже 512 MiB. Владение процессами
+  и cleanup записаны локальным bounded runner; активных jobs после gate нет.
+
+После восстановления ресурсов повторить **только этот fixture**, затем его
+type/lint/format gate. Старые зелёные 21/58/8/4 не перезапускать без изменения
+их scope. Пока критерий 5 остаётся PENDING; это не найденный дефект production.
+
+### Завершение acceptance gap — 2026-09-19, 00:27 MSK
+
+Память восстановилась до ~1800 MiB; тот же bounded runner выполнил финальный
+SCENE_REGION fixture: **4/4 PASS**, 18.34 s. Проверены GM plain/Shift normalized
+region, PLAYER denial, отсутствие selection/fog/drawing/ping mutations,
+недоступность token drag, реальный pan middle/right и token context menu.
+Async pointer-up дожидается завершения до всех assertions; mount baseline
+проверен отдельно. Production path не менялся и dormant tool не включался.
+
+Web TypeScript gate нашёл только два недостающих обязательных поля тестового
+SceneDto.grid (`color`/`opacity`). Они добавлены при `enabled: false`, затем
+полный web typecheck и адресный ESLint нового файла завершились exit 0.
+Предыдущие красные fixture runs и resource refusal сохранены как история,
+не скрыты и не превращены в зелёный production defect fix.
+
+**Все 10 исходных AC имеют evidence: UIX-507 closure-ready.** Это заключение
+по реализации и проверкам, не автоматическая смена Linear In Review. Новый
+регрессионный тест остаётся локальным до отдельной публикации; существующий
+production runtime уже содержал проверенный обработчик. Ни один новый
+человеческий/device/SCENE_REGION gameplay критерий не добавлен. Следующий
+продуктовый пул — оставшиеся touch targets UIX-624, а не повторение UIX-507.
+
+Финальный объединённый повтор трёх suites (`closure-final-frozen`) остановлен
+resource guard при свободной памяти ниже 512 MiB, exit 1. Он **не PASS** и не
+заменяет раздельные receipts 4/4 и 21/21. Между зелёным component run и этим
+повтором изменены лишь два обязательных поля выключенной grid fixture и
+форматирование; production handlers идентичны. Новый локальный regression
+test перед публикацией всё равно должен пройти обычный CI; релизные workflow
+не перезапускались. Все собственные процессы bounded gate остановлены.

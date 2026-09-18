@@ -71,12 +71,27 @@ fixtures и narrow/desktop; это не автоматически текущи�
   focused reducer/browser tests. Не читать весь `App.tsx` до выявленного провода.
 - Шаги: подтвердить toggle/marquee/plain clear; visibility/layer/lock/control;
   conflicts Draw/Fog/Ruler/pan/context; queued move rollback/resync; exact delete
-  confirmation; pruning after delete/scene/resync/access. Отдельно вынести на
-  решение недостижимый `SCENE_REGION`, не включать его ради покрытия.
-- Focused gate: `pnpm exec vitest run apps/web/src/renderers/map-selection.test.ts apps/web/src/renderers/map-move-queue.test.ts`;
-  `pnpm exec playwright test tests/e2e/canvas-token-regressions.spec.ts tests/e2e/selection-authority-live.spec.ts --project=chromium --project=firefox`.
-  Явный список исключает `selection-recovery.spec.ts`. Ожидание: exit 0,
-  rejection/retry/peer convergence и AC-map без UNKNOWN кроме решённого N/A.
+  confirmation; pruning after delete/scene/resync/access. Для недостижимого из
+  App `SCENE_REGION` проверить existing renderer contract компонентно, не
+  включать будущую функцию в продукт ради покрытия non-conflict критерия.
+- Focused client gate: `pnpm exec vitest run apps/web/src/renderers/map-selection.test.ts apps/web/src/renderers/map-move-queue.test.ts --maxWorkers=1`;
+  `pnpm exec playwright test tests/e2e/canvas-token-regressions.spec.ts --project=chromium --project=firefox --workers=1 --retries=0`.
+  Явный список исключает `selection-recovery.spec.ts`. Не повторять неизменные
+  exact-main receipts: текущая сверка и оставшийся gap — в UIX-507 плане.
+- **Live gate — отдельно, не обычная команда выше.**
+  `selection-authority-live.spec.ts` пропускает все случаи без
+  `ARKEN_SELECTION_LIVE_GATE=isolated-loopback`; exit 0 со skipped не PASS.
+  Перед opt-in нужны отдельная одноразовая БД с миграциями, API и web на
+  `127.0.0.1`, отдельный media root и сгенерированные тестовые credentials.
+  `DATABASE_URL` теста и API должны указывать на одну эту БД, `E2E_BASE_URL` —
+  на изолированный web, а web proxy — на этот API. Не загружать production `.env`.
+  Только после проверки loopback/health/build revision выполнить
+  `pnpm exec playwright test tests/e2e/selection-authority-live.spec.ts --project=chromium --project=firefox --workers=1 --retries=0`.
+  Ожидание: ровно 4 PASS, 0 skipped/flaky/errors, rejection/retry/peer convergence.
+  Сохранить SHA/JSON receipt и остановить только свои процессы в `finally`;
+  проверить закрытие своих портов. При отсутствии изоляции остановиться, не
+  устанавливать opt-in ради зелёного exit. Готовый результат 18 сентября уже
+  подтверждён; менять среду или повторять gate без изменения runtime не нужно.
 - Негативные: PLAYER foreign/GM/MAP/locked; stale confirmation после role/scene/
   actor change; rejected move возвращает canonical state; Escape не коммитит
   draft. Budget: один connected matrix, без physical-device (не исходный AC).

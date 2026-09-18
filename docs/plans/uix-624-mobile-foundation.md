@@ -1,5 +1,8 @@
 # UIX-624 — P1: responsive foundation
 
+Текущий остаток исходных критериев уточнён в [сверке 19 сентября](#closure-сверка--2026-09-19);
+не повторять старые утверждения о маленьких toolbar/zoom/dice controls как текущий факт.
+
 Дата: 2026-09-05. **Checkpoint замороженного implementation-пула; не Done, не полный mobile acceptance и не release.** Статус задачи, итоговые SHA и результаты последующих full E2E / PR / CI gates фиксируются в Linear **UIX-624** и Git, а не считаются пройденными по этому документу.
 
 Родитель — [UIX-316 mobile discovery](./uix-316-mobile-discovery.md). Пользовательское «Хорошо, давай» от 2026-09-05 утвердило направление **minimum 360 CSS px / full PLAYER / limited GM / no PWA** и начало только **P1 / UIX-624**. P2–P6 / UIX-625–629 остаются Backlog; full PLAYER — целевое направление, не результат одного P1.
@@ -355,3 +358,33 @@ retries0/skipped0/flaky0. Includes compact GM/PLAYER map/journal targets at
 1280/390 (8), desktop→compact→desktop lifecycle (4). New keyboard hiding cases
 cover both grid and resize settings, active-surface focus and no stale reopening.
 This is synthetic App/browser behavior, not live multiplayer or physical devices.
+
+## Closure-сверка — 2026-09-19
+
+Read-only сверка исходных пяти Linear AC и exact-main E2E
+[35388600465](https://github.com/uixray/arken-space/actions/runs/35388600465)
+на `cce56397a6b1e91fcf2fc6951e506d64b62647cb`:
+
+- AC1 (утверждённые IA/width/style ownership), AC3 (hidden/focus/retained
+  state), AC4 (desktop/общие flows) имеют evidence из согласованного P1 и
+  последующих lifecycle gates. AC5 дополняется завершёнными exact-main
+  checks/E2E/multiplayer; прежние незавершённые прогоны не объявляются PASS.
+- AC2 больше **не имеет старого blanket-gap toolbar/zoom/dice**.
+  `compact-action-targets.spec.ts` прошёл 12/12 GM/PLAYER cases в двух браузерах
+  на 360×850, 360×640, 640×360: все видимые enabled buttons/summaries/tabs на
+  Map/Journal имеют ≥44×44 и реальный center hit. Соответствующий compact CSS
+  применён, переписывать эти controls повторно не нужно.
+- Узкий остаток AC2: **размеры всех inputs внутри открытых GM flyouts**.
+  Текущий тест после открытия Grid/Resize/More проверяет лишь первый control
+  на center hit, а не размеры всех inputs. Нужны measurements для Grid «Шаг»,
+  «Сдвиг X», «Сдвиг Y», fog/grid checkboxes и opacity range (или их реальной
+  кликабельной label-area). Это gap evidence, не доказанный дефект `<44px`.
+- Следующий bounded gate: расширить существующий compact fixture измерением
+  именно этих reachable controls, один browser worker; при фактическом FAIL
+  исправить только их hit-area без изменения игровой логики. Не создавать
+  новый mobile framework и не повторять полный UI audit.
+
+Физические iOS/Android, touch/pinch и P2–P6 относятся к UIX-316/625–629 и не
+добавляются задним числом в P1. Но собственный исходный AC2 нельзя молча
+ослабить ради Done. Linear и production этой сверкой не менялись; новые
+browser measurements не запускались из-за текущего ограничения памяти.

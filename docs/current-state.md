@@ -1,6 +1,7 @@
 # Текущее проверенное состояние Arken Space
 
-Сверка: **18 сентября 2026, 20:50 UTC**. Это снимок, а не автоматически обновляемый статус.
+Сверка выпуска: **18 сентября 2026, 20:50 UTC**; локальный post-release checkpoint
+обновлён **19 сентября, 00:27 MSK**. Это снимок, а не автоматически обновляемый статус.
 
 ## С чего продолжать
 
@@ -70,6 +71,26 @@ Linear — источник статусов и исходных критери�
 Технический выпуск и postflight завершены; не повторять CI/deploy из-за нового чата. Ручная партия GM+6 и физические устройства не подтверждены этим выпуском. См. [отчёт с ограничениями и восстановлением disk gate](release-2026-09-18.md).
 
 План и документация готовы в локальной ветке `codex/project-roadmap-2026-09-18`, отдельно от production. Сверка UIX-502 по восьми исходным AC завершена: **closure ready**, 18 связанных exact-main результатов PASS; [матрица](plans/uix-502-modal-popovers.md). Linear остаётся In Review из-за ранее отклонённой записи; это не повод снова тестировать или расширять критерии. Далее — связанный остаток UIX-507/644 по пакетам, сохраняя protected test и не создавая карточек.
+
+Post-release pool 19 сентября (пока локальный, не опубликован):
+
+- **UIX-507: closure-ready, 10/10 исходных AC.** Отдельный live gate 4/4 PASS
+  на source-equivalent runtime дополняет 58 selection + 8 HUD exact-main cases.
+  После восстановления памяти завершён последний SCENE_REGION renderer fixture
+  4/4 PASS; web typecheck и scoped lint PASS. Linear пока In Review, новый
+  регрессионный тест локальный. Не повторять пройденные CI/live gates.
+  [Полная матрица и границы evidence](plans/uix-507-multi-selection.md#closure-сверка--2026-09-19).
+- **UIX-644:** реестр сверён без исключения mixed reachable buckets:
+  37 buckets / 76 occurrences, 26 PASS / 2 FAIL / 9 BLOCKED. Две FAIL-строки
+  описывают один исторический observer incident; общий статус INCOMPLETE.
+  Blind replay старых observer probes не нужен. Native Firefox popup требует
+  поддерживаемого headed environment, не переписывания компонента.
+- **UIX-645:** миграция и anti-glyph guard интегрированы; exact-main central
+  icon/compact gate 20/20 PASS. Не переустанавливать Lucide. Остаток —
+  неопубликованные персональные темы, зависимые от UIX-317; текущая dark theme
+  проверена, plural-theme acceptance не заявлена.
+- 21 bookkeeping/documentation tests и 4 новых component cases PASS; web typecheck
+  и scoped lint PASS. Product source, production и Linear statuses не менялись.
 
 Материалы текущего оператора: `C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07\release-2026-09-18\checkpoint.md`. Это локальные доказательства, не публичная ссылка и не обязательная зависимость будущего разработчика: в конце gate перенести безопасный итог в этот файл и связанный релизный отчёт.
 
