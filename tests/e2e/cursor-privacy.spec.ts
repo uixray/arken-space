@@ -69,7 +69,7 @@ test("курсор мастера не уходит по сокету, пока 
 
   await page.locator('button[data-tool="CURSOR_PRESENCE"]').click();
   await page
-    .getByRole("group")
+    .getByRole("dialog", { name: "Видимость курсоров", exact: true })
     .getByText("Показывать мой курсор игрокам")
     .click();
   await page.keyboard.press("Escape");
@@ -82,7 +82,7 @@ test("курсор мастера не уходит по сокету, пока 
   const afterEnabling = sentCursorFrames.length;
   await page.locator('button[data-tool="CURSOR_PRESENCE"]').click();
   await page
-    .getByRole("group")
+    .getByRole("dialog", { name: "Видимость курсоров", exact: true })
     .getByText("Показывать мой курсор игрокам")
     .click();
   await page.keyboard.press("Escape");

@@ -5,11 +5,12 @@ export async function paintedIconContrast(icon: Locator) {
   const contrast = await icon.evaluate((element) => {
     const parse = (color: string) => {
       const match = color.match(/^rgba?\(([^)]+)\)$/);
-      // CSS color-mix surfaces can be serialized as Lab. Let the browser
-      // convert opaque Lab into sRGB; do not silently guess unsupported paint.
+      // CSS color-mix surfaces can be serialized as Lab or OKLCH. Let the
+      // browser convert opaque colors into sRGB; do not silently guess
+      // unsupported paint or composite alpha in a non-sRGB color space.
       if (
         !match &&
-        /^lab\([^/]+\)$/.test(color) &&
+        /^(?:lab|oklch)\([^/]+\)$/.test(color) &&
         CSS.supports("color", color)
       ) {
         const canvas = document.createElement("canvas");
@@ -20,7 +21,7 @@ export async function paintedIconContrast(icon: Locator) {
         context.fillRect(0, 0, 1, 1);
         const [r, g, b, alpha] = context.getImageData(0, 0, 1, 1).data;
         if (alpha !== 255)
-          throw new Error("Lab conversion requires opaque color");
+          throw new Error("Color conversion requires opaque color");
         return [r, g, b, 1];
       }
       if (!match) throw new Error(`Unsupported computed color: ${color}`);

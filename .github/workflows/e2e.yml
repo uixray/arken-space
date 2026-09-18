@@ -23,15 +23,17 @@ concurrency:
 
 jobs:
   browser:
-    name: e2e (${{ matrix.project }})
+    name: e2e (${{ matrix.project }}, shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
-    # Общий последовательный прогон подошёл к 45 минутам. Делим по браузеру,
+    # Firefox превысил 45 минут: делим полный набор на два shard каждого браузера,
     # не увеличивая лимит, число Playwright workers или retries.
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 4
       matrix:
+        project: [chromium, firefox]
+        shard: [1, 2]
         include:
           - project: chromium
             installBrowser: chrome
@@ -114,16 +116,28 @@ jobs:
           tail -40 /tmp/server.log
           exit 1
 
-      - run: pnpm test:e2e --project=${{ matrix.project }} --workers=1 --fail-on-flaky-tests
+      - run: pnpm test:e2e --project=${{ matrix.project }} --workers=1 --fail-on-flaky-tests --shard=${{ matrix.shard }}/2 --reporter=line,json
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-report.json
+
+      - name: Upload complete shard result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-result-${{ matrix.project }}-${{ matrix.shard }}
+          path: e2e-report.json
+          retention-days: 7
+          if-no-files-found: error
 
       # Компактные доказательства синтетического acceptance-пула нужны и при
-      # успехе. Только PNG и именованные JSON receipts этих пяти spec-файлов;
+      # успехе. Не каждый shard содержит эти spec: полный result выше обязателен.
+      # Только PNG и именованные JSON receipts этих пяти spec-файлов;
       # трассы, логи и прочие данные остаются в failure-only артефактах ниже.
       - name: Upload synthetic acceptance receipts
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: synthetic-acceptance-receipts-${{ matrix.project }}
+          name: synthetic-acceptance-receipts-${{ matrix.project }}-${{ matrix.shard }}
           path: |
             test-results/russian-error-copy-*/*.png
             test-results/russian-error-copy-*/error-copy-receipt.json
@@ -136,7 +150,7 @@ jobs:
             test-results/follow-scroll-resize-*/*.png
             test-results/follow-scroll-resize-*/resize-follow-receipts.json
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       # Retry-success и отмена не должны терять уже записанные modal receipts.
       # Только именованные синтетические JSON/PNG; suffix включает retry-папки.
@@ -145,7 +159,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: modal-owner-receipts-${{ matrix.project }}
+          name: modal-owner-receipts-${{ matrix.project }}-${{ matrix.shard }}
           path: |
             test-results/modal-owner-contract-*/modal-owner-diagnostics.json
             test-results/modal-owner-contract-*/a-popup-before-completion.png
@@ -162,14 +176,14 @@ jobs:
             test-results/modal-owner-close-lifecycl*/held-close-css-contract.png
             test-results/modal-owner-close-lifecycl*/held-close-css-contract-observer-final.json
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       # Без трасс разбирать падение в CI нечем: локально его может не быть.
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts-${{ matrix.project }}
+          name: playwright-artifacts-${{ matrix.project }}-${{ matrix.shard }}
           path: |
             test-results/
             playwright-report/
@@ -180,12 +194,12 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: server-log-${{ matrix.project }}
+          name: server-log-${{ matrix.project }}-${{ matrix.shard }}
           path: /tmp/server.log
           retention-days: 7
           if-no-files-found: ignore
 
-  # Сохраняем существующее имя required check: success только когда оба
+  # Сохраняем имя required check: success только когда все четыре
   # matrix-задания успешны; failure/cancelled/skipped не превращаются в PASS.
   e2e:
     name: e2e

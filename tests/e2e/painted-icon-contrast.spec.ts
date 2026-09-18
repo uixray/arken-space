@@ -77,3 +77,25 @@ test("contrast oracle converts opaque Lab and still rejects unsupported paint", 
     "image/opacity-aware",
   );
 });
+
+test("contrast oracle converts opaque OKLCH and rejects alpha", async ({
+  page,
+}) => {
+  await page.setContent(
+    `<div style="background:oklch(1 0 0)"><svg style="color:oklch(0 0 0)" width="16" height="16"><path d="M0 8H16" stroke="currentColor" fill="none" /></svg></div>`,
+  );
+  const icon = page.locator("svg");
+  expect(await paintedIconContrast(icon)).toBeCloseTo(21, 1);
+
+  await icon.evaluate((node) => {
+    (node as SVGElement).style.color = "oklch(0.21 0.01 75)";
+  });
+  expect(await paintedIconContrast(icon)).toBeGreaterThan(10);
+
+  await icon.evaluate((node) => {
+    (node as SVGElement).style.color = "oklch(0.21 0.01 75 / .5)";
+  });
+  await expect(paintedIconContrast(icon)).rejects.toThrow(
+    "Unsupported computed color",
+  );
+});
