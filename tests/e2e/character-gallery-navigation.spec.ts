@@ -124,9 +124,16 @@ for (const role of ["GM", "PLAYER"] as const)
         await expect(b.locator("svg.arken-icon")).toHaveCount(1);
         await expect(b.locator("svg")).toHaveAttribute("aria-hidden", "true");
         await expect(b.locator("svg")).toHaveAttribute("focusable", "false");
+        const minimum = width === 360 ? 44 : 24;
+        await expect
+          .poll(async () => {
+            const box = await b.boundingBox();
+            return Math.min(box?.width ?? 0, box?.height ?? 0);
+          })
+          .toBeGreaterThanOrEqual(minimum);
         const box = await b.boundingBox();
-        expect(box!.width).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
-        expect(box!.height).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
+        expect(box!.width).toBeGreaterThanOrEqual(minimum);
+        expect(box!.height).toBeGreaterThanOrEqual(minimum);
       }
       await page.keyboard.press("ArrowRight");
       await expect(viewer.getByRole("img")).toHaveAttribute(
