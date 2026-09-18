@@ -36,3 +36,76 @@
 Исходники проверены на `bc3dde8fd170b6c062ceb6e887f616f4861d6de9`: прежний перечень обычных блоков выше не означает, что все три подключены к действующему приложению. `InitiativePanel` экспортируется только в своём файле и импортируется в компонентном тесте; рабочих JSX-вызовов или импортов в `apps/web/src` не найдено. В `concept.spec.ts` существующий сценарий UIX-386 отдельно ожидает отсутствие `.initiative-panel` после загрузки активного encounter. Это не результат нового браузерного прогона и не приёмка действующей очереди encounter. Не включать старый компонент в приложение ради покрытия. Сохранить его статическую строку с явным исключением из текущих игровых сценариев.
 
 Доступные in-flow блоки для адресной проверки: предыстория в CharacterWorkspace и ресурсы в ActivityPanel (ChatPanels.tsx). Для них применимы native summary Enter/Space, реальный pointer, сохранность содержимого при закрытии; popup Escape/outside-close не требуются.
+
+## Occurrence-level reconciliation — 2026-09-19
+
+Оригинальные критерии UIX-644 требуют полного реестра без молчаливых
+пропусков и runtime smoke для каждого уникального **места использования**.
+Они не требуют включать мёртвый или демонстрационный маршрут ради теста.
+Поэтому статические строки не удалены и их исходные статусы/evidence сохранены,
+но применимость шестнадцати occurrences теперь зафиксирована отдельно в
+`uix-644-runtime-coverage.json`.
+
+- 37 buckets / 76 JSX occurrences остаются неизменным статическим реестром.
+- В восьми ранее applicability-blocked buckets находятся 16 occurrences:
+  пять поддерживаемых и достижимых уже имеют PASS evidence, одиннадцать имеют
+  `NOT_APPLICABLE_CURRENT_PRODUCT` с caller/source evidence и условием повторного
+  открытия.
+- Смешанные CharacterWorkspace, ChatPanels listbox и SetupPanel не объявлены
+  целиком PASS: у каждого активные и недостижимые occurrences перечислены
+  отдельно.
+- `NOT_APPLICABLE_CURRENT_PRODUCT` закрывает только вопрос применимости в
+  инвентаризации. Это не runtime PASS, не waiver и не удаление строки. При
+  выполнении `reactivationCriterion` occurrence снова становится обязательным
+  для runtime gate.
+- FuturePoolDialogs, GravityFoundationPreview, скрытый Direct select и legacy
+  InitiativePanel не нужно активировать или удалять для UIX-644. Их подключение
+  к production entry/router автоматически отменяет текущую классификацию.
+
+Текущую runtime-приёмку по-прежнему блокируют две независимые границы: один
+исторический ResizeObserver-дефект, представленный строками TokenPalette и
+GravityFormControls, и browser-owned native popup в поддерживаемом headed
+Firefox для OperatorFeedbackFilters. Firefox keyboard/value/focus behavior уже
+имеет автоматизированное evidence; ручная граница относится только к видимому
+нативному popup, pointer selection и Escape cancel/focus return. UIX-644 остаётся
+`INCOMPLETE`.
+
+## Recovered ResizeObserver sequence — 2026-09-19
+
+Это evidence checkpoint, а не закрытие дефекта. Исторический FAIL восстановлен
+из `true-browser-zoom-gate/owner-06/token-generator-UIX-272-UI-05f7b--picker-at-desktop-viewport-chromium/trace.zip`,
+соседнего `owner-results.json` и `checkpoint-fix-452f5f1.md` относительно
+`artifactBase` runtime-ledger.
+
+- Тестировался dev source Git revision
+  `452f5f162da51f10fbafcedef92f5d85fc9d36cf`; строка runtime payload
+  `buildRevision: test-revision` сама по себе SHA не доказывает, поэтому
+  происхождение ревизии фиксируется по соседнему checkpoint.
+- Это Chromium, GM, **обычный 100% browser zoom**, viewport `1280×900`, DPR 1.
+  Родительская папка true-browser-zoom отражает связанный gate, но этот owner
+  FAIL не является 125/150%-zoom repro.
+- Точный сценарий: открыть `Новый токен`, выбрать `Explorer.png`, выполнить
+  существующие keyboard-переходы image picker и впервые открыть FormSelect
+  `Персонаж`. Popup-visible assertion завершился, после чего примерно через
+  186 ms был отправлен неотфильтрованный `POST /api/client-logs` с
+  `window.error: ResizeObserver loop completed with undelivered notifications`
+  (примерно 207 ms после завершения trigger click).
+- Следующие screenshot/geometry assertions, Escape, повторные открытия,
+  outside-close, ArrowDown/Enter и переход workspace произошли уже после
+  ошибки. Они не являются доказанными причинными prerequisites.
+
+Единственный следующий causal gate должен сравнить ровно этот существующий
+Chromium desktop сценарий на `452f5f1` и `e03b60e`, при 100%, `1280×900`, без
+широких zoom/width/warm-cold sweep. После первого `popup visible` нужно сохранить
+оригинальные неотфильтрованные window/client-log errors и наблюдать не менее
+исторических 207 ms; bounded окно **500 ms** достаточно для одной проверки.
+Адресная временная telemetry может записать identity/constructor stack
+ResizeObserver и widths trigger, popup content и floating wrapper на callback,
+не превращая gate в глобальный observer dump.
+
+Между указанными ревизиями observer остаётся, а связанный diff меняет popup
+content с фиксированного `width` на `minWidth` и добавляет `width: max-content`.
+Это правдоподобная стабилизация sizing feedback, но trace не содержит callback
+attribution и не доказывает причинность. Если обе ревизии в единственном
+old/new gate зелёные, серию не повторять: causal gap остаётся открытым, а fix
+не следует изобретать или объявлять подтверждённым по non-reproduction.

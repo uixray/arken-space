@@ -43,7 +43,21 @@
       ],
       "manualEnvironmentBucket": "apps/web/src/OperatorFeedbackFilters.tsx::tag:select"
     },
-    "scope": "Reconciliation preserves every static row and historical failure. The full acceptance denominator remains all37 buckets/76 occurrences:26PASS,2FAIL,9BLOCKED. Eight applicability-blocked buckets include mixed buckets with reachable siblings and are not N/A, waived or excluded from acceptance. The derived29/60 subset is planning information only. The two FAIL rows describe one unresolved ResizeObserver incident. The other live-environment BLOCKED row requires headed Firefox native-popup acceptance. Overall acceptance remains INCOMPLETE."
+    "scope": "Reconciliation preserves every static row and historical failure. The full acceptance denominator remains all37 buckets/76 occurrences:26PASS,2FAIL,9BLOCKED. Eight applicability-blocked buckets include mixed buckets with reachable siblings and are not N/A, waived or excluded from acceptance. The derived29/60 subset is planning information only. The two FAIL rows describe one unresolved ResizeObserver incident. The other live-environment BLOCKED row requires headed Firefox native-popup acceptance. Overall acceptance remains INCOMPLETE.",
+    "occurrenceApplicability": {
+      "inventoryResolution": "RESOLVED_FOR_CURRENT_PRODUCT_REACHABILITY",
+      "staticInventoryPreserved": { "buckets": 37, "jsxOccurrences": 76 },
+      "reconciledBuckets": 8,
+      "reconciledOccurrences": 16,
+      "supportedReachableOccurrencesWithPassEvidence": 5,
+      "notApplicableCurrentProductOccurrences": 11,
+      "rule": "NOT_APPLICABLE_CURRENT_PRODUCT resolves inventory applicability only. It is not PASS, does not erase the static occurrence, and must be reopened when its reactivation criterion becomes true.",
+      "remainingRuntimeGaps": [
+        "apps/web/src/sidebar/TokenPalette.tsx::tag:FormSelect",
+        "apps/web/src/ui/GravityFormControls.tsx::tag:Select",
+        "apps/web/src/OperatorFeedbackFilters.tsx::tag:select"
+      ]
+    }
   },
   "evidence": {
     "compactSectionsBreakpoint": {
@@ -442,7 +456,29 @@
       "classification": "reachable",
       "scope": "Template modal PASS four current cases; second showCharacterPicker source occurrence inactive, not silently counted as runtime PASS.",
       "evidence": ["built", "workspaceCurrent"],
-      "next": "Retain explicit inactive exclusion; no new UI route for coverage."
+      "next": "Retain explicit inactive exclusion; no new UI route for coverage.",
+      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+      "applicability": {
+        "resolution": "MIXED_REACHABILITY",
+        "occurrences": [
+          {
+            "label": "template creation FormSelect",
+            "count": 1,
+            "applicability": "SUPPORTED_REACHABLE",
+            "runtimeStatus": "PASS",
+            "evidence": ["built", "workspaceCurrent"]
+          },
+          {
+            "label": "showCharacterPicker FormSelect",
+            "count": 1,
+            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "runtimeStatus": "NOT_RUN",
+            "sourceCallerEvidence": "Only production CharacterPanel caller passes showCharacterPicker=false."
+          }
+        ],
+        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
+        "reactivationCriterion": "Re-open the inactive occurrence if a production caller can set showCharacterPicker=true."
+      }
     },
     {
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
@@ -462,7 +498,29 @@
       "classification": "reachable",
       "scope": "Activity list current8 cases passed. Second ChatPanel list excluded from current production navigation: allowed feeds only ACTIVITY/STORY, handled by ActivityPanel/StoryChannel. Source applicability audit records chain.",
       "evidence": ["remainingMenus"],
-      "next": "Retain two static occurrences; revisit second only if feed policy changes. Do not activate dead route for coverage; full shared lifecycle gate still separate."
+      "next": "Retain two static occurrences; revisit second only if feed policy changes. Do not activate dead route for coverage; full shared lifecycle gate still separate.",
+      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+      "applicability": {
+        "resolution": "MIXED_REACHABILITY",
+        "occurrences": [
+          {
+            "label": "activity-slash-suggestions",
+            "count": 1,
+            "applicability": "SUPPORTED_REACHABLE",
+            "runtimeStatus": "PASS",
+            "evidence": ["remainingMenus"]
+          },
+          {
+            "label": "chat-slash-suggestions",
+            "count": 1,
+            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "runtimeStatus": "NOT_RUN",
+            "sourceCallerEvidence": "Current feed policy routes ACTIVITY/STORY to ActivityPanel/StoryChannel; ChatPanel fallback is unreachable."
+          }
+        ],
+        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
+        "reactivationCriterion": "Re-open if production feed policy adds a route rendered by ChatPanel."
+      }
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
@@ -492,7 +550,22 @@
       "classification": "inactive",
       "scope": "Direct-chat recipient select; production Direct entry hidden.",
       "evidence": [],
-      "next": "Do not enable hidden Direct to satisfy inventory."
+      "next": "Do not enable hidden Direct to satisfy inventory.",
+      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+      "applicability": {
+        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
+        "occurrences": [
+          {
+            "label": "Direct-chat recipient select",
+            "count": 1,
+            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "runtimeStatus": "NOT_RUN",
+            "sourceCallerEvidence": "Direct mode is initialized false and all current transitions keep it hidden."
+          }
+        ],
+        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
+        "reactivationCriterion": "Re-open if the Direct entry becomes reachable in production navigation."
+      }
     },
     {
       "file": "apps/web/src/sidebar/InitiativePanel.tsx",
@@ -502,7 +575,22 @@
       "classification": "in-flow",
       "scope": "Legacy in-flow disclosure: no production import/JSX caller found in apps/web/src at bc3dde8fd170b6c062ceb6e887f616f4861d6de9; only component tests. Not the active encounter queue.",
       "evidence": [],
-      "next": "Explicit source-only inactive exclusion; retain the static bucket. Do not enable legacy UI for coverage or claim current encounter acceptance."
+      "next": "Explicit source-only inactive exclusion; retain the static bucket. Do not enable legacy UI for coverage or claim current encounter acceptance.",
+      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+      "applicability": {
+        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
+        "occurrences": [
+          {
+            "label": "legacy initiative disclosure",
+            "count": 1,
+            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "runtimeStatus": "NOT_RUN",
+            "sourceCallerEvidence": "No production import or JSX caller; only component tests. This is not the active encounter queue."
+          }
+        ],
+        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#уточнение-достижимости--2026-09-17",
+        "reactivationCriterion": "Re-open if InitiativePanel gains a production import or caller."
+      }
     },
     {
       "file": "apps/web/src/sidebar/ResourceCounters.tsx",
@@ -522,7 +610,29 @@
       "classification": "reachable",
       "scope": "Three live controls PASS four current cases; three legacy hidden occurrences explicitly excluded, never reactivate for tests.",
       "evidence": ["built", "workspaceCurrent"],
-      "next": "Keep active/hidden split explicit at next combined gate."
+      "next": "Keep active/hidden split explicit at next combined gate.",
+      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+      "applicability": {
+        "resolution": "MIXED_REACHABILITY",
+        "occurrences": [
+          {
+            "label": "previewMembership, tokenCharacter, inviteCharacter",
+            "count": 3,
+            "applicability": "SUPPORTED_REACHABLE",
+            "runtimeStatus": "PASS",
+            "evidence": ["built", "workspaceCurrent"]
+          },
+          {
+            "label": "catalogKind plus two legacy scene selects",
+            "count": 3,
+            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "runtimeStatus": "NOT_RUN",
+            "sourceCallerEvidence": "catalogKind is in an unconditional hidden block; both legacy scene selects are in an unconditional hidden section."
+          }
+        ],
+        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
+        "reactivationCriterion": "Re-open each hidden occurrence if its section becomes production-reachable."
+      }
     },
     {
       "file": "apps/web/src/sidebar/TokenPalette.tsx",
@@ -567,7 +677,22 @@
       "classification": "preview-only",
       "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
       "evidence": [],
-      "next": "Preserve as BLOCKED in the full acceptance denominator; require reachability review if activated."
+      "next": "Preserve the static occurrence and re-review if activated; it does not block the current reachable-product runtime gate.",
+      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+      "applicability": {
+        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
+        "occurrences": [
+          {
+            "label": "historical future-pool dialog Select",
+            "count": 1,
+            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "runtimeStatus": "NOT_RUN",
+            "sourceCallerEvidence": "Preview-only chain has no production caller."
+          }
+        ],
+        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
+        "reactivationCriterion": "Re-open if FuturePoolDialogs is called from a production route or entry."
+      }
     },
     {
       "file": "apps/web/src/ui/GravityFormControls.tsx",
@@ -587,7 +712,22 @@
       "classification": "preview-only",
       "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
       "evidence": [],
-      "next": "Preserve as BLOCKED in the full acceptance denominator; require reachability review if activated."
+      "next": "Preserve the static occurrence and re-review if activated; it does not block the current reachable-product runtime gate.",
+      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+      "applicability": {
+        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
+        "occurrences": [
+          {
+            "label": "foundation preview Popup",
+            "count": 1,
+            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "runtimeStatus": "NOT_RUN",
+            "sourceCallerEvidence": "FoundationPreviewRoute is declared but has no production entry or router link."
+          }
+        ],
+        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
+        "reactivationCriterion": "Re-open if FoundationPreviewRoute becomes production-reachable."
+      }
     },
     {
       "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
@@ -597,7 +737,22 @@
       "classification": "preview-only",
       "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
       "evidence": [],
-      "next": "Preserve as BLOCKED in the full acceptance denominator; require reachability review if activated."
+      "next": "Preserve both static occurrences and re-review if activated; they do not block the current reachable-product runtime gate.",
+      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+      "applicability": {
+        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
+        "occurrences": [
+          {
+            "label": "foundation preview Select controls",
+            "count": 2,
+            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "runtimeStatus": "NOT_RUN",
+            "sourceCallerEvidence": "FoundationPreviewRoute is declared but has no production entry or router link."
+          }
+        ],
+        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
+        "reactivationCriterion": "Re-open both occurrences if FoundationPreviewRoute becomes production-reachable."
+      }
     },
     {
       "file": "apps/web/src/ui/SceneManagerDialog.tsx",
