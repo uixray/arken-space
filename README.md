@@ -67,18 +67,21 @@ All implementation, generated code and commits for arken-space must stay inside 
 
 - [Linear project](https://linear.app/uixraydesign/project/arken-space-004b59486dc4)
 - [Текущее проверенное состояние](./docs/current-state.md)
+- [Актуальный многомесячный план и условия перехода](./docs/plans/global-roadmap-2026-09-18.md)
+- [Полный внутренний реестр оставшихся задач](./docs/plans/remaining-work-2026-09-18.md)
+- [Исполнительные пакеты для продолжения работы](./docs/plans/execution-packets-2026-09-18.md)
 - [Архивная публичная дорожная карта на 20.07–16.08.2026](./ROADMAP.md)
 - [Публичная доска задач](https://github.com/users/uixray/projects/1)
 - Linear is the source of truth for issue status and acceptance criteria.
 - [tasks.md](./tasks.md) and [docs/roadmap.md](./docs/roadmap.md) are preserved historical foundation snapshots, not active trackers.
 - See [docs/operations.md](./docs/operations.md) for deployment, backup, restore and incident checks.
 - See [docs/yandex-object-storage-backup-2026-07-13.md](./docs/yandex-object-storage-backup-2026-07-13.md) for the private bucket, IAM, secret handling and current cost setup.
-- See [docs/server-audit-2026-07-12.md](./docs/server-audit-2026-07-12.md) for the current host capacity and deployment blockers.
+- [docs/server-audit-2026-07-12.md](./docs/server-audit-2026-07-12.md) is a historical host audit, not current capacity or release clearance; verify live before deployment.
 
 ## Codebase documentation
 
 Start at the [documentation index](./docs/README.md). It separates the handful of
-maintained documents from the ~60 dated per-ticket checkpoints, which are kept
+maintained documents from dated per-ticket checkpoints, which are kept
 for their reasoning but are not a description of how the system works today.
 
 - [Architecture](./docs/architecture.md) — runtime, modules, data model, realtime and client structure.

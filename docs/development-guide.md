@@ -4,6 +4,11 @@
 Общее устройство системы описано в [architecture.md](./architecture.md), а
 production-процедуры — в [operations.md](./operations.md).
 
+**Проверено 2026-09-18:** команды и настройки ниже сверены с текущим source
+tree/release-кандидатом `cce56397a6b1e91fcf2fc6951e506d64b62647cb` (локальный
+`7d681d5` имеет то же дерево). Это не запуск команд и не production acceptance;
+ручные GM+6, mobile-device и performance проверки остаются отдельными gates.
+
 ## Требования
 
 **UI-иконки:** только Lucide через общий entrypoint и `AppIcon`.
@@ -162,9 +167,16 @@ pnpm test
 pnpm test:e2e
 ```
 
-Обычные Playwright e2e намеренно выполняются с `workers: 1`: спеки делят одну
-кампанию в одной БД. Не увеличивайте параллельность без изоляции состояния на
-worker. `pnpm typecheck` отдельно компилирует `tests/e2e/tsconfig.json`, поэтому
+Обычные Playwright e2e намеренно выполняются с `workers: 1`: live-backend
+спеки получают отдельную кампанию, но geometry assertions остаются шумными при
+конкурирующей нагрузке. Не увеличивайте параллельность без нового измеренного
+обоснования. При низкой RAM запускайте также Vitest с одним worker:
+
+```powershell
+corepack pnpm test -- --maxWorkers=1
+```
+
+`pnpm typecheck` отдельно компилирует `tests/e2e/tsconfig.json`, поэтому
 расхождение Playwright-фикстуры с `GameSnapshot` должно быть исправлено до
 browser-прогона.
 
@@ -203,27 +215,28 @@ row locking, sequences, triggers и concurrency. Критические DB/realt
 
 ### Те же гейты в CI
 
-С конца августа 2026 гейты продублированы в GitHub Actions — три отдельных
-workflow, каждый на свой набор:
+В GitHub Actions проверка разделена на независимые workflow:
 
-| Workflow          | Что гоняет                                           | Когда красный                            |
-| ----------------- | ---------------------------------------------------- | ---------------------------------------- |
-| `checks.yml`      | `build`, `typecheck`, `lint`, `format:check`, `test` | Любая правка кода или форматирования     |
-| `e2e.yml`         | `test:e2e` в Chromium и Firefox на живой базе        | Правка UI-потока, раскладки, доступности |
-| `multiplayer.yml` | `test:multiplayer` в собственном Docker Compose      | Realtime, доступ, реконнект, миграции    |
+| Workflow          | Что гоняет                                                                                                         | Когда красный                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| `checks.yml`      | `build`, `typecheck`, `lint`, `format:check`, `test`                                                               | Любая правка кода или форматирования     |
+| `e2e.yml`         | live DB Playwright: Chromium + Firefox, 2 shard на каждый browser (4 jobs), `--workers=1`, `--fail-on-flaky-tests` | Правка UI-потока, раскладки, доступности |
+| `multiplayer.yml` | `test:multiplayer` в собственном Docker Compose                                                                    | Realtime, доступ, реконнект, миграции    |
 
-Все три объявлены с `cancel-in-progress`: новый push в ту же ветку отменяет
-предыдущий прогон. Отменённый прогон — это не падение и не успех, у него просто
-нет результата.
+`checks.yml`, `e2e.yml` и `multiplayer.yml` объявлены с
+`cancel-in-progress`: новый push в ту же ветку отменяет предыдущий прогон.
+Отменённый прогон — не падение и не успех. Для release не перезапускайте зелёный
+CI «на всякий случай»: используйте результаты именно candidate SHA; другой SHA,
+retry-success или cancelled run не является этим доказательством.
 
 Деплоя в CI нет и не планируется: выкатка остаётся ручной процедурой из
 [operations.md](./operations.md). Зелёный CI — необходимое условие слияния, но
 не разрешение на production: обязательные release gates перечислены в
 [production-release-checklist.md](./production-release-checklist.md).
 
-`multiplayer.yml` содержит отдельный шаг с проверкой `${PIPESTATUS[0]}` — не
-из перестраховки: `pnpm test:multiplayer` маскирует настоящий код возврата,
-когда вывод уходит в конвейер, и красный прогон выглядел бы зелёным.
+`multiplayer.yml` запускает команду без pipeline, чтобы настоящий exit code не
+был скрыт. CI не делает deploy: release gates и ручная приёмка описаны в
+[production-release-checklist.md](./production-release-checklist.md).
 
 ## Environment
 
