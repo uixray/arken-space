@@ -2,7 +2,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   configure,
-  ThemeProvider,
   ToasterComponent,
   ToasterProvider,
 } from "@gravity-ui/uikit";
@@ -23,6 +22,7 @@ import "./design-system/tokens.generated.css";
 import "./ui/gravity-foundation.css";
 import "./styles.css";
 import "./mobile-foundation.css";
+import { PlayerThemeRoot } from "./design-system/player-theme-runtime";
 
 configure({ lang: "ru" });
 installInputDiagnostics();
@@ -34,13 +34,13 @@ installPerformanceReporting();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider theme="dark" lang="ru">
+    <PlayerThemeRoot>
       <ToasterProvider toaster={appToaster}>
         <AppErrorBoundary>
           <App />
         </AppErrorBoundary>
         <ToasterComponent />
       </ToasterProvider>
-    </ThemeProvider>
+    </PlayerThemeRoot>
   </StrictMode>,
 );

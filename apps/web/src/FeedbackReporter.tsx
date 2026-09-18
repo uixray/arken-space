@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, TextArea, TextInput } from "@gravity-ui/uikit";
+import { TextArea, TextInput } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import { api } from "./api";
 import { createFeedbackDiagnostics } from "./feedback-diagnostics";
 import { ArkenDialog } from "./ui/ArkenDialog";

@@ -6,7 +6,7 @@ import type {
   GameSnapshot,
   PlayerAccessDto,
 } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import {
   CatalogEntryForm,
   type CatalogEntryFormInput,
@@ -17,6 +17,7 @@ import { TextPromptDialog } from "../ui/TextPromptDialog";
 import type { Props } from "../Sidebar";
 import { AppIcon } from "../ui/AppIcon";
 import { OfflineStatusIcon, OnlineStatusIcon } from "../ui/icons";
+import { MemberDefaultThemeField } from "../design-system/MemberDefaultThemeField";
 
 export function SetupPanel(props: Props) {
   // UIX-398 step B: scene commands come from context, not through Sidebar.
@@ -55,6 +56,9 @@ export function SetupPanel(props: Props) {
   const [playerAccess, setPlayerAccess] = useState<PlayerAccessDto[]>([]);
   const [previewMembership, setPreviewMembership] = useState(
     props.snapshot.members.find((member) => member.role === "PLAYER")?.id ?? "",
+  );
+  const previewedMember = props.snapshot.members.find(
+    (member) => member.id === previewMembership && member.role === "PLAYER",
   );
   const activeScene = props.snapshot.scenes.find((scene) => scene.active);
   const maps = props.snapshot.assets.filter((asset) => asset.kind === "MAP");
@@ -329,6 +333,19 @@ export function SetupPanel(props: Props) {
               ))}
           </FormSelect>
         </label>
+        {previewedMember?.defaultThemeId &&
+        previewedMember.defaultThemeRevision != null &&
+        props.snapshot.personalTheme?.publishedThemes ? (
+          <MemberDefaultThemeField
+            key={previewedMember.id}
+            membership={{
+              id: previewedMember.id,
+              defaultThemeId: previewedMember.defaultThemeId,
+              revision: previewedMember.defaultThemeRevision,
+            }}
+            publishedThemes={props.snapshot.personalTheme.publishedThemes}
+          />
+        ) : null}
         <Button
           disabled={!previewMembership}
           onClick={() => props.onPreviewPlayer(previewMembership)}

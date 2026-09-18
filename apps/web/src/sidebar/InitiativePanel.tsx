@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { InitiativeParticipantDto } from "@arken/contracts";
-import { Button, TextInput } from "@gravity-ui/uikit";
+import { TextInput } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 
 /**
  * UIX-431 — очередь ходов боя.

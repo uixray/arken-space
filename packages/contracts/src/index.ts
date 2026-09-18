@@ -4,6 +4,7 @@ export * from "./fog-visibility.js";
 export * from "./spell-schools.js";
 import { fogGeometrySchema } from "./fog-geometry.js";
 export * from "./ruler-geometry.js";
+export { PUBLISHED_PLAYER_THEME_DEFINITIONS } from "./player-themes.generated.js";
 import { rulerUpdateSchema } from "./ruler-geometry.js";
 export {
   betaPlayerByHandle,
@@ -1007,6 +1008,28 @@ export const rotateGmAccessSchema = z.object({
   actionId: actionIdSchema,
   token: z.string().min(32).max(512),
 });
+export const playerThemeIdSchema = z.enum([
+  "forest",
+  "dragons",
+  "ice",
+  "fire",
+  "gold",
+  "silver",
+  "light",
+  "classic-v1",
+]);
+export const personalThemeUpdateSchema = z
+  .object({
+    selectedThemeId: playerThemeIdSchema.or(z.literal("system")).nullable(),
+    expectedRevision: z.number().int().nonnegative(),
+  })
+  .strict();
+export const memberThemeDefaultUpdateSchema = z
+  .object({
+    defaultThemeId: playerThemeIdSchema,
+    expectedRevision: z.number().int().nonnegative(),
+  })
+  .strict();
 export const renameCampaignSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -2238,6 +2261,24 @@ export interface MembershipDto {
   displayName: string;
   characterId: string | null;
   revision?: number;
+  /** GM-only projection for members of the current campaign. */
+  defaultThemeId?: string;
+  /** GM-only default-assignment revision; distinct from private preference and gameplay. */
+  defaultThemeRevision?: number;
+}
+
+export interface PublishedPlayerThemeDto {
+  id: string;
+  name: string;
+  colorScheme: "dark" | "light";
+  version: number;
+}
+export interface PersonalThemeDto {
+  scopeKey: string;
+  selectedThemeId: string | null;
+  defaultThemeId: string | null;
+  revision: number;
+  publishedThemes: PublishedPlayerThemeDto[];
 }
 
 export interface TokenDefinitionDto {
@@ -2808,6 +2849,8 @@ export interface GameSnapshot {
     revision: number;
   };
   me: MembershipDto;
+  /** Optional while older fixtures migrate; production bootstrap always supplies it. */
+  personalTheme?: PersonalThemeDto;
   members: MembershipDto[];
   /** Safe peers available to the current member for a direct chat. */
   directChatContacts?: DirectChatContactDto[];

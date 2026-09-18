@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import {
   FEEDBACK_KIND_LABELS,
   FEEDBACK_STATUS_LABELS,

@@ -1,12 +1,12 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "./Button";
 
 import { FormSelect } from "../ui/GravityFormControls";
-import type { PlayerThemeDefinition, PlayerThemeId } from "./player-themes";
+import type { PlayerThemeDefinition } from "./player-themes";
 import { isPlayerThemeId } from "./player-themes";
 import "./PlayerThemeSettings.css";
 
-export type PlayerThemeSelection = PlayerThemeId | "system";
+export type PlayerThemeSelection = string;
 
 export interface PlayerThemeSettingsProps {
   /** A server-approved, already published catalogue. Unpublished themes stay out. */
@@ -57,7 +57,7 @@ function ScopedPlayerThemeSettings({
   const visiblePublishedThemes = useMemo(
     () =>
       publishedThemes.filter(
-        (theme): theme is PlayerThemeDefinition & { id: PlayerThemeId } =>
+        (theme): theme is PlayerThemeDefinition & { id: string } =>
           isPlayerThemeId(theme.id),
       ),
     [publishedThemes],

@@ -19,7 +19,7 @@ import {
 import { useCampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { CatalogEntryForm } from "../CatalogEntryForm";
 import { ApiError, formatApiError } from "../api";
 import { TextPromptDialog } from "../ui/TextPromptDialog";

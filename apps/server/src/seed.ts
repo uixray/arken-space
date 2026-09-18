@@ -1,4 +1,5 @@
 import { eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import {
   campaignAudioTracks,
   campaigns,
@@ -10,6 +11,7 @@ import {
 import { createStarterCharacter } from "@arken/system";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
+import { defaultThemeForMembership } from "./player-themes.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -53,9 +55,16 @@ export async function seedCampaignContent(
     .where(eq(memberships.campaignId, campaign.id))
     .limit(1);
   if (!gm) {
+    const membershipId = randomUUID();
     [gm] = await db
       .insert(memberships)
-      .values({ campaignId: campaign.id, role: "GM", displayName: "Мастер" })
+      .values({
+        id: membershipId,
+        campaignId: campaign.id,
+        role: "GM",
+        displayName: "Мастер",
+        defaultThemeId: defaultThemeForMembership(membershipId),
+      })
       .returning();
   }
 

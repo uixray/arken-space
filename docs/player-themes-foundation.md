@@ -1,5 +1,44 @@
 # Player themes: opt-in foundation
 
+> **Current implementation state — 2026-09-19.** The sections below record
+> the foundation and earlier scoped checkpoints; read them as history unless
+> this section explicitly supersedes them.
+
+## Current membership preference boundary
+
+Personal appearance is now stored **per campaign membership**, not by display
+name, beta handle, session, character, browser storage, or a cross-campaign
+profile. Each membership has a persisted deterministic initial default from the
+seven approved personal palettes; `classic-v1` is selectable but is not an
+automatic default. An explicit `"system"` override is distinct from `null`:
+`null` returns to the membership's stored default.
+
+- `GET`/`PATCH /api/me/theme` expose and change only the authenticated
+  membership's private preference. PATCH uses the private preference revision
+  as compare-and-swap; conflict responses return only that same preference.
+- A GM may set a current-campaign member's default through
+  `PATCH /api/members/:id/theme-default`. This uses a separate public
+  `defaultThemeRevision`; it never changes the member's selected override.
+  The GM membership projection includes only default assignment/revision, not
+  another member's private preference activity.
+- `GameSnapshot.personalTheme` is the authenticated viewer's projection.
+  GM player-preview snapshots deliberately strip it, so preview cannot reveal
+  the target player's override.
+
+The published catalog is generated from
+`tokens/player-themes/{player-themes,classic-v1}.tokens.json` into both web and
+shared-contract artifacts. Adding a theme means adding approved token source,
+running the generator, and adding a migration for the membership SQL CHECK when
+the allowed IDs change; consumers use generated catalog data, so no component
+edit is required merely to list a new published theme.
+
+The first runtime migration replaces the theme-settings actions with the shared
+Base UI `Button`; other Gravity controls remain intentionally until their
+separate migration pools. Server/PGlite and real-server E2E coverage has been
+added for persistence, CAS, isolation and preview privacy, but this document
+does **not** claim browser, CI, deployment, or production acceptance until the
+running gates report it.
+
 UIX-317, implementation started 2026-09-15. This is a migration step, not
 completion of the profile/theme feature or approval of the full design system.
 

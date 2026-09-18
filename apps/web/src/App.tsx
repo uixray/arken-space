@@ -5,6 +5,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,6 +17,7 @@ import type {
   GameSnapshot,
   MapPing,
   MessageVisibility,
+  PersonalThemeDto,
   StoryPostAdminDto,
   StoryPostDto,
   TokenDto,
@@ -127,6 +129,11 @@ import {
   readCursorPreference,
   writeCursorPreference,
 } from "./cursor-preference";
+import { resolvePlayerThemeId } from "./design-system/player-themes";
+import { PlayerThemeSettings } from "./design-system/PlayerThemeSettings";
+import { usePlayerThemeRuntime } from "./design-system/player-theme-runtime-context";
+import { usePlayerThemePreference } from "./design-system/usePlayerThemePreference";
+import { patchPersonalThemePreference } from "./design-system/personal-theme-api";
 
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
@@ -152,6 +159,13 @@ type SceneViewEmission = {
   sceneId: string | null;
 };
 
+function replacePersonalTheme(
+  snapshot: GameSnapshot,
+  personalTheme: PersonalThemeDto,
+): GameSnapshot {
+  return { ...snapshot, personalTheme };
+}
+
 /**
  * A socket can already be connected by the time React commits it to state.
  * Both the Socket.IO connect callback and the viewed-scene effect therefore
@@ -176,7 +190,92 @@ function emitSceneViewIfNeeded(
 }
 
 export function App() {
+  const { setThemeId: setRootThemeId } = usePlayerThemeRuntime();
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
+  const personalTheme = snapshot?.personalTheme;
+  const [themeSettingsOpen, setThemeSettingsOpen] = useState(false);
+  const publishedThemeIds = useMemo(
+    () => personalTheme?.publishedThemes.map(({ id }) => id) ?? [],
+    [personalTheme?.publishedThemes],
+  );
+  const saveThemePreference = useCallback(
+    async (
+      selectedThemeId: string | null,
+      { signal }: { signal: AbortSignal },
+    ) => {
+      const source = snapshot?.personalTheme;
+      if (!source) throw new Error("Настройки темы недоступны.");
+      try {
+        const updated = await patchPersonalThemePreference({
+          source,
+          selectedThemeId,
+          signal,
+        });
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+        setSnapshot((current) => {
+          const existing = current?.personalTheme;
+          if (
+            !current ||
+            existing?.scopeKey !== source.scopeKey ||
+            (existing.revision ?? -1) > updated.revision
+          )
+            return current;
+          return replacePersonalTheme(current, updated);
+        });
+        return updated;
+      } catch (reason) {
+        const conflict =
+          reason instanceof ApiError &&
+          reason.status === 409 &&
+          reason.code === "THEME_PREFERENCE_CONFLICT"
+            ? (reason.details?.personalTheme as PersonalThemeDto | undefined)
+            : undefined;
+        if (!signal.aborted && conflict?.scopeKey === source.scopeKey) {
+          setSnapshot((current) => {
+            const existing = current?.personalTheme;
+            if (
+              !current ||
+              existing?.scopeKey !== source.scopeKey ||
+              (existing.revision ?? -1) > conflict.revision
+            )
+              return current;
+            return replacePersonalTheme(current, conflict);
+          });
+          throw new Error(
+            "Настройка темы изменилась в другом окне. Проверьте актуальный выбор.",
+            { cause: reason },
+          );
+        }
+        throw reason;
+      }
+    },
+    [snapshot],
+  );
+  const themePreference = usePlayerThemePreference({
+    scopeKey: personalTheme?.scopeKey ?? null,
+    preference: personalTheme ?? {
+      selectedThemeId: null,
+      defaultThemeId: null,
+      revision: 0,
+    },
+    publishedThemeIds,
+    save: saveThemePreference,
+  });
+
+  useLayoutEffect(() => {
+    setRootThemeId(themePreference.selection);
+  }, [setRootThemeId, themePreference.selection]);
+
+  useLayoutEffect(() => {
+    setThemeSettingsOpen(false);
+  }, [personalTheme?.scopeKey]);
+
+  useEffect(
+    () => () => {
+      setRootThemeId(null);
+    },
+    [setRootThemeId],
+  );
   const [bulkMoveIntents, setBulkMoveIntents] = useState<
     readonly CanvasBulkMoveIntent[]
   >([]);
@@ -1715,6 +1814,22 @@ export function App() {
                       Переименовать кампанию
                     </button>
                   )}
+                  {!previewSnapshot && personalTheme && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const menu = accountMenuRef.current;
+                        if (menu) {
+                          menu.open = false;
+                          menu.querySelector<HTMLElement>("summary")?.focus();
+                        }
+                        themePreference.cancel();
+                        setThemeSettingsOpen(true);
+                      }}
+                    >
+                      Оформление
+                    </button>
+                  )}
                   {/* UIX-462: шпаргалка рядом с выходом — сюда лезут, когда ищут
                     «что-то про программу, а не про игру». */}
                   <button onClick={() => setShortcutsOpen(true)}>
@@ -1759,6 +1874,41 @@ export function App() {
               </details>
             </div>
           </header>
+          {personalTheme ? (
+            <ArkenDialog
+              open={themeSettingsOpen}
+              title="Оформление"
+              footer={false}
+              onClose={() => {
+                if (themePreference.pending) return;
+                themePreference.cancel();
+                setThemeSettingsOpen(false);
+              }}
+            >
+              <PlayerThemeSettings
+                publishedThemes={personalTheme.publishedThemes}
+                currentResolvedThemeId={themePreference.selection}
+                defaultThemeId={resolvePlayerThemeId({
+                  selectedThemeId: null,
+                  defaultThemeId: personalTheme.defaultThemeId,
+                  publishedThemeIds: new Set(publishedThemeIds),
+                })}
+                savedOverrideThemeId={
+                  themePreference.preference?.selectedThemeId ?? null
+                }
+                scopeKey={personalTheme.scopeKey}
+                pending={themePreference.pending}
+                error={themePreference.error}
+                onPreview={themePreference.preview}
+                onApply={() => void themePreference.apply()}
+                onReset={() => void themePreference.reset()}
+                onCancel={() => {
+                  themePreference.cancel();
+                  setThemeSettingsOpen(false);
+                }}
+              />
+            </ArkenDialog>
+          ) : null}
           <ArkenDialog
             open={compact && compactSectionsOpen}
             title="Разделы"

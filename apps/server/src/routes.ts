@@ -1,4 +1,4 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import {
@@ -122,6 +122,7 @@ import {
   buildSnapshot,
   loadCampaignReadSet,
   resolveStatLayout,
+  withoutPersonalTheme,
 } from "./snapshot.js";
 import { fullChatVisibilityFilter, loadThreadHistory } from "./chat-history.js";
 import { listVisiblePlayerRequests } from "./player-requests.js";
@@ -152,6 +153,8 @@ import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
 import { registerEncounterRoutes } from "./encounters.js";
+import { defaultThemeForMembership } from "./player-themes.js";
+import { registerPlayerThemeRoutes } from "./player-theme-routes.js";
 import { recruitFromBattleZone } from "./battle-initiative.js";
 import {
   campaignRechargeAnchorsNeedReset,
@@ -671,12 +674,15 @@ export async function claimInviteOwnership(
   displayName: string,
 ) {
   return db.transaction(async (tx) => {
+    const membershipId = randomUUID();
     const [member] = await tx
       .insert(memberships)
       .values({
+        id: membershipId,
         campaignId: invite.campaignId,
         role: "PLAYER",
         displayName,
+        defaultThemeId: defaultThemeForMembership(membershipId),
       })
       .returning();
     if (!member) throw new Error("MEMBER_CREATE_FAILED");
@@ -805,9 +811,16 @@ async function createPlayerAccess(
         };
       }
     }
+    const membershipId = randomUUID();
     const [member] = await tx
       .insert(memberships)
-      .values({ campaignId, role: "PLAYER", displayName: label })
+      .values({
+        id: membershipId,
+        campaignId,
+        role: "PLAYER",
+        displayName: label,
+        defaultThemeId: defaultThemeForMembership(membershipId),
+      })
       .returning();
     if (!member) throw new Error("MEMBER_CREATE_FAILED");
     await tx
@@ -898,6 +911,7 @@ export function registerRoutes(
   registerOperatorFeedbackRoutes(app, db);
   registerPlayerRequestRoutes(app, db, io);
   registerCharacterMediaRoutes(app, db);
+  registerPlayerThemeRoutes(app, db);
   registerEncounterRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
@@ -1157,12 +1171,14 @@ export function registerRoutes(
       )
       .limit(1);
     if (!target) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
-    return buildSnapshot(db, {
-      membershipId: target.id,
-      campaignId: target.campaignId,
-      role: target.role,
-      displayName: target.displayName,
-    });
+    return withoutPersonalTheme(
+      await buildSnapshot(db, {
+        membershipId: target.id,
+        campaignId: target.campaignId,
+        role: target.role,
+        displayName: target.displayName,
+      }),
+    );
   });
 
   app.patch("/api/memberships/:id/name", async (request, reply) => {

@@ -47,14 +47,12 @@ UIX-507 имеет evidence по исходным десяти критерия�
 
 ## Решения, которые нельзя принимать скрыто
 
-- Владельцу уже отправлен вопрос: настройка общая для всех кампаний или
-  отдельная для участия в каждой. В коде сейчас нет глобального аккаунта;
-  имя игрока, beta handle, session ID и character ID не заменяют такую
-  идентичность. Независимые контролы можно делать до ответа, persistence — нет.
+- **Ответ владельца 19 сентября:** настройка отдельно для игрока в каждой
+  кампании. Владелец данных — стабильная membership-запись; имя игрока,
+  beta handle, session ID и character ID не заменяют эту идентичность.
 - В UIX-317 записан согласованный постепенный переход на Base UI с Button.
-  Задан вопрос, входит ли этот первый этап в конечный пул или владелец
-  предпочитает сначала закончить темы на текущих компонентах. До ответа
-  миграция **не объявлена отменённой или выполненной**.
+  Повторный вопрос о нём признан лишним: первый этап Button входит в пул,
+  остальные Gravity-компоненты не переписываются заодно.
 - Исходные палитры утверждены ранее; заново придумывать их не нужно.
   `classic-v1` сверяется с сохранённым образцом, не с памятью агента.
 - Удалённый override должен безопасно давать system. Отсутствие override
@@ -73,12 +71,13 @@ UIX-507 имеет evidence по исходным десяти критерия�
 
 ## Ограничения gate
 
-- Linear write ранее отклонён; до разрешения формальный статус не меняется.
-  Локальная closure-ready запись не равна обновлённой карточке.
-- Этот пул не опубликован. Старое разрешение на предыдущий релиз не
-  распространяется молча на новые push / PR / deploy.
+- Владелец разрешил обновлять существующие Linear-карточки; запись stage gate
+  в UIX-317 успешно выполнена. Done по-прежнему требует исходных критериев.
+- Владелец разрешил публикацию этой ветки и CI. Слияние и новый production
+  deploy не входят в разрешение этого пула.
 - Один локальный test worker, ограниченные время / память, cleanup своих
-  процессов. Full suite после каждой правки запрещён. Использовать результаты
+  процессов. Доступны все свободные ресурсы по ответу владельца; остаётся
+  аварийный запас RAM1GiB. Full suite после каждой правки запрещён. Использовать результаты
   неизменного SHA, не выдавая их за проверку новых файлов.
 - `tests/e2e/selection-recovery.spec.ts` остаётся нетронутым и неотслеживаемым;
   исходный SHA256: `7A5AB2F67EA250F787DFAC9AC441CE387CD61C4F9B99AAA48210A935EB6D6D9A`.
@@ -184,3 +183,57 @@ free<1GiB. До ответа эти лимиты не применяются. И
 геометрию и пройти один frozen Chromium/Firefox gate на12 cases. После
 продуктового решения подключить темы к правильному серверному владельцу,
 затем выполнить единую проверку тем/иконок/меню. Не начинать следующий backlog.
+
+## Возобновление после ответов владельца — 2026-09-19
+
+Предыдущие блокеры решения/публикации/Linear/бюджета RAM сняты явными ответами
+владельца. Предыдущий checkpoint сохранён как история, а не текущий запрет.
+
+- Persistence: текущая membership своей кампании, published-only каталог,
+  self-only preference projection, revisions/CAS, отдельные null(reset) и system.
+- Начальный default назначается и сохраняется стабильно по membership UUID
+  из семи утверждённых персональных палитр; это техническое начальное
+  назначение, не вывод о предпочтениях человека. Без displayName/handle.
+  Мастер может назначить опубликованную исходную тему участнику своей
+  кампании; сохранённый пользовательский override этим не перезаписывается.
+  Classic доступен в переключателе, не выбирается автоматическим default.
+- Параллельные владельцы файлов: server/contracts/db; frontend theme wiring;
+  Base UI Button; root — компактные controls, общая интеграция и gate.
+- Браузер работает с фиксированным built payload и одним worker; budget4GiB
+  при preflight2GiB free, остановке free<1GiB и ограничении времени.
+  Запуск `compact-static-gm-authorized` заменяет ресурсно прерванный baseline;
+  он ещё не считается успешным до receipt.
+
+## Checkpoint — connected implementation, before browser gate
+
+**Decisions:** the owner's answers above supersede the historical blockers.
+The actual App now uses the membership-scoped preference and the real server
+adapter. GM default assignment has its own public revision; private player
+activity is not exposed through that counter or through the GM preview endpoint.
+The first Base UI migration is Button only; other Gravity controls remain.
+
+**Revision:** product changes on top of `dfd07bb`; exact freeze follows this
+checkpoint. Files: server theme routes/service/snapshot/seed, contracts catalog,
+DB migration0044, App/root/theme settings, shared Button and its consumers,
+compact Grid/More sizing, targeted unit/integration/browser tests and docs.
+
+**Verification:** `design-connected-corrected` passed canonical generation,
+contracts/DB builds, web/server/E2E types, scoped format/lint (zero errors, two
+pre-existing App dependency warnings), **65/65 tests in10 files**, and a frozen
+App plus real-control fixture build. One worker; receipt/logs and source hashes
+in `selection-closure-2026-09-18`. The first connected run was62/65: a real SQL
+constraint mismatch and disabled-link callback were fixed, not waived.
+The privacy/default-counter corrections are covered by the same final run.
+
+**Browser baseline:** the authorized compact run completed three GM viewports
+and exposed34px grid inputs and18px checkbox labels. Scoped44px fixes are in
+this candidate; post-fix browser acceptance is next, not claimed from source.
+
+**Remaining gate:** current built browser matrix; actual-server reload/re-login
+and privacy E2E on CI; original menu-ledger limits including the historical RO
+incident/native Firefox popup. No task is Done from a build or unit run alone.
+Protected untracked selection test remains untouched and excluded. No deployment.
+
+**Next action:** freeze this connected candidate, run the targeted browser gate,
+publish the approved branch/PR and use its CI once. Update existing Linear cards
+at the acceptance gate; do not start a new backlog pool.

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { ApiError } from "./api";
 import { OperatorFeedbackFilters } from "./OperatorFeedbackFilters";

@@ -109,3 +109,26 @@ content с фиксированного `width` на `minWidth` и добавл�
 attribution и не доказывает причинность. Если обе ревизии в единственном
 old/new gate зелёные, серию не повторять: causal gap остаётся открытым, а fix
 не следует изобретать или объявлять подтверждённым по non-reproduction.
+
+## Reachable personal-theme additions — dirty candidate
+
+Историческая база реестра остаётся 37 buckets / 76 JSX occurrences с прежними
+статусами и evidence. После base revision
+`dfd07bb57e9c176df2642c36650193d24a9dd72d` в незамороженном рабочем кандидате
+появились два новых достижимых `FormSelect`. Freeze SHA пока отсутствует и не
+подменяется текущим dirty working tree.
+
+- `PlayerThemeSettings.tsx` — один Select в личном диалоге оформления текущего
+  campaign membership. Он остаётся `BLOCKED` до exact-frozen evidence из
+  `player-theme-preference.spec.ts` для GM/PLAYER desktop/compact и изолированного
+  real-server `player-theme-persistence.spec.ts`.
+- `MemberDefaultThemeField.tsx` — один GM Select назначения темы участнику в
+  Setup. Он не наследует PASS от старых shared-FormSelect проверок и остаётся
+  `BLOCKED`, пока preference gate не содержит отдельный runtime case этого
+  контрола, а real-server gate не докажет сохранение/default conflict behavior.
+
+Текущий статический снимок с additions — 39 buckets / 78 occurrences, но это не
+пересчёт исторических PASS/FAIL/BLOCKED до freeze и runtime evidence. Новая
+Base UI кнопка рядом с каждым Select не является раскрывающимся контролом и не
+добавляет строку UIX-644. Старые exact-main/menu gates видят общий FormSelect
+contract, но не видят эти два новых уникальных reachable места использования.

@@ -21,7 +21,7 @@ import type {
   InitiativeParticipantDto,
   MessageVisibility,
 } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
 import {
   extractPastedImageFile,

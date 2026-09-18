@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { AppIcon } from "./AppIcon";
 import { DeleteIcon } from "./icons";
 

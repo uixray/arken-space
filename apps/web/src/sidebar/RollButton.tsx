@@ -1,4 +1,4 @@
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { humanizeFormula } from "../formula-display";
 import { useCampaignStatLabels } from "../campaign-stat-labels-context";
 

@@ -1,0 +1,21 @@
+.arken-button__spinner {
+  box-sizing: border-box;
+  inline-size: 1em;
+  block-size: 1em;
+  border: 2px solid currentColor;
+  border-block-start-color: transparent;
+  border-radius: 50%;
+  animation: arken-button-spin 0.7s linear infinite;
+}
+
+@keyframes arken-button-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arken-button__spinner {
+    animation: none;
+  }
+}

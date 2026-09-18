@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { AssetDto, GameSnapshot } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import {
   TokenImageGenerator,
   type TokenImageDraft,

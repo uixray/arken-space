@@ -6,7 +6,7 @@ import {
   type PointerEvent,
 } from "react";
 import type { AssetDto } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import { AppIcon } from "./ui/AppIcon";
 import { AddIcon, DecreaseIcon } from "./ui/icons";
 import {
