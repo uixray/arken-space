@@ -617,7 +617,19 @@ for (const role of ["GM", "PLAYER"] as const) {
       await expect(select).toBeFocused();
       await select.press("Enter");
       await expect(idea).toBeVisible();
+      // Visible options precede Floating UI's keyboard-ready open state.
+      // Do not send Home during the initial opening frame (exact-main CI trace).
+      await expect(
+        idea.locator("xpath=ancestor::*[@data-floating-ui-status][1]"),
+      ).toHaveAttribute("data-floating-ui-status", "open");
+      await expect(select).toBeFocused();
       await page.keyboard.press("Home");
+      await expect(select).toHaveAttribute(
+        "aria-activedescendant",
+        (await page
+          .getByRole("option", { name: "Ошибка", exact: true })
+          .getAttribute("id"))!,
+      );
       await page.keyboard.press("Enter");
       await expect(select).toContainText("Ошибка");
       await select.press("Enter");
