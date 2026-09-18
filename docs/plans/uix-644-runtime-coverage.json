@@ -7,7 +7,7 @@
   "evidence": {
     "compactSectionsBreakpoint": {
       "status": "PASS",
-      "revision": "168508ee2bb5f7703f09675c094f6557cbde7011 plus App compact breakpoint reset; see checkpoint for final commit",
+      "revision": "ecf66e62bb2c5cfb9fa679074bc7cdbfe2f176f2",
       "artifact": "compact-sections-breakpoint/fixed/results.json",
       "scope": "12 Chrome/Firefox production-build cases: new GM/PLAYER Sections390→360x480→1280→390 lifecycle, visible destination hit targets, no spontaneous modal revival, Journal hit/click, reopen/Escape/focus return; existing navigation owner and scene-picker breakpoint regressions. Mocked API, not all destination workspaces or physical devices. Old candidate failed with revived modal; fixed build passed."
     },
@@ -49,13 +49,13 @@
     },
     "cursorStableObserver": {
       "status": "PASS",
-      "revision": "984c1fec452f2cfd09cc1645ab4fd52db5775d74 plus WorkspaceNav stable observer subscription; see cursor-observer-cause/checkpoint.md",
+      "revision": "5d7d548d0ad69c67139333039f170ecc88cca708",
       "artifact": "cursor-observer-cause/connected-results.json",
       "scope": "16/16 Chrome/Firefox connected cases PASS52.5s: all8 previously split cursor cases,6 navigation-owner and2 desktop overflow pointer cases. New keyboard cases include named dialog/controls, two Journal/Map cycles, Escape/focus, no client-log writes. Instrumented same Firefox360 case now1 stable workspace observer versus22 before,0errors versus2; extra1case PASS6.2s. Unit10PASS preserves render/resize/observer measurement and unmount cleanup. Scoped repair of WorkspaceNav re-observation during popup resize; original TokenPalette RO not separately resolved."
     },
     "cursorOwnerNaming": {
       "status": "FAIL",
-      "revision": "d67d683cb79d06a8c788b68ebb359a11873b2efb plus CursorPresenceMenu naming fix; see cursor-owner-navigation/checkpoint.md",
+      "revision": "984c1fec452f2cfd09cc1645ab4fd52db5775d74",
       "artifact": "cursor-owner-navigation/owner-contract-results.json",
       "scope": "Connected8-case matrix split across owner-contract-results.json and remaining-results.json:5PASS3FAIL. Named dialog/control relationship, two keyboard Journal/Map cycles, no revival and Escape focus assertions pass in both browsers; Firefox new360/640 cases fail on ResizeObserver telemetry, existing GM Chromium resize case also fails. Old d67d683 Firefox360 baseline independently reproduces two same errors. Naming fix is not observer repair; do not accept this gate or discard telemetry."
     },
