@@ -413,6 +413,16 @@ async function installBoundary(page: Page, editExisting = false) {
       for (const socket of sockets)
         socket.send(`42${JSON.stringify(["game:snapshot", snapshot])}`);
     },
+    refreshRecoveredAsset(asset: AssetDto) {
+      snapshot.assets = [
+        ...snapshot.assets.filter((item) => item.id !== asset.id),
+        asset,
+      ];
+      snapshot.snapshotVersion += 1;
+      expect(sockets.size).toBeGreaterThan(0);
+      for (const socket of sockets)
+        socket.send(`42${JSON.stringify(["game:snapshot", snapshot])}`);
+    },
   };
 }
 
@@ -443,7 +453,11 @@ for (const width of [1280, 360]) {
   }, info) => {
     await page.setViewportSize({ width, height: 900 });
     const fixture = await installBoundary(page);
+    // Replacement content gets a new URL in production. Reusing the corrupt
+    // URL instead tests Firefox's failed-image cache, not preview recovery.
+    const recoveredA = { ...a, url: `${a.url}?v=recovered-a` };
     let damaged = true;
+    let recoveredRequests = 0;
     await page.route(`**${a.url}`, (route) =>
       route.fulfill({
         contentType: "image/png",
@@ -453,6 +467,10 @@ for (const width of [1280, 360]) {
         headers: { "cache-control": "no-store" },
       }),
     );
+    await page.route(`**${recoveredA.url}`, (route) => {
+      recoveredRequests += 1;
+      return route.fulfill({ contentType: "image/png", body: aBytes });
+    });
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Токены");
@@ -509,8 +527,11 @@ for (const width of [1280, 360]) {
     await imageDecoded(previewImage, 40, 60);
     await expect(alert).toHaveCount(0);
     damaged = false;
+    fixture.refreshRecoveredAsset(recoveredA);
     await source.selectOption(a.id);
+    await expect(previewImage).toHaveAttribute("src", recoveredA.url);
     await imageDecoded(previewImage, 60, 40);
+    expect(recoveredRequests).toBeGreaterThan(0);
     await expect(alert).toHaveCount(0);
     expect(fixture.writes).toHaveLength(2);
     expect(fixture.writes.every((write) => write.upload)).toBe(true);
