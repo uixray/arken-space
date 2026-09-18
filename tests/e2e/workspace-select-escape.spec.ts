@@ -3,8 +3,49 @@ import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 
-async function install(page: Page, role: "GM" | "PLAYER") {
+async function install(
+  page: Page,
+  role: "GM" | "PLAYER",
+  withCharacter = false,
+  withSetup = false,
+) {
   const snapshot = buildGameSnapshot(role, { schemaVersion: 2 });
+  if (withCharacter)
+    snapshot.characters = [
+      {
+        id: "1acf0103-1111-4111-8111-111111111111",
+        name: "Страж образец",
+        ownerMembershipId: null,
+        controllerMembershipIds: [],
+        portraitAssetId: null,
+        lifecycle: "ACTIVE",
+        archivedAt: null,
+        archivedByMembershipId: null,
+        stats: {},
+        skills: [],
+        spells: [],
+        notes: "",
+        backstory: "",
+        inventory: [],
+        resources: {},
+        wallet: { gold: 0, silver: 0, copper: 0, sp: 0 },
+        entries: [],
+        revision: 1,
+      },
+    ];
+  if (withSetup) {
+    snapshot.members.push({
+      id: "1acf0104-1111-4111-8111-111111111111",
+      role: "PLAYER",
+      displayName: "Игрок для проверки",
+      characterId: null,
+    });
+    snapshot.characters.push({
+      ...snapshot.characters[0]!,
+      id: "1acf0105-1111-4111-8111-111111111111",
+      name: "Маг образец",
+    });
+  }
   const assetId = "1acf0101-1111-4111-8111-111111111111";
   snapshot.assets = [
     {
@@ -37,9 +78,6 @@ async function install(page: Page, role: "GM" | "PLAYER") {
   await page.route("**/api/**", (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path === "/api/client-logs") {
-      return route.fulfill({ json: { ok: true } });
-    }
     if (request.method() !== "GET") {
       mutations.push(`${request.method()} ${path}`);
       return route.fulfill({
@@ -117,3 +155,325 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
   }
 }
+
+for (const width of [1280, 360]) {
+  test(`UIX-644 character template modal lifecycle ${width}`, async ({
+    page,
+  }, testInfo) => {
+    const mutations = await install(page, "GM", true);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    await openWorkspaceSection(page, "Персонажи");
+    const create = page.getByRole("button", {
+      name: "Создать персонажа",
+      exact: true,
+    });
+    await create.click();
+    const dialog = page.getByRole("dialog", {
+      name: "Новый персонаж",
+      exact: true,
+    });
+    const name = dialog.getByRole("textbox", { name: "Имя персонажа" });
+    await name.fill("Новый страж");
+    const trigger = dialog.getByRole("combobox", { name: /Шаблон/ });
+    await name.press("Tab");
+    await expect(trigger).toBeFocused();
+    await trigger.press("Shift+Tab");
+    await expect(name).toBeFocused();
+    await expect(name.locator("..")).toHaveCSS("outline-style", "solid");
+    await expect(name.locator("..")).toHaveCSS("outline-width", "2px");
+    const popup = page.locator(".arken-form-select-popup");
+    await trigger.click();
+    const template = popup.getByRole("option", {
+      name: "На основе «Страж образец»",
+      exact: true,
+    });
+    await expect(template).toBeVisible();
+    await expect
+      .poll(() =>
+        template.evaluate((element) => {
+          const r = element.getBoundingClientRect();
+          return (
+            r.left >= 0 &&
+            r.right <= innerWidth &&
+            r.top >= 0 &&
+            r.bottom <= innerHeight &&
+            element.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            )
+          );
+        }),
+      )
+      .toBe(true);
+    await template.click();
+    await expect(trigger).toContainText("На основе «Страж образец»");
+    await expect(popup).toBeHidden();
+    await trigger.click();
+    await page.setViewportSize({
+      width: width === 360 ? 390 : 1180,
+      height: 640,
+    });
+    await expect(template).toBeVisible();
+    await template.click();
+    await expect(name).toHaveValue("Новый страж");
+    await trigger.click();
+    await page.keyboard.press("Escape");
+    await expect(popup).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(dialog).toBeVisible();
+    await expect(trigger).toContainText("На основе «Страж образец»");
+    await trigger.press("ArrowDown");
+    await expect(popup).toBeVisible();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Enter");
+    await expect(trigger).toContainText("Без шаблона (пустой лист)");
+    await expect(popup).toBeHidden();
+    await trigger.click();
+    await dialog.getByText("Новый персонаж", { exact: true }).click();
+    await expect(popup).toBeHidden();
+    await expect(dialog).toBeVisible();
+    await trigger.focus();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(create).toBeVisible();
+    await create.click();
+    await expect(name).toHaveValue("");
+    await expect(trigger).toContainText("Без шаблона (пустой лист)");
+    await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+    await testInfo.attach("character-template-lifecycle", {
+      body: JSON.stringify({ width, mutations, errors }),
+      contentType: "application/json",
+    });
+    expect(mutations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const width of [1280, 360]) {
+  test(`UIX-644 setup select registry ${width}`, async ({ page }, testInfo) => {
+    const mutations = await install(page, "GM", true, true);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    await openWorkspaceSection(page, "Подготовка");
+    const popup = page.locator(".arken-form-select-popup");
+    const tabs = page.getByRole("navigation", { name: "Разделы подготовки" });
+    async function expectHiddenSectionsInert() {
+      expect(
+        await page.locator(".subsection[hidden]").evaluateAll((sections) => {
+          if (!sections.length) return false;
+          const before = document.activeElement;
+          return sections.every((section) => {
+            if (section.getClientRects().length) return false;
+            return [
+              ...section.querySelectorAll<HTMLElement>(
+                "button, input, select, textarea, [tabindex]",
+              ),
+            ].every((control) => {
+              control.focus();
+              return document.activeElement === before;
+            });
+          });
+        }),
+      ).toBe(true);
+    }
+    await expectHiddenSectionsInert();
+    const receipts: string[] = [];
+    for (const [label, selected] of [
+      ["Игрок", "Игрок для проверки"],
+      ["Персонаж для токена", "Маг образец"],
+      ["Персонаж", "Маг образец"],
+    ]) {
+      if (label === "Персонаж для токена")
+        await tabs
+          .getByRole("button", { name: "Персонажи и доступ", exact: true })
+          .click();
+      const trigger = page.getByRole("combobox", { name: label, exact: true });
+      await trigger.click();
+      const option = popup.getByRole("option", { name: selected, exact: true });
+      await expect
+        .poll(() =>
+          option.evaluate((element) => {
+            const r = element.getBoundingClientRect();
+            return (
+              r.left >= 0 &&
+              r.right <= innerWidth &&
+              r.top >= 0 &&
+              r.bottom <= innerHeight &&
+              element.contains(
+                document.elementFromPoint(
+                  r.x + r.width / 2,
+                  r.y + r.height / 2,
+                ),
+              )
+            );
+          }),
+        )
+        .toBe(true);
+      await option.click();
+      await expect(popup).toBeHidden();
+      await expect(trigger).toContainText(selected!);
+      await trigger.click();
+      await page.keyboard.press("Escape");
+      await expect(popup).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await trigger.press("ArrowDown");
+      await expect(popup).toBeVisible();
+      await page.keyboard.press("End");
+      await page.keyboard.press("Enter");
+      await expect(trigger).toContainText(selected!);
+      await expect(popup).toBeHidden();
+      receipts.push(label!);
+    }
+    const invite = page.getByRole("combobox", {
+      name: "Персонаж",
+      exact: true,
+    });
+    await invite.click();
+    await page.setViewportSize({
+      width: width === 360 ? 390 : 1180,
+      height: 640,
+    });
+    await popup
+      .getByRole("option", { name: "Маг образец", exact: true })
+      .click();
+    await expect(invite).toContainText("Маг образец");
+    await invite.click();
+    await tabs.getByRole("button", { name: "Обзор", exact: true }).click();
+    await expect(popup).toBeHidden();
+    await expect(invite).toBeHidden();
+    await expectHiddenSectionsInert();
+    await expect(
+      page.getByRole("combobox", { name: "Игрок", exact: true }),
+    ).toContainText("Игрок для проверки");
+    await tabs
+      .getByRole("button", { name: "Персонажи и доступ", exact: true })
+      .click();
+    await expect(invite).toContainText("Маг образец");
+    await expect(
+      page.getByRole("combobox", { name: "Персонаж для токена", exact: true }),
+    ).toContainText("Маг образец");
+    await testInfo.attach("setup-select-registry", {
+      body: JSON.stringify({ width, receipts, mutations, errors }),
+      contentType: "application/json",
+    });
+    expect(mutations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}
+
+test("UIX-317 reduced motion preserves actual character dialog and popup lifecycle", async ({
+  page,
+}, info) => {
+  const mutations = await install(page, "GM", true);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await openWorkspaceSection(page, "Персонажи");
+  const create = page.getByRole("button", {
+    name: "Создать персонажа",
+    exact: true,
+  });
+  await create.click();
+  const dialog = page.getByRole("dialog", {
+    name: "Новый персонаж",
+    exact: true,
+  });
+  const name = dialog.getByRole("textbox", { name: "Имя персонажа" });
+  await name.pressSequentially("Страж без анимации");
+  const trigger = dialog.getByRole("combobox", { name: /Шаблон/ });
+  await name.press("Tab");
+  await expect(trigger).toBeFocused();
+  await trigger.press("ArrowDown");
+  const popup = page.locator(".arken-form-select-popup");
+  await expect(popup).toBeVisible();
+  const sample = async (phase: string) => {
+    const state = await page.evaluate(() => ({
+      reduce: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      running: document
+        .getAnimations()
+        .filter((a) => a.playState === "running")
+        .map((a) => ({ state: a.playState, type: a.constructor.name })),
+      styles: Array.from(
+        document.querySelectorAll(
+          '[role="dialog"],.arken-form-select-popup,[data-floating-ui-status]',
+        ),
+      ).map((node) => {
+        const css = getComputedStyle(node);
+        return {
+          className: node.className,
+          transition: css.transitionDuration,
+          animation: css.animationName,
+          scroll: css.scrollBehavior,
+        };
+      }),
+    }));
+    expect(state.reduce).toBe(true);
+    expect(state.running).toEqual([]);
+    expect(state.styles.length).toBeGreaterThan(1);
+    for (const style of state.styles) {
+      expect(style.transition).toBe("0s");
+      expect(style.animation).toBe("none");
+      expect(style.scroll).toBe("auto");
+    }
+    await info.attach(phase, {
+      body: JSON.stringify(state),
+      contentType: "application/json",
+    });
+  };
+  await sample("reduced-at-open");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await expect(trigger).toContainText("На основе «Страж образец»");
+  await expect(popup).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(popup).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 360, height: 640 });
+  await expect(popup).toBeVisible();
+  await sample("reduced-after-live-toggle-and-resize");
+  const option = popup.getByRole("option", {
+    name: "На основе «Страж образец»",
+    exact: true,
+  });
+  await expect
+    .poll(() =>
+      option.evaluate((node) => {
+        const r = node.getBoundingClientRect();
+        return (
+          r.left >= 0 &&
+          r.right <= innerWidth &&
+          r.top >= 0 &&
+          r.bottom <= innerHeight &&
+          node.contains(
+            document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+          )
+        );
+      }),
+    )
+    .toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(popup).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await expect(trigger).toBeFocused();
+  await expect(name).toHaveValue("Страж без анимации");
+  await trigger.press("Shift+Tab");
+  await expect(name).toBeFocused();
+  await expect(name.locator("..")).toHaveCSS("outline-width", "2px");
+  await info.attach("reduced-compact-dialog", {
+    body: await page.screenshot(),
+    contentType: "image/png",
+  });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(create).toBeFocused();
+  expect(errors).toEqual([]);
+  expect(mutations).toEqual([]);
+});

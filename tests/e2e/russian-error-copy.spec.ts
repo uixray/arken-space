@@ -1,12 +1,14 @@
 import type { AssetDto, CommandAck, GameSnapshot } from "@arken/contracts";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { openWorkspaceSection } from "./workspace-nav-helper";
 
 // Real App/api/MusicBar/socket.io client/Gravity notifications. Only HTTP and
 // Engine.IO/Socket.IO transport boundaries are synthetic: no real server,
-// author data, production hook, media decoding or mutation is used here.
+// author data, production hook or mutation is used here. The local preview
+// recovery cases use the native media engine with a synthetic OGG fixture.
 const networkMessage =
   "Не удалось связаться с сервером. Проверьте подключение и повторите попытку.";
 const audioMessage = "Состояние музыки изменилось. Повторите команду.";
@@ -301,6 +303,106 @@ function expectIsolated(
   expect(state.pageErrors).toEqual([]);
 }
 
+// Files is a GM-only workspace; do not fabricate a PLAYER navigation route.
+{
+  for (const width of [1280, 360]) {
+    test(`UIX-417 local audio failure and recovery GM ${width}`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize({ width, height: 900 });
+      const fixture = await installErrorFixture(page, false);
+      const bytes = await readFile(
+        new URL("../multiplayer/uix642-synthetic-tone.ogg", import.meta.url),
+      );
+      let recover = false,
+        failures = 0,
+        successes = 0;
+      await page.route(`**${audioAsset.url}`, (route) => {
+        if (!recover) {
+          failures++;
+          return route.fulfill({
+            status: 404,
+            contentType: "text/plain",
+            body: "MEDIA_NOT_FOUND internal-request-secret",
+            headers: { "cache-control": "no-store" },
+          });
+        }
+        successes++;
+        return route.fulfill({
+          contentType: "audio/ogg",
+          body: bytes,
+          headers: { "cache-control": "no-store" },
+        });
+      });
+      await page.goto("/");
+      await expect(page.locator(".app-shell")).toBeVisible();
+      await openWorkspaceSection(page, "Файлы");
+      const files = page.getByRole("dialog", { name: "Файлы", exact: true });
+      await files
+        .getByRole("button", { name: "Прослушать", exact: true })
+        .click();
+      const audition = files.locator(".asset-audio-preview");
+      const audio = audition.getByLabel(`Прослушивание: ${audioAsset.name}`, {
+        exact: true,
+      });
+      // Ask the real media engine to load the resource; do not dispatch an
+      // artificial error event or claim a native-control playback test.
+      await audio.evaluate((node) => (node as HTMLAudioElement).load());
+      const alert = audition.getByRole("alert");
+      await expect(alert).toHaveText(
+        "Не удалось воспроизвести файл. Закройте превью и попробуйте снова.",
+      );
+      expect(failures).toBeGreaterThan(0);
+      expect(
+        await audio.evaluate(
+          (node) => (node as HTMLAudioElement).error?.code ?? 0,
+        ),
+      ).toBeGreaterThan(0);
+      expectTextFits(await textGeometry(alert));
+      await expect(files).not.toContainText("MEDIA_NOT_FOUND");
+      await expect(files).not.toContainText("internal-request-secret");
+      await expect(files).not.toContainText("NotSupportedError");
+      await screenshot(page, info, "local-audio-error");
+      await files
+        .getByRole("button", { name: "Закрыть превью", exact: true })
+        .click();
+      await expect(audition).toHaveCount(0);
+      recover = true;
+      await files
+        .getByRole("button", { name: "Прослушать", exact: true })
+        .click();
+      await expect(alert).toHaveCount(0);
+      await audio.evaluate((node) => (node as HTMLAudioElement).load());
+      await expect
+        .poll(() =>
+          audio.evaluate((node) => (node as HTMLAudioElement).readyState),
+        )
+        .toBeGreaterThanOrEqual(2);
+      expect(successes).toBeGreaterThan(0);
+      expect(
+        await audio.evaluate((node) => ({
+          paused: (node as HTMLAudioElement).paused,
+          error: (node as HTMLAudioElement).error,
+        })),
+      ).toEqual({ paused: true, error: null });
+      await expect(alert).toHaveCount(0);
+      expectIsolated(fixture);
+      expect(fixture.commands).toEqual([]);
+      await info.attach("local-audio-failure-recovery", {
+        body: JSON.stringify({
+          role: "GM",
+          width,
+          failures,
+          successes,
+          blockedWrites: fixture.blockedWrites,
+          pageErrors: fixture.pageErrors,
+        }),
+        contentType: "application/json",
+      });
+    });
+  }
+}
+
 for (const width of [1280, 390]) {
   test(`Russian API network failure and real retry at ${width}px`, async ({
     page,
@@ -362,6 +464,11 @@ for (const width of [1280, 390]) {
         .getByRole("button", { name: audioAsset.name, exact: true })
         .click();
       await expect.poll(() => fixture.commands.length).toBe(1);
+      // Selection closes its menu: keyboard focus must not remain on the
+      // now-hidden track, even while its server acknowledgement is pending.
+      await expect(
+        music.getByLabel("Меню музыки", { exact: true }),
+      ).toBeFocused();
       expect(fixture.acknowledgementsSent).toBe(0);
       if (width === 390) {
         await page.setViewportSize({ width, height: 900 });
@@ -422,3 +529,32 @@ for (const width of [1280, 390]) {
     }
   });
 }
+
+test("UIX-417 malformed bootstrap shows Russian recovery text instead of crashing", async ({
+  page,
+}) => {
+  let bootstrapReads = 0;
+  await page.route("**/api/**", (route) => {
+    if (new URL(route.request().url()).pathname === "/api/bootstrap") {
+      bootstrapReads++;
+      return route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<html>Private proxy failure</html>",
+      });
+    }
+    return route.fulfill({ status: 202, body: "" });
+  });
+  await page.goto("/");
+  await expect(
+    page.getByText(
+      "Не удалось прочитать ответ сервера. Обновите данные перед повторением действия.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Интерфейс временно остановлен" }),
+  ).toHaveCount(0);
+  await expect(page.getByText("Private proxy failure")).toHaveCount(0);
+  expect(bootstrapReads).toBeGreaterThan(0);
+});

@@ -95,6 +95,13 @@ describe("cursor presence control", () => {
       screen.getByText("Показывать мой курсор игрокам"),
     ).toBeInTheDocument();
     expect(screen.getByText(/скрытых туманом/)).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Видимость курсоров" });
+    expect(
+      screen.getByRole("button", { name: "Настроить видимость курсоров" }),
+    ).toHaveAttribute("aria-controls", dialog.id);
+    expect(dialog).toContainElement(
+      screen.getByText("Показывать чужие курсоры"),
+    );
   });
 
   it("starts a GM with their cursor private", () => {

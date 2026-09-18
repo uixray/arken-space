@@ -188,3 +188,134 @@ PR #58 устраняет видимый дефект: внешний Floating U
   новая регрессия подготовлена для следующей GitHub-интеграции. Сам этот
   локальный пул не публиковался и не менял production. Широкий UIX-644
   и отдельные задачи ручной/mobile-приёмки этим не закрываются.
+
+## 2026-09-16 — revalidation using existing release evidence
+
+Live UIX-502 remains In Review. Existing exact-main CI `35043939211` was read,
+not restarted: SHA `7f28ca399ec0530e55e6bd41d4427ea23150522b`, both browser jobs
+successful (Chromium239 passed/2 skipped; Firefox238 passed/3 skipped).
+The modal-owner contract, close-lifecycle and token-generator scenarios, dialog
+ownership implementation and styles have no diff from that released revision.
+The current form-wrapper change is confined to checkbox forwarding, not Select.
+
+Downloaded modal-owner receipts from that run contain all eight combinations of
+sibling/nested ×1280/390 ×Chrome/Firefox. Each final diagnostic has zero page
+errors, zero unexpected API requests, zero leftover layers and29 focus events.
+The existing assertions cover actual overlapping hit targets, focus cycles,
+Arrow/Enter, Escape levels, owner focus return and cleanup. This reuses release
+evidence rather than re-running browser tests because the chat changed.
+
+The generic synthetic-acceptance artifacts were also inspected: they do not
+contain token-modal-character-popup PNGs. Do not claim those images were viewed
+in this audit. The historical September8 App acceptance report and unchanged
+source remain available; the downloaded CI log uses summary output and does not
+individually name the token-modal cases. Whole UIX-644, arbitrary nesting depth
+and physical-device acceptance are not inferred from the owner-fixture receipts.
+No Linear state change was attempted because the earlier external-write approval
+is unresolved. This evidence audit is not an assertion that every open project
+issue is ready for closure.
+
+## 2026-09-16 — current Select integration acceptance
+
+After the shared Select contract fix, the existing connected browser pool was
+run against `0e3e3c723207b980082214217b3c4e1b9cb32399`: 12/12 PASS in 1.4 minutes,
+Chrome/Firefox, desktop/390px, one worker and zero retries. This is a fresh local
+candidate gate, not a claim that old CI covered the new Select code.
+
+Eight sibling/nested owner cases report zero popup-focus violations, page errors,
+unexpected API requests and leftover layers. Four real App token-editor cases
+verify the inline image picker and character popup, hit testing and viewport
+bounds, outside click, keyboard selection, Escape and focus return. The narrow
+Chrome token-popup screenshot was visually inspected. No assertion or runtime
+code was changed to obtain these passes. Source and test fixtures are the existing
+ones; synthetic API does not establish backend permissions or production playtest.
+
+The stated UIX-502 local acceptance matrix passes for this candidate. Wider
+UIX-644 menus, personal themes, arbitrary nesting and physical devices remain
+outside that conclusion. Linear remains In Review pending the previously blocked
+external write; this report does not silently update the task. No deployment.
+
+## 2026-09-16 — current Review acceptance revalidated at ca7b579
+
+Live UIX-502 remains In Review with its original eight acceptance criteria.
+The earlier0e3e3c7 gate predates23lines added to the shared Select adapter (popup
+open/closed list reset and composite labels). Therefore the separate current
+54-case bundle gate does not silently replace nested/sibling owner acceptance.
+
+Existing tests, unchanged:18/18PASS106.997247s, Chromium/Firefox, one worker,
+retries0/skipped0/flaky0. Evidence revisionca7b579bb0e03ad8c557f9dc555b1a231e08c144;
+runtime sourcee8daadcb357ceb456d789b7964ec69bea267fb38. No new test or product edit
+was needed. Special fixture intentionally runs on Vite dev and is excluded from
+production; do not relabel this as the production-dist54-case gate.
+
+| Original criterion                                         | Current evidence and boundary                                                                                                                                                                                    |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Token image/character picker above token modal             | 4real App token-generator cases: inline asset picker and character dropdown,1280/390, pointer hits; narrow Chromium screenshot inspected. Image picker is inline, not a fabricated popup.                        |
+| Consistent dialog-owned dropdown/combobox/popover handling | Existing shared owner context and actual Select;8owner cases plus4App cases. Unrelated UIX-644 custom menu types remain their own scope.                                                                         |
+| Explicit overlay order                                     | 8sibling/nested fixtures capture layers before/after B and with B popup, plus overlap hit targets.                                                                                                               |
+| No clipping by modal/ancestors                             | Actual option-center hits and viewport bounds in real App and owner fixture widths.                                                                                                                              |
+| Outside/Escape/focus/keyboard                              | Existing App cases and owner cycles verify pointer outside, Arrow/Enter, Escape levels, trigger/base-opener focus return.                                                                                        |
+| Old menu below newer modal                                 | B opens from held async completion after verified A popup, no intervening pointer/forced-open/state mutation; overlap and focus cycles reject stale A pointer/focus ownership. Both sibling and nested topology. |
+| Regression for token modal                                 | Existing token-generator.spec.ts actual image/character path retained,4cases.                                                                                                                                    |
+| Narrow and desktop                                         | 1280/390 in both browsers for owner/App; close-lifecycle390 in both.                                                                                                                                             |
+
+Additionally4natural close-lifecycle cases verify immediate hidden/inert state;
+2held-close-attribute cases explicitly test CSS state, not natural lifecycle.
+Read all8modal-owner-diagnostics.json: zero pageErrors, unexpectedApiRequests,
+bPopupFocusViolations and finalLayers. Screenshot inspection shows the character
+menu visible over the inline asset area within narrow token dialog. No viewport
+or assertion weakened to pass. Konva layer warning remains separate.
+
+Artifacts modal-current-gate/results.json,browser.log,browser-01/ contain named
+results, diagnostics and screenshots. Own Vite stopped. Scoped local UIX-502
+acceptance remains PASS for this candidate; backend ACL, arbitrary-depth menus,
+physical devices and full UIX-644 are not inferred. Linear mutation was not
+attempted: previous external-write permission remains unresolved. No deploy.
+
+## 2026-09-17 — Review gate after popup sizing and modal header changes
+
+Live original eight criteria reread; issue remains In Review. Revalidation was
+triggered by actual shared code changes after ca7b579: popup sizing452f5f1 and
+modal heading1458f43, not by a chat transition. Current sourcee20c77a:
+18/18 existing connected browser cases passed, Chrome/Firefox, one worker,
+zero retries/skips. Same eight owner, six closing and four real App token-picker
+cases; existing App tests additionally retain their first-open resize assertions.
+No product changes, test weakening, full suite, build or remote CI in this pool.
+
+Eight owner diagnostics have zero page errors, unexpected API requests, popup
+focus violations and leftover layers. Compact Chrome screenshot inspected:
+menu is above the inline picker, within the modal/viewport. Original layering,
+keyboard, outside dismissal and focus-return criteria remain locally accepted.
+This uses the dedicated development fixture, not a production-dist or backend
+acceptance claim. Artifacts: modal-review-final/results.json and owner-summary.json.
+
+Visual inspection also found a separate UIX-644 gap: narrow character menu
+renders the action «Создать персонажа» as «Создать пе…». Full text exists in DOM,
+so the passing layer/hit tests do not prove label readability. Follow up with a
+rendered-text regression and review shared popup content sizing, preserving the
+zoom-width fix and viewport bound. Do not silently count whole UIX-644 as done.
+Owned Vite stopped; protected selection recovery file unchanged. Existing Linear
+write/publication gates unchanged, no status mutation or deployment.
+
+## 2026-09-17 — UIX-644 readable shared Select options
+
+The clipped action from the preceding screenshot is fixed in the shared adapter,
+not by widening the token form alone. Measured trigger width is now a minimum;
+popup content uses intrinsic max-content width, still capped by the existing
+viewport limit. ResizeObserver/resize scheduling and portal/owner rules remain
+unchanged. The native selector is not replaced.
+
+Added a rendered overflow assertion for guidance and create-action labels to the
+existing token-modal browser scenario. It failed on the original narrow Chrome
+popup (RED); no assertion was weakened. Fixed18/18 connected owner/App cases
+passed93.884s on Chrome/Firefox. Four existing real Chrome zoom cases passed23.7s
+(GM/PLAYER,1600/1280 windows,100/125/150/100 percent,isolated profiles). Current
+component13/13,web/E2E types and scoped ESLint passed. One production build2.38s;
+four served HTML/JS/CSS hashes matched local files; real App token-modal cases
+passed4/4 in20.1s against that bundle. Compact Chrome screenshot visually confirms
+full «Персонажей пока нет» and «Создать персонажа» labels.
+
+Artifacts:select-readable-labels/red,fixed,zoom,built-results.json,manifest.json.
+This connected pool does not replace the whole UIX-644 registry gate, all long
+user-authored labels, physical devices or backend acceptance. No publication,
+Linear write or new card. Protected untracked selection test unchanged.

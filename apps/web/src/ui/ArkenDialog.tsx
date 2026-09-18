@@ -165,6 +165,7 @@ export function ArkenDialog({
   return (
     <OverlayOwnerContext.Provider value="modal">
       <Dialog
+        className="arken-dialog"
         open={open}
         onClose={onClose}
         onOpenChange={(nextOpen) => {

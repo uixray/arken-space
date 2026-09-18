@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useRef,
   useState,
   type DragEvent,
   type ClipboardEvent,
@@ -51,6 +52,9 @@ export function ImageUploadField({
   onUpdate,
 }: ImageUploadFieldProps) {
   const inputId = useId();
+  const hintId = useId();
+  const errorId = useId();
+  const pickerRef = useRef<HTMLButtonElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [intakeError, setIntakeError] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
@@ -64,6 +68,9 @@ export function ImageUploadField({
 
   const removeFile = () => {
     if (disabled) return;
+    // The remove button unmounts with the preview. Keep keyboard navigation
+    // on the persistent picker, without a deferred callback stealing focus.
+    pickerRef.current?.focus();
     setIntakeError("");
     onUpdate(undefined);
   };
@@ -118,6 +125,11 @@ export function ImageUploadField({
     return () => URL.revokeObjectURL(nextUrl);
   }, [value]);
 
+  const describedBy =
+    [hint ? hintId : null, intakeError ? errorId : null]
+      .filter(Boolean)
+      .join(" ") || undefined;
+
   return (
     <div
       className={`arken-upload-field ${unifiedIntake && !disabled ? "arken-upload-field--interactive" : ""}`}
@@ -131,10 +143,12 @@ export function ImageUploadField({
       <div className="arken-upload-field__heading">
         <div>
           <strong>{label}</strong>
-          {hint ? <span>{hint}</span> : null}
+          {hint ? <span id={hintId}>{hint}</span> : null}
         </div>
         <Button
+          ref={pickerRef}
           view="normal"
+          aria-describedby={describedBy}
           disabled={disabled}
           onClick={() => document.getElementById(inputId)?.click()}
         >
@@ -147,6 +161,8 @@ export function ImageUploadField({
       <input
         id={inputId}
         aria-label={label}
+        aria-describedby={describedBy}
+        aria-invalid={intakeError ? true : undefined}
         className="arken-visually-hidden"
         type="file"
         accept={accept}
@@ -182,6 +198,9 @@ export function ImageUploadField({
           className={`arken-upload-field__empty ${unifiedIntake && !disabled ? "arken-upload-field__empty--interactive" : ""}`}
           role={unifiedIntake && !disabled ? "button" : undefined}
           tabIndex={unifiedIntake && !disabled ? 0 : undefined}
+          aria-describedby={
+            unifiedIntake && !disabled ? describedBy : undefined
+          }
           aria-label={
             unifiedIntake && !disabled
               ? "Выбрать, вставить или перетащить файл"
@@ -209,7 +228,7 @@ export function ImageUploadField({
         </div>
       )}
       {intakeError ? (
-        <div className="field-error" role="alert">
+        <div id={errorId} className="field-error" role="alert">
           {intakeError}
         </div>
       ) : null}

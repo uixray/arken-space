@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  AssetDto,
   CharacterMediaCategory,
   CharacterMediaDto,
   CharacterMediaVisibility,
@@ -36,10 +37,6 @@ type RemovalTarget = {
   actionId: string;
 };
 
-function assetUrl(assetId: string): string {
-  return `/api/assets/${assetId}/content`;
-}
-
 /**
  * Owner-facing gallery for a single character sheet (UIX-292 Stage 3): an
  * ordered set of media entries alongside the existing single `portraitAssetId`.
@@ -56,13 +53,18 @@ export function CharacterMediaGallery({
   editable,
   isGm,
   onUpload,
+  assets = [],
 }: {
   characterId: string;
   characterName: string;
   editable: boolean;
   isGm: boolean;
   onUpload: AssetActions["uploadAsset"];
+  assets?: ReadonlyArray<Pick<AssetDto, "id" | "url">>;
 }) {
+  const assetUrl = (assetId: string) =>
+    assets.find((asset) => asset.id === assetId)?.url ??
+    `/api/assets/${assetId}/content`;
   const [items, setItems] = useState<CharacterMediaDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -75,6 +77,7 @@ export function CharacterMediaGallery({
   const activeCharacterIdRef = useRef(characterId);
   const loadRequestIdRef = useRef(0);
   const removalOperationRef = useRef<string | null>(null);
+  const reorderOperationRef = useRef<object | null>(null);
 
   const load = async (): Promise<boolean> => {
     const requestId = ++loadRequestIdRef.current;
@@ -103,6 +106,7 @@ export function CharacterMediaGallery({
   useEffect(() => {
     activeCharacterIdRef.current = characterId;
     removalOperationRef.current = null;
+    reorderOperationRef.current = null;
     setLoading(true);
     setViewerId(null);
     setEditingId(null);
@@ -112,6 +116,7 @@ export function CharacterMediaGallery({
     void load();
     return () => {
       loadRequestIdRef.current += 1;
+      reorderOperationRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId]);
@@ -126,8 +131,14 @@ export function CharacterMediaGallery({
   const viewerItem = sorted.find((item) => item.id === viewerId) ?? null;
 
   const reorder = async (id: string, direction: "up" | "down") => {
+    if (reorderOperationRef.current || removalOperationRef.current) return;
     const swap = computeAdjacentSwap(items, id, direction);
     if (!swap) return;
+    const operation = {};
+    reorderOperationRef.current = operation;
+    const isCurrentOperation = () =>
+      reorderOperationRef.current === operation &&
+      activeCharacterIdRef.current === characterId;
     setPendingId(id);
     setError("");
     try {
@@ -143,23 +154,31 @@ export function CharacterMediaGallery({
             }),
           },
         );
-        setItems((current) =>
-          current.map((entry) => (entry.id === updated.id ? updated : entry)),
-        );
+        // Finish the accepted swap, but never paint its result into another
+        // character's gallery after the user navigates away.
+        if (isCurrentOperation()) {
+          setItems((current) =>
+            current.map((entry) => (entry.id === updated.id ? updated : entry)),
+          );
+        }
       }
     } catch (reason) {
+      if (!isCurrentOperation()) return;
       if (reason instanceof ApiError && reason.status === 409) {
         const refreshed = await load();
-        if (!refreshed) return;
+        if (!refreshed || !isCurrentOperation()) return;
       }
       setError(formatApiError(reason, "Не удалось изменить порядок."));
     } finally {
-      setPendingId(null);
+      if (isCurrentOperation()) {
+        reorderOperationRef.current = null;
+        setPendingId(null);
+      }
     }
   };
 
   const remove = async (target: RemovalTarget) => {
-    if (removalOperationRef.current) return;
+    if (removalOperationRef.current || reorderOperationRef.current) return;
     removalOperationRef.current = target.actionId;
     setPendingId(target.item.id);
     setError("");
@@ -274,7 +293,11 @@ export function CharacterMediaGallery({
                   item.caption || CHARACTER_MEDIA_CATEGORY_LABELS[item.category]
                 }`}
               >
-                <GalleryImage assetId={item.assetId} alt={item.caption ?? ""} />
+                <GalleryImage
+                  key={assetUrl(item.assetId)}
+                  src={assetUrl(item.assetId)}
+                  alt={item.caption ?? ""}
+                />
               </button>
               <div className="character-media-gallery__meta">
                 <span className="character-media-gallery__category">
@@ -286,7 +309,7 @@ export function CharacterMediaGallery({
                 <div className="character-media-gallery__actions">
                   <Button
                     size="s"
-                    disabled={index === 0 || pendingId === item.id}
+                    disabled={index === 0 || pendingId !== null}
                     aria-label="Переместить выше"
                     title="Переместить выше"
                     onClick={() => void reorder(item.id, "up")}
@@ -295,9 +318,7 @@ export function CharacterMediaGallery({
                   </Button>
                   <Button
                     size="s"
-                    disabled={
-                      index === sorted.length - 1 || pendingId === item.id
-                    }
+                    disabled={index === sorted.length - 1 || pendingId !== null}
                     aria-label="Переместить ниже"
                     title="Переместить ниже"
                     onClick={() => void reorder(item.id, "down")}
@@ -306,7 +327,7 @@ export function CharacterMediaGallery({
                   </Button>
                   <Button
                     size="s"
-                    disabled={pendingId === item.id}
+                    disabled={pendingId !== null}
                     onClick={() => setEditingId(item.id)}
                   >
                     Изменить
@@ -347,6 +368,7 @@ export function CharacterMediaGallery({
       {viewerItem && (
         <MediaViewer
           item={viewerItem}
+          src={assetUrl(viewerItem.assetId)}
           characterName={characterName}
           items={sorted}
           onNavigate={(id) => setViewerId(id)}
@@ -395,7 +417,7 @@ export function CharacterMediaGallery({
   );
 }
 
-function GalleryImage({ assetId, alt }: { assetId: string; alt: string }) {
+function GalleryImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   if (failed)
     return (
@@ -407,9 +429,7 @@ function GalleryImage({ assetId, alt }: { assetId: string; alt: string }) {
         Изображение недоступно
       </span>
     );
-  return (
-    <img src={assetUrl(assetId)} alt={alt} onError={() => setFailed(true)} />
-  );
+  return <img src={src} alt={alt} onError={() => setFailed(true)} />;
 }
 
 /** Attach flow: reuses the same file-picker upload pattern as the portrait field, then attaches the resulting asset. */
@@ -675,12 +695,14 @@ function EditMediaDialog({
  */
 function MediaViewer({
   item,
+  src,
   characterName,
   items,
   onNavigate,
   onClose,
 }: {
   item: CharacterMediaDto;
+  src: string;
   characterName: string;
   items: CharacterMediaDto[];
   onNavigate: (id: string) => void;
@@ -691,11 +713,13 @@ function MediaViewer({
 
   useEffect(() => {
     setFailed(false);
-  }, [item.id]);
+  }, [item.id, src]);
 
   useEffect(() => {
+    // Enter the viewer once. Paging must not steal focus from its navigation
+    // buttons: repeated Enter/Space should continue using the same control.
     containerRef.current?.focus();
-  }, [item.id]);
+  }, []);
 
   return (
     <ArkenDialog
@@ -728,7 +752,7 @@ function MediaViewer({
           </div>
         ) : (
           <img
-            src={assetUrl(item.assetId)}
+            src={src}
             alt={
               item.caption ||
               `${characterName}: ${CHARACTER_MEDIA_CATEGORY_LABELS[item.category]}`

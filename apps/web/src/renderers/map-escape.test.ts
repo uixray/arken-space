@@ -20,3 +20,25 @@ describe("map Escape layering", () => {
     );
   });
 });
+
+it.each([false, true])(
+  "keeps selection when token menu consumes Escape (object list %s)",
+  (objectListOpen) => {
+    expect(
+      resolveMapEscapeIntent({
+        key: "Escape",
+        objectListOpen,
+        tokenMenuOpen: true,
+      }),
+    ).toBe("close-token-menu");
+  },
+);
+it("does not consume non-Escape keys while a token menu is open", () => {
+  expect(
+    resolveMapEscapeIntent({
+      key: "Enter",
+      objectListOpen: false,
+      tokenMenuOpen: true,
+    }),
+  ).toBe("ignore");
+});

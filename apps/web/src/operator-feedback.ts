@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, ApiError } from "./api";
 export type FeedbackStatus =
   "NEW" | "ACKNOWLEDGED" | "LINKED" | "RESOLVED" | "DISMISSED";
 export const OPERATOR_FEEDBACK_TITLE = "Обратная связь";
@@ -79,9 +79,31 @@ export function transitionPayload(
 }
 export const fetchOperatorCapability = () =>
   api<{ allowed: true }>("/api/operator/feedback/capability");
-export const fetchFeedbackList = () =>
+export type FeedbackListQuery = {
+  from?: string;
+  to?: string;
+  kind?: FeedbackListItem["kind"];
+  status?: FeedbackStatus;
+  build?: string;
+  cursor?: string;
+};
+export function feedbackListPath(query: FeedbackListQuery = {}) {
+  const params = new URLSearchParams();
+  for (const key of [
+    "from",
+    "to",
+    "kind",
+    "status",
+    "build",
+    "cursor",
+  ] as const)
+    if (query[key]) params.set(key, query[key]);
+  const suffix = params.toString();
+  return `/api/operator/feedback${suffix ? `?${suffix}` : ""}`;
+}
+export const fetchFeedbackList = (query: FeedbackListQuery = {}) =>
   api<{ items: FeedbackListItem[]; nextCursor: string | null }>(
-    "/api/operator/feedback",
+    feedbackListPath(query),
   );
 export const fetchFeedbackDetail = (id: string, reveal = false) =>
   api<FeedbackDetail>(
@@ -104,7 +126,12 @@ export async function fetchAttachment(reportId: string, attachmentId: string) {
     `/api/operator/feedback/${encodeURIComponent(reportId)}/attachments/${encodeURIComponent(attachmentId)}`,
     { credentials: "include" },
   );
-  if (!r.ok) throw new Error("Не удалось открыть вложение");
+  if (!r.ok)
+    throw new ApiError(
+      r.status,
+      "ATTACHMENT_FAILED",
+      "Не удалось открыть вложение",
+    );
   const mime = r.headers.get("content-type")?.split(";", 1)[0] ?? "";
   if (!allowedImageMimeTypes.has(mime))
     throw new Error("Недопустимый тип вложения");

@@ -533,3 +533,452 @@ test("UIX-621 raw Gravity select receives pointer above feedback modal", async (
   await option.click();
   await expect(dialog.locator(".g-select")).toContainText("Идея");
 });
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-644 feedback selector lifecycle ${role}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    const writes: string[] = [],
+      errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const r = route.request(),
+        path = new URL(r.url()).pathname;
+      if (!["GET", "HEAD"].includes(r.method()) && path !== "/api/chat/read")
+        writes.push(`${r.method()} ${path}`);
+      if (path === "/api/bootstrap") return route.fulfill({ json: current });
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40")
+          socket.send('40{"sid":"feedback-menu"}');
+      });
+      socket.send(
+        '0{"sid":"feedback-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const session = page.getByLabel("Меню сеанса", { exact: true });
+    await session.click();
+    await page.getByRole("button", { name: "Сообщить", exact: true }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "Сообщить о проблеме или идее",
+      exact: true,
+    });
+    const select = dialog.getByRole("combobox");
+    await expect(dialog).toBeVisible();
+    await dialog
+      .locator("input")
+      .first()
+      .fill("Локальный черновик без отправки");
+    const geometry: unknown[] = [];
+    for (const size of [
+      { width: 1280, height: 850 },
+      { width: 390, height: 850 },
+      { width: 360, height: 480 },
+      { width: 1280, height: 850 },
+    ]) {
+      await select.click();
+      const idea = page.getByRole("option", { name: "Идея", exact: true });
+      await expect(idea).toBeVisible();
+      await page.setViewportSize(size);
+      await expect(idea).toBeVisible();
+      await expect
+        .poll(() =>
+          idea.evaluate((el) => {
+            const b = el.getBoundingClientRect();
+            return (
+              b.left >= 0 &&
+              b.top >= 0 &&
+              b.right <= innerWidth &&
+              b.bottom <= innerHeight &&
+              el.contains(
+                document.elementFromPoint(
+                  b.x + b.width / 2,
+                  b.y + b.height / 2,
+                ),
+              )
+            );
+          }),
+        )
+        .toBe(true);
+      geometry.push({ size, option: await idea.boundingBox() });
+      await idea.click();
+      await expect(select).toContainText("Идея");
+      await expect(idea).toBeHidden();
+      await expect(select).toBeFocused();
+      await select.press("Enter");
+      await expect(idea).toBeVisible();
+      await page.keyboard.press("Home");
+      await page.keyboard.press("Enter");
+      await expect(select).toContainText("Ошибка");
+      await select.press("Enter");
+      await expect(idea).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(idea).toBeHidden();
+      await expect(dialog).toBeVisible();
+      await expect(select).toBeFocused();
+      await select.click();
+      await expect(idea).toBeVisible();
+      await dialog.locator("textarea").first().click();
+      await expect(idea).toBeHidden();
+      await expect(dialog.locator("textarea").first()).toBeFocused();
+      await expect(dialog.locator("input").first()).toHaveValue(
+        "Локальный черновик без отправки",
+      );
+    }
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const el = document.activeElement as HTMLElement | null;
+          return Boolean(
+            el &&
+            el !== document.body &&
+            el.getClientRects().length &&
+            !el.closest("[hidden],[inert]"),
+          );
+        }),
+      )
+      .toBe(true);
+    await session.click();
+    await page.getByRole("button", { name: "Сообщить", exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await expect(select).toContainText("Ошибка");
+    await expect(dialog.locator("input").first()).toHaveValue("");
+    await page.keyboard.press("Escape");
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("feedback-selector-receipt", {
+      body: JSON.stringify({ role, geometry, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-644 cursor visibility menu lifecycle ${role}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    const writes: string[] = [],
+      errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const r = route.request(),
+        path = new URL(r.url()).pathname;
+      if (!["GET", "HEAD"].includes(r.method()) && path !== "/api/chat/read")
+        writes.push(`${r.method()} ${path}`);
+      if (path === "/api/bootstrap") return route.fulfill({ json: current });
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((m) => {
+        if (m.toString() === "40") socket.send('40{"sid":"cursor-menu"}');
+      });
+      socket.send(
+        '0{"sid":"cursor-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const trigger = page.locator('button[data-tool="CURSOR_PRESENCE"]');
+    const panel = page.locator(".cursor-presence-menu");
+    const receive = page.getByRole("switch", {
+      name: "Показывать чужие курсоры",
+      exact: true,
+    });
+    const send = page.getByRole("switch", {
+      name: "Показывать мой курсор игрокам",
+      exact: true,
+    });
+    const geometry: unknown[] = [];
+    for (const size of [
+      { width: 1280, height: 850 },
+      { width: 390, height: 850 },
+      { width: 360, height: 480 },
+    ]) {
+      if (role === "GM") {
+        await trigger.click();
+        await expect(panel).toBeVisible();
+        await expect(receive).toBeFocused();
+        await expect(send).not.toBeChecked();
+        await page.setViewportSize(size);
+        if (size.height === 480) {
+          // The shorter viewport clips the anchor in the scrollable toolbar;
+          // its popup must dismiss, not float without a reachable owner.
+          await expect(panel).toBeHidden();
+          await trigger.scrollIntoViewIfNeeded();
+          await trigger.click();
+          await expect(panel).toBeVisible();
+        }
+        await expect
+          .poll(() =>
+            panel.evaluate((el) => {
+              const b = el.getBoundingClientRect();
+              return (
+                b.left >= 0 &&
+                b.top >= 0 &&
+                b.right <= innerWidth &&
+                b.bottom <= innerHeight
+              );
+            }),
+          )
+          .toBe(true);
+        await expect
+          .poll(() =>
+            receive.evaluate((input) => {
+              const el = input.closest("label");
+              if (!el) return false;
+              const b = el.getBoundingClientRect();
+              return el.contains(
+                document.elementFromPoint(
+                  b.x + b.width / 2,
+                  b.y + b.height / 2,
+                ),
+              );
+            }),
+          )
+          .toBe(true);
+        geometry.push({ size, panel: await panel.boundingBox() });
+        await panel
+          .getByText("Показывать чужие курсоры", { exact: true })
+          .click();
+        await expect(receive).not.toBeChecked();
+        await receive.press("Space");
+        await expect(receive).toBeChecked();
+        await page.keyboard.press("Tab");
+        await expect(send).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(panel).toBeHidden();
+        await expect(trigger).toBeFocused();
+        await trigger.press("Enter");
+        await expect(panel).toBeVisible();
+        await page.getByLabel("Меню сеанса", { exact: true }).click();
+        await expect(panel).toBeHidden();
+        await expect(
+          page.getByLabel("Меню сеанса", { exact: true }),
+        ).toBeFocused();
+        await page.keyboard.press("Escape");
+      } else {
+        await page.setViewportSize(size);
+        await expect(trigger).toHaveAttribute("aria-pressed", "true");
+        await trigger.click();
+        await expect(trigger).toHaveAttribute("aria-pressed", "false");
+        await trigger.press("Space");
+        await expect(trigger).toHaveAttribute("aria-pressed", "true");
+        await expect(panel).toHaveCount(0);
+      }
+    }
+    if (role === "GM") {
+      await trigger.click();
+      await expect(panel).toBeVisible();
+      await page.locator("#compact-nav-journal").click();
+      await expect(panel).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(trigger).toBeVisible();
+      await expect(panel).toBeHidden();
+    }
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("cursor-menu-receipt", {
+      body: JSON.stringify({ role, geometry, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const width of [1280, 360]) {
+  test(`UIX-644 map toolbar settings lifecycle ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: width === 360 ? 480 : 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    const writes: string[] = [],
+      errors: string[] = [];
+    const saves: unknown[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/api/**", (route) => {
+      const r = route.request(),
+        p = new URL(r.url()).pathname;
+      if (!["GET", "HEAD"].includes(r.method()) && p !== "/api/chat/read")
+        writes.push(`${r.method()} ${p}`);
+      if (p === "/api/bootstrap") return route.fulfill({ json: current });
+      if (p === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (p === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await page.route("**/api/scenes/scene-1/canvas", (route) => {
+      const body = route.request().postDataJSON();
+      saves.push(body.grid);
+      current.scenes[0].grid = body.grid;
+      current.scenes[0].revision = (current.scenes[0].revision ?? 0) + 1;
+      return route.fulfill({ json: current.scenes[0] });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((m) => {
+        if (m.toString() === "40") socket.send('40{"sid":"toolbar-settings"}');
+      });
+      socket.send(
+        '0{"sid":"toolbar-settings","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const grid = page.locator(".grid-settings"),
+      g = grid.locator("summary"),
+      step = grid.getByRole("spinbutton", { name: "Шаг", exact: true });
+    await g.click();
+    await step.fill("96");
+    for (let i = 0; i < 5; i++) await page.keyboard.press("Tab");
+    await expect(
+      grid.getByRole("button", { name: "Отмена", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(grid).not.toHaveAttribute("open", "");
+    await expect(g).toBeFocused();
+    expect(saves).toEqual([]);
+    await page.keyboard.press("Enter");
+    await expect(step).toHaveValue("64");
+    await step.fill("80");
+    for (let i = 0; i < 4; i++) await page.keyboard.press("Tab");
+    await expect(
+      grid.getByRole("button", { name: "Сохранить", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => saves.length).toBe(1);
+    await expect(grid).not.toHaveAttribute("open", "");
+    await expect(g).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(step).toHaveValue("80");
+    await page.keyboard.press("Escape");
+    const resize = page.locator(".resize-settings"),
+      r = resize.locator("summary");
+    await r.click();
+    await page.keyboard.press("Tab");
+    const image = resize.getByRole("button", {
+      name: "Изображение",
+      exact: true,
+    });
+    await expect(image).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(image).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Tab");
+    const world = resize.getByRole("button", { name: "Область", exact: true });
+    await expect(world).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(world).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Tab");
+    await expect(
+      resize.getByRole("button", { name: "Готово", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(resize).not.toHaveAttribute("open", "");
+    await expect(r).toBeFocused();
+    const more = page.locator(".toolbar-overflow"),
+      m = more.locator("summary");
+    await m.click();
+    await page.keyboard.press("Tab");
+    const toggle = more.getByRole("checkbox", {
+      name: "Показывать сетку",
+      exact: true,
+    });
+    await expect(toggle).toBeFocused();
+    await expect(toggle).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(toggle).not.toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(toggle).toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(m).toBeFocused();
+    expect(saves).toEqual([{ ...snapshot.scenes[0].grid, size: 80 }]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("toolbar-settings-receipt", {
+      body: JSON.stringify({ width, saves, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+test("UIX-644 pending grid save preserves newer outside focus", async ({
+  page,
+}, testInfo) => {
+  const current: GameSnapshot = structuredClone(snapshot);
+  const errors: string[] = [],
+    writes: string[] = [];
+  let release: (() => void) | undefined;
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/api/**", (route) => {
+    const r = route.request(),
+      p = new URL(r.url()).pathname;
+    if (!["GET", "HEAD"].includes(r.method()) && p !== "/api/chat/read")
+      writes.push(`${r.method()} ${p}`);
+    if (p === "/api/bootstrap") return route.fulfill({ json: current });
+    if (p === "/api/story/posts")
+      return route.fulfill({ json: { posts: [], nextCursor: null } });
+    if (p === "/api/operator/feedback/capability")
+      return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+    return route.fulfill({ json: [] });
+  });
+  await page.route("**/api/scenes/scene-1/canvas", async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.grid.size).toBe(96);
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    current.scenes[0].grid = body.grid;
+    current.scenes[0].revision = 1;
+    await route.fulfill({ json: current.scenes[0] });
+  });
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((m) => {
+      if (m.toString() === "40") socket.send('40{"sid":"grid-pending"}');
+    });
+    socket.send(
+      '0{"sid":"grid-pending","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.goto("/");
+  const settings = page.locator(".grid-settings");
+  await settings.locator("summary").click();
+  await settings
+    .getByRole("spinbutton", { name: "Шаг", exact: true })
+    .fill("96");
+  const save = settings.getByRole("button", {
+    name: "Сохранить",
+    exact: true,
+    includeHidden: true,
+  });
+  await save.click();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  const outside = page.getByLabel("Меню сеанса", { exact: true });
+  await outside.click();
+  await expect(settings).not.toHaveAttribute("open", "");
+  await expect(outside).toBeFocused();
+  release!();
+  await expect(save).toBeEnabled();
+  await expect(outside).toBeFocused();
+  await expect(settings).not.toHaveAttribute("open", "");
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+  await testInfo.attach("grid-pending-receipt", {
+    body: JSON.stringify({ writes, errors, grid: current.scenes[0].grid }),
+    contentType: "application/json",
+  });
+});

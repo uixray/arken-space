@@ -12,7 +12,8 @@ import {
   renderComponent as renderBase,
   screen,
 } from "../test-support/render";
-import { FormInput, FormTextArea } from "./GravityFormControls";
+import { FormInput, FormSelect, FormTextArea } from "./GravityFormControls";
+import userEvent from "@testing-library/user-event";
 
 // Real production provider; only the browser API missing from jsdom is shimmed.
 beforeEach(() => {
@@ -261,4 +262,176 @@ it("keeps native textarea change and paste handlers on the inner control", () =>
   });
   expect(pasted).toHaveBeenCalledTimes(1);
   expect(pasteCurrentTarget).toBe(textarea);
+});
+
+it("preserves checkbox native identity, validation, descriptions, ref and real events", () => {
+  const ref = createRef<HTMLInputElement>();
+  const changed = vi.fn();
+  const focused = vi.fn();
+  const blurred = vi.fn();
+  const keyed = vi.fn();
+  renderComponent(
+    <>
+      <p id="check-hint">Нужно подтверждение перед продолжением.</p>
+      <FormInput
+        type="checkbox"
+        id="confirmation"
+        name="confirmation"
+        value="accepted"
+        controlRef={ref}
+        required
+        aria-invalid
+        aria-describedby="check-hint"
+        onFocus={focused}
+        onBlur={blurred}
+        onKeyDown={keyed}
+        onChange={(event) =>
+          changed(
+            event.target,
+            event.currentTarget,
+            event.target.checked,
+            event.target.value,
+          )
+        }
+      >
+        Подтверждаю
+      </FormInput>
+    </>,
+  );
+  const input = screen.getByRole("checkbox", { name: "Подтверждаю" });
+  expect(ref.current).toBe(input);
+  expect(input).toHaveAttribute("id", "confirmation");
+  expect(input).toHaveAttribute("name", "confirmation");
+  expect(input).toHaveAccessibleDescription(
+    "Нужно подтверждение перед продолжением.",
+  );
+  expect(input).toBeRequired();
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  fireEvent.focus(input);
+  fireEvent.keyDown(input, { key: " " });
+  fireEvent.click(input);
+  fireEvent.blur(input);
+  expect(changed).toHaveBeenCalledExactlyOnceWith(
+    input,
+    input,
+    true,
+    "accepted",
+  );
+  expect(focused).toHaveBeenCalledOnce();
+  expect(blurred).toHaveBeenCalledOnce();
+  expect(keyed).toHaveBeenCalledOnce();
+});
+
+it("keeps Select identity, accessible error and validation on its trigger", () => {
+  const { rerender } = renderComponent(
+    <>
+      <span id="select-name">Изображение</span>
+      <p id="select-error">Выберите изображение.</p>
+      <FormSelect
+        id="image-choice"
+        aria-labelledby="select-name"
+        aria-describedby="select-error"
+        aria-invalid
+        value=""
+      >
+        <option value="">Нет</option>
+      </FormSelect>
+    </>,
+  );
+  const trigger = screen.getByRole("combobox", { name: "Изображение" });
+  expect(trigger).toHaveAttribute("id", "image-choice");
+  expect(trigger).toHaveAccessibleDescription("Выберите изображение.");
+  expect(trigger).toHaveAttribute("aria-invalid", "true");
+  rerender(
+    <FormSelect aria-label="Изображение" aria-invalid="false" value="">
+      <option value="">Нет</option>
+    </FormSelect>,
+  );
+  expect(
+    screen.getByRole("combobox", { name: "Изображение" }),
+  ).not.toHaveAttribute("aria-invalid", "true");
+});
+
+it("retains an uncontrolled Select choice without selecting the create utility action", async () => {
+  const user = userEvent.setup();
+  const changed = vi.fn();
+  const create = vi.fn();
+  renderComponent(
+    <FormSelect
+      aria-label="Изображение"
+      defaultValue="portrait"
+      onChange={changed}
+      createAction={{ label: "Создать", onSelect: create }}
+    >
+      <option value="portrait">Портрет</option>
+      <option value="marker">Маркер</option>
+    </FormSelect>,
+  );
+  const trigger = screen.getByRole("combobox", { name: "Изображение" });
+  await user.click(trigger);
+  await user.click(screen.getByRole("option", { name: "Маркер" }));
+  expect(trigger).toHaveTextContent("Маркер");
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(changed.mock.lastCall?.[0].target.value).toBe("marker");
+  await user.click(trigger);
+  await user.click(screen.getByRole("option", { name: "Создать" }));
+  expect(create).toHaveBeenCalledOnce();
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(trigger).toHaveTextContent("Маркер");
+});
+
+it.each([
+  {
+    value: "entity-id",
+    label: ["Silverymoon", " (", "Локация", ")"],
+    expected: "Silverymoon (Локация)",
+  },
+  { value: "zero-id", label: ["Зарядов: ", 0], expected: "Зарядов: 0" },
+])(
+  "keeps compound option text instead of exposing $value",
+  ({ value, label, expected }) => {
+    renderComponent(
+      <FormSelect aria-label="Цель" value={value}>
+        <option value={value}>{label}</option>
+      </FormSelect>,
+    );
+    expect(screen.getByRole("combobox", { name: "Цель" })).toHaveTextContent(
+      expected,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Цель" }),
+    ).not.toHaveTextContent(value);
+  },
+);
+
+it("refreshes open popup minimum width after the trigger resizes without losing selection", async () => {
+  const user = userEvent.setup();
+  const { container } = renderComponent(
+    <FormSelect aria-label="Размер списка" defaultValue="one">
+      <option value="one">Первый</option>
+      <option value="two">Второй</option>
+    </FormSelect>,
+  );
+  const trigger = screen.getByRole("combobox", { name: "Размер списка" });
+  let width = 320;
+  const measured = vi
+    .spyOn(trigger, "getBoundingClientRect")
+    .mockImplementation(() => new DOMRect(0, 0, width, 32));
+  try {
+    await user.click(trigger);
+    const content = () =>
+      document.querySelector<HTMLElement>(".arken-form-select-popup__content");
+    await expect.poll(() => content()?.style.minWidth).toBe("320px");
+    expect(content()?.style.width).toBe("");
+    width = 160;
+    fireEvent(window, new Event("resize"));
+    await expect.poll(() => content()?.style.minWidth).toBe("160px");
+    expect(trigger).toHaveTextContent("Первый");
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(container).toContainElement(trigger);
+  } finally {
+    measured.mockRestore();
+  }
 });

@@ -1,3 +1,5 @@
+import { AssetReplacementDialog } from "./AssetReplacementDialog";
+import { AssetAudioPreview } from "./AssetAudioPreview";
 import { useId, useMemo, useState } from "react";
 import type {
   AssetKind,
@@ -16,13 +18,22 @@ export function MediaPanel({
   onUpload,
   onGetUsage,
   onDelete,
+  onReplace,
+  onRefresh,
 }: {
   snapshot: GameSnapshot;
   onUpload: AssetActions["uploadAsset"];
   onGetUsage: AssetActions["getAssetUsage"];
   onDelete: AssetActions["deleteAsset"];
+  onReplace?: AssetActions["replaceAsset"];
+  onRefresh?: AssetActions["refreshAssets"];
 }) {
   const uploadStatusPrefix = useId();
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [replacementId, setReplacementId] = useState<string | null>(null);
+  const replacement = snapshot.assets.find(
+    (asset) => asset.id === replacementId,
+  );
   const [drafts, setDrafts] = useState<Partial<Record<AssetKind, File>>>({});
   const [uploading, setUploading] = useState<AssetKind | null>(null);
   const [error, setError] = useState("");
@@ -90,6 +101,16 @@ export function MediaPanel({
   };
   return (
     <section className="panel-section">
+      {replacement && snapshot.me.role === "GM" && onReplace && onRefresh && (
+        <AssetReplacementDialog
+          key={`${snapshot.campaign.id}:${snapshot.me.id}:${replacement.id}`}
+          asset={replacement}
+          onGetUsage={onGetUsage}
+          onReplace={onReplace}
+          onRefresh={onRefresh}
+          onClose={() => setReplacementId(null)}
+        />
+      )}
       <div className="section-heading">
         <div>
           <span className="eyebrow">Хранилище</span>
@@ -171,6 +192,25 @@ export function MediaPanel({
                   {ASSET_KIND_LABELS[asset.kind]} ·{" "}
                   {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
                 </small>
+                {asset.kind === "AUDIO" && (
+                  <>
+                    <Button
+                      aria-expanded={previewId === asset.id}
+                      onClick={() =>
+                        setPreviewId(previewId === asset.id ? null : asset.id)
+                      }
+                    >
+                      {previewId === asset.id ? "Закрыть превью" : "Прослушать"}
+                    </Button>
+                    {previewId === asset.id && (
+                      <AssetAudioPreview
+                        key={`${snapshot.campaign.id}:${snapshot.me.id}:${asset.url}`}
+                        url={asset.url}
+                        name={asset.name}
+                      />
+                    )}
+                  </>
+                )}
                 {snapshot.me.role === "GM" && (
                   <div>
                     <Button
@@ -184,6 +224,18 @@ export function MediaPanel({
                         ? "Обновить использование"
                         : "Проверить использование"}
                     </Button>
+                    {onReplace && onRefresh && (
+                      <Button
+                        disabled={
+                          checkingAssetId !== null ||
+                          deletingAssetId !== null ||
+                          uploading !== null
+                        }
+                        onClick={() => setReplacementId(asset.id)}
+                      >
+                        Заменить файл
+                      </Button>
+                    )}
                     {usage && (
                       <div aria-live="polite">
                         <small>

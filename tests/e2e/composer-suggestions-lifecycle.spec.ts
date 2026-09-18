@@ -337,3 +337,176 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
   }
 }
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 390]) {
+    test(`UIX-644 activity selectors lifecycle ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 850 });
+      const current = structuredClone(baseline);
+      current.me.role = role;
+      current.characters[0].controllerMembershipIds = [current.me.id];
+      current.me.characterId = current.characters[0].id;
+      current.characters.push({
+        ...structuredClone(current.characters[0]),
+        id: "82668dba-d385-434a-a76c-b9e2f8e84de9",
+        name: "Следопыт",
+        controllerMembershipIds: [],
+        skills: [
+          {
+            key: "trail",
+            name: "Поиск следов",
+            rank: 1,
+            formula: "2d6 + mind",
+          },
+        ],
+      });
+      const writes: string[] = [],
+        errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/api/**", (route) => {
+        const r = route.request(),
+          p = new URL(r.url()).pathname;
+        if (!["GET", "HEAD"].includes(r.method()) && p !== "/api/chat/read")
+          writes.push(`${r.method()} ${p}`);
+        if (p === "/api/bootstrap") return route.fulfill({ json: current });
+        if (p === "/api/story/posts")
+          return route.fulfill({ json: { posts: [], nextCursor: null } });
+        if (p === "/api/operator/feedback/capability")
+          return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+        return route.fulfill({ json: [] });
+      });
+      await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+        socket.onMessage((m) => {
+          if (m.toString() === "40")
+            socket.send('40{"sid":"activity-selectors"}');
+        });
+        socket.send(
+          '0{"sid":"activity-selectors","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+        );
+      });
+      await page.goto("/");
+      if (width === 390) await page.locator("#compact-nav-journal").click();
+      const panel = page.locator("#chat-panel-activity"),
+        composer = panel.getByRole("textbox", {
+          name: "Сообщение или бросок",
+          exact: true,
+        });
+      await composer.fill("Черновик остаётся здесь");
+      const select = panel.getByRole("combobox", {
+        name: "Персонаж для броска",
+        exact: true,
+      });
+      if (role === "GM") {
+        await select.click();
+        const option = page.getByRole("option", {
+          name: "Следопыт",
+          exact: true,
+        });
+        await expect
+          .poll(() =>
+            option.evaluate((el) => {
+              const b = el.getBoundingClientRect();
+              return (
+                b.left >= 0 &&
+                b.right <= innerWidth &&
+                b.top >= 0 &&
+                b.bottom <= innerHeight &&
+                el.contains(
+                  document.elementFromPoint(
+                    b.x + b.width / 2,
+                    b.y + b.height / 2,
+                  ),
+                )
+              );
+            }),
+          )
+          .toBe(true);
+        await option.click();
+        await expect(select).toContainText("Следопыт");
+        await expect(
+          panel.getByRole("button", { name: "Поиск следов", exact: true }),
+        ).toBeVisible();
+        await expect(
+          panel.getByRole("button", { name: "Наблюдение", exact: true }),
+        ).toHaveCount(0);
+        await expect(select).toBeFocused();
+        await select.press("Enter");
+        await expect(option).toBeVisible();
+        await page.keyboard.press("Home");
+        await page.keyboard.press("Enter");
+        await expect(select).toContainText("Картограф");
+        await expect(
+          panel.getByRole("button", { name: "Наблюдение", exact: true }),
+        ).toBeVisible();
+        await select.press("Enter");
+        await page.keyboard.press("Escape");
+        await expect(option).toBeHidden();
+        await expect(select).toBeFocused();
+      } else {
+        await expect(select).toHaveCount(0);
+        await expect(
+          panel.getByRole("button", { name: "Наблюдение", exact: true }),
+        ).toBeVisible();
+        await expect(
+          panel.getByRole("button", { name: "Поиск следов", exact: true }),
+        ).toHaveCount(0);
+      }
+      const filters = panel.locator(".activity-filters-menu"),
+        trigger = filters.locator("summary");
+      await trigger.click();
+      const labels = ["Броски", "Сюжет", "Справочные события"];
+      await page.keyboard.press("Tab");
+      for (const name of labels) {
+        const control = filters.getByRole("checkbox", { name, exact: true });
+        await expect(control).toBeFocused();
+        await page.keyboard.press("Space");
+        await expect(control).not.toBeChecked();
+        if (name !== labels[2]) await page.keyboard.press("Tab");
+      }
+      await expect(
+        panel.getByText("Сцена готова.", { exact: true }),
+      ).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveAccessibleName(
+        "Показывать. Скрыто: Броски, Сюжет, Справочные события",
+      );
+      await page.keyboard.press("Enter");
+      for (const name of labels) {
+        const label = filters.getByText(name, { exact: true });
+        await expect
+          .poll(() =>
+            label.evaluate((el) => {
+              const b = el.getBoundingClientRect();
+              return el.contains(
+                document.elementFromPoint(
+                  b.x + b.width / 2,
+                  b.y + b.height / 2,
+                ),
+              );
+            }),
+          )
+          .toBe(true);
+        await label.click();
+        await expect(
+          filters.getByRole("checkbox", { name, exact: true }),
+        ).toBeChecked();
+      }
+      await expect(
+        panel.getByText("Сцена готова.", { exact: true }),
+      ).toBeVisible();
+      await composer.click();
+      await expect(filters).not.toHaveAttribute("open", "");
+      await expect(composer).toBeFocused();
+      await expect(composer).toHaveValue("Черновик остаётся здесь");
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("activity-selectors-receipt", {
+        body: JSON.stringify({ role, width, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
+}

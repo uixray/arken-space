@@ -101,6 +101,21 @@ export function intersectsWorld(bounds: MapObjectBounds, world: WorldBounds) {
   );
 }
 
+/** UI affordance for a token already resolved in the active scene. The server
+ * remains authoritative; ownership alone does not grant controller deletion. */
+export function canDeleteSelectedToken(
+  token: TokenDto | undefined,
+  context: Pick<MapObjectSelectionContext, "role" | "membershipId">,
+) {
+  if (!token) return false;
+  if (context.role === "GM") return true;
+  return (
+    token.visible &&
+    !token.locked &&
+    token.layer !== "GM" &&
+    token.controllerMembershipIds.includes(context.membershipId)
+  );
+}
 export function canSelectToken(
   token: TokenDto,
   context: MapObjectSelectionContext,

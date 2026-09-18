@@ -80,6 +80,75 @@ beforeEach(() => {
 });
 
 describe("UIX-612 — единый intake изображения", () => {
+  it("returns keyboard focus to the picker after removing the draft", async () => {
+    const user = userEvent.setup();
+    renderComponent(<ControlledField />);
+    await user.upload(
+      screen.getByLabelText("Исходник"),
+      new File(["png"], "draft.png", { type: "image/png" }),
+    );
+    screen.getByRole("button", { name: "Удалить draft.png" }).focus();
+    await user.keyboard("{Enter}");
+    expect(
+      screen.queryByRole("button", { name: "Удалить draft.png" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Выбрать файл" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("Исходник")).toHaveFocus();
+  });
+  it("links hint and validation to intake controls and clears only the error on recovery", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    function Harness() {
+      const [value, setValue] = useState<File>();
+      return (
+        <ImageUploadField
+          label="Исходник"
+          hint="Портрет персонажа"
+          unifiedIntake
+          value={value}
+          onUpdate={setValue}
+        />
+      );
+    }
+    renderComponent(<Harness />);
+    const input = screen.getByLabelText<HTMLInputElement>("Исходник");
+    const picker = screen.getByRole("button", { name: "Выбрать файл" });
+    const dropzone = screen.getByRole("button", {
+      name: "Выбрать, вставить или перетащить файл",
+    });
+    for (const control of [input, picker, dropzone]) {
+      expect(control).toHaveAccessibleDescription("Портрет персонажа");
+    }
+    const bad = new File(["vector"], "bad.svg", { type: "image/svg+xml" });
+    await user.upload(input, bad);
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    for (const control of [input, picker, dropzone]) {
+      expect(control).toHaveAccessibleDescription(
+        "Портрет персонажа Поддерживаются только PNG, JPEG и WebP.",
+      );
+    }
+    const good = new File(["image"], "kept.png", { type: "image/png" });
+    await user.upload(input, good);
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(input).toHaveAccessibleDescription("Портрет персонажа");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await user.upload(input, bad);
+    expect(screen.getByText("kept.png")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Заменить" }),
+    ).toHaveAccessibleDescription(
+      "Портрет персонажа Поддерживаются только PNG, JPEG и WebP.",
+    );
+    await user.click(screen.getByRole("button", { name: "Удалить kept.png" }));
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(input).toHaveAccessibleDescription("Портрет персонажа");
+    expect(
+      screen.getByRole("button", {
+        name: "Выбрать, вставить или перетащить файл",
+      }),
+    ).toHaveAccessibleDescription("Портрет персонажа");
+  });
+
   it("keeps a named decorative delete icon and the controlled removal callback", () => {
     let view: ReturnType<typeof renderComponent> | undefined;
     try {

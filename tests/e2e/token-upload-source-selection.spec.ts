@@ -16,6 +16,10 @@ import { deflateSync } from "node:zlib";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import {
+  paintedIconContrast,
+  settleIconState,
+} from "./helpers/painted-icon-contrast";
 
 // Actual App/Palette/Editor/Generator/upload/actions. Only HTTP and realtime
 // transport boundaries are synthetic. Valid PNG files exercise browser image
@@ -433,6 +437,88 @@ async function capture(page: Page, info: TestInfo, name: string) {
   await info.attach(name, { path, contentType: "image/png" });
 }
 
+for (const width of [1280, 360]) {
+  test(`UIX-417 damaged token preview recovers after source switch ${width}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    const fixture = await installBoundary(page);
+    let damaged = true;
+    await page.route(`**${a.url}`, (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: damaged
+          ? Buffer.from("INVALID_IMAGE private-error-details")
+          : aBytes,
+        headers: { "cache-control": "no-store" },
+      }),
+    );
+    await page.goto("/");
+    await expect(page.locator(".app-shell")).toBeVisible();
+    await openWorkspaceSection(page, "Токены");
+    await page
+      .locator(".token-palette")
+      .getByRole("button", { name: "Создать токен", exact: true })
+      .click();
+    const editor = page.getByRole("dialog", {
+      name: "Новый токен",
+      exact: true,
+    });
+    const upload = editor.getByLabel("Загрузить новое изображение", {
+      exact: true,
+    });
+    await upload.setInputFiles({
+      name: a.name,
+      mimeType: "image/png",
+      buffer: aBytes,
+    });
+    const previewImage = editor.locator(".token-image-preview img");
+    await expect
+      .poll(() =>
+        previewImage.evaluate((node) => ({
+          complete: (node as HTMLImageElement).complete,
+          width: (node as HTMLImageElement).naturalWidth,
+        })),
+      )
+      .toEqual({ complete: true, width: 0 });
+    const alert = editor.locator(".token-image-generator").getByRole("alert");
+    await expect(alert).toHaveText(
+      "Не удалось загрузить предпросмотр. Выберите другое изображение или откройте редактор заново.",
+    );
+    await alert.scrollIntoViewIfNeeded();
+    const box = (await alert.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(
+      await alert.evaluate((node) => node.scrollWidth <= node.clientWidth + 1),
+    ).toBe(true);
+    await expect(editor).not.toContainText("private-error-details");
+    await capture(page, info, "damaged-source-message");
+    await upload.setInputFiles({
+      name: b.name,
+      mimeType: "image/png",
+      buffer: bBytes,
+    });
+    await expect.poll(() => fixture.heldUploads.length).toBe(1);
+    await fixture.acceptB();
+    const source = editor.getByRole("combobox", {
+      name: "Исходное изображение",
+      exact: true,
+    });
+    await expect(source).toHaveValue(b.id);
+    await imageDecoded(previewImage, 40, 60);
+    await expect(alert).toHaveCount(0);
+    damaged = false;
+    await source.selectOption(a.id);
+    await imageDecoded(previewImage, 60, 40);
+    await expect(alert).toHaveCount(0);
+    expect(fixture.writes).toHaveLength(2);
+    expect(fixture.writes.every((write) => write.upload)).toBe(true);
+    expect(fixture.unexpected).toEqual([]);
+    expect(fixture.pageErrors).toEqual([]);
+  });
+}
+
 test("UIX-611 real App selects uploaded portrait B once and saves only generated TOKEN", async ({
   page,
 }, testInfo) => {
@@ -485,6 +571,94 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
       name: "Масштаб изображения токена",
       exact: true,
     });
+    const decrease = editor.getByRole("button", {
+      name: "Уменьшить масштаб",
+      exact: true,
+    });
+    const increase = editor.getByRole("button", {
+      name: "Увеличить масштаб",
+      exact: true,
+    });
+    // UIX-645: use the real editor and decoded source, not a component demo.
+    for (const width of [1280, 360]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(zoom).toHaveValue("1");
+      await expect(decrease).toBeDisabled();
+      await expect(increase).toBeEnabled();
+      await increase.focus();
+      await increase.press("Enter");
+      await expect(zoom).toHaveValue("1.1");
+      const glyphs: string[] = [];
+      for (const control of [decrease, increase]) {
+        await expect(control).toBeEnabled();
+        const svg = control.locator("svg.arken-icon");
+        await expect(svg).toHaveCount(1);
+        await expect(svg).toBeVisible();
+        for (const [attribute, value] of [
+          ["aria-hidden", "true"],
+          ["focusable", "false"],
+          ["stroke", "currentColor"],
+          ["stroke-width", "2"],
+        ])
+          await expect(svg).toHaveAttribute(attribute, value);
+        glyphs.push(await svg.innerHTML());
+        await control.scrollIntoViewIfNeeded();
+        const box = (await control.boundingBox())!;
+        for (const size of [box.width, box.height])
+          expect(Number(size.toFixed(3))).toBeGreaterThanOrEqual(
+            width === 360 ? 44 : 24,
+          );
+        expect(
+          await control.evaluate((node) => {
+            const r = node.getBoundingClientRect();
+            return node.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            );
+          }),
+        ).toBe(true);
+        await control.evaluate((node) => (node as HTMLElement).blur());
+        await page.mouse.move(1, 899);
+        await settleIconState(control);
+        expect(await control.evaluate((node) => node.matches(":hover"))).toBe(
+          false,
+        );
+        expect(await paintedIconContrast(svg)).toBeGreaterThanOrEqual(3);
+        await control.hover();
+        await settleIconState(control);
+        expect(await paintedIconContrast(svg)).toBeGreaterThanOrEqual(3);
+        await page.mouse.move(1, 899);
+        await control.focus();
+        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
+        await expect(control).toBeFocused();
+        expect(
+          await control.evaluate((node) => {
+            const s = getComputedStyle(node);
+            return (
+              node.matches(":focus-visible") &&
+              ((s.outlineStyle !== "none" &&
+                parseFloat(s.outlineWidth) > 0 &&
+                s.outlineColor !== "rgba(0, 0, 0, 0)") ||
+                s.boxShadow !== "none")
+            );
+          }),
+        ).toBe(true);
+        await settleIconState(control);
+        expect(await paintedIconContrast(svg)).toBeGreaterThanOrEqual(3);
+      }
+      expect(new Set(glyphs).size).toBe(2);
+      await zoom.fill("8");
+      await expect(increase).toBeDisabled();
+      await expect(decrease).toBeEnabled();
+      await decrease.focus();
+      await decrease.press("Enter");
+      await expect(zoom).toHaveValue("7.9");
+      await expect(increase).toBeEnabled();
+      await capture(page, testInfo, `zoom-icons-${width}`);
+      await zoom.fill("1");
+      await expect(decrease).toBeDisabled();
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
     await zoom.fill("2");
     await preview.focus();
     await preview.press("Shift+ArrowRight");
@@ -505,6 +679,8 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     await expect(source).toBeDisabled();
     await expect(zoom).toHaveValue("2");
     await expect(zoom).toBeDisabled();
+    await expect(decrease).toBeDisabled();
+    await expect(increase).toBeDisabled();
     await expect(editor.getByRole("status")).toHaveText(
       "Загрузка исходного изображения…",
     );
@@ -539,6 +715,8 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
     await expect(source).toHaveValue(b.id);
     await expect(noImage).toHaveAttribute("aria-pressed", "false");
     await expect(zoom).toHaveValue("1");
+    await expect(decrease).toBeDisabled();
+    await expect(increase).toBeEnabled();
     await expect(
       editor.getByRole("radio", { name: "Без рамки", exact: true }),
     ).toBeChecked();
@@ -772,3 +950,93 @@ test("UIX-589 palette replacement and controllers commit in one PATCH with stabl
       await held.route.abort("blockedbyclient").catch(() => undefined);
   }
 });
+
+for (const width of [1280, 390]) {
+  test(`UIX-317 image intake error association and recovery in token dialog ${width}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 850 });
+    const fixture = await installBoundary(page);
+    await page.goto("/");
+    await openWorkspaceSection(page, "Токены");
+    await page
+      .locator(".token-palette")
+      .getByRole("button", { name: "Создать токен", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Новый токен",
+      exact: true,
+    });
+    const name = dialog.getByLabel("Название", { exact: true });
+    await name.fill("Черновик портрета");
+    const input = dialog.getByLabel("Загрузить новое изображение", {
+      exact: true,
+    });
+    const field = dialog.locator(".arken-upload-field").filter({
+      has: page.getByLabel("Загрузить новое изображение", { exact: true }),
+    });
+    const picker = field.getByRole("button", {
+      name: "Выбрать файл",
+      exact: true,
+    });
+    const zone = field.getByRole("button", {
+      name: "Выбрать, вставить или перетащить файл",
+      exact: true,
+    });
+    const hint =
+      "Выберите, вставьте или перетащите файл — он станет доступен в генераторе";
+    const error = "Поддерживаются только PNG, JPEG и WebP.";
+    for (const control of [input, picker, zone])
+      await expect(control).toHaveAccessibleDescription(hint);
+    const bad = {
+      name: "unsupported.svg",
+      mimeType: "image/svg+xml",
+      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    };
+    await input.setInputFiles(bad);
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    for (const control of [input, picker, zone])
+      await expect(control).toHaveAccessibleDescription(`${hint} ${error}`);
+    await expect(field.getByRole("alert")).toHaveText(error);
+    await field.getByRole("alert").scrollIntoViewIfNeeded();
+    const box = (await field.getByRole("alert").boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(fixture.writes).toEqual([]);
+    await input.setInputFiles({
+      name: a.name,
+      mimeType: "image/png",
+      buffer: aBytes,
+    });
+    const source = dialog.getByRole("combobox", {
+      name: "Исходное изображение",
+      exact: true,
+    });
+    await expect(source).toHaveValue(a.id);
+    await imageDecoded(dialog.locator(".token-image-preview img"), 60, 40);
+    await expect(field.getByRole("alert")).toHaveCount(0);
+    await expect(input).not.toHaveAttribute("aria-invalid");
+    await expect(input).toHaveAccessibleDescription(hint);
+    await input.setInputFiles(bad);
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await expect(source).toHaveValue(a.id);
+    await expect(name).toHaveValue("Черновик портрета");
+    await imageDecoded(dialog.locator(".token-image-preview img"), 60, 40);
+    expect(fixture.writes.map((write) => write.path)).toEqual(["/api/assets"]);
+    expect(fixture.pageErrors).toEqual([]);
+    expect(fixture.unexpected).toEqual([]);
+    expect(
+      fixture.background.filter((entry) => entry.includes("client-logs")),
+    ).toEqual([]);
+    await capture(page, info, "image-intake-error");
+    await info.attach("image-intake-receipt", {
+      body: JSON.stringify({
+        width,
+        writes: fixture.writes,
+        errors: fixture.pageErrors,
+        background: fixture.background,
+      }),
+      contentType: "application/json",
+    });
+  });
+}

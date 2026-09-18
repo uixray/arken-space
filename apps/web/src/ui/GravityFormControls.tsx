@@ -1,6 +1,9 @@
 import {
   Children,
   isValidElement,
+  useLayoutEffect,
+  useRef,
+  useState,
   type ChangeEvent,
   type InputHTMLAttributes,
   type ReactElement,
@@ -46,17 +49,19 @@ export function FormInput({
          подписи: он снова переключает флажок. */
       <Checkbox
         className={props.className}
+        style={props.style}
+        title={props.title}
+        id={props.id}
+        value={value}
+        controlRef={controlRef}
+        controlProps={{ ...props, className: undefined, style: undefined }}
         checked={checked}
         defaultChecked={defaultChecked}
         disabled={props.disabled}
         name={props.name}
-        aria-label={props["aria-label"]}
-        onUpdate={(next) =>
-          onChange?.({
-            target: { checked: next, value: next ? "on" : "" },
-            currentTarget: { checked: next, value: next ? "on" : "" },
-          } as ChangeEvent<HTMLInputElement>)
-        }
+        onFocus={props.onFocus}
+        onBlur={props.onBlur}
+        onChange={onChange}
       >
         {children}
       </Checkbox>
@@ -137,6 +142,16 @@ export function FormTextArea({
 }
 
 type OptionProps = { value?: string | number; children?: ReactNode };
+// Native option labels may be JSX arrays of text/number expressions. Gravity
+// needs a plain text hint for the collapsed label and type-ahead search.
+function optionText(children: ReactNode): string | undefined {
+  const parts = Children.toArray(children);
+  return parts.every(
+    (part) => typeof part === "string" || typeof part === "number",
+  )
+    ? parts.join("")
+    : undefined;
+}
 
 type FormSelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
   emptyMessage?: ReactNode;
@@ -153,7 +168,54 @@ export function FormSelect({
   "aria-label": ariaLabel,
   emptyMessage,
   createAction,
+  id,
+  title,
+  className,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
+  "aria-details": ariaDetails,
+  "aria-invalid": ariaInvalid,
 }: FormSelectProps) {
+  const [uncontrolledValue, setUncontrolledValue] = useState(() =>
+    String(defaultValue ?? ""),
+  );
+  // The fading popup can retain Gravity List active-index state after close.
+  // Give each open/closed phase its own list to avoid replaying that state
+  // into a keyboard reopen. Selection stays in the Select, not this subtree.
+  const [open, setOpen] = useState(false);
+  const controlRef = useRef<HTMLButtonElement>(null);
+  const [popupWidth, setPopupWidth] = useState<number>();
+  useLayoutEffect(() => {
+    if (!open || !controlRef.current) return;
+    const control = controlRef.current;
+    let frame = 0;
+    const measure = () => {
+      const width = control.getBoundingClientRect().width;
+      // Size our popup content independently of UIKit's cached floating width.
+      // Respect Floating UI's 10px viewport padding on either side.
+      setPopupWidth(
+        width > 0
+          ? Math.max(1, Math.min(width, window.innerWidth - 20))
+          : undefined,
+      );
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(schedule);
+    observer?.observe(control);
+    window.addEventListener("resize", schedule);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", schedule);
+      cancelAnimationFrame(frame);
+    };
+  }, [open]);
   const popupClassName = useOverlayPopupClassName("arken-form-select-popup");
   const childOptions = Children.toArray(children)
     .filter(
@@ -163,6 +225,7 @@ export function FormSelect({
     .map((child) => ({
       value: String(child.props.value ?? ""),
       content: child.props.children,
+      text: optionText(child.props.children),
       disabled: Boolean(
         (child.props as OptionProps & { disabled?: boolean }).disabled,
       ),
@@ -171,14 +234,35 @@ export function FormSelect({
     ...childOptions,
     ...buildFormSelectUtilityOptions(emptyMessage, createAction?.label),
   ];
-  const selected = value ?? defaultValue ?? "";
+  const selected = value ?? uncontrolledValue;
 
   return (
     <Select
       name={name}
+      id={id}
+      title={title}
+      className={className}
       aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      aria-describedby={ariaDescribedBy}
+      aria-details={ariaDetails}
+      validationState={
+        ariaInvalid && ariaInvalid !== "false" ? "invalid" : undefined
+      }
       disabled={disabled}
+      ref={controlRef}
       popupClassName={popupClassName}
+      onOpenChange={setOpen}
+      renderPopup={({ renderFilter, renderList }) => (
+        <div
+          key={open ? "open" : "closed"}
+          className="arken-form-select-popup__content"
+          style={{ minWidth: popupWidth }}
+        >
+          {renderFilter()}
+          {renderList()}
+        </div>
+      )}
       options={options}
       value={[String(selected)]}
       onUpdate={(next) => {
@@ -186,6 +270,7 @@ export function FormSelect({
           createAction?.onSelect();
           return;
         }
+        if (value === undefined) setUncontrolledValue(next[0] ?? "");
         onChange?.({
           target: { value: next[0] ?? "" },
           currentTarget: { value: next[0] ?? "" },

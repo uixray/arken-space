@@ -47,10 +47,10 @@ export function formatApiError(
     return reason instanceof Error ? reason.message : fallback;
   const correlation = [
     safeCorrelationIdPattern.test(reason.requestId ?? "")
-      ? `requestId: ${reason.requestId}`
+      ? `Код запроса: ${reason.requestId}`
       : null,
     safeCorrelationIdPattern.test(reason.actionId ?? "")
-      ? `actionId: ${reason.actionId}`
+      ? `Код действия: ${reason.actionId}`
       : null,
   ].filter(Boolean);
   return correlation.length > 0
@@ -130,9 +130,26 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       { cause: reason },
     );
   }
-  const data = (await response
-    .json()
-    .catch(() => null)) as ApiResponseError | null;
+  let data: ApiResponseError | null = null;
+  try {
+    const body = await response.text();
+    // Empty successful responses remain valid for commands without a payload.
+    if (body.trim()) data = JSON.parse(body) as ApiResponseError | null;
+  } catch (reason) {
+    if (
+      init?.signal?.aborted ||
+      (reason instanceof Error && reason.name === "AbortError")
+    )
+      throw reason;
+    // A successful HTML fallback or truncated JSON must not masquerade as a
+    // valid null snapshot and crash its consumer. Do not echo response content
+    // or retry a mutation: the server may already have applied it.
+    if (response.ok)
+      throw new Error(
+        "Не удалось прочитать ответ сервера. Обновите данные перед повторением действия.",
+        { cause: reason },
+      );
+  }
   if (!response.ok) {
     const requestId =
       response.headers.get("x-request-id") ?? data?.requestId ?? undefined;
@@ -141,8 +158,20 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       headers.get("x-action-id") ??
       undefined;
     const code = data?.error ?? "REQUEST_FAILED";
-    const message =
-      code === "INSUFFICIENT_CHARACTER_RESOURCE"
+    const genericRateLimit =
+      response.status === 429 &&
+      code === "REQUEST_FAILED" &&
+      (!data?.message || data.message === "Не удалось выполнить запрос");
+    const retryAfter = response.headers.get("retry-after");
+    const retrySeconds =
+      retryAfter && /^\d+$/.test(retryAfter) ? Number(retryAfter) : NaN;
+    const rateLimitMessage =
+      Number.isSafeInteger(retrySeconds) && retrySeconds > 0
+        ? `Слишком много запросов. Повторите попытку через ${retrySeconds} с.`
+        : "Слишком много запросов. Подождите немного и повторите попытку.";
+    const message = genericRateLimit
+      ? rateLimitMessage
+      : code === "INSUFFICIENT_CHARACTER_RESOURCE"
         ? // UIX-424, шаг 9: «магической силы» и «физической силы» — имена, от
           // которых мастер отказался. Раскладки кампании здесь нет (это общий
           // разбор ответов, а не компонент), поэтому подставляются нейтральные

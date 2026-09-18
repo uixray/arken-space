@@ -7,9 +7,18 @@ interface StateProps {
   action?: ReactNode;
 }
 
-function StateLayout({ title, description, action }: StateProps) {
+function StateLayout({
+  title,
+  description,
+  action,
+  role,
+}: StateProps & { role?: "alert" }) {
   return (
-    <div className="arken-state">
+    <div
+      className="arken-state"
+      role={role}
+      aria-atomic={role === "alert" ? true : undefined}
+    >
       <strong>{title}</strong>
       {description ? <p>{description}</p> : null}
       {action}
@@ -41,6 +50,7 @@ export function ErrorState({
 }) {
   return (
     <StateLayout
+      role="alert"
       title={title}
       description={description}
       action={

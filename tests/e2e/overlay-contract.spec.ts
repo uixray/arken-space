@@ -32,7 +32,19 @@ async function install(page: Page, role: "GM" | "PLAYER" = "GM") {
   current.me.role = role;
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/story/posts")
+      return route.fulfill({ json: { posts: [], nextCursor: null } });
+    if (path === "/api/operator/feedback/capability")
+      return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
     return route.fulfill({ json: path === "/api/bootstrap" ? current : [] });
+  });
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((m) => {
+      if (m.toString() === "40") socket.send('40{"sid":"navigation"}');
+    });
+    socket.send(
+      '0{"sid":"navigation","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
   });
   return current;
 }
@@ -172,3 +184,647 @@ test("UIX-644 short viewport scrolls options without dismissing and keeps focus 
   await expect(trigger).toContainText("Сцена 20");
   await expect(list).toBeHidden();
 });
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-644 compact Sections breakpoint lifecycle ${role}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await install(page, role);
+    const errors: string[] = [],
+      writes: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (
+        path.startsWith("/api/") &&
+        !["GET", "HEAD"].includes(request.method()) &&
+        path !== "/api/chat/read"
+      )
+        writes.push(`${request.method()} ${path}`);
+    });
+    await page.goto("/");
+    const trigger = page.getByRole("button", { name: "Разделы", exact: true });
+    const sheet = page.getByRole("dialog", { name: "Разделы", exact: true });
+    await trigger.click();
+    await expect(sheet).toBeVisible();
+    await page.setViewportSize({ width: 360, height: 480 });
+    const destinations = sheet.locator(".compact-sections-list button");
+    const labels = await destinations.allTextContents();
+    expect(labels.length).toBeGreaterThanOrEqual(3);
+    for (const option of await destinations.all()) {
+      await option.scrollIntoViewIfNeeded();
+      await assertHitTarget(option);
+    }
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeHidden();
+    await assertHitTarget(
+      page.getByRole("button", { name: "Вписать", exact: true }),
+    );
+    await page.setViewportSize({ width: 390, height: 800 });
+    await expect(trigger).toBeVisible();
+    await expect(sheet).toBeHidden();
+    await assertHitTarget(page.locator("#compact-nav-journal"));
+    await page.locator("#compact-nav-journal").click();
+    await expect(page.locator("#compact-nav-journal")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await trigger.click();
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeFocused();
+    expect(errors).toEqual([]);
+    expect(writes).toEqual([]);
+    await info.attach("compact-sections-breakpoint", {
+      body: JSON.stringify({ role, labels, errors, writes }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const { role, width, target } of [
+  { role: "GM", width: 1024, target: "Сцены" },
+  { role: "GM", width: 390, target: "Сцены" },
+  { role: "PLAYER", width: 390, target: "Токены" },
+] as const) {
+  test(`UIX-644 navigation return owner ${role} ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 800 });
+    await install(page, role);
+    const errors: string[] = [],
+      writes: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("request", (r) => {
+      const p = new URL(r.url()).pathname;
+      if (
+        p.startsWith("/api/") &&
+        !["GET", "HEAD"].includes(r.method()) &&
+        p !== "/api/chat/read"
+      )
+        writes.push(`${r.method()} ${p}`);
+    });
+    await page.goto("/");
+    const trigger =
+      width === 1024
+        ? page.getByLabel("Ещё разделы", { exact: true })
+        : page.getByRole("button", { name: "Разделы", exact: true });
+    const menu =
+      width === 1024
+        ? page.locator(".workspace-nav__menu")
+        : page.getByRole("dialog", { name: "Разделы", exact: true });
+    for (let round = 0; round < 2; round++) {
+      await trigger.click();
+      await expect(menu).toBeVisible();
+      const option = menu.getByRole("button", { name: target, exact: true });
+      await assertHitTarget(option);
+      await option.click();
+      const dialog = page.getByRole("dialog", { name: target, exact: true });
+      await expect(dialog).toBeVisible();
+      await expect(menu).toBeHidden();
+      await expect
+        .poll(() =>
+          dialog.evaluate((el) => el.contains(document.activeElement)),
+        )
+        .toBe(true);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      if (width === 1024) await expect(trigger).toBeFocused();
+      else {
+        // Compact navigation intentionally restores the previous map surface,
+        // not Sections. Preserve that existing owner contract.
+        await expect(page.locator("#compact-nav-map")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const map = document.querySelector(".map-shell");
+              return Boolean(
+                map &&
+                (map === document.activeElement ||
+                  map.contains(document.activeElement)),
+              );
+            }),
+          )
+          .toBe(true);
+      }
+      await expect(trigger).toBeVisible();
+    }
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("navigation-return-receipt", {
+      body: JSON.stringify({ role, width, target, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const role of ["GM", "PLAYER"] as const)
+  for (const width of [1280, 1024]) {
+    test(`UIX-644 music library return owner ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      await install(page, role);
+      const errors: string[] = [],
+        writes: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        const p = new URL(r.url()).pathname;
+        if (
+          p.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(r.method()) &&
+          p !== "/api/chat/read"
+        )
+          writes.push(`${r.method()} ${p}`);
+      });
+      await page.goto("/");
+      const music = page.getByRole("region", { name: "Музыка", exact: true });
+      const menu = music.getByLabel("Меню музыки", { exact: true });
+      if (role === "GM")
+        for (let round = 0; round < 2; round++) {
+          await menu.click();
+          const open = music.getByRole("button", {
+            name: "Открыть библиотеку",
+            exact: true,
+          });
+          await assertHitTarget(open);
+          await open.click();
+          const dialog = page.getByRole("dialog", {
+            name: "Музыкальная библиотека",
+            exact: true,
+          });
+          await expect(dialog).toBeVisible();
+          await expect(page.locator(".music-overflow")).not.toHaveAttribute(
+            "open",
+            "",
+          );
+          await expect
+            .poll(() =>
+              dialog.evaluate((el) => el.contains(document.activeElement)),
+            )
+            .toBe(true);
+          await page.keyboard.press("Escape");
+          await expect(dialog).toBeHidden();
+          await expect(menu).toBeFocused();
+        }
+      else await expect(menu).toHaveCount(0);
+      const volume = music.getByLabel("Громкость", { exact: true });
+      await volume.click();
+      const slider = music.getByRole("slider");
+      await expect(slider).toBeVisible();
+      await assertHitTarget(slider);
+      await slider.focus();
+      await page.keyboard.press("ArrowLeft");
+      await page.keyboard.press("Escape");
+      await expect(slider).toBeHidden();
+      await expect(volume).toBeFocused();
+      await volume.press("Enter");
+      await expect(slider).toBeVisible();
+      await page.getByLabel("Меню сеанса", { exact: true }).click();
+      await expect(slider).toBeHidden();
+      // Compact foundation deliberately hides music controls; verify hidden owner
+      // closes, not pretend the desktop library is a reachable phone feature.
+      await page.keyboard.press("Escape");
+      await volume.click();
+      await expect(slider).toBeVisible();
+      await page.setViewportSize({ width: 390, height: 800 });
+      await expect(page.locator(".music-topbar")).toBeHidden();
+      await expect(page.locator(".music-volume-control")).not.toHaveAttribute(
+        "open",
+        "",
+      );
+      await page.setViewportSize({ width, height: 800 });
+      await expect(volume).toBeVisible();
+      await expect(slider).toBeHidden();
+      expect(errors).toEqual([]);
+      expect(writes).toEqual([]);
+      await testInfo.attach("music-owner-receipt", {
+        body: JSON.stringify({ role, width, errors, writes }),
+        contentType: "application/json",
+      });
+    });
+  }
+
+for (const role of ["GM", "PLAYER"] as const)
+  for (const width of [1280, 390]) {
+    test(`UIX-644 token tray owner lifecycle ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      const snapshot = await install(page, role);
+      snapshot.tokenDefinitions = Array.from({ length: 24 }, (_, i) => ({
+        id: `tray-definition-${i}`,
+        characterId: null,
+        defaultAssetId: null,
+        name: `Страж ${String(i + 1).padStart(2, "0")}`,
+        ownName: null,
+        defaultWidth: 1,
+        defaultHeight: 1,
+        controllerMembershipIds: [snapshot.me.id],
+        revision: 1,
+      }));
+      const errors: string[] = [],
+        writes: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        const p = new URL(r.url()).pathname;
+        if (
+          p.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(r.method()) &&
+          p !== "/api/chat/read"
+        )
+          writes.push(`${r.method()} ${p}`);
+      });
+      await page.goto("/");
+      const tray = page.locator(".token-tray"),
+        summary = tray.locator("summary"),
+        list = tray.locator(".token-tray-list");
+      await summary.click();
+      await expect(tray).toHaveAttribute("open", "");
+      await page.keyboard.press("Tab");
+      // Firefox includes the scrollable list itself in native tab order.
+      // Do not skip arbitrary controls or programmatically focus a token.
+      if (await list.evaluate((el) => el === document.activeElement))
+        await page.keyboard.press("Tab");
+      await expect(list.getByRole("button").first()).toBeFocused();
+      for (let i = 1; i < 24; i++) await page.keyboard.press("Tab");
+      const last = list.getByRole("button", { name: "Страж 24", exact: true });
+      await expect(last).toBeFocused();
+      await assertHitTarget(last);
+      await expect
+        .poll(() => list.evaluate((el) => el.scrollTop))
+        .toBeGreaterThan(0);
+      expect(writes).toEqual([]);
+      await page.keyboard.press("Escape");
+      await expect(tray).not.toHaveAttribute("open", "");
+      await expect(summary).toBeFocused();
+      await summary.press("Enter");
+      await expect(list).toBeVisible();
+      await last.scrollIntoViewIfNeeded();
+      await assertHitTarget(last);
+      await expect(tray).toHaveAttribute("open", "");
+      await page.getByLabel("Меню сеанса", { exact: true }).click();
+      await expect(tray).not.toHaveAttribute("open", "");
+      await expect(
+        page.getByLabel("Меню сеанса", { exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await summary.click();
+      await expect(tray).toHaveAttribute("open", "");
+      if (width === 1280)
+        await page.setViewportSize({ width: 390, height: 800 });
+      await page.locator("#compact-nav-journal").click();
+      await expect(tray).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(summary).toBeVisible();
+      await expect(tray).not.toHaveAttribute("open", "");
+      await summary.click();
+      await expect(tray).toHaveAttribute("open", "");
+      await page.keyboard.press("Escape");
+      await expect(summary).toBeFocused();
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("token-tray-receipt", {
+        body: JSON.stringify({ role, width, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
+
+for (const width of [1280, 390])
+  test(`UIX-644 scene editor map owner ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 800 });
+    const snapshot = await install(page);
+    snapshot.assets = ["Лесная карта", "Карта башни"].map((name, i) => ({
+      id: `scene-map-${i}`,
+      kind: "MAP" as const,
+      name,
+      mimeType: "image/svg+xml",
+      sizeBytes: 128,
+      width: 1600,
+      height: 1000,
+      durationSeconds: null,
+      url: `/api/assets/scene-map-${i}/content`,
+      createdAt: new Date(0).toISOString(),
+    }));
+    await page.route("**/api/assets/*/content", (r) =>
+      r.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><rect width="1600" height="1000" fill="#637d72"/></svg>',
+      }),
+    );
+    const errors: string[] = [],
+      writes: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("request", (r) => {
+      const p = new URL(r.url()).pathname;
+      if (
+        p.startsWith("/api/") &&
+        !["GET", "HEAD"].includes(r.method()) &&
+        p !== "/api/chat/read"
+      )
+        writes.push(`${r.method()} ${p}`);
+    });
+    await page.goto("/");
+    await openWorkspaceSection(page, "Сцены");
+    const workspace = page.getByRole("dialog", { name: "Сцены", exact: true });
+    const configure = workspace
+      .locator(".scene-manager-card")
+      .filter({ hasText: "Начальная сцена" })
+      .getByRole("button", { name: "Настроить", exact: true });
+    await configure.click();
+    const editor = page.getByRole("dialog", {
+      name: "Настройка: Начальная сцена",
+      exact: true,
+    });
+    const name = editor.getByRole("textbox", { name: "Название", exact: true });
+    await name.fill("Черновик леса");
+    const trigger = editor.getByRole("combobox", {
+      name: "Карта",
+      exact: true,
+    });
+    await trigger.click();
+    const popup = page.locator(".arken-form-select-popup");
+    const forest = popup.getByRole("option", {
+      name: "Лесная карта",
+      exact: true,
+    });
+    await assertHitTarget(forest);
+    await forest.click();
+    await expect(trigger).toContainText("Лесная карта");
+    await trigger.click();
+    await expect(popup).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(popup).toBeHidden();
+    await expect(editor).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await expect(name).toHaveValue("Черновик леса");
+    await trigger.press("ArrowDown");
+    await expect(popup).toBeVisible();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Enter");
+    await expect(trigger).toContainText("Без карты");
+    await expect(name).toHaveValue("Черновик леса");
+    await trigger.click();
+    await page.setViewportSize({ width: 360, height: 480 });
+    await expect
+      .poll(() =>
+        popup.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return (
+            r.left >= -1 &&
+            r.right <= innerWidth + 1 &&
+            r.top >= -1 &&
+            r.bottom <= innerHeight + 1
+          );
+        }),
+      )
+      .toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(popup).toBeHidden();
+    await expect(editor).toBeVisible();
+    await editor.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(editor).toBeHidden();
+    await expect(workspace).toBeVisible();
+    await configure.click();
+    await expect(name).toHaveValue("Начальная сцена");
+    await expect(trigger).toContainText("Без карты");
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeHidden();
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("scene-editor-map-receipt", {
+      body: JSON.stringify({ width, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+
+for (const role of ["GM", "PLAYER"] as const)
+  for (const width of [1280, 390])
+    test(`UIX-644 object list lifecycle ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      const snapshot = await install(page, role);
+      snapshot.tokens = Array.from({ length: 24 }, (_, i) => ({
+        id: `object-${i}`,
+        definitionId: `definition-${i}`,
+        definitionRevision: 1,
+        controllerMembershipIds: [snapshot.me.id],
+        sceneId: snapshot.scenes[0].id,
+        characterId: null,
+        ownerMembershipId: snapshot.me.id,
+        assetId: null,
+        name: `Объект ${String(i + 1).padStart(2, "0")}`,
+        x: 64 + i * 64,
+        y: 320,
+        z: 0,
+        levelId: null,
+        width: 64,
+        height: 64,
+        rotation: 0,
+        visible: true,
+        locked: false,
+        baseColor: "#8899aa",
+        frameColor: null,
+        layer: "PLAYER" as const,
+        conditions: [],
+        revision: 1,
+      }));
+      const errors: string[] = [],
+        writes: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        const p = new URL(r.url()).pathname;
+        if (
+          p.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(r.method()) &&
+          p !== "/api/chat/read"
+        )
+          writes.push(`${r.method()} ${p}`);
+      });
+      await page.goto("/");
+      const trigger = page.getByRole("button", {
+          name: "Объекты карты",
+          exact: true,
+        }),
+        list = page.getByRole("region", { name: "Объекты карты", exact: true });
+      await trigger.click();
+      await expect(list).toBeVisible();
+      await page.keyboard.press("Tab");
+      if (await list.evaluate((el) => el === document.activeElement))
+        await page.keyboard.press("Tab");
+      const first = list.getByRole("button", {
+        name: "Объект 01",
+        exact: true,
+      });
+      await expect(first).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(first).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Escape");
+      await expect(list).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await trigger.press("Enter");
+      await expect(first).toHaveAttribute("aria-pressed", "true");
+      await page.setViewportSize({ width: 360, height: 480 });
+      await expect(list).toBeVisible();
+      const last = list.getByRole("button", { name: "Объект 24", exact: true });
+      await last.scrollIntoViewIfNeeded();
+      await assertHitTarget(last);
+      await expect
+        .poll(() =>
+          list.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return (
+              r.left >= 0 &&
+              r.top >= 0 &&
+              r.right <= innerWidth + 1 &&
+              r.bottom <= innerHeight + 1
+            );
+          }),
+        )
+        .toBe(true);
+      await testInfo.attach("object-list-short", {
+        body: await page.screenshot(),
+        contentType: "image/png",
+      });
+      await page.getByLabel("Меню сеанса", { exact: true }).click();
+      await expect(list).toBeHidden();
+      await expect(
+        page.getByLabel("Меню сеанса", { exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await trigger.click();
+      await page.locator("#compact-nav-journal").click();
+      await expect(list).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(trigger).toBeVisible();
+      await expect(list).toBeHidden();
+      await trigger.click();
+      await expect(first).toHaveAttribute("aria-pressed", "true");
+      await trigger.press("Escape");
+      await expect(list).toBeHidden();
+      expect(errors).toEqual([]);
+      expect(writes).toEqual([]);
+      await testInfo.attach("object-list-receipt", {
+        body: JSON.stringify({ role, width, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+
+for (const role of ["GM", "PLAYER"] as const)
+  for (const width of [1280, 390])
+    test(`UIX-644 drawing palette lifecycle ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      await install(page, role);
+      const writes: string[] = [],
+        errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        const p = new URL(r.url()).pathname;
+        if (
+          p.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(r.method()) &&
+          p !== "/api/chat/read"
+        )
+          writes.push(`${r.method()} ${p}`);
+      });
+      await page.goto("/");
+      const draw = page.getByRole("button", { name: "Рисование", exact: true });
+      await draw.click();
+      const panel = page.getByRole("complementary", {
+        name: "Панель параметров рисунка",
+        exact: true,
+      });
+      await expect(panel).toBeVisible();
+      const red = panel.getByRole("button", {
+        name: "Красный: #ef4444",
+        exact: true,
+      });
+      await red.scrollIntoViewIfNeeded();
+      await assertHitTarget(red);
+      await red.click();
+      await expect(red).toHaveAttribute("aria-pressed", "true");
+      const color = panel.getByLabel("Цвет рисунка", { exact: true });
+      await expect(color).toHaveAttribute("type", "color");
+      await expect(color).toHaveValue("#ef4444");
+      const thick = panel.getByRole("button", {
+        name: "Толщина 12px",
+        exact: true,
+      });
+      await thick.scrollIntoViewIfNeeded();
+      await assertHitTarget(thick);
+      await thick.click();
+      await expect(thick).toHaveAttribute("aria-pressed", "true");
+      const slider = panel.getByRole("slider", {
+        name: "Толщина линии",
+        exact: true,
+      });
+      await expect(slider).toHaveValue("12");
+      await slider.focus();
+      await page.keyboard.press("Home");
+      await expect(slider).toHaveValue("1");
+      await expect(
+        panel.getByRole("button", { name: "Толщина 1px", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("End");
+      await expect(slider).toHaveValue("50");
+      await expect(red).toHaveAttribute("aria-pressed", "true");
+      await page.setViewportSize({ width: 360, height: 480 });
+      await slider.scrollIntoViewIfNeeded();
+      await assertHitTarget(slider);
+      await expect
+        .poll(() =>
+          panel.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const map = el.closest(".map-shell")!.getBoundingClientRect();
+            if (r.top < map.top || r.bottom > map.bottom) return false;
+            return (
+              r.left >= -1 &&
+              r.top >= -1 &&
+              r.right <= innerWidth + 1 &&
+              r.bottom <= innerHeight + 1
+            );
+          }),
+        )
+        .toBe(true);
+      await red.scrollIntoViewIfNeeded();
+      await assertHitTarget(red);
+      await slider.scrollIntoViewIfNeeded();
+      await assertHitTarget(slider);
+      await testInfo.attach("drawing-palette-short", {
+        body: await page.screenshot(),
+        contentType: "image/png",
+      });
+      const move = page.getByRole("button", {
+        name: "Перемещение",
+        exact: true,
+      });
+      await move.click();
+      await expect(panel).toBeHidden();
+      await draw.click();
+      await expect(red).toHaveAttribute("aria-pressed", "true");
+      await expect(slider).toHaveValue("50");
+      await page.locator("#compact-nav-journal").click();
+      await expect(panel).toBeHidden();
+      await page.locator("#compact-nav-map").click();
+      await expect(panel).toBeVisible();
+      await expect(slider).toHaveValue("50");
+      await expect(red).toHaveAttribute("aria-pressed", "true");
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("drawing-palette-receipt", {
+        body: JSON.stringify({ role, width, writes, errors }),
+        contentType: "application/json",
+      });
+    });

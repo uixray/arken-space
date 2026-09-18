@@ -819,6 +819,7 @@ function RelationsSection({
       )}
       <div className="world-content-workspace__relation-form">
         <FormSelect
+          aria-label="Сущность для связи"
           value={targetId}
           disabled={busy}
           onChange={(event) => setTargetId(event.target.value)}
@@ -955,7 +956,10 @@ function MediaSection({
           {sorted.map((item, index) => (
             <li key={item.id}>
               <img
-                src={`/api/assets/${item.assetId}/content`}
+                src={
+                  assets.find((asset) => asset.id === item.assetId)?.url ??
+                  `/api/assets/${item.assetId}/content`
+                }
                 alt={item.caption ?? ""}
               />
               {item.caption && <p>{item.caption}</p>}

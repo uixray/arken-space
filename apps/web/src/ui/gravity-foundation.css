@@ -26,10 +26,36 @@
   --arken-layer-toast: 3000;
 }
 
+/* Text controls need UIKit's dedicated outline hooks. Native input focus
+ * styles alone are overridden by the component stylesheet. Keep one mapping
+ * for baseline, classic and personal themes; the semantic color is inherited. */
+.g-root {
+  --g-text-input-focus-outline-color: var(--color-focus);
+  --g-text-area-focus-outline-color: var(--color-focus);
+}
+
 /* Gravity portals default to z-index 1000. Blocking editors opened from a
  * workspace window must stay above their 1200 parent layer. */
 .g-modal {
   z-index: var(--arken-layer-dialog);
+}
+
+/* A filename can be one long word. Keep the full caption readable without
+ * allowing its flex min-content width to cover the independently placed close
+ * control: 14px inset + 44px target + 8px gap. Scope to our modal wrapper. */
+.arken-dialog .g-dialog-header {
+  padding-inline-end: 66px;
+}
+
+.arken-dialog .g-dialog-header__caption {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.arken-dialog .g-dialog-btn-close__btn {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 /* Select renders its menu in a document-level portal. Lift only the popup
@@ -250,7 +276,7 @@
   gap: 12px;
   padding: 8px 10px;
 }
-.arken-upload-field__preview figcaption span {
+.arken-upload-field__preview figcaption > span {
   display: grid;
   min-width: 0;
 }
@@ -261,6 +287,27 @@
 }
 .arken-upload-field__preview figcaption small {
   color: var(--arken-ui-muted);
+}
+
+/* Keep the draft-remove glyph legible on the hovered preview surface.
+ * The normal state retains the danger color; use the shared high-contrast
+ * foreground on hover rather than changing the whole application's palette. */
+.arken-upload-field__preview .g-button_view_flat-danger {
+  --g-button-text-color-hover: var(--g-color-text-primary);
+}
+
+.arken-upload-field__preview .g-button_view_flat-danger .g-button__text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .arken-upload-field__preview .g-button_view_flat-danger {
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
 }
 
 .arken-visually-hidden {
@@ -306,4 +353,36 @@
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+/* UIKit caches inline popup widths across browser zoom. Let measured content
+ * determine this adapter's width; preserve the positioning and owner layers. */
+[data-floating-ui-status]:has(> .arken-form-select-popup) {
+  min-width: 0 !important;
+  width: max-content !important;
+  max-width: calc(100vw - 20px) !important;
+}
+.arken-form-select-popup__content {
+  display: flex;
+  flex-direction: column;
+  /* The trigger is a minimum, not a cap on readable option labels. */
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  max-height: inherit;
+}
+
+/* UIX-317: read-only is selectable content, not a disabled control. A dashed
+ * frame supplies a non-color cue without dimming text or blocking selection.
+ * Keep the normal solid focus outline and let disabled win if both are set.
+ * Match native readonly attributes, not :read-only (which also matches many
+ * controls that are not editable text, including selects and checkboxes). */
+.g-text-input__content:has(> input[readonly]:not(:disabled)),
+.g-text-area__content:has(> textarea[readonly]:not(:disabled)) {
+  border-style: dashed;
+}
+
+.g-text-input__content:has(> input[readonly]:not(:disabled):focus-visible),
+.g-text-area__content:has(> textarea[readonly]:not(:disabled):focus-visible) {
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset, 1px);
 }

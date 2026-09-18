@@ -24,6 +24,20 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
 
   useDismissibleDetails(settingsRef, dismissGridSettings);
 
+  const closeSettings = (restoreLostFocus = false) => {
+    const details = settingsRef.current;
+    const summary = details?.querySelector<HTMLElement>("summary");
+    if (
+      details?.open &&
+      (details.contains(document.activeElement) ||
+        (restoreLostFocus && document.activeElement === document.body)) &&
+      summary?.getClientRects().length &&
+      !summary.closest("[hidden], [inert]")
+    )
+      summary.focus({ preventScroll: true });
+    if (details) details.open = false;
+  };
+
   const resetGrid = () => {
     const next = {
       enabled: true,
@@ -95,11 +109,16 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
             type="button"
             disabled={saving}
             onClick={async () => {
+              // Disabling Save can move native focus to body while awaiting.
+              // Restore only that lost focus, not a newer external owner.
+              const restoreLostFocus = Boolean(
+                settingsRef.current?.contains(document.activeElement),
+              );
               setSaving(true);
               try {
                 await onSave(draft);
                 onPreview(null);
-                if (settingsRef.current) settingsRef.current.open = false;
+                closeSettings(restoreLostFocus);
               } catch {
                 // The shared mutation runner exposes the server error. Keep the
                 // draft open so a conflict or validation failure can be fixed
@@ -116,7 +135,7 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
             onClick={() => {
               setDraft(scene.grid);
               onPreview(null);
-              if (settingsRef.current) settingsRef.current.open = false;
+              closeSettings();
             }}
           >
             Отмена

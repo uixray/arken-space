@@ -124,11 +124,67 @@ function setup(
     onSetPartyPosition: vi.fn().mockResolvedValue(undefined),
     onClearPartyPosition: vi.fn().mockResolvedValue(undefined),
   };
-  renderComponent(<WorldMapsWorkspace {...props} />);
-  return { onCreateLocation };
+  const view = renderComponent(<WorldMapsWorkspace {...props} />);
+  return { onCreateLocation, view, props };
 }
 
 describe("world map localized display copy", () => {
+  it("keeps one canvas observer across selection and releases it on close", async () => {
+    const observers: Array<{
+      callback: () => void;
+      observe: ReturnType<typeof vi.fn>;
+      disconnect: ReturnType<typeof vi.fn>;
+    }> = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        constructor(public callback: () => void) {
+          observers.push(this);
+        }
+      },
+    );
+    try {
+      const { view, props } = setup("GM", "PUBLISHED");
+      const canvas = view.container.querySelector<HTMLDivElement>(
+        ".world-map-stage__canvas",
+      )!;
+      const observer = observers.find((o) =>
+        o.observe.mock.calls.some(([node]) => node === canvas),
+      )!;
+      expect(observer).toBeDefined();
+      Object.defineProperties(canvas, {
+        clientWidth: { configurable: true, value: 600 },
+        clientHeight: { configurable: true, value: 340 },
+      });
+      observer.callback();
+      expect(canvas.style.getPropertyValue("--world-map-width")).toBe("600px");
+      expect(canvas.style.getPropertyValue("--world-map-height")).toBe("340px");
+      const count = observers.length;
+      await userEvent.click(
+        screen.getByRole("button", { name: "Локация: Neverwinter 2" }),
+      );
+      expect(observers).toHaveLength(count);
+      Object.defineProperty(canvas, "clientWidth", {
+        configurable: true,
+        value: 300,
+      });
+      observer.callback();
+      expect(canvas.style.getPropertyValue("--world-map-width")).toBe("300px");
+      Object.defineProperty(canvas, "clientWidth", {
+        configurable: true,
+        value: 0,
+      });
+      observer.callback();
+      expect(canvas.style.getPropertyValue("--world-map-width")).toBe("300px");
+      view.rerender(<WorldMapsWorkspace {...props} open={false} />);
+      expect(observer.disconnect).toHaveBeenCalledTimes(1);
+      view.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it.each(["GM", "PLAYER"] as const)(
     "keeps named, distinct location and party markers for %s",
     (role) => {
@@ -157,7 +213,12 @@ describe("world map localized display copy", () => {
       expect(partyIcon).toHaveAttribute("width", "24");
       expect(partyIcon?.innerHTML).not.toBe(locationIcon?.innerHTML);
       expect(location).toHaveStyle({ left: "10%", top: "30%" });
-      expect(party).toHaveStyle({ left: "10%", top: "30%" });
+      // The party badge shares the location anchor without covering its label.
+      expect(party.closest("button")).toBe(location);
+      expect(location).toHaveAccessibleDescription("Текущая позиция группы");
+      expect(
+        screen.getByRole("button", { name: "Локация: Neverwinter 0" }),
+      ).not.toHaveAttribute("aria-describedby");
     },
   );
 

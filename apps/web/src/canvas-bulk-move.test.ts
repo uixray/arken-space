@@ -1,97 +1,147 @@
 import { describe, expect, it } from "vitest";
-import { applyBulkMoveResult } from "./canvas-bulk-move";
+import {
+  acknowledgeBulkMoveIntent,
+  appendBulkMoveIntent,
+  projectBulkMoveIntents,
+  reconcileBulkMoveIntents,
+  rejectBulkMoveIntent,
+  retainBulkMoveIntentsForScene,
+  type CanvasBulkMoveIntent,
+} from "./canvas-bulk-move";
 
-const token = (id: string, x: number, y: number, revision: number) => ({
+const token = (id: string, x: number, revision: number, sceneId = "scene") => ({
   id,
+  sceneId,
   x,
-  y,
+  y: 20,
   revision,
+  name: `Token ${id}`,
 });
+const drawing = (
+  id: string,
+  x: number,
+  revision: number,
+  sceneId = "scene",
+) => ({ id, sceneId, x, y: 40, revision, points: [0, 0, 4, 4] });
+const mixedIntent = (): CanvasBulkMoveIntent => ({
+  actionId: "move-1",
+  sceneId: "scene",
+  targets: [
+    { targetType: "TOKEN", targetId: "t1", revision: 1 },
+    { targetType: "DRAWING", targetId: "d1", revision: 4 },
+  ],
+  delta: { x: 64, y: -8 },
+});
+const ack = { tokens: { t1: 2 }, drawings: { d1: 5 } };
 
-describe("applyBulkMoveResult", () => {
-  it("applies the delta and the server's revision to moved items", () => {
-    const untouched = token("b", 0, 0, 7);
-    const result = applyBulkMoveResult(
-      [token("a", 10, 20, 3), untouched],
-      { a: 4 },
-      { x: 5, y: -2 },
+describe("bulk move optimistic projection", () => {
+  it("shows a mixed intent immediately and keeps rich entity fields", () => {
+    const intents = appendBulkMoveIntent([], mixedIntent());
+    expect(
+      projectBulkMoveIntents([token("t1", 10, 1)], "TOKEN", intents),
+    ).toEqual([{ ...token("t1", 10, 1), x: 74, y: 12 }]);
+    expect(
+      projectBulkMoveIntents([drawing("d1", 30, 4)], "DRAWING", intents),
+    ).toEqual([{ ...drawing("d1", 30, 4), x: 94, y: 32 }]);
+  });
+
+  it("keeps the overlay after an ack until the matching snapshot arrives", () => {
+    let intents = acknowledgeBulkMoveIntent([mixedIntent()], "move-1", ack);
+    expect(
+      projectBulkMoveIntents([token("t1", 10, 1)], "TOKEN", intents)[0],
+    ).toMatchObject({ x: 74, revision: 2 });
+
+    const canonicalTokens = [token("t1", 74, 2)];
+    const canonicalDrawings = [drawing("d1", 94, 5)];
+    expect(projectBulkMoveIntents(canonicalTokens, "TOKEN", intents)).toBe(
+      canonicalTokens,
     );
-    expect(result[0]).toEqual({ id: "a", x: 15, y: 18, revision: 4 });
-    // Items outside the move keep their object identity, so anything
-    // memoized on them is not needlessly invalidated.
-    expect(result[1]).toBe(untouched);
-  });
-
-  it("takes the revision from the server rather than incrementing locally", () => {
-    // The server may skip numbers (another write landed in between). Guessing
-    // revision+1 would send a stale value on the next mutation, which is the
-    // whole failure this fixes.
-    const [moved] = applyBulkMoveResult(
-      [token("a", 0, 0, 3)],
-      { a: 9 },
-      {
-        x: 0,
-        y: 0,
-      },
+    intents = reconcileBulkMoveIntents(
+      intents,
+      canonicalTokens,
+      canonicalDrawings,
     );
-    expect(moved?.revision).toBe(9);
+    expect(intents).toEqual([]);
   });
 
-  it("lets a second immediate move send a fresh revision", () => {
-    // The regression in one test: drag, then drag again before any broadcast.
-    let tokens: readonly {
-      id: string;
-      x: number;
-      y: number;
-      revision: number;
-    }[] = [token("a", 0, 0, 1)];
-    tokens = applyBulkMoveResult(tokens, { a: 2 }, { x: 10, y: 0 });
-    const revisionSentBySecondDrag = tokens[0]!.revision;
-    expect(revisionSentBySecondDrag).toBe(2);
-    tokens = applyBulkMoveResult(tokens, { a: 3 }, { x: 10, y: 0 });
-    expect(tokens[0]).toEqual({ id: "a", x: 20, y: 0, revision: 3 });
+  it("does not apply the delta twice when the snapshot beats the ack", () => {
+    const canonicalTokens = [token("t1", 74, 2)];
+    const canonicalDrawings = [drawing("d1", 94, 5)];
+    let intents: readonly CanvasBulkMoveIntent[] = [mixedIntent()];
+    expect(projectBulkMoveIntents(canonicalTokens, "TOKEN", intents)).toBe(
+      canonicalTokens,
+    );
+    intents = acknowledgeBulkMoveIntent(intents, "move-1", ack);
+    expect(projectBulkMoveIntents(canonicalTokens, "TOKEN", intents)).toBe(
+      canonicalTokens,
+    );
+    expect(projectBulkMoveIntents(canonicalDrawings, "DRAWING", intents)).toBe(
+      canonicalDrawings,
+    );
   });
 
-  it("preserves definition-owned token presentation fields", () => {
-    // UIX-491: bulk MOVE updates only placement coordinates/revision. Rebuilding
-    // a partial token here would erase the image just assigned to its
-    // definition and reproduce the player report after the first drag.
-    const richToken = {
-      ...token("a", 1, 2, 4),
-      assetId: "asset-portrait",
-      characterId: "character-1",
-      name: "Персонаж",
-      definitionRevision: 9,
+  it("rolls back exactly the rejected request to canonical coordinates", () => {
+    const canonical = [token("t1", 10, 1)];
+    const optimistic = [mixedIntent()];
+    expect(projectBulkMoveIntents(canonical, "TOKEN", optimistic)[0]?.x).toBe(
+      74,
+    );
+    const rolledBack = rejectBulkMoveIntent(optimistic, "move-1");
+    expect(projectBulkMoveIntents(canonical, "TOKEN", rolledBack)).toBe(
+      canonical,
+    );
+  });
+
+  it("stacks serialized moves on acknowledgement revisions", () => {
+    const first = acknowledgeBulkMoveIntent([mixedIntent()], "move-1", ack);
+    const second: CanvasBulkMoveIntent = {
+      actionId: "move-2",
+      sceneId: "scene",
+      targets: [{ targetType: "TOKEN", targetId: "t1", revision: 2 }],
+      delta: { x: 10, y: 3 },
     };
-    const [moved] = applyBulkMoveResult([richToken], { a: 5 }, { x: 3, y: 4 });
-
-    expect(moved).toEqual({
-      ...richToken,
-      x: 4,
-      y: 6,
-      revision: 5,
-    });
+    const projected = projectBulkMoveIntents(
+      [token("t1", 10, 1)],
+      "TOKEN",
+      appendBulkMoveIntent(first, second),
+    );
+    expect(projected[0]).toMatchObject({ x: 84, y: 15, revision: 2 });
   });
 
-  it("returns the same array when nothing it holds was moved", () => {
-    // Keeps an unrelated bulk move from re-rendering this collection.
-    const tokens = [token("a", 1, 1, 1)];
-    expect(applyBulkMoveResult(tokens, { other: 2 }, { x: 5, y: 5 })).toBe(
-      tokens,
+  it("preserves an accepted move when a later queued move is rejected", () => {
+    const first = acknowledgeBulkMoveIntent([mixedIntent()], "move-1", ack);
+    const second: CanvasBulkMoveIntent = {
+      ...mixedIntent(),
+      actionId: "move-2",
+      targets: [{ targetType: "TOKEN", targetId: "t1", revision: 2 }],
+    };
+    const remaining = rejectBulkMoveIntent(
+      appendBulkMoveIntent(first, second),
+      "move-2",
     );
-    expect(applyBulkMoveResult(tokens, {}, { x: 5, y: 5 })).toBe(tokens);
-    expect(applyBulkMoveResult(tokens, undefined, { x: 5, y: 5 })).toBe(tokens);
+    expect(
+      projectBulkMoveIntents([token("t1", 10, 1)], "TOKEN", remaining)[0],
+    ).toMatchObject({ x: 74, y: 12, revision: 2 });
+    expect(remaining).toEqual(first);
   });
 
-  it("handles a zero delta without disturbing coordinates", () => {
-    const [moved] = applyBulkMoveResult(
-      [token("a", 4, 6, 1)],
-      { a: 2 },
-      {
-        x: 0,
-        y: 0,
-      },
-    );
-    expect(moved).toEqual({ id: "a", x: 4, y: 6, revision: 2 });
+  it("does not leak an old scene or selection into the current projection", () => {
+    const otherSelection = [token("t2", 5, 1)];
+    expect(
+      projectBulkMoveIntents(otherSelection, "TOKEN", [mixedIntent()]),
+    ).toBe(otherSelection);
+    expect(
+      retainBulkMoveIntentsForScene([mixedIntent()], "other-scene"),
+    ).toEqual([]);
+  });
+
+  it("never resurrects deletion or overwrites a newer revision", () => {
+    const intents = acknowledgeBulkMoveIntent([mixedIntent()], "move-1", ack);
+    const deleted: ReturnType<typeof token>[] = [];
+    expect(projectBulkMoveIntents(deleted, "TOKEN", intents)).toBe(deleted);
+
+    const newer = [token("t1", 900, 7)];
+    expect(projectBulkMoveIntents(newer, "TOKEN", intents)).toBe(newer);
+    expect(reconcileBulkMoveIntents(intents, newer, [])).toEqual([]);
   });
 });

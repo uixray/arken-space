@@ -1,0 +1,586 @@
+{
+  "schemaVersion": 1,
+  "inventoryRevision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
+  "overallAcceptance": "INCOMPLETE",
+  "statusMeaning": "PASS = only stated scope at evidence revision, not current HEAD/full issue. FAIL = unresolved known defect. BLOCKED = evidence or applicability unresolved, not whole-project blocked.",
+  "artifactBase": "C:/Users/UIXRay/.codex/visualizations/2026/09/16/01a0a7d5-b072-7022-8e9d-4538c0a92b07",
+  "evidence": {
+    "compactSectionsBreakpoint": {
+      "status": "PASS",
+      "revision": "ecf66e62bb2c5cfb9fa679074bc7cdbfe2f176f2",
+      "artifact": "compact-sections-breakpoint/fixed/results.json",
+      "scope": "12 Chrome/Firefox production-build cases: new GM/PLAYER Sections390→360x480→1280→390 lifecycle, visible destination hit targets, no spontaneous modal revival, Journal hit/click, reopen/Escape/focus return; existing navigation owner and scene-picker breakpoint regressions. Mocked API, not all destination workspaces or physical devices. Old candidate failed with revived modal; fixed build passed."
+    },
+    "operatorFilters": {
+      "status": "PASS",
+      "revision": "176485ba82eada952fc37f2cd86b6b350eefa754",
+      "artifact": "operator-accessibility/focused-results.json",
+      "scope": "Four Chrome/Firefox1280/390 mocked operator list/detail cases include type/status selectOption and filter request assertions. Native pointer/keyboard open/select/close was not asserted; not OS picker visuals or backend trust acceptance. Not included in current204 gate."
+    },
+    "integratedCurrent": {
+      "status": "PASS",
+      "revision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
+      "artifact": "menu-integrated-1d00a8d/results.json",
+      "scope": "204 existing actual-App cases in one local production-bundle run, Chrome/Firefox worker1/retries0, 862.051s; mocked API. Explicit case-index covers14files. Excludes dedicated world/character image callers, real-server request controls, music command ACK, shared dev Select fixture and true browser zoom. Original RO FAIL remains; not complete registry acceptance."
+    },
+    "disclosureCurrent": {
+      "status": "PASS",
+      "revision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
+      "artifact": "menu-integrated-1d00a8d/results.json",
+      "scope": "Four cases within204 integrated run: PLAYER compact backstory Enter/Space/pointer and pending draft after reopen/Journal; PLAYER desktop resources retain pending value through native toggles and existing batching/rebase/conflict sequence. No GM/non-owner full matrix or real persistence."
+    },
+    "built": {
+      "status": "PASS",
+      "revision": "edb70ce01db62eb6fa18e82dec25fb51d381c6dc",
+      "artifact": "ui-built-edb70ce/results.json",
+      "scope": "58 actual-App cases, Chromium/Firefox; mocked API. Not dev-only owner fixtures or whole registry."
+    },
+    "feedback": {
+      "status": "PASS",
+      "revision": "d1872099a3b0c4cee207cbb0aceb491441e2fc00",
+      "artifact": "feedback-selector-gate/results.json",
+      "scope": "GM/PLAYER responsive selector and focus; 4 cases, no submission."
+    },
+    "cursor": {
+      "status": "PASS",
+      "revision": "d7ef50a2eb5795bd3959021e32c4d44143c11f07",
+      "artifact": "cursor-menu-gate/results.json",
+      "scope": "GM popup and PLAYER direct toggle, 4 cases; not actual remote cursor payload."
+    },
+    "cursorStableObserver": {
+      "status": "PASS",
+      "revision": "5d7d548d0ad69c67139333039f170ecc88cca708",
+      "artifact": "cursor-observer-cause/connected-results.json",
+      "scope": "16/16 Chrome/Firefox connected cases PASS52.5s: all8 previously split cursor cases,6 navigation-owner and2 desktop overflow pointer cases. New keyboard cases include named dialog/controls, two Journal/Map cycles, Escape/focus, no client-log writes. Instrumented same Firefox360 case now1 stable workspace observer versus22 before,0errors versus2; extra1case PASS6.2s. Unit10PASS preserves render/resize/observer measurement and unmount cleanup. Scoped repair of WorkspaceNav re-observation during popup resize; original TokenPalette RO not separately resolved."
+    },
+    "cursorOwnerNaming": {
+      "status": "FAIL",
+      "revision": "984c1fec452f2cfd09cc1645ab4fd52db5775d74",
+      "artifact": "cursor-owner-navigation/owner-contract-results.json",
+      "scope": "Connected8-case matrix split across owner-contract-results.json and remaining-results.json:5PASS3FAIL. Named dialog/control relationship, two keyboard Journal/Map cycles, no revival and Escape focus assertions pass in both browsers; Firefox new360/640 cases fail on ResizeObserver telemetry, existing GM Chromium resize case also fails. Old d67d683 Firefox360 baseline independently reproduces two same errors. Naming fix is not observer repair; do not accept this gate or discard telemetry."
+    },
+    "token": {
+      "status": "PASS",
+      "revision": "43d0fee8f2b791ab9176e69e3d8a70f153eb4816",
+      "artifact": "menu-access-gate/results.json",
+      "scope": "16 access-change cases; adjacent20 in related-results.json; only token menu."
+    },
+    "tokenFirstOpenResize": {
+      "status": "PASS",
+      "revision": "5d7d548d0ad69c67139333039f170ecc88cca708",
+      "artifact": "token-first-open-resize/current-results.json",
+      "scope": "4 Chrome/Firefox desktop1280→1120→1280 and compact390→360→390 cases PASS20.4s: resize during FIRST token character popup, before Escape/Setup; bounds and actual create-character target hit checks at each width, prior inline-image/pointer/keyboard/owner assertions retained, no unexpected API writes inclclientlogs. Same4 on pre-fix984c1fe alsoPASS20.7s: NOT an old-red/new-green demonstration and does not resolve original RO failure."
+    },
+    "ro": {
+      "status": "FAIL",
+      "revision": "452f5f162da51f10fbafcedef92f5d85fc9d36cf",
+      "artifact": "true-browser-zoom-gate/owner-06/token-generator-UIX-272-UI-05f7b--picker-at-desktop-viewport-chromium/trace.zip",
+      "scope": "Token modal opening emitted ResizeObserver loop completed with undelivered notifications. Subsequent non-reproduction is not a fix; see token-resize-diagnosis/checkpoint.md."
+    },
+    "toolbar": {
+      "status": "PASS",
+      "revision": "cd99d3d30b23a0ba70baa0bc302e820c20faf2c5",
+      "artifact": "toolbar-settings-gate/results.json",
+      "scope": "Four GM1280/360short grid/resize/overflow keyboard cases, one mocked save each; related eight cases across two retained reports, including delayed outside focus and rejection."
+    },
+    "activity": {
+      "status": "PASS",
+      "revision": "d1908c20bba3cdfeb6ae88e7fe28e36825ac6ddb",
+      "artifact": "activity-selectors-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox cases; actual App mocked backend, no messages/rolls submitted."
+    },
+    "navigation": {
+      "status": "PASS",
+      "revision": "226533ae0cb33e0585f52a770ede01c5a21ee4ad",
+      "artifact": "navigation-owner-gate/results.json",
+      "scope": "Six Chrome/Firefox cases: GM1024 More to Scenes returns focus to visible More; compact GM Scenes/PLAYER Tokens390 restores Map. Two cycles, mocked backend, no unexpected writes/pageerrors."
+    },
+    "scenePicker": {
+      "status": "PASS",
+      "revision": "226533ae0cb33e0585f52a770ede01c5a21ee4ad",
+      "artifact": "navigation-owner-gate/related-results.json",
+      "scope": "Eight Chrome/Firefox pointer/keyboard scene picker cases at1024/1440, compact hidden owner/PLAYER read-only, short-height option scrolling. Mocked backend, not server scene persistence."
+    },
+    "worldImages": {
+      "status": "PASS",
+      "revision": "fa54b9a27b15ff2c4d339e2c413632be857b015f",
+      "artifact": "world-image-gate/results.json",
+      "scope": "Four GM1280/390 Chrome/Firefox actual-App cases:14-image name filter, pointer hit-test, keyboard cover selection/removal, isolated cover PATCH and gallery POST, clear-after-attach, reload of mock-backed saved selection/caption. Not real backend persistence or PLAYER ACL."
+    },
+    "characterImages": {
+      "status": "PASS",
+      "revision": "b048921c2220ece0efb42c492b3b424859a258e2",
+      "artifact": "character-image-gate/results.json",
+      "scope": "Eight GM/PLAYER-owner1280/390 Chrome/Firefox cases: portrait-only eligible assets, pointer hit, independent portrait PATCH and resource counters PATCH, keyboard focus-only then removal, preserved current/maximum/recoverable, reload mock-backed state. Not live persistence, non-owner ACL or failure recovery."
+    },
+    "musicOwner": {
+      "status": "PASS",
+      "revision": "20b48de69676539db3ebc5816ddfbc0b5a3cd47e",
+      "artifact": "music-owner-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/1024 Chrome/Firefox cases: GM empty-library transition twice and visible return focus; PLAYER overflow absent; volume Escape/outside/hidden-anchor390 resize. No audio playback/upload/track command test."
+    },
+    "tokenTray": {
+      "status": "PASS",
+      "revision": "23ed18709b378bb493721c549e00fe7e4e2bcff8",
+      "artifact": "token-tray-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/390 lifecycle cases: Chromium4 PASS in chromium-pass-firefox-tab-results.json, Firefox4 PASS in results.json after native scroll-container Tab adjustment. Related geometry4 PASS in related-results.json. No placement commands; mocked backend."
+    },
+    "sceneEditorMap": {
+      "status": "PASS",
+      "revision": "bbf0206a72babfa3636415b91cd02ae94ceb88e7",
+      "artifact": "scene-editor-map-gate/results.json",
+      "scope": "Four GM1280/390 Chrome/Firefox cases, actual workspace→editor→Select: pointer choice, keyboard Home/Enter, first Escape retains editor/name draft, open-popup resize360x480 bounds, cancel/reopen original draft. No save/upload/publish or real persistence."
+    },
+    "remainingMenus": {
+      "status": "PASS",
+      "revision": "b7cfc77fc7ecbff20d409badd8909996c71dcf19",
+      "artifact": "remaining-menu-gate/results.json",
+      "scope": "24 existing named cases current App/styles: composer8 Activity (one mocked roll each), details8 (compact session/desktop volume plus foreign owner), sticker8 Activity including resize/scroll/owner. Chrome/Firefox GM/PLAYER1280/390. Legacy fixture limitations: no comprehensive telemetry/pageerror/write audit."
+    },
+    "musicCommand": {
+      "status": "PASS",
+      "revision": "9f91183cebd1e63c42f36b2325977f11ca6180d0",
+      "artifact": "music-command-gate/results.json",
+      "scope": "Four Chrome/Firefox cases: desktop1280 SELECT returns focus to visible summary before delayed conflict ACK; rejection notification at1280/390, exact command/revision/actionId, no optimistic selection/playback. No successful audio/media playback or compact music entry."
+    },
+    "objectList": {
+      "status": "PASS",
+      "revision": "5311000403d01e9c96ec6fcf9f03888c0fa2c60c",
+      "artifact": "object-list-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox actual-App cases: keyboard selects first of24 tokens, Escape retains selection/returns trigger,360x480 list scroll/last hit and bounds, outside session focus, Journal/Map hidden owner and retained selection. No clone/delete/move/placement payload."
+    },
+    "drawingPalette": {
+      "status": "PASS",
+      "revision": "7b4af10beef8ec1cbd59d96ecce49c88622cf2c2",
+      "artifact": "drawing-palette-gate/results.json",
+      "scope": "Eight GM/PLAYER1280/390 Chrome/Firefox cases: red preset/native input value, width12 and keyboard1/50,360x480 map-bound containment and internal scroll to top/bottom controls, tool/journal state retention. No actual drawing or OS color dialog."
+    },
+    "workspaceCurrent": {
+      "status": "PASS",
+      "revision": "75a7e37e90b8eefb7b55ce080e935832ebd78e6f",
+      "artifact": "workspace-current-gate/results.json",
+      "scope": "16 actual-App mocked cases: outer token image Escape GM/PLAYER1280/390 (8), GM template1280/360 (4), GM Setup three active controls1280/360 (4). Client-log POST no longer exempt from unexpected writes. Not original first-open TokenPalette RO fix or server acceptance."
+    },
+    "requestsCurrent": {
+      "status": "PASS",
+      "revision": "b65f3c046dd102b100c3e02dd5fa0759d567ded9",
+      "artifact": "request-server-gate/results.json",
+      "scope": "4 existing real API/PostgreSQL18.1 cases Chrome/Firefox: PLAYER native draft/keyboard/compact resize/submit and GM filter combinations/reopen. Six persisted request rows/hash unchanged across isolated DB restart. Source-mode server, loopback-only entry copy; not CI PostgreSQL17 or production bundle/full matrix."
+    },
+    "menuFollowup": {
+      "status": "PASS",
+      "revision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
+      "artifact": "menu-followup-native/final-runtime-unchanged-results.json",
+      "scope": "20/20PASS80.615s retained unchanged production bundle: character image callers8, world image callers4, music command ACK4, operator filters4. Real Home/End/arrows/Tab and Chromium native pointer-open/Escape-close. Firefox native popup axis explicitly unaccepted after plain-HTML headless baseline. No runtime patch retained."
+    },
+    "requestsBuilt": {
+      "status": "PASS",
+      "revision": "47c475a180caef231be246f1c28dc6cbec5ae405",
+      "artifact": "request-built-gate/final-results.json",
+      "scope": "4/4PASS23.375s Chrome/Firefox, actual retained production web bundle1d00a8d + source-mode real API47c475a + fresh isolated PG18.1 database. PLAYER native keys/draft/resize/submit and GM filter/reopen. Four served bundle hashes match; six request rows count/full-row hash survive isolated DB restart. Not production deployment, UI reconnect, OS-native popup visuals or all-role/device matrix."
+    }
+  },
+  "sites": [
+    {
+      "file": "apps/web/src/App.tsx",
+      "kind": "role:listbox",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Scene picker in shell; GM interaction, PLAYER read-only, compact hidden path.",
+      "evidence": ["scenePicker"],
+      "next": "Real multiplayer persistence and physical devices remain separate gates."
+    },
+    {
+      "file": "apps/web/src/App.tsx",
+      "kind": "tag:details",
+      "count": 3,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Three source buckets with limited caller evidence: scene picker8, token tray8 plus geometry4, compact GM/PLAYER session foreign/own Escape and pointer layer from details cases.",
+      "evidence": ["scenePicker", "tokenTray", "remainingMenus"],
+      "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
+    },
+    {
+      "file": "apps/web/src/CatalogEntryForm.tsx",
+      "kind": "tag:FormSelect",
+      "count": 7,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Seven conditional controls in edit/picker/setup callers; catalog tests12/58.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/FeedbackReporter.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "One feedback category selector, GM/PLAYER, 1280→390→360 short→1280; keyboard/pointer/Escape/outside and visible close focus.",
+      "evidence": ["feedback"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/MapToolbar.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Size mode selection/Done and overflow display toggles: keyboard/focus on1280 and360x480. No resize dragging/persistence claim.",
+      "evidence": ["toolbar"],
+      "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
+    },
+    {
+      "file": "apps/web/src/MusicBar.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target. Track SELECT now also returns visible focus; conflict ACK notifications verified by four existing cases.",
+      "evidence": ["musicOwner", "musicCommand", "menuFollowup"],
+      "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch."
+    },
+    {
+      "file": "apps/web/src/OperatorFeedbackFilters.tsx",
+      "kind": "tag:select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Authorized operator type/status native selects. Both browsers: hit-testing, focus, Home/End/arrows/Tab, no fetch before Apply, exact payloads. Chromium: native pointer-open/Escape-close and next Escape closes workspace. Headless Firefox native popup axis unaccepted; identical behavior reproduced on plain HTML without App.",
+      "evidence": ["operatorFilters", "menuFollowup"],
+      "next": "Verify native popup open/cancel in a supported Firefox environment; do not patch App from headless UA behavior or convert the selector to silence tests. Independent host authorization remains separate."
+    },
+    {
+      "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 6,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Six native controls through existing PLAYER compact draft/submit and GM filter/reopen: current production web bundle with real isolated API/PG, four Chrome/Firefox cases. Native values/keys, not OS popup visuals.",
+      "evidence": ["requestsCurrent", "requestsBuilt"],
+      "next": "Native OS popup visual/physical-device matrix, CI PostgreSQL17 and production bundle remain separate; no full menu acceptance claim."
+    },
+    {
+      "file": "apps/web/src/StickerPicker.tsx",
+      "kind": "role:listbox",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
+      "evidence": ["remainingMenus"],
+      "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
+    },
+    {
+      "file": "apps/web/src/StickerPicker.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
+      "evidence": ["remainingMenus"],
+      "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
+    },
+    {
+      "file": "apps/web/src/TokenImageGenerator.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "One native source selector; desktop/narrow four cases. OS picker UI not inspected.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/WorkspaceNav.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "GM1024 More destination opening/closing and visible return focus, twice, Chrome/Firefox.",
+      "evidence": ["navigation"],
+      "next": "Other destinations and responsive owner changes remain outside this scoped result."
+    },
+    {
+      "file": "apps/web/src/WorldContentWorkspace.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 2,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Both inline callers: entity cover and gallery attachment, independent selected assets and exact request payloads.",
+      "evidence": ["worldImages", "menuFollowup"],
+      "next": "Real persistence/authorization, request-failure recovery and physical-device checks remain outside this scoped acceptance."
+    },
+    {
+      "file": "apps/web/src/WorldContentWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 4,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Four filters/link/create controls in world dropdown tests; 4 combined editor/reader cases.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/WorldEncyclopediaWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Reader filter in world dropdown tests; current navigation GM-only, no invented PLAYER route.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/WorldMapsWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 7,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Seven native map/draft selectors; 8 world-map cases incl PLAYER navigation exclusion. Not OS popup visuals.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/renderers/GridSettings.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Cancel draft reset/no save, explicit save/reopen value/focus, rejected draft retained, outside delayed-save focus. Mocked backend; preview pixels and full in-flight session races not accepted.",
+      "evidence": ["toolbar"],
+      "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
+    },
+    {
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "kind": "role:menu",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Token menu live permissions/focus lifecycle; previous geometry/actions in inventory checkpoints. Not object-list/drawing-color controls.",
+      "evidence": ["token"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterMediaGallery.tsx",
+      "kind": "tag:FormSelect",
+      "count": 4,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Four attach/edit controls GM/PLAYER; ten gallery cases including sheet Escape.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 2,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Both actual character-sheet callers: portrait and additional resource image; GM and PLAYER owner on desktop/compact.",
+      "evidence": ["characterImages", "menuFollowup"],
+      "next": "Non-owner/controller restrictions, live payload persistence and rejection/realtime recovery remain outside this scoped evidence."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Template modal PASS four current cases; second showCharacterPicker source occurrence inactive, not silently counted as runtime PASS.",
+      "evidence": ["built", "workspaceCurrent"],
+      "next": "Retain explicit inactive exclusion; no new UI route for coverage."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "PASS",
+      "classification": "in-flow",
+      "scope": "PLAYER compact backstory native Enter/Space/pointer close/reopen and pending draft retention; ordinary in-flow disclosure, not floating popup.",
+      "evidence": ["disclosureCurrent"],
+      "next": "GM/non-owner and full viewport matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "role:listbox",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Activity list current8 cases passed. Second ChatPanel list excluded from current production navigation: allowed feeds only ACTIVITY/STORY, handled by ActivityPanel/StoryChannel. Source applicability audit records chain.",
+      "evidence": ["remainingMenus"],
+      "next": "Retain two static occurrences; revisit second only if feed policy changes. Do not activate dead route for coverage; full shared lifecycle gate still separate."
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "GM selection changes available skill buttons, pointer hit/bounds, keyboard reset/Escape/focus; PLAYER selector absent, own skill only. Actual dice request target not tested.",
+      "evidence": ["activity"],
+      "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "All3 filter checkboxes keyboard off/pointer on, accessible hidden-summary, Escape/outside focus and unsent draft preserved. REFERENCE event disappearance/restoration verified; ROLLS/STORY timeline fixtures absent.",
+      "evidence": ["activity"],
+      "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
+    },
+    {
+      "file": "apps/web/src/sidebar/ChatPanels.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "inactive",
+      "scope": "Direct-chat recipient select; production Direct entry hidden.",
+      "evidence": [],
+      "next": "Do not enable hidden Direct to satisfy inventory."
+    },
+    {
+      "file": "apps/web/src/sidebar/InitiativePanel.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "in-flow",
+      "scope": "Legacy in-flow disclosure: no production import/JSX caller found in apps/web/src at bc3dde8fd170b6c062ceb6e887f616f4861d6de9; only component tests. Not the active encounter queue.",
+      "evidence": [],
+      "next": "Explicit source-only inactive exclusion; retain the static bucket. Do not enable legacy UI for coverage or claim current encounter acceptance."
+    },
+    {
+      "file": "apps/web/src/sidebar/ResourceCounters.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "PASS",
+      "classification": "in-flow",
+      "scope": "PLAYER desktop resources native Enter/Space/pointer toggles preserve pending value and do not create additional writes; ordinary in-flow disclosure.",
+      "evidence": ["disclosureCurrent"],
+      "next": "GM/non-owner and compact full matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
+    },
+    {
+      "file": "apps/web/src/sidebar/SetupPanel.tsx",
+      "kind": "tag:FormSelect",
+      "count": 6,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Three live controls PASS four current cases; three legacy hidden occurrences explicitly excluded, never reactivate for tests.",
+      "evidence": ["built", "workspaceCurrent"],
+      "next": "Keep active/hidden split explicit at next combined gate."
+    },
+    {
+      "file": "apps/web/src/sidebar/TokenPalette.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Inline image picker in four actual token-modal cases. Shared owner error separately remains open.",
+      "evidence": ["built"],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/sidebar/TokenPalette.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2,
+      "status": "FAIL",
+      "classification": "reachable",
+      "scope": "Outer image and modal character controls: first-open width-transition gate now also passes on5d7d548, but original modal ResizeObserver error is unresolved.",
+      "evidence": ["built", "ro", "tokenFirstOpenResize"],
+      "next": "Capture offending observer at actual failure; do not repeat identical warm runs or filter client logs."
+    },
+    {
+      "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Named-dialog/keyboard-owner gate repaired by stable WorkspaceNav subscription; all8 cursor cases now PASS within connected16. Historical red evidence retained. PLAYER remains a direct toggle, not another popup.",
+      "evidence": ["cursor", "cursorOwnerNaming", "cursorStableObserver"],
+      "next": "Retain scoped cursor/owner acceptance; original TokenPalette observer failure, full registry and physical-device acceptance remain separate."
+    },
+    {
+      "file": "apps/web/src/ui/FuturePoolDialogs.tsx",
+      "kind": "tag:Select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "preview-only",
+      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
+      "evidence": [],
+      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+    },
+    {
+      "file": "apps/web/src/ui/GravityFormControls.tsx",
+      "kind": "tag:Select",
+      "count": 1,
+      "status": "FAIL",
+      "classification": "shared-implementation",
+      "scope": "Shared implementation, not another caller. Built tests and true zoom passed, unresolved original RO still prevents complete acceptance.",
+      "evidence": ["built", "ro"],
+      "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence."
+    },
+    {
+      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "preview-only",
+      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
+      "evidence": [],
+      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+    },
+    {
+      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
+      "kind": "tag:Select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "preview-only",
+      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
+      "evidence": [],
+      "next": "Exclude from live acceptance denominator; require reachability review if activated."
+    },
+    {
+      "file": "apps/web/src/ui/SceneManagerDialog.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Scene editor map selector under workspace→modal, keyboard/pointer and draft ownership through compact short-height resize.",
+      "evidence": ["sceneEditorMap"],
+      "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect."
+    }
+  ],
+  "supplementalSites": [
+    {
+      "id": "map-object-list",
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "status": "PASS",
+      "scope": "Supplemental custom object-list lifecycle tested for token rows and local selection, both roles/viewport modes.",
+      "next": "Mixed drawing/region rows, clone/delete action flows, live permission updates and real server behavior remain separate from this scoped menu protocol.",
+      "evidence": ["objectList"]
+    },
+    {
+      "id": "drawing-color-panel",
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "status": "PASS",
+      "scope": "DOM drawing palette settings/lifecycle including short-map containment. Native color input type/value only; OS chooser excluded.",
+      "next": "Actual stroke payload/pixels, editing existing strokes, OS color chooser and physical touch sizing remain separate gates.",
+      "evidence": ["drawingPalette"]
+    },
+    {
+      "id": "compact-navigation",
+      "file": "apps/web/src/App.tsx",
+      "status": "PASS",
+      "scope": "GM Scenes and PLAYER Tokens390: destination owns focus then Escape returns to Map. New Sections resize gate verifies all visible destination hit targets, desktop closes sheet without revival on compact return, Journal remains clickable, reopen/Escape/focus; both roles and browsers.",
+      "next": "Other destination workspace internals and physical devices remain separate. This does not resolve original Select RO or whole-registry acceptance.",
+      "evidence": ["navigation", "compactSectionsBreakpoint"]
+    }
+  ],
+  "applicabilityAudit": {
+    "revision": "c8d76655e737ec48ad2dcc4becc331b912ac379d",
+    "document": "docs/plans/uix-644-applicability.md",
+    "scope": "Source reachability only; preserves all static buckets, not runtime acceptance."
+  }
+}

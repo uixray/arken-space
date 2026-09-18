@@ -91,3 +91,47 @@ describe("token generation replay key", () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 });
+
+it("replacement commit and refresh are separate stable actions", async () => {
+  const result = { asset: { id: "asset" }, version: '"new"', replayed: false };
+  apiMock.mockReset().mockResolvedValue(result);
+  const load = vi.fn().mockRejectedValue(new Error("Refresh failed"));
+  let actions!: AssetActions;
+  const view = renderComponent(
+    <Harness
+      load={load}
+      receive={(value) => {
+        actions = value;
+      }}
+    />,
+  );
+  const before = actions;
+  view.rerender(
+    <Harness
+      load={load}
+      receive={(value) => {
+        actions = value;
+      }}
+    />,
+  );
+  expect(actions.replaceAsset).toBe(before.replaceAsset);
+  expect(actions.refreshAssets).toBe(before.refreshAssets);
+  const intent = {
+    assetId: "asset",
+    file: new File(["file"], "map.png"),
+    version: '"old"',
+    actionId: "same-intent",
+  };
+  await expect(actions.replaceAsset(intent)).resolves.toBe(result);
+  expect(load).not.toHaveBeenCalled();
+  await expect(actions.refreshAssets()).rejects.toThrow("Refresh failed");
+  expect(apiMock).toHaveBeenCalledTimes(1);
+  const [path, init] = apiMock.mock.calls[0]!;
+  expect(path).toBe("/api/assets/asset/content");
+  expect(init.method).toBe("PUT");
+  expect(init.headers).toEqual({
+    "if-match": intent.version,
+    "x-action-id": intent.actionId,
+  });
+  expect(init.body.get("file")).toBe(intent.file);
+});

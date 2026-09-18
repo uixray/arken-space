@@ -180,6 +180,8 @@ const actions: CampaignActions = {
     uploadAsset: unexpectedAction,
     getAssetUsage: unexpectedAction,
     deleteAsset: unexpectedAction,
+    replaceAsset: unexpectedAction,
+    refreshAssets: unexpectedAction,
     generateTokenImage: unexpectedAction,
   },
   statLayout: { onUpdateStatLayout: unexpectedAction },

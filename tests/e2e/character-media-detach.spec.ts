@@ -163,6 +163,7 @@ async function installMockedApp(
   page: Page,
   detachRequests: DetachRequest[],
   unexpectedApiRequests: string[],
+  role: "GM" | "PLAYER" = "PLAYER",
 ) {
   // Registered first so the narrower routes below win. Any REST request not
   // declared by this fixture is recorded instead of reaching a backend or DB.
@@ -182,7 +183,11 @@ async function installMockedApp(
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(snapshot),
+      body: JSON.stringify({
+        ...snapshot,
+        me: { ...snapshot.me, role },
+        members: snapshot.members.map((member) => ({ ...member, role })),
+      }),
     });
   });
   await page.route("**/api/story/posts**", (route) => {
@@ -317,4 +322,142 @@ test("an owner confirms before detaching character media from the gallery", asyn
     0,
   );
   expect(unexpectedApiRequests).toEqual([]);
+});
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 360]) {
+    test(`gallery dropdown lifecycle ${role} ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const mutations: DetachRequest[] = [];
+      const unexpected: string[] = [];
+      await installMockedApp(page, mutations, unexpected, role);
+      await page.goto("/");
+      await openWorkspaceSection(page, "Персонажи");
+      const gallery = page.locator(".character-media-gallery");
+      const attach = gallery.locator(".character-media-gallery__attach");
+      async function exercise(
+        scope: import("@playwright/test").Locator,
+        label: string,
+      ) {
+        const trigger = scope.getByRole("combobox", {
+          name: label,
+          exact: true,
+        });
+        await trigger.scrollIntoViewIfNeeded();
+        await trigger.click();
+        const list = page.getByRole("listbox");
+        await expect(list).toBeVisible();
+        const option = list.getByRole("option").nth(1);
+        await option.scrollIntoViewIfNeeded();
+        const selectedText = (await option.innerText()).trim();
+        expect(
+          await option.evaluate((node) => {
+            const r = node.getBoundingClientRect();
+            return node.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            );
+          }),
+        ).toBe(true);
+        await option.click();
+        await expect(list).toBeHidden();
+        await expect(trigger).toContainText(selectedText);
+        await trigger.click();
+        await expect(list).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(list).toBeHidden();
+        await expect(trigger).toBeFocused();
+        await expect(scope).toBeVisible();
+        // Keyboard selection must update the real controlled field, not merely
+        // expose an option in the DOM.
+        await trigger.press("ArrowDown");
+        await expect(list).toBeVisible();
+        const firstText = (
+          await list.getByRole("option").first().innerText()
+        ).trim();
+        await page.keyboard.press("Home");
+        await page.keyboard.press("Enter");
+        await expect(list).toBeHidden();
+        await expect(trigger).toContainText(firstText);
+        await expect(trigger).toBeFocused();
+
+        await trigger.click();
+        await expect(list).toBeVisible();
+        const resizedWidth = width === 360 ? 390 : 1180;
+        await page.setViewportSize({ width: resizedWidth, height: 640 });
+        await expect(list).toBeVisible();
+        const resizedOption = list.getByRole("option").first();
+        await resizedOption.scrollIntoViewIfNeeded();
+        await expect
+          .poll(() =>
+            resizedOption.evaluate((node) => {
+              const r = node.getBoundingClientRect();
+              return (
+                r.left >= 0 &&
+                r.right <= innerWidth &&
+                r.top >= 0 &&
+                r.bottom <= innerHeight &&
+                node.contains(
+                  document.elementFromPoint(
+                    r.x + r.width / 2,
+                    r.y + r.height / 2,
+                  ),
+                )
+              );
+            }),
+          )
+          .toBe(true);
+        // A dropdown intentionally overlays the following field. Its owner
+        // heading is an actual outside point, not a click through the menu.
+        await scope
+          .getByText(/^(Добавить в галерею|Изменить запись галереи)$/)
+          .first()
+          .click();
+        await expect(list).toBeHidden();
+        await expect(scope).toBeVisible();
+        await page.setViewportSize({ width, height: 800 });
+      }
+      await exercise(attach, "Категория");
+      await exercise(attach, "Видимость");
+      await gallery
+        .getByRole("button", { name: "Изменить", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: "Изменить запись галереи",
+        exact: true,
+      });
+      await expect(dialog).toBeVisible();
+      await exercise(dialog, "Категория");
+      await exercise(dialog, "Видимость");
+      await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await expect(gallery).toBeVisible();
+      expect(mutations).toEqual([]);
+      expect(unexpected).toEqual([]);
+    });
+  }
+}
+
+test("gallery dropdown closes before the PLAYER sheet on consecutive Escape", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  const mutations: DetachRequest[] = [];
+  const unexpected: string[] = [];
+  await installMockedApp(page, mutations, unexpected);
+  await page.goto("/");
+  await openWorkspaceSection(page, "Персонажи");
+  const gallery = page.locator(".character-media-gallery");
+  const trigger = gallery
+    .locator(".character-media-gallery__attach")
+    .getByRole("combobox", { name: "Категория", exact: true });
+  await trigger.click();
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox")).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expect(gallery).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(gallery).toBeHidden();
+  expect(mutations).toEqual([]);
+  expect(unexpected).toEqual([]);
 });

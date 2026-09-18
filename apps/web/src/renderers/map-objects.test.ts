@@ -1,6 +1,7 @@
 import type { DrawingDto, TokenDto } from "@arken/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  canDeleteSelectedToken,
   canSelectDrawing,
   canSelectToken,
   drawingBounds,
@@ -142,5 +143,28 @@ describe("token stacks", () => {
       "0:0": { count: 2, representativeId: "a" },
       "1:0": { count: 1, representativeId: "z" },
     });
+  });
+});
+
+describe("selected token deletion affordance", () => {
+  it("keeps GM and current controller actions available", () => {
+    expect(canDeleteSelectedToken(token(), context)).toBe(true);
+    expect(
+      canDeleteSelectedToken(
+        token({ locked: true, visible: false, controllerMembershipIds: [] }),
+        { ...context, role: "GM" },
+      ),
+    ).toBe(true);
+  });
+  it.each([
+    { locked: true },
+    { visible: false },
+    { layer: "GM" as const },
+    { controllerMembershipIds: [] },
+  ])("does not offer deletion for a prohibited PLAYER target %j", (patch) => {
+    expect(canDeleteSelectedToken(token(patch), context)).toBe(false);
+  });
+  it("does not offer an action for a removed token", () => {
+    expect(canDeleteSelectedToken(undefined, context)).toBe(false);
   });
 });

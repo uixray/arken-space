@@ -1,6 +1,8 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@gravity-ui/uikit";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { ApiError } from "./api";
+import { OperatorFeedbackFilters } from "./OperatorFeedbackFilters";
 import {
   fetchAttachment,
   FEEDBACK_KIND_LABELS,
@@ -15,6 +17,7 @@ import {
   type FeedbackDetail,
   type FeedbackListItem,
   type FeedbackStatus,
+  type FeedbackListQuery,
 } from "./operator-feedback";
 import "./OperatorFeedbackWorkspace.css";
 
@@ -36,6 +39,11 @@ export const OperatorFeedbackWorkspace = memo(
     onClose: () => void;
   }) {
     const [items, setItems] = useState<FeedbackListItem[]>([]);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [listBusy, setListBusy] = useState(false);
+    const [listError, setListError] = useState(false);
+    const filters = useRef<FeedbackListQuery>({});
+    const retryCursor = useRef<string | undefined>(undefined);
     const [detail, setDetail] = useState<FeedbackDetail | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [linearKey, setLinearKey] = useState("");
@@ -43,46 +51,119 @@ export const OperatorFeedbackWorkspace = memo(
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const scope = useRef(0);
+    const image = useRef<string | null>(null);
+    const detailHeading = useRef<HTMLHeadingElement | null>(null);
+    const selectedReportId = detail?.id;
+    useEffect(() => {
+      if (selectedReportId) detailHeading.current?.focus();
+    }, [selectedReportId]);
 
     const closeImage = useCallback(() => {
-      setImageUrl((current) => {
-        if (current) URL.revokeObjectURL(current);
-        return null;
-      });
+      if (image.current) URL.revokeObjectURL(image.current);
+      image.current = null;
+      setImageUrl(null);
     }, []);
     const clearSensitive = useCallback(() => {
+      scope.current += 1;
       setDetail(null);
+      setLinearKey("");
+      setLinearUrl("");
+      setBusy(false);
       closeImage();
     }, [closeImage]);
-    const refreshList = useCallback(async () => {
-      const response = await fetchFeedbackList();
-      setItems(response.items);
+    const closeIfUnauthorized = useCallback(
+      (reason: unknown) => {
+        if (
+          !(reason instanceof ApiError) ||
+          ![401, 403].includes(reason.status)
+        )
+          return false;
+        clearSensitive();
+        setItems([]);
+        setNextCursor(null);
+        setListBusy(false);
+        setListError(false);
+        setError("");
+        setNotice("");
+        onClose();
+        return true;
+      },
+      [clearSensitive, onClose],
+    );
+    const refreshList = useCallback(async (cursor?: string) => {
+      const requestScope = scope.current;
+      setListBusy(true);
+      setListError(false);
+      retryCursor.current = cursor;
+      try {
+        const response = await fetchFeedbackList({
+          ...filters.current,
+          ...(cursor ? { cursor } : {}),
+        });
+        if (requestScope !== scope.current) return;
+        setItems((current) =>
+          cursor
+            ? [
+                ...current,
+                ...response.items.filter(
+                  (item) =>
+                    !current.some((existing) => existing.id === item.id),
+                ),
+              ]
+            : response.items,
+        );
+        setNextCursor(response.nextCursor);
+      } finally {
+        if (requestScope === scope.current) setListBusy(false);
+      }
     }, []);
-    useEffect(() => () => closeImage(), [closeImage]);
+    const loadList = useCallback(
+      (cursor?: string) => {
+        const requestScope = scope.current;
+        void refreshList(cursor).catch((reason) => {
+          if (requestScope !== scope.current) return;
+          if (!closeIfUnauthorized(reason)) setListError(true);
+        });
+      },
+      [refreshList, closeIfUnauthorized],
+    );
+    useEffect(
+      () => () => {
+        scope.current += 1;
+        if (image.current) URL.revokeObjectURL(image.current);
+        image.current = null;
+      },
+      [],
+    );
     useEffect(() => {
       if (!open) {
         clearSensitive();
+        filters.current = {};
+        setItems([]);
+        setNextCursor(null);
+        setListBusy(false);
+        setListError(false);
         return;
       }
       setError("");
-      void refreshList().catch(() => {
-        setError("Доступ к обратной связи потерян.");
-        clearSensitive();
-        onClose();
-      });
-    }, [open, onClose, refreshList, clearSensitive]);
+      loadList();
+    }, [open, loadList, clearSensitive]);
 
     async function select(id: string) {
       clearSensitive();
+      const requestScope = scope.current;
       setError("");
       setNotice("");
       setBusy(true);
       try {
-        setDetail(await fetchFeedbackDetail(id));
-      } catch {
-        setError(safeError);
+        const next = await fetchFeedbackDetail(id);
+        if (requestScope === scope.current) setDetail(next);
+      } catch (reason) {
+        if (requestScope === scope.current && !closeIfUnauthorized(reason))
+          setError(safeError);
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
     async function transition(status: FeedbackStatus) {
@@ -93,64 +174,83 @@ export const OperatorFeedbackWorkspace = memo(
         return;
       }
       const id = detail.id;
+      const requestScope = scope.current;
       setBusy(true);
       setError("");
       setNotice("");
       closeImage();
       try {
         await updateFeedback(id, payload);
-        setDetail(await fetchFeedbackDetail(id));
+        if (requestScope !== scope.current) return;
+        const next = await fetchFeedbackDetail(id);
+        if (requestScope !== scope.current) return;
+        setDetail(next);
         await refreshList();
+        if (requestScope !== scope.current) return;
         setLinearKey("");
         setLinearUrl("");
-      } catch {
+      } catch (reason) {
+        if (requestScope !== scope.current) return;
+        if (closeIfUnauthorized(reason)) return;
         setDetail(null);
         setError(safeError);
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
     async function reveal() {
       if (!detail) return;
+      const requestScope = scope.current;
       setBusy(true);
       setError("");
       closeImage();
       try {
-        setDetail(await fetchFeedbackDetail(detail.id, true));
-      } catch {
+        const next = await fetchFeedbackDetail(detail.id, true);
+        if (requestScope === scope.current) setDetail(next);
+      } catch (reason) {
+        if (requestScope !== scope.current) return;
+        if (closeIfUnauthorized(reason)) return;
         setDetail(null);
         setError(safeError);
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
     async function copy() {
       if (!detail) return;
+      const requestScope = scope.current;
       setBusy(true);
       setError("");
       setNotice("");
       try {
         const data = await fetchRedactedExport(detail.id);
+        if (requestScope !== scope.current) return;
         await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-        setNotice("Обезличенная копия скопирована.");
-      } catch {
-        setError("Не удалось скопировать. Попробуйте снова.");
+        if (requestScope === scope.current)
+          setNotice("Обезличенная копия скопирована.");
+      } catch (reason) {
+        if (requestScope === scope.current && !closeIfUnauthorized(reason))
+          setError("Не удалось скопировать. Попробуйте снова.");
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
     async function openAttachment(attachmentId: string) {
       if (!detail) return;
+      const requestScope = scope.current;
       closeImage();
       setBusy(true);
       setError("");
       try {
         const blob = await fetchAttachment(detail.id, attachmentId);
-        setImageUrl(URL.createObjectURL(blob));
-      } catch {
-        setError("Не удалось открыть изображение.");
+        if (requestScope !== scope.current) return;
+        image.current = URL.createObjectURL(blob);
+        setImageUrl(image.current);
+      } catch (reason) {
+        if (requestScope === scope.current && !closeIfUnauthorized(reason))
+          setError("Не удалось открыть изображение.");
       } finally {
-        setBusy(false);
+        if (requestScope === scope.current) setBusy(false);
       }
     }
 
@@ -168,27 +268,68 @@ export const OperatorFeedbackWorkspace = memo(
       >
         <div className="operator-feedback__grid">
           <nav aria-label={OPERATOR_FEEDBACK_TITLE}>
+            <OperatorFeedbackFilters
+              disabled={busy || listBusy}
+              onApply={(query) => {
+                clearSensitive();
+                filters.current = query;
+                setItems([]);
+                setNextCursor(null);
+                loadList();
+              }}
+            />
+            {listError && (
+              <div role="alert">
+                <p>Не удалось загрузить обращения.</p>
+                <Button
+                  disabled={listBusy}
+                  onClick={() => loadList(retryCursor.current)}
+                >
+                  Повторить загрузку
+                </Button>
+              </div>
+            )}
+            <p role="status">
+              {listBusy ? "Загрузка обращений…" : `Загружено: ${items.length}`}
+            </p>
+            {!listBusy && !listError && items.length === 0 && (
+              <p>По выбранным фильтрам обращений нет.</p>
+            )}
             {items.map((item) => (
               <button
                 type="button"
                 key={item.id}
-                disabled={busy}
+                disabled={busy || listBusy}
                 onClick={() => void select(item.id)}
               >
                 <b>{FEEDBACK_KIND_LABELS[item.kind]}</b>
                 <span>
                   {FEEDBACK_STATUS_LABELS[item.status]} /{" "}
-                  {new Date(item.createdAt).toLocaleString()}
+                  {new Date(item.createdAt).toLocaleString("ru-RU")}
                 </span>
+                <small>
+                  Сборка:{" "}
+                  {item.buildVersion ?? item.buildRevision ?? "Не указана"}
+                </small>
               </button>
             ))}
+            {nextCursor && (
+              <Button
+                disabled={busy || listBusy}
+                onClick={() => loadList(nextCursor)}
+              >
+                Загрузить ещё
+              </Button>
+            )}
           </nav>
           <section>
             {error && <p role="alert">{error}</p>}
             {notice && <p role="status">{notice}</p>}
             {detail ? (
               <>
-                <h3>{detail.title}</h3>
+                <h3 ref={detailHeading} tabIndex={-1}>
+                  {detail.title}
+                </h3>
                 <p>{detail.description}</p>
                 <p>Статус: {FEEDBACK_STATUS_LABELS[detail.status]}</p>
                 {transitions[detail.status].includes("LINKED") && (

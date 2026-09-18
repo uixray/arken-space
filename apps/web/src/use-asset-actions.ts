@@ -6,6 +6,11 @@ import type {
   DeleteAssetResponseDto,
 } from "@arken/contracts";
 import { api } from "./api";
+import {
+  commitAssetReplacement,
+  type AssetReplacementIntent,
+  type AssetReplacementResult,
+} from "./asset-replacement";
 import type { TokenFramePreset } from "./token-image-editor-state";
 
 /**
@@ -19,6 +24,10 @@ import type { TokenFramePreset } from "./token-image-editor-state";
  * are part of the snapshot.
  */
 export interface AssetActions {
+  replaceAsset: (
+    intent: AssetReplacementIntent,
+  ) => Promise<AssetReplacementResult>;
+  refreshAssets: () => Promise<void>;
   uploadAsset: (file: File, kind: AssetKind) => Promise<AssetDto>;
   getAssetUsage: (assetId: string) => Promise<AssetUsageResponseDto>;
   deleteAsset: (assetId: string) => Promise<DeleteAssetResponseDto>;
@@ -43,6 +52,8 @@ export function useAssetActions(dependencies: {
 
   return useMemo<AssetActions>(
     () => ({
+      replaceAsset: commitAssetReplacement,
+      refreshAssets: load,
       uploadAsset: async (file, kind) => {
         const form = new FormData();
         form.append("file", file);

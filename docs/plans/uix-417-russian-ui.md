@@ -260,3 +260,73 @@
   не доказываются. Исторический авторский контент не переписан.
 - **Дальше:** локальная фиксация и общий release gate связанного пула.
   UIX-417 остаётся In Progress: этот срез не закрывает весь English-error audit.
+
+## 2026-09-16 — remaining system-role labels
+
+- Live UIX-417 is still In Progress; original all-screen Russian criterion remains
+  broader than this slice. Source scan found raw `GM` in the session identity and
+  the map master-layer checkbox. Only their display labels became `Мастер`;
+  role values, predicates, permissions, user display names and authored content
+  are unchanged.
+- New actual-App `russian-system-roles.spec.ts`: old desktop GM case failed on
+  expected `Мастер` / actual `GM`. After the two-label change, 8/8 PASS (36.6s),
+  Chromium/Firefox × GM/PLAYER ×1280×850/360×640. It preserves deliberately Latin
+  names `GM Smith` and `Player One`, checks exact system captions, checkbox-label
+  viewport bounds and no game HTTP mutations. Synthetic transport, not auth proof.
+- Investigated `Imported stickers require provenance`: it is a server Zod issue.
+  The production error handler replaces validation details with Russian
+  `Некорректные данные запроса`; the non-production handler exposes diagnostic
+  details. This source trace is not an executed API test or a reason to rewrite
+  internal machine codes/logs. No server change in this pool.
+- Evidence `russian-roles-gate/browser-red.log`, `browser-01.log` and screenshots
+  under the current local artifact root. Formatter/diffcheck PASS; scoped ESLint
+  exits0 with two pre-existing unchanged App effect-dependency warnings at359/513,
+  not a warning-free lint claim. No full typecheck/build/34-case replay for two
+  text literals; the prior integrated8504fea build is not this exact runtime.
+- No push/deploy/Linear state change. Remaining error/conditional-screen coverage
+  and complete UI417 acceptance are still open; do not close from these8 cases.
+
+## 2026-09-17 — entry copy and diagnostic captions
+
+Live original UIX-417 reread. Removed remaining product-owned English captions:
+landing badge MVP → «Ранний доступ»; RPG kicker → «настольных ролевых игр»;
+catalog machine-key placeholder magic → «Код латиницей». Input pattern, entered
+keys and payload stay unchanged. API error correlation captions are now «Код
+запроса» / «Код действия»; actual IDs, wire fields, telemetry and safe-ID filtering
+are unchanged. Server-authored messages and user/proper names are not translated
+by guessing from their content.
+
+Connected API + real-form component pool31/31PASS15.13s; form submits unchanged
+values.magic=3. Real App Chrome/Firefox six casesPASS23.9s: landing360/820 including
+expanded-guide overflow/action checks, plus actual canvas-conflict toast retaining
+safe correlation IDs, one canonical PATCH, no rebootstrap and no private request
+body/URL leakage. HTTP/socket mocked, not production or device acceptance.
+Initial browser run1PASS/1FAIL/4notrun: new kicker selector matched six sections;
+scoped to landing intro, no app change. Initial typecheck caught test-only RTL
+exact option/index nullability; changed to exact name regex and justified non-null
+assertion after called-once assertion. Final web/E2E types and scoped lint/diffPASS.
+Evidence: russian-entry-errors in current artifact root. Own Vite stopped. No full
+suite/build/CI/push/deploy or premature UIX-417 closure; all-screen criterion remains
+broader than this copy pool. Protected selection recovery file unchanged.
+
+## 2026-09-17 — native media failures and recovery
+
+Local audio preview: four unique Chrome/Firefox GM cases at1280/360 passed
+across two runs (Chrome reused; Firefox9.6s). Native media404 produces Russian
+recovery copy without raw response details; close/reopen with valid synthetic OGG
+clears the error and reaches readyState>=2 without playback or shared music
+commands. Removed an invalid PLAYER scenario: Files is intentionally GM-only.
+Evidence: russian-media-errors; local test commit462c184. Not server acceptance.
+
+Token source preview: actual browser decoding of damaged PNG confirmed a silent
+empty frame (RED Chrome1280). Added a Russian alert suggesting a different source
+or reopening the editor. Failure state is keyed by asset ID and URL; successful
+load clears that source's failure. Source switching remounts the image, without
+changing crop, generation, save or authorization contracts. Four Chrome/Firefox
+1280/360 recovery casesPASS16.7s: damagedA → validB → recoveredA, exactly the two
+intentional mocked uploads, no generation/definition writes or page errors.
+Compact Firefox screenshot inspected: message fully visible and wrapped.
+Existing generator component4/4PASS; web/E2E types, scoped lint and diffcheckPASS.
+One build2.91s; four served HTML/JS/CSS hashes matched local bundle. Evidence:
+token-preview-errors. HTTP/socket boundaries mocked, not real server crop output,
+device acceptance or full UIX-417 completion. No push/deploy/Linear writes.

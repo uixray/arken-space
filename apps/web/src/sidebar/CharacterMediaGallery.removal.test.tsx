@@ -189,6 +189,124 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it("locks every gallery row until both reorder writes settle", async () => {
+  const first = deferred<CharacterMediaDto>();
+  const second = deferred<CharacterMediaDto>();
+  apiMock.mockReset();
+  apiMock
+    .mockResolvedValueOnce([media, secondMedia])
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise);
+  renderGallery(true);
+  await screen.findByText("Портрет у костра");
+  await userEvent.click(
+    screen.getAllByRole("button", { name: "Переместить ниже" })[0]!,
+  );
+  for (const button of screen.getAllByRole("button", {
+    name: /Переместить|^Изменить$|Убрать из галереи|Удалить навсегда/,
+  }))
+    expect(button).toBeDisabled();
+  await act(async () => first.resolve({ ...media, ordering: 1, revision: 8 }));
+  expect(apiMock).toHaveBeenCalledTimes(3);
+  for (const button of screen.getAllByRole("button", { name: "Изменить" }))
+    expect(button).toBeDisabled();
+  await act(async () =>
+    second.resolve({ ...secondMedia, ordering: 0, revision: 8 }),
+  );
+  for (const button of screen.getAllByRole("button", { name: "Изменить" }))
+    expect(button).toBeEnabled();
+});
+
+it("does not show a previous character reorder failure in the new gallery", async () => {
+  const pending = deferred<CharacterMediaDto>();
+  const other = {
+    ...media,
+    id: "other-media",
+    characterId: "other-character",
+    caption: "Другой персонаж",
+  };
+  apiMock.mockReset();
+  apiMock
+    .mockResolvedValueOnce([media, secondMedia])
+    .mockReturnValueOnce(pending.promise)
+    .mockResolvedValueOnce([other]);
+  const view = renderGallery(true);
+  await screen.findByText("Портрет у костра");
+  await userEvent.click(
+    screen.getAllByRole("button", { name: "Переместить ниже" })[0]!,
+  );
+  view.rerender(galleryElement(other.characterId, true));
+  await screen.findByText("Другой персонаж");
+  await act(async () => pending.reject(new Error("OLD_REORDER_FAILED")));
+  expect(screen.queryByText(/OLD_REORDER_FAILED/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Изменить" })).toBeEnabled();
+});
+
+it("refreshes mounted gallery images and recovers failed images on a new asset version", async () => {
+  const element = (version: string) => {
+    const props = {
+      characterId: media.characterId,
+      characterName: "Аркен",
+      editable: true,
+      isGm: false,
+      onUpload: vi.fn(),
+      assets: [
+        {
+          id: media.assetId,
+          url: `/api/assets/${media.assetId}/content?v=${version}`,
+        },
+      ],
+    };
+    return <CharacterMediaGallery {...props} />;
+  };
+  const view = renderComponent(element("old"));
+  const thumb = await screen.findByRole("img", {
+    name: "Портрет у костра",
+  });
+  expect(thumb).toHaveAttribute(
+    "src",
+    `/api/assets/${media.assetId}/content?v=old`,
+  );
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: "Открыть в полном размере: Портрет у костра",
+    }),
+  );
+  expect(screen.getAllByRole("img", { name: "Портрет у костра" })).toHaveLength(
+    2,
+  );
+  view.rerender(element("new"));
+  for (const image of screen.getAllByRole("img", {
+    name: "Портрет у костра",
+  })) {
+    expect(image).toHaveAttribute(
+      "src",
+      `/api/assets/${media.assetId}/content?v=new`,
+    );
+    act(() => image.dispatchEvent(new Event("error")));
+  }
+  expect(
+    screen.getAllByRole("img", { name: "Изображение недоступно" }),
+  ).toHaveLength(2);
+  view.rerender(element("recovered"));
+  await waitFor(() =>
+    expect(
+      screen.queryAllByRole("img", {
+        name: "Изображение недоступно",
+      }),
+    ).toHaveLength(0),
+  );
+  for (const image of screen.getAllByRole("img", {
+    name: "Портрет у костра",
+  })) {
+    expect(image).toHaveAttribute(
+      "src",
+      `/api/assets/${media.assetId}/content?v=recovered`,
+    );
+  }
+  expect(apiMock).toHaveBeenCalledTimes(1);
+});
+
 describe("подтверждение удаления изображения из галереи персонажа", () => {
   it("объясняет назначение пустой галереи и форму добавления", async () => {
     apiMock.mockResolvedValueOnce([]);

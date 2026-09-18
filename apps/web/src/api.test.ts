@@ -64,7 +64,7 @@ describe("api telemetry and correlation", () => {
       formatApiError(
         new ApiError(409, "CONFLICT", "Conflict", "request-1", "action_2"),
       ),
-    ).toBe("Conflict (requestId: request-1, actionId: action_2)");
+    ).toBe("Conflict (Код запроса: request-1, Код действия: action_2)");
   });
 
   it("omits unsafe or oversized correlation ids", () => {
@@ -263,4 +263,118 @@ describe("client event buffer durability", () => {
 
     expect(postAuthFetch).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("UIX-417 malformed response copy", () => {
+  it.each(["<html>Internal private proxy details</html>", '{"unfinished":'])(
+    "rejects malformed successful payloads without leaking or retrying: %s",
+    async (body) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response(body, { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(api("/api/canvas/bulk", { method: "POST" })).rejects.toThrow(
+        "Не удалось прочитать ответ сервера. Обновите данные перед повторением действия.",
+      );
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
+  it("retains empty and explicit null success responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(new Response("null", { status: 200 })),
+    );
+    await expect(api("/api/example")).resolves.toBeNull();
+    await expect(api("/api/example")).resolves.toBeNull();
+  });
+  it("retains HTTP status and safe fallback for a non-JSON failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("<html>private</html>", { status: 502 }),
+        ),
+    );
+    await expect(api("/api/example")).rejects.toMatchObject({
+      status: 502,
+      code: "REQUEST_FAILED",
+      message: "Не удалось выполнить запрос",
+    });
+  });
+  it("preserves cancellation while the response body is being read", async () => {
+    const cancelled = new DOMException(
+      "The operation was aborted.",
+      "AbortError",
+    );
+    const response = new Response("{}");
+    vi.spyOn(response, "text").mockRejectedValue(cancelled);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    await expect(api("/api/example")).rejects.toBe(cancelled);
+  });
+});
+
+describe("UIX-417 rate limit recovery copy", () => {
+  it.each(["60", "0", null, "invalid", "-1", "1.5", "9007199254740992"])(
+    "explains generic 429 without retrying: %s",
+    async (retryAfter) => {
+      const body = {
+        error: "REQUEST_FAILED",
+        message: "Не удалось выполнить запрос",
+      };
+      const headers = new Headers({
+        "content-type": "application/json",
+        "x-request-id": "rate-request",
+      });
+      if (retryAfter !== null) headers.set("retry-after", retryAfter);
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(body), { status: 429, headers }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const error = await api("/api/auth/invite", {
+        method: "POST",
+        headers: { "x-action-id": "rate-action" },
+        body: JSON.stringify({ displayName: "Игрок" }),
+      }).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).toMatchObject({
+        status: 429,
+        code: "REQUEST_FAILED",
+        requestId: "rate-request",
+        actionId: "rate-action",
+        details: body,
+        message:
+          retryAfter === "60"
+            ? "Слишком много запросов. Повторите попытку через 60 с."
+            : "Слишком много запросов. Подождите немного и повторите попытку.",
+      });
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
+  it.each([429, 403])(
+    "retains specific server guidance and status %s",
+    async (status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: "REQUEST_FAILED",
+              message: "Повторная выдача приглашения временно недоступна",
+            }),
+            { status, headers: { "retry-after": "60" } },
+          ),
+        ),
+      );
+      await expect(api("/api/bootstrap")).rejects.toMatchObject({
+        status,
+        message: "Повторная выдача приглашения временно недоступна",
+      });
+    },
+  );
 });

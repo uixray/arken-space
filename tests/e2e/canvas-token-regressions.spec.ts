@@ -1,7 +1,13 @@
+import { makePng } from "./helpers/generated-png";
+import { expectSelectedMenuIcon } from "./helpers/selected-menu-icon";
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { fitRect } from "../../apps/web/src/renderers/camera-fit";
+import {
+  paintedIconContrast,
+  settleIconState,
+} from "./helpers/painted-icon-contrast";
 
 const sceneId = "7376b502-02f8-4cd6-9c55-3816d70d44dc";
 const tokenId = "35f46186-2ebc-4cf8-bce7-870097305a6b";
@@ -141,6 +147,178 @@ async function installCanvasRoutes(page: Page) {
     });
   });
   return { portraitRequestCount: () => portraitRequests };
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 360]) {
+    test(`UIX-645 object list row icons ${role} ${width}`, async ({
+      page,
+    }, info) => {
+      const current: GameSnapshot = structuredClone(snapshot);
+      current.me.role = role;
+      const tokenName = "СтражДревнейБашни".repeat(6);
+      current.tokens[0].name = tokenName;
+      current.tokens[0].controllerMembershipIds = [current.me.id];
+      current.drawings = [
+        current.me.id,
+        "00000000-0000-4000-8000-000000000009",
+      ].map((authorMembershipId, index) => ({
+        id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+        sceneId,
+        authorMembershipId,
+        points: [0, 0, 64, 64],
+        color: "#ef4444",
+        strokeWidth: 8,
+        x: 700 + index * 200,
+        y: 500,
+        revision: 0,
+      }));
+      current.fogReveals = [
+        { id: "revealed", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+      ];
+      const writes: string[] = [],
+        errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.route("**/api/**", (route) => {
+        const req = route.request(),
+          path = new URL(req.url()).pathname;
+        if (req.method() !== "GET") {
+          if (path === "/api/chat/read")
+            return route.fulfill({ json: { ok: true } });
+          writes.push(`${req.method()} ${path}`);
+          return route.abort();
+        }
+        if (path === "/api/story/posts")
+          return route.fulfill({ json: { posts: [], nextCursor: null } });
+        if (path === "/api/operator/feedback/capability")
+          return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+        return route.fulfill({ json: [] });
+      });
+      await installCanvasRoutes(page);
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({ json: current }),
+      );
+      await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+        socket.onMessage((message) => {
+          if (message.toString() === "40")
+            socket.send('40{"sid":"object-icons"}');
+        });
+        socket.send(
+          '0{"sid":"object-icons-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+        );
+      });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      const trigger = page.getByRole("button", {
+        name: "Объекты карты",
+        exact: true,
+      });
+      await trigger.click();
+      const list = page.getByRole("region", {
+        name: "Объекты карты",
+        exact: true,
+      });
+      await expect(list).toBeVisible();
+      const labels =
+        role === "GM"
+          ? [tokenName, "Рисунок 1", "Рисунок 2"]
+          : [tokenName, "Рисунок 1"];
+      await expect(list.locator("li")).toHaveCount(labels.length);
+      if (role === "PLAYER") {
+        // canSelectDrawing filters foreign authors before rendering the list.
+        // Do not invent an unreachable disabled row to satisfy a state matrix.
+        await expect(
+          list.getByRole("button", { name: "Рисунок 2", exact: true }),
+        ).toHaveCount(0);
+      }
+      const samples: unknown[] = [];
+      for (const label of labels) {
+        const select = list.getByRole("button", { name: label, exact: true });
+        await select.scrollIntoViewIfNeeded();
+        expect(
+          await select.evaluate((node) => node.scrollWidth - node.clientWidth),
+        ).toBeLessThanOrEqual(1);
+        await select.focus();
+        const glyphs: string[] = [];
+        for (const action of ["Дублировать", "Удалить"]) {
+          const control = list.getByRole("button", {
+            name: `${action}: ${label}`,
+            exact: true,
+          });
+          await page.keyboard.press("Tab");
+          await expect(control).toBeFocused();
+          expect(
+            await control.evaluate((node) => node.matches(":focus-visible")),
+          ).toBe(true);
+          await expect(control).toBeEnabled();
+          const svg = control.locator(":scope > svg.arken-icon");
+          await expect(svg).toBeVisible();
+          for (const [a, v] of [
+            ["aria-hidden", "true"],
+            ["focusable", "false"],
+            ["stroke", "currentColor"],
+            ["stroke-width", "2"],
+          ])
+            await expect(svg).toHaveAttribute(a, v);
+          glyphs.push(await svg.innerHTML());
+          const offsets = await control.evaluate((node) => {
+            const b = node.getBoundingClientRect();
+            const g = node.querySelector("svg")!.getBoundingClientRect();
+            return [
+              g.x + g.width / 2 - b.x - b.width / 2,
+              g.y + g.height / 2 - b.y - b.height / 2,
+            ];
+          });
+          for (const offset of offsets)
+            expect(Math.abs(offset)).toBeLessThanOrEqual(1);
+          const box = (await control.boundingBox())!;
+          for (const size of [box.width, box.height])
+            expect(Number(size.toFixed(3))).toBeGreaterThanOrEqual(
+              width === 360 ? 44 : 24,
+            );
+          expect(
+            await control.evaluate((node) => {
+              const r = node.getBoundingClientRect();
+              return node.contains(
+                document.elementFromPoint(
+                  r.x + r.width / 2,
+                  r.y + r.height / 2,
+                ),
+              );
+            }),
+          ).toBe(true);
+          await page.mouse.move(1, 899);
+          await settleIconState(control);
+          const focus = await paintedIconContrast(svg);
+          await control.evaluate((node) => (node as HTMLElement).blur());
+          await settleIconState(control);
+          const normal = await paintedIconContrast(svg);
+          await control.hover();
+          await settleIconState(control);
+          const hover = await paintedIconContrast(svg);
+          for (const ratio of [normal, hover, focus])
+            expect(ratio).toBeGreaterThanOrEqual(3);
+          samples.push({ label, action, normal, hover, focus });
+          await page.mouse.move(1, 899);
+          await control.focus();
+        }
+        expect(new Set(glyphs).size).toBe(2);
+      }
+      expect(
+        await list.evaluate((node) => node.scrollWidth - node.clientWidth),
+      ).toBeLessThanOrEqual(1);
+      await page.screenshot({ path: info.outputPath("object-list-icons.png") });
+      await page.keyboard.press("Escape");
+      await expect(list).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await info.attach("object-icon-receipt", {
+        body: JSON.stringify({ role, width, samples, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
 }
 
 for (const role of ["GM", "PLAYER"] as const) {
@@ -485,8 +663,10 @@ test("cold token resize conflict keeps socket authority and exposes only safe co
     .locator("[data-toast]")
     .filter({ hasText: safeMessage });
   await expect(notification).toBeVisible();
-  await expect(notification).toContainText(`requestId: ${safeRequestId}`);
-  await expect(notification).toContainText(`actionId: ${canonicalActionId}`);
+  await expect(notification).toContainText(`Код запроса: ${safeRequestId}`);
+  await expect(notification).toContainText(
+    `Код действия: ${canonicalActionId}`,
+  );
   const visibleText = await notification.innerText();
   expect(visibleText).not.toContain(tokenId);
   expect(visibleText).not.toContain(`/api/tokens/${tokenId}/size`);
@@ -757,6 +937,20 @@ test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats",
   page,
 }) => {
   await installCanvasRoutes(page);
+  await page.route("**/api/story/posts**", (route) =>
+    route.fulfill({ json: { posts: [], nextCursor: null } }),
+  );
+  await page.route("**/api/operator/feedback/capability", (route) =>
+    route.fulfill({ status: 403, json: { error: "FORBIDDEN" } }),
+  );
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString() === "40") socket.send('40{"sid":"wasd-socket"}');
+    });
+    socket.send(
+      '0{"sid":"wasd-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
   await page.route("**/api/canvas/history**", (route) =>
     route.fulfill({ json: [] }),
   );
@@ -813,6 +1007,32 @@ test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats",
   await page.waitForTimeout(50);
   expect(moves).toHaveLength(beforeHeldKey + 1);
 
+  // Exercise real key events while a movable token is still selected in PAN.
+  // fill() alone emits input, not keydown, and testing after deselection would
+  // pass even if the map incorrectly stole editable WASD events.
+  await map.evaluate((element) => {
+    for (const tag of ["input", "textarea", "div"]) {
+      const input = document.createElement(tag);
+      input.setAttribute("aria-label", `Проверка ввода ${tag}`);
+      if (tag === "div") {
+        input.setAttribute("contenteditable", "true");
+        input.setAttribute("role", "textbox");
+      }
+      element.append(input);
+    }
+  });
+  for (const tag of ["input", "textarea", "div"]) {
+    const input = page.getByRole("textbox", {
+      name: `Проверка ввода ${tag}`,
+      exact: true,
+    });
+    await input.pressSequentially("wasd");
+    if (tag === "div") await expect(input).toHaveText("wasd");
+    else await expect(input).toHaveValue("wasd");
+    expect(moves).toHaveLength(beforeHeldKey + 1);
+  }
+  await map.focus();
+
   // Without a movable selection, D keeps its established tool shortcut.
   await page.keyboard.press("Escape");
   await page.keyboard.press("d");
@@ -820,17 +1040,6 @@ test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats",
     "aria-pressed",
     "true",
   );
-  expect(moves).toHaveLength(beforeHeldKey + 1);
-
-  // Editable descendants own their keys and never leak WASD to the map.
-  await map.evaluate((element) => {
-    const input = document.createElement("input");
-    input.setAttribute("aria-label", "Проверка ввода на карте");
-    element.append(input);
-  });
-  const input = page.getByRole("textbox", { name: "Проверка ввода на карте" });
-  await input.fill("wasd");
-  await expect(input).toHaveValue("wasd");
   expect(moves).toHaveLength(beforeHeldKey + 1);
 });
 
@@ -1169,6 +1378,50 @@ for (const role of ["GM", "PLAYER"] as const) {
         name: "Удалить выбранное",
         exact: true,
       });
+      if (width === 390) {
+        // Rotate with an existing mixed group: the short-screen action must
+        // remain reachable without covering zoom or dropping selected objects.
+        await page.setViewportSize({ width: 640, height: 360 });
+        await expect(bulkAction).toBeVisible();
+        const landscapeZoom = await zoomBounds(page);
+        await expectStableSelectionChrome(page, landscapeZoom);
+        await expect
+          .poll(() =>
+            bulkAction.evaluate((node) => {
+              const r = node.getBoundingClientRect();
+              return (
+                r.left >= 0 &&
+                r.top >= 0 &&
+                r.right <= innerWidth &&
+                r.bottom <= innerHeight &&
+                r.width >= 44 &&
+                r.height >= 44 &&
+                node.contains(
+                  document.elementFromPoint(
+                    r.x + r.width / 2,
+                    r.y + r.height / 2,
+                  ),
+                )
+              );
+            }),
+          )
+          .toBe(true);
+        await page.screenshot({
+          path: testInfo.outputPath(
+            `selection-landscape-${role.toLowerCase()}.png`,
+          ),
+          fullPage: true,
+        });
+        await bulkAction.click();
+        await inspectBulkConfirmation(
+          page,
+          "Выбрано объектов: 4. Токенов: 2. Рисунков: 2.",
+        );
+        expect(requests).toHaveLength(0);
+        await expectStableSelectionChrome(page, landscapeZoom);
+        await page.setViewportSize({ width, height: 850 });
+        await expectStableSelectionChrome(page, baseline);
+      }
       await openObjectList();
       await expect(bulkAction).toHaveCount(1);
       await closeObjectList();
@@ -1335,6 +1588,30 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   });
   const marqueeStart = screenPoint(350, 285);
   const marqueeEnd = screenPoint(560, 415);
+
+  // Escape cancels the in-flight rectangle, not just the previous selection.
+  // The later pointerup must not resurrect this group.
+  await page.keyboard.down("Shift");
+  await page.mouse.move(marqueeStart.x, marqueeStart.y);
+  await page.mouse.down();
+  await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
+  await map.focus();
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Delete");
+  await expect(
+    page.getByRole("dialog", {
+      name: /Удалить выбранные объекты|Убрать токен с карты/,
+    }),
+  ).toHaveCount(0);
+  expect(bulkRequests).toHaveLength(0);
+  await expectStableSelectionChrome(page, zoomBaseline);
+
+  // Positive control: the same rectangle without cancellation selects both.
   await page.keyboard.down("Shift");
   await page.mouse.move(marqueeStart.x, marqueeStart.y);
   await page.mouse.down();
@@ -1342,6 +1619,52 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   await page.mouse.up();
   await page.keyboard.up("Shift");
   await expectStableSelectionChrome(page, zoomBaseline);
+  await page.getByRole("button", { name: "Удалить выбранное" }).click();
+  await inspectBulkConfirmation(
+    page,
+    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+  );
+  expect(bulkRequests).toHaveLength(0);
+
+  // A context menu belongs above the mixed selection: opening/closing it
+  // must neither replace that group nor consume the next destructive action.
+  const contextPoint = screenPoint(416, 352);
+  await map.focus();
+  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+  const contextMenu = page.getByRole("menu");
+  await expect(contextMenu).toBeVisible();
+  await expect(contextMenu).toContainText("Selected token");
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toBeVisible();
+  expect(bulkRequests).toHaveLength(0);
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toHaveCount(0);
+  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+  await expect(contextMenu).toBeVisible();
+  const menuItem = contextMenu.getByRole("menuitemradio", {
+    name: "Игровой слой",
+    exact: true,
+  });
+  await menuItem.focus();
+  await expect(menuItem).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toHaveCount(0);
+  await expect(map).toBeFocused();
+
+  // Outside-pointer dismissal must not steal focus from the clicked control.
+  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+  await expect(contextMenu).toBeVisible();
+  await trigger.click();
+  await expect(contextMenu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await trigger.press("Escape");
+  await expect(
+    map.getByRole("region", { name: "Объекты карты", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Удалить выбранное" }).click();
   await inspectBulkConfirmation(
     page,
@@ -1373,8 +1696,66 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   );
   expect(bulkRequests).toHaveLength(0);
 
-  // Dragging either selected member uses the existing queued mixed bulk move.
+  // Toggle a token as well as a drawing: neither may replace its selected peer.
   const tokenCenter = screenPoint(416, 352);
+  await page.keyboard.down("Shift");
+  await page.mouse.click(tokenCenter.x, tokenCenter.y);
+  await page.keyboard.up("Shift");
+  await map.focus();
+  await page.keyboard.press("Delete");
+  await inspectBulkConfirmation(
+    page,
+    "Выбрано объектов: 1. Токенов: 0. Рисунков: 1.",
+  );
+  await page.keyboard.down("Shift");
+  await page.mouse.click(tokenCenter.x, tokenCenter.y);
+  await page.keyboard.up("Shift");
+  await page.getByRole("button", { name: "Удалить выбранное" }).click();
+  await inspectBulkConfirmation(
+    page,
+    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+  );
+
+  // An unmodified object click replaces the group and uses single-object deletion.
+  await page.mouse.click(tokenCenter.x, tokenCenter.y);
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toHaveCount(0);
+  await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+  await map.focus();
+  await page.keyboard.press("Delete");
+  const singleDelete = page.getByRole("dialog", {
+    name: "Убрать токен с карты?",
+  });
+  await expect(singleDelete).toBeVisible();
+  await singleDelete
+    .getByRole("button", { name: "Отмена", exact: true })
+    .click();
+  await expect(singleDelete).toBeHidden();
+  await page.mouse.click(marqueeStart.x, marqueeStart.y);
+  await expect(map).not.toHaveAttribute("data-resize-handle-x");
+  await expect(
+    page.getByRole("button", { name: "Удалить выбранное" }),
+  ).toHaveCount(0);
+  await map.focus();
+  await page.keyboard.press("Delete");
+  await expect(
+    page.getByRole("dialog", { name: "Удалить выбранные объекты?" }),
+  ).toHaveCount(0);
+  await expectStableSelectionChrome(page, zoomBaseline);
+  expect(bulkRequests).toHaveLength(0);
+
+  await expect(singleDelete).toHaveCount(0);
+
+  // Restore the mixed group for the existing move/delete checks below.
+  await page.keyboard.down("Shift");
+  await page.mouse.move(marqueeStart.x, marqueeStart.y);
+  await page.mouse.down();
+  await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+
+  // Dragging either selected member uses the existing queued mixed bulk move.
   await page.mouse.move(tokenCenter.x, tokenCenter.y);
   await page.mouse.down();
   await page.mouse.move(tokenCenter.x + 64 * scale, tokenCenter.y, {
@@ -1930,3 +2311,1925 @@ test("UIX-621 rapid conditions render before delayed server confirmation and sta
     page.getByRole("group", { name: "Состояния токена" }),
   ).toBeHidden();
 });
+
+for (const tool of ["PAN", "DRAW"] as const) {
+  test(`UIX-405 Ctrl ping in ${tool} does not mutate or move a selected token`, async ({
+    page,
+  }) => {
+    const writes: string[] = [];
+    const pings: Array<{ sceneId: string; x: number; y: number }> = [];
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (request.method() !== "GET" && path !== "/api/client-logs")
+        writes.push(`${request.method()} ${path}`);
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasRoutes(page);
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        const raw = message.toString();
+        if (raw === "40") {
+          socket.send('40{"sid":"ctrl-ping-socket"}');
+          return;
+        }
+        if (!raw.startsWith("42")) return;
+        const start = raw.indexOf("[");
+        if (start < 0) return;
+        const [event, payload] = JSON.parse(raw.slice(start));
+        if (event !== "map:ping") return;
+        pings.push(payload);
+        const ackId = raw.slice(2, start);
+        if (ackId) socket.send(`43${ackId}[{"ok":true}]`);
+      });
+      socket.send(
+        '0{"sid":"ctrl-ping-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    const bounds = (await map.boundingBox())!;
+    const scale = Number(
+      await map.getByRole("slider", { name: "Масштаб карты" }).inputValue(),
+    );
+    const right = Number(await map.getAttribute("data-resize-handle-x"));
+    const bottom = Number(await map.getAttribute("data-resize-handle-y"));
+    const token = {
+      x: bounds.x + right - 32 * scale,
+      y: bounds.y + bottom - 32 * scale,
+    };
+    if (tool === "DRAW")
+      await page
+        .getByRole("button", { name: "Рисование", exact: true })
+        .click();
+    await page.keyboard.down("Control");
+    try {
+      await page.mouse.click(token.x, token.y);
+      await expect.poll(() => pings.length).toBe(1);
+      expect(pings[0]).toMatchObject({ sceneId });
+      expect(pings[0]!.x).toBeCloseTo(416, 0);
+      expect(pings[0]!.y).toBeCloseTo(352, 0);
+      await page.mouse.click(token.x + 200 * scale, token.y);
+      await expect.poll(() => pings.length).toBe(2);
+      expect(pings[1]!.x).toBeCloseTo(616, 0);
+    } finally {
+      await page.keyboard.up("Control");
+    }
+    // Give any mistakenly completed drawing/move request a rendering turn.
+    await map.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    expect(writes).toEqual([]);
+    if (tool === "PAN")
+      await expect(map).toHaveAttribute("data-resize-handle-x", String(right));
+  });
+}
+
+for (const shifted of [true, false]) {
+  for (const tool of ["FOG_POLYGON", "COVER_POLYGON"] as const) {
+    test(`UIX-507 ${shifted ? "Shift" : "Plain"} polygon cancellation and completion ${tool}`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize({ width: 1280, height: 850 });
+      await installCanvasReviewRoutes(page);
+      const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.route("**/api/**", async (route) => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        if (["GET", "HEAD"].includes(request.method())) return route.fallback();
+        if (path === "/api/chat/read") return route.fulfill({ json: {} });
+        writes.push({ path, body: request.postDataJSON() });
+        return route.fulfill({ json: {} });
+      });
+      await page.goto("/");
+      const map = page.locator(".map-viewport");
+      const control = page.locator(`.map-tool[data-tool="${tool}"]`);
+      await control.click();
+      const points = await map.evaluate((node) => {
+        const b = node.getBoundingClientRect();
+        const x = b.x + b.width * 0.55,
+          y = b.y + b.height * 0.55;
+        const result = [
+          { x, y },
+          { x: x + 80, y },
+          { x: x + 80, y: y + 80 },
+        ];
+        for (const p of result)
+          if (
+            !(document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement)
+          )
+            throw Error("Polygon input is obstructed");
+        return result;
+      });
+      const vertices = async (double = false, jitter = false) => {
+        if (shifted) await page.keyboard.down("Shift");
+        try {
+          for (const [index, point] of points.entries()) {
+            if (double && index === points.length - 1) {
+              if (jitter) {
+                await page.mouse.click(point.x, point.y);
+                await page.mouse.move(point.x + 2, point.y + 1);
+                await page.mouse.down({ clickCount: 2 });
+                await page.mouse.up({ clickCount: 2 });
+              } else await page.mouse.dblclick(point.x, point.y);
+            } else await page.mouse.click(point.x, point.y);
+          }
+        } finally {
+          if (shifted) await page.keyboard.up("Shift");
+        }
+      };
+      const settle = () =>
+        map.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => resolve()),
+              ),
+            ),
+        );
+      // Cancel complete three-vertex drafts, not merely an incomplete shape.
+      await vertices();
+      expect(
+        writes,
+        "Distinct rapid vertex clicks must not complete a polygon",
+      ).toEqual([]);
+      await map.press("Escape");
+      await expect(page.locator('.map-tool[data-tool="PAN"]')).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await control.click();
+      await map.press("Enter");
+      await settle();
+      expect(writes).toEqual([]);
+      await vertices();
+      await page.mouse.click(points[2].x, points[2].y, { button: "right" });
+      await map.press("Enter");
+      await settle();
+      expect(writes).toEqual([]);
+      await expect(control).toHaveAttribute("aria-pressed", "true");
+      for (const [index, mode] of ["enter", "double", "jitter"].entries()) {
+        const double = mode !== "enter";
+        await vertices(double, mode === "jitter");
+        if (!double) await map.press("Enter");
+        await expect.poll(() => writes.length).toBe(index + 1);
+        const write = writes.at(-1)!;
+        expect(write).toMatchObject({
+          path: "/api/fog-reveals",
+          body: {
+            sceneId,
+            operation: tool === "COVER_POLYGON" ? "COVER" : "REVEAL",
+            geometry: { type: "POLYGON" },
+          },
+        });
+        const geometry = write.body.geometry as {
+          points: Array<{ x: number; y: number }>;
+        };
+        expect(geometry.points).toHaveLength(3);
+        expect(new Set(geometry.points.map((p) => `${p.x},${p.y}`)).size).toBe(
+          3,
+        );
+        expect(geometry.points[1].x).toBeGreaterThan(geometry.points[0].x);
+        expect(geometry.points[2].y).toBeGreaterThan(geometry.points[1].y);
+        await expect(
+          page.getByRole("button", { name: "Удалить выбранное" }),
+        ).toHaveCount(0);
+      }
+      expect(writes[1].body.geometry).toEqual(writes[0].body.geometry);
+      expect(writes[2].body.geometry).toEqual(writes[0].body.geometry);
+      // A deliberately separate close vertex remains valid: the spatial
+      // tolerance applies only inside Konva's 400ms double-click window.
+      await vertices();
+      await page.waitForTimeout(450);
+      await page.mouse.click(points[2].x + 2, points[2].y + 1);
+      expect(writes).toHaveLength(3);
+      await map.press("Enter");
+      await expect.poll(() => writes.length).toBe(4);
+      expect(
+        (writes[3].body.geometry as { points: unknown[] }).points,
+      ).toHaveLength(4);
+      expect(errors).toEqual([]);
+      await info.attach("shift-polygon-contract", {
+        body: JSON.stringify({ tool, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
+}
+for (const tool of ["FOG", "COVER", "FOG_BRUSH", "COVER_BRUSH"] as const) {
+  test(`UIX-507 Shift fog gesture and Escape cancellation ${tool}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await installCanvasReviewRoutes(page);
+    const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+    await page.route("**/api/**", async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (["GET", "HEAD"].includes(request.method())) return route.fallback();
+      if (path === "/api/chat/read") return route.fulfill({ json: {} });
+      writes.push({
+        path,
+        body: request.postDataJSON() as Record<string, unknown>,
+      });
+      return route.fulfill({ json: {} });
+    });
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    const control = page.locator(`.map-tool[data-tool="${tool}"]`);
+    await control.click();
+    await expect(control).toHaveAttribute("aria-pressed", "true");
+    const points = await map.evaluate((node) => {
+      const b = node.getBoundingClientRect();
+      const start = { x: b.x + b.width * 0.55, y: b.y + b.height * 0.55 };
+      const end = { x: start.x + 80, y: start.y + 80 };
+      for (const p of [start, end])
+        if (!(document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement))
+          throw Error("Fog path is obstructed");
+      return { start, end };
+    });
+    const drag = async (cancel: boolean) => {
+      await page.keyboard.down("Shift");
+      try {
+        await page.mouse.move(points.start.x, points.start.y);
+        await page.mouse.down();
+        await page.mouse.move(points.end.x, points.end.y, { steps: 8 });
+        if (cancel) {
+          await map.focus();
+          await page.keyboard.press("Escape");
+        }
+      } finally {
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+      }
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+    };
+    await drag(true);
+    await expect(page.locator('.map-tool[data-tool="PAN"]')).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(writes).toEqual([]);
+    await control.click();
+    await drag(false);
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]).toMatchObject({
+      path: "/api/fog-reveals",
+      body: {
+        sceneId,
+        operation: tool.startsWith("COVER") ? "COVER" : "REVEAL",
+      },
+    });
+    if (tool.endsWith("BRUSH")) {
+      const geometry = writes[0].body.geometry as {
+        type: string;
+        points: Array<{ x: number; y: number }>;
+        radius: number;
+      };
+      expect(geometry.type).toBe("BRUSH");
+      expect(geometry.points.length).toBeGreaterThan(1);
+      expect(geometry.radius).toBeGreaterThan(0);
+      expect(geometry.points.at(-1)).not.toEqual(geometry.points[0]);
+    } else {
+      expect(Number(writes[0].body.width)).toBeGreaterThan(8);
+      expect(Number(writes[0].body.height)).toBeGreaterThan(8);
+    }
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное" }),
+    ).toHaveCount(0);
+    await testInfo.attach("shift-fog-contract", {
+      body: JSON.stringify({ tool, writes }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-507 Shift ruler remains measurement and cancels cleanly ${role}`, async ({
+    page,
+  }, testInfo) => {
+    const writes: string[] = [];
+    const events: Array<{
+      event: string;
+      payload: { sceneId: string; points?: Array<{ x: number; y: number }> };
+    }> = [];
+    let connected = false;
+    await page.route("**/api/**", (route) => {
+      const r = route.request();
+      const path = new URL(r.url()).pathname;
+      if (!["GET", "HEAD"].includes(r.method()) && path !== "/api/chat/read")
+        writes.push(`${r.method()} ${path}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    current.fogReveals = [
+      { id: "revealed", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        const raw = message.toString();
+        if (raw === "40") {
+          socket.send('40{"sid":"shift-ruler"}');
+          connected = true;
+          return;
+        }
+        if (!raw.startsWith("42")) return;
+        const index = raw.indexOf("[");
+        if (index < 0) return;
+        const [event, payload] = JSON.parse(raw.slice(index));
+        if (["ruler:update", "ruler:clear", "map:ping"].includes(event))
+          events.push({ event, payload });
+        const ack = raw.slice(2, index);
+        if (ack) socket.send(`43${ack}[{"ok":true}]`);
+      });
+      socket.send(
+        '0{"sid":"shift-ruler-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect.poll(() => connected).toBe(true);
+    const map = page.locator(".map-viewport");
+    const tool = page.locator('.map-tool[data-tool="RULER"]');
+    const points = await map.evaluate((node) => {
+      const b = node.getBoundingClientRect();
+      const start = { x: b.x + b.width * 0.55, y: b.y + b.height * 0.55 };
+      const end = { x: start.x + 80, y: start.y + 80 };
+      for (const p of [start, end])
+        if (!(document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement))
+          throw Error("Ruler path obstructed");
+      return { start, end };
+    });
+    for (const cancel of [false, true]) {
+      await tool.click();
+      await expect(tool).toHaveAttribute("aria-pressed", "true");
+      const beginning = events.length;
+      await page.keyboard.down("Shift");
+      try {
+        await page.mouse.move(points.start.x, points.start.y);
+        await page.mouse.down();
+        await page.mouse.move(points.end.x, points.end.y, { steps: 8 });
+        await expect
+          .poll(
+            () =>
+              events.slice(beginning).filter((e) => e.event === "ruler:update")
+                .length,
+          )
+          .toBeGreaterThan(0);
+        const update = events
+          .slice(beginning)
+          .filter((e) => e.event === "ruler:update")
+          .at(-1)!;
+        expect(update.payload.sceneId).toBe(sceneId);
+        expect(update.payload.points).toHaveLength(2);
+        expect(update.payload.points![0]).not.toEqual(
+          update.payload.points![1],
+        );
+        if (cancel) {
+          await map.focus();
+          await page.keyboard.press("Escape");
+        }
+      } finally {
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+      }
+      await expect
+        .poll(() => events.slice(beginning).at(-1)?.event)
+        .toBe("ruler:clear");
+      await page.mouse.move(points.end.x + 20, points.end.y);
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      expect(events.slice(beginning).at(-1)?.event).toBe("ruler:clear");
+      await expect(
+        page.getByRole("button", { name: "Удалить выбранное" }),
+      ).toHaveCount(0);
+      if (cancel)
+        await expect(
+          page.locator('.map-tool[data-tool="PAN"]'),
+        ).toHaveAttribute("aria-pressed", "true");
+    }
+    expect(events.filter((e) => e.event === "map:ping")).toEqual([]);
+    expect(writes).toEqual([]);
+    await testInfo.attach("shift-ruler-contract", {
+      body: JSON.stringify({ role, events, writes }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-507 Shift drawing preserves stroke and cancels cleanly ${role}`, async ({
+    page,
+  }, testInfo) => {
+    const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => route.fulfill({ json: [] }));
+    await installCanvasReviewRoutes(page);
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    current.fogReveals = [
+      { id: "revealed", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (["GET", "HEAD"].includes(request.method())) return route.fallback();
+      if (path === "/api/chat/read") return route.fulfill({ json: {} });
+      const body = request.postDataJSON() as Record<string, unknown>;
+      writes.push({ path, body });
+      if (path === "/api/drawings")
+        return route.fulfill({
+          status: 201,
+          json: {
+            id: "d5400000-0000-4000-8000-000000000001",
+            sceneId,
+            authorMembershipId: current.me.id,
+            points: body.points,
+            color: body.color,
+            strokeWidth: body.strokeWidth,
+            x: 0,
+            y: 0,
+            revision: 0,
+          },
+        });
+      return route.fulfill({
+        status: 405,
+        json: { error: "UNEXPECTED_WRITE" },
+      });
+    });
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    const tool = page.locator('.map-tool[data-tool="DRAW"]');
+    const points = await map.evaluate((node) => {
+      const b = node.getBoundingClientRect();
+      const start = { x: b.x + b.width * 0.55, y: b.y + b.height * 0.55 };
+      const end = { x: start.x + 80, y: start.y + 80 };
+      for (const p of [start, end])
+        if (!(document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement))
+          throw Error("Drawing path obstructed");
+      return { start, end };
+    });
+    for (const cancel of [true, false]) {
+      await tool.click();
+      await expect(tool).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.down("Shift");
+      try {
+        await page.mouse.move(points.start.x, points.start.y);
+        await page.mouse.down();
+        await page.mouse.move(points.end.x, points.end.y, { steps: 8 });
+        if (cancel) {
+          await map.focus();
+          await page.keyboard.press("Escape");
+        }
+      } finally {
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+      }
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      if (cancel) {
+        expect(writes).toEqual([]);
+        await expect(
+          page.locator('.map-tool[data-tool="PAN"]'),
+        ).toHaveAttribute("aria-pressed", "true");
+      }
+    }
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]).toMatchObject({
+      path: "/api/drawings",
+      body: { sceneId },
+    });
+    const stroke = writes[0].body.points as number[];
+    expect(stroke.length).toBeGreaterThanOrEqual(4);
+    expect(stroke.every(Number.isFinite)).toBe(true);
+    expect(stroke.slice(-2)).not.toEqual(stroke.slice(0, 2));
+    expect(Number(writes[0].body.strokeWidth)).toBeGreaterThan(0);
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное" }),
+    ).toHaveCount(0);
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole("region", { name: "Объекты карты", exact: true })
+        .getByRole("button", { name: "Рисунок 1", exact: true }),
+    ).toBeVisible();
+    expect(errors).toEqual([]);
+    await testInfo.attach("shift-drawing-contract", {
+      body: JSON.stringify({ role, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+test("UIX-644 token menu remains reachable across viewport resize", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes: string[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/api/**", (route) => {
+    const request = route.request();
+    if (
+      !["GET", "HEAD"].includes(request.method()) &&
+      !request.url().includes("/chat/read")
+    )
+      writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    return route.fulfill({ json: [] });
+  });
+  await installCanvasReviewRoutes(page);
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString() === "40") socket.send('40{"sid":"menu-resize"}');
+    });
+    socket.send(
+      '0{"sid":"menu-resize","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await page.goto("/");
+  const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+  const trigger = map.getByRole("button", {
+    name: "Объекты карты",
+    exact: true,
+  });
+  await trigger.click();
+  await map
+    .getByRole("button", { name: "Selected token", exact: true })
+    .click();
+  await map.press("Escape");
+  await map.press("Enter");
+  const menu = map.getByRole("menu");
+  await expect(menu).toBeVisible();
+  const measurements: unknown[] = [];
+  for (const size of [
+    { width: 1280, height: 900 },
+    { width: 1280, height: 480 },
+    { width: 390, height: 850 },
+    { width: 640, height: 360 },
+    { width: 640, height: 320 },
+    { width: 1280, height: 900 },
+  ]) {
+    await page.setViewportSize(size);
+    await expect(menu).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          menu.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            const owner = node
+              .closest(".map-viewport")!
+              .getBoundingClientRect();
+            return (
+              rect.left >= Math.max(0, owner.left) &&
+              rect.top >= Math.max(0, owner.top) &&
+              rect.right <= Math.min(innerWidth, owner.right) + 1 &&
+              rect.bottom <= Math.min(innerHeight, owner.bottom) + 1
+            );
+          }),
+        {
+          message: `Menu must fit map and viewport at ${size.width}x${size.height}`,
+        },
+      )
+      .toBe(true);
+    const item = menu.getByRole("menuitemradio", {
+      name: "Игровой слой",
+      exact: true,
+    });
+    await item.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() =>
+        item.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          return node.contains(
+            document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            ),
+          );
+        }),
+      )
+      .toBe(true);
+    measurements.push({
+      size,
+      menu: await menu.boundingBox(),
+      map: await map.boundingBox(),
+    });
+    if (size.width === 640 && size.height === 360)
+      await page.screenshot({
+        path: testInfo.outputPath("menu-landscape.png"),
+      });
+    // Real pointer selection, dismissal and reopen at every size. The next
+    // resize starts with the menu open, not a freshly opened post-resize menu.
+    await item.click();
+    await expect(menu).toHaveCount(0);
+    await map.press("Enter");
+    await expect(menu).toBeVisible();
+    const cancel = menu.getByRole("button", { name: "Отмена", exact: true });
+    await cancel.scrollIntoViewIfNeeded();
+    await expect
+      .poll(
+        () =>
+          cancel.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            return [0.1, 0.5, 0.9].every((ratio) =>
+              node.contains(
+                document.elementFromPoint(
+                  rect.x + rect.width * ratio,
+                  rect.y + rect.height / 2,
+                ),
+              ),
+            );
+          }),
+        { message: "Bottom menu action must not be covered by the dice tray" },
+      )
+      .toBe(true);
+    await cancel.click();
+    await expect(menu).toHaveCount(0);
+    await map.press("Enter");
+    await expect(menu).toBeVisible();
+  }
+  // A real action remains clickable after all retained-open resizes.
+  await menu
+    .getByRole("menuitemradio", { name: "Игровой слой", exact: true })
+    .click();
+  await expect(menu).toHaveCount(0);
+  await map.press("Enter");
+  await expect(menu).toBeVisible();
+  await map.press("Escape");
+  await expect(menu).toHaveCount(0);
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+  await testInfo.attach("menu-resize-receipt", {
+    body: JSON.stringify({ measurements, writes, errors }),
+    contentType: "application/json",
+  });
+});
+
+for (const width of [1280, 390]) {
+  test(`UIX-644 token menu keyboard entry and actions ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    const writes: string[] = [];
+    const conditions: string[][] = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route(`**/api/tokens/${tokenId}/conditions`, async (route) => {
+      const body = route.request().postDataJSON();
+      expect(body.revision).toBe(current.tokens[0].revision);
+      conditions.push(body.conditions);
+      current.tokens[0].conditions = body.conditions;
+      current.tokens[0].revision += 1;
+      await route.fulfill({ json: current.tokens[0] });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40")
+          socket.send('40{"sid":"menu-keyboard"}');
+      });
+      socket.send(
+        '0{"sid":"menu-keyboard","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await map.press("Escape");
+    // From here on only physical keyboard input, no locator.focus().
+    await page.keyboard.press("Enter");
+    const menu = map.getByRole("menu");
+    const first = menu.getByRole("menuitemcheckbox", {
+      name: "Отравлен",
+      exact: true,
+    });
+    const last = menu.getByRole("button", { name: "Отмена", exact: true });
+    await expect(first).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(first).toHaveAttribute("aria-checked", "true");
+    await expect(first).toBeFocused();
+    const conditionContrast = await expectSelectedMenuIcon(first);
+    await first.hover();
+    const conditionHoverContrast = await expectSelectedMenuIcon(first);
+    await page.mouse.move(0, 0);
+    await page.keyboard.press("Space");
+    await expect(first).toHaveAttribute("aria-checked", "false");
+    await expect(first).toBeFocused();
+    await expect(first.locator("svg.arken-icon")).toHaveCount(0);
+    await page.keyboard.press("ArrowDown");
+    await expect(
+      menu.getByRole("menuitemcheckbox", { name: "Без сознания", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(last).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(last).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+
+    await page.keyboard.press("Shift+F10");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("End");
+    for (let step = 0; step < 4; step++) await page.keyboard.press("ArrowUp");
+    const layer = menu.getByRole("menuitemradio", {
+      name: "Игровой слой",
+      exact: true,
+    });
+    await expect(layer).toBeFocused();
+    const layerContrast = await expectSelectedMenuIcon(layer);
+    await layer.hover();
+    const layerHoverContrast = await expectSelectedMenuIcon(layer);
+    await menu.screenshot({
+      path: testInfo.outputPath(`selected-menu-${width}.png`),
+    });
+    await page.mouse.move(0, 0);
+    await page.keyboard.press("Enter");
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+
+    await page.keyboard.press("ContextMenu");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("End");
+    for (let step = 0; step < 3; step++) await page.keyboard.press("ArrowUp");
+    await expect(
+      menu.getByRole("menuitemradio", { name: "Слой мастера", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    const color = menu.getByLabel("Цвет", { exact: true });
+    await expect(color).toBeFocused();
+    // Native fields keep their own navigation; menu arrows must not hijack them.
+    await page.keyboard.press("ArrowDown");
+    await expect(color).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+    expect(conditions).toEqual([["POISONED"], []]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("keyboard-menu-receipt", {
+      body: JSON.stringify({
+        width,
+        conditions,
+        conditionContrast,
+        conditionHoverContrast,
+        layerContrast,
+        layerHoverContrast,
+        writes,
+        errors,
+      }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const width of [1280, 390]) {
+  test(`UIX-644 PLAYER menu offers only permitted token actions ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = "PLAYER";
+    const playerId = current.me.id;
+    current.fogReveals = [
+      { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    current.tokens = [
+      {
+        ...current.tokens[0],
+        name: "Controlled token",
+        controllerMembershipIds: [playerId],
+        ownerMembershipId: playerId,
+      },
+      {
+        ...current.tokens[0],
+        id: "45f46186-2ebc-4cf8-bce7-870097305a6b",
+        name: "Locked controlled token",
+        x: 480,
+        locked: true,
+        controllerMembershipIds: [playerId],
+        ownerMembershipId: playerId,
+      },
+      {
+        ...current.tokens[0],
+        id: "55f46186-2ebc-4cf8-bce7-870097305a6b",
+        name: "Owner without control",
+        x: 576,
+        controllerMembershipIds: [],
+        ownerMembershipId: playerId,
+      },
+    ];
+    const writes: string[] = [];
+    const deleted: string[] = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route(`**/api/tokens/${tokenId}`, async (route) => {
+      expect(route.request().method()).toBe("DELETE");
+      expect(route.request().postDataJSON()).toMatchObject({ revision: 0 });
+      deleted.push(tokenId);
+      current.tokens = current.tokens.filter((token) => token.id !== tokenId);
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") socket.send('40{"sid":"player-menu"}');
+      });
+      socket.send(
+        '0{"sid":"player-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    const trigger = map.getByRole("button", {
+      name: "Объекты карты",
+      exact: true,
+    });
+    const menu = map.getByRole("menu");
+    const dialog = page.getByRole("dialog", {
+      name: "Убрать токен с карты?",
+      exact: true,
+    });
+    for (const name of [
+      "Controlled token",
+      "Locked controlled token",
+      "Owner without control",
+    ]) {
+      await trigger.click();
+      await map.getByRole("button", { name, exact: true }).click();
+      await map.press("Escape");
+      await page.keyboard.press("Enter");
+      await expect(menu).toBeVisible();
+      await expect(menu.getByRole("menuitemradio")).toHaveCount(0);
+      await expect(menu.getByRole("menuitemcheckbox")).toHaveCount(0);
+      await expect(menu.locator('input[type="color"]')).toHaveCount(0);
+      await expect(
+        menu.getByRole("button", { name: "Без рамки", exact: true }),
+      ).toHaveCount(0);
+      const remove = menu.getByRole("menuitem", {
+        name: "Удалить с карты",
+        exact: true,
+      });
+      if (name === "Controlled token") {
+        await expect(remove).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(dialog).toBeVisible();
+        await dialog
+          .getByRole("button", { name: "Отмена", exact: true })
+          .click();
+        expect(deleted).toEqual([]);
+        await map.press("Enter");
+        await expect(remove).toBeFocused();
+        await page.keyboard.press("Enter");
+        await dialog
+          .getByRole("button", { name: "Удалить", exact: true })
+          .click();
+        await expect.poll(() => deleted.length).toBe(1);
+        await expect(dialog).toHaveCount(0);
+      } else {
+        await expect(remove).toHaveCount(0);
+        await expect(
+          menu.getByRole("button", { name: "Отмена", exact: true }),
+        ).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(map).toBeFocused();
+        await page.keyboard.press("Delete");
+        await expect(dialog).toHaveCount(0);
+      }
+    }
+    expect(deleted).toEqual([tokenId]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("player-menu-receipt", {
+      body: JSON.stringify({ width, deleted, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  for (const width of [1280, 390]) {
+    test(`UIX-644 token menu Tab exits without losing selection ${role} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 850 });
+      const current: GameSnapshot = structuredClone(snapshot);
+      current.me.role = role;
+      current.tokens[0].controllerMembershipIds = [current.me.id];
+      current.tokens[0].ownerMembershipId = current.me.id;
+      const writes: string[] = [];
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.route("**/api/**", (route) => {
+        const request = route.request();
+        if (
+          !["GET", "HEAD"].includes(request.method()) &&
+          !request.url().includes("/chat/read")
+        )
+          writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+        return route.fulfill({ json: [] });
+      });
+      await installCanvasReviewRoutes(page);
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({ json: current }),
+      );
+      await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+        socket.onMessage((message) => {
+          if (message.toString() === "40") socket.send('40{"sid":"menu-tab"}');
+        });
+        socket.send(
+          '0{"sid":"menu-tab","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+        );
+      });
+      await page.goto("/");
+      const map = page.getByRole("region", {
+        name: "Интерактивная карта сцены",
+      });
+      await map
+        .getByRole("button", { name: "Объекты карты", exact: true })
+        .click();
+      await map
+        .getByRole("button", { name: "Selected token", exact: true })
+        .click();
+      await map.press("Escape");
+      const menu = map.getByRole("menu");
+      const destinations: unknown[] = [];
+      for (const key of ["Shift+Tab", "Tab"]) {
+        await map.press("Enter");
+        await expect(menu).toBeVisible();
+        if (key === "Tab") {
+          await page.keyboard.press("End");
+          await expect(
+            menu.getByRole("button", { name: "Отмена", exact: true }),
+          ).toBeFocused();
+        }
+        await page.keyboard.press(key);
+        const destination = await page.evaluateHandle(
+          () => document.activeElement,
+        );
+        await expect(menu).toHaveCount(0);
+        await expect
+          .poll(() =>
+            destination.evaluate(
+              (node) =>
+                node === document.activeElement &&
+                node instanceof HTMLElement &&
+                node !== document.body &&
+                node.getClientRects().length > 0 &&
+                !node.closest("[hidden], [inert]"),
+            ),
+          )
+          .toBe(true);
+        destinations.push(
+          await destination.evaluate(
+            (node, { key }) => ({
+              key,
+              tag: node?.tagName,
+              label:
+                node?.getAttribute("aria-label") ??
+                node?.textContent?.trim().slice(0, 80),
+            }),
+            { key },
+          ),
+        );
+        await destination.dispose();
+      }
+      // Leaving the menu is not deselection. Delete still opens the original
+      // token confirmation, and cancelling it must not issue a mutation.
+      await map.press("Delete");
+      const dialog = page.getByRole("dialog", {
+        name: "Убрать токен с карты?",
+        exact: true,
+      });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("menu-tab-receipt", {
+        body: JSON.stringify({ role, width, destinations, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
+}
+
+for (const change of ["revision", "locked", "revoked", "removed"] as const) {
+  test(`UIX-507 stale delete confirmation closes on ${change}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role =
+      change === "locked" || change === "revoked" ? "PLAYER" : "GM";
+    current.tokens[0].controllerMembershipIds = [current.me.id];
+    current.tokens[0].ownerMembershipId = current.me.id;
+    current.fogReveals = [
+      { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    const original = structuredClone(current.tokens[0]);
+    const writes: string[] = [];
+    const deletions: number[] = [];
+    const errors: string[] = [];
+    let publish: (() => void) | undefined;
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route(`**/api/tokens/${tokenId}`, async (route) => {
+      expect(route.request().method()).toBe("DELETE");
+      deletions.push(route.request().postDataJSON().revision);
+      current.tokens = [];
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") {
+          socket.send('40{"sid":"delete-lifecycle"}');
+          publish = () =>
+            socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+        }
+      });
+      socket.send(
+        '0{"sid":"delete-lifecycle","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect.poll(() => Boolean(publish)).toBe(true);
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    const trigger = map.getByRole("button", {
+      name: "Объекты карты",
+      exact: true,
+    });
+    const select = async (name: string) => {
+      await trigger.click();
+      await map.getByRole("button", { name, exact: true }).click();
+      await map.press("Escape");
+    };
+    await select("Selected token");
+    await map.press("Delete");
+    const dialog = page.getByRole("dialog", {
+      name: "Убрать токен с карты?",
+      exact: true,
+    });
+    await expect(dialog).toBeVisible();
+    current.scenes[0].name = "Snapshot updated";
+    // Controller/lock changes are deliberately tested without a placement
+    // revision bump: permission invalidation must not rely on revision alone.
+    current.tokens[0].revision = change === "revision" ? 1 : 0;
+    if (change === "locked") current.tokens[0].locked = true;
+    if (change === "revoked") current.tokens[0].controllerMembershipIds = [];
+    if (change === "removed") current.tokens = [];
+    publish!();
+    await expect(page.locator(".topbar")).toContainText("Snapshot updated");
+    await expect(dialog).toHaveCount(0);
+    expect(deletions).toEqual([]);
+    // Restore an eligible target, but not the stale confirmation. A new
+    // selection and confirmation must use the newly authoritative revision.
+    current.tokens = [{ ...original, revision: 2, name: "Restored token" }];
+    current.scenes[0].name = "Snapshot restored";
+    publish!();
+    await expect(page.locator(".topbar")).toContainText("Snapshot restored");
+    await expect(dialog).toHaveCount(0);
+    await select("Restored token");
+    await map.press("Enter");
+    await map
+      .getByRole("menuitem", { name: "Удалить с карты", exact: true })
+      .click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
+    await expect.poll(() => deletions.length).toBe(1);
+    expect(deletions).toEqual([2]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("delete-lifecycle-receipt", {
+      body: JSON.stringify({ change, deletions, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const change of [
+  "token-revision",
+  "drawing-revision",
+  "drawing-removed",
+  "control-revoked",
+  "token-locked",
+  "map-layer",
+  "visibility-revoked",
+  "gm-layer",
+  "role-changed",
+  "actor-changed",
+  "scene-changed",
+] as const) {
+  test(`UIX-507 bulk confirmation keeps exact targets on ${change}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = [
+      "control-revoked",
+      "visibility-revoked",
+      "gm-layer",
+    ].includes(change)
+      ? "PLAYER"
+      : "GM";
+    current.tokens[0].controllerMembershipIds = [current.me.id];
+    current.tokens[0].ownerMembershipId = current.me.id;
+    current.fogReveals = [
+      { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    const drawingId = "c5f46186-2ebc-4cf8-bce7-870097305a6b";
+    current.drawings = [
+      {
+        id: drawingId,
+        sceneId,
+        authorMembershipId: current.me.id,
+        points: [0, 0, 64, 64],
+        color: "#ef4444",
+        strokeWidth: 8,
+        x: 480,
+        y: 320,
+        revision: 0,
+      },
+    ];
+    const originalActor = structuredClone(current.me);
+    const originalToken = structuredClone(current.tokens[0]);
+    const originalDrawing = structuredClone(current.drawings[0]);
+    const writes: string[] = [];
+    const requests: unknown[] = [];
+    const errors: string[] = [];
+    let publish: (() => void) | undefined;
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route("**/api/canvas/bulk", async (route) => {
+      const body = route.request().postDataJSON();
+      expect(body.operation).toBe("DELETE");
+      expect(body.sceneId).toBe(sceneId);
+      requests.push(body.targets);
+      current.tokens = [];
+      current.drawings = [];
+      await route.fulfill({
+        json: { revisions: { tokens: {}, drawings: {} } },
+      });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") {
+          socket.send('40{"sid":"bulk-lifecycle"}');
+          publish = () =>
+            socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+        }
+      });
+      socket.send(
+        '0{"sid":"bulk-lifecycle","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect.poll(() => Boolean(publish)).toBe(true);
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    const selectBoth = async () => {
+      await page.getByRole("button", { name: "Вписать", exact: true }).click();
+      const box = (await map.boundingBox())!;
+      const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, box);
+      const point = (x: number, y: number) => ({
+        x: box.x + fitted.position.x + x * fitted.scale,
+        y: box.y + fitted.position.y + y * fitted.scale,
+      });
+      const start = point(350, 290),
+        end = point(565, 410);
+      await page.keyboard.down("Shift");
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(end.x, end.y, { steps: 6 });
+      await page.mouse.up();
+      await page.keyboard.up("Shift");
+      await expect(
+        page.getByRole("button", { name: "Удалить выбранное", exact: true }),
+      ).toBeVisible();
+    };
+    await selectBoth();
+    await page
+      .getByRole("button", { name: "Удалить выбранное", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Удалить выбранные объекты?",
+      exact: true,
+    });
+    await expect(dialog).toContainText("Токенов: 1. Рисунков: 1.");
+    if (change === "token-revision") current.tokens[0].revision = 1;
+    if (change === "drawing-revision") current.drawings[0].revision = 1;
+    if (change === "drawing-removed") current.drawings = [];
+    if (change === "control-revoked")
+      current.tokens[0].controllerMembershipIds = [];
+    if (change === "token-locked") current.tokens[0].locked = true;
+    if (change === "map-layer") current.tokens[0].layer = "MAP";
+    if (change === "visibility-revoked") current.tokens[0].visible = false;
+    if (change === "gm-layer") current.tokens[0].layer = "GM";
+    // Eligibility changes must invalidate approval without relying on a revision bump.
+    if (
+      ["token-locked", "map-layer", "visibility-revoked", "gm-layer"].includes(
+        change,
+      )
+    ) {
+      expect(current.tokens[0].revision).toBe(originalToken.revision);
+      expect(current.drawings[0].revision).toBe(originalDrawing.revision);
+    }
+    if (change === "role-changed") {
+      expect(originalActor.role).toBe("GM");
+      current.me.role = "PLAYER";
+    }
+    if (change === "actor-changed")
+      current.me.id = "e21b4bb6-ae66-47b9-b719-610e0440044c";
+    if (change === "scene-changed")
+      current.scenes[0].id = "8376b502-02f8-4cd6-9c55-3816d70d44dc";
+    if (["role-changed", "actor-changed", "scene-changed"].includes(change)) {
+      expect(current.tokens[0]).toEqual(originalToken);
+      expect(current.drawings[0]).toEqual(originalDrawing);
+    }
+    current.scenes[0].name = "Bulk snapshot updated";
+    publish!();
+    await expect(page.locator(".topbar")).toContainText(
+      "Bulk snapshot updated",
+    );
+    await expect(dialog).toHaveCount(0);
+    expect(requests).toEqual([]);
+    current.me = originalActor;
+    current.scenes[0].id = sceneId;
+    current.tokens = [{ ...originalToken, revision: 2 }];
+    current.drawings = [{ ...originalDrawing, revision: 2 }];
+    current.scenes[0].name = "Bulk snapshot restored";
+    publish!();
+    await expect(page.locator(".topbar")).toContainText(
+      "Bulk snapshot restored",
+    );
+    await expect(dialog).toHaveCount(0);
+    await selectBoth();
+    await page
+      .getByRole("button", { name: "Удалить выбранное", exact: true })
+      .click();
+    await expect(dialog).toContainText("Токенов: 1. Рисунков: 1.");
+    await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests).toEqual([
+      [
+        { targetType: "TOKEN", targetId: tokenId, revision: 2 },
+        { targetType: "DRAWING", targetId: drawingId, revision: 2 },
+      ],
+    ]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("bulk-lifecycle-receipt", {
+      body: JSON.stringify({ change, requests, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const width of [1280, 390]) {
+  test(`UIX-644 live token menu submits current layer and appearance ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    const writes: string[] = [],
+      errors: string[] = [];
+    const commands: unknown[] = [];
+    let publish: (() => void) | undefined;
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/**", (route) => {
+      const request = route.request();
+      if (
+        !["GET", "HEAD"].includes(request.method()) &&
+        !request.url().includes("/chat/read")
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    for (const action of ["layer", "appearance"] as const) {
+      await page.route(`**/api/tokens/${tokenId}/${action}`, async (route) => {
+        expect(route.request().method()).toBe("PATCH");
+        const body = route.request().postDataJSON();
+        expect(body.revision).toBe(current.tokens[0].revision);
+        commands.push({
+          action,
+          revision: body.revision,
+          ...(action === "layer"
+            ? { layer: body.layer }
+            : { baseColor: body.baseColor, frameColor: body.frameColor }),
+        });
+        if (action === "layer") current.tokens[0].layer = body.layer;
+        else {
+          current.tokens[0].baseColor = body.baseColor;
+          current.tokens[0].frameColor = body.frameColor;
+        }
+        current.tokens[0].revision++;
+        await route.fulfill({ json: current.tokens[0] });
+      });
+    }
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") {
+          socket.send('40{"sid":"live-menu"}');
+          publish = () =>
+            socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+        }
+      });
+      socket.send(
+        '0{"sid":"live-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect.poll(() => Boolean(publish)).toBe(true);
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await map.press("Escape");
+    await page.keyboard.press("Enter");
+    const menu = map.getByRole("menu");
+    await expect(menu).toBeVisible();
+    current.tokens[0] = {
+      ...current.tokens[0],
+      revision: 1,
+      baseColor: "#123456",
+      frameColor: "#abcdef",
+    };
+    publish!();
+    await expect(menu.getByLabel("Цвет", { exact: true })).toHaveValue(
+      "#123456",
+    );
+    await menu
+      .getByRole("menuitemradio", { name: "Слой мастера", exact: true })
+      .click();
+    await expect.poll(() => commands.length).toBe(1);
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    current.tokens[0] = {
+      ...current.tokens[0],
+      revision: 3,
+      baseColor: "#654321",
+      frameColor: "#fedcba",
+    };
+    publish!();
+    await expect(menu.getByLabel("Цвет", { exact: true })).toHaveValue(
+      "#654321",
+    );
+    await expect(menu.locator('input[type="color"]').nth(1)).toHaveValue(
+      "#fedcba",
+    );
+    await page.keyboard.press("End");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await expect(
+      menu.getByRole("button", { name: "Без рамки", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => commands.length).toBe(2);
+    await expect(menu).toHaveCount(0);
+    await expect(map).toBeFocused();
+    expect(commands).toEqual([
+      { action: "layer", revision: 1, layer: "GM" },
+      {
+        action: "appearance",
+        revision: 3,
+        baseColor: "#654321",
+        frameColor: null,
+      },
+    ]);
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await testInfo.attach("live-menu-receipt", {
+      body: JSON.stringify({ width, commands, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+for (const width of [1280, 390]) {
+  for (const change of ["revoked", "locked", "role", "removed"] as const) {
+    test(`UIX-644 live menu focus survives ${change} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 850 });
+      const current: GameSnapshot = structuredClone(snapshot);
+      current.me.role = change === "role" ? "GM" : "PLAYER";
+      current.tokens[0].controllerMembershipIds = [current.me.id];
+      current.tokens[0].ownerMembershipId = current.me.id;
+      current.fogReveals = [
+        { id: "reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+      ];
+      const writes: string[] = [],
+        errors: string[] = [];
+      let publish: (() => void) | undefined;
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.route("**/api/**", (route) => {
+        const request = route.request();
+        if (
+          !["GET", "HEAD"].includes(request.method()) &&
+          !request.url().includes("/chat/read")
+        )
+          writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+        return route.fulfill({ json: [] });
+      });
+      await installCanvasReviewRoutes(page);
+      await page.route("**/api/bootstrap", (route) =>
+        route.fulfill({ json: current }),
+      );
+      await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+        socket.onMessage((message) => {
+          if (message.toString() === "40") {
+            socket.send('40{"sid":"menu-access"}');
+            publish = () =>
+              socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+          }
+        });
+        socket.send(
+          '0{"sid":"menu-access","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+        );
+      });
+      await page.goto("/");
+      await expect.poll(() => Boolean(publish)).toBe(true);
+      const map = page.getByRole("region", {
+        name: "Интерактивная карта сцены",
+      });
+      await map
+        .getByRole("button", { name: "Объекты карты", exact: true })
+        .click();
+      await map
+        .getByRole("button", { name: "Selected token", exact: true })
+        .click();
+      await map.press("Escape");
+      await page.keyboard.press("Enter");
+      const menu = map.getByRole("menu");
+      await expect(menu).toBeVisible();
+      await expect(menu.locator("button").first()).toBeFocused();
+      // No token revision bump: permission-only changes also remove controls.
+      if (change === "locked") current.tokens[0].locked = true;
+      if (change === "revoked" || change === "role")
+        current.tokens[0].controllerMembershipIds = [];
+      if (change === "role") current.me.role = "PLAYER";
+      if (change === "removed") current.tokens = [];
+      current.scenes[0].name = "Menu access updated";
+      publish!();
+      await expect(page.locator(".topbar")).toContainText(
+        "Menu access updated",
+      );
+      if (change === "removed") {
+        await expect(menu).toHaveCount(0);
+        await expect(map).toBeFocused();
+      } else {
+        await expect(menu).toBeVisible();
+        await expect(
+          menu.getByRole("menuitem", { name: "Удалить с карты", exact: true }),
+        ).toHaveCount(0);
+        await expect(menu.getByRole("menuitemcheckbox")).toHaveCount(0);
+        await expect(menu.getByRole("menuitemradio")).toHaveCount(0);
+        await expect(
+          menu.getByRole("button", { name: "Отмена", exact: true }),
+        ).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(menu).toHaveCount(0);
+        await expect(map).toBeFocused();
+      }
+      await page.keyboard.press("Delete");
+      await expect(
+        page.getByRole("dialog", {
+          name: "Убрать токен с карты?",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+      await testInfo.attach("menu-access-receipt", {
+        body: JSON.stringify({ width, change, writes, errors }),
+        contentType: "application/json",
+      });
+    });
+  }
+}
+
+for (const scenario of [
+  { name: "GM gridless", role: "GM", grid: false, access: "controlled" },
+  { name: "PLAYER grid", role: "PLAYER", grid: true, access: "controlled" },
+  {
+    name: "PLAYER gridless",
+    role: "PLAYER",
+    grid: false,
+    access: "controlled",
+  },
+  {
+    name: "PLAYER owner without control",
+    role: "PLAYER",
+    grid: true,
+    access: "foreign",
+  },
+  { name: "PLAYER locked", role: "PLAYER", grid: true, access: "locked" },
+] as const) {
+  test(`UIX-405 WASD role and grid contract ${scenario.name}`, async ({
+    page,
+  }, info) => {
+    const errors: string[] = [],
+      writes: string[] = [];
+    const moves: Array<Record<string, unknown>> = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await page.route("**/api/**", (route) => {
+      const request = route.request(),
+        path = new URL(request.url()).pathname;
+      // Bootstrap bookkeeping, not a map mutation. Client telemetry is NOT exempt.
+      if (path === "/api/chat/read") return route.fulfill({ json: {} });
+      if (!["GET", "HEAD"].includes(request.method()))
+        writes.push(`${request.method()} ${path}`);
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasRoutes(page);
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = scenario.role;
+    current.scenes[0]!.grid.enabled = scenario.grid;
+    current.tokens[0]!.controllerMembershipIds =
+      scenario.access === "foreign" ? [] : [current.me.id];
+    // Ownership alone permits selection of a revealed token, not movement.
+    // A truly foreign token is absent from the object list, so that would not
+    // exercise the selected-token permission guard at all.
+    current.tokens[0]!.ownerMembershipId = current.me.id;
+    current.tokens[0]!.locked = scenario.access === "locked";
+    current.fogReveals = [
+      { id: "wasd-reveal", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route("**/api/canvas/bulk", (route) => {
+      moves.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: {
+          revisions: { tokens: { [tokenId]: moves.length }, drawings: {} },
+        },
+      });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((message) => {
+        if (message.toString() === "40") socket.send('40{"sid":"wasd-role"}');
+      });
+      socket.send(
+        '0{"sid":"wasd-role-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
+    await map
+      .getByRole("button", { name: "Объекты карты", exact: true })
+      .click();
+    const selected = map.getByRole("button", {
+      name: "Selected token",
+      exact: true,
+    });
+    await selected.click();
+    await expect(selected).toHaveAttribute("aria-pressed", "true");
+    await selected.press("Escape");
+    await map.focus();
+    const step = scenario.grid ? 64 : 8;
+    const allowed = scenario.access === "controlled";
+    for (const [key, x, y] of [
+      ["w", 0, -step],
+      ["a", -step, 0],
+      ["s", 0, step],
+      ["d", step, 0],
+    ] as const) {
+      const count = moves.length;
+      await page.keyboard.press(key);
+      if (allowed) {
+        await expect.poll(() => moves.length).toBe(count + 1);
+        expect(moves.at(-1)).toMatchObject({
+          sceneId,
+          operation: "MOVE",
+          deltaX: x,
+          deltaY: y,
+          targets: [{ targetType: "TOKEN", targetId: tokenId }],
+        });
+      }
+    }
+    if (allowed) {
+      const before = moves.length;
+      await page.keyboard.down("Shift");
+      try {
+        await page.keyboard.press("w");
+      } finally {
+        await page.keyboard.up("Shift");
+      }
+      await expect.poll(() => moves.length).toBe(before + 1);
+      expect(moves.at(-1)).toMatchObject({ deltaX: 0, deltaY: -step * 5 });
+      const heldBefore = moves.length;
+      await page.keyboard.down("s");
+      try {
+        await expect.poll(() => moves.length).toBe(heldBefore + 1);
+        for (let i = 0; i < 8; i++) await page.keyboard.down("s");
+      } finally {
+        await page.keyboard.up("s");
+      }
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      expect(moves).toHaveLength(heldBefore + 1);
+      // A new physical press must still work after the repeat guard.
+      await page.keyboard.press("s");
+      await expect.poll(() => moves.length).toBe(heldBefore + 2);
+    } else {
+      await map.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      expect(moves).toEqual([]);
+    }
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await info.attach("wasd-role-grid", {
+      body: JSON.stringify({ scenario, moves, writes, errors }),
+      contentType: "application/json",
+    });
+  });
+}
+
+for (const role of ["GM", "PLAYER"] as const) {
+  test(`UIX-293 mounted map and token consume replaced image versions ${role}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    const current: GameSnapshot = structuredClone(snapshot);
+    current.me.role = role;
+    current.scenes[0].grid.enabled = false;
+    current.scenes[0].mapAssetId = stackAlphaId;
+    current.fogReveals = [
+      { id: "all", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+    ];
+    const originalToken = structuredClone(current.tokens[0]);
+    current.assets = [
+      {
+        ...current.assets[0],
+        id: stackAlphaId,
+        kind: "MAP",
+        width: 1,
+        height: 1,
+        url: `/api/assets/${stackAlphaId}/content?v=old`,
+      },
+      {
+        ...current.assets[0],
+        width: 1,
+        height: 1,
+        url: `${portraitUrl}?v=old`,
+      },
+    ];
+    const colors = {
+      map: { old: [30, 60, 90], next: [180, 80, 40] },
+      token: { old: [150, 30, 80], next: [30, 160, 80] },
+    } as const;
+    const requests: string[] = [],
+      writes: string[] = [],
+      errors: string[] = [];
+    let publish: (() => void) | undefined;
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/api/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (!["GET", "HEAD"].includes(route.request().method())) {
+        if (path === "/api/chat/read")
+          return route.fulfill({ json: { ok: true } });
+        writes.push(`${route.request().method()} ${path}`);
+        return route.abort();
+      }
+      if (path === "/api/story/posts")
+        return route.fulfill({ json: { posts: [], nextCursor: null } });
+      if (path === "/api/operator/feedback/capability")
+        return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+      return route.fulfill({ json: [] });
+    });
+    await installCanvasReviewRoutes(page);
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: current }),
+    );
+    await page.route("**/api/assets/*/content?*", (route) => {
+      const url = new URL(route.request().url());
+      const type = url.pathname.includes(stackAlphaId) ? "map" : "token";
+      const version = url.searchParams.get("v") === "next" ? "next" : "old";
+      requests.push(`${type}:${version}`);
+      return route.fulfill({
+        contentType: "image/png",
+        body: makePng(1, 1, [...colors[type][version]]),
+      });
+    });
+    await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+      socket.onMessage((m) => {
+        if (m.toString() === "40") {
+          socket.send('40{"sid":"images"}');
+          publish = () =>
+            socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
+        }
+      });
+      socket.send(
+        '0{"sid":"images-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+      );
+    });
+    await page.goto("/");
+    await expect(
+      page.getByRole("region", { name: "Интерактивная карта сцены" }),
+    ).toBeVisible();
+    await expect.poll(() => Boolean(publish)).toBe(true);
+    await page.getByRole("button", { name: "Вписать", exact: true }).click();
+    const stage = page.locator(".konvajs-content");
+    const stageHandle = await stage.elementHandle();
+    const bounds = (await stage.boundingBox())!;
+    const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, bounds);
+    const sample = async (x: number, y: number) =>
+      stage.evaluate(
+        (node, { x, y }) => {
+          const output = document.createElement("canvas");
+          output.width = 1;
+          output.height = 1;
+          const context = output.getContext("2d")!;
+          for (const canvas of node.querySelectorAll("canvas")) {
+            const rect = canvas.getBoundingClientRect();
+            if (
+              !rect.width ||
+              !rect.height ||
+              getComputedStyle(canvas).display === "none"
+            )
+              continue;
+            context.drawImage(
+              canvas,
+              (x * canvas.width) / rect.width,
+              (y * canvas.height) / rect.height,
+              1,
+              1,
+              0,
+              0,
+              1,
+              1,
+            );
+          }
+          return [...context.getImageData(0, 0, 1, 1).data];
+        },
+        {
+          x: fitted.position.x + x * fitted.scale,
+          y: fitted.position.y + y * fitted.scale,
+        },
+      );
+    await expect.poll(() => sample(100, 100)).toEqual([...colors.map.old, 255]);
+    await expect
+      .poll(() => sample(416, 352))
+      .toEqual([...colors.token.old, 255]);
+    current.assets = current.assets.map((asset) => ({
+      ...asset,
+      url: asset.url.replace("v=old", "v=next"),
+    }));
+    current.scenes[0].name = "Изображения обновлены";
+    publish!();
+    await expect(page.locator(".topbar")).toContainText(
+      "Изображения обновлены",
+    );
+    await expect
+      .poll(() => sample(100, 100))
+      .toEqual([...colors.map.next, 255]);
+    await expect
+      .poll(() => sample(416, 352))
+      .toEqual([...colors.token.next, 255]);
+    expect(
+      await stage.evaluate((node, original) => node === original, stageHandle),
+    ).toBe(true);
+    expect(current.tokens[0]).toEqual(originalToken);
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        "map:old",
+        "token:old",
+        "map:next",
+        "token:next",
+      ]),
+    );
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+    await info.attach("mounted-image-receipt", {
+      body: JSON.stringify({
+        role,
+        requests,
+        map: await sample(100, 100),
+        token: await sample(416, 352),
+        writes,
+        errors,
+      }),
+      contentType: "application/json",
+    });
+  });
+}

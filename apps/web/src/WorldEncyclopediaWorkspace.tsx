@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import type {
+  AssetDto,
   WorldContentMediaDto,
   WorldContentPlayerDto,
   WorldContentRelationEdgeDto,
@@ -52,16 +53,18 @@ const notFoundError =
  */
 /**
  * UIX-395: memoized — self-fetches its own list/detail data (see the module
- * doc comment above) purely from `open`/an internal `id`, never from
- * `GameSnapshot`, so with a stable `onClose` (see `closeWorkspace` in
- * `Sidebar.tsx`) this panel is inert to unrelated realtime snapshot events.
+ * doc comment above) from `open`/an internal `id`. Snapshot assets supply
+ * versioned image URLs; stable asset/onClose props keep unrelated realtime
+ * updates from rerendering the reader or refetching its article data.
  */
 export const WorldEncyclopediaWorkspace = memo(
   function WorldEncyclopediaWorkspace({
     open,
+    assets = [],
     onClose,
   }: {
     open: boolean;
+    assets?: readonly Pick<AssetDto, "id" | "url">[];
     onClose: () => void;
   }) {
     const [items, setItems] = useState<WorldContentPlayerDto[]>([]);
@@ -198,6 +201,7 @@ export const WorldEncyclopediaWorkspace = memo(
               <EntityPage
                 key={selectedId}
                 id={selectedId}
+                assets={assets}
                 onNavigate={setSelectedId}
                 onMissing={() => setSelectedId(null)}
               />
@@ -215,10 +219,12 @@ export const WorldEncyclopediaWorkspace = memo(
 
 function EntityPage({
   id,
+  assets,
   onNavigate,
   onMissing,
 }: {
   id: string;
+  assets: readonly Pick<AssetDto, "id" | "url">[];
   onNavigate: (id: string) => void;
   onMissing: () => void;
 }) {
@@ -296,7 +302,10 @@ function EntityPage({
       {entity.coverAssetId && (
         <img
           className="world-encyclopedia-workspace__cover"
-          src={`/api/assets/${entity.coverAssetId}/content`}
+          src={
+            assets.find((asset) => asset.id === entity.coverAssetId)?.url ??
+            `/api/assets/${entity.coverAssetId}/content`
+          }
           alt=""
         />
       )}
@@ -332,7 +341,10 @@ function EntityPage({
             {media.map((item) => (
               <li key={item.id}>
                 <img
-                  src={`/api/assets/${item.assetId}/content`}
+                  src={
+                    assets.find((asset) => asset.id === item.assetId)?.url ??
+                    `/api/assets/${item.assetId}/content`
+                  }
                   alt={item.caption ?? ""}
                 />
                 {item.caption && <p>{item.caption}</p>}

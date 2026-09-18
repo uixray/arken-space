@@ -13,15 +13,16 @@ const items: WorkspaceNavItem[] = [
 const originalFonts = Object.getOwnPropertyDescriptor(document, "fonts");
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   if (originalFonts) Object.defineProperty(document, "fonts", originalFonts);
   else Reflect.deleteProperty(document, "fonts");
 });
 
-function dimensions(buttonWidth: () => number) {
+function dimensions(buttonWidth: () => number, rowWidth = () => 300) {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
       const width = this.classList.contains("workspace-nav")
-        ? 300
+        ? rowWidth()
         : this.dataset.measure === "more"
           ? 160
           : buttonWidth();
@@ -62,6 +63,49 @@ it("показывает скрытый активный раздел, не ме
       (node) => node.textContent,
     ),
   ).toEqual(before);
+});
+
+it("keeps one observer while remeasuring renders, resize and observer deliveries", () => {
+  let rowWidth = 300;
+  dimensions(
+    () => 100,
+    () => rowWidth,
+  );
+  let deliver!: ResizeObserverCallback;
+  const observe = vi.fn();
+  const disconnect = vi.fn();
+  const created = vi.fn();
+  class Observer {
+    constructor(callback: ResizeObserverCallback) {
+      deliver = callback;
+      created();
+    }
+    observe = observe;
+    disconnect = disconnect;
+    unobserve = vi.fn();
+  }
+  vi.stubGlobal("ResizeObserver", Observer);
+  const { container, rerender, unmount } = renderComponent(
+    <WorkspaceNav items={items} active={null} onSelect={vi.fn()} />,
+  );
+  expect(created).toHaveBeenCalledTimes(1);
+  expect(observe).toHaveBeenCalledTimes(1);
+  expect(container.querySelectorAll(".workspace-nav__item")).toHaveLength(1);
+  // A render still measures when an embedded browser never delivers RO.
+  rowWidth = 600;
+  rerender(<WorkspaceNav items={items} active="tokens" onSelect={vi.fn()} />);
+  expect(container.querySelectorAll(".workspace-nav__item")).toHaveLength(3);
+  rowWidth = 300;
+  act(() => window.dispatchEvent(new Event("resize")));
+  expect(container.querySelectorAll(".workspace-nav__item")).toHaveLength(1);
+  rowWidth = 600;
+  act(() => deliver([], {} as ResizeObserver));
+  expect(container.querySelectorAll(".workspace-nav__item")).toHaveLength(3);
+  expect(created).toHaveBeenCalledTimes(1);
+  expect(observe).toHaveBeenCalledTimes(1);
+  expect(disconnect).not.toHaveBeenCalled();
+  unmount();
+  expect(disconnect).toHaveBeenCalledTimes(1);
 });
 
 it("переизмеряет подписи после fonts.ready и loadingdone", async () => {

@@ -102,12 +102,14 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
         <a className="wordmark" href="/" aria-label="Arken Space — на главную">
           arken-space
         </a>
-        <span className="landing-badge">MVP · ранний доступ</span>
+        <span className="landing-badge">Ранний доступ</span>
       </header>
 
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-intro">
-          <p className="landing-kicker">Виртуальный стол для домашних RPG</p>
+          <p className="landing-kicker">
+            Виртуальный стол для домашних настольных ролевых игр
+          </p>
           <h1 id="landing-title">
             Всё необходимое для игры — в одном пространстве
           </h1>
@@ -123,7 +125,12 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           </p>
         </div>
 
-        <form className="auth-panel" onSubmit={submit} aria-label="Вход в игру">
+        <form
+          className="auth-panel"
+          onSubmit={submit}
+          aria-label="Вход в игру"
+          aria-busy={busy}
+        >
           <div>
             <p className="landing-kicker">Присоединиться</p>
             <h2>
@@ -150,6 +157,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               Имя
               <FormInput
                 value={name}
+                readOnly={busy}
                 onChange={(event) => setName(event.target.value)}
                 required
                 maxLength={40}
@@ -239,11 +247,16 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
             </Button>
           </div>
         ) : (
-          <form className="feedback-form" onSubmit={submitFeedback}>
+          <form
+            className="feedback-form"
+            onSubmit={submitFeedback}
+            aria-busy={feedbackStatus === "sending"}
+          >
             <label>
               Предложение
               <FormTextArea
                 name="message"
+                readOnly={feedbackStatus === "sending"}
                 required
                 minLength={5}
                 maxLength={4000}
@@ -254,6 +267,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               Контакт <span className="optional">необязательно</span>
               <FormInput
                 name="contact"
+                readOnly={feedbackStatus === "sending"}
                 maxLength={160}
                 placeholder="Telegram или почта"
               />

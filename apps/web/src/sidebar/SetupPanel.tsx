@@ -92,7 +92,7 @@ export function SetupPanel(props: Props) {
         ))}
       </nav>
       <div className="subsection" hidden={activeSetupTab !== "OVERVIEW"}>
-        <h3>Игроки онлайн</h3>
+        <h3>Игроки</h3>
         <div className="stack-list">
           {props.snapshot.members
             .filter((member) => member.role === "PLAYER")

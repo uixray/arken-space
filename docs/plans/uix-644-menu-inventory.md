@@ -85,38 +85,38 @@
 
 Каждое вхождение наследует общий `FormSelect` через портал, но **не** автоматически успешную проверку всех владельцев. `W` = workspace popup1999; `M` = modal popup2001; `B` = base/default Gravity popup. Overflow/transform владельца описан в A; дочерние элементы в потоке могут иметь дополнительные контейнеры прокрутки.
 
-| Место использования / все строки                       | Роль / владелец и вложенность                                                                                                                                                                              | Доказательства / пробел                                                                              |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `CatalogEntryForm.tsx:305,366,407,432,449,468,508` (7) | GM: модальное окно нового каталога SetupPanel; модальное окно редактирования каталога CharacterWorkspace; CatalogEntryPicker CREATE в его модальном окне. Все M. Условия полей зависят от модели kind/use. | Общий E1; тесты формы каталога/карточки навыка — не адресная проверка владельца popup каждого поля.  |
-| `WorldContentWorkspace.tsx:152,168,784` (3)            | GM, workspace редактора: фильтры типа/жизненного цикла, цель связи; W. Основное содержимое overflow:hidden, панель деталей overflow:auto.                                                                  | E1 — только общий механизм; отдельного hit-test overlay этих мест использования нет.                 |
-| `WorldContentWorkspace.tsx:383` (1)                    | GM CreateEntityDialog под редактором: **M**, не W.                                                                                                                                                         | E1; одновременный вложенный popup workspace→modal ещё не проверен.                                   |
-| `WorldEncyclopediaWorkspace.tsx:112` (1)               | Фильтр опубликованного содержимого в reader W. Навигация только для GM; прямая ветка reader в Sidebar не имеет isGm. Прокрутка панели деталей, main overflow:hidden.                                       | E1; не серверный ACL и не новое разрешение reader.                                                   |
-| `sidebar/CharacterMediaGallery.tsx:484,509` (2)        | AttachMediaForm: GM/разрешённый владелец персонажа, варианты видимости по роли; в потоке внутри портала персонажа в body → **B**.                                                                          | Компонент удаления CharacterMediaGallery + E1 не доказывают размещение этих select.                  |
-| `CharacterMediaGallery.tsx:619,644` (2)                | EditMediaDialog того же пользователя; вложенный M.                                                                                                                                                         | Общий E1; отдельный протокол проверки вложенного popup отсутствует.                                  |
-| `sidebar/CharacterWorkspace.tsx:482` (1)               | GM, модальное окно создания персонажа / выбор шаблона; M.                                                                                                                                                  | Общий E1; сценарии персонажа — не адресный контрольный этап проверки popup overlay.                  |
-| `CharacterWorkspace.tsx:1206` (1)                      | Условный выбор персонажа GM (`showCharacterPicker`); в потоке листа → B.                                                                                                                                   | Общий E1; условное место использования не надо считать постоянно видимым.                            |
-| `sidebar/ChatPanels.tsx:584` (1)                       | GM в ActivityPanel, «Персонаж для броска» при непустом availableRollCharacters; B в боковой панели.                                                                                                        | E12; overflow владельца отдельно от портала Select.                                                  |
-| `sidebar/SetupPanel.tsx:310,411,433` (3)               | GM: предпросмотр игрока, персонаж токена, персонаж приглашения; W в workspace настроек Sidebar. Видимость секции зависит от вкладки настроек.                                                              | Общий E1 + настройка concept; не отдельные hit-test.                                                 |
-| `SetupPanel.tsx:174,335,356` (3)                       | GM, **устаревшие hidden/aria-hidden** секции: вид каталога, прежняя активная сцена/карта; W, сами элементы управления не должны стать интерактивными/видимыми.                                             | Только реестр; не создавать новые пути выполнения ради покрытия скрытой устаревшей функциональности. |
-| `sidebar/TokenPalette.tsx:138` (1)                     | GM/PLAYER «Изображение токена» для доступного определения внутри workspace палитры; W. Не путать с доступной только GM кнопкой открытия редактора.                                                         | E1: hit-test workspace normal/cap.                                                                   |
-| `TokenPalette.tsx:441` (1)                             | GM, редактор токена из палитры; M.                                                                                                                                                                         | E1: модальное окно токена на настольном/узком экране.                                                |
-| `ui/SceneManagerDialog.tsx:220` (1)                    | GM, модальное окно SceneEditor из workspace менеджера сцен; выбор карты M; ниже вложенная загрузка изображения/выбор цвета.                                                                                | E1, E2; не все одновременно открытые вложенные владельцы.                                            |
+| Место использования / все строки                       | Роль / владелец и вложенность                                                                                                                                                                              | Доказательства / пробел                                                                                                              |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `CatalogEntryForm.tsx:305,366,407,432,449,468,508` (7) | GM: модальное окно нового каталога SetupPanel; модальное окно редактирования каталога CharacterWorkspace; CatalogEntryPicker CREATE в его модальном окне. Все M. Условия полей зависят от модели kind/use. | Общий E1; тесты формы каталога/карточки навыка — не адресная проверка владельца popup каждого поля.                                  |
+| `WorldContentWorkspace.tsx:152,168,784` (3)            | GM, workspace редактора: фильтры типа/жизненного цикла, цель связи; W. Основное содержимое overflow:hidden, панель деталей overflow:auto.                                                                  | E1 — только общий механизм; отдельного hit-test overlay этих мест использования нет.                                                 |
+| `WorldContentWorkspace.tsx:383` (1)                    | GM CreateEntityDialog под редактором: **M**, не W.                                                                                                                                                         | E1; одновременный вложенный popup workspace→modal ещё не проверен.                                                                   |
+| `WorldEncyclopediaWorkspace.tsx:112` (1)               | Фильтр опубликованного содержимого в reader W. Навигация только для GM; прямая ветка reader в Sidebar не имеет isGm. Прокрутка панели деталей, main overflow:hidden.                                       | E1; не серверный ACL и не новое разрешение reader.                                                                                   |
+| `sidebar/CharacterMediaGallery.tsx:484,509` (2)        | AttachMediaForm: GM/разрешённый владелец персонажа, варианты видимости по роли; в потоке внутри портала персонажа в body → **B**.                                                                          | Компонент удаления CharacterMediaGallery + E1 не доказывают размещение этих select.                                                  |
+| `CharacterMediaGallery.tsx:619,644` (2)                | EditMediaDialog того же пользователя; вложенный M.                                                                                                                                                         | Общий E1; отдельный протокол проверки вложенного popup отсутствует.                                                                  |
+| `sidebar/CharacterWorkspace.tsx:482` (1)               | GM, модальное окно создания персонажа / выбор шаблона; M.                                                                                                                                                  | Адресная матрица шаблона GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/outside/resize/reset PASS; см. дополнение ниже.        |
+| `CharacterWorkspace.tsx:1206` (1)                      | Условный выбор персонажа GM (`showCharacterPicker`); в потоке листа → B.                                                                                                                                   | Неактивное место: единственный production-вызов CharacterPanel передаёт showCharacterPicker=false; не включать ради теста.           |
+| `sidebar/ChatPanels.tsx:584` (1)                       | GM в ActivityPanel, «Персонаж для броска» при непустом availableRollCharacters; B в боковой панели.                                                                                                        | E12; overflow владельца отдельно от портала Select.                                                                                  |
+| `sidebar/SetupPanel.tsx:310,411,433` (3)               | GM: предпросмотр игрока, персонаж токена, персонаж приглашения; W в workspace настроек Sidebar. Видимость секции зависит от вкладки настроек.                                                              | Адресные три списка GM1280/360 Chromium/Firefox: pointer/keyboard/Escape/resize/tab-switch PASS; исправлен desktop hidden, см. ниже. |
+| `SetupPanel.tsx:174,335,356` (3)                       | GM, **устаревшие hidden/aria-hidden** секции: вид каталога, прежняя активная сцена/карта; W, сами элементы управления не должны стать интерактивными/видимыми.                                             | Только реестр; не создавать новые пути выполнения ради покрытия скрытой устаревшей функциональности.                                 |
+| `sidebar/TokenPalette.tsx:138` (1)                     | GM/PLAYER «Изображение токена» для доступного определения внутри workspace палитры; W. Не путать с доступной только GM кнопкой открытия редактора.                                                         | E1: hit-test workspace normal/cap.                                                                                                   |
+| `TokenPalette.tsx:441` (1)                             | GM, редактор токена из палитры; M.                                                                                                                                                                         | E1: модальное окно токена на настольном/узком экране.                                                                                |
+| `ui/SceneManagerDialog.tsx:220` (1)                    | GM, модальное окно SceneEditor из workspace менеджера сцен; выбор карты M; ниже вложенная загрузка изображения/выбор цвета.                                                                                | E1, E2; не все одновременно открытые вложенные владельцы.                                                                            |
 
 ## D. Нативные select и Gravity без общей обёртки
 
 Нативное окно вариантов рисует браузер/ОС: CSS z-index страницы не является способом поднять его список. Обрезание родителем/фокус/disabled всё равно проверяются в браузере. Ниже перечислены **все 15 нативных вхождений**.
 
-| Место использования / строки                                                    | Роль / владелец                                                                                                                                                                                                            | Доказательства / пробел                                                                                  |
-| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `PlayerRequestsWorkspace.tsx:169,189,209` (3)                                   | PLAYER, поля выбора при создании черновика внутри W: horizon, audience, character. При редактировании эти три поля скрыты.                                                                                                 | Сценарии заявок; отдельного протокола проверки overlay нет.                                              |
-| `PlayerRequestsWorkspace.tsx:249,263,280` (3)                                   | Фильтры GM/PLAYER внутри W; роли меняют доступный набор заявок.                                                                                                                                                            | Сценарии заявок; нативный popup ещё не проверен во время выполнения.                                     |
-| `WorldMapsWorkspace.tsx:283` (1)                                                | Текущая карта, прямой reader GM/PLAYER; W, workspace на весь холст.                                                                                                                                                        | `tests/e2e/world-maps.spec.ts` сценарий работы, не весь жизненный цикл нативного popup.                  |
-| `WorldMapsWorkspace.tsx:341,618,684,699,751,768` (6)                            | GM: фон черновика / связанная сцена / варианты в формах создания карты и локации; W. Компоновка stage/detail и прокрутка принадлежат workspace.                                                                            | Сценарий world-maps; размещение/клавиатура каждого вхождения ещё не проверены.                           |
-| `TokenImageGenerator.tsx:231` (1)                                               | Выбор исходного ресурса внутри модального редактора TokenPalette GM → M. Сам генератор — секция в потоке, не popup.                                                                                                        | `tests/e2e/token-generator.spec.ts`; нативный элемент выбора нельзя смешивать с E1 Gravity Select.       |
-| `sidebar/ChatPanels.tsx:1088` (1)                                               | Выбор собеседника DirectChatPanel; компонент GM/PLAYER, но текущий Sidebar скрывает точку входа Direct. Страница/боковая панель.                                                                                           | `tests/e2e/concept.spec.ts` исторические сценарии Direct; скрытую точку входа не активировать в UIX-644. |
-| `FeedbackReporter.tsx:32` Gravity без общей обёртки                             | GM/PLAYER, аккаунт→обратная связь M, локальная обёртка с учётом владельца.                                                                                                                                                 | E1, описан в A.                                                                                          |
-| `ui/GravityFoundationPreview.tsx:149,178` Select без общей обёртки; `:66` Popup | Страница предпросмотра B и форма предпросмотра M; Select без общей обёртки не назначает класс владельца. В `main.tsx/App.tsx` место использования в production не найдено; **только предпросмотр**, не живой workspace GM. | Только реестр, проверка во время выполнения BLOCKED.                                                     |
-| `ui/FuturePoolDialogs.tsx:43` Select без общей обёртки                          | Только место использования GravityFoundationPreview `:137`, предпросмотр токена M; класс владельца не назначен.                                                                                                            | Только реестр. Не переносить предпросмотр/не удалять без отдельного решения.                             |
+| Место использования / строки                                                    | Роль / владелец                                                                                                                                                                                                            | Доказательства / пробел                                                                                                                       |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PlayerRequestsWorkspace.tsx:169,189,209` (3)                                   | PLAYER, поля выбора при создании черновика внутри W: horizon, audience, character. При редактировании эти три поля скрыты.                                                                                                 | Реальный сервер: клавиатура/фокус трёх полей, черновик при 390→360 и отправка; исторический CI, см. аудит ниже. Не протокол системного popup. |
+| `PlayerRequestsWorkspace.tsx:249,263,280` (3)                                   | Фильтры GM/PLAYER внутри W; роли меняют доступный набор заявок.                                                                                                                                                            | Реальный сервер: сочетания трёх фильтров PLAYER/GM и сброс после повторного открытия GM; исторический CI, см. аудит ниже.                     |
+| `WorldMapsWorkspace.tsx:283` (1)                                                | Текущая карта, W на весь холст. Текущая навигация открывает workspace только GM; PLAYER-вход не создавать ради реестра.                                                                                                    | `tests/e2e/world-maps.spec.ts` сценарий работы, не весь жизненный цикл нативного popup.                                                       |
+| `WorldMapsWorkspace.tsx:341,618,684,699,751,768` (6)                            | GM: фон черновика / связанная сцена / варианты в формах создания карты и локации; W. Компоновка stage/detail и прокрутка принадлежат workspace.                                                                            | Сценарий world-maps; размещение/клавиатура каждого вхождения ещё не проверены.                                                                |
+| `TokenImageGenerator.tsx:231` (1)                                               | Выбор исходного ресурса внутри модального редактора TokenPalette GM → M. Сам генератор — секция в потоке, не popup.                                                                                                        | Адресный native source lifecycle GM1280/360 Chromium/Firefox PASS; см. дополнение ниже. Не Gravity popup.                                     |
+| `sidebar/ChatPanels.tsx:1088` (1)                                               | Выбор собеседника DirectChatPanel; компонент GM/PLAYER, но текущий Sidebar скрывает точку входа Direct. Страница/боковая панель.                                                                                           | `tests/e2e/concept.spec.ts` исторические сценарии Direct; скрытую точку входа не активировать в UIX-644.                                      |
+| `FeedbackReporter.tsx:32` Gravity без общей обёртки                             | GM/PLAYER, аккаунт→обратная связь M, локальная обёртка с учётом владельца.                                                                                                                                                 | E1, описан в A.                                                                                                                               |
+| `ui/GravityFoundationPreview.tsx:149,178` Select без общей обёртки; `:66` Popup | Страница предпросмотра B и форма предпросмотра M; Select без общей обёртки не назначает класс владельца. В `main.tsx/App.tsx` место использования в production не найдено; **только предпросмотр**, не живой workspace GM. | Только реестр, проверка во время выполнения BLOCKED.                                                                                          |
+| `ui/FuturePoolDialogs.tsx:43` Select без общей обёртки                          | Только место использования GravityFoundationPreview `:137`, предпросмотр токена M; класс владельца не назначен.                                                                                                            | Только реестр. Не переносить предпросмотр/не удалять без отдельного решения.                                                                  |
 
 ## E. Элементы выбора в потоке/модальные/системные и все места использования
 
@@ -302,3 +302,872 @@ not a new PASS for the complete B–E inventory.
   against the combined candidate; mock APIs do not prove backend permissions.
 - First-Escape containment, reopen and scope transitions must pass alongside the
   existing sticker/workspace/overlay and published draft/action-context pool.
+
+## 2026-09-16 — shell popup stacking and Escape ownership
+
+Verified on the candidate based on `0649487`; this is a bounded UIX-644 slice,
+not acceptance of the entire historical inventory above.
+
+- Two new DOM regressions failed before the change: an already consumed Escape
+  still dismissed a details popup, and Escape in a different dialog dismissed a
+  background popup and moved focus to its summary. The shared handler now honors
+  `defaultPrevented` and the event target's dialog owner. Hidden/inert cleanup,
+  the popup's own Escape, and outside-pointer dismissal remain intact.
+- The first new compact browser case incorrectly targeted the music bar, which
+  is deliberately hidden in this layout. The corrected case uses the visible
+  session menu. Its hit-test then exposed a real stacking defect: the menu was
+  behind the token workspace (failure screenshot retained).
+- While a topbar details menu is explicitly open, its stacking context uses the
+  existing `--arken-layer-workspace-popup` tier (1999), above capped non-modal
+  workspaces (1998 max) and below blocking dialogs (2000). Changing only the
+  descendant's z-index cannot escape the topbar's original 1000 context. No new
+  numeric tier or portal implementation was introduced.
+- `details-escape-ownership.spec.ts`: 8/8 PASS, Chromium/Firefox, GM/PLAYER,
+  1280/390. Actual App, music menu on desktop and session menu on compact,
+  ordinary trigger clicks and popup-control hit-testing; Escape in the token
+  workspace does not steal focus to the background menu, and the menu's own
+  Escape restores its trigger. GM cases also open the real new-token modal,
+  compare layer ordering, cancel by real pointer click, and reopen the menu.
+  No game mutation HTTP requests were observed in the mocked fixture.
+- Four focused unit/DOM suites: 42/42 PASS. Web typecheck (768 MiB), scoped ESLint,
+  Prettier and diff whitespace checks PASS. No full test/build/CI restart.
+- Evidence: `details-escape-gate/tests.log`, `browser-01.log` (fixture mistake),
+  `browser-02.log` (actual compact hit-test failure), `browser-03.log` (8 PASS),
+  `types.log`, `lint.log`, and checkpoint in the current local artifact root.
+- Limits: not all topbar/details consumers, browser zoom, physical devices,
+  arbitrary popup nesting, or live authorization. No publication/deploy and no
+  Linear state change; the earlier external-write approval remains pending.
+  The untracked selection-recovery test is unchanged and excluded.
+
+Next: continue the remaining unique menu owners and viewport/scroll lifecycle
+cases in this same issue; retain failures rather than replacing them with DOM
+visibility checks or closing the whole audit from this slice.
+
+## 2026-09-16 — responsive dismissal of hidden shell menus
+
+Follow-up to `43c67b1`, not a replay of its eight Escape/layer cases.
+
+- A regression showed that the shared details hook left a popup open when its
+  trigger disappeared after a responsive layout change. Besides stale menu
+  state on returning to desktop, this could retain the promoted topbar layer.
+- All details users now check trigger layout after resize/visualViewport resize,
+  on one coalesced animation frame after responsive React state can commit.
+  A trigger without rendered rectangles closes its menu without moving focus.
+  The frame is cancelled on cleanup. Existing opt-in unconditional resize and
+  ancestor-scroll dismissal is unchanged.
+- Visible mixed-control menus are intentionally kept open: a height-only resize
+  must not discard an in-progress setting just because the viewport changed.
+  This is not a claim about a physical software keyboard or all browser zoom.
+- Two focused suites: 15/15 PASS. New regression failed on prior code (open
+  remained true); the first updated test needed to wait for the animation frame,
+  and that test correction is retained in evidence rather than hidden.
+- `details-responsive-lifecycle.spec.ts`: 4/4 PASS, GM/PLAYER in Chromium/Firefox.
+  Actual music menu opens, 1280→390 hides its trigger and closes it, the topbar
+  returns to its ordinary layer; 390→1280 does not reopen it. Reopening and a
+  height-only resize retain the menu, slider value and focus; Escape still works.
+  Synthetic API fixture observed no game mutations. No forced clicks.
+- Scoped lint, web typecheck, formatter and whitespace checks PASS. Evidence in
+  `details-responsive-gate` under the current local artifact root. No full tests,
+  build, CI restart, push or deploy. UIX-644 and the full mobile audit remain open.
+
+## 2026-09-16 — character gallery dropdown runtime slice
+
+Four previously inventory-only FormSelect sites now have targeted runtime smoke:
+AttachMediaForm category/visibility (sheet) and EditMediaDialog category/visibility
+(blocking modal), each GM/PLAYER at1280/360 in Chromium/Firefox.
+
+- New cases in `tests/e2e/character-media-detach.spec.ts` reuse the existing
+  media fixture. `browser-04.log`: 8/8PASS, one worker/no retries. Pointer open,
+  second option center hit and click, selected label, reopening, Escape,
+  trigger focus return and owner still visible; cancel modal, zero mutations.
+- Separate consecutive-Escape regression: 2/2PASS14.3s (PLAYER360, both browsers).
+  First Escape closes only the dropdown, second closes the character sheet.
+- Found actual FAIL: sheet closed with its Select on the first Escape.
+  defaultPrevented alone and a bubble-time aria-expanded check both failed.
+  CharacterWorkspace now remembers open Select/listbox ownership during native
+  capture in a WeakSet; the existing bubble listener leaves that event alone.
+  No stopPropagation, gameplay/save/auth change or new z-index. Both listeners
+  are removed when the sheet becomes inactive/unmounts. Existing editable/IME
+  and dialog exemptions remain; defaultPrevented is now respected too.
+- Evidence directory: local `gallery-menus-gate` for this continuation; first
+  three browser logs preserve failures, fourth preserves the corrected matrix.
+- This resolves runtime-smoke absence for these four sites only. The full site
+  matrix still has unverified outside-click, resize/browser-zoom, keyboard
+  option selection, nested-modal and other registry rows. No whole UIX-644 PASS.
+  API is mocked; this is not actual file upload/persistence/ACL proof.
+
+## 2026-09-16 — gallery keyboard reopen and resize lifecycle
+
+- The same four gallery Select sites now additionally cover ArrowDown open,
+  Home/Enter selecting the first option and updating the real trigger label,
+  keyboard focus return, visible open-menu hit/viewport bounds after resizing
+  1280→1180 or360→390 and800→640, outside click on the visible owner title,
+  owner retained and size restored. Eight role/viewport/browser cases PASS
+  (gallery-lifecycle-gate/browser-04.log,1.6min), no mutations.
+- Real FAIL preserved in browser-02: keyboard reopening after pointer selection
+  raised React Maximum update depth exceeded in Gravity List.activateItem /
+  componentDidUpdate, recovering via AppErrorBoundary. Not suppressed as noise.
+- FormSelect now keys the renderPopup subtree by open/closed phase through
+  Gravity public onOpenChange/renderPopup APIs. The selected value remains in
+  Select/the existing wrapper state; internal active-item state cannot persist
+  from the closing phase into the next open. No dependency patch or upgrade.
+  The fading-popup state explanation is source-based diagnosis; the measured
+  evidence is the original error and passing lifecycle on the new boundary.
+- Existing workspace-select-escape.spec.ts:8/8PASS42.2s on the changed adapter,
+  GM/PLAYER desktop/compact in Chromium/Firefox; retained first/second Escape.
+- Test corrections are separate from product failures: browser-01 attempted to
+  click the caption through an intentionally visible dropdown; screenshot
+  inspection confirmed the overlay. Outside click now targets the title.
+  Browser-03 used a heading role absent from Gravity Dialog title; fixed to
+  exact visible title text, not a weakened hit test or forced click.
+- Still not browser zoom, physical touch, nested-modal completeness or a full
+  all-site UIX-644 gate. Resize is actual viewport resize, not called zoom.
+
+## 2026-09-16 — world editor/reader Select sites
+
+Five inventory sites now have runtime smoke in russian-world-copy.spec.ts:
+editor type/lifecycle filters, relation target, create-entity type inside its
+blocking dialog, and reader type filter. GM navigation only,1280/360 in both
+Chromium/Firefox:4/4PASS44.8s (world-menus-gate/browser-03.log).
+
+- Each site: actual pointer open/second-option center hit/click, visible chosen
+  label, reopening, Escape with focus and owner retained, ArrowDown/Home/Enter
+  keyboard selection and label update. Create canceled, workspace changed to
+  reader, no entity/relation mutations. Two-entity fixture makes the relation
+  target a real enabled candidate, not an empty fallback option.
+- Found and fixed missing accessible name on relation target; it is now
+  "Сущность для связи". browser-01 preserves the original empty-name failure.
+- browser-02 caught technical UUID replacing chosen relation name. Native
+  option children here are multiple text expressions; Gravity getOptionText
+  falls back to value for non-string content unless text is provided.
+  FormSelect now provides joined string/number child text as Gravity text hint,
+  retaining original content and values. Two real-Gravity DOM regressions cover
+  compound name/type and numeric0 labels. Rich element children remain on the
+  existing path; this change does not render arbitrary components to text.
+- Limits: synthetic GET list does not implement filter semantics, so this proves
+  controls/layers/selected labels, not backend filtering/ACL or saved links.
+  No outside/scroll/resize/zoom matrix for these five sites yet; a workspace plus
+  create dialog is not two nested blocking dialogs. No entire UIX-644 PASS.
+
+## 2026-09-16 — catalog form conditional sites and owners
+
+All seven CatalogEntryForm Select sites are now exercised through actual GM
+entry edit, CatalogEntryPicker CREATE and SetupPanel new-catalog dialog, at
+1280/360 in Chromium/Firefox. Existing SKILL/ABILITY fixture was extended with
+an actual stat-layout characteristic; creation paths enable uses and add a roll
+and a value through UI, not by making hidden branches artificially visible.
+
+- Fields: entry kind, recharge, roll kind, modifier source, characteristic,
+  entry-value key, resource. Each selects an actual enabled option by real
+  center hit/click, asserts the selected label, reopens and Escape-dismisses
+  while retaining dialog/focus. No save/assign/roll requests; forms canceled.
+- Edit-only run:4/4PASS42.3s. New owner matrix and telemetry receipts are in
+  catalog-menus-gate. Not new production/runtime code; unchanged exact source
+  retains the previous6ea1f0f type/build evidence.
+- IMPORTANT: the first setup-owner run recorded browser window.error:
+  ResizeObserver loop completed with undelivered notifications. The trace
+  contains the exact client-log payload. This is not a gameplay mutation, nor
+  evidence that the whole error-free runtime gate passed. Tests now retain
+  clientLogs separately in catalog-receipts.json instead of silently dropping
+  diagnostics or treating them as save requests. Root cause remains open under
+  this issue; no new card and no broad error suppression.
+- This is site-level pointer/open/select/Escape smoke, not all keyboard options,
+  outside/resize/browser zoom or full nested-blocking-modal acceptance. GM paths
+  only; no new PLAYER permission or actual catalog persistence claim.
+- Final owner run:8/8 menu cases PASS1.6min, zero gameplay mutations. Read all
+  eight receipts: setup1280 in BOTH Chromium and Firefox logged one identical
+  ResizeObserver notification error; six others logged none. Error-free runtime
+  gate remains FAIL, not rescued by the green menu assertions. Next action is
+  targeted observer ownership diagnosis on that reproduced setup1280 path.
+
+## 2026-09-16 — catalog ResizeObserver error root cause
+
+The desktop SetupPanel creation error is no longer treated as an unexplained
+observer warning. A temporary diagnostic copy wrapped native ResizeObserver
+without changing callback scheduling, capturing constructor stacks and entries
+at window.error. `resize-observer-gate/trace-01` reproduced the error:
+
+- Immediately before the error, Gravity TextArea observers saw the two empty
+  catalog textareas at width638/content-height0, then content-height16 in the
+  same delivery cycle. WorkspaceNav observations were earlier and unchanged.
+- Installed Gravity TextAreaControl.resizeHeight measures/writes its own height
+  inside its resize callback when rows are absent. The form had been measured
+  while its SetupPanel section was hidden. No evidence called for altering all
+  observers, the canvas, nav measurements or suppressing window.error.
+- CatalogEntryForm now has a scoped class; only its textareas get minimum height
+  from the existing size-control-height token. Automatic growth remains enabled
+  (no forced rows, max-height or fixed-height workaround). Compact44px rules
+  retain their higher-specificity minimum.
+- trace-02 repeated the diagnostic path: zero window errors and zero client logs.
+  Diagnostic source retained in artifacts and removed from the test tree.
+- The normal catalog-owner test now asserts clientLogs is empty after writing
+  its receipt, and checks initial field height, expansion for12lines and shrink
+  back to original text/height. This restores a failing error-free runtime gate,
+  rather than leaving telemetry outside assertions.
+- Final normal (uninstrumented) matrix:12/12PASS2.1min. Read all12receipts:
+  zero client logs and zero gameplay mutations across edit/picker/setup,
+  1280/360, Chromium/Firefox; auto-grow/shrink checks passed. The previously
+  failing catalog error-free slice is now PASS, not the whole UIX-644 gate.
+- Scoped lint/format/diff, web typecheck768MiB and one production build1.93s
+  PASS; large main-chunk warning retained. No full suite or CI restart.
+
+## 2026-09-16 — native player-request evidence reconciliation
+
+The six native selects are not untested merely because they have no Gravity
+popup receipt. Existing `tests/e2e/player-requests-controls.spec.ts` uses the real
+campaign/server fixture, not a list-filter mock:
+
+- `UIX644_PLAYER_REQUEST_NATIVE_DRAFT`: PLAYER keyboard selection and focus for
+  horizon/audience/character; draft retained from390x844 to360x640; submission
+  shows the selected labels; state/horizon/audience filters hide/show the card.
+- `UIX644_PLAYER_REQUEST_GM_FILTERS`: actual PLAYER public/open and private/closed
+  requests; GM has no creation form, combines all three filters, and reopening
+  resets the workspace filters to OPEN/ALL/ALL.
+
+Historical evidence: existing E2E run35043939211 at exact released revision
+7f28ca399ec0530e55e6bd41d4427ea23150522b is SUCCESS. Chromium job104629600020
+reports239passed/2skipped; Firefox job104629599902 reports238passed/3skipped.
+Both execute the full configured test directory, one worker, fail-on-flaky.
+The exact-revision request spec and its campaign/console-guard fixture chain
+have no skip/fixme path; collection has no request-specific exclusion. Inclusion
+of these cases is inferred from that configuration and the successful aggregate,
+not from a named-case receipt: the dot-reporter job logs do not name individual
+passing tests, and this successful workflow did not upload their test-results.
+Do not turn the aggregate into a fabricated per-case artifact.
+
+At audit revision c8bf29d18d168aed62bd8e745cc5370e2de54421, request workspace,
+request spec and both fixtures are unchanged from that release. Global styles
+have changed, however: historical evidence is reusable for unchanged behavior,
+not proof of exact-current visual acceptance. The later connected integration
+pool must include these two existing cases rather than create duplicate tests.
+
+Still not established by these cases: physical-device native popup appearance,
+OS popup geometry/z-index, full outside/Escape/scroll/browser-zoom lifecycle,
+or the complete UIX-644 gate. No CI rerun, local server, database, or browser
+was started for this evidence-only reconciliation. Raw existing job logs are
+retained in the local native-menu-ci-audit artifact directory.
+
+## 2026-09-16 — world-map native controls, current browser evidence
+
+Extended the existing world-maps spec instead of duplicating its create/publish
+scenario. Five unique native controls now have keyboard/focus and viewport
+hit-test evidence at1280/360 in Chromium/Firefox: current map (two real fixture
+options, switch and return), new-map scope/visibility, new-location kind/visibility.
+The two nested forms preserve entered names and changed selections across
+1280→1180 or360→390 and height800→640 (then back). Cancel returns to the owner
+without a world-map write. These are rendered UI tests against mocked APIs, not
+server persistence, backend ACL or production publication evidence.
+
+Final connected file run:8/8PASS42.5s, one worker, zero retries/skips/flaky.
+Includes the four new cases and both existing GM create/complete/publish and
+PLAYER navigation-denial cases in each browser. The existing GM path still
+exercises draft background and linked-scene selects through selectOption; do
+not misreport those two sites as keyboard-tested or tested at compact width.
+All four new named receipts were decoded: zero page errors, zero world-map
+writes, expected values for all five sites. Existing React console guard kept.
+
+Initial test failure was exact getByLabel("Карта") matching the label's full text
+(including option text), not a broken map selector. Diagnostic Chromium native
+accessibility tree independently named the dialog "Карты мира" and resolved its
+unique heading. Final test keeps the original named dialog locator and uses
+combobox role/name for exact select labels. No production component was changed
+for a test lookup failure. Diagnostic runs remain separate from final receipts.
+
+Remaining: OS popup rendering/selection by pointer is not proven by DOM control
+center-hit and keyboard checks. Escape/outside/scroll/browser zoom lifecycle,
+compact background/scene-link paths and full integrated UIX-644 acceptance remain
+open. PLAYER navigation is intentionally unavailable; do not add access to make
+an obsolete registry role claim pass. Artifacts: world-map-native-gate/results.json
+contains named outcomes and four native-world-map-controls attachments.
+Scoped ESLint, Prettier and git diff --check PASS. No build or full CI rerun for
+this test/documentation-only pool; own Vite stopped after verification.
+
+## 2026-09-16 — create-character template lifecycle
+
+New cases in existing workspace-select-escape.spec.ts cover the actual GM
+"Новый персонаж" dialog, not a preview or a synthetic standalone Select:
+
+-1280/360, Chromium/Firefox: open template popup, hit-test the real template
+option at its center and within viewport, click it and observe selected label.
+-Reopen, resize to1180/390 and height640 while open, select with a real pointer;
+entered character name remains intact.
+-First Escape closes only the popup, returns focus to its trigger and keeps the
+selected template/dialog. Keyboard ArrowDown/Home/Enter then selects empty-sheet.
+-An outside click on the actual dialog title closes the popup, not its owner.
+Escape from the closed trigger dismisses the dialog; character workspace and
+creation control remain available. Reopening clears name/template; cancel writes
+nothing. No save, template-copy correctness or backend persistence claim.
+
+Final connected file gate:12/12PASS57.989713s, one worker, retries0, skipped0,
+flaky0. Includes the existing8 GM/PLAYER outer-token-select Escape cases and4 new
+character-template cases. Decoded all4 named attachments: mutations[]/errors[].
+Existing React console guard retained. Scope is page errors/guarded React errors,
+not every possible browser warning. ESLint/Prettier/diff PASS; no runtime source
+change, build, full-suite run, new CI or deployment.
+
+Registry correction: current production JSX has only one CharacterPanel call,
+inside CharacterWorkspace, explicitly showCharacterPicker=false. The conditional
+legacy sheet selector is inactive, not an untested GM feature to enable. Keep
+its source entry for future drift auditing; no runtime PASS invented for it.
+
+Remaining for template site: browser zoom, scroll-specific positioning and
+higher/nested competing modal ownership beyond this actual character dialog.
+The full UIX-644 matrix and current integrated release gate remain open.
+Evidence: character-template-gate/results.json with named outcomes and four
+character-template-lifecycle attachments; results-new-01.json keeps initial4PASS.
+
+## 2026-09-16 — SetupPanel visibility defect and three live selects
+
+The new real SetupPanel tab-switch test exposed a product defect, not merely
+missing coverage: desktop .subsection {display:flex} overrode native [hidden].
+The browser-01 screenshot shows Overview selected while Characters/invite forms
+and retired scene controls remain rendered. Therefore historical source-only
+claims that hidden legacy sections were noninteractive were not runtime proof.
+Compact already had a stronger hidden rule; desktop did not.
+
+Fix: .subsection[hidden] {display:none} beside the base subsection rule. This
+restores intended hidden semantics, rather than enabling legacy controls or
+changing permissions. Current matching JSX is SetupPanel sections and an
+unhidden character details section; ordinary visible flex layout is unchanged.
+
+Four new1280/360 Chromium/Firefox cases in workspace-select-escape.spec.ts:
+-Actual player-preview, token-character and invite-character selects each open,
+center-hit a visible in-viewport option, select by pointer, close/reopen, consume
+Escape with focus returned, and select by ArrowDown/End/Enter.
+-Invite popup survives resize and remains pointer-selectable; switching to
+Overview closes it and removes the hidden invite trigger. Switching back retains
+selections. No preview operation, token creation or invite publication executed.
+-All .subsection[hidden] have no layout rects; attempted focus of their controls
+leaves document.activeElement unchanged. Checked initial Overview and return.
+-Mocked API fixture blocks gameplay writes; four named receipts show no mutations
+or page errors. Existing React console guard is retained.
+
+Final connected gate:20/20PASS128.030287s, one worker/retries0/skipped0/flaky0.
+Includes new4, existing12 outer-select/template cases and4 actual Setup catalog
+cases. Decoded all4 Setup receipts and all4 catalog receipts: zero logged catalog
+errors/unexpected mutations (the earlier textarea fix remains intact).
+Scoped ESLint/Prettier/diff PASS. One production build PASS2.81s; main1077.15kB
+chunk warning remains, not suppressed. Browser evidence is Vite dev, not a claim
+that the built payload or production was visually accepted. No new CI/deploy.
+
+Evidence: setup-select-gate/results-red-01.json and browser-01 screenshot/trace
+preserve failure; results-new-02.json preserves4PASS; results.json and connected-03
+hold final named20PASS. Own Vite stopped. UIX-644 remains open for remaining sites,
+scroll/browser zoom/competing owners and complete exact-current integration.
+
+## 2026-09-16 — native token-image source selector
+
+Four new cases in the existing token-generator.spec.ts exercise the actual
+embedded generator in GM "Новый токен", using the existing image fixture/helper.
+1280/360 in Chromium/Firefox: enter a token name, set crop zoom200%, resize to
+1180/390 and height640, retain name/source/zoom; scroll source into view and verify
+viewport bounds/control-center hit. Native keyboard Home selects empty source,
+keeps focus, clears preview and resets zoom100% without clearing the name.
+End reselects the source and restores visible preview with zoom100%; cancel closes
+editor. No force click, generated image, new token definition or placement.
+
+4/4PASS27.821637s, one worker/retries0/skipped0/flaky0; all four named native-token-
+source attachments decoded: writes[]/errors[]. Write audit explicitly excludes
+only ordinary /api/chat/read and /api/client-logs; it is not a claim of zero total
+HTTP POSTs. Existing React console guard retained; Konva layer warning not hidden.
+Scoped ESLint/Prettier/diff PASS. Test-only addition: no source/build/full crop
+suite or new CI run. Earlier preview/real-renderer parity evidence is not replaced
+or newly asserted by these four tests.
+
+Remaining: native OS popup appearance/pointer selection, Escape/outside lifecycle,
+full browser zoom and competing modal acceptance. CSS viewport resize and token
+crop zoom are NOT browser zoom. Evidence: token-source-gate/results.json and
+browser-01 named results. UIX-644 overall remains open.
+
+## 2026-09-16 — connected production-bundle gate at dcc3977
+
+54/54PASS307.25028s, Chromium/Firefox, workers1/retries0/skipped0/flaky0.
+This was a single connected pool against saved production dist, NOT Vite dev:
+10gallery cases,4world-content,12catalog owners,4native token source,
+16outer-select/character-template/setup,8world-map cases. Named case-index and
+original results retained;28JSON attachments decoded with no entries in their
+audited errors/clientLogs/unexpected/mutations/writes arrays. This does not imply
+all tests audit every network mutation or every warning (see per-site limits).
+
+Evidence revision dcc397712d4b6e262178cc8d35d2afc9b0b61bab, runtime source unchanged
+from e8daadcb357ceb456d789b7964ec69bea267fb38. Reused the existing2.81s build after
+that CSS change, rather than rebuilding for test-only commits. Saved entire dist
+and SHA256 manifest. HTTP-fetched HTML, CSS, mainJS and lazy renderer all4/4hashes
+match saved files; HTML contains no /@vite/client, built CSS contains the hidden
+subsection fix. No production/public endpoint or backend database was used.
+
+Artifacts ui-integrated-dcc3977: revision.txt, dist/,payload-sha256.json,
+served-payload-verification.json,results.json,case-index.json,decoded-receipts.json,
+browser.log,browser-01/. Test config retained (its relative import expects the
+worktree's existing .tmp-wasd-browser.mjs). FreeRAM2631MiB at start; one worker.
+Own preview stopped after completion. No CI restart, new build or deployment.
+
+This upgrades the connected acceptance evidence for the listed owners beyond
+separate dev-server slices. It does NOT close UIX-644: native OS popup appearance,
+browser zoom, remaining scroll/competing-owner/site axes and full original
+registry contract remain incomplete. Real-server request scenarios retain their
+historical evidence; they were NOT silently included in this mocked-UI gate.
+Physical devices, multiplayer/backend durability and full product release
+acceptance are not established by54passed. Older8504fea34-case bundle gate stays
+historical and is not relabelled as this current revision.
+
+## 2026-09-16 — genuine browser zoom test mechanism, not menu acceptance
+
+A bounded probe in an isolated persistent headless Chrome profile established a
+way to test real full-page browser zoom without touching the user's profile.
+The browser's own settings appearance page exposes settingsPrivate.getDefaultZoom
+and setDefaultZoom. Changed only the disposable profile100%→125%→100%, using a
+local ephemeral HTTP probe and no CSS zoom, CDP device/pinch emulation or resize.
+
+Measured baseline innerWidth1258/innerHeight802/DPR1; at125%1006/642/DPR1.25;
+restored1258/802/DPR1. CSS zoom1 and visualViewport.scale1 throughout;100CSSpx
+probe width remains100CSSpx. Script asserts DPR ratio, inverse layout width and
+restoration. Context and HTTP listener close in finally; zoom restored as well.
+Artifacts browser-zoom-probe/metrics.json, before.png, after.png, probe.mjs.
+
+This is mechanism validation only: no Arken menu or Firefox zoom acceptance yet.
+Next run must exercise actual app menus while browser zoom changes, retain real
+pointer/focus/viewport evidence and verify100% restoration. Do not turn these
+probe metrics into a PASS for the missing UIX-644 browser-zoom criterion.
+
+## 2026-09-16 — real app browser zoom FAIL, reproduced
+
+Added a separate explicit QA config playwright.browser-zoom.config.ts and
+tests/browser-qa/real-browser-zoom.spec.ts. This is NOT silently added to normal
+Chromium/Firefox E2E collection: it launches its own isolated Chrome profiles,
+viewport:null, uses the browser settings zoom API, and audits DPR/layout plus
+CSSzoom1/visualViewport.scale1. GM/PLAYER×window1600/1280 are defined; one worker.
+Run against the unchanged saved production bundle from ui-integrated-dcc3977.
+
+Actual result browser-01: GM1600PASS for100/125/150/100%; GM1280FAIL at150%;
+PLAYER cases not run after maxFailures1. Diagnostic-02 reproduces GM1280FAIL.
+At125% width1006/DPR1.25, triggerwidth905.2; after150% width839/DPR1.5,
+triggerwidth738 but popup/optionwidth937.198 startsx10, beyond right viewport.
+Actual popup visibility is not acceptance: strict viewport/center-hit fails.
+Name/value and workspace remain visible, no page errors or gameplay writes.
+
+Installed Gravity SelectPopup sameWidthMiddleware provides the concrete cache
+mechanism: for nonnumeric popupWidth, apply returns when floating.style.maxWidth
+already exists; it retains minWidth from previous anchor measurement. FormSelect
+currently supplies no popupWidth. Existing open/closed Fragment reset affects
+List children, not this floating element's cached size. No vendor file modified.
+
+Next fix must refresh/constrain actual popup width during anchor/browser resize,
+using supported Select sizing/ref behavior, preserving control focus and overlay
+owner. Do not solve by weakening viewport assertions, force clicks, CSSzoom or
+turning a closed popup into a false retained-open PASS. The new test records
+retainedOpen explicitly and allows safe reopen on layout-mode dismissal.
+
+Artifacts true-browser-zoom-gate/results-red-01.json, results.json (diagnostic),
+browser-01/,diagnostic-02/ contain metrics/geometry receipts and screenshots.
+No zoom gate PASS claimed. Scope lint/format/diff passed; no app source change,
+new build, CI or deployment. Profiles restore100%/close in finally; preview stopped.
+
+## 2026-09-16 — zoom sizing repaired, related owner gate still RED
+
+Current working fix observes the open trigger with ResizeObserver/window resize,
+coalesces measurements by animation frame and sizes a popup-content wrapper to
+the measured width capped by viewport minus20px. Scoped outer floating CSS uses
+max-content/min-width0 to bypass cached library inline width. Positioning/owner
+z-index remain unchanged; open/closed List reset retained on the new wrapper.
+Observer/listener/frame cleanup runs on close. Vendor package not modified.
+
+A first numeric popupWidth implementation did NOT fix it: diagnostic-04 confirmed
+the patched module loaded and Select received634/905.2/738 widths, yet floating
+width retained666/937.198. Numeric prop alone was insufficient; removed afterward.
+Temporary response/Fiber diagnostics were removed; permanent geometry receipts
+and strict assertions remain unchanged.
+
+Current results:4/4true browser zoom PASS25.9s in dev, GM/PLAYER×1600/1280 across
+100/125/150/100;13/13GravityFormControls DOM tests PASS23.11s including new width
+320→160 regression; scoped lint/format/diff and web tsc768MiB PASS.
+
+NOT an accepted whole fix: related18-case owner gate stopped after7PASS at the
+real App desktop token-editor case, which posted /api/client-logs. Extracted
+request resource4596156f0365d8579d490a7c34ac2baf64ea0c65.json from trace.zip:
+window.error "ResizeObserver loop completed with undelivered notifications."
+Ten cases did not run. No exemption added for telemetry; prior UIX-50218PASS is
+historical, not current shared-code acceptance. No final build/production zoom
+gate/deploy while this error-free gate is RED.
+
+Evidence true-browser-zoom-gate/results-fix-dev-03.json (numeric attempt red),
+results-diagnostic-04.json,results-fix-dev-05.json (4PASS),owner-results.json and
+owner-06/trace. Next diagnose observer stack/entries on this exact App path,
+not broad canvas rewrites or warning suppression. Working code kept for bounded
+continuation; UIX-644 and full release remain open.
+
+### UIX-644: open field resizing regression (2026-09-16)
+
+Added `tests/e2e/select-element-resize.spec.ts` to the existing E2E test directory.
+The existing modal-owner fixture supplies the real FormSelect and ArkenDialog;
+only the fixture field width is animated, without changing the popup, observer,
+owner or focus implementation. This is a component layout contract, not a new
+actual-App acceptance claim or a substitute for real browser zoom.
+
+- Chromium + Firefox, 1280px + 390px: **4/4 PASS**, one worker, no retries.
+- While the popup is open, its field shrinks to 160px and returns to 320/240px.
+  The popup follows the trigger within 2px, stays inside the viewport, preserves
+  selection, accepts a real pointer selection, and restores focus after Escape
+  without closing its owning dialog. All window error events are collected;
+  zero recorded, with no ResizeObserver-error filter.
+- Sensitivity check: temporarily omitting only the trigger observer registration
+  makes the desktop Chromium case fail on a **160px width mismatch**. Source was
+  restored byte-for-byte in `finally`; no product change is included in this pool.
+- This strengthens resize regression coverage but does **not** resolve the earlier
+  intermittent token-popup ResizeObserver error. UIX-502/UIX-644 error-free gate
+  remains open; neither the four passes nor the controlled negative test prove
+  that original error fixed. No production release or Linear completion claimed.
+
+### Map selection controls — 2026-09-16
+
+The UIX-507 original flow exposed a real overlap between `.map-selection-action`
+and `.map-scale` (fixed `right: 80px` versus actual zoom width). Positioning now
+uses `.map-scale-anchor` and an out-of-flow sibling action at `right: calc(100% +
+8px)`. Zoom coordinates and size remain independent of selection; no permanent
+selection counts were added. Compact short-screen placement uses a lower row.
+
+Connected gate: 16/16 PASS across selection/zoom/compact action targets in Chrome
+and Firefox; details and limits in `uix-507-multi-selection.md`. This does not
+resolve the separate first-open token-popup ResizeObserver error.
+
+## 2026-09-16 — Меню токена при resize и слои костей
+
+- Две подтверждённые причины: открытое меню не пересчитывало координаты после изменения размеров карты; панель костей (46) перекрывала нижние действия меню (40).
+- Позиция ограничивается фактическими размерами владельца и меню, в том числе когда высота карты меньше минимальной внутренней высоты canvas. ResizeObserver объединяет обновления через animation frame и отключается при закрытии. Неизменённые координаты не вызывают обновление состояния.
+- Постоянная панель костей возвращена в слой canvas chrome (24), под списком объектов (25), меню токена (40) и паузой (45). Меню не поднимается над workspace/dialog.
+- Сценарий GM: открытие через выбранный объект и Enter; retained-open resize 1280x900 → 1280x480 → 390x850 → 640x360 → 640x320 → 1280x900. На каждом размере — bounds, hit-testing, реальный клик по текущему слою, повторное открытие, прокрутка к «Отмена», hit-testing в трёх точках кнопки и реальный клик.
+- Финальный связанный gate: 14/14 Chromium/Firefox, один worker, без retries. Включает GM/PLAYER selection, меню состояний с отказом сервера, Escape из DRAW и compact action targets GM/PLAYER 640x360. Typecheck renderer после изменения прошёл; финальные lint/format/diff прошли. Скриншот landscape проверен визуально.
+- Ранние 10 PASS были недостаточны: скриншот выявил перекрытие части меню; усиленный тест дал RED, затем исправление слоя дало финальные 14 PASS. Исходные RED и промежуточные результаты сохранены в артефактах `context-resize-gate` текущей сессии.
+- Ограничения: это не полная приёмка UIX-644; natural Tab/arrow navigation, вся owner/zoom матрица, независимый token-popup ResizeObserver FAIL и физические устройства остаются открыты. Никакой публикации, deployment или закрытия Linear. Неотслеживаемый тест selection-recovery не изменён.
+
+## 2026-09-16 — Меню токена: естественный ввод с клавиатуры
+
+- Воспроизведено: Enter с выбранного объекта открывал меню, но фокус оставался на карте. Новый тест не использует locator.focus() для доступа к меню.
+- При открытии фокус получает первое действие, без сброса фокуса при обновлении состояний/позиции. Добавлены Shift+F10 и ContextMenu, имя меню для accessibility tree, ArrowUp/Down с переходом через границы, Home/End для кнопок. Нативные поля оформления сохраняют Tab и собственные стрелки.
+- Escape, «Отмена» и выбор слоя возвращают фокус видимой не-inert карте, только если фокус ещё внутри меню. Outside-click по-прежнему сохраняет фокус на нажатом внешнем контроле; действия, открывающие dialog/workspace, не используют этот возврат.
+- GM1280/390 × Chromium/Firefox: Enter/Space включают/выключают состояние с актуальной ревизией; стрелки/границы/повторный вызов/выбор текущего слоя/Tab к цвету/Escape проверены физическим keyboard API. Четыре receipts: ожидаемые две смены состояния, никаких дополнительных API-команд и pageerror.
+- Финальный связанный gate 18/18, 112.1 s, workers1/retries0: keyboard + resize + GM/PLAYER selection + rejected condition update + DRAW Escape + compact dice/action targets. Web typecheck, scoped lint/format и diff PASS. Без full-suite/build/публикации.
+- Первое промежуточное продолжение упало из-за ошибочного ожидания теста: второе состояние в существующем контракте — «Без сознания», а не «Обездвижен». Тест исправлен по packages/contracts/src/index.ts; исходный RED на отсутствии фокуса и промежуточный результат сохранены в context-keyboard-gate.
+- Не полная keyboard/ARIA приёмка всего приложения: mixed-controls menu semantics/выход Tab наружу, PLAYER права в keyboard-пути, screen reader и физические устройства ещё требуют проверки. Не закрывать UIX-644/507; независимый token-popup ResizeObserver gate остаётся открытым. selection-recovery.spec.ts не изменён и не добавлен.
+
+## 2026-09-16 — PLAYER: действия меню по существующим правам
+
+- Сверены текущие серверные маршруты: `/api/tokens/:id/layer` и `/appearance` требуют GM. Удаление допускает GM либо контролирующего игрока для видимого, незаблокированного токена не на GM-слое в активной сцене; одного ownerMembershipId недостаточно. Backend не изменён, его интеграционный gate здесь не повторялся.
+- RED: Enter игрока открывал все три radio-действия слоя (ожидалось 0). Состояния уже были скрыты для PLAYER отдельным компонентом.
+- Слой и оформление в меню теперь доступны только GM. Удаление использует общий локальный предикат `canDeleteSelectedToken` в меню и в обработчике одиночного Delete. Законное удаление игроком не запрещено; locked и отсутствие controllerMembershipId не открывают бесполезное подтверждение.
+- Меню читает актуальный токен из props, а не снимок при открытии; если токен исчез, меню закрывается. Это не доказательство всей socket/revoke/scene-change матрицы.
+- PLAYER1280/390 × Chrome/Firefox: три доступных для выбора токена (controlled, locked controlled, owner без control), отсутствие команд GM, отмена без записи, реальное подтверждённое удаление controlled через mock API, отсутствие удаления двух остальных через меню и Delete. 4 receipts: одно ожидаемое удаление, 0 дополнительных команд/ошибок.
+- Финальный связанный gate22/22 PASS, workers1/retries0; GM keyboard/conditions/resize, GM+PLAYER selection, DRAW Escape и compact action targets сохранены. Один unit-файл13/13 (6 новых проверок предиката); web types, scoped lint/format/diff PASS. Без full-suite/build/CI rerun/push/deploy/Linear closure.
+- Артефакты: player-menu-gate текущей сессии, исходный RED и финальный green-03/results.json. Неотслеживаемый selection-recovery.spec.ts не изменён и не добавлен.
+- Остаток: Tab-выход/семантика смешанного menu, смена прав при уже открытом меню и подтверждении, актуальная revision последующих GM-команд, реальная server/device приёмка. Общие UIX-644/507 и независимый token-popup ResizeObserver gate не закрыты.
+
+## 2026-09-16 — Tab-выход из меню без потери выбора
+
+- RED: после Shift+Tab фокус уже ушёл к внешней кнопке, но меню оставалось открытым. Исходное падение сохранено в menu-tab-gate/red-01.
+- Меню закрывается на blur только при известном внешнем DOM-адресате. Tab не перехватывается, фокус не возвращается принудительно; переходы между внутренними контролами и временный relatedTarget=null не закрывают его. Выделение карты не изменяется.
+- GM/PLAYER1280/390 × Chromium/Firefox: Shift+Tab от первого действия и Tab от «Отмена» закрывают меню; внешний видимый не-inert адресат сохраняет фокус. После обоих выходов Delete открывает подтверждение исходного токена; отмена не записывает данные. 8 receipts, по 2 направления, 0 команд/ошибок. Для GM1280 Chrome фактические адресаты — «Объекты карты» и «Увеличить масштаб».
+- Финальный связанный gate24/24 PASS132.7s, workers1/retries0: Tab + прежние keyboard/PLAYER permissions/resize/conditions/GM+PLAYER selection. Несвязанные DRAW и compact dice не повторялись. Web types/scoped lint/format/diff PASS. Нет full-suite/build/CI rerun/push/deploy.
+- Не полная ARIA/screen-reader/device приёмка смешанного menu. Динамическое отозванное управление, открытое подтверждение и актуальная revision последующих GM-команд требуют следующего lifecycle-пула; прежний token-popup ResizeObserver gate остаётся открытым. selection-recovery.spec.ts сохранён вне коммита.
+
+## 2026-09-16 — Общая проверка собранного интерфейса edb70ce
+
+- Одна локальная диагностическая production-сборка точной ревизии `edb70ce01db62eb6fa18e82dec25fb51d381c6dc`, 3.71s. Сохранена отдельно в session artifact `ui-built-edb70ce/dist`, без замены прежних артефактов и без публикации. Warning: main chunk1077484 bytes (gzip317.82kB), лимит предупреждения не повышался.
+- По HTTP проверены SHA256 index.html, CSS, main JS и lazy renderer; 4/4 совпали с manifest, dev-client отсутствует. После тестов все файлы сборки повторно совпали с сохранёнными хешами.
+- Actual-App gate58/58 PASS319.0s, Chromium/Firefox, один worker, retries0/skipped0/flaky0: галереи GM/PLAYER, содержание мира, conditional catalog controls, редактор токена/inline image picker, native token source, workspace dropdowns, character template, Setup, карты мира. Сохранены 58 именованных результатов и 32 JSON receipts; 56 полей диагностик/неожиданных записей пусты.
+- На том же dist настоящий Chrome browser zoom4/4 PASS19.6s: GM/PLAYER, ширина окна1600/1280, 100→125→150→100%, отдельные профили. DPR/inverse innerWidth меняются, visualViewport.scale=1 и CSS zoom=1; реальные выбор/клик/Escape и owner retention проверены. Ошибок/мутаций нет. Финальный GM1280 screenshot после reset просмотрен; это не скриншот каждого промежуточного масштаба.
+- Dev-only страницы `/tests/fixtures/modal-owner/` не включались в production bundle и не выдаются за эту приёмку. Данная проверка НЕ заменяет полный 18-case fixture-owner gate и не доказывает устранение прежнего ResizeObserver error. Ошибка из owner-06 остаётся нерешённой: здесь она не воспроизвелась, причина не установлена. Не объявлять её dev-only по одному production PASS.
+- Live Linear readonly: UIX-507 In Review, UIX-502 In Review, UIX-644 In Progress. Статусы/карточки не изменялись. Полная owner/keyboard/physical-device/multiplayer приёмка не завершена. Ни production deployment, ни новый релизный GO из этого результата не следуют.
+- В этом пуле код и тесты не менялись; только доказательства и этот checkpoint. Preview остановлен. Неотслеживаемый selection-recovery.spec.ts сохранён без изменений. Повторять сборку или эти62 проверки из-за смены чата не нужно.
+
+### Live token menu: current commands and no-frame focus — 2026-09-16
+
+- На сохранённом production bundle edb70ce один новый Chromium1280 тест воспроизвёл потерю клавиатурного фокуса после «Без рамки»: запрос прошёл и меню закрылось, карта осталась неактивной. RED и trace сохранены в live-token-menu-gate/red-01, red-results.json.
+- Только кнопка «Без рамки» переведена на существующий guarded closeTokenMenu: возврат фокуса видимой не-inert карте, если фокус ещё внутри меню. Native color inputs и действия открытия диалогов не менялись.
+- Новый тест получает socket snapshot при открытом меню, затем проверяет PATCH слоя с revision1 и оформления с revision3 и новым baseColor. Две реальные команды, без дополнительных записей/pageerror; после каждой меню закрыто и карта снова получает keyboard input.
+- Chrome/Firefox ×1280/390: новые4/4 PASS21.648s; соседние keyboard/PLAYER permissions/Tab16/16 PASS75.256s. Один worker, retries0, skipped0, flaky0. Web typecheck, scoped ESLint, Prettier, git diff --check PASS. CLI grep пересекается с config grep: первый green запуск выполнил только4; остальные16 выполнены отдельно без повторения этих4.
+- Runtime source изменён после edb70ce; исправление проверено на dev server, старый dist не доказывает исправление и не пересобирался. API mocked: не реальный multiplayer/persistence и не physical-device acceptance. Исходный ResizeObserver error остаётся нерешённым. Linear не изменялся; публикации/deploy не было.
+- Неотслеживаемый selection-recovery.spec.ts сохранён. Следующий ограниченный шаг: lifecycle открытого меню при изменении прав/контроллера; отдельно проверить native color chooser focus, не выдавая синтетический input за проверку системного диалога.
+
+### Open token menu: focus survives permission and target changes — 2026-09-16
+
+- При отзыве управления без увеличения revision кнопка удаления исчезала, но keyboard focus терялся на body. Подтверждённый Chromium1280 RED сохранён в menu-access-gate/red-01 и red-results.json.
+- Renderer запоминает последний сфокусированный элемент меню. После snapshot возвращает фокус первому доступному действию, только если прежний элемент удалён из DOM и activeElement стал body; если удалено само меню токена — видимой не-inert карте. Обычные Tab/outside focus и ввод в оставшемся native input не перехватываются. Gameplay/API/permissions не менялись.
+- Новые16/16 PASS: revoked / locked / GM→PLAYER / removed ×1280/390 ×Chrome/Firefox. Permission cases без revision bump; owner id остаётся. Недоступные команды отсутствуют, «Отмена» работает физическим Enter; после удаления карта получает focus. Никаких неожиданных API writes/pageerror в16 receipts.
+- Связанные20/20 PASS: keyboard entry/actions, PLAYER permissions/delete dialog, Tab exit GM/PLAYER, live layer/appearance revisions. Один worker/retries0; web typecheck, scoped ESLint/Prettier и diff check PASS. Не full suite, не release gate и не production build.
+- Live Linear readonly: UIX-644 In Progress, UIX-642 In Review. Не закрывать эти задачи по данному пулу; внешние записи не повторялись. Original ResizeObserver issue и полная cross-application matrix остаются открыты. Native OS color picker не принимался. Нет push/deploy.
+- Сохранённый selection-recovery.spec.ts не изменён и не добавлен. Следующий пул: сверить оставшиеся уникальные overlay sites с runtime evidence и исходными Review AC, а не продолжать повторять уже закрытые token-menu проверки.
+
+## Feedback selector — shared lifecycle and visible return target, 2026-09-16
+
+- Historical D row FeedbackReporter raw Select is superseded: now tag:FormSelect1 in AST registry (source FormSelect sites total29). It reuses shared popup owner/width/open-list lifecycle, not a new local size/observer solution. Label remains visible above the selector.
+- Confirmed RED: opening at1280 then resize390 retains raw popup width beyond viewport; screenshot/trace diagnose-02 and red-results.json. Initial-01 was a test error (outside-click aimed at a field legitimately covered by the popup), corrected to exposed description textarea; not counted as product defect.
+- Second RED after shared component conversion: closing feedback after resize left focus on body/hidden report entry (green-03, focus-red-results.json). App now closes session details and focuses its persistent summary before opening feedback, as existing rename dialog does. No gameplay, feedback payload, capture or upload behavior changed.
+- Actual App GM/PLAYER ×Chrome/Firefox4/4 PASS41.6s. Each covers1280×850→390×850→360×480→1280×850 while popup open, full option bounds/hit-test and real click, keyboard selection, first Escape popup-only, outside click/focus, draft retained during resize, second Escape closes dialog with visible focus, reopen draft reset. No submissions, screenshots capture, uploads, unexpected API writes or pageerrors. JSON receipts saved in feedback-selector-gate. This is not true browser zoom, physical phone or feedback delivery acceptance.
+- Web tsc exit0, scoped ESLint exit0 with existing App359/513 warnings unchanged, AST inventory5/5, formatting/diff PASS. Shared FormSelect implementation unchanged; original separate ResizeObserver issue remains unresolved. No full suite/build/CI rerun/push/deploy.
+- Files: FeedbackReporter.tsx, App.tsx, scene-workspace-dialog.spec.ts, overlay-sites JSON, this inventory. Existing untracked selection-recovery.spec.ts untouched. Linear whole issue remains open; no external write retry.
+- Next: remaining unique reachable overlay sites/evidence reconciliation; include feedback in next combined interface gate without pretending isolated4 cases establish the whole matrix.
+
+## Cursor visibility popup — keyboard and clipped anchor, 2026-09-16
+
+- New reachable-site gate for CursorPresenceMenu; PLAYER remains a direct toggle, not a manufactured popup. Cursor privacy/default values and outgoing movement code unchanged.
+- Chromium RED browser-01: opening did not focus first switch. Popup now declares named dialog and uses built-in initialFocus0; normal Tab moves between switches, Escape returns trigger, outside click preserves session trigger focus.
+- Short-screen RED browser-03/04: at360×480 toolbar clips cursor trigger and portalled popup remains outside viewport. Screenshot absence was initially mistaken for hidden DOM; browser-04 explicitly proved visible/offscreen, not successful dismissal. Added open-only IntersectionObserver cleanup to close when anchor fully non-intersecting. Fixed positioning and bottom/top fallback use existing Popup mechanics, no z-index increase.
+- Intermediate browser-02 failure was test hit-target error: native switch input is visually hidden; real target is label. Corrected label hit-test/pointer + native keyboard, not forced clicks. browser-05 exposed unstable reopen with overly strict100% intersection/default absolute positioning; final uses any intersection and fixed/flip. All failed reports/traces retained, no suppression.
+- Final browser-06:4/4 PASS23.8s Chrome/Firefox GM/PLAYER. GM1280×850→390×850→360×480 open lifecycle, label bounds/hit/pointer, Space toggle, Tab, Escape, keyboard reopen/outside focus, hidden-anchor close then toolbar scroll/reopen, compact Journal hides menu and returning to Map does not reopen. PLAYER pointer/Space direct toggle at all3 sizes without popup. Send-enabled remains unchecked; no live sockets/privacy claim.4 receipts no unexpected writes/pageerrors. Mock API not real-server acceptance.
+- Typecheck/scoped ESLint/Prettier/diff PASS. Existing release composer/sticker test+implementation files match7f28ca3 in scoped git diff, not rerun; common App/styles have changed, so this is not a fresh whole overlay gate. UIX644 and original ResizeObserver gap remain open. No build/CI restart/push/deploy/Linear write retry.
+- Files: ui/CursorPresenceMenu.tsx, scene-workspace-dialog.spec.ts, this inventory. Untracked selection-recovery.spec.ts preserved. Next: remaining-site evidence ledger / next connected overlay gate, not another blind replay of passed per-site tests.
+
+## Current evidence ledger — 2026-09-16, source d7ef50a
+
+The historical B–E tables above are discovery snapshots, not current PASS statements. Start the next pool from `uix-644-runtime-coverage.json`, then original criteria and referenced checkpoint/Git history. The ledger accounts for all36 static source buckets /74 JSX occurrences, plus3 known supplemental custom controls. These are NOT36/74 independent user flows: nested wrappers, inactive controls and multiple conditional callers require separate interpretation.
+
+- 10 buckets have a scoped PASS at the evidence revision (not current HEAD/whole issue).
+- 2 buckets retain FAIL for the SAME unresolved ResizeObserver defect (shared FormSelect and token-modal caller), even though later production-bundle runs did not reproduce it.
+- 24 buckets remain BLOCKED at this evidence-reconciliation layer, including preview-only/inactive/in-flow exclusions. This does NOT mean24 broken live menus or a blocked project. Each has explicit scope/next action; old tests must be reconciled before any rerun.
+- All5 cited artifact paths exist locally; exact JSON result stats/titles for built58, feedback4, cursor4 and token-access16 were inspected. Existing failure trace was retained, not replaced by a green run. Historical release data is not mislabeled current full acceptance.
+- 8/8 inventory unit checks pass. The added bookkeeping guard rejects omitted/count-changed source buckets, unknown evidence and PASS/FAIL without matching evidence. It does not execute a browser, resolve aliases, discover every CSS-only control, or certify source-equivalence/whole acceptance. No new runtime test/build/server/CI was started in this pool.
+- Next connected gap: map-toolbar grid/size/overflow owners; first reconcile existing tests, then cover missing keyboard/short-viewport/owner transitions. Token-menu and feedback/cursor per-site runs are already saved and should not be repeated because of a new chat. Full combined overlay gate and real-device requirements remain open.
+
+## Map toolbar connected lifecycle — 2026-09-16, cd99d3d
+
+- GridSettings Cancel lost focus inside closed details (red-01). First close fix then exposed Save focus lost when native disabled button moved focus to body (green-02). Guarded close now returns summary only for current owned focus or the captured save focus lost to body, while details stays open and trigger is visible/non-inert; newer external focus is not pulled back. No mutation/data semantics changed.
+- Four GM1280 /360×480 ×Chrome/Firefox cases PASS: physical Tab/Enter Cancel resets96→64 without API; explicit save80 once, reopen80, focus return; resize image/world/Done; overflow grid toggle/Space/Escape. These complement prior geometry tests, not whole PLAYER/privacy/resize-drag acceptance.
+- Related8 unique cases PASS across retained reports: Chromium original reset/canonical-save/rejection3 in related-initial-results.json, then delayed-save Chromium +Firefox originals/delayed5 in related-results.json. Test-only failure: hidden Save was excluded by getByRole after outside dismissal; includeHidden only for completion observation fixes locator, not UI or pointer interaction. A failed patch attempt accidentally replayed that unchanged failure once; all traces kept. No suppression/force or blanket rerun.
+- Delayed save specifically proves visible session trigger retains focus after completion; no reopened-session race claim. Six receipts have expected grid/no unexpected writes/pageerrors. Mock backend does not prove true persistence, grid preview pixel restoration or server ACL.
+- Typecheck/scoped lint/format/diff PASS. Ledger now links both grid and toolbar source buckets to exact source cd99d3d and scoped evidence. Original RO failure and complete matrix remain open. No full build/CI/push/deploy or Linear write retry. Saved untracked selection test untouched.
+
+## Activity selectors and filters — 2026-09-16, d1908c2
+
+- Runtime code unchanged from parent849837f / sourcecd99d3d. Added only a separate scenario to existing composer spec; old command-list cases were not rerun or modified.
+  -8/8 PASS37.3s: GM/PLAYER1280/390 ×Chrome/Firefox. GM actual selected character changes skill buttons (Следопыт/Поиск следов versus Картограф/Наблюдение), popup pointer bounds/hit, keyboard Home/Enter reset and Escape/focus. PLAYER cannot choose another character and only own skill displayed; mocked snapshot does not establish server ACL.
+  -All3 filter controls keyboard off/pointer on, accessible summary names hidden streams, own Escape/outside focus, draft preserved. Real rendered REFERENCE event hidden then restored; no claim ROLLS/STORY fixture events were tested. No dice/message/resource mutation.8 receipts no unexpected writes/pageerror.
+  -First run failed only due a wrong test word «Скрыты» versus existing correct «Скрыто». Fixed exact expected existing string; no product text changed. Initial report/trace retained, final retries0/skips0/flaky0.
+  -Scoped ESLint/Prettier/diff PASS. No full typecheck/build/CI rerun or publication for unchanged runtime. Ledger binds both ChatPanels control buckets to exact test revision and scoped evidence; does not close UIX644/originalRO issue. Saved selection-recovery.spec.ts untouched.
+  -Next: remaining scene/navigation or inline-asset caller evidence reconciliation; include journal in next connected gate, not immediate repetition of these8cases.
+
+## Navigation return owner — 2026-09-16
+
+Source `226533ae0cb33e0585f52a770ede01c5a21ee4ad`: desktop More now captures a visible return target before opening a destination. Six navigation cases and eight connected scene-picker cases PASS in Chrome/Firefox (one worker, no retries). Compact return to Map is the existing contract, not a new Sections-focus behavior. Experimental App/ArkenDialog changes were discarded. Evidence: `navigation-owner-gate/results.json`, `related-results.json`, checkpoint under the runtime ledger artifactBase. Mocked backend; not whole UIX-644 acceptance or production release.
+
+## World image callers — 2026-09-16
+
+Evidence revision `fa54b9a27b15ff2c4d339e2c413632be857b015f`: four GM1280/390 Chrome/Firefox cases cover both inline AssetPicker callers in the world editor. Name filtering, real pointer hit, keyboard selection/removal, independent cover/gallery selection, exact save/attach requests and reloaded mock state passed. No product source changes required. `world-image-gate/results.json` and checkpoint under artifactBase; not live persistence, PLAYER ACL, failure recovery or whole UIX-644 acceptance.
+
+## Character image callers — 2026-09-16
+
+Evidence `b048921c2220ece0efb42c492b3b424859a258e2`:8/8 GM/PLAYER-owner1280/390 Chrome/Firefox actual-App cases PASS. Portrait excludes non-portrait image; resource accepts it independently. Exact revisioned mutations, keyboard focus without write then image removal, resource amounts preserved, reloaded mock state verified. No runtime changes. `character-image-gate/results.json` and checkpoint under artifactBase. Not live persistence, non-owner authorization, rejection recovery or complete UIX-644 acceptance.
+
+## Music owner transition — 2026-09-16
+
+Source `20b48de69676539db3ebc5816ddfbc0b5a3cd47e`: reproduced lost return focus after library close, fixed by focusing visible overflow summary before dialog mount. Eight GM/PLAYER1280/1024 Chrome/Firefox cases PASS including volume Escape/outside and resize390 dismissal. Compact foundation hides music-topbar: no claim of available mobile playback/library entry. No track commands/upload/audio tested. Artifacts `music-owner-gate/results.json`, red-results.json, checkpoint. Not whole UIX-644 acceptance.
+
+## Token tray lifecycle — 2026-09-16
+
+Source `23ed18709b378bb493721c549e00fe7e4e2bcff8`: decorative initials no longer duplicate accessible names; open tray layer26 above persistent tools24, below token menus40/pause45. Real compact screenshot/hit-test reproduced tool occlusion. Eight lifecycle cases passed across retained Chromium4/Firefox4 reports, plus four existing geometry/quick-roll cases. Tab through24 entries, actual pointer hit, inner scroll, Escape/focus, outside menu and Journal/Map transition; no token placement requests. Artifacts `token-tray-gate/` checkpoint/results. Shared App details bucket remains partial pending session evidence reconciliation, not whole UIX-644 acceptance.
+
+## Scene editor map selector — 2026-09-16
+
+Evidence `bbf0206a72babfa3636415b91cd02ae94ceb88e7`:4/4 GM1280/390 Chrome/Firefox PASS, real App nested scene editor map dropdown. Pointer choice, keyboard reset, Escape closes dropdown only/returns focus and retains name draft, resize-open360x480 bounds, cancel/reopen original values. No runtime change, no server writes/save/upload/publish. Artifacts `scene-editor-map-gate/results.json` and checkpoint. Shared Select original RO remains unresolved; this caller PASS is scoped, not whole UIX-644 acceptance.
+
+## Connected remaining-menu gate — 2026-09-16
+
+Observed revision `b7cfc77fc7ecbff20d409badd8909996c71dcf19`:24/24 existing tests PASS106.068s after accumulated App/styles changes, one worker/no retries. Activity command list8, Activity stickers8, background details8 (compact session and desktop volume). No new duplicate specs or runtime modifications. Session/scene/tray evidence now reconciled per caller; second ChatPanel list remains unaccepted. Legacy fixtures do not uniformly audit client logs/pageerrors/all HTTP writes: do not claim a clean telemetry/production gate. Artifacts `remaining-menu-gate/results.json` and checkpoint. Original sharedSelectRO remains unresolved, broader UIX-644 incomplete.
+
+## Track selection focus — 2026-09-16
+
+Source `9f91183cebd1e63c42f36b2325977f11ca6180d0`: existing audio rejection test strengthened to detect focus lost on hidden track. RED reproduced; track click now closes overflow and focuses visible summary, wire/ACK behavior unchanged. Four Chrome/Firefox cases PASS16.4s: desktop action, delayed conflict receipt at1280/390, Russian toast geometry, exact command and no optimistic playback. `music-command-gate/results.json`, red-results.json/checkpoint. No success playback or compact music availability claim.
+
+## Controlled Select transition diagnosis — 2026-09-16
+
+Observed `16a1ae63a6ed0188da59d97cd440b471f6b9768d`: two diagnostic first-open control width transitions220→400px and400→220px passed without ResizeObserver errors.40 sampled frames and90/93 observer callbacks confirm the change. This is NOT an original bug fix: imposed diagnostic flex/CSS and environment differ; original FAIL remains. First two attempts did not establish the required control geometry/timing and are retained separately, not accepted causal evidence. Product source unchanged; temporary spec removed. Artifacts `token-transition-diagnosis/results.json`, `pointer-summary.json`, `pointer-diagnostic-spec.ts`, `config.mjs`, checkpoint under artifactBase. Do not repeat this same stress/warm-cold condition; original first-layout/font/Floating UI interaction remains unproven.
+
+## Object list lifecycle — 2026-09-16
+
+Evidence `5311000403d01e9c96ec6fcf9f03888c0fa2c60c`:8/8 GM/PLAYER1280/390 Chrome/Firefox PASS40.5s. Real keyboard local token selection survives Escape and Journal/Map transitions; scroll24rows, last pointer hit and bounds at360x480, outside session focus. Eight receipts no writes/pageerrors; eight screenshots retained, first GM short screenshot visually checked. No runtime change. No mixed object kinds, clone/delete or liveACL acceptance. `object-list-gate/results.json`, short.png/checkpoint; supplemental bucket only, not complete UIX644.
+
+## Drawing palette containment — 2026-09-16
+
+Source `7b4af10beef8ec1cbd59d96ecce49c88622cf2c2`: screenshot after initial8 PASS revealed top clipping by map despite viewport-only geometry. Stronger map-bound test reproduced failure. CSS now limits palette height to map minus16px and scrolls internally. Final8/8 GM/PLAYER Chrome/Firefox PASS39.0s includes presets/slider keyboard, real hits after scrolling both ends, tool/journal retention. First/fixed short screenshots visually inspected. Native OS chooser not opened; no drawing payload. Artifacts `drawing-palette-gate/results.json`, map-red-results.json, viewport-only-results.json, checkpoint. Supplemental DOM scope only, not wholeUIX644.
+
+## First-open font loading diagnosis — 2026-09-17
+
+Observed `0f910784d87ef8d832093a728ee327d140ce6e76`: project sans token is system-ui, but main.tsx imports UIKit fonts.css (Google Fonts Inter) and Gravity controls compute Inter. A temporary copy of the current original desktop token-modal test held three real woff2 requests until the first character Select pointerdown. Fonts then loaded (document.fonts events and faces recorded),30 native observer callbacks forwarded unchanged,0 ResizeObserver failures;1 diagnostic PASS8.2s. No CSS/font/observer implementation was changed. This specific late-font scenario does not reproduce the original failure and is NOT a fix or proof against all timing races. Artifacts font-open-diagnosis/results.json,diagnostic.json,diagnostic-spec.ts,config.mjs,checkpoint under artifactBase. Font requests/Inter usage are now verified rather than inferred from the system font token; do not simply remove Inter as an assumed no-visual-impact repair.
+
+## Observer callback geometry audit — 2026-09-17
+
+A bounded read-only dependency review identified a specific candidate feedback
+path: UIKit7.43 Dialog.Body uses useAnimateHeight. Its callback can unobserve its
+own body, write height/overflow, then reobserve and write height in the next rAF.
+Child-list mutation cleanup can also clear those styles. This is a candidate,
+not attribution of the original error. Trigger/Floating UI observers already
+exist during the original failing popup phase and cannot be excluded merely
+because the dialog-body observer was constructed earlier. Setup textarea entries
+remain outside that original phase.
+
+A new diagnostic ran the original desktop token-modal scenario once. The native
+observer wrapper forwarded callbacks synchronously and compared all connected
+observed targets before/after each callback (rect/client/scroll sizes and inline
+styles), recording observer creation stacks and frame epochs. It never caught or
+suppressed application errors. Result:1/1PASS10.7s,31callbacks,0recorded immediate
+geometry/style changes and0ResizeObserver errors. Thus this execution does not
+support a direct synchronous callback-write attribution. It is NOT a fix or
+proof that the original failure disappeared. Measurement itself forces layout
+and can affect timing; rAF/microtask changes were not captured by this pass.
+
+Evidence: observer-callback-audit/{results.json,diagnostic.json,diagnostic-spec.ts,
+config.mjs}. Original tracked browser case and production/dependency code remain
+unchanged. Temporary spec removed after terminal result; own Vite stopped.
+Existing FormSelect/TokenPalette ledger FAIL entries remain unresolved.
+Next useful diagnostic: correlate Dialog.Body observe/unobserve and microtask/rAF
+height transitions with a real error, rather than repeat width/font/warm loops
+or patch the dependency speculatively. No full suite/build/CI/deploy/Linear write.
+
+## Deferred observer audit — 2026-09-17
+
+The follow-up diagnostic records observe/unobserve stacks, active observer ID,
+frame epoch and microtask/next-rAF geometry, preserving native callback delivery.
+One original desktop token-popup scenario passed6.8s:31callbacks,44observation
+operations,0errors. Dialog.Body had two initial observe calls while hidden,
+one delivered size entry, no unobserve, no inline height/overflow writes and no
+body geometry difference from microtask to sampled next frame. Its self-height
+animation path therefore did not execute in this run; the source candidate must
+not be promoted to a demonstrated cause or patched based on the prior review.
+
+Floating UI did execute three callback-local unobserves for the floating wrapper,
+followed by size deliveries in later frames as trigger width changed
+132.765625→139.203125→139.25 and popup98.765625→105.203125→105.25. No error occurred.
+This records normal resize sequencing, not a repro. The diagnostic's rect reads
+can alter scheduling, and no sample proves every intervening layout state.
+
+Evidence in observer-deferred-audit, including decoded diagnostic.json and full
+source/config. No production or dependency edits, no weakened gate. Original
+observer FAIL remains. Temporary spec removed, own Vite stopped. Stop repeating
+this unchanged scenario: return to other original acceptance work unless a new
+actual failing trace or distinct layout transition justifies further diagnosis.
+
+## Integrated current production-bundle gate — 2026-09-17
+
+On1d00a8db83f4663a679d4d13d78f5d3dd580b125, one local build followed the
+accumulated UI pools, not each micro-change. Build4.35s; JS1090.11kB/gzip321.15kB
+retains the >500kB warning. All4 runtime HTML/JS/CSS payload hashes matched the
+saved manifest through the loopback preview and remained unchanged after tests.
+
+**204/204PASS862.051s**, Chrome/Firefox, one worker, zero retries/skips/flaky.
+The14-file case-index covers canvas menus/selection chrome, gallery, compact
+sheet/disclosures, chat suggestions/activity selectors, details ownership,
+navigation/music library/token tray/map editor/object list/drawing palette,
+world dropdowns, feedback/cursor/map toolbar, catalog controls, sticker picker,
+token modal/native source and workspace/Setup/world-map selectors. These are
+actual bundled App flows with mocked API, not real backend or persistence proof.
+
+Explicit omissions from this combined gate: dedicated world-image-callers and
+character-image-callers specs, real-server player-requests-controls, music-command
+ACK cases from russian-error-copy, shared dev-only select-element-resize fixture
+and true browser-zoom/device axes. Existing evidence for them is not relabelled
+as current. Inactive preview/legacy controls remain excluded, not activated.
+
+The previously empty ledger evidence for CharacterWorkspace/ResourceCounters
+details was a documentation omission: cbac5b3 added their tests but changed only
+the InitiativePanel JSON row. Both native disclosure cases passed again inside
+this gate; their rows now reference precise PLAYER compact/desktop evidence,
+not GM/non-owner/full-matrix acceptance.
+
+Original TokenPalette/shared Select observer FAIL remains unresolved despite
+non-reproduction here. No error filtering or dependency changes, no claim of
+whole-registry acceptance. Evidence: menu-integrated-1d00a8d/{results.json,
+case-index.json,manifest.json,payload-checks.json,build.log,checkpoint.md} under
+artifactBase. Preview stopped; protected untracked selection test unchanged.
+No full application suite, CI restart, Linear write, publication or deploy.
+
+The post-pool AST guard then correctly failed: OperatorFeedbackFilters.tsx added
+two native selects since the last reviewed source registry. Source review found
+only those two additions, no removals. Type/status controls are inside the
+authorized operator viewer's labeled form and disabled fieldset; their popup is
+browser-owned, not a custom portal/stacking context. Added both to the static
+index and a BLOCKED runtime row, rather than changing the guard. Existing
+operator-accessibility/focused-results.json proves filtering via selectOption,
+not native pointer/keyboard lifecycle; operator-feedback-list.spec.ts was not in
+the204 gate. This is another explicit remaining scope, not evidence-free PASS.
+
+## Image/music and native-filter follow-up — 2026-09-17
+
+Reused the same1d00a8d production bundle for the final gate:
+**20/20PASS80.615s**, Chrome/Firefox worker1/retries0. Character image callers8,
+world image callers4 and music command ACK4 fill their explicit omissions from
+the204 run. Four operator cases replace selectOption with Home/End/ArrowDown/Tab,
+verify real hit targets/focus, no filtering request until Apply, exact query,
+reset, detail accessibility, owner close/reopen. Chromium also asserts native
+pointer-open via :open, Escape closes only picker, and next Escape closes owner.
+
+Do not count Firefox native popup acceptance. Initial click/Escape incorrectly
+assumed its popup had opened; diagnosis found click :open=false, Alt+Down true.
+An experimental event-ownership patch kept the workspace open, but :open stayed
+true even after Escape. Independent plain HTML select without any app code
+reproduced exactly that headless Firefox behavior, including second Escape;
+Chrome opened/closed normally. Thus no app defect was established. Removed the
+entire experimental ArkenDialog change and its unit test; retained diff and
+failed receipts only in artifacts. The final test explicitly separates supported
+keyboard/filter checks from the unaccepted Firefox native popup axis. Runtime
+row remains BLOCKED, rather than relabelling this limitation as a product fix.
+
+Evidence: menu-followup-native/{final-runtime-unchanged-results.json,
+plain-native-baseline.json,native-open-diagnostic-results.json,checkpoint.md}.
+The experimental dist/results.json in that folder are failed and superseded,
+NOT the final tested candidate; final runtime is menu-integrated-1d00a8d/dist.
+Original ResizeObserver FAIL remains. No204 rerun, full suite, CI, publication,
+production, Linear write or new cards. Real request-controls and true zoom/device
+axes remain outside this follow-up. No product source changes are retained.
+
+## Built player-request controls with real persistence — 2026-09-17
+
+Closed the production-web/real-server gap for the six existing request controls,
+not by rerunning the old source-mode gate unchanged. Reused verified1d00a8d
+production dist, source API47c475a and a fresh synthetic database in the stopped
+isolated PostgreSQL18.1 cluster. Preview/API/PG bound only to loopback; original
+Windows PostgreSQL service was not stopped or modified. All4 served runtime
+HTML/JS/CSS hashes matched the earlier bundle manifest; no rebuild.
+
+Existing unchanged player-requests-controls.spec.ts: **4/4PASS23.375s**,
+Chrome/Firefox, worker1/retries0. PLAYER native keyboard values/focus, draft
+retention390→360 and real submission; GM status/horizon/audience combinations
+and close/reopen defaults. After stopping API/preview, six full request rows had
+the same count/hash before and after restarting only the isolated database:
+6|3899e3cc206a0702ec0e7d115fd5821b. This is database persistence, not a UI reconnect
+or backup/restore claim. Native OS popup visuals and physical devices remain out
+of scope; original observer FAIL and Firefox native-picker limitation remain.
+
+Evidence: request-built-gate/{final-results.json,persistence.json,
+payload-checks.json,run.ps1,checkpoint.md}. Temporary loopback server entry
+removed; all3 owned listeners stopped. No source/test changes, full suite,
+CI restart, production/deploy, Linear writes or new cards.
+
+## Compact Sections breakpoint lifecycle — 2026-09-17
+
+Distinct missing axis, not another unchanged observer probe: opening Sections at
+390px, shrinking to360×480, expanding to1280 and returning to390 revived the
+modal without a user action. Old verified1d00a8d bundle fails the new GM test:
+the restored modal makes the underlying Sections trigger inaccessible; retained
+error-context lists the visible Sections dialog. Source confirmed the open flag
+was cleared only by close/select/identity change, not by hiding its compact owner.
+
+App now discards compactSectionsOpen when leaving compact layout. Workspace,
+campaign state, permissions and other overlays are unchanged. Added GM/PLAYER
+regression to overlay-contract.spec.ts: all available destination buttons can
+be scrolled into view and hit-tested in the short viewport; desktop map remains
+clickable; compact return has no revived sheet; Journal can be selected; explicit
+reopen/Escape returns focus. No force clicks or error filtering.
+
+One fresh local production build after the connected fix (3.09s), four runtime
+payload hashes verified through loopback preview. Connected gate **12/12PASS
+39.6s**, Chrome/Firefox, worker1/retries0/skipped0/flaky0: four new role cases,
+six existing navigation-owner cases and two scene-picker breakpoint cases.
+Scoped ESLint has zero errors and two pre-existing App hook-dependency warnings;
+web/E2E typecheck, Prettier and diffcheck pass. This does not revalidate all204
+previous cases against the new runtime, whole registry or physical devices.
+
+Evidence: compact-sections-breakpoint/results.json (red), browser-output/trace,
+fixed/{results.json,manifest.json,payload-checks.json,build.log}. Fixed manifest
+was captured before commit and its revision names the parent168508e; checkpoint
+records the final commit and exact App diff. This new dist supersedes the old
+bundle only for subsequent checks requiring current runtime. No CI/publish/deploy
+or Linear write; own preview stopped, protected untracked selection test intact.

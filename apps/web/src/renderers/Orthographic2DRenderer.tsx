@@ -1,3 +1,4 @@
+import { mapDeleteScope, type MapDeleteRequest } from "./map-delete";
 import {
   useCallback,
   useEffect,
@@ -61,6 +62,7 @@ import {
   type RulerDraft,
 } from "./map-interaction";
 import {
+  canDeleteSelectedToken,
   canSelectToken,
   resolveTokenStacks,
   selectMapObjects,
@@ -77,7 +79,10 @@ import {
   TOKEN_CONDITION_BADGE,
 } from "./token-condition-badges";
 import { persistDrawingDraft, releaseDrawingDraft } from "./drawing-draft";
-import { isDirectTokenDrag } from "./token-drag-event";
+import {
+  createTokenDragGuard,
+  runNonPingPointerAction,
+} from "./token-drag-event";
 import { mapWorldPointFromDrop } from "../token-placement";
 import { getTokenImageMask } from "./token-image-mask";
 import {
@@ -215,6 +220,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     canvasEditMode,
     onCanvasEditCancel,
     onBulkMove,
+    onBulkMovePreview,
+    onBulkMoveDiscard,
     onBulkMoveFailure,
     onToolSelect,
   } = props;
@@ -222,6 +229,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   const objectListRef = useRef<HTMLDivElement>(null);
   const objectListTriggerRef = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
+  const [tokenDragGuard] = useState(createTokenDragGuard);
   const [interaction, dispatchInteraction] = useReducer(
     mapInteractionReducer,
     undefined,
@@ -236,11 +244,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     [],
   );
   useEffect(() => {
-    moveQueue.setExecutor(async ({ targets, delta }) => {
+    moveQueue.setExecutor(async ({ intentId, targets, delta }) => {
       if (!onBulkMove) throw new Error("MOVE_UNAVAILABLE");
-      return onBulkMove(targets, delta);
+      return onBulkMove(intentId, targets, delta);
     });
   }, [moveQueue, onBulkMove]);
+  useEffect(() => {
+    moveQueue.setPreviewHandler(({ intentId, targets, delta }) =>
+      onBulkMovePreview?.(intentId, targets, delta),
+    );
+  }, [moveQueue, onBulkMovePreview]);
+  useEffect(() => {
+    moveQueue.setDiscardHandler((intentIds) => onBulkMoveDiscard?.(intentIds));
+  }, [moveQueue, onBulkMoveDiscard]);
   useEffect(() => {
     moveQueue.setFailureHandler(async (reason) => {
       await onBulkMoveFailure?.(reason);
@@ -258,6 +274,53 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     y: number;
   } | null>(null);
   const tokenMenuRef = useRef<HTMLDivElement>(null);
+  const tokenMenuFocusRef = useRef<HTMLElement | null>(null);
+  const menuToken = props.tokens.find(
+    (token) => token.id === tokenMenu?.token.id,
+  );
+  const tokenMenuOpen = Boolean(tokenMenu);
+  const closeTokenMenu = useCallback(() => {
+    const owner = containerRef.current;
+    if (
+      tokenMenuRef.current?.contains(document.activeElement) &&
+      owner?.getClientRects().length &&
+      !owner.closest("[hidden], [inert]")
+    )
+      owner.focus({ preventScroll: true });
+    setTokenMenu(null);
+  }, []);
+  useLayoutEffect(() => {
+    if (tokenMenuOpen)
+      tokenMenuRef.current
+        ?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+        ?.focus({ preventScroll: true });
+  }, [tokenMenuOpen]);
+  useLayoutEffect(() => {
+    const previous = tokenMenuFocusRef.current;
+    if (!tokenMenu) {
+      tokenMenuFocusRef.current = null;
+      return;
+    }
+    // A snapshot may remove the focused action (permissions) or the entire
+    // token. Recover only focus lost with that detached node, never an
+    // intentional Tab/click to another owner or a native input's focus.
+    if (
+      !previous ||
+      previous.isConnected ||
+      document.activeElement !== document.body
+    )
+      return;
+    tokenMenuFocusRef.current = null;
+    const target =
+      tokenMenuRef.current?.querySelector<HTMLElement>(
+        "button:not(:disabled)",
+      ) ?? containerRef.current;
+    if (target?.getClientRects().length && !target.closest("[hidden], [inert]"))
+      target.focus({ preventScroll: true });
+  });
+  useEffect(() => {
+    if (tokenMenu && !menuToken) closeTokenMenu();
+  }, [tokenMenu, menuToken, closeTokenMenu]);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(
     null,
   );
@@ -269,10 +332,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     onSelectionChangeRef.current?.(selectedTokenIds);
   }, [selectedTokenIds, onSelectionChangeRef]);
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([]);
-  const [bulkDeleteRequested, setBulkDeleteRequested] = useState(false);
+  const [bulkDeleteRequested, setBulkDeleteRequested] = useState<{
+    scope: string;
+    request: MapDeleteRequest;
+  } | null>(null);
   useEffect(() => {
     if (selectedTokenIds.length + selectedDrawingIds.length === 0)
-      setBulkDeleteRequested(false);
+      setBulkDeleteRequested(null);
   }, [selectedTokenIds.length, selectedDrawingIds.length]);
   const [marquee, setMarquee] = useState<{
     startX: number;
@@ -401,7 +467,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     x: number;
     y: number;
   } | null>(null);
+  const polygonLastClickRef = useRef<{
+    x: number;
+    y: number;
+    at: number;
+  } | null>(null);
+  const polygonRepeatClickRef = useRef(false);
   const cancelPolygonDraft = () => {
+    polygonLastClickRef.current = null;
+    polygonRepeatClickRef.current = false;
     setPolygonPoints([]);
     setPolygonPreview(null);
   };
@@ -518,7 +592,8 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (!tokenMenu) return;
     const close = (event: KeyboardEvent | PointerEvent) => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
-      setTokenMenu(null);
+      if (event instanceof KeyboardEvent) closeTokenMenu();
+      else setTokenMenu(null);
     };
     window.addEventListener("keydown", close);
     window.addEventListener("pointerdown", close);
@@ -526,7 +601,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       window.removeEventListener("keydown", close);
       window.removeEventListener("pointerdown", close);
     };
-  }, [tokenMenu]);
+  }, [tokenMenu, closeTokenMenu]);
   useEffect(() => {
     if (!interaction.objectListOpen) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
@@ -884,6 +959,24 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       showGmLayer,
     },
   );
+  const requestedDeleteToken =
+    interaction.deleteRequestedFor?.kind === "token"
+      ? selectableObjects.tokens.find(
+          (token) =>
+            token.id === interaction.deleteRequestedFor?.objectId &&
+            token.revision === interaction.deleteRequestedFor.revision,
+        )
+      : undefined;
+  const deleteRequestValid = canDeleteSelectedToken(
+    requestedDeleteToken,
+    props,
+  );
+  useEffect(() => {
+    // A confirmation belongs to one authoritative revision and permission set;
+    // do not silently retarget it after a snapshot update or restore it later.
+    if (interaction.deleteRequestedFor && !deleteRequestValid)
+      dispatchInteraction({ type: "cancel-delete" });
+  }, [interaction.deleteRequestedFor, deleteRequestValid]);
   const movableTargets = useMemo<MapMoveTarget[]>(
     () => [
       ...selectableObjects.tokens
@@ -917,6 +1010,32 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       props.membershipId,
     ],
   );
+  const bulkDeleteScope = mapDeleteScope(
+    { sceneId: props.scene.id, targets: movableTargets },
+    props.role,
+    props.membershipId,
+  );
+  const bulkDeleteValid = Boolean(
+    bulkDeleteRequested && bulkDeleteRequested.scope === bulkDeleteScope,
+  );
+  useEffect(() => {
+    if (bulkDeleteRequested && !bulkDeleteValid) setBulkDeleteRequested(null);
+  }, [bulkDeleteRequested, bulkDeleteValid]);
+  const requestBulkDelete = () => {
+    if (
+      !movableTargets.length ||
+      movableTargets.length !==
+        selectedTokenIds.length + selectedDrawingIds.length
+    )
+      return;
+    setBulkDeleteRequested({
+      scope: bulkDeleteScope,
+      request: {
+        sceneId: props.scene.id,
+        targets: movableTargets.map((target) => ({ ...target })),
+      },
+    });
+  };
   const keyboardTokenTargets = movableTargets.filter(
     (target) => target.targetType === "TOKEN",
   );
@@ -955,25 +1074,30 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   };
   const requestDelete = (ref: MapObjectRef) => {
     const current = resolveCurrentRef(ref);
+    if (
+      current?.kind === "token" &&
+      !canDeleteSelectedToken(
+        props.tokens.find((token) => token.id === current.objectId),
+        props,
+      )
+    )
+      return;
     if (current) dispatchInteraction({ type: "request-delete", ref: current });
     else dispatchInteraction({ type: "clear-selection" });
   };
   const requestSelectedDelete = () => {
     if (selectedTokenIds.length + selectedDrawingIds.length > 1) {
-      setBulkDeleteRequested(true);
+      requestBulkDelete();
     } else if (interaction.selectedObject)
       requestDelete(interaction.selectedObject);
     else if (selectedTokenIds.length + selectedDrawingIds.length === 1)
-      setBulkDeleteRequested(true);
+      requestBulkDelete();
   };
   const confirmBulkDelete = async () => {
-    if (!props.onBulkDelete) return;
+    if (!props.onBulkDelete || !bulkDeleteRequested || !bulkDeleteValid) return;
     try {
-      await props.onBulkDelete({
-        tokenIds: selectedTokenIds,
-        drawingIds: selectedDrawingIds,
-      });
-      setBulkDeleteRequested(false);
+      await props.onBulkDelete(bulkDeleteRequested.request);
+      setBulkDeleteRequested(null);
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
@@ -987,22 +1111,39 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const container = containerRef.current;
     const menu = tokenMenuRef.current;
     if (!container || !menu) return;
-    const padding = 8;
-    const maxLeft = Math.max(
-      padding,
-      container.clientWidth - menu.offsetWidth - padding,
-    );
-    const maxTop = Math.max(
-      padding,
-      container.clientHeight - menu.offsetHeight - padding,
-    );
-    const left = Math.min(Math.max(padding, tokenMenu.x), maxLeft);
-    const top = Math.min(Math.max(padding, tokenMenu.y), maxTop);
-    if (left !== tokenMenu.x || top !== tokenMenu.y) {
-      setTokenMenu((current) =>
-        current ? { ...current, x: left, y: top } : current,
+    const clampMenu = () => {
+      const padding = 8;
+      const maxLeft = Math.max(
+        padding,
+        container.clientWidth - menu.offsetWidth - padding,
       );
-    }
+      const maxTop = Math.max(
+        padding,
+        container.clientHeight - menu.offsetHeight - padding,
+      );
+      setTokenMenu((current) => {
+        if (!current) return current;
+        const x = Math.min(Math.max(padding, current.x), maxLeft);
+        const y = Math.min(Math.max(padding, current.y), maxTop);
+        return x === current.x && y === current.y
+          ? current
+          : { ...current, x, y };
+      });
+    };
+    clampMenu();
+    // Track the actual owner box, including compact heights below the canvas
+    // viewport's minimum. Defer observer writes to avoid resize feedback loops.
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(clampMenu);
+    });
+    observer.observe(container);
+    observer.observe(menu);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
   }, [tokenMenu]);
 
   const openSelectedAction = () => {
@@ -1040,10 +1181,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const escapeIntent = resolveMapEscapeIntent({
       key: event.key,
       objectListOpen: interaction.objectListOpen,
+      tokenMenuOpen: Boolean(tokenMenu),
     });
     if (tokenMove) {
       if (tokenMove.delta)
         moveQueue.enqueue(keyboardTokenTargets, tokenMove.delta);
+    } else if (escapeIntent === "close-token-menu") {
+      setTokenMenu(null);
     } else if (escapeIntent === "close-object-list") {
       // The list is the top-most map layer. Let the reducer close only that
       // layer; clearing the renderer's parallel selection arrays here would
@@ -1051,6 +1195,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       dispatchInteraction({ type: "escape" });
     } else if (escapeIntent === "clear-map-state") {
       dispatchInteraction({ type: "escape" });
+      // Do not let the later pointerup commit a cancelled rectangle.
+      setMarquee(null);
+      setFogStart(null);
+      setFogDraft(null);
+      brushActiveRef.current = false;
+      brushPointsRef.current = [];
+      setBrushPoints([]);
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
@@ -1114,6 +1265,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       });
     else if (event.key.toLowerCase() === "o")
       dispatchInteraction({ type: "toggle-object-list" });
+    else if (
+      event.key === "ContextMenu" ||
+      (event.shiftKey && event.key === "F10")
+    )
+      openSelectedAction();
     else if (event.key === "Enter") {
       if (isPolygonTool && polygonPoints.length >= 3)
         void handlePolygonComplete();
@@ -1283,6 +1439,19 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     const point = pointerInWorld();
     if (!point) return;
     const bounded = clampToWorld(point);
+    const previousClick = polygonLastClickRef.current;
+    const at = performance.now();
+    polygonRepeatClickRef.current = Boolean(
+      previousClick &&
+      at - previousClick.at <= Konva.dblClickWindow &&
+      // Small hand jitter must not turn a double-click into another vertex.
+      // Measure in screen pixels so camera zoom does not change the gesture.
+      Math.hypot(previousClick.x - bounded.x, previousClick.y - bounded.y) *
+        scale <=
+        4,
+    );
+    polygonLastClickRef.current = { ...bounded, at };
+    if (polygonRepeatClickRef.current) return;
     setPolygonPoints((current) => {
       const last = current[current.length - 1];
       // A double-click's second mousedown lands on the same point as the
@@ -1421,6 +1590,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     if (shouldBeginMapPan(event.evt.button, props.tool, targetIsCanvas)) {
       beginPan(event);
       if (event.evt.button === 0) {
+        dispatchInteraction({ type: "clear-selection" });
         setSelectedTokenIds([]);
         setSelectedDrawingIds([]);
         setSelectedDrawingId(null);
@@ -1939,65 +2109,97 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       onDragMove: () => undefined,
       onDragEnd: () => undefined,
     };
-    const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
-      if (!isDirectTokenDrag(event.target, event.currentTarget)) return;
+    const restoreDragPosition = (origin: { x: number; y: number }) => {
       setDragPositions((current) => ({
         ...current,
-        [token.id]: {
-          x: event.target.x(),
-          y: event.target.y(),
-          revision: token.revision,
-        },
+        [token.id]: { ...origin, revision: token.revision },
       }));
-      props.socket?.emit("token:moving", {
-        actionId: crypto.randomUUID(),
-        tokenId: token.id,
-        x: event.target.x(),
-        y: event.target.y(),
-        z: token.z,
-        levelId: token.levelId,
-        revision: token.revision,
-      });
+    };
+    const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
+      tokenDragGuard.run(
+        event,
+        () => {
+          setDragPositions((current) => ({
+            ...current,
+            [token.id]: {
+              x: event.target.x(),
+              y: event.target.y(),
+              revision: token.revision,
+            },
+          }));
+          // A mixed/group move is committed atomically by the bulk command.
+          // Relaying only its dragged token would leave other clients with a
+          // partial preview that has no matching token:moved on rejection.
+          if (
+            selectedTokenIds.includes(token.id) &&
+            selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+            props.onBulkMove
+          )
+            return;
+          props.socket?.emit("token:moving", {
+            actionId: crypto.randomUUID(),
+            tokenId: token.id,
+            x: event.target.x(),
+            y: event.target.y(),
+            z: token.z,
+            levelId: token.levelId,
+            revision: token.revision,
+          });
+        },
+        restoreDragPosition,
+      );
     };
     const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
-      if (!isDirectTokenDrag(event.target, event.currentTarget)) return;
-      const x = snap(event.target.x());
-      const y = snap(event.target.y());
-      if (
-        selectedTokenIds.includes(token.id) &&
-        selectedTokenIds.length + selectedDrawingIds.length > 1 &&
-        props.onBulkMove
-      ) {
-        event.target.position({ x, y });
-        enqueueMove({ x: x - token.x, y: y - token.y });
-        return;
-      }
-      event.target.position({ x, y });
-      setDragPositions((current) => ({
-        ...current,
-        [token.id]: { x, y, revision: token.revision },
-      }));
-      props.socket?.emit(
-        "token:moved",
-        {
-          actionId: crypto.randomUUID(),
-          tokenId: token.id,
-          x,
-          y,
-          z: token.z,
-          levelId: token.levelId,
-          revision: token.revision,
-        },
-        (ack) => {
-          if (!ack.ok) {
+      tokenDragGuard.run(
+        event,
+        () => {
+          const x = snap(event.target.x());
+          const y = snap(event.target.y());
+          if (
+            selectedTokenIds.includes(token.id) &&
+            selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+            props.onBulkMove
+          ) {
+            event.target.position({ x, y });
+            // App owns the group projection from this point on. A single-token
+            // drag override must not survive its acknowledgement or rollback.
             setDragPositions((current) => {
               const next = { ...current };
               delete next[token.id];
               return next;
             });
-            props.socket?.emit("game:resync", ack.sequence);
+            enqueueMove({ x: x - token.x, y: y - token.y });
+            return;
           }
+          event.target.position({ x, y });
+          setDragPositions((current) => ({
+            ...current,
+            [token.id]: { x, y, revision: token.revision },
+          }));
+          props.socket?.emit(
+            "token:moved",
+            {
+              actionId: crypto.randomUUID(),
+              tokenId: token.id,
+              x,
+              y,
+              z: token.z,
+              levelId: token.levelId,
+              revision: token.revision,
+            },
+            (ack) => {
+              if (!ack.ok) {
+                setDragPositions((current) => {
+                  const next = { ...current };
+                  delete next[token.id];
+                  return next;
+                });
+                props.socket?.emit("game:resync", ack.sequence);
+              }
+            },
+          );
         },
+        restoreDragPosition,
       );
     };
     return (
@@ -2006,6 +2208,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         x={dragPosition?.x ?? token.x}
         y={dragPosition?.y ?? token.y}
         draggable={canMove}
+        onMouseDown={(event) =>
+          tokenDragGuard.recordPointerDown(event.currentTarget, event.evt)
+        }
+        onTouchStart={(event) =>
+          tokenDragGuard.recordTouchStart(event.currentTarget, event.evt)
+        }
+        onDragStart={(event) => tokenDragGuard.begin(event)}
         onDragMove={onDragMove}
         onDragEnd={onDragEnd}
         onMouseEnter={() => setHoveredTokenId(token.id)}
@@ -2013,8 +2222,6 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onClick={(event) => {
           if (
             token.id.startsWith("pending:") ||
-            event.evt.button !== 0 ||
-            event.evt.ctrlKey ||
             !canSelectToken(token, {
               role: props.role,
               membershipId: props.membershipId,
@@ -2024,9 +2231,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             })
           )
             return;
-          selectObject(
-            { kind: "token", objectId: token.id, revision: token.revision },
-            event.evt.shiftKey,
+          runNonPingPointerAction(props.tool, event.evt, () =>
+            selectObject(
+              { kind: "token", objectId: token.id, revision: token.revision },
+              event.evt.shiftKey,
+            ),
           );
         }}
         onContextMenu={(event) => {
@@ -2273,14 +2482,16 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           !(event.target instanceof HTMLCanvasElement)
         )
           return;
-        stageRef.current?.setPointersPositions(event.nativeEvent);
-        const point = pointerInWorld();
-        if (!point) return;
-        const bounded = clampToWorld(point);
-        const points = [bounded.x, bounded.y];
-        drawingActiveRef.current = true;
-        drawingPointsRef.current = points;
-        setDrawingPoints(points);
+        runNonPingPointerAction(props.tool, event, () => {
+          stageRef.current?.setPointersPositions(event.nativeEvent);
+          const point = pointerInWorld();
+          if (!point) return;
+          const bounded = clampToWorld(point);
+          const points = [bounded.x, bounded.y];
+          drawingActiveRef.current = true;
+          drawingPointsRef.current = points;
+          setDrawingPoints(points);
+        });
       }}
       onFocus={() => dispatchInteraction({ type: "focus" })}
       onBlur={(event) => {
@@ -2512,7 +2723,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onClick={handleClick}
-        onDblClick={() => void handlePolygonComplete()}
+        onDblClick={() => {
+          // Konva may synthesize dblclick for rapid clicks at different points
+          // on the same hit plane. Only a repeated final vertex completes it.
+          if (polygonRepeatClickRef.current) void handlePolygonComplete();
+        }}
       >
         <Layer
           clipX={0}
@@ -3111,128 +3326,176 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           })}
         </Layer>
       </Stage>
-      {tokenMenu && (
+      {tokenMenu && menuToken && (
         <div
           ref={tokenMenuRef}
           className="token-context-menu"
           style={{ left: tokenMenu.x, top: tokenMenu.y }}
           role="menu"
+          aria-label={`Действия токена «${menuToken.name}»`}
+          onFocusCapture={(event) => {
+            tokenMenuFocusRef.current = event.target;
+          }}
+          onBlur={(event) => {
+            // Let Tab/Shift+Tab choose the next native focus target. Closing
+            // this layer must neither pull focus back nor clear map selection.
+            if (
+              event.relatedTarget instanceof Node &&
+              !event.currentTarget.contains(event.relatedTarget)
+            )
+              setTokenMenu(null);
+          }}
+          onKeyDown={(event) => {
+            if (
+              event.altKey ||
+              event.ctrlKey ||
+              event.metaKey ||
+              event.shiftKey ||
+              !(event.target instanceof HTMLButtonElement) ||
+              !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+            )
+              return;
+            // Native appearance inputs keep their own arrow/Tab behavior.
+            const items = Array.from(
+              event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                "button:not(:disabled)",
+              ),
+            ).filter(
+              (item) =>
+                item.getClientRects().length &&
+                !item.closest("[hidden], [inert]"),
+            );
+            if (!items.length) return;
+            const current = items.indexOf(event.target);
+            const next =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? items.length - 1
+                  : (current +
+                      (event.key === "ArrowDown" ? 1 : -1) +
+                      items.length) %
+                    items.length;
+            event.preventDefault();
+            event.stopPropagation();
+            items[next]?.focus();
+          }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <strong>{tokenMenu.token.name}</strong>
-          {props.tokens.find((token) => token.id === tokenMenu.token.id) && (
-            <TokenConditionMenu
-              token={props.tokens.find(
-                (token) => token.id === tokenMenu.token.id,
-              )!}
-              role={props.role}
-              onChange={props.onTokenConditionsChange}
-              onClose={() => setTokenMenu(null)}
-            />
-          )}
-          {tokenMenu.token.characterId && props.onOpenCharacter && (
+          <strong>{menuToken.name}</strong>
+          <TokenConditionMenu
+            token={menuToken}
+            role={props.role}
+            onChange={props.onTokenConditionsChange}
+            onClose={() => setTokenMenu(null)}
+          />
+          {menuToken.characterId && props.onOpenCharacter && (
             <button
               role="menuitem"
               onClick={() => {
-                props.onOpenCharacter?.(tokenMenu.token.characterId!);
+                props.onOpenCharacter?.(menuToken.characterId!);
                 setTokenMenu(null);
               }}
             >
               Открыть карточку
             </button>
           )}
-          {(
-            [
-              ["MAP", "Слой карты"],
-              ["PLAYER", "Игровой слой"],
-              ["GM", "Слой мастера"],
-            ] as const
-          ).map(([layer, label]) => (
+          {props.role === "GM" && (
+            <>
+              {(
+                [
+                  ["MAP", "Слой карты"],
+                  ["PLAYER", "Игровой слой"],
+                  ["GM", "Слой мастера"],
+                ] as const
+              ).map(([layer, label]) => (
+                <button
+                  role="menuitemradio"
+                  aria-checked={menuToken.layer === layer}
+                  key={layer}
+                  onClick={() => {
+                    if (menuToken.layer !== layer)
+                      void props.onTokenLayerChange?.(
+                        menuToken.id,
+                        menuToken.revision,
+                        layer,
+                      );
+                    closeTokenMenu();
+                  }}
+                >
+                  {menuToken.layer === layer && (
+                    <AppIcon icon={SelectedOptionIcon} />
+                  )}
+                  {label}
+                </button>
+              ))}
+              <label>
+                Цвет
+                <input
+                  type="color"
+                  value={menuToken.baseColor}
+                  onChange={(event) => {
+                    setTokenMenu(null);
+                    void props.onTokenAppearanceChange?.(
+                      menuToken.id,
+                      menuToken.revision,
+                      {
+                        baseColor: event.target.value,
+                        frameColor: menuToken.frameColor,
+                      },
+                    );
+                  }}
+                />
+              </label>
+              <label>
+                Рамка
+                <input
+                  type="color"
+                  value={menuToken.frameColor ?? visual.color.tokenFrameDefault}
+                  onChange={(event) => {
+                    setTokenMenu(null);
+                    void props.onTokenAppearanceChange?.(
+                      menuToken.id,
+                      menuToken.revision,
+                      {
+                        baseColor: menuToken.baseColor,
+                        frameColor: event.target.value,
+                      },
+                    );
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeTokenMenu();
+                    void props.onTokenAppearanceChange?.(
+                      menuToken.id,
+                      menuToken.revision,
+                      { baseColor: menuToken.baseColor, frameColor: null },
+                    );
+                  }}
+                >
+                  Без рамки
+                </button>
+              </label>
+            </>
+          )}
+          {canDeleteSelectedToken(menuToken, props) && (
             <button
-              role="menuitemradio"
-              aria-checked={tokenMenu.token.layer === layer}
-              key={layer}
+              role="menuitem"
               onClick={() => {
-                if (tokenMenu.token.layer !== layer)
-                  void props.onTokenLayerChange?.(
-                    tokenMenu.token.id,
-                    tokenMenu.token.revision,
-                    layer,
-                  );
+                requestDelete({
+                  kind: "token",
+                  objectId: menuToken.id,
+                  revision: menuToken.revision,
+                });
                 setTokenMenu(null);
               }}
             >
-              {tokenMenu.token.layer === layer && (
-                <AppIcon icon={SelectedOptionIcon} />
-              )}
-              {label}
+              Удалить с карты
             </button>
-          ))}
-          <label>
-            Цвет
-            <input
-              type="color"
-              value={tokenMenu.token.baseColor}
-              onChange={(event) => {
-                setTokenMenu(null);
-                void props.onTokenAppearanceChange?.(
-                  tokenMenu.token.id,
-                  tokenMenu.token.revision,
-                  {
-                    baseColor: event.target.value,
-                    frameColor: tokenMenu.token.frameColor,
-                  },
-                );
-              }}
-            />
-          </label>
-          <label>
-            Рамка
-            <input
-              type="color"
-              value={
-                tokenMenu.token.frameColor ?? visual.color.tokenFrameDefault
-              }
-              onChange={(event) => {
-                setTokenMenu(null);
-                void props.onTokenAppearanceChange?.(
-                  tokenMenu.token.id,
-                  tokenMenu.token.revision,
-                  {
-                    baseColor: tokenMenu.token.baseColor,
-                    frameColor: event.target.value,
-                  },
-                );
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setTokenMenu(null);
-                void props.onTokenAppearanceChange?.(
-                  tokenMenu.token.id,
-                  tokenMenu.token.revision,
-                  { baseColor: tokenMenu.token.baseColor, frameColor: null },
-                );
-              }}
-            >
-              Без рамки
-            </button>
-          </label>
-          <button
-            role="menuitem"
-            onClick={() => {
-              requestDelete({
-                kind: "token",
-                objectId: tokenMenu.token.id,
-                revision: tokenMenu.token.revision,
-              });
-              setTokenMenu(null);
-            }}
-          >
-            Удалить с карты
-          </button>
-          <button onClick={() => setTokenMenu(null)}>Отмена</button>
+          )}
+          <button onClick={closeTokenMenu}>Отмена</button>
         </div>
       )}
       {/* UIX-470: спрашивают теперь только про токен — рисунок удаляется сразу.
@@ -3241,20 +3504,30 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           необратимостью там, где её нет, — худший вид подтверждения: человек
           учится не верить предупреждениям вообще. */}
       <ConfirmDialog
-        open={interaction.deleteRequestedFor !== null}
+        open={interaction.deleteRequestedFor !== null && deleteRequestValid}
         title="Убрать токен с карты?"
         message="Действие можно отменить: Ctrl+Z вернёт токен на место."
         onClose={() => dispatchInteraction({ type: "cancel-delete" })}
-        onConfirm={() => dispatchInteraction({ type: "confirm-delete" })}
+        onConfirm={() =>
+          dispatchInteraction({
+            type: deleteRequestValid ? "confirm-delete" : "cancel-delete",
+          })
+        }
       />
       <ConfirmDialog
-        open={bulkDeleteRequested}
+        open={bulkDeleteRequested !== null && bulkDeleteValid}
         title="Удалить выбранные объекты?"
         message={selectionSummary({
-          tokenIds: selectedTokenIds,
-          drawingIds: selectedDrawingIds,
+          tokenIds:
+            bulkDeleteRequested?.request.targets
+              .filter((target) => target.targetType === "TOKEN")
+              .map((target) => target.targetId) ?? [],
+          drawingIds:
+            bulkDeleteRequested?.request.targets
+              .filter((target) => target.targetType === "DRAWING")
+              .map((target) => target.targetId) ?? [],
         })}
-        onClose={() => setBulkDeleteRequested(false)}
+        onClose={() => setBulkDeleteRequested(null)}
         onConfirm={() => void confirmBulkDelete()}
       />
       {props.canvasEditMode === "BACKGROUND" && (
@@ -3421,50 +3694,52 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           </aside>
         );
       })()}
-      <div className="map-scale">
-        <button
-          aria-label="Увеличить масштаб"
-          onClick={() => zoomAtCenter(scale + 0.1)}
-        >
-          <AppIcon icon={AddIcon} />
-        </button>
-        <input
-          aria-label="Масштаб карты"
-          type="range"
-          min="0.25"
-          max="3"
-          step="0.05"
-          value={scale}
-          onChange={(event) => zoomAtCenter(Number(event.target.value))}
-        />
-        <button
-          aria-label="Уменьшить масштаб"
-          onClick={() => zoomAtCenter(scale - 0.1)}
-        >
-          <AppIcon icon={DecreaseIcon} />
-        </button>
-        {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
-        {props.role === "GM" && (
-          <label>
-            <input
-              aria-label="Показывать скрытый слой мастера"
-              title="Показывать скрытый слой мастера"
-              type="checkbox"
-              checked={showGmLayer}
-              onChange={(event) => setShowGmLayer(event.target.checked)}
-            />
-            GM
-          </label>
+      <div className="map-scale-anchor">
+        <div className="map-scale">
+          <button
+            aria-label="Увеличить масштаб"
+            onClick={() => zoomAtCenter(scale + 0.1)}
+          >
+            <AppIcon icon={AddIcon} />
+          </button>
+          <input
+            aria-label="Масштаб карты"
+            type="range"
+            min="0.25"
+            max="3"
+            step="0.05"
+            value={scale}
+            onChange={(event) => zoomAtCenter(Number(event.target.value))}
+          />
+          <button
+            aria-label="Уменьшить масштаб"
+            onClick={() => zoomAtCenter(scale - 0.1)}
+          >
+            <AppIcon icon={DecreaseIcon} />
+          </button>
+          {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
+          {props.role === "GM" && (
+            <label>
+              <input
+                aria-label="Показывать скрытый слой мастера"
+                title="Показывать скрытый слой мастера"
+                type="checkbox"
+                checked={showGmLayer}
+                onChange={(event) => setShowGmLayer(event.target.checked)}
+              />
+              Мастер
+            </label>
+          )}
+        </div>
+        {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
+          <button
+            className="map-selection-action"
+            onClick={() => requestBulkDelete()}
+          >
+            Удалить выбранное
+          </button>
         )}
       </div>
-      {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
-        <button
-          className="map-selection-action"
-          onClick={() => setBulkDeleteRequested(true)}
-        >
-          Удалить выбранное
-        </button>
-      )}
     </div>
   );
 }

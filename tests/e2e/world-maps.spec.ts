@@ -1,4 +1,4 @@
-import { type Page } from "@playwright/test";
+import { type Locator, type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
@@ -294,3 +294,461 @@ test("UIX-243: PLAYER cannot enter the GM-only world-map workspace from navigati
   await expect(page.getByText("Сторожевая башня")).toHaveCount(0);
   await expect(page.getByText("Открытая карта")).toHaveCount(0);
 });
+
+for (const width of [1280, 360]) {
+  test(`UIX-644: world-map native controls and nested drafts ${width}`, async ({
+    page,
+  }, testInfo) => {
+    const state = snapshotFor("GM");
+    const secondMap = "55555555-5555-4555-8555-555555555555";
+    state.worldMaps!.maps = [ids.map, secondMap].map((id, index) => ({
+      id,
+      name: index ? "Южные земли" : "Северные земли",
+      scope: "REGION",
+      visibility: "CAMPAIGN",
+      lifecycle: "DRAFT",
+      backgroundAssetId: null,
+      revision: 0,
+    }));
+    const writes: string[] = [];
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname.startsWith("/api/world-maps") &&
+        request.method() !== "GET"
+      )
+        writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    });
+    await page.route("**/api/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "[]",
+      }),
+    );
+    await mockWorldMapApi(page, state);
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    const workspace = await openWorldMaps(page);
+    const receipts: { label: string; value: string }[] = [];
+    // Native OS option windows are not DOM listboxes. Check the rendered control
+    // and keyboard state, without pretending to measure OS popup geometry.
+    async function choose(
+      control: Locator,
+      label: string,
+      key: "End" | "Home",
+      expected: string,
+    ) {
+      await control.scrollIntoViewIfNeeded();
+      await expect(control).toBeVisible();
+      expect(
+        await control.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return (
+            box.left >= 0 &&
+            box.right <= innerWidth &&
+            box.top >= 0 &&
+            box.bottom <= innerHeight &&
+            document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            ) === element
+          );
+        }),
+      ).toBe(true);
+      await control.focus();
+      await control.press(key);
+      await expect(control).toHaveValue(expected);
+      await expect(control).toBeFocused();
+      receipts.push({ label, value: expected });
+    }
+    await choose(
+      workspace.getByRole("combobox", { name: "Карта", exact: true }),
+      "current-map",
+      "End",
+      secondMap,
+    );
+    await choose(
+      workspace.getByRole("combobox", { name: "Карта", exact: true }),
+      "current-map",
+      "Home",
+      ids.map,
+    );
+    await workspace
+      .getByRole("button", { name: "Создать карту", exact: true })
+      .click();
+    const mapEditor = page.getByRole("dialog", {
+      name: "Новая карта",
+      exact: true,
+    });
+    await mapEditor
+      .getByLabel("Название", { exact: true })
+      .fill("Несохранённая карта");
+    await choose(mapEditor.getByLabel("Охват"), "map-scope", "End", "WORLD");
+    await choose(
+      mapEditor.getByLabel("Видимость"),
+      "map-visibility",
+      "End",
+      "GM_ONLY",
+    );
+    await page.setViewportSize({
+      width: width === 360 ? 390 : 1180,
+      height: 640,
+    });
+    await expect(mapEditor.getByLabel("Охват")).toHaveValue("WORLD");
+    await expect(mapEditor.getByLabel("Видимость")).toHaveValue("GM_ONLY");
+    await expect(mapEditor.getByLabel("Название", { exact: true })).toHaveValue(
+      "Несохранённая карта",
+    );
+    await mapEditor
+      .getByRole("button", { name: "Отмена", exact: true })
+      .click();
+    await expect(mapEditor).toBeHidden();
+    await expect(workspace).toBeVisible();
+    await workspace
+      .getByRole("button", { name: "Добавить локацию", exact: true })
+      .click();
+    const locationEditor = page.getByRole("dialog", {
+      name: "Новая локация",
+      exact: true,
+    });
+    await locationEditor
+      .getByLabel("Название", { exact: true })
+      .fill("Несохранённая локация");
+    const kind = locationEditor.getByRole("combobox", {
+      name: "Тип",
+      exact: true,
+    });
+    const firstKind = await kind
+      .locator("option")
+      .first()
+      .getAttribute("value");
+    expect(firstKind).toBeTruthy();
+    await choose(kind, "location-kind", "Home", firstKind!);
+    await choose(
+      locationEditor.getByLabel("Видимость"),
+      "location-visibility",
+      "Home",
+      "PUBLIC",
+    );
+    await page.setViewportSize({ width, height: 800 });
+    await expect(kind).toHaveValue(firstKind!);
+    await expect(locationEditor.getByLabel("Видимость")).toHaveValue("PUBLIC");
+    await expect(
+      locationEditor.getByLabel("Название", { exact: true }),
+    ).toHaveValue("Несохранённая локация");
+    await locationEditor
+      .getByRole("button", { name: "Отмена", exact: true })
+      .click();
+    await expect(locationEditor).toBeHidden();
+    await expect(workspace).toBeVisible();
+    await testInfo.attach("native-world-map-controls", {
+      body: JSON.stringify({ receipts, writes, errors }),
+      contentType: "application/json",
+    });
+    expect(writes).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const width of [1280, 360]) {
+  for (const name of ["Башня", "Северная сторожевая башня древнего перевала"])
+    test(`UIX-645 world marker controls ${width} ${name}`, async ({
+      page,
+    }, info) => {
+      const state = snapshotFor("GM");
+      const location = {
+        id: ids.location,
+        mapId: ids.map,
+        name,
+        kind: "SETTLEMENT" as const,
+        summary: "",
+        visibility: "PUBLIC" as const,
+        x: 0.5,
+        y: 0.5,
+        revision: 0,
+        sceneIds: [],
+      };
+      state.worldMaps = {
+        maps: [
+          {
+            id: ids.map,
+            name: "Регион",
+            scope: "REGION",
+            visibility: "CAMPAIGN",
+            lifecycle: "PUBLISHED",
+            backgroundAssetId: ids.asset,
+            revision: 3,
+          },
+        ],
+        locations: [location],
+        gmLocations: [{ ...location, gmNotes: "" }],
+        partyPosition: {
+          mapId: ids.map,
+          locationId: ids.location,
+          revision: 0,
+          updatedAt: "2026-07-23T00:00:00.000Z",
+        },
+      };
+      const writes: string[] = [],
+        errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/api/**", (route) => {
+        const r = route.request(),
+          path = new URL(r.url()).pathname;
+        if (r.method() !== "GET" && path !== "/api/chat/read")
+          writes.push(`${r.method()} ${path}`);
+        return route.fulfill({ json: [] });
+      });
+      await mockWorldMapApi(page, state);
+      await page.route("**/map-background.png", (route) =>
+        route.fulfill({
+          contentType: "image/svg+xml",
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#40566b"/></svg>',
+        }),
+      );
+      await page.setViewportSize({ width, height: 850 });
+      await page.goto("/");
+      const workspace = await openWorldMaps(page);
+      const marker = workspace.getByRole("button", {
+        name: `Локация: ${name}`,
+        exact: true,
+      });
+      const party = workspace.getByRole("img", {
+        name: "Текущая позиция группы",
+        exact: true,
+      });
+      await expect(party).toBeVisible();
+      await expect(marker).toHaveAccessibleDescription(
+        "Текущая позиция группы",
+      );
+      const partyBox = await party.boundingBox();
+      const captionBox = await marker
+        .locator(":scope > span:last-child")
+        .boundingBox();
+      expect(partyBox!.x + partyBox!.width).toBeLessThanOrEqual(captionBox!.x);
+      await marker.scrollIntoViewIfNeeded();
+      const box = await marker.boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
+      expect(box!.height).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
+      expect(
+        await marker.evaluate((n) => {
+          const r = n.getBoundingClientRect();
+          return n.contains(
+            document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+          );
+        }),
+      ).toBe(true);
+      for (const control of [marker, party]) {
+        await expect(control.locator(":scope > svg.arken-icon")).toHaveCount(1);
+        await expect(control.locator(":scope > svg")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+        await expect(control.locator(":scope > svg")).toHaveAttribute(
+          "focusable",
+          "false",
+        );
+        await expect(control.locator(":scope > svg")).toHaveAttribute(
+          "stroke",
+          "currentColor",
+        );
+      }
+      expect(await marker.locator(":scope > svg").innerHTML()).not.toBe(
+        await party.locator("svg").innerHTML(),
+      );
+      const locationSvgBox = await marker.locator(":scope > svg").boundingBox();
+      expect(locationSvgBox!.width).toBeCloseTo(16, 2);
+      const partySvgBox = await party.locator("svg").boundingBox();
+      expect(partySvgBox!.width).toBeCloseTo(24, 2);
+      const label = marker.locator(":scope > span:last-child");
+      const labelBox = await label.boundingBox();
+      const markerBox = await marker.boundingBox();
+      expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(
+        markerBox!.x + markerBox!.width,
+      );
+      await marker.focus();
+      await marker.press("Enter");
+      await expect(marker).toHaveAttribute("aria-pressed", "true");
+      await expect(marker).toBeFocused();
+      await expect(
+        workspace.getByRole("heading", { name, exact: true }),
+      ).toBeVisible();
+      await page.screenshot({
+        path: info.outputPath(`world-marker-${width}.png`),
+      });
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+    });
+}
+for (const width of [1280, 360]) {
+  for (const [x, y] of [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [0.01, 0.01],
+    [0.99, 0.01],
+    [0.01, 0.99],
+    [0.99, 0.99],
+  ]) {
+    const name =
+      x < 0.5 ? "Башня" : "Северная сторожевая башня древнего перевала";
+    test(`UIX-645 world marker edge ${width} ${x},${y} ${name}`, async ({
+      page,
+    }, info) => {
+      const state = snapshotFor("GM");
+      const location = {
+        id: ids.location,
+        mapId: ids.map,
+        name,
+        kind: "SETTLEMENT" as const,
+        summary: "",
+        visibility: "PUBLIC" as const,
+        x,
+        y,
+        revision: 0,
+        sceneIds: [],
+      };
+      state.worldMaps = {
+        maps: [
+          {
+            id: ids.map,
+            name: "Регион",
+            scope: "REGION",
+            visibility: "CAMPAIGN",
+            lifecycle: "PUBLISHED",
+            backgroundAssetId: ids.asset,
+            revision: 3,
+          },
+        ],
+        locations: [location],
+        gmLocations: [{ ...location, gmNotes: "" }],
+        partyPosition: {
+          mapId: ids.map,
+          locationId: ids.location,
+          revision: 0,
+          updatedAt: "2026-07-23T00:00:00.000Z",
+        },
+      };
+      const writes: string[] = [],
+        errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/api/**", (route) => {
+        const r = route.request(),
+          path = new URL(r.url()).pathname;
+        if (r.method() !== "GET" && path !== "/api/chat/read")
+          writes.push(`${r.method()} ${path}`);
+        return route.fulfill({ json: [] });
+      });
+      await mockWorldMapApi(page, state);
+      await page.route("**/map-background.png", (route) =>
+        route.fulfill({
+          contentType: "image/svg+xml",
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#40566b"/></svg>',
+        }),
+      );
+      await page.setViewportSize({ width, height: 850 });
+      await page.goto("/");
+      const workspace = await openWorldMaps(page);
+      const marker = workspace.getByRole("button", {
+        name: `Локация: ${name}`,
+        exact: true,
+      });
+      const party = workspace.getByRole("img", {
+        name: "Текущая позиция группы",
+        exact: true,
+      });
+      await expect(party).toBeVisible();
+      await expect(marker).toHaveAccessibleDescription(
+        "Текущая позиция группы",
+      );
+      const partyBox = await party.boundingBox();
+      const captionBox = await marker
+        .locator(":scope > span:last-child")
+        .boundingBox();
+      expect(partyBox!.x + partyBox!.width).toBeLessThanOrEqual(captionBox!.x);
+      await marker.scrollIntoViewIfNeeded();
+      const box = await marker.boundingBox();
+      const assertContained = async () => {
+        await expect
+          .poll(async () => {
+            const markerBox = await marker.boundingBox();
+            const stage = await workspace
+              .locator(".world-map-stage__canvas")
+              .boundingBox();
+            if (!markerBox || !stage) return false;
+            return (
+              markerBox.x >= stage.x - 1 &&
+              markerBox.y >= stage.y - 1 &&
+              markerBox.x + markerBox.width <= stage.x + stage.width + 1 &&
+              markerBox.y + markerBox.height <= stage.y + stage.height + 1
+            );
+          })
+          .toBe(true);
+        expect(
+          await marker.evaluate((n) => [n.style.left, n.style.top]),
+        ).toEqual([`${x * 100}%`, `${y * 100}%`]);
+      };
+      await assertContained();
+      expect(box!.width).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
+      expect(box!.height).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
+      expect(
+        await marker.evaluate((n) => {
+          const r = n.getBoundingClientRect();
+          return n.contains(
+            document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+          );
+        }),
+      ).toBe(true);
+      for (const control of [marker, party]) {
+        await expect(control.locator(":scope > svg.arken-icon")).toHaveCount(1);
+        await expect(control.locator(":scope > svg")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+        await expect(control.locator(":scope > svg")).toHaveAttribute(
+          "focusable",
+          "false",
+        );
+        await expect(control.locator(":scope > svg")).toHaveAttribute(
+          "stroke",
+          "currentColor",
+        );
+      }
+      expect(await marker.locator(":scope > svg").innerHTML()).not.toBe(
+        await party.locator("svg").innerHTML(),
+      );
+      const locationSvgBox = await marker.locator(":scope > svg").boundingBox();
+      expect(locationSvgBox!.width).toBeCloseTo(16, 2);
+      const partySvgBox = await party.locator("svg").boundingBox();
+      expect(partySvgBox!.width).toBeCloseTo(24, 2);
+      const label = marker.locator(":scope > span:last-child");
+      const labelBox = await label.boundingBox();
+      const markerBox = await marker.boundingBox();
+      expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(
+        markerBox!.x + markerBox!.width,
+      );
+      await marker.focus();
+      await marker.press("Enter");
+      await expect(marker).toHaveAttribute("aria-pressed", "true");
+      await expect(marker).toBeFocused();
+      await expect(
+        workspace.getByRole("heading", { name, exact: true }),
+      ).toBeVisible();
+      await page.screenshot({
+        path: info.outputPath(`world-marker-${width}.png`),
+      });
+      // The same mounted canvas must reclamp when the dialog changes width.
+      await page.setViewportSize({
+        width: width === 360 ? 1280 : 360,
+        height: 850,
+      });
+      await marker.scrollIntoViewIfNeeded();
+      await assertContained();
+      expect(writes).toEqual([]);
+      expect(errors).toEqual([]);
+    });
+  }
+}

@@ -54,7 +54,15 @@ import {
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { canvasHistoryVersion } from "./canvas-history-label";
 import { normalizeClientDiceResult } from "./dice-result";
-import { applyBulkMoveResult } from "./canvas-bulk-move";
+import {
+  acknowledgeBulkMoveIntent,
+  appendBulkMoveIntent,
+  projectBulkMoveIntents,
+  reconcileBulkMoveIntents,
+  rejectBulkMoveIntent,
+  retainBulkMoveIntentsForScene,
+  type CanvasBulkMoveIntent,
+} from "./canvas-bulk-move";
 import { useMutationRunners } from "./use-mutation-runners";
 import { useSceneActions } from "./use-scene-actions";
 import { useWorldMapActions } from "./use-world-map-actions";
@@ -169,6 +177,20 @@ function emitSceneViewIfNeeded(
 
 export function App() {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
+  const [bulkMoveIntents, setBulkMoveIntents] = useState<
+    readonly CanvasBulkMoveIntent[]
+  >([]);
+  useEffect(() => {
+    setBulkMoveIntents((current) =>
+      snapshot
+        ? reconcileBulkMoveIntents(
+            current,
+            snapshot.tokens,
+            snapshot.drawings ?? [],
+          )
+        : [],
+    );
+  }, [snapshot]);
   const [mapRollVisibility, setMapRollVisibility] =
     useState<import("@arken/contracts").MessageVisibility>("PUBLIC");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -284,6 +306,11 @@ export function App() {
     setWorkspace(null);
     setCompactSectionsOpen(false);
   }, [compactIdentity]);
+  useEffect(() => {
+    // The compact trigger disappears on desktop. Discard its open state so
+    // returning to a narrow viewport cannot revive a modal over the map.
+    if (!compact) setCompactSectionsOpen(false);
+  }, [compact]);
   const selectCompactSurface = useCallback(
     (surface: CompactSurface) => {
       selectSurface(surface);
@@ -1043,17 +1070,21 @@ export function App() {
             }
           : current,
       );
-      const previous =
-        characterMutationQueuesRef.current.get(id) ??
-        Promise.resolve(undefined);
+      const previousQueue = characterMutationQueuesRef.current.get(id);
+      const previous = previousQueue ?? Promise.resolve(undefined);
       const operation = previous.then(async (previousCharacter) => {
         const { revision: _revision, ...updates } = patch;
-        const base =
-          previousCharacter ??
-          snapshotRef.current?.characters.find(
-            (character) => character.id === id,
+        // An existing tail resolving undefined confirms canonical absence;
+        // only a new queue may read the current snapshot as its initial base.
+        const base = previousQueue
+          ? previousCharacter
+          : snapshotRef.current?.characters.find(
+              (character) => character.id === id,
+            );
+        if (!base)
+          throw new Error(
+            "Персонаж больше недоступен. Обновите список персонажей.",
           );
-        if (!base) throw new Error("CHARACTER_NOT_FOUND");
         const response = await api<unknown>(`/api/characters/${id}`, {
           method: "PATCH",
           body: JSON.stringify({
@@ -1070,7 +1101,10 @@ export function App() {
             refreshed.characters.find((character) => character.id === id) ??
             null;
         }
-        if (!updated) throw new Error("CHARACTER_NOT_FOUND");
+        if (!updated)
+          throw new Error(
+            "Персонаж больше недоступен. Обновите список персонажей.",
+          );
         setSnapshot((current) =>
           applyCharacterMutationToSnapshot(current, updated),
         );
@@ -1247,6 +1281,11 @@ export function App() {
       ? (view.scenes.find((scene) => scene.id === viewedSceneId) ?? broadcast)
       : broadcast;
   }, [previewSnapshot, snapshot, viewedSceneId]);
+  useEffect(() => {
+    setBulkMoveIntents((current) =>
+      retainBulkMoveIntentsForScene(current, activeSceneValue?.id),
+    );
+  }, [activeSceneValue?.id]);
   /**
    * UIX-408 — сервер должен знать, какую сцену рассматривает мастер.
    *
@@ -1371,7 +1410,16 @@ export function App() {
 
   const viewSnapshot = previewSnapshot ?? {
     ...snapshot,
-    tokens: tokenMutations.project(snapshot.tokens),
+    tokens: projectBulkMoveIntents(
+      tokenMutations.project(snapshot.tokens),
+      "TOKEN",
+      bulkMoveIntents,
+    ) as GameSnapshot["tokens"],
+    drawings: projectBulkMoveIntents(
+      snapshot.drawings ?? [],
+      "DRAWING",
+      bulkMoveIntents,
+    ) as GameSnapshot["drawings"],
   };
   const broadcastScene =
     viewSnapshot.scenes.find((scene) => scene.active) ?? viewSnapshot.scenes[0];
@@ -1642,7 +1690,7 @@ export function App() {
                       ? `Просмотр: ${viewSnapshot.me.displayName}`
                       : snapshot.me.role === "PLAYER"
                         ? `Вы играете как: ${snapshot.me.displayName}`
-                        : `${snapshot.me.displayName} · ${snapshot.me.role}`}
+                        : `${snapshot.me.displayName} · Мастер`}
                   </span>
                   <span
                     className="account-menu__build"
@@ -1674,6 +1722,15 @@ export function App() {
                   </button>
                   {!previewSnapshot && (
                     <FeedbackReporter
+                      onOpen={() => {
+                        // The dialog must restore focus to the persistent menu
+                        // entry, not a report button hidden after menu dismissal.
+                        const menu = accountMenuRef.current;
+                        if (menu) {
+                          menu.open = false;
+                          menu.querySelector<HTMLElement>("summary")?.focus();
+                        }
+                      }}
                       buildVersion={snapshot.buildVersion}
                       buildRevision={snapshot.buildRevision}
                       connection={connection}
@@ -2172,89 +2229,86 @@ export function App() {
                         }),
                       )
                     }
-                    onBulkMove={async (targets, delta) => {
-                      const acknowledgement = await runResult(() =>
-                        api<{
-                          revisions: {
-                            tokens: Record<string, number>;
-                            drawings: Record<string, number>;
-                          };
-                        }>("/api/canvas/bulk", {
-                          method: "POST",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            sceneId: activeScene.id,
-                            operation: "MOVE",
-                            deltaX: delta.x,
-                            deltaY: delta.y,
-                            targets,
-                          }),
+                    onBulkMovePreview={(intentId, targets, delta) => {
+                      setBulkMoveIntents((current) =>
+                        appendBulkMoveIntent(current, {
+                          actionId: intentId,
+                          sceneId: activeScene.id,
+                          targets,
+                          delta,
                         }),
                       );
-                      // UIX-396 stage 2: the response carries the new revision for
-                      // every moved entity and used to be thrown away, so a second
-                      // drag before the broadcast landed still sent the superseded
-                      // one and was rejected with a 409 -- losing the move on the
-                      // app's most frequent action. See canvas-bulk-move.ts.
-                      const revisions = acknowledgement?.revisions;
-                      setSnapshot((current) =>
-                        current
-                          ? {
-                              ...current,
-                              tokens: applyBulkMoveResult(
-                                current.tokens,
-                                revisions?.tokens,
-                                delta,
-                              ) as GameSnapshot["tokens"],
-                              drawings: applyBulkMoveResult(
-                                current.drawings ?? [],
-                                revisions?.drawings,
-                                delta,
-                              ) as GameSnapshot["drawings"],
-                            }
-                          : current,
-                      );
-                      return acknowledgement;
                     }}
-                    onBulkMoveFailure={recoverFromCanvasMutation}
-                    onBulkDelete={(selection) =>
+                    onBulkMoveDiscard={(intentIds) => {
+                      const discarded = new Set(intentIds);
+                      setBulkMoveIntents((current) => {
+                        const next = current.filter(
+                          (intent) => !discarded.has(intent.actionId),
+                        );
+                        return next.length === current.length ? current : next;
+                      });
+                    }}
+                    onBulkMove={async (intentId, targets, delta) => {
+                      try {
+                        const acknowledgement = await runResult(() =>
+                          api<{
+                            revisions: {
+                              tokens: Record<string, number>;
+                              drawings: Record<string, number>;
+                            };
+                          }>("/api/canvas/bulk", {
+                            method: "POST",
+                            body: JSON.stringify({
+                              actionId: crypto.randomUUID(),
+                              sceneId: activeScene.id,
+                              operation: "MOVE",
+                              deltaX: delta.x,
+                              deltaY: delta.y,
+                              targets,
+                            }),
+                          }),
+                        );
+                        setBulkMoveIntents((current) => {
+                          const acknowledged = acknowledgeBulkMoveIntent(
+                            current,
+                            intentId,
+                            acknowledgement.revisions,
+                          );
+                          const canonical = snapshotRef.current;
+                          return canonical
+                            ? reconcileBulkMoveIntents(
+                                acknowledged,
+                                canonical.tokens,
+                                canonical.drawings ?? [],
+                              )
+                            : acknowledged;
+                        });
+                        return acknowledgement;
+                      } catch (reason) {
+                        // Remove the failed draft before the queue remounts the
+                        // Konva stage. Canonical state was never changed, so
+                        // rollback cannot overwrite a newer socket revision.
+                        setBulkMoveIntents((current) =>
+                          rejectBulkMoveIntent(current, intentId),
+                        );
+                        throw reason;
+                      }
+                    }}
+                    onBulkMoveFailure={async (reason) => {
+                      // The executor removes the rejected intent, and the queue
+                      // discards its unsent tail. Preserve earlier acknowledged
+                      // moves until their canonical socket snapshot arrives.
+                      await recoverFromCanvasMutation(reason);
+                    }}
+                    onBulkDelete={(request) =>
                       run(() =>
                         api("/api/canvas/bulk", {
                           method: "POST",
                           body: JSON.stringify({
                             actionId: crypto.randomUUID(),
-                            sceneId: activeScene.id,
+                            sceneId: request.sceneId,
                             operation: "DELETE",
-                            targets: [
-                              ...selection.tokenIds.flatMap((id) => {
-                                const token = activeTokens.find(
-                                  (item) => item.id === id,
-                                );
-                                return token
-                                  ? [
-                                      {
-                                        targetType: "TOKEN" as const,
-                                        targetId: id,
-                                        revision: token.revision,
-                                      },
-                                    ]
-                                  : [];
-                              }),
-                              ...selection.drawingIds.flatMap((id) => {
-                                const drawing = activeDrawings.find(
-                                  (item) => item.id === id,
-                                );
-                                return drawing
-                                  ? [
-                                      {
-                                        targetType: "DRAWING" as const,
-                                        targetId: id,
-                                        revision: drawing.revision,
-                                      },
-                                    ]
-                                  : [];
-                              }),
-                            ],
+                            targets: request.targets,
                           }),
                         }),
                       )
@@ -2347,7 +2401,7 @@ export function App() {
                           {asset ? (
                             <img src={asset.url} alt="" />
                           ) : (
-                            <span>
+                            <span aria-hidden="true">
                               {definition.name.slice(0, 2).toUpperCase()}
                             </span>
                           )}

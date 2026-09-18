@@ -112,3 +112,246 @@ docs/plans/uix-624-mobile-foundation.md
 - **Next action:** exact push только **codex/uix-624-mobile-foundation**, draft PR с базой **codex/uix-502-modal-popovers**, затем обязательные GitHub checks/e2e/multiplayer. В стабильном окружении выполнить полный E2E, а не переносить агрегат отдельных PASS как готовый gate. До его результата задача не считается готовой. После интеграции текущих PR требуется отдельный exact-main release gate со свежим backup/restore и rollback. Production GO не означает, что эти проверки пройдены. Physical-device/full-touch и human UIX-217 acceptance остаются явно отложенными.
 
 Следующий пул опирается на этот checkpoint, Linear и Git history. Решение — P1 foundation; code revision — **0e558df**; changes — 23 файла плюс docs-only receipt; verification — §4; открытые gates — стабильный full E2E, PR/CI, integrated release и отдельное hardware/full-touch acceptance. P2–P6 не начинаются автоматически.
+
+## 2026-09-16 — 360 px map action targets (local continuation)
+
+Candidate based on `d451abe`; this does not replace the full P1/mobile acceptance.
+
+- Actual App audit of enabled visible buttons, summaries and tabs in the map and
+  journal exposed map actions at 24–36 px wide / 28–32 px high. The prior journal
+  rules did not cover the map's separate dice tray, toolbar and HUD.
+- Compact main-content actions now use a 44×44 minimum, with no desktop change.
+  Zoom starts below the enlarged object-list trigger; its vertical range target
+  is widened. The tool column reserves the bottom token row and scrolls within
+  its existing bounds instead of intercepting the token trigger.
+- Compact tool menus use fixed viewport-bounded positioning outside that scroll
+  column, with the existing popup tier while open (below workspace/modal tiers).
+  They are not moved to a new portal or made globally topmost.
+- `compact-action-targets.spec.ts`: 4/4 PASS, GM/PLAYER at 360×850, Chrome/Firefox.
+  Enumerates every enabled visible button/summary/tab in these fixture surfaces,
+  scrolls each into view, checks >=44 dimensions and center hit-testing, checks
+  document horizontal overflow and zero game HTTP writes. GM also opens the real
+  More menu, hit-tests its checkbox and closes it with Escape/focus return.
+- Red evidence preserved: initial undersized actions; first CSS selector missed
+  sibling controls; corrected scope exposed token-trigger interception. The first
+  added popup check mistakenly expected a button where the actual GM-only menu
+  has checkboxes; corrected fixture checks the real existing input, no role bypass.
+- Final evidence: `compact-targets-gate/browser-05.log` (4 PASS,31s) and screenshots.
+  The PLAYER Chromium map screenshot was visually inspected; the fixture has no
+  map image/characters, so this is not visual/content acceptance of a full game.
+  Prettier, scoped test ESLint and git whitespace checks pass. CSS-only runtime
+  change: no repeated web typecheck, production build or full CI in this slice.
+- Open: short-height/landscape, character/invite/handoff and populated workspaces,
+  disabled controls, checkbox/range targets beyond this scope, every tool popup,
+  physical touch/browser zoom, desktop and integrated release gate. No task Done,
+  Linear write, push or deploy. Selection-recovery remains untracked and untouched.
+
+## 2026-09-16 — short portrait and landscape map controls
+
+Follow-up to `5ea2c0f`, not acceptance by extrapolation from the 850px-tall screen.
+
+- At 360×640, the map dice panel intercepted Minus and Fit. At 640×360,
+  non-scrolling toolbar chrome consumed the available height and left the inner
+  tool group effectively unreachable. Both failed real center hit-testing.
+- Compact map dice remain complete in a single independently scrolling row,
+  rather than a tall overlay. At <=480px viewport height, zoom uses a horizontal
+  range/row. The whole compact toolbar scrolls, including its chrome, instead of
+  shrinking only the tool group. Popup placement outside the scrollport remains.
+- Existing target spec now includes 360×640 and 640×360. Only the eight new
+  role/browser cases ran in the final slice: 8/8 PASS (59s), Chromium/Firefox,
+  GM/PLAYER, map+journal enabled visible buttons/summaries/tabs >=44 and hit-test,
+  no document horizontal overflow or game HTTP mutation. Every control is
+  scrolled into view before measurement; this does not mean all are simultaneous.
+- GM cases additionally use actual grid numeric input, resize-mode button and
+  More checkbox: open by ordinary pointer click, hit-test, Escape, trigger focus.
+  Initial added resize test wrongly expected an input; corrected against actual
+  source, not by skipping the menu or using force.
+- PLAYER Chromium landscape screenshot was inspected (the empty scene is a
+  fixture, not a full game visual acceptance). Evidence: `compact-short-gate`,
+  browser-01/02 reproductions, browser-03 selector error, browser-04 final8 PASS.
+  Prettier, scoped ESLint and whitespace checks PASS. CSS-only runtime change;
+  typecheck/build/full CI deferred to the connected delivery gate, not waived.
+- Not yet proven: physical orientation changes/software keyboard, populated
+  character surfaces, all input touch targets, zoom-value interaction, or a real
+  multiplayer session. The tests start in each viewport; they do not prove a
+  live in-session rotation retained state. No publication/deploy or Linear Done.
+
+## 2026-09-16 — PLAYER sheet, pending text and inner overflow
+
+Local continuation from `e9d8017`. Real App/CharacterWorkspace with an owned
+PLAYER character, name, one stat, wallet values and backstory; not a full
+inventory/skills/media/authorization fixture.
+
+- New `compact-player-sheet.spec.ts` found wallet +/- controls at 40×44; compact
+  sheet buttons/summaries now have the full 44×44 minimum, not only height.
+- The first green geometry pass did NOT prove visual fit: screenshot inspection
+  revealed backstory clipped beyond the right edge. Document scrollWidth was
+  360, but the sheet's inner body was ~406 and textarea right edge ~398.
+  Added actual control bounds and inner ancestor scroll-width checks.
+- Setting only body min-width did not fix the implicit grid track. Compact sheet
+  cards now explicitly use `grid-template-columns: minmax(0, 1fr)`, with body
+  min-width:0; text reflows within the card instead of masking overflow.
+- Final 2/2 PASS (24.3s), Chromium/Firefox. Both actually resize the same session
+  360×640→640×360→360×640, audit enabled visible sheet buttons/summaries via
+  dimensions and center hit-testing after scrolling, then type backstory,
+  hold its PATCH response, visit Journal and return after resize. Text remains
+  intact, exactly one captured backstory request precedes return, no unexpected
+  writes. The held response is released only for cleanup: no durable-server save
+  or post-ack convergence claim. Ownership is ordinary fixture data, not ACL bypass.
+- Final PLAYER Chromium screenshot visually checked: field fits and wraps.
+  Evidence `compact-player-gate/browser-01` (40px red), `browser-02` (earlier weak
+  pass), `browser-03` (inner clipping red), `browser-04` (body-only fix insufficient),
+  `browser-05` (final2 PASS). One PowerShell quote syntax failure ran no test.
+- Scoped ESLint/Prettier/diffcheck PASS; no full suite/build/typecheck rerun for
+  the CSS-only runtime change. Existing character queue regression not replayed.
+  No publication/deploy/Linear Done. All-skills/inventory/dialog controls, real
+  device keyboard/touch, other roles/characters and integrated CI remain open.
+
+## 2026-09-16 — integrated built-candidate UI gate
+
+Exact runtime candidate: `8504feac439ec0d68d473b13f7149b53ce47a3ba`.
+This supersedes the older `508167f` compiled UI evidence for the covered cases,
+not the separate production release or whole mobile acceptance.
+
+- One web typecheck (768 MiB) and one Vite production build PASS. Saved the full
+  dist and seven-file SHA256 manifest; copied artifact hashes verified afterward.
+- One sequential browser gate against **vite preview of production dist**, not
+  the development server: 34 expected, 0 skipped, 0 unexpected, 0 flaky;
+  retries0/workers1, Chromium+Firefox, duration167.926s. Existing unchanged CI was
+  not restarted and no backend/full test suite was launched.
+- Covered: compact enabled action dimensions/hit-testing at360×850,360×640,640×360
+  for GM/PLAYER; grid/resize/More popup reachability; actual PLAYER sheet pending
+  backstory and viewport/navigation transitions; Escape ownership vs workspaces
+  and blocking dialogs; responsive menu hidden-state cleanup; desktop/compact
+  SVG/icon-button contracts. These are five existing focused specs, no weakened
+  assertions or newly skipped cases. Synthetic API/socket fixtures throughout.
+- Receipt folder `ui-integrated-8504fea` in the current local artifact root:
+  revision.txt, types.log, build.log, payload-sha256.json, dist/, results.json,
+  browser-01.log and browser-01/ artifacts. JSON results preserve per-test records
+  and diagnostic attachments instead of relying only on a dot-reporter count.
+- MainJS1076454bytes, CSS296536bytes, lazy renderer364587bytes; Vite's >500kB chunk
+  warning remains, not hidden by changing limits. This is build-size evidence,
+  not a device performance/latency acceptance or an optimization claim.
+- Preview stopped after the gate. No source edits during build/QA, no publication,
+  deploy, production mutation or Linear write. Untracked selection test preserved.
+- Still required: remaining original UI624/316 and UI644 inventories/roles/states,
+  physical-device/human acceptance, complete backend/persistence/multiplayer and
+  exact integrated CI/release gates. A local built UI pass does not close these.
+
+## 2026-09-17 — current real-server entry/navigation/handoff gate
+
+Tested revision `9d019e95d92137265cd8a33a82852acb9eca3284`, unchanged
+`tests/e2e/mobile-foundation.spec.ts`:12/12PASS195.941s, one worker, retries0,
+no skips/flaky/unexpected. Eight GM/PLAYER ×360×800/820×1180 ×Chrome/Firefox
+journeys plus four desktop-first character/compact-preview cases.
+
+This time authentication, invitations, session cookies, bootstrap, chat writes,
+read cursors and realtime delivery used the actual current source API and isolated
+PostgreSQL18.1, not intercepted HTTP/socket responses. Reused only our stopped
+request-server-gate cluster (127.0.0.1:15439), API14109 and Vite5189; all listeners
+verified loopback. Per-test campaigns are created by the existing campaign fixture.
+Health reported databaseok, schema2 and the exact tested SHA.
+
+Verified within the existing assertions:
+
+- Actual GM entry and PLAYER invitation/name/keyboard entry.
+- Compact map/journal/character navigation, checked controls44px, no measured
+  document overflow, hidden/inert roots excluded from keyboard navigation.
+- Desktop collapse preference, canvas identity/zoom, journal reader position,
+  composer/resource drafts retained across surface/viewport changes.
+- Messages from a separate authenticated context arrive through real sockets;
+  hidden journal does not submit read acknowledgements, reopening does.
+- Nested rename and handoff confirmations own focus; cancelling preserves draft.
+  Confirmed exit unmounts game roots, bootstrap returns401 and reload stays signed
+  out. This does not prove a subsequent different player's entire session.
+
+Evidence: mobile-real-gate/results.json and8decoded geometry receipts (21measurements
+per GM /25per PLAYER), browser/vite config and loopback source copy. Source server
+logs are local only and may contain synthetic authentication URLs. Free RAM during
+run was approximately2.4GiB. Existing Konva6/7-layer warnings remain; this is not an
+all-console-clean or performance acceptance claim.
+
+Cleanup: own API/Vite stopped, isolated PG fast-stop succeeded, ports15439/14109/5189
+no longer listen; existing postgresql-x64-18 service remainsRunning. Temporary API
+entry removed via exact verified path. Original untracked selection test unchanged.
+
+Limits: development/source runtime, not current production bundle/GitHubPG17 CI,
+physical touch/Safari/software keyboard, full P2–P6, new-player cross-session privacy
+matrix or release acceptance. No product/test changes, full suite/build/release
+rerun, publication or Linear write; UIX-624 remains under original full criteria.
+
+## 2026-09-17 — full shared-browser A→B real-server gate
+
+Extended the existing multiplayer shared-browser test, rather than duplicating
+authentication: manually created browser context now honors the configured
+viewport; per-run names are unique and remain under the40-character input limit.
+PlayerA types an unsent composer draft before handoff; after PlayerB enters the
+same browser with their own invitation, the composer must be empty. Wait for the
+actual shell before choosing compact navigation, not a one-shot visibility query
+while login is still pending. Original session/socket/projection assertions remain.
+
+Final4/4PASS40.685s:Chrome/Firefox ×1280/360,worker1,retries0,real isolated API/PG.
+All receipts prove actor identity changed, prior private note absent, old action
+401, new action201 and empty new draft. Existing assertions also verify A socket
+disconnect, bootstrap401 after logout, B-only full character data and the deliberate
+public identity-only projection of A. This is not a promise to hide character
+names that the campaign intentionally exposes.
+
+Harness corrections, not product failures: initial retained DB lacked the static
+multiplayer credential; preparation now used a separate synthetic campaign without
+changing existing credentials. An inline tsx command silently did not prepare it;
+an explicit file did. First unique names exceeded40chars and were truncated by the
+real input; shortened tags preserve exact identity assertions. Compact test initially
+queried navigation before shell readiness. Two later attempts lost their Vite process
+(exit1, cause not established). Final gate owned a hidden Vite child in the same
+PowerShell try/finally as the test, with separate stdout/stderr and guaranteed stop;
+it was alive until intentional cleanup. Retained earlier reports are not product REDs.
+
+Targeted TypeScript exposed pre-existing multiplayer helper errors: expectOk now
+retains the generic response type while requiring only used ok/status/text methods
+(browser Response as well as APIResponse); two encounter predicates treat an absent
+optional collection as not-yet-matched, retaining the required ACTIVE/ENDED predicate.
+Scoped tsc/ESLint/format/diffPASS. Full GM+6 scenario was not rerun or claimed covered.
+
+Evidence:shared-mobile-gate/owned-results.json,receipts.json,configs and logs.
+Own API/PG stopped; frontend stopped in finally; ports15439/14109/5189 absent and
+user PostgreSQL service remainsRunning. No product code, deployment, full suite,
+new cards or Linear write. This covers real A→B entry/privacy at two viewport sizes,
+not physical hardware, every private surface or personal-theme persistence.
+
+## 2026-09-17 — close native map settings when their owner is hidden
+
+A real built-app regression was reproduced at 360×850 GM: open grid settings,
+focus compact Journal navigation and press Enter. The map becomes hidden/inert,
+but `<details open>` survived because keyboard navigation emits no outside
+pointerdown and no resize. This could revive stale settings on returning to Map.
+
+`useDismissibleDetails` now observes only `hidden`/`inert` on the details element
+and its current ancestor chain, and only while open. Initial hidden owners close
+immediately; removal of an attribute does not close a visible menu. Toggle/close/
+unmount disconnect the observer; stale ref callbacks cannot close a replacement.
+The observer never focuses a hidden summary. Existing Escape ownership and
+viewport behavior remain unchanged; no ResizeObserver or whole-document subtree
+watcher was added. No gameplay mutations, layout redesign or new navigation.
+
+Focused helper/DOM gate: **19/19 PASS**, including hidden and inert changes,
+reopen, initial hidden owner, removal-only records and focus preservation.
+Web/E2E types, scoped lint and diff checks passed. One fresh web build4.29s;
+four served runtime hashes verified in the pool. Browser results are recorded in
+compact-owner-hide/checkpoint.md and the final report under the current artifact
+base, separate from the initial red and intermediate harness failure.
+
+The intermediate fixed run passed the closing assertion but exposed an incorrect
+new test expectation: compact navigation intentionally restores focus inside the
+new surface (useCompactNavigation), not permanently on its navigation button.
+The test now verifies focus inside the active non-hidden/non-inert surface and
+that the old settings remain closed after return. Product focus policy was not
+changed or weakened. No full-suite/remote CI rerun, publication or Linear update;
+UIX-624 and UIX-644 retain their remaining original gates.
+
+Final connected browser gate: **24/24 PASS** Chrome/Firefox, one worker,
+retries0/skipped0/flaky0. Includes compact GM/PLAYER map/journal targets at
+360×850,360×640,640×360 (12 cases), mixed popup/modal Escape ownership at
+1280/390 (8), desktop→compact→desktop lifecycle (4). New keyboard hiding cases
+cover both grid and resize settings, active-surface focus and no stale reopening.
+This is synthetic App/browser behavior, not live multiplayer or physical devices.

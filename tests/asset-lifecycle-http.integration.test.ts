@@ -585,6 +585,178 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(denied.statusCode).toBe(403);
   });
 
+  it("authorizes only same-campaign published world cover and media content for players", async () => {
+    const assetIds = {
+      publishedCover: crypto.randomUUID(),
+      publishedMedia: crypto.randomUUID(),
+      draft: crypto.randomUUID(),
+      archived: crypto.randomUUID(),
+      foreign: crypto.randomUUID(),
+    };
+    for (const [name, id] of Object.entries(assetIds)) {
+      const storageKey = `world-${name}.webp`;
+      await writeFile(join(mediaRoot, storageKey), Buffer.from(name));
+      await db.insert(schema.assets).values({
+        id,
+        campaignId: name === "foreign" ? ids.foreignCampaign : ids.campaign,
+        uploadedByMembershipId: name === "foreign" ? ids.foreignGm : ids.gm,
+        kind: "IMAGE",
+        name,
+        storageKey,
+        mimeType: "image/webp",
+        sizeBytes: name.length,
+      });
+    }
+    const [published, draft, archived] = await db
+      .insert(schema.worldContent)
+      .values([
+        {
+          slug: `published-${crypto.randomUUID()}`,
+          type: "LOCATION",
+          name: "Published",
+          lifecycle: "PUBLISHED",
+          coverAssetId: assetIds.publishedCover,
+        },
+        {
+          slug: `draft-${crypto.randomUUID()}`,
+          type: "LOCATION",
+          name: "Draft",
+          lifecycle: "DRAFT",
+          coverAssetId: assetIds.draft,
+        },
+        {
+          slug: `archived-${crypto.randomUUID()}`,
+          type: "LOCATION",
+          name: "Archived",
+          lifecycle: "ARCHIVED",
+          coverAssetId: assetIds.archived,
+        },
+        {
+          slug: `foreign-${crypto.randomUUID()}`,
+          type: "LOCATION",
+          name: "Published foreign asset",
+          lifecycle: "PUBLISHED",
+          coverAssetId: assetIds.foreign,
+        },
+      ])
+      .returning();
+    expect(draft).toBeDefined();
+    expect(archived).toBeDefined();
+    await db.insert(schema.worldContentMedia).values({
+      worldContentId: published!.id,
+      assetId: assetIds.publishedMedia,
+      caption: "Published gallery",
+    });
+
+    const bootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(bootstrap.statusCode, bootstrap.body).toBe(200);
+    const visibleIds = new Set(
+      bootstrap.json().assets.map((asset: { id: string }) => asset.id),
+    );
+    expect(visibleIds.has(assetIds.publishedCover)).toBe(true);
+    expect(visibleIds.has(assetIds.publishedMedia)).toBe(true);
+    expect(visibleIds.has(assetIds.draft)).toBe(false);
+    expect(visibleIds.has(assetIds.archived)).toBe(false);
+    expect(visibleIds.has(assetIds.foreign)).toBe(false);
+
+    for (const id of [assetIds.publishedCover, assetIds.publishedMedia]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/assets/${id}/content`,
+        headers: headers(secrets.player),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    for (const id of [assetIds.draft, assetIds.archived, assetIds.foreign]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/assets/${id}/content`,
+        headers: headers(secrets.player),
+      });
+      expect(response.statusCode, response.body).toBe(404);
+    }
+  });
+
+  it("blocks deletion of character resource artwork and replacement preserves the resource link", async () => {
+    const [character] = await db
+      .insert(schema.characters)
+      .values({
+        campaignId: ids.campaign,
+        name: "Resource artwork character",
+        ownerMembershipId: ids.player,
+        resources: {
+          mana: {
+            current: 3,
+            maximum: 5,
+            imageAssetId: ids.unused,
+          },
+        },
+      })
+      .returning();
+
+    const usage = await app.inject({
+      method: "GET",
+      url: `/api/assets/${ids.unused}/usage`,
+      headers: headers(secrets.gm),
+    });
+    expect(usage.statusCode, usage.body).toBe(200);
+    expect(usage.json()).toMatchObject({
+      inUse: true,
+      canDelete: false,
+      usages: [
+        {
+          kind: "CHARACTER_RESOURCE",
+          entityId: character!.id,
+          label: "Resource artwork character",
+          location: "Ресурс персонажа",
+          visibility: "PARTICIPANT",
+          deletionPolicy: "BLOCK",
+        },
+      ],
+    });
+
+    const blocked = await app.inject({
+      method: "DELETE",
+      url: `/api/assets/${ids.unused}`,
+      headers: headers(secrets.gm),
+    });
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json()).toMatchObject({
+      error: "ASSET_IN_USE",
+      usages: [{ kind: "CHARACTER_RESOURCE", entityId: character!.id }],
+    });
+
+    const before = await app.inject({
+      method: "GET",
+      url: `/api/assets/${ids.unused}/content`,
+      headers: headers(secrets.gm),
+    });
+    const form = multipartFile();
+    const replaced = await app.inject({
+      method: "PUT",
+      url: `/api/assets/${ids.unused}/content`,
+      headers: {
+        ...headers(secrets.gm),
+        "x-action-id": crypto.randomUUID(),
+        "if-match": before.headers.etag!,
+        "content-type": form.contentType,
+      },
+      payload: form.body,
+    });
+    expect(replaced.statusCode, replaced.body).toBe(200);
+    const [after] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, character!.id));
+    expect(after!.resources).toMatchObject({
+      mana: { imageAssetId: ids.unused },
+    });
+  });
+
   it("returns 409 for used content and deletes unused metadata plus blob", async () => {
     const blocked = await app.inject({
       method: "DELETE",
@@ -624,7 +796,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("replaces referenced MAP, TOKEN, PORTRAIT, IMAGE, and AUDIO without changing their relation rows or content URLs", async () => {
+  it("replaces referenced MAP, TOKEN, PORTRAIT, IMAGE, and AUDIO without changing their relation rows or canonical content paths", async () => {
     // Existing self-authored Vorbis fixture, also used by media-smoke.spec.ts.
     const audio = await readFile(
       new URL("./multiplayer/uix642-synthetic-tone.ogg", import.meta.url),
@@ -798,7 +970,12 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       });
       expect(replaced.statusCode, replaced.body).toBe(200);
       expect(replaced.json()).toMatchObject({
-        asset: { id, kind, name: beforeRow.name, url: contentUrl },
+        asset: {
+          id,
+          kind,
+          name: beforeRow.name,
+          url: `${contentUrl}?v=${replaced.json().version.slice(1, -1)}`,
+        },
         oldBlobCleanupPending: false,
         replayed: false,
       });
@@ -938,7 +1115,10 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     });
     expect(retry.statusCode, retry.body).toBe(200);
     expect(retry.json()).toMatchObject({
-      asset: { id: ids.unused, url: contentUrl },
+      asset: {
+        id: ids.unused,
+        url: `${contentUrl}?v=${retry.json().version.slice(1, -1)}`,
+      },
       replayed: false,
       oldBlobCleanupPending: false,
     });
@@ -958,6 +1138,26 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       headers: headers(secrets.gm),
     });
     expect(before.statusCode, before.body).toBe(200);
+    const head = await app.inject({
+      method: "HEAD",
+      url: contentUrl,
+      headers: headers(secrets.gm),
+    });
+    expect(head.statusCode).toBe(200);
+    expect(head.body).toBe("");
+    expect(head.headers.etag).toBe(before.headers.etag);
+    const initialBootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(initialBootstrap.statusCode, initialBootstrap.body).toBe(200);
+    const beforeProjected = initialBootstrap
+      .json()
+      .assets.find((item: { id: string }) => item.id === ids.unused);
+    expect(beforeProjected.url).toBe(
+      `${contentUrl}?v=${String(head.headers.etag).slice(1, -1)}`,
+    );
     const beforeVersion = before.headers.etag;
     expect(beforeVersion).toMatch(/^"[a-f0-9]{64}"$/);
 
@@ -995,7 +1195,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
         kind: beforeRow.kind,
         name: beforeRow.name,
         createdAt: beforeRow.createdAt.toISOString(),
-        url: contentUrl,
+        url: `${contentUrl}?v=${replaced.json().version.slice(1, -1)}`,
         mimeType: "image/webp",
         width: 1,
         height: 1,
@@ -1064,6 +1264,65 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     });
     expect(notModified.statusCode).toBe(304);
 
+    const projectedUrl = replaced.json().asset.url as string;
+    expect(new URL(projectedUrl, "http://localhost").pathname).toBe(contentUrl);
+    expect(projectedUrl).not.toBe(beforeProjected.url);
+    const bootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(bootstrap.statusCode, bootstrap.body).toBe(200);
+    expect(
+      bootstrap
+        .json()
+        .assets.find((item: { id: string }) => item.id === ids.unused),
+    ).toEqual(replaced.json().asset);
+    const projectedContent = await app.inject({
+      method: "GET",
+      url: projectedUrl,
+      headers: headers(secrets.gm),
+    });
+    expect(projectedContent.statusCode).toBe(200);
+    expect(projectedContent.rawPayload).toEqual(storedBytes);
+    const projectedHead = await app.inject({
+      method: "HEAD",
+      url: projectedUrl,
+      headers: headers(secrets.gm),
+    });
+    expect(projectedHead.statusCode).toBe(200);
+    expect(projectedHead.body).toBe("");
+    expect(projectedHead.headers.etag).toBe(afterVersion);
+    const cached = await app.inject({
+      method: "GET",
+      url: projectedUrl,
+      headers: { ...headers(secrets.gm), "if-none-match": afterVersion },
+    });
+    expect(cached.statusCode).toBe(304);
+    const oldLink = await app.inject({
+      method: "GET",
+      url: beforeProjected.url,
+      headers: headers(secrets.gm),
+    });
+    expect(oldLink.statusCode).toBe(200);
+    expect(oldLink.rawPayload).toEqual(storedBytes);
+    for (const method of ["HEAD", "GET"] as const) {
+      const anonymous = await app.inject({ method, url: projectedUrl });
+      expect(anonymous.statusCode).toBe(401);
+      const playerDenied = await app.inject({
+        method,
+        url: projectedUrl,
+        headers: { ...headers(secrets.player), "if-none-match": afterVersion },
+      });
+      expect(playerDenied.statusCode).toBe(404);
+      expect(playerDenied.headers.etag).toBeUndefined();
+      const foreign = await app.inject({
+        method,
+        url: `/api/assets/${ids.foreign}/content?v=${afterVersion.slice(1, -1)}`,
+        headers: headers(secrets.gm),
+      });
+      expect(foreign.statusCode).toBe(404);
+    }
     const inventoryAfterReplacement = await fileInventory();
     const replayForm = multipartFile();
     const replay = await app.inject({

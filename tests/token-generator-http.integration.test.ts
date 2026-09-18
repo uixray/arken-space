@@ -7,6 +7,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
@@ -486,7 +487,7 @@ describe("UIX-589 derivative replacement HTTP acceptance", () => {
       await generateReplacementAsset(),
     ];
     const before = await persistedReplacementState();
-    const actionIds = [crypto.randomUUID(), crypto.randomUUID()];
+    const actionIds: string[] = [crypto.randomUUID(), crypto.randomUUID()];
     const responses = await Promise.all(
       replacementIds.map((defaultAssetId, index) =>
         app.inject({
@@ -508,7 +509,7 @@ describe("UIX-589 derivative replacement HTTP acceptance", () => {
     const winner = responses.findIndex(
       (response) => response.statusCode === 200,
     );
-    expect(responses[1 - winner].json()).toEqual({
+    expect(responses[1 - winner]!.json()).toEqual({
       error: "TOKEN_DEFINITION_CONFLICT",
     });
     const after = await persistedReplacementState();
@@ -702,7 +703,6 @@ describe("UIX-255 token generator HTTP", () => {
       height: 512,
       durationSeconds: null,
     });
-    expect(created.json().url).toBe(`/api/assets/${created.json().id}/content`);
 
     const replay = await app.inject({
       method: "POST",
@@ -712,6 +712,7 @@ describe("UIX-255 token generator HTTP", () => {
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.json().id).toBe(created.json().id);
+    expect(replay.json().url).toBe(created.json().url);
 
     const allAssets = await db.select().from(schema.assets);
     expect(
@@ -729,6 +730,20 @@ describe("UIX-255 token generator HTTP", () => {
     const generatedContent = await readFile(
       join(mediaRoot, generated.storageKey),
     );
+    const version = createHash("sha256")
+      .update(generated.storageKey)
+      .digest("hex");
+    expect(created.json().url).toBe(
+      `/api/assets/${generated.id}/content?v=${version}`,
+    );
+    const delivered = await app.inject({
+      method: "GET",
+      url: created.json().url,
+      headers: headers(secrets.gm),
+    });
+    expect(delivered.statusCode).toBe(200);
+    expect(delivered.headers.etag).toBe(`"${version}"`);
+    expect(delivered.rawPayload).toEqual(generatedContent);
     expect(generatedContent.subarray(0, 4).toString("ascii")).toBe("RIFF");
     expect(generatedContent.subarray(8, 12).toString("ascii")).toBe("WEBP");
   });

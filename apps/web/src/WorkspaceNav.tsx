@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import {
   splitWorkspaceNav,
@@ -87,27 +87,33 @@ export function WorkspaceNav({
    * её содержимого (см. `flex: 1 1 0` в стилях): убранная кнопка не меняет
    * ширину, значит новый замер не запускает следующий.
    */
+  const measureAvailable = useCallback(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const width = row.getBoundingClientRect().width;
+    setAvailable((previous) =>
+      Math.abs(previous - width) > 0.5 ? width : previous,
+    );
+  }, []);
+  useLayoutEffect(measureAvailable);
   useLayoutEffect(() => {
     const row = rowRef.current;
     if (!row) return;
-    const measure = () => {
-      const width = row.getBoundingClientRect().width;
-      setAvailable((previous) =>
-        Math.abs(previous - width) > 0.5 ? width : previous,
-      );
-    };
-    measure();
-    window.addEventListener("resize", measure);
+    // Keep the subscription across renders. A popup's ResizeObserver can flush
+    // a React render during delivery; observing this shallower row again then
+    // queues an initial notification the browser cannot deliver in that cycle.
+    // The separate render measurement above retains the no-callback fallback.
+    window.addEventListener("resize", measureAvailable);
     const observer =
       typeof ResizeObserver === "undefined"
         ? null
-        : new ResizeObserver(measure);
+        : new ResizeObserver(measureAvailable);
     observer?.observe(row);
     return () => {
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", measureAvailable);
       observer?.disconnect();
     };
-  });
+  }, [measureAvailable]);
 
   const gap = 6;
   const { visible, overflow } = splitWorkspaceNav(
@@ -128,8 +134,14 @@ export function WorkspaceNav({
       data-workspace={item.id}
       aria-pressed={active === item.id}
       onClick={() => {
+        if (moreRef.current) {
+          moreRef.current.open = false;
+          // The destination window must remember a visible return target,
+          // not the menu item that is about to become hidden.
+          if (inMenu)
+            moreRef.current.querySelector<HTMLElement>("summary")?.focus();
+        }
         onSelect(item.id);
-        if (moreRef.current) moreRef.current.open = false;
       }}
     >
       {item.label}

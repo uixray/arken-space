@@ -4,6 +4,7 @@
 }
 .operator-feedback__grid {
   display: grid;
+  overflow-wrap: anywhere;
   grid-template-columns: 280px 1fr;
   gap: 16px;
   height: 100%;
@@ -28,4 +29,27 @@
 .operator-feedback pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.operator-feedback__filters fieldset,
+.operator-feedback__filters label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.operator-feedback__filters input,
+.operator-feedback__filters select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.operator-feedback__grid > * {
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .operator-feedback__grid {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    overflow: visible;
+  }
 }

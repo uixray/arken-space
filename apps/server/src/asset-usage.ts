@@ -67,6 +67,7 @@ export async function resolveAssetUsages(
   const [
     sceneRows,
     definitionRows,
+    characterResourceRows,
     characterRows,
     characterMediaRows,
     mapRows,
@@ -93,6 +94,23 @@ export async function resolveAssetUsages(
         and(
           eq(tokenDefinitions.campaignId, campaignId),
           eq(tokenDefinitions.defaultAssetId, assetId),
+        ),
+      ),
+    db
+      .select({
+        id: characters.id,
+        name: characters.name,
+        ownerMembershipId: characters.ownerMembershipId,
+      })
+      .from(characters)
+      .where(
+        and(
+          eq(characters.campaignId, campaignId),
+          sql`exists (
+            select 1
+            from jsonb_each(${characters.resources}) as resource
+            where resource.value->>'imageAssetId' = ${assetId}
+          )`,
         ),
       ),
     db
@@ -199,6 +217,16 @@ export async function resolveAssetUsages(
       entityId: row.id,
       label: row.name,
       location: "Персонаж",
+      visibility: row.ownerMembershipId
+        ? ("PARTICIPANT" as const)
+        : ("GM_ONLY" as const),
+      deletionPolicy: "BLOCK" as const,
+    })),
+    ...characterResourceRows.map((row) => ({
+      kind: "CHARACTER_RESOURCE" as const,
+      entityId: row.id,
+      label: row.name,
+      location: "Ресурс персонажа",
       visibility: row.ownerMembershipId
         ? ("PARTICIPANT" as const)
         : ("GM_ONLY" as const),

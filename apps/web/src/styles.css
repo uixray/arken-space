@@ -176,6 +176,12 @@ code {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
+/* An explicitly opened shell menu is a transient popup above non-modal
+ * workspaces, not a blocking dialog. Raising its topbar stacking context (not
+ * merely the nested menu) uses the reserved popup tier below all modals. */
+.topbar:has(details[open]) {
+  z-index: var(--arken-layer-workspace-popup, 1999);
+}
 .brand,
 .status-line {
   display: flex;
@@ -727,7 +733,7 @@ code {
 }
 .resize-settings-popover button[aria-pressed="true"] {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--color-text-accent);
 }
 .aspect-lock {
   position: absolute;
@@ -768,10 +774,13 @@ code {
     linear-gradient(90deg, #292823 1px, transparent 1px);
   background-size: 24px 24px;
 }
-.map-scale {
+.map-scale-anchor {
   position: absolute;
   right: 8px;
   top: 44px;
+  pointer-events: none;
+}
+.map-scale {
   padding: 3px 6px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -798,10 +807,12 @@ code {
 }
 .map-selection-action {
   position: absolute;
-  top: 44px;
-  right: 80px;
+  top: 0;
+  right: calc(100% + 8px);
   z-index: 24;
-  max-width: calc(100% - 160px);
+  width: max-content;
+  max-width: calc(100vw - 160px);
+  pointer-events: auto;
 }
 .drawing-color-panel {
   position: absolute;
@@ -812,7 +823,11 @@ code {
   left: calc(8px + var(--map-toolbar-width, 48px) + 8px);
   width: max-content;
   max-width: calc(100% - var(--map-toolbar-width, 48px) - 32px);
-  overflow-x: auto;
+  /* Keep every setting reachable inside short maps, not behind the topbar. */
+  box-sizing: border-box;
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -994,7 +1009,10 @@ code {
   text-align: left;
 }
 .token-context-menu button[aria-checked="true"] {
-  color: var(--accent);
+  /* Accent colors fail normal-size label contrast, including on hover.
+     The check mark and weight preserve a non-color selection indicator. */
+  color: var(--text);
+  font-weight: 600;
 }
 .token-tray {
   position: absolute;
@@ -1008,6 +1026,11 @@ code {
   border: 1px solid var(--line);
   background: var(--surface);
   box-shadow: 0 8px 24px #0008;
+}
+.token-tray[open] {
+  /* An active picker sits above persistent canvas tools (24), but stays
+     below token menus (40), pause (45), and workspace/modal owners. */
+  z-index: 26;
 }
 .token-tray summary {
   flex: 0 0 auto;
@@ -1125,6 +1148,10 @@ code {
   gap: var(--space-sm);
   padding-top: var(--space-lg);
   border-top: 1px solid var(--line);
+}
+/* Keep inactive setup tabs and retired controls hidden on desktop too. */
+.subsection[hidden] {
+  display: none;
 }
 .field {
   display: flex;
@@ -1810,7 +1837,7 @@ code {
 
 .slash-command-suggestions code {
   grid-column: 1 / -1;
-  color: var(--accent);
+  color: var(--color-text-accent);
 }
 .chat-compose {
   display: grid;
@@ -1944,13 +1971,30 @@ code {
 .character-workspace__body.is-rail-collapsed .character-rail {
   padding-inline: 6px;
 }
-.character-workspace__body.is-rail-collapsed .character-rail__create {
+.character-workspace__body.is-rail-collapsed
+  :is(
+    .character-rail__create,
+    .character-rail__restore-archived,
+    .character-rail__archive
+  ) {
   min-width: 0;
   padding-inline: 0;
   font-size: 0;
 }
 .character-workspace__body.is-rail-collapsed .character-rail__item {
   grid-template-columns: 1fr;
+}
+.character-workspace__body.is-rail-collapsed
+  .character-rail__item
+  > button:first-child {
+  padding-inline: 0;
+  justify-items: center;
+}
+.character-rail__archive-icon {
+  display: none;
+}
+.character-workspace__body.is-rail-collapsed .character-rail__archive-icon {
+  display: inline-flex;
 }
 .character-workspace__body.is-rail-collapsed .character-rail__item strong,
 .character-workspace__body.is-rail-collapsed .character-rail__status,
@@ -2211,6 +2255,11 @@ code {
 }
 .asset-row small {
   color: var(--muted);
+}
+
+.asset-audio-preview audio {
+  width: 100%;
+  min-width: 0;
 }
 
 .music-bar {
@@ -2494,7 +2543,7 @@ code {
 }
 .landing-kicker {
   margin: 0;
-  color: var(--accent);
+  color: var(--color-text-accent);
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -2585,7 +2634,7 @@ code {
 }
 .landing-roadmap li::before {
   content: counter(roadmap, decimal-leading-zero);
-  color: var(--accent);
+  color: var(--color-text-accent);
   font-size: 0.75rem;
 }
 .feedback-form {
@@ -2789,7 +2838,7 @@ code {
 }
 
 .message-character {
-  color: var(--accent);
+  color: var(--color-text-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2877,10 +2926,16 @@ code {
   min-width: 0;
   text-align: left;
 }
+.map-object-list li > button:first-child {
+  overflow-wrap: anywhere;
+}
 .map-object-list button[aria-pressed="true"] {
   outline: 2px solid var(--accent);
 }
 .map-object-list__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding-inline: 8px;
 }
 .entity-form {
@@ -3249,9 +3304,10 @@ code {
   color: var(--muted);
   text-align: center;
 }
-.world-map-marker,
-.world-map-party-marker {
+.world-map-marker {
   position: absolute;
+  width: max-content;
+  max-width: 100%;
   transform: translate(-50%, -50%);
 }
 .world-map-marker {
@@ -3272,13 +3328,19 @@ code {
   font-size: 16px;
   line-height: 1;
 }
+.world-map-marker__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .world-map-marker.is-selected,
 .world-map-marker:focus-visible {
   border-color: #f0bd72;
   outline-color: #f0bd72;
 }
 .world-map-party-marker {
-  z-index: 2;
+  display: inline-flex;
+  flex-shrink: 0;
   color: #f0bd72;
   font-size: 24px;
   line-height: 1;
@@ -3610,7 +3672,7 @@ code {
 }
 .story-post__media-fallback {
   width: fit-content;
-  color: var(--accent);
+  color: var(--color-text-accent);
 }
 .story-composer {
   display: grid;
@@ -4378,7 +4440,7 @@ code {
   align-items: center;
   gap: var(--space-xs);
   margin: 0;
-  color: var(--accent);
+  color: var(--color-text-accent);
   font-size: 0.78rem;
 }
 .activity-filters {
@@ -4845,6 +4907,8 @@ code {
   color: var(--text-muted, #999);
 }
 .character-media-viewer__caption {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   text-align: center;
 }
 .character-media-viewer__nav {
@@ -5086,7 +5150,9 @@ code {
   position: absolute;
   right: 8px;
   bottom: 8px;
-  z-index: 46;
+  /* Canvas chrome: below the object list (25), token menu (40), and pause
+     overlay (45). Persistent dice must not intercept menu actions. */
+  z-index: 24;
   width: max-content;
   max-width: min(420px, calc(50% - 18px));
 }
@@ -5115,4 +5181,10 @@ code {
 }
 .workspace-nav__count {
   flex: 0 0 auto;
+}
+
+/* Auto-growing catalog fields must start at a usable height even when the
+ * dialog was measured while its setup section was hidden. Keep growth enabled. */
+.catalog-entry-form .g-text-area__control {
+  min-height: var(--size-control-height);
 }

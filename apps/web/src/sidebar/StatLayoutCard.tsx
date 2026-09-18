@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button } from "@gravity-ui/uikit";
 import { isSystemRegenStatKey, STAT_VALUE_RANGE } from "@arken/system";
 import { ApiError, formatApiError } from "../api";
@@ -54,10 +54,12 @@ function refusalOf(
  * в цикле нарушил бы порядок вызовов при первом же удалении.
  */
 function StatValueField({
+  id,
   value,
   editable,
   onCommit,
 }: {
+  id: string;
   value: number;
   editable: boolean;
   onCommit: (value: number) => void;
@@ -65,6 +67,7 @@ function StatValueField({
   const controlRef = useRemoteFieldValue<HTMLInputElement>(String(value));
   return (
     <FormInput
+      id={id}
       controlRef={controlRef}
       type="number"
       defaultValue={value}
@@ -124,6 +127,7 @@ export function StatLayoutCard({
    */
   onMoveRow: (key: string, direction: "up" | "down") => Promise<void>;
 }) {
+  const fieldIdPrefix = useId();
   // `null` — окно закрыто; `{ key: undefined }` — добавление новой строки.
   const [editing, setEditing] = useState<{ key?: string } | null>(null);
   const renamed = editing?.key
@@ -168,9 +172,16 @@ export function StatLayoutCard({
       <h3 className="character-card__header">{title}</h3>
       <div className="character-card__body">
         {rows.map((row, index) => (
-          <label key={row.key} className="stat-field">
-            <span>{row.label}</span>
+          <div key={row.key} className="stat-field">
+            <span>
+              <label
+                htmlFor={`${fieldIdPrefix}-${encodeURIComponent(row.key)}`}
+              >
+                {row.label}
+              </label>
+            </span>
             <StatValueField
+              id={`${fieldIdPrefix}-${encodeURIComponent(row.key)}`}
               value={values[row.key] ?? STAT_VALUE_RANGE.defaultValue}
               editable={editable}
               onCommit={(value: number) => onChangeValue(row.key, value)}
@@ -215,8 +226,6 @@ export function StatLayoutCard({
                   <Button
                     view="flat"
                     className="stat-field__rename"
-                    // Кнопка внутри `label`: без этого клик по ней считался бы
-                    // кликом по подписи и уводил фокус в поле ввода.
                     onClick={(event) => {
                       event.preventDefault();
                       setEditing({ key: row.key });
@@ -250,7 +259,7 @@ export function StatLayoutCard({
                 </>
               )}
             </div>
-          </label>
+          </div>
         ))}
         {canEditLayout && (
           <Button

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, renderComponent, screen } from "../test-support/render";
+import {
+  fireEvent,
+  renderComponent,
+  screen,
+  waitFor,
+} from "../test-support/render";
 import { useDismissibleDetails } from "./dismissible-details";
 
 /**
@@ -70,6 +75,90 @@ describe("механизм закрытия поповера", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves an already consumed Escape and its focus with the child control", () => {
+    const onDismiss = vi.fn();
+    const details = render(onDismiss);
+    const child = details.querySelector("button")!;
+    child.focus();
+    child.addEventListener("keydown", (event) => event.preventDefault());
+
+    fireEvent.keyDown(child, { key: "Escape" });
+
+    expect(details.open).toBe(true);
+    expect(child).toHaveFocus();
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("does not steal Escape or focus from a different dialog", () => {
+    const onDismiss = vi.fn();
+    const details = render(onDismiss);
+    const view = renderComponent(
+      <section role="dialog" aria-label="Другое окно">
+        <button>В другом окне</button>
+      </section>,
+    );
+    const button = screen.getByRole("button", { name: "В другом окне" });
+    button.focus();
+
+    fireEvent.keyDown(button, { key: "Escape" });
+
+    expect(details.open).toBe(true);
+    expect(button).toHaveFocus();
+    expect(onDismiss).not.toHaveBeenCalled();
+    view.unmount();
+  });
+  it("still closes its own menu inside a dialog", () => {
+    renderComponent(
+      <section role="dialog" aria-label="Владелец">
+        <Popover />
+      </section>,
+    );
+    const details =
+      document.querySelector<HTMLDetailsElement>("details.probe")!;
+    fireEvent.keyDown(details.querySelector("button")!, { key: "Escape" });
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")).toHaveFocus();
+  });
+
+  it("cleans up a hidden menu without taking focus or consuming Escape", () => {
+    const details = render();
+    details.hidden = true;
+    const outside = screen.getByText("Открыть").parentElement!.parentElement!;
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(outside, event);
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")).not.toHaveFocus();
+    expect(event.defaultPrevented).toBe(false);
+  });
+  it("dismisses an open menu when resize hides its trigger", async () => {
+    const onDismiss = vi.fn();
+    const details = render(onDismiss);
+    const trigger = details.querySelector("summary")!;
+    vi.spyOn(trigger, "getClientRects").mockReturnValue(
+      [] as unknown as DOMRectList,
+    );
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(details.open).toBe(false));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(trigger).not.toHaveFocus();
+  });
+
+  it("keeps a still-visible mixed-control menu open during resize", async () => {
+    const details = render();
+    const trigger = details.querySelector("summary")!;
+    vi.spyOn(trigger, "getClientRects").mockReturnValue([
+      {},
+    ] as unknown as DOMRectList);
+    fireEvent(window, new Event("resize"));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
+    expect(details.open).toBe(true);
+  });
   it("не трогает уже закрытый поповер", () => {
     // Иначе Escape в любом месте приложения дёргал бы `onDismiss` у каждого
     // смонтированного поповера разом.
@@ -152,4 +241,65 @@ describe("UIX-644 opt-in details listbox", () => {
     fireEvent.focusIn(document.body);
     expect(document.querySelector("details")?.open).toBe(false);
   });
+});
+
+it.each(["hidden", "inert"])(
+  "closes a mounted owner on %s without moving focus, and watches a later reopen",
+  async (attribute) => {
+    const onDismiss = vi.fn();
+    const rendered = renderComponent(
+      <>
+        <button type="button">Next surface</button>
+        <section data-testid="owner">
+          <Popover onDismiss={onDismiss} />
+        </section>
+      </>,
+    );
+    const owner = rendered.getByTestId("owner");
+    const details = owner.querySelector("details")!;
+    const next = screen.getByRole("button", { name: "Next surface" });
+    next.focus();
+    owner.setAttribute(attribute, "");
+    await waitFor(() => expect(details.open).toBe(false));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(next).toHaveFocus();
+    owner.removeAttribute(attribute);
+    expect(details.open).toBe(false);
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    owner.setAttribute(attribute, "");
+    await waitFor(() => expect(details.open).toBe(false));
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+    expect(next).toHaveFocus();
+  },
+);
+
+it("closes an initially open details already under a hidden owner", async () => {
+  const onDismiss = vi.fn();
+  const rendered = renderComponent(
+    <section hidden>
+      <Popover onDismiss={onDismiss} />
+    </section>,
+  );
+  expect(rendered.container.querySelector("details")!.open).toBe(false);
+  expect(onDismiss).toHaveBeenCalledTimes(1);
+});
+
+it("rechecks current visibility rather than dismissing on a removed attribute record", async () => {
+  const onDismiss = vi.fn();
+  const rendered = renderComponent(
+    <section>
+      <Popover onDismiss={onDismiss} />
+    </section>,
+  );
+  const owner = rendered.container.querySelector("section")!;
+  const details = owner.querySelector("details")!;
+  owner.hidden = true;
+  owner.hidden = false;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(details.open).toBe(true);
+  expect(onDismiss).not.toHaveBeenCalled();
+  details.hidden = true;
+  await waitFor(() => expect(details.open).toBe(false));
+  expect(onDismiss).toHaveBeenCalledTimes(1);
 });

@@ -1,6 +1,7 @@
 /* Opt-in bridge. The unthemed production UI and overlay ownership are unchanged.
  * Personal colors must never replace saved canvas colors or game outcomes. */
-html[data-player-theme] .g-root {
+/* Classic retains the original UIKit dark theme, not the personal-color bridge. */
+html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {
   --g-color-base-background: var(--color-canvas);
   --g-color-base-float: var(--color-surface-raised);
   --g-color-base-float-hover: var(--color-surface-hover);
@@ -24,8 +25,4 @@ html[data-player-theme] .g-root {
   --g-color-line-generic-hover: var(--color-focus);
   --g-color-line-generic-active: var(--color-focus);
   --g-color-line-danger: var(--state-error-ink);
-  /* Text controls use their own outline hooks, not --g-color-line-focus.
-   * Without these, keyboard focus falls back to UIKit's low-contrast border. */
-  --g-text-input-focus-outline-color: var(--color-focus);
-  --g-text-area-focus-outline-color: var(--color-focus);
 }

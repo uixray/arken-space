@@ -119,3 +119,206 @@ Audit payload хранит `assetId`, предыдущий и новый version
 - **Блокеры / дальше:** root выполняет единый pooled gate после freeze,
   указанную source-диверсию и проверку восстановления. До этого UIX-609 не
   объявляется принятой или готовой к публикации по этому checkpoint.
+
+## 2026-09-17 — missing replacement UI: client intent foundation (UIX-293)
+
+Live UIX-293 is In Progress and still requires a user-facing replacement action.
+UIX-610 is Done but its original criteria cover usage/delete, not replacement.
+Current MediaPanel and AssetActions expose no replacement action. The server PUT
+and ETag contract already exist; do not change storage/version policy or create
+another issue to fill this gap.
+
+New isolated asset-replacement.ts captures a fresh authenticated HEAD version
+(no file download), selected File and one action ID in an immutable intent.
+Missing/weak/malformed versions and HTTP failures fail closed with Russian text.
+Cancellation retains its original reason. Commit sends multipart PUT with that
+exact If-Match and action ID through the existing api helper. It never fetches
+a newer version or retries automatically. An explicit retry of the same intent
+keeps the same file/action ID; a409 remains a409 for the future review UI.
+The response preserves replay and old-blob-cleanup flags.
+
+13 new protocol tests plus30 unchanged api tests PASS (43 total,637ms,worker1),
+web TypeScript and scoped ESLint/Prettier/diff PASS. Fetch is mocked; this is not
+an executed HEAD/PUT server, browser, file replacement or finished UI acceptance.
+No caller imports this module yet. No new dependency, backend change, build,
+full suite, CI, publication or Linear write.
+
+Next connected pool: integrate GM-only replacement review in the existing file
+row using this intent, show existing usage/impact and selected replacement,
+require explicit confirmation, retain the same intent after ambiguous transport
+failure, require fresh review on version conflict, and distinguish committed
+replacement from later catalog-refresh failure. Reuse ImageUploadField/
+AudioUploadField without losing asset ID/name/kind; no force overwrite or
+implicit retry. Add component and actual-App browser success/cancel/conflict/
+retained-draft checks before claiming that masters can use the feature.
+
+## 2026-09-17 — replacement review UI wired, browser gate pending
+
+GM file rows now open a shared-modal replacement review. It uses the existing
+image/audio intake controls, lists server usage, explains the irreversible content
+change, and requires a separate confirmation after the version check. PLAYER rows
+have no entry. File/intent freeze while reviewed or pending; changing the choice
+requires a new review. A409 discards only the old intent, retaining the file;
+ambiguous failure offers an explicit retry with the same intent/action ID.
+
+Commit and catalog refresh are separate stable AssetActions. Acknowledged commit
+moves to success before refresh; a thrown refresh failure never offers PUT again.
+App's existing load catches its own errors and displays the global error; this
+was not changed or misrepresented as a successful fresh catalog. The modal's
+separate refresh warning covers rejected refresh callbacks. Cleanup-pending is
+shown as maintenance, not failed replacement. Async callbacks after unmount are
+ignored; pending preparation is aborted, and modal identity includes campaign,
+actor and asset. No force overwrite or server contract changes.
+
+Connected component gate16/16PASS10.53s (five new dialog scenarios, existing media
+and action tests); then one additional action identity/commit-vs-refresh test plus
+two existing hook tests3/3PASS1.52s. Web types and scoped lint/format/diff PASS.
+Five action-context fixtures gained fail-fast stubs; their behavior tests were
+not rerun. Dialog/intake controls are mocked in the five component cases: these
+are lifecycle assertions, not Gravity portal/focus, actual decoding or browser QA.
+
+Still required before feature acceptance: actual-App GM/PLAYER responsive browser
+flow, cancel/pending/409/explicit retry; real backend HEAD/PUT integration; verify
+already-mounted media consumers refresh after replacement. Current URLs in
+assetDto/snapshot remain stable, so snapshot reload alone must not be assumed to
+refresh rendered pixels/audio. No build/CI/release or full UIX-293 acceptance.
+
+## 2026-09-17 — actual replacement browser flow and stale-preview correction
+
+New actual-App GM flow1280/390 in Chrome/Firefox exercises real file intake/PNG
+decode, usage review, cancel without PUT, disabled cancel/Escape during held PUT,
+409 retaining the file but requiring new HEAD/review, transport failure and an
+explicit same-action/same-version retry, success and modal closure. Multipart
+contains the selected bytes; exactly three deliberate PUTs, three HEADs and no
+unexpected writes/pageerrors. A new review creates a new action; retry does not.
+
+The first fixture PNG decoded in Chrome but failed Firefox: replaced it with
+valid generated RGB PNG chunks/CRC (test fixture only). Corrected workflow4/4PASS
+29.8s then exposed a REAL rendering gap in all four receipts: after acknowledged
+replacement and bootstrap reload, preview still showed [30,60,90,255], with only
+one GET. New bytes should be [180,80,40,255]. Those green workflow results do not
+mean media freshness passed; the pixel observations contradicted it.
+
+Server assetDto now emits content URLs with the existing opaque version token as
+`?v=...`. Snapshot and generated-token responses reuse that DTO instead of
+separate unversioned projections. Asset ID, canonical endpoint, references,
+If-Match/ETag, no-cache policy and content ACL remain unchanged. Storage keys are
+not exposed, and changing only the display name leaves the URL stable. This
+intentionally supersedes the earlier stable-projected-URL-only assumption.
+
+11 asset-policy/unit tests PASS285ms, including versioned URL identity/privacy;
+server/E2E TypeScript, scoped lint/format/diff PASS. Final browser4/4PASS26.4s now
+asserts an additional GET and actual new preview pixels, not just success copy.
+The synthetic bootstrap/PUT DTO supplies the versioned URL; this does NOT execute
+the changed server snapshot/HTTP routes. Reports initial/corrected/versioned in
+asset-replacement-browser preserve fixture failure, stale evidence and final gate.
+No build/full suite/CI/publication/Linear closure; protected recovery test unchanged.
+
+Next mandatory gate: actual backend HEAD/PUT/bootstrap and versioned content ACL/
+304 behavior, then already-mounted map/token/audio consumers and PLAYER exclusion.
+The current four cases are image/media-row GM UI, not audio playback or complete
+UIX-293 acceptance. Do not repeat only these passing image cases as substitute.
+
+## 2026-09-17 — executed HTTP/database replacement gate
+
+Extended the existing asset-lifecycle HTTP suite rather than creating a second
+backend harness. Real registerRoutes, Fastify injection, isolated PGlite with the
+current migration chain, real multipart normalization/storage and temporary files:
+7/7 PASS14.46s, one worker. This is executed server behavior, not mocked API, but
+it is not a deployed server/TCP/multiplayer or physical playback test.
+
+New assertions cover empty-body authenticated HEAD and strong ETag; real bootstrap
+URLs before/after replacement; exact match between replacement DTO and bootstrap;
+versioned GET bytes/HEAD/304; old versioned links still resolve authorized latest
+content, not historical blobs; anonymous401 and foreign404 for GET/HEAD; PLAYER
+cannot bypass hidden-content ACL using a known version and If-None-Match (404,
+no ETag). Existing PLAYER PUT403, foreign PUT404, stale-version409, action reuse,
+exact replay, audit privacy and blob inventory assertions remain.
+
+All five MAP/TOKEN/PORTRAIT/IMAGE/AUDIO replacements retain identity and relation
+rows. A forced audit-insert failure still rolls back metadata and removes the new
+blob, and a later same-action retry succeeds. Assertions formerly demanding an
+unversioned projected URL now require the canonical path plus the exact returned
+version token; reference and identity assertions are unchanged.
+
+First launch collected no tests because @arken/db/dist was absent. A local Vitest
+config aliases @arken/db to its current source (same path as TypeScript), avoiding
+a dependency build. The first three-case run passed replacement/cache but found
+one remaining obsolete URL expectation in the rollback test; corrected that
+contract assertion, then ran all seven connected cases. Earlier reports retained.
+Focused test TypeScript including server imports, scoped lint/format/diff PASS.
+No production DB/service, full suite/build, CI, publication or issue closure.
+Evidence: asset-replacement-http/{results.json,source-results.json,final-results.json}.
+
+Next: mounted canvas/token/audio browser consumers and PLAYER navigation exclusion.
+The real HTTP gate does not prove that changing a URL actually refreshes those
+consumers or that an audio replacement plays. Keep those acceptance gaps explicit.
+
+## 2026-09-17 — mounted map/token pixels, both roles
+
+Added four actual-App browser cases (GM/PLAYER × Chrome/Firefox,1280): a visible
+map image and token start with distinct solid RGB PNGs, then a socket snapshot
+changes only their asset URLs to new content versions. Scene/token identity,
+placement/revision and canvas DOM instance are retained. After actual image GETs,
+composited Konva-layer pixels change from the old map/token colors to the exact
+new colors without a page reload or renderer remount. No HTTP gameplay writes
+or pageerrors. PLAYER uses an explicit full-scene fog reveal; this is not a new
+fog/visibility authorization test.
+
+4/4PASS18.4s,worker1/retries0; E2E types, scoped ESLint/format/diff PASS. The valid
+PNG builder was moved unchanged to a shared test helper, also used by the earlier
+replacement-modal test; that unchanged workflow was not replayed. Runtime source
+unchanged. Source analysis of MusicBar found it passes current.url to audio, but
+that is not playback/decode proof: mounted audio remains the next required gate.
+Evidence: mounted-asset-images/initial-results.json and attached pixel receipts.
+HTTP/socket are synthetic; real backend replacement evidence is the separate
+asset-replacement-http gate. No full suite/build/CI/publication or issue closure.
+
+## 2026-09-17 — mounted native audio and local consent
+
+Four new real-App cases passed18.7s: Chrome/Firefox ×GM/PLAYER at1280, one worker,
+no retries. The native audio element decodes the valid0.7s Vorbis fixture, sees
+successive versioned URLs at the same asset ID, and remains the same DOM element.
+Before local consent, source replacement stays paused despite server playing=true.
+Using the real volume UI, gain is set to0 before enabling sound; playback advances
+without audible laptop output. Replacing the active source reloads/decodes it and
+playback resumes with gain0. After explicit local opt-out, another replacement
+stays paused; saved consent=false and volume=0 remain. No audio:set commands,
+HTTP game writes or pageerrors; server audio state/revision remain unchanged.
+
+E2E types, scoped lint/format/diff PASS; owned Vite stopped after the run. Evidence:
+mounted-asset-audio/initial-results.json and native-media receipts. HTTP/socket
+are mocked but native decoding/currentSrc/readiness/time progression are real.
+The same valid Ogg payload is served under each version: this proves source reload
+and playback/consent preservation, not different-song audibility, a changed
+shorter duration, production delivery, Safari or physical speakers. No full suite,
+build/CI/publication or automatic UIX-293 closure.
+
+## 2026-09-17 — local audio catalog preview (UIX-293)
+
+Original AC was reread live: it requires usage status, not an additional asset
+lifecycle status. Existing usage lookup supplies that status. Audio preview was
+missing: catalog rows showed only the Audio label.
+
+Added an explicit local preview toggle to audio rows, with at most one player
+mounted. Native controls load on demand (preload=none), never autoplay, and start
+at the saved personal gain (existing quadratic curve; invalid/unavailable storage
+falls back to slider midpoint). Preview does not save consent/volume or send game
+commands. Closing/switching unmounts the old player; replacement URL or actor scope
+remounts it paused. Playback failures have a Russian alert and close/reopen retry.
+Controls fit the available row width.
+
+Verification: component pool 20/20 PASS (19.37s), including actual MediaPanel upload
+controls, usage/delete role tests and preview gain/error cases. Chrome/Firefox x
+1280/390: 4/4 PASS (20.1s), real App/native Ogg decode/time advancement at gain zero;
+no eager content requests, previous player paused on switching, one preview only,
+no audio:set or unexpected HTTP writes, preferences unchanged. Native play() was
+invoked through browser evaluation; native control gesture usability is not claimed.
+HTTP/socket mocked, GM catalog only, not physical mobile/Safari/production evidence.
+Web and E2E types, scoped ESLint/Prettier, git diff check PASS. Own Vite stopped.
+Evidence: catalog-audio-preview/initial-results.json and attached receipts under
+C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07.
+No full suite/build/CI/push/deploy or Linear closure. Protected untracked selection
+recovery test unchanged and excluded. Next gate: consolidate original UIX-293
+acceptance evidence and remaining release/real interaction gaps without adding
+invented status requirements or repeating unchanged gates.

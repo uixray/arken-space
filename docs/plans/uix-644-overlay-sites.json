@@ -19,7 +19,7 @@
     },
     {
       "file": "apps/web/src/FeedbackReporter.tsx",
-      "kind": "tag:Select",
+      "kind": "tag:FormSelect",
       "count": 1
     },
     {
@@ -30,6 +30,11 @@
     {
       "file": "apps/web/src/MusicBar.tsx",
       "kind": "tag:details",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/OperatorFeedbackFilters.tsx",
+      "kind": "tag:select",
       "count": 2
     },
     {

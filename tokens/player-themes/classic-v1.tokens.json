@@ -1,0 +1,78 @@
+{
+  "$description": "Immutable classic-v1 presentation color snapshot. Do not regenerate from mutable base tokens or game semantic colors. Full component migration is separate.",
+  "$extensions": {
+    "arken": {
+      "sourceRevision": "1ea7051b56092551423546ae9a507a22069f9f62",
+      "sourceFile": "tokens/color.tokens.json"
+    }
+  },
+  "name": "Прежнее оформление",
+  "colorScheme": "dark",
+  "version": 1,
+  "tokens": {
+    "color-canvas": {
+      "$type": "color",
+      "$value": "#181816"
+    },
+    "color-surface": {
+      "$type": "color",
+      "$value": "#20201d"
+    },
+    "color-surface-raised": {
+      "$type": "color",
+      "$value": "#292824"
+    },
+    "color-surface-hover": {
+      "$type": "color",
+      "$value": "#34322c"
+    },
+    "color-surface-active": {
+      "$type": "color",
+      "$value": "#34322c"
+    },
+    "color-border": {
+      "$type": "color",
+      "$value": "#47443b"
+    },
+    "color-border-hover": {
+      "$type": "color",
+      "$value": "#696356"
+    },
+    "color-text": {
+      "$type": "color",
+      "$value": "#e8e4da"
+    },
+    "color-text-muted": {
+      "$type": "color",
+      "$value": "#aaa598"
+    },
+    "color-text-faint": {
+      "$type": "color",
+      "$value": "#777267"
+    },
+    "color-accent": {
+      "$type": "color",
+      "$value": "#c46f49"
+    },
+    "color-accent-hover": {
+      "$type": "color",
+      "$value": "#d57d55"
+    },
+    "color-accent-active": {
+      "$type": "color",
+      "$value": "#d57d55"
+    },
+    "color-danger": {
+      "$type": "color",
+      "$value": "#da6b61"
+    },
+    "color-focus": {
+      "$type": "color",
+      "$value": "#c46f49"
+    },
+    "color-focus-strong": {
+      "$type": "color",
+      "$value": "#d57d55"
+    }
+  }
+}

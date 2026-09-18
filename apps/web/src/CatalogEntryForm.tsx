@@ -295,6 +295,7 @@ export function CatalogEntryForm({
 
   return (
     <form
+      className="catalog-entry-form"
       onSubmit={submit}
       aria-label={
         existing ? "Редактирование записи каталога" : "Новая запись каталога"
@@ -580,7 +581,7 @@ export function CatalogEntryForm({
               <FormInput
                 value={row.key}
                 pattern="[a-z][a-z0-9_]{0,39}"
-                placeholder="magic"
+                placeholder="Код латиницей"
                 onChange={(event) =>
                   setValues((current) =>
                     current.map((item) =>

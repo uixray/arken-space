@@ -235,3 +235,96 @@ describe("UIX-644 static overlay inventory", () => {
     expect(() => requireReviewedSiteIndex(reviewed, reviewed)).not.toThrow();
   });
 });
+
+interface RuntimeCoverageRow extends OverlaySiteCount {
+  status: "PASS" | "FAIL" | "BLOCKED";
+  classification: string;
+  scope: string;
+  evidence: string[];
+  next: string;
+}
+interface RuntimeCoverage {
+  schemaVersion: number;
+  overallAcceptance: string;
+  statusMeaning: string;
+  evidence: Record<
+    string,
+    { status: string; revision: string; artifact: string; scope: string }
+  >;
+  sites: RuntimeCoverageRow[];
+}
+function requireRuntimeCoverage(
+  registry: OverlaySiteCount[],
+  ledger: RuntimeCoverage,
+) {
+  if (ledger.schemaVersion !== 1 || ledger.overallAcceptance !== "INCOMPLETE")
+    throw new Error(
+      "Runtime ledger is scoped evidence, not a full acceptance certificate",
+    );
+  requireReviewedSiteIndex(
+    registry,
+    ledger.sites.map(({ file, kind, count }) => ({ file, kind, count })),
+  );
+  for (const row of ledger.sites) {
+    if (
+      !["PASS", "FAIL", "BLOCKED"].includes(row.status) ||
+      !row.classification ||
+      !row.scope ||
+      !row.next
+    )
+      throw new Error(
+        "Every source bucket needs scope, status and next action",
+      );
+    const refs = row.evidence.map((id) => {
+      const entry = ledger.evidence[id];
+      if (
+        !entry ||
+        !/^[a-f0-9]{40}$/.test(entry.revision) ||
+        !entry.artifact ||
+        !entry.scope
+      )
+        throw new Error("Unknown or incomplete runtime evidence");
+      return entry;
+    });
+    if (row.status !== "BLOCKED" && !refs.some((e) => e.status === row.status))
+      throw new Error(
+        "PASS/FAIL requires corresponding evidence, not test-file existence",
+      );
+  }
+}
+
+describe("UIX-644 runtime coverage bookkeeping (not browser acceptance)", () => {
+  const root = resolve(
+    fileURLToPath(new URL(".", import.meta.url)),
+    "../../../docs/plans",
+  );
+  const registry = JSON.parse(
+    readFileSync(join(root, "uix-644-overlay-sites.json"), "utf8"),
+  ).sites as OverlaySiteCount[];
+  const ledger = JSON.parse(
+    readFileSync(join(root, "uix-644-runtime-coverage.json"), "utf8"),
+  ) as RuntimeCoverage;
+  it("accounts for every static bucket and keeps evidence scope explicit", () => {
+    requireRuntimeCoverage(registry, ledger);
+  });
+  it("rejects omitted buckets and evidence-free acceptance claims", () => {
+    expect(() =>
+      requireRuntimeCoverage(registry, {
+        ...ledger,
+        sites: ledger.sites.slice(1),
+      }),
+    ).toThrow(/inventory drift/);
+    const changed = structuredClone(ledger);
+    changed.sites[0] = { ...changed.sites[0]!, status: "PASS", evidence: [] };
+    expect(() => requireRuntimeCoverage(registry, changed)).toThrow(
+      /requires corresponding evidence/,
+    );
+  });
+  it("rejects dangling evidence references", () => {
+    const changed = structuredClone(ledger);
+    changed.sites[0]!.evidence = ["unverified-report"];
+    expect(() => requireRuntimeCoverage(registry, changed)).toThrow(
+      /Unknown or incomplete/,
+    );
+  });
+});
