@@ -371,6 +371,7 @@ it("retains an uncontrolled Select choice without selecting the create utility a
   await user.click(trigger);
   await user.click(screen.getByRole("option", { name: "Маркер" }));
   expect(trigger).toHaveTextContent("Маркер");
+  expect(trigger).toHaveFocus();
   expect(changed).toHaveBeenCalledTimes(1);
   expect(changed.mock.lastCall?.[0].target.value).toBe("marker");
   await user.click(trigger);
@@ -378,6 +379,33 @@ it("retains an uncontrolled Select choice without selecting the create utility a
   expect(create).toHaveBeenCalledOnce();
   expect(changed).toHaveBeenCalledTimes(1);
   expect(trigger).toHaveTextContent("Маркер");
+});
+
+it("returns focus to a controlled Select trigger after choosing an option", async () => {
+  const user = userEvent.setup();
+  function ControlledSelect() {
+    const [value, setValue] = useState("forest");
+    return (
+      <FormSelect
+        aria-label="Тема игрока по умолчанию"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+      >
+        <option value="forest">Лес</option>
+        <option value="light">Светлая</option>
+      </FormSelect>
+    );
+  }
+  renderComponent(<ControlledSelect />);
+  const trigger = screen.getByRole("combobox", {
+    name: "Тема игрока по умолчанию",
+  });
+
+  await user.click(trigger);
+  await user.click(screen.getByRole("option", { name: "Светлая" }));
+
+  expect(trigger).toHaveTextContent("Светлая");
+  expect(trigger).toHaveFocus();
 });
 
 it.each([
