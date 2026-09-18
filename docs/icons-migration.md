@@ -29,14 +29,14 @@ Source maps содержат47 уникальных Lucide icon modules:45main+2
 Это статическая сверка **иконок**, не blanket-аудит всех сетевых запросов приложения.
 Новую сборку или браузерные micropools ради этой сверки не запускали.
 
-| Исходный критерий | Фактическая граница доказательства |
-| --- | --- |
-| Точная dependency/лицензия, общий слой | Ранее проверены; свежий bundle содержит реальные Lucide SVG modules, не пустую dependency |
-| Миграция и запрет возврата glyphs | Reachable local-source closure + текущие28 tests и negative examples; vendor internals/игровой контент не выдаются за авторский UI |
-| Выравнивание, состояния, имена, keyboard/hit-area | Датированные scoped receipts ниже; разные ревизии и роли, не один общий прогон на HEAD |
-| Все поддерживаемые темы | Не завершено: main.tsx по-прежнему ThemeProvider dark, generated player-theme styles не импортированы в entry; решение о владении темой ожидается |
-| Без полного registry/иконного CDN | Emitted47/2066, no dynamic registry/network calls в Lucide sources, local HTML assets; общий runtime network audit не заявлен |
-| Exact-candidate integration/release | Нет нового полного CI/push/deploy; широкая локальная ветка не опубликована, UIX-645 остаётся In Progress |
+| Исходный критерий                                 | Фактическая граница доказательства                                                                                                                |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Точная dependency/лицензия, общий слой            | Ранее проверены; свежий bundle содержит реальные Lucide SVG modules, не пустую dependency                                                         |
+| Миграция и запрет возврата glyphs                 | Reachable local-source closure + текущие28 tests и negative examples; vendor internals/игровой контент не выдаются за авторский UI                |
+| Выравнивание, состояния, имена, keyboard/hit-area | Датированные scoped receipts ниже; разные ревизии и роли, не один общий прогон на HEAD                                                            |
+| Все поддерживаемые темы                           | Не завершено: main.tsx по-прежнему ThemeProvider dark, generated player-theme styles не импортированы в entry; решение о владении темой ожидается |
+| Без полного registry/иконного CDN                 | Emitted47/2066, no dynamic registry/network calls в Lucide sources, local HTML assets; общий runtime network audit не заявлен                     |
+| Exact-candidate integration/release               | Нет нового полного CI/push/deploy; широкая локальная ветка не опубликована, UIX-645 остаётся In Progress                                          |
 
 Live список Linear на этой сверке:21 Review/In Progress, без изменений статусов
 и новых карточек. Запрет повторного внешнего write после предыдущего отказа соблюдён.
