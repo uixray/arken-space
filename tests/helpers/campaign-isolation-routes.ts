@@ -77,6 +77,8 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "GET /api/gm/characters/:characterId/spell-progression",
   "GET /api/player-requests/:id",
   "GET /api/preview/:membershipId",
+  "GET /api/spell-packs/:id/versions",
+  "GET /api/spell-packs/:id/versions/:versionId",
   "GET /api/stickers/:id/content",
   "GET /api/story/media/:contentId",
   "GET /api/world-content-instances/:id",

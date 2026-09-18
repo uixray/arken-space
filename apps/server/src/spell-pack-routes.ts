@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
@@ -8,6 +8,14 @@ import {
   archiveSpellPackCommandSchema,
   createSpellPackCommandSchema,
   previewSpellReferenceImportCommandSchema,
+  spellPackInventoryQuerySchema,
+  spellPackInventoryResponseSchema,
+  spellPackReadParamsSchema,
+  spellPackVersionHistoryQuerySchema,
+  spellPackVersionHistoryResponseSchema,
+  spellPackVersionReadParamsSchema,
+  spellPackVersionReadQuerySchema,
+  spellPackVersionResponseSchema,
   spellProgressionGraphSchema,
   transitionSpellPackLifecycleCommandSchema,
   validateSpellPackGraphSchema,
@@ -35,6 +43,17 @@ type VersionRow = typeof spellPackVersions.$inferSelect;
 type EventRow = typeof gameEvents.$inferSelect;
 
 const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
+
+// Summary queries do not transfer historical graph JSON into the API process.
+const versionSummarySelection = {
+  packId: spellPackVersions.packId,
+  versionId: spellPackVersions.id,
+  version: spellPackVersions.version,
+  lifecycle: spellPackVersions.lifecycle,
+  title: sql<string>`${spellPackVersions.graph}->>'title'`,
+  edition: sql<string | null>`${spellPackVersions.graph}->>'edition'`,
+  createdAt: spellPackVersions.createdAt,
+};
 
 const LIFECYCLE_TRANSITIONS: Readonly<
   Record<SpellPackLifecycle, readonly SpellPackLifecycle[]>
@@ -429,6 +448,143 @@ async function sendMutationOutcome<
 }
 
 export function registerSpellPackRoutes(app: FastifyInstance, db: Database) {
+  app.get("/api/spell-packs", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    const auth = await requireGm(request, reply, db);
+    if (!auth) return;
+    const query = spellPackInventoryQuerySchema.safeParse(request.query);
+    if (!query.success) return fail(reply, 400, "INVALID_REQUEST");
+    const { limit, cursor } = query.data;
+    const rows = await db
+      .select({ packId: spellPacks.id, createdAt: spellPacks.createdAt })
+      .from(spellPacks)
+      .where(
+        and(
+          eq(spellPacks.campaignId, auth.campaignId),
+          cursor === undefined ? undefined : gt(spellPacks.id, cursor),
+        ),
+      )
+      .orderBy(asc(spellPacks.id))
+      .limit(limit + 1);
+    const page = rows.slice(0, limit);
+    // At most one summary per selected pack; no N+1 full-graph/history reads.
+    const latest = page.length
+      ? await db
+          .selectDistinctOn([spellPackVersions.packId], versionSummarySelection)
+          .from(spellPackVersions)
+          .where(
+            and(
+              eq(spellPackVersions.campaignId, auth.campaignId),
+              inArray(
+                spellPackVersions.packId,
+                page.map((row) => row.packId),
+              ),
+            ),
+          )
+          .orderBy(
+            asc(spellPackVersions.packId),
+            desc(spellPackVersions.version),
+          )
+      : [];
+    const latestByPack = new Map(latest.map((row) => [row.packId, row]));
+    const items = page.map((pack) => {
+      const version = latestByPack.get(pack.packId);
+      if (!version) throw new Error("SPELL_PACK_LATEST_VERSION_MISSING");
+      return {
+        packId: pack.packId,
+        createdAt: pack.createdAt.toISOString(),
+        latestVersion: {
+          ...version,
+          createdAt: version.createdAt.toISOString(),
+        },
+      };
+    });
+    return reply.send(
+      spellPackInventoryResponseSchema.parse({
+        items,
+        nextCursor: rows.length > limit ? page[page.length - 1]!.packId : null,
+      }),
+    );
+  });
+
+  app.get("/api/spell-packs/:id/versions", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    const auth = await requireGm(request, reply, db);
+    if (!auth) return;
+    const params = spellPackReadParamsSchema.safeParse(request.params);
+    const query = spellPackVersionHistoryQuerySchema.safeParse(request.query);
+    if (!params.success || !query.success)
+      return fail(reply, 400, "INVALID_REQUEST");
+    const [pack] = await db
+      .select({ id: spellPacks.id })
+      .from(spellPacks)
+      .where(
+        and(
+          eq(spellPacks.campaignId, auth.campaignId),
+          eq(spellPacks.id, params.data.id),
+        ),
+      )
+      .limit(1);
+    if (!pack) return fail(reply, 404, "SPELL_PACK_NOT_FOUND");
+    const { limit, cursor } = query.data;
+    const rows = await db
+      .select(versionSummarySelection)
+      .from(spellPackVersions)
+      .where(
+        and(
+          eq(spellPackVersions.campaignId, auth.campaignId),
+          eq(spellPackVersions.packId, pack.id),
+          cursor === undefined
+            ? undefined
+            : lt(spellPackVersions.version, Number(cursor)),
+        ),
+      )
+      .orderBy(desc(spellPackVersions.version))
+      .limit(limit + 1);
+    const page = rows.slice(0, limit);
+    return reply.send(
+      spellPackVersionHistoryResponseSchema.parse({
+        items: page.map((row) => ({
+          ...row,
+          createdAt: row.createdAt.toISOString(),
+        })),
+        nextCursor:
+          rows.length > limit ? String(page[page.length - 1]!.version) : null,
+      }),
+    );
+  });
+
+  app.get(
+    "/api/spell-packs/:id/versions/:versionId",
+    async (request, reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      const auth = await requireGm(request, reply, db);
+      if (!auth) return;
+      const params = spellPackVersionReadParamsSchema.safeParse(request.params);
+      const query = spellPackVersionReadQuerySchema.safeParse(request.query);
+      if (!params.success || !query.success)
+        return fail(reply, 400, "INVALID_REQUEST");
+      const [row] = await db
+        .select()
+        .from(spellPackVersions)
+        .where(
+          and(
+            eq(spellPackVersions.campaignId, auth.campaignId),
+            eq(spellPackVersions.packId, params.data.id),
+            eq(spellPackVersions.id, params.data.versionId),
+          ),
+        )
+        .limit(1);
+      if (!row) return fail(reply, 404, "SPELL_PACK_VERSION_NOT_FOUND");
+      const saved = validatedVersion(row);
+      return reply.send(
+        spellPackVersionResponseSchema.parse(
+          versionDto(saved.row, saved.warnings),
+        ),
+      );
+    },
+  );
+
   app.post(
     "/api/spell-packs/imports/reference/preview",
     { bodyLimit: SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS * 4 },
