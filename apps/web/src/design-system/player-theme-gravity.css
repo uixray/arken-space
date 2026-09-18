@@ -1,6 +1,18 @@
 /* Opt-in bridge. The unthemed production UI and overlay ownership are unchanged.
  * Personal colors must never replace saved canvas colors or game outcomes. */
 /* Classic retains the original UIKit dark theme, not the personal-color bridge. */
+html[data-player-theme]:not([data-player-theme="classic-v1"]) {
+  /* EntityState/dialog consumers still use the preview-era compatibility
+   * vocabulary. Personal themes resolve it from the same canonical palette;
+   * otherwise light themes inherit the old near-white preview copy. */
+  --arken-ui-bg: var(--color-canvas);
+  --arken-ui-surface: var(--color-surface);
+  --arken-ui-surface-raised: var(--color-surface-raised);
+  --arken-ui-border: var(--color-control-border);
+  --arken-ui-text: var(--color-text);
+  --arken-ui-muted: var(--color-text-muted);
+  --arken-ui-accent: var(--color-accent);
+}
 html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {
   --g-color-base-background: var(--color-canvas);
   --g-color-base-float: var(--color-surface-raised);

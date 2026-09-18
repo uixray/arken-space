@@ -1,0 +1,35 @@
+.player-theme-settings {
+  display: grid;
+  gap: var(--space-lg);
+  color: var(--color-text);
+}
+
+.player-theme-settings h2,
+.player-theme-settings p {
+  margin: 0;
+}
+
+.player-theme-settings__description {
+  color: var(--color-text-muted);
+}
+
+.player-theme-settings__field {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.player-theme-settings__error {
+  color: var(--g-color-text-danger);
+}
+
+.player-theme-settings__actions,
+.player-theme-settings__actions-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.player-theme-settings__actions {
+  justify-content: space-between;
+}

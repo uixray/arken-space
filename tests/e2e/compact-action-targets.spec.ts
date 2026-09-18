@@ -1,5 +1,6 @@
-import { expect, test } from "./react-console-guard";
+import type { Locator } from "@playwright/test";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { expect, test } from "./react-console-guard";
 
 for (const role of ["GM", "PLAYER"] as const)
   for (const { width, height } of [
@@ -62,6 +63,84 @@ for (const role of ["GM", "PLAYER"] as const)
       await expect(page.locator(".map-viewport")).toBeVisible();
       const failures: object[] = [];
       const measurements: object[] = [];
+      const assertVisibleInputTargets = async (
+        owner: Locator,
+        surface: string,
+      ) => {
+        const inputs = owner.locator("input:visible:not(:disabled)");
+        for (const input of await inputs.all()) {
+          const type = (await input.getAttribute("type")) ?? "text";
+          const labelledTarget = input.locator("xpath=ancestor::label[1]");
+          const mayUseLabel =
+            (type === "checkbox" || type === "range") &&
+            (await input.evaluate(
+              (node) =>
+                node instanceof HTMLInputElement &&
+                node.closest("label")?.control === node,
+            ));
+          const target = mayUseLabel ? labelledTarget : input;
+          await target.scrollIntoViewIfNeeded();
+          const measurement = await target.evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            return {
+              label:
+                node.getAttribute("aria-label") ||
+                node.textContent?.trim() ||
+                node.getAttribute("type"),
+              className: node.className,
+              width: box.width,
+              height: box.height,
+              hit: node.contains(
+                document.elementFromPoint(
+                  box.x + box.width / 2,
+                  box.y + box.height / 2,
+                ),
+              ),
+            };
+          });
+          measurements.push({ surface, inputType: type, ...measurement });
+          // Collect the whole connected flyout pool before failing, just like
+          // the button audit below. One run should reveal every small target,
+          // not stop at the first number input and hide the remaining owners.
+          if (
+            measurement.width < 44 ||
+            measurement.height < 44 ||
+            !measurement.hit
+          )
+            failures.push({ surface, inputType: type, ...measurement });
+          if (!measurement.hit) continue;
+
+          if (mayUseLabel) {
+            const checkedBefore = await input.isChecked().catch(() => null);
+            const valueBefore = await input.inputValue();
+            await target.click();
+            await expect(input).toBeFocused();
+            if (type === "checkbox") {
+              expect(await input.isChecked()).toBe(!checkedBefore);
+              await target.click();
+              expect(await input.isChecked()).toBe(checkedBefore);
+            } else if ((await input.inputValue()) !== valueBefore) {
+              const { min, step } = await input.evaluate((node) => {
+                if (!(node instanceof HTMLInputElement))
+                  throw new Error("Expected range input");
+                return {
+                  min: Number(node.min || 0),
+                  step: Number(node.step || 1),
+                };
+              });
+              const presses = Math.round((Number(valueBefore) - min) / step);
+              expect(presses).toBeGreaterThanOrEqual(0);
+              expect(presses).toBeLessThanOrEqual(100);
+              await input.press("Home");
+              for (let i = 0; i < presses; i++) await input.press("ArrowRight");
+              expect(Number(await input.inputValue())).toBeCloseTo(
+                Number(valueBefore),
+                5,
+              );
+            }
+          }
+        }
+      };
       for (const surface of ["map", "journal"] as const) {
         await page.locator(`#compact-nav-${surface}`).click();
         await expect(page.locator(`#compact-nav-${surface}`)).toHaveAttribute(
@@ -118,6 +197,8 @@ for (const role of ["GM", "PLAYER"] as const)
             )
             .first();
           await expect(control).toBeVisible();
+          await assertVisibleInputTargets(owner, selector);
+          await control.scrollIntoViewIfNeeded();
           await expect
             .poll(() =>
               control.evaluate((node) => {
@@ -177,6 +258,11 @@ for (const role of ["GM", "PLAYER"] as const)
           .locator(".toolbar-overflow-menu input:visible")
           .first();
         await expect(moreAction).toBeVisible();
+        await assertVisibleInputTargets(
+          page.locator(".toolbar-overflow-menu"),
+          ".toolbar-overflow-menu",
+        );
+        await moreAction.scrollIntoViewIfNeeded();
         await expect
           .poll(() =>
             moreAction.evaluate((node) => {

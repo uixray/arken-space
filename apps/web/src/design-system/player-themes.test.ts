@@ -70,7 +70,7 @@ describe("player theme configuration", () => {
     );
   });
 
-  it("prefers a valid override, then a valid default, then baseline system", () => {
+  it("uses a published override, a default only for no override, or baseline system", () => {
     expect(
       resolvePlayerThemeId({ selectedThemeId: "ice", defaultThemeId: "gold" }),
     ).toBe("ice");
@@ -79,7 +79,7 @@ describe("player theme configuration", () => {
         selectedThemeId: "unknown",
         defaultThemeId: "gold",
       }),
-    ).toBe("gold");
+    ).toBe("system");
     expect(
       resolvePlayerThemeId({
         selectedThemeId: "unknown",
@@ -88,6 +88,31 @@ describe("player theme configuration", () => {
     ).toBe("system");
     expect(isPlayerThemeId("forest")).toBe(true);
     expect(isPlayerThemeId("system")).toBe(false);
+  });
+
+  it("never uses an unpublished override or default from the local registry", () => {
+    const publishedThemeIds = new Set(["forest"]);
+    expect(
+      resolvePlayerThemeId({
+        selectedThemeId: "ice",
+        defaultThemeId: "forest",
+        publishedThemeIds,
+      }),
+    ).toBe("system");
+    expect(
+      resolvePlayerThemeId({
+        selectedThemeId: null,
+        defaultThemeId: "ice",
+        publishedThemeIds,
+      }),
+    ).toBe("system");
+    expect(
+      resolvePlayerThemeId({
+        selectedThemeId: null,
+        defaultThemeId: "forest",
+        publishedThemeIds,
+      }),
+    ).toBe("forest");
   });
 
   it.each(PLAYER_THEMES.map(({ id }) => id))(

@@ -185,6 +185,64 @@ function requireContrast(tokens: Tokens) {
   if (failed.length) throw new Error(JSON.stringify(failed));
 }
 
+it("uses checked semantic error surfaces and does not recolor game success", async () => {
+  const css = await readFile(
+    new URL("../apps/web/src/styles.css", import.meta.url),
+    "utf8",
+  );
+  // A class can have a shared geometry rule before its semantic state rule.
+  // Collect its exact selector lines, not an arbitrary first substring hit.
+  const block = (selector: string) =>
+    [
+      ...css.matchAll(
+        new RegExp(
+          `^${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`,
+          "gm",
+        ),
+      ),
+    ]
+      .map((match) => match[1])
+      .join("\n");
+  for (const selector of [".error-box", ".toast"]) {
+    expect(block(selector)).toContain("background: var(--surface);");
+    expect(block(selector)).toContain(
+      "color: var(--state-error-ink, var(--danger));",
+    );
+    expect(block(selector)).not.toContain("color-mix");
+  }
+  for (const selector of [
+    ".field-error",
+    ".danger-link",
+    ".asset-picker__warning",
+  ])
+    expect(block(selector)).toContain(
+      "color: var(--state-error-ink, var(--danger));",
+    );
+  for (const selector of [".field-notice", ".world-map-lifecycle--published"])
+    expect(block(selector)).toContain("color: var(--text);");
+  expect(css).not.toContain("var(--surface-active)");
+  expect(css).toContain("--ok: var(--color-success);");
+});
+
+it("resolves legacy entity-state text from the active canonical theme", async () => {
+  const bridge = await readFile(
+    new URL(
+      "../apps/web/src/design-system/player-theme-gravity.css",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const block =
+    bridge
+      .split(
+        'html[data-player-theme]:not([data-player-theme="classic-v1"]) {',
+      )[1]
+      ?.split("}")[0] ?? "";
+  expect(block).toContain("--arken-ui-text: var(--color-text);");
+  expect(block).toContain("--arken-ui-muted: var(--color-text-muted);");
+  expect(block).toContain("--arken-ui-border: var(--color-control-border);");
+});
+
 describe("personal theme semantic contrast (flat token surfaces only)", () => {
   it("checks known luminance endpoints without rounding away failures", () => {
     expect(ratio(color("#000000"), color("#ffffff"))).toBe(21);
