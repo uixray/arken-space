@@ -1,6 +1,13 @@
 # UIX-624 — P1: responsive foundation
 
-Текущий остаток исходных критериев уточнён в [сверке 19 сентября](#closure-сверка--2026-09-19);
+> **Итог 19.09.2026: P1 Done в Linear.** Последний gap размеров Grid/Resize/More
+> закрыт; exact candidate `e67bacc37` прошёл все3 CI, включая12 compact target и
+> 6 journal budget cases без flaky. Исправлено ожидание native End в тесте,
+> не уменьшены44px/160px/±1px требования. P2–P6/physical touch не закрывались;
+> новый PR85 не слит/не deployed. Предыдущие pending ниже — история.
+> [Финальный checkpoint](design-finish-2026-09-19.md#final-checkpoint--accepted-candidate-three-closures-work-paused).
+
+Предыдущий остаток исходных критериев был уточнён в [сверке 19 сентября](#closure-сверка--2026-09-19);
 не повторять старые утверждения о маленьких toolbar/zoom/dice controls как текущий факт.
 
 Дата: 2026-09-05. **Checkpoint замороженного implementation-пула; не Done, не полный mobile acceptance и не release.** Статус задачи, итоговые SHA и результаты последующих full E2E / PR / CI gates фиксируются в Linear **UIX-624** и Git, а не считаются пройденными по этому документу.

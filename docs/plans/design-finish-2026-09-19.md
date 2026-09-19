@@ -345,3 +345,61 @@ assertion failure, then the240s whole-process budget stopped the20-repeat run.
 This is partial repetition evidence, not a successful20-test complete run and
 not backend/authentication acceptance. Temporary fixture source and trace stay
 in session artifacts, excluded from Git. The next exact CI is authoritative.
+
+## Final checkpoint — accepted candidate, three closures, work paused
+
+**Published revision:** `e67bacc37a1ac4b77a2524388cc76a8ffacf5698`, draft
+[PR85](https://github.com/uixray/arken-space/pull/85). Product bytes are v6 /
+`f630606d2a576781913e62209f77c3670c30cb13`; the subsequent commit changes only
+the causal scroll-test assertion and this checkpoint. The local follow-up to
+this published SHA contains only final acceptance documentation and is not a
+new product candidate. Do not rerun unchanged CI because the task/chat changed.
+
+**Exact final gates, all SUCCESS:**
+
+- [checks35412873275](https://github.com/uixray/arken-space/actions/runs/35412873275).
+- [E2E35412873288](https://github.com/uixray/arken-space/actions/runs/35412873288):
+  **1063 PASS /29 existing SKIP /0 FAIL /0 FLAKY**, all four reports retained.
+  Includes12 compact target,6 journal budget,72 icon shell,8 modal owner and
+  2 actual PostgreSQL player-theme persistence cases.
+- [multiplayer35412873306](https://github.com/uixray/arken-space/actions/runs/35412873306).
+- Local v6 surface8/8, critical-text contrast5.655/13.461, source contrast17/17,
+  membership default DOM3/3 and v6 icon-bundle audit remain scoped evidence.
+  `ci-e67bacc-summary.json` and `design-candidate-e67bacc-proof.json` bind them
+  to the published candidate without pretending all were one frozen run.
+
+**Linear stage gate completed:** UIX-502, UIX-624(P1 only), UIX-645 → **Done**,
+with original-criterion evidence and current next actions. UIX-317 and UIX-644
+remain **In Progress**; original criteria were not waived. No new cards.
+
+**What players/GM gain in the candidate:** each membership keeps its own theme;
+preview/cancel/save/reset/system/classic behave distinctly; GM default changes
+do not overwrite private choice. Icons remain legible above map art; compact
+settings targets are usable; dialog-owned lists remain above their owner; light
+critical results retain readable text plus colored borders and explicit labels.
+
+**Unfinished original acceptance, not new backlog:**
+
+- UIX-317: broader rendered contrast/non-color game surfaces (including actual
+  fog/drawing/ruler states), toast/popover matrix, browser first-paint/no-flash
+  and full representative visual-regression acceptance. Token math, screenshots
+  and passing persistence are not a blanket all-surface certificate.
+- UIX-644: original TokenPalette/GravityFormControls ResizeObserver old/new
+  causal replay and headed native Firefox popup visual/pointer/Escape/focus.
+  Both new theme Select rows are scoped PASS; historical failures remain.
+- Full physical mobile/touch/P2–P6 and broader game acceptance remain outside
+  completed P1. They were not silently included or closed.
+
+**Changed at this final handoff:** this plan, current-state entry point, three
+closed-issue checkpoints and the menu runtime ledger only. The approved Lucide
+archive/extracted package/license stay in the project's `asset-library.local`.
+Protected untracked `tests/e2e/selection-recovery.spec.ts` stays excluded;
+SHA256 `7A5AB2F67EA250F787DFAC9AC441CE387CD61C4F9B99AAA48210A935EB6D6D9A`.
+
+**Stop / next action:** work is paused as requested. No further issue, audit,
+build or automatic follow-up is started. PR85 remains draft/unmerged and this
+pool is not deployed. The prior `cce56397` production release is separate.
+On explicit resume, first read this checkpoint, Git log/diff and the listed CI;
+then choose only the remaining original acceptance. A future merge/release of
+PR85 needs its own explicit scope and completed exact-main/backup/restore/
+deploy/postflight gates; do not reuse the earlier PR81 permission silently.
