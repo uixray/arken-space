@@ -1,5 +1,19 @@
 # UIX-644 — реестр меню, popup и picker
 
+## 2026-09-19 — два новых места выбора персональной темы
+
+Текущий static index расширен до **39 groups / 78 occurrences**. Исторические
+37 / 76 и их PASS / FAIL / BLOCKED ниже не переписаны задним числом.
+
+| Место                                                      | Роль и вход                                       | Владелец / слой                           | Приёмка                                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `design-system/PlayerThemeSettings.tsx` — 1 FormSelect     | GM / PLAYER: аккаунт → Оформление                 | Shared FormSelect, modal-owned portal     | Текущий connected gate и real-server persistence CI; не наследует PASS старых списков        |
+| `design-system/MemberDefaultThemeField.tsx` — 1 FormSelect | GM: Подготовка → Игрок → Тема игрока по умолчанию | Shared FormSelect, workspace-owned portal | Отдельные open / select / Escape / focus / outside / save cases; статус до receipt — BLOCKED |
+
+Для обеих строк сохраняются общий overflow/resize contract и реальные
+pointer/keyboard проверки без force. Новый статический индекс не является
+runtime PASS. Детальное evidence ведётся в `uix-644-runtime-coverage.json`.
+
 ## 2026-09-12 — Escape во внешнем окне «Токены»
 
 - На опубликованном интерфейсе дважды воспроизведено: Escape в раскрытом списке изображения токена закрывает и список, и всё рабочее окно. Выбор/сохранение/загрузка не выполнялись. Это внешний `TokenPalette` → `FormSelect` в workspace, не grid AssetPicker в модальном редакторе. Точная опубликованная ревизия не установлена.
@@ -1171,3 +1185,43 @@ was captured before commit and its revision names the parent168508e; checkpoint
 records the final commit and exact App diff. This new dist supersedes the old
 bundle only for subsequent checks requiring current runtime. No CI/publish/deploy
 or Linear write; own preview stopped, protected untracked selection test intact.
+
+## Exact-main ledger reconciliation — 2026-09-18
+
+Reconciled the unchanged static registry against released main
+`cce56397a6b1e91fcf2fc6951e506d64b62647cb` and GitHub Actions E2E run
+`35388600465`. The four retained JSON reports under
+`release-2026-09-18/main-cce5639-e2e` show, in both Chromium and Firefox:
+`modal-owner-contract` 4, `modal-owner-close-lifecycle` 3,
+`workspace-select-escape` 9, `select-element-resize` 2, `token-generator` 22,
+`operator-feedback-list` 2 and `operator-feedback-close` 2 — 44 per browser,
+88 total, zero bad. This refreshes only those seven specs; it does not inspect
+browser-owned Firefox popup UI, physical devices or backend persistence.
+
+All 37 static buckets / 76 JSX occurrences remain the full acceptance
+denominator: 26 PASS, 2 FAIL and 9 BLOCKED. Eight BLOCKED buckets (16
+occurrences) carry applicability uncertainty for mixed inactive, hidden, legacy
+or preview-only code. Some of those buckets also contain reachable siblings, so
+none is silently waived or excluded as a whole. A derived 29-bucket / 60-
+occurrence subset (26 PASS, 2 FAIL, 1 BLOCKED) is useful only for planning work
+that is not applicability-blocked; it is **not** the runtime or acceptance
+denominator. Every applicability-blocked row must remain explicit and be
+reconciled if reachability changes or its reachable sibling lacks evidence.
+
+The two FAIL rows are one unresolved historical defect: reachable caller
+`TokenPalette.tsx::tag:FormSelect` and shared implementation
+`GravityFormControls.tsx::tag:Select`. Exact-main green non-reproduction is not a
+causal red-to-green fix for the owner-06 `ResizeObserver loop completed with
+undelivered notifications` trace. Do not repeat unchanged warm/width/font
+diagnostics; resume only with a fresh failing trace or distinct transition. The
+one live BLOCKED bucket is `OperatorFeedbackFilters.tsx::tag:select`: a headed,
+supported Firefox environment must verify the browser-owned native popup. The
+plain-HTML headless limitation is not an App defect and must not prompt a custom
+select rewrite.
+
+Historical `cursorOwnerNaming` FAIL evidence remains raw and is explicitly
+marked superseded by `cursorStableObserver`; current CursorPresenceMenu remains
+PASS. Overall UIX-644 acceptance stays **INCOMPLETE**. No source/tests, browser
+runs, Linear state, deployment or protected untracked selection-recovery file
+changed. Next: headed Firefox native-popup acceptance; observer work waits for
+new failing evidence rather than another blind replay.

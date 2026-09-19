@@ -235,6 +235,25 @@ export function FormSelect({
     ...buildFormSelectUtilityOptions(emptyMessage, createAction?.label),
   ];
   const selected = value ?? uncontrolledValue;
+  const restoreFocusAfterSelection = (ownedList: HTMLElement | null) => {
+    requestAnimationFrame(() => {
+      const control = controlRef.current;
+      if (!control) return;
+      const active = document.activeElement;
+      // A real browser can leave focus on the fading option (and then body)
+      // when a controlled update removes that option. Restore only while this
+      // Select still owns focus; never override a dialog/input focused by the
+      // consumer's onChange handler.
+      if (
+        !active ||
+        active === document.body ||
+        active === control ||
+        ownedList?.contains(active)
+      ) {
+        control.focus();
+      }
+    });
+  };
 
   return (
     <Select
@@ -270,11 +289,16 @@ export function FormSelect({
           createAction?.onSelect();
           return;
         }
+        const ownedListId = controlRef.current?.getAttribute("aria-controls");
+        const ownedList = ownedListId
+          ? document.getElementById(ownedListId)
+          : null;
         if (value === undefined) setUncontrolledValue(next[0] ?? "");
         onChange?.({
           target: { value: next[0] ?? "" },
           currentTarget: { value: next[0] ?? "" },
         } as ChangeEvent<HTMLSelectElement>);
+        restoreFocusAfterSelection(ownedList);
       }}
     />
   );

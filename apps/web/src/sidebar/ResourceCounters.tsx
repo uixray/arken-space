@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import type { CharacterDto } from "@arken/contracts";
 import { FormInput } from "../ui/GravityFormControls";
 import {

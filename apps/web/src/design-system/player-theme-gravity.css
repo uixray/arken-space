@@ -1,6 +1,18 @@
 /* Opt-in bridge. The unthemed production UI and overlay ownership are unchanged.
  * Personal colors must never replace saved canvas colors or game outcomes. */
 /* Classic retains the original UIKit dark theme, not the personal-color bridge. */
+html[data-player-theme]:not([data-player-theme="classic-v1"]) {
+  /* EntityState/dialog consumers still use the preview-era compatibility
+   * vocabulary. Personal themes resolve it from the same canonical palette;
+   * otherwise light themes inherit the old near-white preview copy. */
+  --arken-ui-bg: var(--color-canvas);
+  --arken-ui-surface: var(--color-surface);
+  --arken-ui-surface-raised: var(--color-surface-raised);
+  --arken-ui-border: var(--color-control-border);
+  --arken-ui-text: var(--color-text);
+  --arken-ui-muted: var(--color-text-muted);
+  --arken-ui-accent: var(--color-accent);
+}
 html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {
   --g-color-base-background: var(--color-canvas);
   --g-color-base-float: var(--color-surface-raised);
@@ -25,4 +37,34 @@ html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {
   --g-color-line-generic-hover: var(--color-focus);
   --g-color-line-generic-active: var(--color-focus);
   --g-color-line-danger: var(--state-error-ink);
+}
+
+/* Canvas HUD groups must establish an opaque UI plane before translucent
+ * control states are composited. Otherwise the same icon can inherit map art
+ * as its effective backing. This changes chrome only, never canvas/game paint. */
+html[data-player-theme]:not([data-player-theme="classic-v1"])
+  :is(
+    .map-toolbar,
+    .map-scale,
+    .map-object-list-trigger,
+    .map-object-list-popover,
+    .map-selection-action,
+    .dice-tray-panel,
+    .token-tray
+  ) {
+  background-color: var(--color-surface);
+}
+
+/* The fixed game outcome colors remain on borders in every theme. On the
+ * opaque light roll-card surface those hues are not readable as small text,
+ * so only its textual total/label use canonical high-contrast ink. */
+html[data-player-theme="light"]
+  .roll-result--critical-failure
+  :is(.roll-total, .skill-chat-card__result > strong, .roll-critical-label) {
+  color: var(--state-error-ink);
+}
+html[data-player-theme="light"]
+  .roll-result--critical-success
+  :is(.roll-total, .skill-chat-card__result > strong, .roll-critical-label) {
+  color: var(--color-text);
 }

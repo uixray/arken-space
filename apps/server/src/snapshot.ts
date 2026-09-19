@@ -58,8 +58,15 @@ import { listVisiblePlayerRequests } from "./player-requests.js";
 import { listEncounters } from "./encounters.js";
 import { normalizeSystemRegenStatRows } from "./stat-layout.js";
 import { canViewCharacterMedia } from "./character-media.js";
+import { personalThemeDto } from "./player-themes.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
+
+/** A GM preview is another member's view, never their private preference. */
+export function withoutPersonalTheme(snapshot: GameSnapshot): GameSnapshot {
+  const { personalTheme: _personalTheme, ...safe } = snapshot;
+  return safe;
+}
 
 /**
  * UIX-424: раскладка приходит из `jsonb`, то есть может быть чем угодно —
@@ -892,6 +899,7 @@ export async function buildSnapshot(
       characterId: characterByOwner.get(me.id) ?? null,
       revision: me.revision,
     },
+    personalTheme: personalThemeDto(me),
     members: (auth.role === "GM"
       ? memberRows
       : memberRows.filter((member) => member.id === auth.membershipId)
@@ -901,6 +909,12 @@ export async function buildSnapshot(
       displayName: member.displayName,
       characterId: characterByOwner.get(member.id) ?? null,
       revision: member.revision,
+      ...(auth.role === "GM"
+        ? {
+            defaultThemeId: member.defaultThemeId,
+            defaultThemeRevision: member.defaultThemeRevision,
+          }
+        : {}),
     })),
     directChatContacts: memberRows
       .filter((member) => member.id !== auth.membershipId)

@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button, ThemeProvider } from "@gravity-ui/uikit";
+import { ThemeProvider } from "@gravity-ui/uikit";
+import { Button } from "./Button";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
 import {
   PLAYER_THEMES,

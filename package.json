@@ -26,7 +26,7 @@
     "format": "prettier --write . --ignore-unknown",
     "format:check": "prettier --check . --ignore-unknown",
     "tokens:build": "style-dictionary build --config style-dictionary.config.js && prettier --write apps/web/src/design-system/tokens.generated.css && node scripts/build-player-themes.mjs",
-    "tokens:check": "pnpm tokens:build && git diff --exit-code apps/web/src/design-system/tokens.generated.css apps/web/src/design-system/player-themes.generated.css apps/web/src/design-system/player-themes.generated.ts",
+    "tokens:check": "pnpm tokens:build && git diff --exit-code apps/web/src/design-system/tokens.generated.css apps/web/src/design-system/player-themes.generated.css apps/web/src/design-system/player-themes.generated.ts packages/contracts/src/player-themes.generated.ts",
     "players:build": "node infra/static/players/build-player-pages.mjs"
   },
   "devDependencies": {

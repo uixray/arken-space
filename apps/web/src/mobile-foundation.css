@@ -695,6 +695,17 @@
     overflow: auto;
     overscroll-behavior: contain;
   }
+
+  /* The flyout's button targets do not cover its native fields or checkbox
+   * labels. Keep the actual editable control and associated label tappable. */
+  .app-shell--compact .grid-settings-popover input[type="number"] {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .app-shell--compact .fog-view-controls label:has(input[type="checkbox"]) {
+    min-height: 44px;
+  }
 }
 
 @media (max-width: 1023px) {

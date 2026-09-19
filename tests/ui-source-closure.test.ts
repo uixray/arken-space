@@ -96,6 +96,31 @@ describe("UIX-645 reachable UI source coverage", () => {
     expect(result.findings.join("\n")).toContain("missing-screen");
   });
 
+  it("resolves a TypeScript extensionless dotted basename but not a missing one", () => {
+    const { root, write } = fixture();
+    write(
+      "apps/web/src/main.tsx",
+      'import { themes } from "./player-themes.generated"; void themes;',
+    );
+    write(
+      "apps/web/src/player-themes.generated.ts",
+      'export const themes = ["classic-v1"] as const;',
+    );
+
+    expect(collectUiSourceClosure(root)).toEqual({
+      files: [
+        "apps/web/src/main.tsx",
+        "apps/web/src/player-themes.generated.ts",
+      ],
+      findings: [],
+    });
+
+    write("apps/web/src/main.tsx", 'import "./missing.generated";');
+    const missing = collectUiSourceClosure(root);
+    expect(missing.files).toEqual(["apps/web/src/main.tsx"]);
+    expect(missing.findings.join("\n")).toContain("missing.generated");
+  });
+
   it("the integrated guard rejects a glyph in a newly connected screen and stylesheet", () => {
     const { root, write } = fixture();
     for (const file of protectedSourceFiles)

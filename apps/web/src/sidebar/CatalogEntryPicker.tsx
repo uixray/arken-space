@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { CatalogEntryDto } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { ArkenDialog } from "../ui/ArkenDialog";
 import { FormInput } from "../ui/GravityFormControls";
 import {

@@ -1,8 +1,13 @@
 # Архитектура Arken Space
 
-Документ сверялся с фактическим устройством проекта на ревизии
-`42c7ccc` от 2026-08-20 (та же ревизия была подтверждена production
-`/healthz`). Продуктовые решения и
+**Проверено 2026-09-18 (source scope):** локальный `7d681d5` имеет то же
+дерево, что release-кандидат
+`cce56397a6b1e91fcf2fc6951e506d64b62647cb`; сверены package/Compose,
+server, web, contracts, db и CI. Это не production-приёмка: текущий deploy
+проверять в `current-state.md`. Не проверены ручная игра GM+6,
+физические мобильные устройства и нагрузка/performance.
+
+Продуктовые решения и
 причины их принятия вынесены в
 [architecture-decisions-2026-07-14.md](./architecture-decisions-2026-07-14.md),
 а найденные при чтении кода ограничения — в
@@ -84,15 +89,15 @@ flowchart TD
   Ops --> Postgres
 ```
 
-| Область              | Ответственность                                               | Основные точки входа                               |
-| -------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
-| `apps/web`           | SPA, локальное UI-состояние, canvas, REST/Socket.IO-клиенты   | `src/main.tsx`, `src/App.tsx`, `src/Sidebar.tsx`   |
-| `apps/server`        | HTTP/WS transport, auth/authz, use cases, snapshots, media    | `src/index.ts`, `src/routes.ts`, `src/realtime.ts` |
-| `packages/contracts` | Общие Zod input-схемы, DTO и typed Socket.IO events           | `src/index.ts`                                     |
-| `packages/system`    | Определение Arken Core и starter character                    | `src/index.ts`                                     |
-| `packages/db`        | Drizzle schema, connection factory и SQL migrations           | `src/schema.ts`, `src/index.ts`, `src/migrate.ts`  |
-| `tests`              | Vitest/PGlite, HTTP/realtime integration, Playwright          | `vitest.config.ts`, `playwright*.config.ts`        |
-| `scripts`, `infra`   | Deploy, backup/restore, reset, incident bundle, nginx/systemd | `docker-compose*.yml`, `infra/**`, `scripts/**`    |
+| Область              | Ответственность                                               | Основные точки входа                                              |
+| -------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `apps/web`           | SPA, локальное UI-состояние, canvas, REST/Socket.IO-клиенты   | `src/main.tsx`, `src/App.tsx`, `src/Sidebar.tsx`                  |
+| `apps/server`        | HTTP/WS transport, auth/authz, use cases, snapshots, media    | `src/index.ts`, `src/routes.ts`, `src/realtime.ts`, `*-routes.ts` |
+| `packages/contracts` | Общие Zod input-схемы, DTO и typed Socket.IO events           | `src/index.ts`                                                    |
+| `packages/system`    | Определение Arken Core и starter character                    | `src/index.ts`                                                    |
+| `packages/db`        | Drizzle schema, connection factory и SQL migrations           | `src/schema.ts`, `src/index.ts`, `src/migrate.ts`, `drizzle/`     |
+| `tests`              | Vitest/PGlite, HTTP/realtime integration, Playwright          | `vitest.config.ts`, `playwright*.config.ts`                       |
+| `scripts`, `infra`   | Deploy, backup/restore, reset, incident bundle, nginx/systemd | `docker-compose*.yml`, `infra/**`, `scripts/**`                   |
 
 Направление зависимостей в целом правильное: web не импортирует server/db, а
 общие wire-контракты находятся отдельно. При этом backend application layer пока
@@ -169,7 +174,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **158** HTTP-маршрутов во всех server route-модулях: 85 остаются в
+Всего **161** HTTP-маршрут во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, паузе кампании,
 operator feedback, заявкам игроков, сюжетному каналу, картам, магии и
 содержимому мира.
@@ -177,7 +182,7 @@ operator feedback, заявкам игроков, сюжетному канал�
 | Домен              | Маршруты                                                                                                                                                                                                                                                                                                            |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                                                                                                                                                                                                                                   |
-| Membership/access  | rename membership, legacy invite, list/revoke/rotate persistent player access                                                                                                                                                                                                                                       |
+| Membership/access  | rename membership, private `/api/me/theme` preference CAS, GM same-campaign `/api/members/:id/theme-default` default CAS, legacy invite, list/revoke/rotate persistent player access                                                                                                                                |
 | Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll                                                                                                                                                                                                                |
 | Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo, состояния фигур (`/api/tokens/:id/conditions`)                                                                                                                                                           |
 | Столкновения       | создание, переходы состояний, применение результатов                                                                                                                                                                                                                                                                |
@@ -188,7 +193,17 @@ operator feedback, заявкам игроков, сюжетному канал�
 | Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                                                                                                                                                                                                                                        |
 | Заявки игроков     | создание, редактирование, переходы состояний                                                                                                                                                                                                                                                                        |
 | Магия              | `spell-pack-routes.ts` — GM validation, review-only import preview, create, draft version, lifecycle promotion и archive; `spell-assignment-routes.ts` — GM-only назначение школы/узла и append следующего состояния; `spell-projection-routes.ts` — раздельные player-safe и полная GM-проекции                    |
-| Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`                                                                                                                                                                                                               |
+
+`PATCH /api/members/:id/theme-default` is an ID route in the campaign-isolation
+inventory: it first requires GM authentication, then updates only a membership
+whose `id` **and** `campaignId` match the caller. Its CAS is the public
+`defaultThemeRevision`, not the member's private preference revision; a stale
+write returns the current public id/default/revision only. The executable
+same-/cross-campaign and non-GM evidence is
+`apps/server/src/player-theme-routes.integration.test.ts`; the route key is
+registered in `tests/helpers/campaign-isolation-routes.ts`, so an unlisted
+future `:id` route fails the inventory guard rather than becoming an exception.
+| Media/feedback | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs` |
 
 Подробные request-схемы являются экспортами `@arken/contracts`. REST response и
 error shapes централизованы не полностью, поэтому при добавлении endpoint нужно
@@ -253,6 +268,13 @@ event sequence. Более ранняя история загружается о
 Туман войны — визуальный механизм canvas, не самостоятельная граница
 конфиденциальности. Секретность достигается тем, что GM-layer tokens и закрытые
 объекты вообще не попадают в player snapshot.
+
+**Контракт проекций.** Роль и принадлежность кампании сервер проверяет до HTTP
+ответа и realtime audience; UI не является границей доступа. GM получает полную
+campaign-проекцию, PLAYER — только server-filtered snapshot и разрешённые DTO.
+Новый field нельзя добавлять в общий snapshot «для удобства»: сначала определить
+GM/PLAYER visibility, проверить HTTP и resync, затем добавить negative test для
+чужой роли и кампании.
 
 ## Клиент
 
@@ -405,11 +427,14 @@ Drizzle schema содержит **55** прикладных таблиц.
   строит только `REFERENCE`-кандидат и не читает `docs/content` в runtime;
   незакрытые import warnings сохраняются в snapshot и блокируют promotion в
   `ACTIVE` через тот же валидатор;
-- assets лежат в БД как metadata, а content — на файловой системе;
+- assets лежат в БД как metadata, а content — на persistent filesystem под
+  `MEDIA_ROOT`; `asset-lifecycle.ts` строит versioned DTO. Бинарник не является
+  границей доступа: выдача требует server-side visibility check. При замене или
+  удалении меняйте content version и не считайте browser cache persistence;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0043` применяются при старте server-контейнера до запуска
-Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
+Миграции `0000`–`0044` (45 SQL files) применяются при старте server-контейнера
+до запуска Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 
 > **Журнал миграций — не документация, а исполняемый список.** Drizzle

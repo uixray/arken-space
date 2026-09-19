@@ -9,7 +9,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { StickerPackDto } from "@arken/contracts";
-import { Button, Popup } from "@gravity-ui/uikit";
+import { Popup } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import { api } from "./api";
 import { filterStickerPacks } from "./sticker-picker-state";
 import { useOverlayPopupClassName } from "./ui/overlay-owner";

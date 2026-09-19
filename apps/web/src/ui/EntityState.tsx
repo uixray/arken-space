@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Button, Loader } from "@gravity-ui/uikit";
+import { Loader } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 
 interface StateProps {
   title: string;

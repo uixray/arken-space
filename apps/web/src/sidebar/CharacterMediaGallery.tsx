@@ -5,7 +5,7 @@ import type {
   CharacterMediaDto,
   CharacterMediaVisibility,
 } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { api, ApiError, formatApiError } from "../api";
 import { ArkenDialog } from "../ui/ArkenDialog";
 import { ImageUploadField } from "../ui/ImageUploadField";

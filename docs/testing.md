@@ -1,5 +1,31 @@
 # Тестирование: где что живёт
 
+**Проверено 2026-09-18 (source scope):** `package.json`, `vitest.config.ts`,
+`playwright.config.ts`, `tests/e2e` и `.github/workflows/{checks,e2e,multiplayer}.yml`
+на дереве release-кандидата `cce56397a6b1e91fcf2fc6951e506d64b62647cb`
+(локальный `7d681d5` эквивалентен по дереву). Это описание контракта запуска, а
+не результат прогона; фактический production и CI сверять в `current-state.md`.
+
+## Выбор проверки и ожидаемое доказательство
+
+Пути в угловых скобках заменить существующим конкретным файлом. Это адресная
+проверка изменённого пула, а не команда повторять полный набор; полные gates
+выполняются удалённо после заморозки. Бюджет и разрешения — в
+[ресурсной политике](development-resource-policy.md).
+
+| Если меняется                                                                      | Минимальная команда                                                                 | Зелёный результат доказывает                                                         | Не доказывает                                                |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| pure logic / contracts                                                             | `pnpm exec vitest run <изменённый.test.ts> --maxWorkers=1`                          | Vitest завершился `0`; unit/integration assertions прошли                            | реальный browser, PostgreSQL concurrency, GM приёмку         |
+| типы или package exports                                                           | `pnpm typecheck` после `pnpm build`                                                 | TypeScript включая `tests/e2e/tsconfig.json` завершился `0`                          | runtime flow                                                 |
+| UI flow / copy / a11y                                                              | `pnpm exec playwright test <связанный.spec.ts> --workers=1`                         | оба browser projects из config прошли; локально `workers: 1`                         | физический mobile, визуальная оценка человеком               |
+| auth, visibility, realtime, canvas persistence, reconnect, migration, nginx/Docker | `pnpm test:multiplayer`                                                             | isolated Docker GM + 6 contexts прошёл                                               | production traffic или ручная партия                         |
+| candidate release                                                                  | exact-SHA CI + [production-release-checklist.md](./production-release-checklist.md) | проверки относятся к этому SHA; release script/operator gates выполнены по чек-листу | deploy и ручную production-приёмку без их отдельных evidence |
+
+`pnpm format:check` ничего не меняет; `pnpm format` записывает файлы. На слабой
+машине Vitest можно ограничить: `corepack pnpm exec vitest run <test-path> --maxWorkers=1`.
+Синтетические тесты не заменяют human GM+6, mobile physical-device и
+performance/load acceptance.
+
 Короткий справочник по видам тестов в репозитории и по тому, когда писать
 какой. Общий quality gate и команды — в
 [development-guide.md](./development-guide.md#рекомендуемый-quality-gate).

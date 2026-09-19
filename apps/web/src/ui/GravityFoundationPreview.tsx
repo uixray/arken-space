@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Button,
   Checkbox,
   Label,
   Popup,
@@ -9,6 +8,7 @@ import {
   TextArea,
   TextInput,
 } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { AppIcon } from "./AppIcon";
 import { AddIcon, DeleteIcon, SettingsIcon } from "./icons";
 import { ArkenDialog } from "./ArkenDialog";

@@ -14,7 +14,7 @@ import type {
   StoryPostAdminDto,
   StoryPostDto,
 } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import type { GameSocket } from "./realtime";
 import { useCampaignActions } from "./campaign-actions-context";
 import type { CharacterTemplateFields } from "./character-workspace-state";

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import type { AssetDto, AssetUsageResponseDto } from "@arken/contracts";
 import { ApiError, formatApiError } from "../api";
 import {

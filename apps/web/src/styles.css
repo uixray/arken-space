@@ -754,9 +754,9 @@ code {
   min-height: 28px;
 }
 .map-toolbar button[aria-pressed="true"] {
-  background: #ded4bd;
-  border-color: #ded4bd;
-  color: #191815;
+  background: var(--color-surface-active);
+  border-color: var(--accent);
+  color: var(--text);
 }
 .map-toolbar span {
   margin-left: auto;
@@ -941,9 +941,9 @@ code {
   cursor: pointer;
 }
 .drawing-width-preset-btn[aria-pressed="true"] {
-  border-color: var(--accent, #e5c07b);
-  background: #ded4bd;
-  color: #191815;
+  border-color: var(--accent);
+  background: var(--color-surface-active);
+  color: var(--text);
 }
 .drawing-width-preview {
   width: 16px;
@@ -2145,14 +2145,14 @@ code {
   border-radius: 0;
 }
 .field-error {
-  color: #f0bbb4;
+  color: var(--state-error-ink, var(--danger));
   font-size: 0.82rem;
 }
 /* UIX-491: подтверждение успеха рядом с полем. Класс уже использовался в
    `WorldContentWorkspace`, но правила у него не было — текст сливался с
    окружением и сообщение об успехе было легко не заметить. */
 .field-notice {
-  color: #bcd8b4;
+  color: var(--text);
   font-size: 0.82rem;
 }
 .inline-fields,
@@ -2461,8 +2461,8 @@ code {
   text-align: left;
 }
 .danger-link {
-  border-color: #73463c;
-  color: #e8a18f;
+  border-color: var(--danger);
+  color: var(--state-error-ink, var(--danger));
   font-size: 0.72rem;
 }
 .volume input {
@@ -2686,9 +2686,9 @@ code {
 }
 .error-box {
   padding: var(--space-sm);
-  border: 1px solid #81554f;
-  background: #392522;
-  color: #f0bbb4;
+  border: 1px solid var(--state-error-ink, var(--danger));
+  background: var(--surface);
+  color: var(--state-error-ink, var(--danger));
 }
 @media (max-width: 760px) {
   .landing-header,
@@ -2737,9 +2737,9 @@ code {
   gap: var(--space-md);
   max-width: 520px;
   padding: var(--space-sm);
-  border: 1px solid #81554f;
-  background: #392522;
-  color: #f0bbb4;
+  border: 1px solid var(--state-error-ink, var(--danger));
+  background: var(--surface);
+  color: var(--state-error-ink, var(--danger));
 }
 .empty {
   display: flex;
@@ -3236,10 +3236,10 @@ code {
   color: var(--muted);
 }
 .world-map-lifecycle--draft {
-  color: #e7c46a;
+  color: var(--color-text-accent);
 }
 .world-map-lifecycle--published {
-  color: #86c995;
+  color: var(--text);
 }
 .world-map-lifecycle--archived {
   color: var(--muted);
@@ -3316,10 +3316,10 @@ code {
   gap: 4px;
   min-height: 26px;
   padding: 2px 5px;
-  border-color: #221f18;
+  border-color: var(--line-strong);
   border-radius: 999px;
-  background: #181611e8;
-  color: #f3e9cd;
+  background: var(--surface-2);
+  color: var(--text);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -3335,8 +3335,8 @@ code {
 }
 .world-map-marker.is-selected,
 .world-map-marker:focus-visible {
-  border-color: #f0bd72;
-  outline-color: #f0bd72;
+  border-color: var(--color-focus);
+  outline-color: var(--color-focus);
 }
 .world-map-party-marker {
   display: inline-flex;
@@ -4743,13 +4743,13 @@ code {
 }
 .asset-picker--loading {
   padding: var(--space-sm, 8px);
-  color: var(--text-muted, #999);
+  color: var(--muted);
   font-size: 0.85rem;
 }
 .asset-picker__warning {
   margin: 0;
   font-size: 0.8rem;
-  color: var(--danger, #d97757);
+  color: var(--state-error-ink, var(--danger));
 }
 .asset-picker__filter {
   width: 100%;
@@ -4778,19 +4778,19 @@ code {
   width: 100%;
   aspect-ratio: 1 / 1;
   padding: 0;
-  border: 1px solid var(--line, #444);
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm, 4px);
   overflow: hidden;
   cursor: pointer;
-  background: var(--surface-2, #1a1a1a);
+  background: var(--surface-2);
 }
 .asset-picker__tile:focus-visible {
-  outline: 2px solid var(--accent, #d97757);
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 .asset-picker__tile[aria-pressed="true"] {
-  border-color: var(--accent, #d97757);
-  box-shadow: 0 0 0 1px var(--accent, #d97757) inset;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
 }
 .asset-picker__tile img {
   width: 100%;
@@ -4800,7 +4800,7 @@ code {
 }
 .asset-picker__tile--none span {
   font-size: 1.4rem;
-  color: var(--text-muted, #999);
+  color: var(--muted);
 }
 .asset-picker__broken {
   display: flex;
@@ -4811,18 +4811,18 @@ code {
   padding: var(--space-2xs, 2px);
   text-align: center;
   font-size: 0.7rem;
-  color: var(--text-muted, #999);
+  color: var(--muted);
 }
 .asset-picker__caption {
   font-size: 0.72rem;
   text-align: center;
   overflow-wrap: anywhere;
-  color: var(--text-muted, #999);
+  color: var(--muted);
 }
 .asset-picker__empty {
   margin: 0;
   font-size: 0.8rem;
-  color: var(--text-muted, #999);
+  color: var(--muted);
 }
 
 .character-media-gallery__grid {
@@ -4843,11 +4843,11 @@ code {
   width: 100%;
   aspect-ratio: 1 / 1;
   padding: 0;
-  border: 1px solid var(--border-color, #444);
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm, 4px);
   overflow: hidden;
   cursor: pointer;
-  background: var(--surface-2, #1a1a1a);
+  background: var(--surface-2);
 }
 .character-media-gallery__thumb img {
   width: 100%;
@@ -4864,7 +4864,7 @@ code {
   padding: var(--space-xs, 4px);
   text-align: center;
   font-size: 0.75rem;
-  color: var(--text-muted, #999);
+  color: var(--muted);
 }
 .character-media-gallery__meta {
   font-size: 0.8rem;
@@ -4904,12 +4904,71 @@ code {
   justify-content: center;
   min-height: 200px;
   width: 100%;
-  color: var(--text-muted, #999);
+  color: var(--muted);
 }
 .character-media-viewer__caption {
   max-width: 100%;
   overflow-wrap: anywhere;
   text-align: center;
+}
+
+/* `classic-v1` is the immutable pre-theme presentation reference. Keep the
+   presentation colors that predate the semantic theme remap while allowing
+   the seven personal themes to resolve these states through their tokens. */
+html[data-player-theme="classic-v1"] .map-toolbar button[aria-pressed="true"],
+html[data-player-theme="classic-v1"]
+  .drawing-width-preset-btn[aria-pressed="true"] {
+  border-color: var(--accent, #e5c07b);
+  background: #ded4bd;
+  color: #191815;
+}
+html[data-player-theme="classic-v1"] .field-error,
+html[data-player-theme="classic-v1"] .error-box,
+html[data-player-theme="classic-v1"] .toast {
+  color: #f0bbb4;
+}
+html[data-player-theme="classic-v1"] .field-notice {
+  color: #bcd8b4;
+}
+html[data-player-theme="classic-v1"] .danger-link {
+  border-color: #73463c;
+  color: #e8a18f;
+}
+html[data-player-theme="classic-v1"] .error-box,
+html[data-player-theme="classic-v1"] .toast {
+  border-color: #81554f;
+  background: #392522;
+}
+html[data-player-theme="classic-v1"] .world-map-lifecycle--draft {
+  color: #e7c46a;
+}
+html[data-player-theme="classic-v1"] .world-map-lifecycle--published {
+  color: #86c995;
+}
+html[data-player-theme="classic-v1"] .world-map-marker {
+  border-color: #221f18;
+  background: #181611e8;
+  color: #f3e9cd;
+}
+html[data-player-theme="classic-v1"] .world-map-marker.is-selected,
+html[data-player-theme="classic-v1"] .world-map-marker:focus-visible {
+  border-color: #f0bd72;
+  outline-color: #f0bd72;
+}
+html[data-player-theme="classic-v1"] .asset-picker--loading,
+html[data-player-theme="classic-v1"] .asset-picker__tile--none span,
+html[data-player-theme="classic-v1"] .asset-picker__broken,
+html[data-player-theme="classic-v1"] .asset-picker__caption,
+html[data-player-theme="classic-v1"] .asset-picker__empty,
+html[data-player-theme="classic-v1"] .character-media-gallery__broken,
+html[data-player-theme="classic-v1"] .character-media-viewer__broken {
+  color: #999;
+}
+html[data-player-theme="classic-v1"] .character-media-gallery__thumb {
+  border-color: #444;
+}
+html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
+  outline-color: var(--accent);
 }
 .character-media-viewer__nav {
   display: flex;

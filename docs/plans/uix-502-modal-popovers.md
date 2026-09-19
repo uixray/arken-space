@@ -319,3 +319,30 @@ Artifacts:select-readable-labels/red,fixed,zoom,built-results.json,manifest.json
 This connected pool does not replace the whole UIX-644 registry gate, all long
 user-authored labels, physical devices or backend acceptance. No publication,
 Linear write or new card. Protected untracked selection test unchanged.
+
+## 2026-09-18 — сверка исходных AC на exact-main
+
+Ревизия `cce56397a6b1e91fcf2fc6951e506d64b62647cb`. Повторно использован
+завершённый [E2E 35388600465](https://github.com/uixray/arken-space/actions/runs/35388600465),
+не запущен новый прогон: 4/4 shards + aggregate SUCCESS. Из четырёх полных
+JSON выделены 18 связанных результатов, все PASS с retry 0: owner 8,
+close lifecycle/CSS 6, actual-App token modal 4. `checks` 35388600458 и
+multiplayer 35388600599 также SUCCESS на точной main.
+
+| Исходный критерий                | Доказательство                                                                              |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| Token picker выше modal          | Actual-App desktop/narrow × Chromium/Firefox, 4/4; popup screenshot и blocked-write receipt |
+| Единый контракт Select/popover   | `overlay-owner` → Gravity adapter → ArkenDialog; 8 owner cases                              |
+| Явная иерархия слоёв             | Workspace 1999 / dialog 2000 / owned popup 2001; diagnostics                                |
+| Нет clipping/ошибок stacking     | Viewport bounds и настоящий `elementFromPoint`, не только CSS assertions                    |
+| Outside/Escape/focus/keyboard    | Arrow/Enter, закрытие по уровню, возврат фокуса, inert закрытых порталов                    |
+| Старое меню не выше нового окна  | Sibling/nested A→B: B получает pointer, A не перехватывает                                  |
+| Regression реального token modal | Inline image picker и character Select в actual App                                         |
+| Узкий и настольный экран         | 1280/390 owner matrix и desktop/narrow actual App, оба браузера                             |
+
+Решение: **AC closure ready**, оставшихся пробелов по восьми исходным AC не
+найдено. Это не закрывает весь UIX-644, произвольную глубину окон, backend ACL,
+ручную игру GM+6 или физические устройства. Код не менялся в этой сверке.
+Linear остаётся **In Review**: запись не выполнялась из-за ранее отклонённого
+auto-review разрешения. Следующий шаг — допустимый stage-gate Review→Done с
+этим evidence, не новый полный аудит и не повторение неизменного CI.

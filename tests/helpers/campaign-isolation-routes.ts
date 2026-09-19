@@ -87,6 +87,7 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "PATCH /api/characters/:id/counters",
   "PATCH /api/drawings/:id",
   "PATCH /api/memberships/:id/name",
+  "PATCH /api/members/:id/theme-default",
   "PATCH /api/player-requests/:id",
   "PATCH /api/scenes/:id",
   "PATCH /api/scenes/:id/canvas",

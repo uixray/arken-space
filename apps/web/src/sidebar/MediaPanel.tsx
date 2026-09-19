@@ -6,7 +6,7 @@ import type {
   AssetUsageResponseDto,
   GameSnapshot,
 } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { ApiError, formatApiError } from "../api";
 import { ASSET_KIND_LABELS } from "../asset-labels";
 import { ImageUploadField } from "../ui/ImageUploadField";

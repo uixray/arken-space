@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AssetDto, AudioStateDto, Role } from "@arken/contracts";
-import { Button, Checkbox, Loader } from "@gravity-ui/uikit";
+import { Checkbox, Loader } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import type { GameSocket } from "./realtime";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { EmptyState, ErrorState } from "./ui/EntityState";

@@ -139,27 +139,62 @@ async function assertCompactBudget(
   await controls.focus();
   await page.keyboard.press("End");
   await expect
-    .poll(() => controls.evaluate((node) => node.scrollTop))
-    .toBeGreaterThan(0);
+    // Firefox animates keyboard End. A positive scrollTop only proves that
+    // scrolling started; it may still move a target after scrollIntoView.
+    .poll(() =>
+      controls.evaluate((node) =>
+        Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop),
+      ),
+    )
+    .toBeLessThanOrEqual(1);
   for (const target of [
     page.locator(".resource-counters__summary"),
     page.locator(".activity-quick-rolls .g-button").last(),
   ]) {
     await target.scrollIntoViewIfNeeded();
     await expect(target).toBeVisible();
-    const box = await rect(target);
-    const port = await rect(controls);
-    const marker = "UIX624_JOURNAL_VISIBLE_BUDGET: reachable 44px target";
-    expect(box.width, marker).toBeGreaterThanOrEqual(44);
-    expect(box.height, marker).toBeGreaterThanOrEqual(44);
-    expect(box.y, marker).toBeGreaterThanOrEqual(port.y - 1);
-    expect(box.y + box.height, marker).toBeLessThanOrEqual(
-      port.y + port.height + 1,
-    );
-    expect(box.x, marker).toBeGreaterThanOrEqual(port.x - 1);
-    expect(box.x + box.width, marker).toBeLessThanOrEqual(
-      port.x + port.width + 1,
-    );
+    // Native End scrolling settles asynchronously. Read both rectangles in one
+    // DOM turn so a target and its scrolling owner cannot come from different
+    // layout frames; the poll performs no interaction or retry action.
+    await expect(async () => {
+      const geometry = await target.evaluate((node) => {
+        const port = node.closest(".activity-feed__controls");
+        if (!port) throw new Error("Quick-roll target has no controls owner");
+        const targetRect = node.getBoundingClientRect();
+        const portRect = port.getBoundingClientRect();
+        return {
+          target: {
+            x: targetRect.x,
+            y: targetRect.y,
+            width: targetRect.width,
+            height: targetRect.height,
+          },
+          port: {
+            x: portRect.x,
+            y: portRect.y,
+            width: portRect.width,
+            height: portRect.height,
+          },
+        };
+      });
+      const marker = "UIX624_JOURNAL_VISIBLE_BUDGET: reachable 44px target";
+      expect(geometry.target.width, marker).toBeGreaterThanOrEqual(44);
+      expect(geometry.target.height, marker).toBeGreaterThanOrEqual(44);
+      expect(geometry.target.y, marker).toBeGreaterThanOrEqual(
+        geometry.port.y - 1,
+      );
+      expect(
+        geometry.target.y + geometry.target.height,
+        marker,
+      ).toBeLessThanOrEqual(geometry.port.y + geometry.port.height + 1);
+      expect(geometry.target.x, marker).toBeGreaterThanOrEqual(
+        geometry.port.x - 1,
+      );
+      expect(
+        geometry.target.x + geometry.target.width,
+        marker,
+      ).toBeLessThanOrEqual(geometry.port.x + geometry.port.width + 1);
+    }).toPass({ timeout: 3_000, intervals: [50, 100, 200] });
   }
 }
 

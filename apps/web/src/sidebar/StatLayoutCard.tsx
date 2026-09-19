@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { isSystemRegenStatKey, STAT_VALUE_RANGE } from "@arken/system";
 import { ApiError, formatApiError } from "../api";
 import { FormInput } from "../ui/GravityFormControls";

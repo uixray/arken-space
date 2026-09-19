@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { GameSnapshot } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { formatApiError } from "../api";
 import { ArkenDialog } from "../ui/ArkenDialog";
 

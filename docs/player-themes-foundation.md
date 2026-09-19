@@ -1,5 +1,65 @@
 # Player themes: opt-in foundation
 
+> **Current implementation state — 2026-09-19.** The sections below record
+> the foundation and earlier scoped checkpoints; read them as history unless
+> this section explicitly supersedes them.
+
+## Current implementation — 2026-09-19
+
+- UI entry is **Account → Оформление**. Preference persistence is per campaign
+  membership: never a display name, session, character, browser store, or global
+  player profile.
+- Player `GET`/`PATCH /api/me/theme` is private and CAS-protected by the
+  private preference revision. GM `PATCH /api/members/:id/theme-default` is
+  current-campaign-only and uses the separate public default revision; it cannot
+  disclose or overwrite a player override. Preview strips `personalTheme`.
+- The seven approved personal palettes are automatic defaults; `classic-v1` is
+  published and manually selectable, not automatic. Explicit `"system"` differs
+  from reset `null`: reset returns to the persisted membership default.
+- Theme settings are the first runtime actions migrated to Base UI `Button`;
+  other Gravity controls remain outside this pool. The retained full Lucide pack
+  is verified locally at `D:\AI\personal\experiments\arken-space\asset-library.local\lucide-react\1.41.0\`:
+  `lucide-react-1.41.0.tgz` (2,885,125 bytes), 2,066 icons, `LICENSE`, and
+  SHA-512 matching the lockfile.
+- PR #85 is published at `b51a18c`. A correction is pending CI; there is no
+  merge or deployment permission. Broad UIX-317/UIX-644 acceptance is **not
+  Done**. This section makes no final-SHA, CI-result, merge, or deployment claim.
+
+## Current membership preference boundary
+
+Personal appearance is now stored **per campaign membership**, not by display
+name, beta handle, session, character, browser storage, or a cross-campaign
+profile. Each membership has a persisted deterministic initial default from the
+seven approved personal palettes; `classic-v1` is selectable but is not an
+automatic default. An explicit `"system"` override is distinct from `null`:
+`null` returns to the membership's stored default.
+
+- `GET`/`PATCH /api/me/theme` expose and change only the authenticated
+  membership's private preference. PATCH uses the private preference revision
+  as compare-and-swap; conflict responses return only that same preference.
+- A GM may set a current-campaign member's default through
+  `PATCH /api/members/:id/theme-default`. This uses a separate public
+  `defaultThemeRevision`; it never changes the member's selected override.
+  The GM membership projection includes only default assignment/revision, not
+  another member's private preference activity.
+- `GameSnapshot.personalTheme` is the authenticated viewer's projection.
+  GM player-preview snapshots deliberately strip it, so preview cannot reveal
+  the target player's override.
+
+The published catalog is generated from
+`tokens/player-themes/{player-themes,classic-v1}.tokens.json` into both web and
+shared-contract artifacts. Adding a theme means adding approved token source,
+running the generator, and adding a migration for the membership SQL CHECK when
+the allowed IDs change; consumers use generated catalog data, so no component
+edit is required merely to list a new published theme.
+
+The first runtime migration replaces the theme-settings actions with the shared
+Base UI `Button`; other Gravity controls remain intentionally until their
+separate migration pools. Server/PGlite and real-server E2E coverage has been
+added for persistence, CAS, isolation and preview privacy, but this document
+does **not** claim browser, CI, deployment, or production acceptance until the
+running gates report it.
+
 UIX-317, implementation started 2026-09-15. This is a migration step, not
 completion of the profile/theme feature or approval of the full design system.
 

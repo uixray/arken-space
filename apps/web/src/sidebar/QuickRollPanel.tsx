@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { CharacterDto } from "@arken/contracts";
 import { STAT_VALUE_RANGE } from "@arken/system";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { formulaBonus } from "../activity-roll-controls";
 import { usePanelResize } from "../use-panel-resize";
 import {

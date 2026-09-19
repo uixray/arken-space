@@ -7,7 +7,7 @@ import type {
   WorldContentRelationEdgeDto,
   WorldContentType,
 } from "@arken/contracts";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { AssetPicker } from "./ui/AssetPicker";

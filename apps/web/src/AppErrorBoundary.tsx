@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import { reportRenderFailure } from "./app-error-report";
 
 type State = { error: Error | null; code: string };

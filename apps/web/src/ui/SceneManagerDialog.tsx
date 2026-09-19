@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
-import { Button, Label } from "@gravity-ui/uikit";
+import { Label } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { ArkenDialog } from "./ArkenDialog";
 import { ImageUploadField } from "./ImageUploadField";
 import { SceneGridPreview } from "./SceneGridPreview";

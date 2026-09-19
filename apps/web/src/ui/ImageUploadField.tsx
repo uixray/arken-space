@@ -6,7 +6,7 @@ import {
   type DragEvent,
   type ClipboardEvent,
 } from "react";
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "../design-system/Button";
 import { AppIcon } from "./AppIcon";
 import { DeleteIcon } from "./icons";
 

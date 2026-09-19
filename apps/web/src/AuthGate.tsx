@@ -1,4 +1,4 @@
-import { Button } from "@gravity-ui/uikit";
+import { Button } from "./design-system/Button";
 import { useState, type FormEvent } from "react";
 import { api } from "./api";
 import { betaPlayerByHandle, betaPlayers } from "@arken/contracts";
