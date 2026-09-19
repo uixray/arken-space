@@ -403,3 +403,50 @@ On explicit resume, first read this checkpoint, Git log/diff and the listed CI;
 then choose only the remaining original acceptance. A future merge/release of
 PR85 needs its own explicit scope and completed exact-main/backup/restore/
 deploy/postflight gates; do not reuse the earlier PR81 permission silently.
+
+## Production checkpoint — 19.09.2026, 13:30 UTC
+
+**Decision:** the owner explicitly requested production publication after the
+finite-pool pause. PR85 was merged with exact-head protection and released; no
+new cards or broader gameplay/design work were started. Pause resumes after
+this release checkpoint.
+
+**Revision:** published PR head `e67bacc37a1ac4b77a2524388cc76a8ffacf5698`;
+exact-main and live `aab0731a947852bbcb3c5955ed52008468353ae4` (identical trees).
+The previous production `cce56397a6b1e91fcf2fc6951e506d64b62647cb` has verified
+immutable rollback tags/images. Local post-release documentation is not a new
+runtime candidate and is not pushed merely to rerun CI.
+
+**Verification:** checks35443744021, E2E35443743897, multiplayer35443743956
+SUCCESS; E2E1063 PASS/29 existing SKIP/0 FAIL/0 FLAKY; multiplayer3/3.
+Confirmed snapshot `5ae46818eefb19341819a54553d35d9ee50eb5247fc9aace9f90c2e44f4136a9`,
+restore22/22:45migrations/55tables/120media. Independent disposable operator
+media smoke passed and all temporary containers/volumes/network were removed.
+
+**Recorded recovery:** release.sh raw exit1 at after-build disk gate is retained,
+not relabelled. Exactly19 non-shared unused Arken build-cache records were pruned;
+all image/volume manifests stayed identical. Reserve restored above7516192768
+bytes, then documented host fallback finished exact-health/auth/WS101/rollback
+checks, with no rebuild/redeploy. After controlled production restart, all55
+counts,120files/74699580bytes/mediahash and.env digest/owner/mode matched baseline.
+Server/PostgreSQL healthy. Browser final: map/media/reload, theme preview/cancel
+with no persistence, existing audio206, zero page/authorized HTTP errors;
+3actual JS/CSS payload hashes match deployed container. Final screenshot was
+visually inspected after dialog exit settled; the earlier animation frame is
+preserved but is not accepted visual evidence.
+
+**Changed files:** `docs/release-2026-09-19.md`, `docs/current-state.md`, this
+checkpoint only. No runtime/source correction, new test, or changed release SHA.
+Protected untracked `tests/e2e/selection-recovery.spec.ts` remains outside Git;
+SHA256 `7A5AB2F67EA250F787DFAC9AC441CE387CD61C4F9B99AAA48210A935EB6D6D9A`.
+
+**Blockers / limits:** no unresolved technical publication gate. UIX-317 and
+UIX-644 still In Progress for their wider original acceptance; release does not
+close them, human GM+6, physical devices, or subjective listening. Three earlier
+Done issues remain Done. Raw receipts, identities and rollback are in the
+[release report](../release-2026-09-19.md).
+
+**Next action:** stop. No new test/CI/automation/backlog/deploy starts. Resume only
+on a new owner request, using this checkpoint, Git history and existing exact
+CI before any broad source reread. Do not repeat a completed release due to a
+new chat or a docs-only commit.
