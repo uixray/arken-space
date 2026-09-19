@@ -322,3 +322,26 @@ all-surface rendered WCAG, no-first-paint-flash or physical-device certificate.
 UIX-644 keeps the original ResizeObserver causal-reproduction and headed native
 Firefox gaps; passing current token menus does not erase historical failures.
 No new cards, gameplay backlog, merge or deployment. Stop after this finite pool.
+
+### Exact-CI result and final scroll-test settlement correction
+
+E2E35410244501 on `4f3ee38` finished1062 PASS/29 SKIP/1 FLAKY, zero
+permanent failures. Both real-server personal-theme persistence cases PASS.
+The workflow correctly remains red because Firefox360 journal geometry passed
+only on retry; that retry is not accepted as a green gate.
+
+Its retained trace proves keyboard End was still moving the controls scrollport:
+scrollTop347 at62476ms,368 at62493ms, while the old test sampled its target and
+owner through separate async bounding-box calls. The target was14px above the
+allowed edge. No product CSS was changed for this test race. The existing
+`compact-journal-budget.spec.ts` now waits for the actual End destination, then
+reads both rectangles atomically with bounded assertion polling. All44px minima,
+160px journal budget and existing1px containment tolerances remain unchanged;
+there is no repeated interaction or extra test retry in that poll.
+
+Local diagnostic reused the exact captured CI PLAYER snapshot against v6 and
+the current assertion helper:17 consecutive Firefox360 repetitions PASS, no
+assertion failure, then the240s whole-process budget stopped the20-repeat run.
+This is partial repetition evidence, not a successful20-test complete run and
+not backend/authentication acceptance. Temporary fixture source and trace stay
+in session artifacts, excluded from Git. The next exact CI is authoritative.
