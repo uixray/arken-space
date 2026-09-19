@@ -446,6 +446,14 @@ export const memberships = pgTable(
       table.campaignId,
       table.id,
     ),
+    check(
+      "memberships_default_theme_id_check",
+      sql`${table.defaultThemeId} in ('forest','dragons','ice','fire','gold','silver','light','classic-v1')`,
+    ),
+    check(
+      "memberships_selected_theme_id_check",
+      sql`${table.selectedThemeId} is null or ${table.selectedThemeId} in ('system','forest','dragons','ice','fire','gold','silver','light','classic-v1')`,
+    ),
   ],
 );
 

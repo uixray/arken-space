@@ -139,12 +139,16 @@ test("UIX-317 real player theme persists per membership and distinguishes reset 
   await expect(preview).toBeOK();
   expect(await preview.json()).not.toHaveProperty("personalTheme");
   await openWorkspaceSection(page, "Подготовка");
-  const playerPicker = page.getByLabel("Игрок", { exact: true });
+  const playerPicker = page.getByRole("combobox", {
+    name: "Игрок",
+    exact: true,
+  });
   await playerPicker.click();
   await page
     .getByRole("option", { name: "Theme persistence player", exact: true })
     .click();
-  const defaultPicker = page.getByLabel("Тема игрока по умолчанию", {
+  const defaultPicker = page.getByRole("combobox", {
+    name: "Тема игрока по умолчанию",
     exact: true,
   });
   await defaultPicker.click();

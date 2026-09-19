@@ -174,7 +174,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **158** HTTP-маршрутов во всех server route-модулях: 85 остаются в
+Всего **161** HTTP-маршрут во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, паузе кампании,
 operator feedback, заявкам игроков, сюжетному каналу, картам, магии и
 содержимому мира.
@@ -182,7 +182,7 @@ operator feedback, заявкам игроков, сюжетному канал�
 | Домен              | Маршруты                                                                                                                                                                                                                                                                                                            |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                                                                                                                                                                                                                                   |
-| Membership/access  | rename membership, legacy invite, list/revoke/rotate persistent player access                                                                                                                                                                                                                                       |
+| Membership/access  | rename membership, private `/api/me/theme` preference CAS, GM same-campaign `/api/members/:id/theme-default` default CAS, legacy invite, list/revoke/rotate persistent player access                                                                                                                                |
 | Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll                                                                                                                                                                                                                |
 | Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo, состояния фигур (`/api/tokens/:id/conditions`)                                                                                                                                                           |
 | Столкновения       | создание, переходы состояний, применение результатов                                                                                                                                                                                                                                                                |
@@ -193,7 +193,17 @@ operator feedback, заявкам игроков, сюжетному канал�
 | Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                                                                                                                                                                                                                                        |
 | Заявки игроков     | создание, редактирование, переходы состояний                                                                                                                                                                                                                                                                        |
 | Магия              | `spell-pack-routes.ts` — GM validation, review-only import preview, create, draft version, lifecycle promotion и archive; `spell-assignment-routes.ts` — GM-only назначение школы/узла и append следующего состояния; `spell-projection-routes.ts` — раздельные player-safe и полная GM-проекции                    |
-| Media/feedback     | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs`                                                                                                                                                                                                               |
+
+`PATCH /api/members/:id/theme-default` is an ID route in the campaign-isolation
+inventory: it first requires GM authentication, then updates only a membership
+whose `id` **and** `campaignId` match the caller. Its CAS is the public
+`defaultThemeRevision`, not the member's private preference revision; a stale
+write returns the current public id/default/revision only. The executable
+same-/cross-campaign and non-GM evidence is
+`apps/server/src/player-theme-routes.integration.test.ts`; the route key is
+registered in `tests/helpers/campaign-isolation-routes.ts`, so an unlisted
+future `:id` route fails the inventory guard rather than becoming an exception.
+| Media/feedback | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs` |
 
 Подробные request-схемы являются экспортами `@arken/contracts`. REST response и
 error shapes централизованы не полностью, поэтому при добавлении endpoint нужно
@@ -423,7 +433,7 @@ Drizzle schema содержит **55** прикладных таблиц.
   удалении меняйте content version и не считайте browser cache persistence;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0043` (44 SQL files) применяются при старте server-контейнера
+Миграции `0000`–`0044` (45 SQL files) применяются при старте server-контейнера
 до запуска Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 

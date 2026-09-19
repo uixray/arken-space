@@ -109,6 +109,21 @@ export function collectUiSourceClosure(root, entry = "apps/web/src/main.tsx") {
       }
       const extension = path.extname(target);
       const candidates = [target];
+      // `path.extname("player-themes.generated")` returns `.generated`, but
+      // TypeScript treats that as an extensionless dotted basename and probes
+      // `player-themes.generated.ts`. Let the TS resolver contribute that
+      // exact local candidate instead of maintaining a second approximation
+      // of its basename rules. Exact assets remain the first candidate.
+      const tsResolved = ts.resolveModuleName(
+        clean,
+        file,
+        {
+          allowImportingTsExtensions: true,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+        },
+        ts.sys,
+      ).resolvedModule?.resolvedFileName;
+      if (tsResolved) candidates.push(tsResolved);
       if (/\.(?:js|jsx|mjs|cjs)$/.test(extension)) {
         const stem = target.slice(0, -extension.length);
         candidates.push(

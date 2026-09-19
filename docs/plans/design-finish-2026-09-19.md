@@ -76,7 +76,8 @@ UIX-507 имеет evidence по исходным десяти критерия�
 - Владелец разрешил публикацию этой ветки и CI. Слияние и новый production
   deploy не входят в разрешение этого пула.
 - Один локальный test worker, ограниченные время / память, cleanup своих
-  процессов. Доступны все свободные ресурсы по ответу владельца; остаётся
+  процессов. Финальный связанный browser gate использует два независимых
+  worker в том же суммарном лимите4GiB. Доступны все свободные ресурсы по ответу владельца; остаётся
   аварийный запас RAM1GiB. Full suite после каждой правки запрещён. Использовать результаты
   неизменного SHA, не выдавая их за проверку новых файлов.
 - `tests/e2e/selection-recovery.spec.ts` остаётся нетронутым и неотслеживаемым;
@@ -237,3 +238,44 @@ Protected untracked selection test remains untouched and excluded. No deployment
 **Next action:** freeze this connected candidate, run the targeted browser gate,
 publish the approved branch/PR and use its CI once. Update existing Linear cards
 at the acceptance gate; do not start a new backlog pool.
+
+## Checkpoint — connected correction before final browser acceptance
+
+**Revision:** published `b51a18c`, local `7f15cb4` plus the explicitly staged
+correction below. Draft PR85: https://github.com/uixray/arken-space/pull/85.
+No merge or deployment of this design candidate is authorized or performed.
+
+**Verified CI on b51 only:** checks35407076062:2411 PASS/9 FAIL;
+E2E35407076074:993 PASS/29 SKIP/62 FAIL; multiplayer35407076077:PASS.
+All browser failures fall into three known classes: media-backed theme icons,
+default-theme selection focus, and the real-server test's player-picker locator.
+The latter reached GM assignment after actual player save/reload/re-login/reset/
+system succeeded, but the whole persistence case is NOT a PASS.
+
+**Corrections:** opaque personal-theme HUD surfaces (no canvas/game palette
+change); shared Select restores only its own lost selection focus and preserves
+consumer-owned dialogs/other inputs; actual accessible combobox locators;
+TypeScript dotted-basename source-closure resolution; schema CHECK/snapshot0044,
+route/probe inventory and the two new menu rows in the39/78 runtime ledger.
+Historical37/76 evidence, RO incident and native Firefox gaps remain immutable.
+
+**Files:** theme bridge, shared FormSelect and DOM tests; DB schema/snapshot;
+source-closure guard/tests; campaign route inventory and executable isolation
+probe; browser preference/persistence/contrast tests; menu ledger and foundation
+documentation. New role/viewport/all-theme chat/critical-roll/dialog screenshot
+cases are acceptance coverage, not a new feature or an all-surface WCAG claim.
+
+**Local verification:** first corrective gate103/108 PASS; failures were ledger
+placement, the missing executable route probe, and one local startup timeout.
+The corrected inventory/focus gate29/29 PASS, plus executable inventory1/1 and
+the new real PGlite cross-campaign boundary1/1 PASS; scoped lint/format and
+web/E2E types PASS. The earlier other seven files remain unchanged and green.
+These are separate receipts, not a fabricated combined run. All artifacts live
+under `selection-closure-2026-09-18` in the session artifact directory.
+
+**Next:** freeze the corrected source; normal single-entry product build and
+separate control fixture; two disjoint browser batches on those exact bytes,
+then one coordinated branch update/CI. Close only existing issues whose original
+criteria are actually met. Broader UIX-317 surface/first-paint criteria and
+UIX-644 historical/manual boundaries cannot be waived by a green build.
+Protected untracked group-selection test remains unchanged and excluded.

@@ -39,16 +39,17 @@ html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {
   --g-color-line-danger: var(--state-error-ink);
 }
 
-/* The collapse glyph floats over a media-backed map HUD. Its legacy
- * transparent override lets the canvas become the effective backing in
- * personal themes, so neither normal nor hover contrast is deterministic.
- * Keep the compact affordance, but give the glyph an opaque canonical surface. */
+/* Canvas HUD groups must establish an opaque UI plane before translucent
+ * control states are composited. Otherwise the same icon can inherit map art
+ * as its effective backing. This changes chrome only, never canvas/game paint. */
 html[data-player-theme]:not([data-player-theme="classic-v1"])
-  .map-toolbar__collapse {
-  background: var(--color-surface);
-}
-
-html[data-player-theme]:not([data-player-theme="classic-v1"])
-  .map-toolbar__collapse:hover:not(:disabled) {
-  background: var(--color-surface-hover);
+  :is(
+    .map-toolbar,
+    .map-scale,
+    .map-object-list-trigger,
+    .map-object-list-popover,
+    .map-selection-action,
+    .token-tray
+  ) {
+  background-color: var(--color-surface);
 }

@@ -48,9 +48,16 @@ export async function paintedIconContrast(icon: Locator) {
         throw new Error("Unmodelled SVG descendant paint");
     }
     const backgrounds: number[][] = [];
+    const backingChain: object[] = [];
     let opaque = false;
     for (let node: Element | null = element; node; node = node.parentElement) {
       const style = getComputedStyle(node);
+      backingChain.push({
+        tag: node.tagName,
+        className: node.getAttribute("class"),
+        background: style.backgroundColor,
+        opaqueChild: opaque,
+      });
       if (
         style.filter !== "none" ||
         style.backdropFilter !== "none" ||
@@ -120,7 +127,15 @@ export async function paintedIconContrast(icon: Locator) {
             rect.top < box.bottom &&
             rect.bottom > box.top
           )
-            throw new Error("Icon backing crosses a media surface");
+            throw new Error(
+              `Icon backing crosses a media surface: ${JSON.stringify({
+                control: element
+                  .closest("button,summary")
+                  ?.getAttribute("aria-label"),
+                media: media.tagName,
+                backingChain,
+              })}`,
+            );
         }
       }
       // Group opacity still affects descendants; backgrounds behind an opaque

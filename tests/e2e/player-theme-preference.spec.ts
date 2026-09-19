@@ -174,7 +174,7 @@ for (const width of [1280, 390]) {
     );
     await trigger.click();
     await page
-      .getByRole("heading", { name: "Подготовка", exact: true })
+      .getByRole("heading", { name: "Проверка видимости", exact: true })
       .click();
     await expect(popup).toBeHidden();
     await info.attach("member-default-menu", {

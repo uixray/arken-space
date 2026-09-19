@@ -1,5 +1,19 @@
 # UIX-644 — реестр меню, popup и picker
 
+## 2026-09-19 — два новых места выбора персональной темы
+
+Текущий static index расширен до **39 groups / 78 occurrences**. Исторические
+37 / 76 и их PASS / FAIL / BLOCKED ниже не переписаны задним числом.
+
+| Место                                                      | Роль и вход                                       | Владелец / слой                           | Приёмка                                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `design-system/PlayerThemeSettings.tsx` — 1 FormSelect     | GM / PLAYER: аккаунт → Оформление                 | Shared FormSelect, modal-owned portal     | Текущий connected gate и real-server persistence CI; не наследует PASS старых списков        |
+| `design-system/MemberDefaultThemeField.tsx` — 1 FormSelect | GM: Подготовка → Игрок → Тема игрока по умолчанию | Shared FormSelect, workspace-owned portal | Отдельные open / select / Escape / focus / outside / save cases; статус до receipt — BLOCKED |
+
+Для обеих строк сохраняются общий overflow/resize contract и реальные
+pointer/keyboard проверки без force. Новый статический индекс не является
+runtime PASS. Детальное evidence ведётся в `uix-644-runtime-coverage.json`.
+
 ## 2026-09-12 — Escape во внешнем окне «Токены»
 
 - На опубликованном интерфейсе дважды воспроизведено: Escape в раскрытом списке изображения токена закрывает и список, и всё рабочее окно. Выбор/сохранение/загрузка не выполнялись. Это внешний `TokenPalette` → `FormSelect` в workspace, не grid AssetPicker в модальном редакторе. Точная опубликованная ревизия не установлена.

@@ -11,6 +11,7 @@ import {
   fireEvent,
   renderComponent as renderBase,
   screen,
+  waitFor,
 } from "../test-support/render";
 import { FormInput, FormSelect, FormTextArea } from "./GravityFormControls";
 import userEvent from "@testing-library/user-event";
@@ -389,7 +390,12 @@ it("returns focus to a controlled Select trigger after choosing an option", asyn
       <FormSelect
         aria-label="Тема игрока по умолчанию"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => {
+          setValue(event.target.value);
+          // Mirrors the real-browser close frame: the selected popup option
+          // disappears and temporarily leaves focus on body.
+          (document.activeElement as HTMLElement | null)?.blur();
+        }}
       >
         <option value="forest">Лес</option>
         <option value="light">Светлая</option>
@@ -405,7 +411,79 @@ it("returns focus to a controlled Select trigger after choosing an option", asyn
   await user.click(screen.getByRole("option", { name: "Светлая" }));
 
   expect(trigger).toHaveTextContent("Светлая");
-  expect(trigger).toHaveFocus();
+  await waitFor(() => expect(trigger).toHaveFocus());
+});
+
+it("does not steal selection focus from a consumer-owned second popup", async () => {
+  const user = userEvent.setup();
+  const destination = createRef<HTMLInputElement>();
+  function ControlledSelect() {
+    const [value, setValue] = useState("forest");
+    return (
+      <>
+        <div className="arken-form-select-popup">
+          <input ref={destination} aria-label="Название новой темы" />
+        </div>
+        <FormSelect
+          aria-label="Тема игрока по умолчанию"
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            destination.current?.focus();
+          }}
+        >
+          <option value="forest">Лес</option>
+          <option value="light">Светлая</option>
+        </FormSelect>
+      </>
+    );
+  }
+  renderComponent(<ControlledSelect />);
+
+  await user.click(
+    screen.getByRole("combobox", { name: "Тема игрока по умолчанию" }),
+  );
+  await user.click(screen.getByRole("option", { name: "Светлая" }));
+
+  await waitFor(() => expect(destination.current).toHaveFocus());
+});
+
+it("leaves focus in a dialog opened by the Select create action", async () => {
+  const user = userEvent.setup();
+  function CreateThemeSelect() {
+    const [dialogOpen, setDialogOpen] = useState(false);
+    return (
+      <>
+        <FormSelect
+          aria-label="Тема игрока по умолчанию"
+          value="forest"
+          createAction={{
+            label: "Создать тему",
+            onSelect: () => setDialogOpen(true),
+          }}
+        >
+          <option value="forest">Лес</option>
+        </FormSelect>
+        {dialogOpen ? (
+          <div role="dialog" aria-label="Новая тема">
+            <input autoFocus aria-label="Название темы" />
+          </div>
+        ) : null}
+      </>
+    );
+  }
+  renderComponent(<CreateThemeSelect />);
+
+  await user.click(
+    screen.getByRole("combobox", { name: "Тема игрока по умолчанию" }),
+  );
+  await user.click(screen.getByRole("option", { name: "Создать тему" }));
+
+  await waitFor(() =>
+    expect(
+      screen.getByRole("textbox", { name: "Название темы" }),
+    ).toHaveFocus(),
+  );
 });
 
 it.each([

@@ -4,6 +4,27 @@
 > the foundation and earlier scoped checkpoints; read them as history unless
 > this section explicitly supersedes them.
 
+## Current implementation — 2026-09-19
+
+- UI entry is **Account → Оформление**. Preference persistence is per campaign
+  membership: never a display name, session, character, browser store, or global
+  player profile.
+- Player `GET`/`PATCH /api/me/theme` is private and CAS-protected by the
+  private preference revision. GM `PATCH /api/members/:id/theme-default` is
+  current-campaign-only and uses the separate public default revision; it cannot
+  disclose or overwrite a player override. Preview strips `personalTheme`.
+- The seven approved personal palettes are automatic defaults; `classic-v1` is
+  published and manually selectable, not automatic. Explicit `"system"` differs
+  from reset `null`: reset returns to the persisted membership default.
+- Theme settings are the first runtime actions migrated to Base UI `Button`;
+  other Gravity controls remain outside this pool. The retained full Lucide pack
+  is verified locally at `D:\AI\personal\experiments\arken-space\asset-library.local\lucide-react\1.41.0\`:
+  `lucide-react-1.41.0.tgz` (2,885,125 bytes), 2,066 icons, `LICENSE`, and
+  SHA-512 matching the lockfile.
+- PR #85 is published at `b51a18c`. A correction is pending CI; there is no
+  merge or deployment permission. Broad UIX-317/UIX-644 acceptance is **not
+  Done**. This section makes no final-SHA, CI-result, merge, or deployment claim.
+
 ## Current membership preference boundary
 
 Personal appearance is now stored **per campaign membership**, not by display

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "inventoryRevision": "1d00a8db83f4663a679d4d13d78f5d3dd580b125",
+  "inventoryRevision": "b51a18ceddc5c7c38064c191a4da608c368c9bc9",
   "overallAcceptance": "INCOMPLETE",
   "statusMeaning": "PASS = only stated scope at evidence revision, not current HEAD/full issue. FAIL = unresolved known defect. BLOCKED = evidence or applicability unresolved, not whole-project blocked.",
   "artifactBase": "C:/Users/UIXRay/.codex/visualizations/2026/09/16/01a0a7d5-b072-7022-8e9d-4538c0a92b07",
@@ -59,16 +59,16 @@
       ]
     },
     "currentCandidateAdditions": {
-      "baseRevision": "dfd07bb57e9c176df2642c36650193d24a9dd72d",
+      "baseRevision": "b51a18ceddc5c7c38064c191a4da608c368c9bc9",
       "freezeRevision": null,
-      "candidateState": "DIRTY_PENDING_FREEZE",
+      "candidateState": "PENDING_NEW_EVIDENCE",
       "addedBuckets": 2,
       "addedOccurrences": 2,
       "currentStaticInventoryIncludingAdditions": {
         "buckets": 39,
         "jsxOccurrences": 78
       },
-      "rule": "The historical37/76 denominator and its statuses/evidence remain immutable. These reachable dirty-candidate additions are supplemental BLOCKED rows until exact frozen-candidate runtime evidence exists."
+      "rule": "The historical37/76 denominator and its statuses/evidence remain immutable. These reachable b51 candidate rows remain BLOCKED until exact new runtime evidence is retained."
     }
   },
   "evidence": {
@@ -419,6 +419,38 @@
       "scope": "Seven native map/draft selectors; 8 world-map cases incl PLAYER navigation exclusion. Not OS popup visuals.",
       "evidence": ["built"],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/design-system/MemberDefaultThemeField.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-candidate-pending-evidence",
+      "baseRevision": "b51a18ceddc5c7c38064c191a4da608c368c9bc9",
+      "freezeRevision": null,
+      "scope": "Reachable GM member default-theme Select inside Setup membership controls, including pending, conflict and error presentation. The adjacent new Base UI Button is not a menu occurrence.",
+      "evidence": [],
+      "pendingEvidence": [
+        "tests/e2e/player-theme-preference.spec.ts only if it contains an explicit GM default-theme Select lifecycle case",
+        "tests/e2e/player-theme-persistence.spec.ts: isolated real-server default assignment and persistence"
+      ],
+      "next": "Keep BLOCKED until an explicit b51 GM runtime case covers open/select/close, keyboard/focus, desktop/compact containment and the real-server gate covers saved default/conflict behavior."
+    },
+    {
+      "file": "apps/web/src/design-system/PlayerThemeSettings.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-candidate-pending-evidence",
+      "baseRevision": "b51a18ceddc5c7c38064c191a4da608c368c9bc9",
+      "freezeRevision": null,
+      "scope": "Reachable personal appearance dialog Select for the campaign membership on the b51 candidate: System plus published personal themes, preview/apply/reset/cancel and pending/error states. The adjacent new Base UI Button is not a menu occurrence.",
+      "evidence": [],
+      "pendingEvidence": [
+        "tests/e2e/player-theme-preference.spec.ts: GM/PLAYER desktop/compact runtime lifecycle on the b51 candidate",
+        "tests/e2e/player-theme-persistence.spec.ts: isolated real-server membership persistence"
+      ],
+      "next": "Keep BLOCKED until the new b51 evidence is retained and both named gates provide exact-revision evidence; do not inherit PASS from older shared FormSelect runs."
     },
     {
       "file": "apps/web/src/renderers/GridSettings.tsx",
@@ -801,40 +833,6 @@
       "scope": "GM Scenes and PLAYER Tokens390: destination owns focus then Escape returns to Map. New Sections resize gate verifies all visible destination hit targets, desktop closes sheet without revival on compact return, Journal remains clickable, reopen/Escape/focus; both roles and browsers.",
       "next": "Other destination workspace internals and physical devices remain separate. This does not resolve original Select RO or whole-registry acceptance.",
       "evidence": ["navigation", "compactSectionsBreakpoint"]
-    },
-    {
-      "id": "player-theme-settings-select",
-      "file": "apps/web/src/design-system/PlayerThemeSettings.tsx",
-      "kind": "tag:FormSelect",
-      "count": 1,
-      "status": "BLOCKED",
-      "classification": "reachable-dirty-candidate",
-      "baseRevision": "dfd07bb57e9c176df2642c36650193d24a9dd72d",
-      "freezeRevision": null,
-      "scope": "Reachable personal appearance dialog Select for the current campaign membership: System plus published personal themes, preview/apply/reset/cancel and pending/error states. The adjacent new Base UI Button is not a menu occurrence.",
-      "evidence": [],
-      "pendingEvidence": [
-        "tests/e2e/player-theme-preference.spec.ts: GM/PLAYER desktop/compact runtime lifecycle on the frozen candidate",
-        "tests/e2e/player-theme-persistence.spec.ts: isolated real-server membership persistence"
-      ],
-      "next": "Keep BLOCKED until the candidate is frozen and both named gates provide exact-revision evidence; do not inherit PASS from older shared FormSelect runs."
-    },
-    {
-      "id": "member-default-theme-field-select",
-      "file": "apps/web/src/design-system/MemberDefaultThemeField.tsx",
-      "kind": "tag:FormSelect",
-      "count": 1,
-      "status": "BLOCKED",
-      "classification": "reachable-dirty-candidate",
-      "baseRevision": "dfd07bb57e9c176df2642c36650193d24a9dd72d",
-      "freezeRevision": null,
-      "scope": "Reachable GM member default-theme Select inside Setup membership controls, including pending, conflict and error presentation. The adjacent new Base UI Button is not a menu occurrence.",
-      "evidence": [],
-      "pendingEvidence": [
-        "tests/e2e/player-theme-preference.spec.ts only if it contains an explicit GM default-theme Select lifecycle case",
-        "tests/e2e/player-theme-persistence.spec.ts: isolated real-server default assignment and persistence"
-      ],
-      "next": "Keep BLOCKED until an explicit frozen-candidate GM runtime case covers open/select/close, keyboard/focus, desktop/compact containment and the real-server gate covers saved default/conflict behavior."
     }
   ],
   "applicabilityAudit": {
