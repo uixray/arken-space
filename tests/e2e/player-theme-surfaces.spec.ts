@@ -129,9 +129,24 @@ function surfaceSnapshot(role: "GM" | "PLAYER"): GameSnapshot {
 
 async function mockSurfaceApp(page: Page, snapshot: GameSnapshot) {
   const writes: string[] = [];
+  const reads: { threadId: string; sequence: number; actionId: string }[] = [];
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    // Opening the real journal acknowledges visible messages. Mock only that
+    // expected read cursor, while still rejecting every game/theme mutation.
+    if (request.method() === "POST" && path === "/api/chat/read") {
+      const input = request.postDataJSON() as (typeof reads)[number];
+      reads.push(input);
+      return route.fulfill({
+        json: {
+          campaignId: snapshot.campaign.id,
+          threadId: input.threadId,
+          lastReadSequence: input.sequence,
+          updatedAt: "2026-09-19T08:00:01.000Z",
+        },
+      });
+    }
     if (request.method() !== "GET") {
       writes.push(`${request.method()} ${path}`);
       return route.fulfill({
@@ -157,7 +172,7 @@ async function mockSurfaceApp(page: Page, snapshot: GameSnapshot) {
       '0{"sid":"theme-surfaces-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
     );
   });
-  return writes;
+  return { writes, reads };
 }
 
 async function openThemeDialog(page: Page) {
@@ -176,7 +191,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       test.setTimeout(120_000);
       await page.setViewportSize({ width, height: 850 });
       const snapshot = surfaceSnapshot(role);
-      const writes = await mockSurfaceApp(page, snapshot);
+      const { writes, reads } = await mockSurfaceApp(page, snapshot);
 
       for (const theme of [
         ...PLAYER_THEMES.map(({ id, name }) => ({ id, name })),
@@ -272,6 +287,16 @@ for (const role of ["GM", "PLAYER"] as const) {
       }
 
       expect(writes).toEqual([]);
+      expect(reads.length).toBeGreaterThan(0);
+      for (const read of reads) {
+        expect([tableThreadId, rollsThreadId]).toContain(read.threadId);
+        expect(read.sequence).toBe(read.threadId === tableThreadId ? 1 : 3);
+        expect(read.actionId).toMatch(/^[a-f0-9-]{36}$/i);
+      }
+      await info.attach("expected-journal-read-cursors", {
+        body: JSON.stringify(reads),
+        contentType: "application/json",
+      });
     });
   }
 }
