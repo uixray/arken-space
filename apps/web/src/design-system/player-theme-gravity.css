@@ -54,3 +54,17 @@ html[data-player-theme]:not([data-player-theme="classic-v1"])
   ) {
   background-color: var(--color-surface);
 }
+
+/* The fixed game outcome colors remain on borders in every theme. On the
+ * opaque light roll-card surface those hues are not readable as small text,
+ * so only its textual total/label use canonical high-contrast ink. */
+html[data-player-theme="light"]
+  .roll-result--critical-failure
+  :is(.roll-total, .skill-chat-card__result > strong, .roll-critical-label) {
+  color: var(--state-error-ink);
+}
+html[data-player-theme="light"]
+  .roll-result--critical-success
+  :is(.roll-total, .skill-chat-card__result > strong, .roll-critical-label) {
+  color: var(--color-text);
+}

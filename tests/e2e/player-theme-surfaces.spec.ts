@@ -232,6 +232,71 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(success).toContainText("Критический успех");
         await expect(failure.locator(".roll-critical-label")).toBeVisible();
         await expect(success.locator(".roll-critical-label")).toBeVisible();
+        if (theme.id === "light") {
+          // Measure the actual critical text against its opaque light card.
+          // This intentionally does not certify arbitrary media/alpha surfaces.
+          const ratios = await page
+            .locator(".roll-result :is(.roll-critical-label, .roll-total)")
+            .evaluateAll((nodes) => {
+              const rgb = (value: string) => {
+                const match = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(value);
+                if (!match) throw new Error(`Expected opaque sRGB: ${value}`);
+                return match.slice(1).map(Number);
+              };
+              const luminance = (color: number[]) =>
+                color.reduce((sum, channel, index) => {
+                  const s = channel / 255;
+                  const linear =
+                    s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+                  return sum + linear * [0.2126, 0.7152, 0.0722][index];
+                }, 0);
+              return nodes.map((node) => {
+                const card = node.closest(".roll-result")!;
+                const background = getComputedStyle(card).backgroundColor;
+                const foreground = getComputedStyle(node).color;
+                for (
+                  let current: Element | null = node;
+                  current;
+                  current = current.parentElement
+                ) {
+                  const style = getComputedStyle(current);
+                  if (
+                    Number(style.opacity) !== 1 ||
+                    style.filter !== "none" ||
+                    style.backdropFilter !== "none" ||
+                    style.mixBlendMode !== "normal" ||
+                    style.maskImage !== "none"
+                  )
+                    throw new Error("Unsupported text compositing");
+                  if (
+                    (current === card || card.contains(current)) &&
+                    (style.backgroundImage !== "none" ||
+                      (current !== card &&
+                        style.backgroundColor !== "rgba(0, 0, 0, 0)"))
+                  )
+                    throw new Error("Unsupported critical text backing");
+                }
+                const a = luminance(rgb(foreground));
+                const b = luminance(rgb(background));
+                return {
+                  text: node.textContent,
+                  foreground,
+                  background,
+                  ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+                };
+              });
+            });
+          expect(ratios).toHaveLength(4);
+          await info.attach("light-critical-text-contrast", {
+            body: JSON.stringify(ratios),
+            contentType: "application/json",
+          });
+          for (const measured of ratios)
+            expect(
+              measured.ratio,
+              measured.text ?? "critical text",
+            ).toBeGreaterThanOrEqual(4.5);
+        }
         await info.attach(`theme-journal-${role}-${width}-${theme.id}`, {
           body: await page.screenshot({ fullPage: true }),
           contentType: "image/png",

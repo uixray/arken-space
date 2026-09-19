@@ -224,6 +224,35 @@ it("uses checked semantic error surfaces and does not recolor game success", asy
   expect(css).toContain("--ok: var(--color-success);");
 });
 
+it("uses readable light-theme ink for critical roll text without recoloring game outcomes", async () => {
+  const bridge = await readFile(
+    new URL(
+      "../apps/web/src/design-system/player-theme-gravity.css",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const normalized = bridge.replace(/\s+/g, " ");
+  const textTargets =
+    ":is(.roll-total, .skill-chat-card__result > strong, .roll-critical-label)";
+  const lightFailure = normalized.split(
+    `html[data-player-theme="light"] .roll-result--critical-failure ${textTargets} {`,
+  )[1];
+  const lightSuccess = normalized.split(
+    `html[data-player-theme="light"] .roll-result--critical-success ${textTargets} {`,
+  )[1];
+  expect(lightFailure?.split("}")[0]).toContain(
+    "color: var(--state-error-ink);",
+  );
+  expect(lightSuccess?.split("}")[0]).toContain("color: var(--color-text);");
+  expect(normalized).not.toContain(
+    'html[data-player-theme="light"] .roll-result--critical-success {',
+  );
+  expect(normalized).not.toContain(
+    'html[data-player-theme="light"] .roll-result--critical-failure {',
+  );
+});
+
 it("resolves legacy entity-state text from the active canonical theme", async () => {
   const bridge = await readFile(
     new URL(

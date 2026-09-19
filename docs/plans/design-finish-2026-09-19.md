@@ -279,3 +279,46 @@ then one coordinated branch update/CI. Close only existing issues whose original
 criteria are actually met. Broader UIX-317 surface/first-paint criteria and
 UIX-644 historical/manual boundaries cannot be waived by a green build.
 Protected untracked group-selection test remains unchanged and excluded.
+
+## Checkpoint — final local acceptance and critical-text correction
+
+**Revision / decision:** PR85 candidate `4f3ee38fd6bd8e32fcd4354f9e5e99f9d7b52a86`
+passed checks35410244349 and multiplayer35410244362. E2E35410244501 is still
+running; it has not been restarted. The next connected commit contains only
+the confirmed light-theme critical-text correction and its acceptance coverage.
+Do not repeat the earlier successful release of `cce56397`.
+
+**Local evidence:** 116 unique browser cases passed in disjoint batches on the
+same v5 product bytes: critical14 (individual passing cases before a fixture
+diagnostic stop), remaining92, Firefox token2 and surfaces8. The stopped batch
+itself is NOT a successful complete run. No retries/flaky waivers were used.
+All source revisions, stdout, JSON and bounded-process receipts are retained
+under the session artifact directory's `selection-closure-2026-09-18`.
+
+**Final correction:** screenshot review found real low-contrast critical text
+on light cards: failure2.87:1 and success1.86:1. The new rendered regression
+failed against immutable v5 on that defect, then passed against v6: failure
+5.655:1 and success13.461:1. Only six text targets in the light theme change;
+colored outcome borders, game colors, classic/system and dark palettes do not.
+Files: `player-theme-gravity.css`, `tests/player-theme-contrast.test.ts`,
+`tests/e2e/player-theme-surfaces.spec.ts`. The first new source guard failed on
+Windows CRLF parsing; whitespace normalization fixed the guard, not its target.
+
+**Verification:** scoped lint/types and17/17 contrast/source tests PASS; normal
+single-entry product build plus separate fixtures PASS; final v6 surface matrix
+8/8 PASS (Chrome/Firefox, GM/PLAYER,1280/390, nine theme choices per case),
+144 raw screenshots and eight critical-text measurement receipts. Bundle audit
+v6 PASS:47 named emitted icons within48 allowed /2066 installed, no dynamic
+registry, emitted Lucide network calls or icon CDN. Both v5/v6 reports preserved.
+New `MemberDefaultThemeField.test.tsx`:3/3 real-component cases PASS, scoped
+lint/web types PASS. Pending controls, generic error/draft preservation, actual
+409 conflict alert, adopted theme/revision and next-save revision are covered.
+The earlier agent runner's inconclusive startup is not counted as a test pass.
+
+**Remaining acceptance:** await the already-running real-server E2E, then publish
+this single final correction and use its exact CI. UIX-624/502/645 can close only
+at the resulting evidence gate. UIX-317 still must not be presented as an
+all-surface rendered WCAG, no-first-paint-flash or physical-device certificate.
+UIX-644 keeps the original ResizeObserver causal-reproduction and headed native
+Firefox gaps; passing current token menus does not erase historical failures.
+No new cards, gameplay backlog, merge or deployment. Stop after this finite pool.
