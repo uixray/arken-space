@@ -49,6 +49,7 @@ html[data-player-theme]:not([data-player-theme="classic-v1"])
     .map-object-list-trigger,
     .map-object-list-popover,
     .map-selection-action,
+    .dice-tray-panel,
     .token-tray
   ) {
   background-color: var(--color-surface);
