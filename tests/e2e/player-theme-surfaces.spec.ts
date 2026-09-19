@@ -247,10 +247,21 @@ for (const role of ["GM", "PLAYER"] as const) {
         });
         expect(hit).toBe(true);
         const popup = page.locator(".arken-form-select-popup");
+        // Layer values live on the actual portal wrappers, not the semantic
+        // content nodes (whose computed z-index is correctly "auto").
         const [dialogZ, popupZ] = await Promise.all([
-          dialog.evaluate((node) => Number(getComputedStyle(node).zIndex) || 0),
-          popup.evaluate((node) => Number(getComputedStyle(node).zIndex) || 0),
+          dialog.evaluate((node) => {
+            const wrapper = node.closest(".g-modal");
+            if (!wrapper) throw new Error("Missing modal layer wrapper");
+            return Number(getComputedStyle(wrapper).zIndex);
+          }),
+          popup.evaluate((node) => {
+            const wrapper = node.closest("[data-floating-ui-status]");
+            if (!wrapper) throw new Error("Missing popup layer wrapper");
+            return Number(getComputedStyle(wrapper).zIndex);
+          }),
         ]);
+        expect(dialogZ).toBeGreaterThan(0);
         expect(popupZ).toBeGreaterThan(dialogZ);
         await page.keyboard.press("Escape");
         await expect(select).toBeFocused();
