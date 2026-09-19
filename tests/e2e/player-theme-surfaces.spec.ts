@@ -3,7 +3,8 @@ import type { GameSnapshot } from "@arken/contracts";
 import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
-import { openWorkspaceSection } from "./workspace-nav-helper";
+
+test.use({ actionTimeout: 10_000 });
 
 const tableThreadId = "31700000-0000-4000-8000-000000000010";
 const rollsThreadId = "31700000-0000-4000-8000-000000000011";
@@ -194,9 +195,15 @@ for (const role of ["GM", "PLAYER"] as const) {
             theme.id,
           );
 
-        // Use the same responsive workspace navigation as a player. On compact
-        // screens the journal is not merely a hidden copy of the desktop rail.
-        await openWorkspaceSection(page, "Журнал");
+        // Desktop already exposes the activity journal alongside the map.
+        // Compact has a real primary navigation button rather than a desktop
+        // workspace row / “Разделы” dialog.
+        if (width === 390) {
+          await page
+            .getByRole("navigation", { name: "Основные области" })
+            .getByRole("button", { name: "Журнал", exact: true })
+            .click();
+        }
         const tableMessage = page.getByText(
           "Сообщение стола читается в активной теме.",
           { exact: true },
