@@ -104,3 +104,13 @@
 **Дальше:** просмотреть full candidate import closure и все изменённые/новые файлы, затем локальный точный manifest и commit без приватных/временных файлов; для remote CI требуется отдельное разрешение на push. После CI — browser/ручной GM+PLAYER QA и release-host gates. Прод не обновлять.
 
 **Уточнение перед staging:** в `docs/plans/ai-execution-log.md` добавлено явное предупреждение, что прежние `[x]` и «проверено» — рабочие заявления Antigravity, не текущая приёмка полного релиза. `git diff --check` по всему tracked diff не показывает ошибок whitespace; status около 128 entries, HEAD неизменен. `cookies.txt` и `.data/` не появляются в untracked status. Запрошено отдельное разрешение владельца на будущий push ветки для CI (без merge/deploy); до ответа push не делать.
+
+## Замороженный кандидат и первый remote CI — 03.10.2026
+
+**Решение/ревизия:** владелец разрешил push ветки для CI и отдельным ответом draft PR только для CI. Exact manifest (131 файл, без `git add -A`, без `cookies.txt`/локальных данных) закоммичен как `87eac435c82538a82abf296c5d656e3c22e8a5d6` и отправлен в `origin/codex/project-roadmap-2026-09-18`. Создан draft PR [#86](https://github.com/uixray/arken-space/pull/86); merge/deploy запрещены. Рабочее дерево было чистым после коммита.
+
+**CI первого SHA:** `checks` [run 37105508239](https://github.com/uixray/arken-space/actions/runs/37105508239) FAIL на `pnpm lint` (27 errors/22 warnings; build/typecheck прошли до lint, downstream format/Vitest не достигнуты). `multiplayer` [run 37105508241](https://github.com/uixray/arken-space/actions/runs/37105508241) PASS. `e2e` [run 37105508208](https://github.com/uixray/arken-space/actions/runs/37105508208) ещё выполнялся на момент проверки; результаты первого SHA нельзя переносить на следующий.
+
+**Исправление связным пулом после CI:** адресно устранены все lint errors в `App.tsx`, `CompactMenuSurface.tsx`, компонентных primitives/stories, `CharacterWorkspace.tsx`, `DiceTrayPanel.tsx`, `SkillCards.tsx`, новых тестах и beta-auth тесте. Условный `useMemo` roleBadge перенесён перед early return; React Compiler-sensitive callback в App получил стабильные локальные зависимости. Workers проверили ESLint на назначенных файлах без ошибок, web/server typecheck PASS и узкие 27 Vitest tests PASS; Prettier исправлен для восьми затронутых файлов, `git diff --check` PASS. Предупреждения lint остаются, но не являются errors. Полный lint/format/Vitest на следующем SHA ещё должен пройти в CI.
+
+**Следующее:** закоммитить только этот lint pool, push в уже одобренную ветку; дождаться exact-SHA checks/e2e/multiplayer. Затем browser/ручная приёмка и release-host gates. Не мержить и не публиковать.

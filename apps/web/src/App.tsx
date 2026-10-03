@@ -24,11 +24,7 @@ import type {
 } from "@arken/contracts";
 import { api, ApiError } from "./api";
 import { AuthGate } from "./AuthGate";
-import type { GameSocket } from "./realtime";
-import {
-  useGameSocketSubscriptions,
-  type ConnectionState,
-} from "./use-game-socket-subscriptions";
+import { useGameSocketSubscriptions } from "./use-game-socket-subscriptions";
 import { Sidebar } from "./Sidebar";
 import { AppHeader } from "./AppHeader";
 import { MusicBar } from "./MusicBar";
@@ -41,7 +37,7 @@ import { removeRollToast, type RollToast } from "./toast-state";
 import { notify } from "./ui/notifications";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { AppIcon } from "./ui/AppIcon";
-import { AddIcon, CloseIcon, SidebarExpandIcon } from "./ui/icons";
+import { CloseIcon, SidebarExpandIcon } from "./ui/icons";
 import { canvasHistoryVersion } from "./canvas-history-label";
 import { normalizeClientDiceResult } from "./dice-result";
 import {
@@ -1428,22 +1424,6 @@ export function App() {
     [activeScene?.id, socket],
   );
 
-  const handlePlaceTokenDefinition = useCallback(
-    async (definitionId: string, point?: { x: number; y: number }) => {
-      if (!activeScene) return;
-      void placeOptimistically({
-        path: `/api/token-definitions/${definitionId}/placements`,
-        body: {
-          actionId: crypto.randomUUID(),
-          definitionId,
-          sceneId: activeScene.id,
-          ...point,
-        },
-      });
-    },
-    [activeScene?.id, placeOptimistically],
-  );
-
   const handleTokenLayerChange = useCallback(
     (tokenId: string, revision: number, layer: TokenDto["layer"]) =>
       run(() =>
@@ -1728,17 +1708,12 @@ export function App() {
     [run],
   );
 
+  const battleZone = viewSnapshot?.campaign.battleZone;
+  const campaignRevision = viewSnapshot?.campaign.revision;
   const handleRecruitFromBattleZone = useCallback(() => {
-    if (!viewSnapshot?.campaign.battleZone) return;
-    void run(() =>
-      initiativeActions.onRecruitFromBattleZone(viewSnapshot.campaign.revision),
-    );
-  }, [
-    viewSnapshot?.campaign.battleZone,
-    viewSnapshot?.campaign.revision,
-    initiativeActions,
-    run,
-  ]);
+    if (!battleZone || campaignRevision === undefined) return;
+    void run(() => initiativeActions.onRecruitFromBattleZone(campaignRevision));
+  }, [battleZone, campaignRevision, initiativeActions, run]);
 
   const handleCreateCharacter = useCallback(
     async (
@@ -2303,8 +2278,6 @@ export function App() {
               characterAvailable={!previewSnapshot}
             />
           )}
-          {/* UIX-645 regression anchor for shell icon policy */}
-          {false && <AppIcon icon={AddIcon} />}
         </div>
       </RollVisibilityContext.Provider>
     </CampaignActionsContext.Provider>

@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { renderHook, act } from "@testing-library/react";
-import type { GameSnapshot } from "@arken/contracts";
 import {
   emitSceneViewIfNeeded,
-  useGameSocketSubscriptions,
   type SceneViewEmission,
-  type UseGameSocketSubscriptionsOptions,
 } from "./use-game-socket-subscriptions";
 import type { GameSocket } from "./realtime";
 

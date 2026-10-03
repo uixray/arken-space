@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Popup } from "./Popup";
 import { Button } from "./Button";
@@ -16,15 +16,19 @@ type Story = StoryObj<typeof Popup>;
 
 function PopupDemo() {
   const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [anchorElement, setAnchorElement] = useState<HTMLButtonElement | null>(
+    null,
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <h3>Всплывающее меню / Тултип (Popup)</h3>
       <div>
         <Button
-          ref={buttonRef}
-          onClick={() => setOpen((prev) => !prev)}
+          onClick={(event) => {
+            setAnchorElement(event.currentTarget);
+            setOpen((prev) => !prev);
+          }}
           view={open ? "action" : "normal"}
         >
           {open ? "Закрыть поповер" : "Открыть поповер"}
@@ -32,12 +36,28 @@ function PopupDemo() {
         <Popup
           open={open}
           onOpenChange={setOpen}
-          anchorElement={buttonRef.current}
+          anchorElement={anchorElement}
           placement="bottom-start"
         >
-          <div style={{ padding: 12, minWidth: 200, display: "flex", flexDirection: "column", gap: 8 }}>
-            <strong style={{ fontSize: "12px", color: "var(--text-primary)" }}>Параметры токена</strong>
-            <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)" }}>
+          <div
+            style={{
+              padding: 12,
+              minWidth: 200,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <strong style={{ fontSize: "12px", color: "var(--text-primary)" }}>
+              Параметры токена
+            </strong>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "11px",
+                color: "var(--text-muted)",
+              }}
+            >
               Быстрые действия: скрыть токен, повернуть или назначить состояние.
             </p>
           </div>

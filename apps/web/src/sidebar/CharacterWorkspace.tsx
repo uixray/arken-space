@@ -535,7 +535,9 @@ function CreateCharacterDialog({
       <div className="create-character-dialog">
         <div className="create-character-dialog__step">
           <label className="field">
-            <span className="create-character-dialog__label">1. Имя персонажа</span>
+            <span className="create-character-dialog__label">
+              1. Имя персонажа
+            </span>
             <FormInput
               autoFocus
               value={name}
@@ -546,14 +548,17 @@ function CreateCharacterDialog({
               }}
             />
             <span className="muted">
-              Имя будет отображаться в списке кампании, инициативе и бросках кубиков.
+              Имя будет отображаться в списке кампании, инициативе и бросках
+              кубиков.
             </span>
           </label>
         </div>
 
         <div className="create-character-dialog__step">
           <label className="field">
-            <span className="create-character-dialog__label">2. Стартовый шаблон листа (опционально)</span>
+            <span className="create-character-dialog__label">
+              2. Стартовый шаблон листа (опционально)
+            </span>
             <FormSelect
               value={templateId}
               onChange={(event) => setTemplateId(event.target.value)}
@@ -569,11 +574,19 @@ function CreateCharacterDialog({
 
           <div className="create-character-dialog__callout">
             <div className="create-character-dialog__callout-title">
-              {templateId ? "Особенности копирования шаблона:" : "Информация о создании:"}
+              {templateId
+                ? "Особенности копирования шаблона:"
+                : "Информация о создании:"}
             </div>
             <ul className="create-character-dialog__callout-list">
-              <li>Копируются характеристики, навыки, заклинания, инвентарь и ресурсы.</li>
-              <li>Имя, портрет, владелец и кошелёк не переносятся — новый персонаж полностью независим.</li>
+              <li>
+                Копируются характеристики, навыки, заклинания, инвентарь и
+                ресурсы.
+              </li>
+              <li>
+                Имя, портрет, владелец и кошелёк не переносятся — новый персонаж
+                полностью независим.
+              </li>
             </ul>
           </div>
         </div>
@@ -1119,6 +1132,19 @@ export function CharacterPanel({
   const inventoryRef = useRemoteFieldValue<HTMLTextAreaElement>(
     character?.inventory.join("\n") ?? "",
   );
+  const roleBadge = useMemo(() => {
+    if (!character) return null;
+    if (snapshot.me.role === "GM") {
+      return <Badge theme="warning">Мастер</Badge>;
+    }
+    if (character.ownerMembershipId === snapshot.me.id) {
+      return <Badge theme="success">Ваш персонаж</Badge>;
+    }
+    if (character.controllerMembershipIds.includes(snapshot.me.id)) {
+      return <Badge theme="info">Контроллер</Badge>;
+    }
+    return <Badge theme="normal">Только чтение</Badge>;
+  }, [snapshot.me.id, snapshot.me.role, character]);
   if (!character)
     return (
       <Empty
@@ -1330,24 +1356,6 @@ export function CharacterPanel({
     };
     walletBatchRef.current = batch;
   };
-  const roleBadge = useMemo(() => {
-    if (snapshot.me.role === "GM") {
-      return <Badge theme="warning">Мастер</Badge>;
-    }
-    if (character.ownerMembershipId === snapshot.me.id) {
-      return <Badge theme="success">Ваш персонаж</Badge>;
-    }
-    if (character.controllerMembershipIds.includes(snapshot.me.id)) {
-      return <Badge theme="info">Контроллер</Badge>;
-    }
-    return <Badge theme="normal">Только чтение</Badge>;
-  }, [
-    snapshot.me.id,
-    snapshot.me.role,
-    character.ownerMembershipId,
-    character.controllerMembershipIds,
-  ]);
-
   return (
     <section className="panel-section character-sheet-content">
       {characterMutationError && (
@@ -1440,14 +1448,18 @@ export function CharacterPanel({
         <div className="character-vital-chip character-vital-chip--wallet">
           <span className="character-vital-chip__label">Казна</span>
           <span className="character-vital-chip__value">
-            <AppIcon icon={CoinsIcon} /> {walletDraft.gold ?? 0} зм · {walletDraft.silver ?? 0} см · {walletDraft.copper ?? 0} мм
+            <AppIcon icon={CoinsIcon} /> {walletDraft.gold ?? 0} зм ·{" "}
+            {walletDraft.silver ?? 0} см · {walletDraft.copper ?? 0} мм
           </span>
         </div>
         {resourceRows.map(({ key, label }) => {
           const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
           const max = res.maximum ?? res.current;
           return (
-            <div className="character-vital-chip character-vital-chip--resource" key={key}>
+            <div
+              className="character-vital-chip character-vital-chip--resource"
+              key={key}
+            >
               <span className="character-vital-chip__label">{label}</span>
               <span className="character-vital-chip__value">
                 {res.current} / {max}
@@ -1459,7 +1471,10 @@ export function CharacterPanel({
           const val = character.stats[row.key];
           if (val === undefined) return null;
           return (
-            <div className="character-vital-chip character-vital-chip--combat" key={row.key}>
+            <div
+              className="character-vital-chip character-vital-chip--combat"
+              key={row.key}
+            >
               <span className="character-vital-chip__label">{row.label}</span>
               <span className="character-vital-chip__value">
                 {val > 0 ? `+${val}` : val}
@@ -1493,8 +1508,12 @@ export function CharacterPanel({
             editable={Boolean(editable)}
             rollPending={rollPending}
             canEditLayout={snapshot.me.role === "GM"}
-            onChangeValue={(key, value) => changeStatValue(character, key, value)}
-            onRoll={(formula, label) => void submitCharacterRoll(formula, label)}
+            onChangeValue={(key, value) =>
+              changeStatValue(character, key, value)
+            }
+            onRoll={(formula, label) =>
+              void submitCharacterRoll(formula, label)
+            }
             onRenameRow={renameStatRow}
             onAddRow={(label) => addStatRow("characteristics", label)}
             onDeleteRow={deleteStatRow}
@@ -1508,8 +1527,12 @@ export function CharacterPanel({
             editable={Boolean(editable)}
             rollPending={rollPending}
             canEditLayout={snapshot.me.role === "GM"}
-            onChangeValue={(key, value) => changeStatValue(character, key, value)}
-            onRoll={(formula, label) => void submitCharacterRoll(formula, label)}
+            onChangeValue={(key, value) =>
+              changeStatValue(character, key, value)
+            }
+            onRoll={(formula, label) =>
+              void submitCharacterRoll(formula, label)
+            }
             onRenameRow={renameStatRow}
             onAddRow={(label) => addStatRow("combat", label)}
             onDeleteRow={deleteStatRow}
@@ -1728,7 +1751,11 @@ export function CharacterPanel({
             const resource = resourcesDraft[key] ?? { current: 0, maximum: 0 };
             const maximum = resource.maximum ?? resource.current;
             return (
-              <fieldset className="resource-card" key={key} disabled={!editable}>
+              <fieldset
+                className="resource-card"
+                key={key}
+                disabled={!editable}
+              >
                 <legend>{label}</legend>
                 <div className="resource-card__inputs">
                   <label className="field">
@@ -1756,7 +1783,10 @@ export function CharacterPanel({
                       min={0}
                       value={maximum}
                       onChange={(event) => {
-                        const nextMaximum = Math.max(0, Number(event.target.value));
+                        const nextMaximum = Math.max(
+                          0,
+                          Number(event.target.value),
+                        );
                         setResourcesDraft((current) => ({
                           ...current,
                           [key]: {
@@ -1790,7 +1820,11 @@ export function CharacterPanel({
           {Object.entries(resourcesDraft)
             .filter(([key]) => key !== "physicalPower" && key !== "magicPower")
             .map(([key, resource]) => (
-              <fieldset className="resource-card" key={key} disabled={!editable}>
+              <fieldset
+                className="resource-card"
+                key={key}
+                disabled={!editable}
+              >
                 <legend>{key}</legend>
                 <div className="resource-card__extra-fields">
                   <label className="field">
@@ -1820,7 +1854,10 @@ export function CharacterPanel({
                       onChange={(event) =>
                         setResourcesDraft((current) => ({
                           ...current,
-                          [key]: { ...resource, description: event.target.value },
+                          [key]: {
+                            ...resource,
+                            description: event.target.value,
+                          },
                         }))
                       }
                       onBlur={() => void saveResources(resourcesDraft)}
@@ -1852,7 +1889,10 @@ export function CharacterPanel({
                         min={0}
                         value={resource.maximum ?? resource.current}
                         onChange={(event) => {
-                          const maximum = Math.max(0, Number(event.target.value));
+                          const maximum = Math.max(
+                            0,
+                            Number(event.target.value),
+                          );
                           setResourcesDraft((current) => ({
                             ...current,
                             [key]: {
@@ -1893,7 +1933,10 @@ export function CharacterPanel({
                       onChange={(event) =>
                         void saveResources({
                           ...resourcesDraft,
-                          [key]: { ...resource, recoverable: event.target.checked },
+                          [key]: {
+                            ...resource,
+                            recoverable: event.target.checked,
+                          },
                         })
                       }
                     />
@@ -2067,7 +2110,9 @@ export function CharacterPanel({
               value={character.portraitAssetId ?? null}
               noneLabel="Без портрета"
               disabled={!editable}
-              assets={snapshot.assets.filter((asset) => asset.kind === "PORTRAIT")}
+              assets={snapshot.assets.filter(
+                (asset) => asset.kind === "PORTRAIT",
+              )}
               onChange={(assetId) => {
                 if (!editable) return;
                 void runCharacterMutation(() =>
@@ -2102,7 +2147,11 @@ export function CharacterPanel({
             aria-describedby={portraitUploadDescriptionId}
             aria-busy={portraitUploadPending}
             onClick={() => {
-              if (!editable || !portraitUpload || portraitUploadPendingRef.current)
+              if (
+                !editable ||
+                !portraitUpload ||
+                portraitUploadPendingRef.current
+              )
                 return;
               const uploadEpoch = portraitUploadEpochRef.current;
               const file = portraitUpload;

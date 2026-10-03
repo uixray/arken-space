@@ -159,7 +159,8 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
       return String(defaultValue);
     }, [defaultValue]);
 
-    const [uncontrolledValue, setUncontrolledValue] = useState(normalizedDefault);
+    const [uncontrolledValue, setUncontrolledValue] =
+      useState(normalizedDefault);
 
     const normalizedControlled = useMemo(() => {
       if (value === undefined) return undefined;
@@ -169,7 +170,9 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
       return String(value);
     }, [value]);
 
-    const activeValue = isControlled ? (normalizedControlled ?? "") : uncontrolledValue;
+    const activeValue = isControlled
+      ? (normalizedControlled ?? "")
+      : uncontrolledValue;
 
     // Parse options from either `options` prop or JSX `<option>` children
     const parsedOptions = useMemo<SelectOption[]>(() => {
@@ -242,7 +245,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
             ? opt.content
             : typeof opt.label === "string"
               ? opt.label
-              : opt.content ?? opt.label ?? String(opt.value));
+              : (opt.content ?? opt.label ?? String(opt.value)));
       }
       return dict;
     }, [flatOptions]);
@@ -313,7 +316,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
       time: 0,
     });
 
-    const handleValueChange = (nextValue: any) => {
+    const handleValueChange = (nextValue: string | number | null) => {
       const nextStr = String(nextValue ?? "");
       const now = Date.now();
       if (
@@ -521,17 +524,11 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
             side="bottom"
             align="start"
             alignItemWithTrigger={false}
-            className={[
-              "arken-select__positioner",
-              popupClassName,
-            ]
+            className={["arken-select__positioner", popupClassName]
               .filter(Boolean)
               .join(" ")}
           >
-            <BaseSelect.Popup
-              ref={popupRef}
-              className="arken-select__popup"
-            >
+            <BaseSelect.Popup ref={popupRef} className="arken-select__popup">
               {renderPopup ? (
                 renderPopup({
                   renderFilter: () => null,

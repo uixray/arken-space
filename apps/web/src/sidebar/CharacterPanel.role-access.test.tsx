@@ -318,12 +318,12 @@ function renderPanel(
     overrides?.onUpdateCharacterEntry ??
     vi
       .fn<CampaignActions["catalog"]["onUpdateCharacterEntry"]>()
-      .mockResolvedValue(undefined as any);
+      .mockResolvedValue(undefined);
   const onAssignCatalogEntry =
     overrides?.onAssignCatalogEntry ??
     vi
       .fn<CampaignActions["catalog"]["onAssignCatalogEntry"]>()
-      .mockResolvedValue(undefined as any);
+      .mockResolvedValue(undefined);
   const decoy = makeCharacter({
     id: "another-character",
     name: "Не редактируется",

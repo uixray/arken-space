@@ -3,9 +3,7 @@ import type { GameSnapshot } from "@arken/contracts";
 import { AppIcon } from "./AppIcon";
 import {
   BattleIcon,
-  CharacterArchiveIcon,
   CloseIcon,
-  CoinsIcon,
   DiceTrayIcon,
   JournalSurfaceIcon,
   MapObjectsIcon,
@@ -14,7 +12,6 @@ import {
   OfflineStatusIcon,
   PublishSceneIcon,
   SendIcon,
-  SessionMenuIcon,
   SettingsIcon,
   TokenTrayIcon,
   CharacterSurfaceIcon,

@@ -6,7 +6,6 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "@arken/db";
 import { betaPlayerByHandle } from "@arken/contracts";
-import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { registerRoutes } from "./routes.js";
 

@@ -53,7 +53,11 @@ export function DiceTrayPanel({
   };
 
   return (
-    <section className="dice-tray-panel" aria-label="Физические кости">
+    <section
+      className="dice-tray-panel"
+      aria-label="Физические кости"
+      aria-busy={pendingRolls > 0}
+    >
       <div className="dice-tray-panel__body">
         <div
           className="dice-tray-panel__toolbar"

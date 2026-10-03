@@ -5,7 +5,6 @@ import {
   useId,
   type CSSProperties,
   type ReactNode,
-  type Ref,
 } from "react";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { CloseIcon as X } from "../ui/icons";
@@ -26,7 +25,9 @@ const DialogContext = createContext<DialogContextValue | null>(null);
 function useDialogContext() {
   const context = useContext(DialogContext);
   if (!context) {
-    throw new Error("Dialog compound components must be rendered inside <Dialog>");
+    throw new Error(
+      "Dialog compound components must be rendered inside <Dialog>",
+    );
   }
   return context;
 }
@@ -47,7 +48,10 @@ export interface DialogHeaderProps {
 }
 
 export const DialogHeader = forwardRef<HTMLDivElement, DialogHeaderProps>(
-  function DialogHeader({ caption, children, hideClose = false, className }, ref) {
+  function DialogHeader(
+    { caption, children, hideClose = false, className },
+    ref,
+  ) {
     const { onClose, titleId } = useDialogContext();
     const titleContent = caption ?? children;
 
@@ -192,8 +196,8 @@ export interface DialogProps {
   title?: string;
   children?: ReactNode;
   danger?: boolean;
-  initialFocus?: any;
-  contentOverflow?: any;
+  initialFocus?: unknown;
+  contentOverflow?: unknown;
   "aria-label"?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
@@ -248,7 +252,9 @@ export function DialogComponent({
               )}
               style={style}
               aria-label={ariaLabel}
-              aria-labelledby={ariaLabelledByProp ?? (title ? titleId : undefined)}
+              aria-labelledby={
+                ariaLabelledByProp ?? (title ? titleId : undefined)
+              }
               aria-describedby={ariaDescribedBy}
               data-qa={qa}
             >

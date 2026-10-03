@@ -5,10 +5,6 @@ import type { DiceCritical } from "./dice-critical";
 import { humanizeFormula } from "./formula-display";
 import { useCampaignStatLabels } from "./campaign-stat-labels-context";
 
-type RollAction = NonNullable<
-  CharacterCatalogEntryDto["data"]["rollActions"]
->[number];
-
 export type SkillCard = {
   version: 1;
   mode: "EXECUTE" | "SHARE";

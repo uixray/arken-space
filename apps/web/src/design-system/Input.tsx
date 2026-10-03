@@ -12,14 +12,12 @@ import "./Input.css";
 export type InputSize = "s" | "m" | "l";
 export type InputView = "normal" | "clear";
 export type InputPin =
-  | "round-round"
-  | "brick-brick"
-  | "round-brick"
-  | "brick-round"
-  | "clear-clear";
+  "round-round" | "brick-brick" | "round-brick" | "brick-round" | "clear-clear";
 
-export interface InputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
+export interface InputProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "size"
+> {
   size?: InputSize | number;
   view?: InputView;
   pin?: InputPin;
@@ -65,7 +63,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     controlRef,
     controlProps,
     validationState,
-    errorMessage,
+    errorMessage: _errorMessage,
     hasClear,
     onClear,
     qa,

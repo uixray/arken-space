@@ -7,8 +7,7 @@ import {
 } from "react";
 import "./TextArea.css";
 
-export interface TextAreaProps
-  extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+export interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: ReactNode;
   onUpdate?: (value: string) => void;
   minRows?: number;
@@ -52,7 +51,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
       onUpdate,
       label,
       minRows,
-      maxRows,
+      maxRows: _maxRows,
       rows = minRows ?? 3,
       "aria-invalid": ariaInvalidProp,
       ...restProps
