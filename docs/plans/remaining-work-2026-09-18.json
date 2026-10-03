@@ -36,9 +36,7 @@
       "updatedAt": "2026-10-01T07:46:00.000Z",
       "originalDescription": "Замечено на проде во время игры: при удалении токена с холста происходит перезапуск фоновой музыки. Вероятно, удаление токена триггерит перерендер компонента плеера или сброс состояния аудио-контекста из-за изменения общего стейта сцены.",
       "originalAcceptanceCriteria": "## Acceptance Criteria\n- Удаление токена на холсте не прерывает и не перезапускает играющий трек.\n- Музыка продолжает играть бесшовно при любых манипуляциях с объектами на сцене.",
-      "gaps": [
-        "Local offline creation"
-      ],
+      "gaps": ["Local offline creation"],
       "nextAction": "Sync status to Linear",
       "dependencies": [],
       "sourceLinks": [],
@@ -61,9 +59,7 @@
       "updatedAt": "2026-10-01T07:46:00.000Z",
       "originalDescription": "Запрос с прода во время игры: сейчас игроки не могут самостоятельно вносить изменения в карточки своих персонажей и их способности. Это создает лишнюю операционную нагрузку на мастера.",
       "originalAcceptanceCriteria": "## Acceptance Criteria\n- Игрок видит кнопку/режим редактирования только на карточке своего персонажа.\n- Игрок может изменить текст, статы и способности своего персонажа и успешно сохранить их.\n- Изменения мгновенно синхронизируются с мастером и другими игроками.\n- Игрок не может редактировать чужих персонажей или NPC.",
-      "gaps": [
-        "Local offline creation"
-      ],
+      "gaps": ["Local offline creation"],
       "nextAction": "Sync status to Linear",
       "dependencies": [],
       "sourceLinks": [],
@@ -86,9 +82,7 @@
       "updatedAt": "2026-10-01T07:46:00.000Z",
       "originalDescription": "Замечено на проде: при сильном отдалении холста (zoom out) длинные названия токенов некорректно обрезаются по длине (text clipping/truncation).",
       "originalAcceptanceCriteria": "## Acceptance Criteria\n- При зуме (zoom out) текст названия токена остается читаемым и не обрезается посреди слова/буквы рамкой.\n- Размеры текстового блока (Text/Label в Konva) корректно пересчитываются с учетом текущего scale камеры, либо текст просто масштабируется целиком.",
-      "gaps": [
-        "Local offline creation"
-      ],
+      "gaps": ["Local offline creation"],
       "nextAction": "Sync status to Linear",
       "dependencies": [],
       "sourceLinks": [],
@@ -111,9 +105,7 @@
       "updatedAt": "2026-10-01T07:46:00.000Z",
       "originalDescription": "Критический баг с прода: часть токенов, размещенных мастером на холсте, не появлялась у игроков в реальном времени. Токены становились видны только после принудительной перезагрузки страницы (F5) у игроков.",
       "originalAcceptanceCriteria": "## Acceptance Criteria\n- Добавление токена мастером мгновенно (через WebSocket) отображает этот токен на экранах всех подключенных игроков.\n- Не требуется перезагрузка страницы для получения актуального состояния холста.",
-      "gaps": [
-        "Local offline creation"
-      ],
+      "gaps": ["Local offline creation"],
       "nextAction": "Sync status to Linear",
       "dependencies": [],
       "sourceLinks": [],

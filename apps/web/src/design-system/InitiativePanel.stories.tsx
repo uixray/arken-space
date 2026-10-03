@@ -68,11 +68,22 @@ export default meta;
 type Story = StoryObj<typeof InitiativePanel>;
 
 function InteractiveDemo({ isGm }: { isGm: boolean }) {
-  const [participants, setParticipants] = useState<InitiativeParticipantDto[]>(initialParticipants);
-  const [selectedTokens, setSelectedTokens] = useState<string[]>(["token-new-1"]);
+  const [participants, setParticipants] =
+    useState<InitiativeParticipantDto[]>(initialParticipants);
+  const [selectedTokens, setSelectedTokens] = useState<string[]>([
+    "token-new-1",
+  ]);
 
   return (
-    <div style={{ maxWidth: 380, margin: "0 auto", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--radius-md)" }}>
+    <div
+      style={{
+        maxWidth: 380,
+        margin: "0 auto",
+        background: "var(--surface)",
+        border: "1px solid var(--line)",
+        borderRadius: "var(--radius-md)",
+      }}
+    >
       <InitiativePanel
         participants={participants}
         isGm={isGm}
@@ -85,9 +96,12 @@ function InteractiveDemo({ isGm }: { isGm: boolean }) {
           );
         }}
         onRoll={(p) => {
-          const roll = Math.floor(Math.random() * 20) + 1 + (p.initiativeBonus ?? 0);
+          const roll =
+            Math.floor(Math.random() * 20) + 1 + (p.initiativeBonus ?? 0);
           setParticipants((prev) =>
-            prev.map((item) => (item.id === p.id ? { ...item, initiative: roll } : item)),
+            prev.map((item) =>
+              item.id === p.id ? { ...item, initiative: roll } : item,
+            ),
           );
         }}
         onRecruitFromZone={() => {
@@ -111,7 +125,15 @@ export const PlayerView: Story = {
 export const EmptyState: Story = {
   name: "Пустая очередь (Empty)",
   render: () => (
-    <div style={{ maxWidth: 380, margin: "0 auto", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--radius-md)" }}>
+    <div
+      style={{
+        maxWidth: 380,
+        margin: "0 auto",
+        background: "var(--surface)",
+        border: "1px solid var(--line)",
+        borderRadius: "var(--radius-md)",
+      }}
+    >
       <InitiativePanel
         participants={[]}
         isGm={true}

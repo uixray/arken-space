@@ -54,10 +54,7 @@ describe("Switch", () => {
     function Controlled() {
       const [checked, setChecked] = useState(false);
       return (
-        <Switch
-          checked={checked}
-          onUpdate={(val) => setChecked(val)}
-        >
+        <Switch checked={checked} onUpdate={(val) => setChecked(val)}>
           Звуковые эффекты
         </Switch>
       );

@@ -23,7 +23,7 @@ export function Popup({
   children,
 }: PopupProps) {
   const preferredPlacement = Array.isArray(placement)
-    ? placement[0] ?? "bottom-start"
+    ? (placement[0] ?? "bottom-start")
     : placement;
   const [sideStr, alignStr] = preferredPlacement.split("-");
   const side =

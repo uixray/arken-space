@@ -14,7 +14,14 @@ type Story = StoryObj<typeof TextArea>;
 
 export const Default: Story = {
   render: () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        maxWidth: 480,
+      }}
+    >
       <h3>Многострочный ввод (TextArea)</h3>
       <TextArea
         placeholder="Опишите предысторию персонажа, внешность или детали сцены..."
@@ -26,7 +33,14 @@ export const Default: Story = {
 
 export const WithLabel: Story = {
   render: () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        maxWidth: 480,
+      }}
+    >
       <h3>С подписью (Label)</h3>
       <TextArea
         label="Заметки мастера"
@@ -39,10 +53,24 @@ export const WithLabel: Story = {
 
 export const States: Story = {
   render: () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        maxWidth: 480,
+      }}
+    >
       <h3>Состояния</h3>
       <div>
-        <label style={{ display: "block", marginBottom: 4, fontSize: "11px", color: "var(--text-muted)" }}>
+        <label
+          style={{
+            display: "block",
+            marginBottom: 4,
+            fontSize: "11px",
+            color: "var(--text-muted)",
+          }}
+        >
           Отключено (Disabled)
         </label>
         <TextArea
@@ -52,7 +80,14 @@ export const States: Story = {
         />
       </div>
       <div>
-        <label style={{ display: "block", marginBottom: 4, fontSize: "11px", color: "var(--danger)" }}>
+        <label
+          style={{
+            display: "block",
+            marginBottom: 4,
+            fontSize: "11px",
+            color: "var(--danger)",
+          }}
+        >
           Ошибка валидации (Invalid)
         </label>
         <TextArea

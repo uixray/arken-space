@@ -30,11 +30,7 @@ import {
 } from "./renderers/cursor-presence";
 
 export type ConnectionState =
-  | "CONNECTING"
-  | "ONLINE"
-  | "RECONNECTING"
-  | "RESYNCING"
-  | "OFFLINE";
+  "CONNECTING" | "ONLINE" | "RECONNECTING" | "RESYNCING" | "OFFLINE";
 
 export type SceneViewEmission = {
   socket: GameSocket;

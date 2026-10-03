@@ -280,8 +280,21 @@
 }
 
 /* Pins (border-radius combos) */
-.g-button_pin_brick-brick { border-radius: 0; }
-.g-button_pin_circle-circle { border-radius: var(--radius-pill, 999px); }
-.g-button_pin_round-brick { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.g-button_pin_brick-round { border-top-left-radius: 0; border-bottom-left-radius: 0; }
-.g-button_pin_clear-clear { border-radius: 0; border-color: transparent; }
+.g-button_pin_brick-brick {
+  border-radius: 0;
+}
+.g-button_pin_circle-circle {
+  border-radius: var(--radius-pill, 999px);
+}
+.g-button_pin_round-brick {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.g-button_pin_brick-round {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.g-button_pin_clear-clear {
+  border-radius: 0;
+  border-color: transparent;
+}

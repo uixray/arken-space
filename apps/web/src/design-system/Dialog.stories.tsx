@@ -29,8 +29,12 @@ export const Default: Story = {
           <Dialog.Header caption="Параметры кампании" />
           <Dialog.Body>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span
+                  style={{ fontSize: 11, color: "var(--color-text-muted)" }}
+                >
                   Название кампании
                 </span>
                 <Input defaultValue="Хроники Забытых Королевств" />
@@ -64,8 +68,9 @@ export const DangerPreset: Story = {
           <Dialog.Header caption="Удаление персонажа" />
           <Dialog.Body>
             <p style={{ margin: 0 }}>
-              Вы уверены, что хотите удалить персонажа <strong>Торин Дубощит</strong>?
-              Это действие необратимо и удалит все связанные предметы и заметки.
+              Вы уверены, что хотите удалить персонажа{" "}
+              <strong>Торин Дубощит</strong>? Это действие необратимо и удалит
+              все связанные предметы и заметки.
             </p>
           </Dialog.Body>
           <Dialog.Footer
@@ -98,9 +103,17 @@ export const ArkenWorkspaceWindow: Story = {
           onApply={() => setOpen(false)}
           onClose={() => setOpen(false)}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+              padding: 16,
+            }}
+          >
             <p style={{ margin: 0, color: "var(--color-text)" }}>
-              Окно рабочего пространства поддерживает свободное перетаскивание по экрану и не блокирует взаимодействие с холстом стола.
+              Окно рабочего пространства поддерживает свободное перетаскивание
+              по экрану и не блокирует взаимодействие с холстом стола.
             </p>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>

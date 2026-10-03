@@ -205,7 +205,9 @@
     width: 20px;
     height: 20px;
     flex-shrink: 0;
-    transition: transform 0.15s ease-out, color 0.15s ease-out;
+    transition:
+      transform 0.15s ease-out,
+      color 0.15s ease-out;
   }
 
   .compact-nav-label {
@@ -266,7 +268,8 @@
     overflow: hidden;
   }
 
-  .app-shell--compact :is(#main-content, #activity-sidebar, #compact-menu-view) {
+  .app-shell--compact
+    :is(#main-content, #activity-sidebar, #compact-menu-view) {
     width: 100%;
     min-width: 0;
     min-height: 0;

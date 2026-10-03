@@ -30,10 +30,9 @@ export async function createPgliteDatabase(dataDir = "./.data/pglite") {
     if (res.rows.length === 0) {
       const raw = await readFile(new URL(file, migrationsUrl), "utf8");
       await database.exec(raw.replaceAll("--> statement-breakpoint", ""));
-      await database.query(
-        `INSERT INTO _arken_migrations (name) VALUES ($1)`,
-        [file],
-      );
+      await database.query(`INSERT INTO _arken_migrations (name) VALUES ($1)`, [
+        file,
+      ]);
     }
   }
   const db = drizzle(database, { schema });

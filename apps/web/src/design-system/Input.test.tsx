@@ -30,11 +30,7 @@ describe("Input", () => {
   it("forwards controlRef directly to the native input element", () => {
     const controlRef = createRef<HTMLInputElement>();
     render(
-      <Input
-        controlRef={controlRef}
-        aria-label="Имя"
-        defaultValue="Арагорн"
-      />,
+      <Input controlRef={controlRef} aria-label="Имя" defaultValue="Арагорн" />,
     );
 
     const input = screen.getByLabelText("Имя");

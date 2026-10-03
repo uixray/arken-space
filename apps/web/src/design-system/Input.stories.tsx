@@ -19,16 +19,37 @@ export const Inputs: Story = {
   render: () => {
     const [searchVal, setSearchVal] = useState("Искать заклинание");
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 420 }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 20,
+          maxWidth: 420,
+        }}
+      >
         <h3>Поля ввода: Размеры и состояния</h3>
         <div>
-          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontSize: 11,
+              color: "var(--color-text-muted)",
+            }}
+          >
             Размер M (32px, основной)
           </label>
           <Input placeholder="Имя персонажа..." defaultValue="Варис" />
         </div>
         <div>
-          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontSize: 11,
+              color: "var(--color-text-muted)",
+            }}
+          >
             Слот иконки слева (Start Slot)
           </label>
           <Input
@@ -38,7 +59,14 @@ export const Inputs: Story = {
           />
         </div>
         <div>
-          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontSize: 11,
+              color: "var(--color-text-muted)",
+            }}
+          >
             Поиск с кнопкой быстрой очистки (hasClear)
           </label>
           <Input
@@ -50,7 +78,14 @@ export const Inputs: Story = {
           />
         </div>
         <div>
-          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontSize: 11,
+              color: "var(--color-text-muted)",
+            }}
+          >
             Числовое поле с шагом (Step / Min / Max)
           </label>
           <Input
@@ -62,7 +97,14 @@ export const Inputs: Story = {
           />
         </div>
         <div>
-          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontSize: 11,
+              color: "var(--color-text-muted)",
+            }}
+          >
             Состояние ошибки (Invalid)
           </label>
           <Input
@@ -71,15 +113,33 @@ export const Inputs: Story = {
             defaultValue="wrong-key"
             validationState="invalid"
           />
-          <span style={{ fontSize: 10, color: "var(--color-danger)", marginTop: 4, display: "block" }}>
+          <span
+            style={{
+              fontSize: 10,
+              color: "var(--color-danger)",
+              marginTop: 4,
+              display: "block",
+            }}
+          >
             Неверный ключ кампании
           </span>
         </div>
         <div>
-          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontSize: 11,
+              color: "var(--color-text-muted)",
+            }}
+          >
             Отключенное поле (Disabled)
           </label>
-          <Input placeholder="Недоступно для редактирования" disabled defaultValue="Только чтение" />
+          <Input
+            placeholder="Недоступно для редактирования"
+            disabled
+            defaultValue="Только чтение"
+          />
         </div>
       </div>
     );
@@ -88,10 +148,24 @@ export const Inputs: Story = {
 
 export const TextAreas: Story = {
   render: () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 420 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+        maxWidth: 420,
+      }}
+    >
       <h3>Многострочные поля ввода (TextArea)</h3>
       <div>
-        <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+        <label
+          style={{
+            display: "block",
+            marginBottom: 6,
+            fontSize: 11,
+            color: "var(--color-text-muted)",
+          }}
+        >
           Описание персонажа или локации
         </label>
         <TextArea
@@ -101,7 +175,14 @@ export const TextAreas: Story = {
         />
       </div>
       <div>
-        <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+        <label
+          style={{
+            display: "block",
+            marginBottom: 6,
+            fontSize: 11,
+            color: "var(--color-text-muted)",
+          }}
+        >
           Многострочное поле с ошибкой (Invalid)
         </label>
         <TextArea
@@ -111,7 +192,14 @@ export const TextAreas: Story = {
         />
       </div>
       <div>
-        <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+        <label
+          style={{
+            display: "block",
+            marginBottom: 6,
+            fontSize: 11,
+            color: "var(--color-text-muted)",
+          }}
+        >
           Отключенное многострочное поле (Disabled)
         </label>
         <TextArea

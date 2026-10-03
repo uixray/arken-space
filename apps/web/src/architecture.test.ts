@@ -30,7 +30,7 @@ describe("Архитектурные инварианты (docs/CODING_GUIDELINE
     ).toBe(false);
   });
 
-  it("App.tsx не содержит прямого инлайнинга details токенов (<details className=\"token-tray\">)", () => {
+  it('App.tsx не содержит прямого инлайнинга details токенов (<details className="token-tray">)', () => {
     const source = readSource("./App.tsx");
     expect(
       source.includes('className="token-tray"'),
@@ -38,7 +38,7 @@ describe("Архитектурные инварианты (docs/CODING_GUIDELINE
     ).toBe(false);
   });
 
-  it("App.tsx не содержит прямого инлайнинга шапки (<header className=\"topbar\">)", () => {
+  it('App.tsx не содержит прямого инлайнинга шапки (<header className="topbar">)', () => {
     const source = readSource("./App.tsx");
     expect(
       source.includes('className="topbar"'),

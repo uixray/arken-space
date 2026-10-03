@@ -74,81 +74,419 @@ interface IconItem {
   name: string;
   original: string;
   icon: LucideIcon;
-  category: "map" | "dice" | "chat" | "audio" | "character" | "dialog" | "navigation" | "status";
+  category:
+    | "map"
+    | "dice"
+    | "chat"
+    | "audio"
+    | "character"
+    | "dialog"
+    | "navigation"
+    | "status";
   locations: string;
 }
 
 const ALL_ICONS: IconItem[] = [
   // Карта и холст
-  { name: "PanIcon", original: "Hand", icon: PanIcon, category: "map", locations: "MapToolbar: панорамирование сцены (Space / Pan)" },
-  { name: "RevealFogIcon", original: "Eye", icon: RevealFogIcon, category: "map", locations: "MapToolbar: открыть область тумана" },
-  { name: "CoverFogIcon", original: "EyeOff", icon: CoverFogIcon, category: "map", locations: "MapToolbar: скрыть область туманом" },
-  { name: "FogBrushIcon", original: "Brush", icon: FogBrushIcon, category: "map", locations: "MapToolbar: круглая кисть открытия тумана" },
-  { name: "CoverBrushIcon", original: "Eraser", icon: CoverBrushIcon, category: "map", locations: "MapToolbar: кисть скрытия тумана (ластик)" },
-  { name: "FogPolygonIcon", original: "Pentagon", icon: FogPolygonIcon, category: "map", locations: "MapToolbar: многоугольник открытия тумана" },
-  { name: "CoverPolygonIcon", original: "Hexagon", icon: CoverPolygonIcon, category: "map", locations: "MapToolbar: многоугольник скрытия тумана" },
-  { name: "DrawIcon", original: "Pencil", icon: DrawIcon, category: "map", locations: "MapToolbar: рисование на холсте" },
-  { name: "RulerIcon", original: "Ruler", icon: RulerIcon, category: "map", locations: "MapToolbar: линейка измерения расстояний" },
-  { name: "PingIcon", original: "MapPin", icon: PingIcon, category: "map", locations: "MapToolbar: метка внимания на карте" },
-  { name: "CursorPresenceIcon", original: "MousePointer2", icon: CursorPresenceIcon, category: "map", locations: "CursorPresenceMenu: курсор и видимость" },
-  { name: "GridSettingsIcon", original: "Grid3x3", icon: GridSettingsIcon, category: "map", locations: "GridSettings: настройки сетки сцены" },
-  { name: "ResizeMapIcon", original: "Maximize2", icon: ResizeMapIcon, category: "map", locations: "ResizeSettings: изменение размеров карты" },
-  { name: "MoreToolsIcon", original: "Ellipsis", icon: MoreToolsIcon, category: "map", locations: "MapToolbar: меню дополнительных инструментов" },
-  { name: "UndoIcon", original: "Undo2", icon: UndoIcon, category: "map", locations: "CanvasHistoryControls: отмена действия на карте" },
-  { name: "RedoIcon", original: "Redo2", icon: RedoIcon, category: "map", locations: "CanvasHistoryControls: повтор действия на карте" },
+  {
+    name: "PanIcon",
+    original: "Hand",
+    icon: PanIcon,
+    category: "map",
+    locations: "MapToolbar: панорамирование сцены (Space / Pan)",
+  },
+  {
+    name: "RevealFogIcon",
+    original: "Eye",
+    icon: RevealFogIcon,
+    category: "map",
+    locations: "MapToolbar: открыть область тумана",
+  },
+  {
+    name: "CoverFogIcon",
+    original: "EyeOff",
+    icon: CoverFogIcon,
+    category: "map",
+    locations: "MapToolbar: скрыть область туманом",
+  },
+  {
+    name: "FogBrushIcon",
+    original: "Brush",
+    icon: FogBrushIcon,
+    category: "map",
+    locations: "MapToolbar: круглая кисть открытия тумана",
+  },
+  {
+    name: "CoverBrushIcon",
+    original: "Eraser",
+    icon: CoverBrushIcon,
+    category: "map",
+    locations: "MapToolbar: кисть скрытия тумана (ластик)",
+  },
+  {
+    name: "FogPolygonIcon",
+    original: "Pentagon",
+    icon: FogPolygonIcon,
+    category: "map",
+    locations: "MapToolbar: многоугольник открытия тумана",
+  },
+  {
+    name: "CoverPolygonIcon",
+    original: "Hexagon",
+    icon: CoverPolygonIcon,
+    category: "map",
+    locations: "MapToolbar: многоугольник скрытия тумана",
+  },
+  {
+    name: "DrawIcon",
+    original: "Pencil",
+    icon: DrawIcon,
+    category: "map",
+    locations: "MapToolbar: рисование на холсте",
+  },
+  {
+    name: "RulerIcon",
+    original: "Ruler",
+    icon: RulerIcon,
+    category: "map",
+    locations: "MapToolbar: линейка измерения расстояний",
+  },
+  {
+    name: "PingIcon",
+    original: "MapPin",
+    icon: PingIcon,
+    category: "map",
+    locations: "MapToolbar: метка внимания на карте",
+  },
+  {
+    name: "CursorPresenceIcon",
+    original: "MousePointer2",
+    icon: CursorPresenceIcon,
+    category: "map",
+    locations: "CursorPresenceMenu: курсор и видимость",
+  },
+  {
+    name: "GridSettingsIcon",
+    original: "Grid3x3",
+    icon: GridSettingsIcon,
+    category: "map",
+    locations: "GridSettings: настройки сетки сцены",
+  },
+  {
+    name: "ResizeMapIcon",
+    original: "Maximize2",
+    icon: ResizeMapIcon,
+    category: "map",
+    locations: "ResizeSettings: изменение размеров карты",
+  },
+  {
+    name: "MoreToolsIcon",
+    original: "Ellipsis",
+    icon: MoreToolsIcon,
+    category: "map",
+    locations: "MapToolbar: меню дополнительных инструментов",
+  },
+  {
+    name: "UndoIcon",
+    original: "Undo2",
+    icon: UndoIcon,
+    category: "map",
+    locations: "CanvasHistoryControls: отмена действия на карте",
+  },
+  {
+    name: "RedoIcon",
+    original: "Redo2",
+    icon: RedoIcon,
+    category: "map",
+    locations: "CanvasHistoryControls: повтор действия на карте",
+  },
 
   // Кубы и броски
-  { name: "NormalRollIcon", original: "Circle", icon: NormalRollIcon, category: "dice", locations: "DiceTrayPanel / RollModeControl: открытый бросок" },
-  { name: "SecretRollIcon", original: "EyeOff", icon: SecretRollIcon, category: "dice", locations: "DiceTrayPanel / RollModeControl: скрытый бросок GM" },
+  {
+    name: "NormalRollIcon",
+    original: "Circle",
+    icon: NormalRollIcon,
+    category: "dice",
+    locations: "DiceTrayPanel / RollModeControl: открытый бросок",
+  },
+  {
+    name: "SecretRollIcon",
+    original: "EyeOff",
+    icon: SecretRollIcon,
+    category: "dice",
+    locations: "DiceTrayPanel / RollModeControl: скрытый бросок GM",
+  },
 
   // Чат и связь
-  { name: "SendIcon", original: "Send", icon: SendIcon, category: "chat", locations: "ChatPanels: кнопка отправки сообщения" },
-  { name: "MoreIcon", original: "Ellipsis", icon: MoreIcon, category: "chat", locations: "ChatPanels: фильтры и действия сообщений" },
-  { name: "StickerPickerIcon", original: "Sticker", icon: StickerPickerIcon, category: "chat", locations: "StickerPicker: каталог стикеров/эмодзи" },
+  {
+    name: "SendIcon",
+    original: "Send",
+    icon: SendIcon,
+    category: "chat",
+    locations: "ChatPanels: кнопка отправки сообщения",
+  },
+  {
+    name: "MoreIcon",
+    original: "Ellipsis",
+    icon: MoreIcon,
+    category: "chat",
+    locations: "ChatPanels: фильтры и действия сообщений",
+  },
+  {
+    name: "StickerPickerIcon",
+    original: "Sticker",
+    icon: StickerPickerIcon,
+    category: "chat",
+    locations: "StickerPicker: каталог стикеров/эмодзи",
+  },
 
   // Аудио и пауза
-  { name: "PlayIcon", original: "Play", icon: PlayIcon, category: "audio", locations: "MusicBar: воспроизведение трека" },
-  { name: "PauseIcon", original: "Pause", icon: PauseIcon, category: "audio", locations: "MusicBar / GamePauseOverlay: пауза музыки и игры" },
-  { name: "VolumeIcon", original: "Volume2", icon: VolumeIcon, category: "audio", locations: "MusicBar: громкость фоновой музыки" },
+  {
+    name: "PlayIcon",
+    original: "Play",
+    icon: PlayIcon,
+    category: "audio",
+    locations: "MusicBar: воспроизведение трека",
+  },
+  {
+    name: "PauseIcon",
+    original: "Pause",
+    icon: PauseIcon,
+    category: "audio",
+    locations: "MusicBar / GamePauseOverlay: пауза музыки и игры",
+  },
+  {
+    name: "VolumeIcon",
+    original: "Volume2",
+    icon: VolumeIcon,
+    category: "audio",
+    locations: "MusicBar: громкость фоновой музыки",
+  },
 
   // Персонаж и статы
-  { name: "CharacterArchiveIcon", original: "Archive", icon: CharacterArchiveIcon, category: "character", locations: "CharacterWorkspace: архив персонажей" },
-  { name: "AddIcon", original: "Plus", icon: AddIcon, category: "character", locations: "CharacterWorkspace / StatLayoutCard: добавить" },
-  { name: "DecreaseIcon", original: "Minus", icon: DecreaseIcon, category: "character", locations: "ResourceCounters: уменьшить HP/MP/счётчик" },
-  { name: "RenameIcon", original: "Pencil", icon: RenameIcon, category: "character", locations: "StatLayoutCard: переименовать характеристику" },
-  { name: "DeleteIcon", original: "Trash", icon: DeleteIcon, category: "character", locations: "StatLayoutCard / TokenPalette: удалить объект" },
+  {
+    name: "CharacterArchiveIcon",
+    original: "Archive",
+    icon: CharacterArchiveIcon,
+    category: "character",
+    locations: "CharacterWorkspace: архив персонажей",
+  },
+  {
+    name: "AddIcon",
+    original: "Plus",
+    icon: AddIcon,
+    category: "character",
+    locations: "CharacterWorkspace / StatLayoutCard: добавить",
+  },
+  {
+    name: "DecreaseIcon",
+    original: "Minus",
+    icon: DecreaseIcon,
+    category: "character",
+    locations: "ResourceCounters: уменьшить HP/MP/счётчик",
+  },
+  {
+    name: "RenameIcon",
+    original: "Pencil",
+    icon: RenameIcon,
+    category: "character",
+    locations: "StatLayoutCard: переименовать характеристику",
+  },
+  {
+    name: "DeleteIcon",
+    original: "Trash",
+    icon: DeleteIcon,
+    category: "character",
+    locations: "StatLayoutCard / TokenPalette: удалить объект",
+  },
 
   // Диалоги и окна
-  { name: "CloseIcon", original: "X", icon: CloseIcon, category: "dialog", locations: "ArkenDialog / Модальные окна: закрыть окно" },
-  { name: "ResetWindowIcon", original: "RotateCcw", icon: ResetWindowIcon, category: "dialog", locations: "ArkenDialog: сбросить позицию и размер окна" },
+  {
+    name: "CloseIcon",
+    original: "X",
+    icon: CloseIcon,
+    category: "dialog",
+    locations: "ArkenDialog / Модальные окна: закрыть окно",
+  },
+  {
+    name: "ResetWindowIcon",
+    original: "RotateCcw",
+    icon: ResetWindowIcon,
+    category: "dialog",
+    locations: "ArkenDialog: сбросить позицию и размер окна",
+  },
 
   // Навигация и меню
-  { name: "SidebarCollapseIcon", original: "PanelRightClose", icon: SidebarCollapseIcon, category: "navigation", locations: "Sidebar: свернуть боковую панель" },
-  { name: "SidebarExpandIcon", original: "PanelRightOpen", icon: SidebarExpandIcon, category: "navigation", locations: "Sidebar: развернуть боковую панель" },
-  { name: "CollapseToolbarIcon", original: "ChevronsLeft", icon: CollapseToolbarIcon, category: "navigation", locations: "MapToolbar: свернуть панель инструментов" },
-  { name: "ExpandToolbarIcon", original: "ChevronsRight", icon: ExpandToolbarIcon, category: "navigation", locations: "MapToolbar: развернуть панель инструментов" },
-  { name: "CollapseCharacterRailIcon", original: "PanelLeftClose", icon: CollapseCharacterRailIcon, category: "navigation", locations: "CharacterWorkspace: свернуть колонку персонажей" },
-  { name: "ExpandCharacterRailIcon", original: "PanelLeftOpen", icon: ExpandCharacterRailIcon, category: "navigation", locations: "CharacterWorkspace: развернуть колонку персонажей" },
-  { name: "SessionMenuIcon", original: "Menu", icon: SessionMenuIcon, category: "navigation", locations: "App header: главное меню сессии" },
-  { name: "ScenePickerIcon", original: "ChevronDown", icon: ScenePickerIcon, category: "navigation", locations: "App header: выбор активной сцены" },
-  { name: "CollapseSectionIcon", original: "ChevronDown", icon: CollapseSectionIcon, category: "navigation", locations: "Аккордеоны и списки: свернуть секцию" },
-  { name: "ExpandSectionIcon", original: "ChevronRight", icon: ExpandSectionIcon, category: "navigation", locations: "Аккордеоны и списки: развернуть секцию" },
-  { name: "DuplicateIcon", original: "Copy", icon: DuplicateIcon, category: "navigation", locations: "ObjectList / Сцены: дублировать объект" },
-  { name: "PublishSceneIcon", original: "ScreenShare", icon: PublishSceneIcon, category: "navigation", locations: "Scene list: опубликовать сцену игрокам" },
-  { name: "PublishedSceneIcon", original: "Cast", icon: PublishedSceneIcon, category: "navigation", locations: "Scene list: сцена транслируется игрокам" },
-  { name: "PreviousPageIcon", original: "ArrowLeft", icon: PreviousPageIcon, category: "navigation", locations: "CharacterMediaGallery: страница назад" },
-  { name: "NextPageIcon", original: "ArrowRight", icon: NextPageIcon, category: "navigation", locations: "CharacterMediaGallery: страница вперед" },
-  { name: "MoveSelectionIcon", original: "ArrowRight", icon: MoveSelectionIcon, category: "navigation", locations: "SelectionActions: переместить выбранные элементы" },
-  { name: "SettingsIcon", original: "Settings", icon: SettingsIcon, category: "navigation", locations: "GravityFoundationPreview / Настройки" },
+  {
+    name: "SidebarCollapseIcon",
+    original: "PanelRightClose",
+    icon: SidebarCollapseIcon,
+    category: "navigation",
+    locations: "Sidebar: свернуть боковую панель",
+  },
+  {
+    name: "SidebarExpandIcon",
+    original: "PanelRightOpen",
+    icon: SidebarExpandIcon,
+    category: "navigation",
+    locations: "Sidebar: развернуть боковую панель",
+  },
+  {
+    name: "CollapseToolbarIcon",
+    original: "ChevronsLeft",
+    icon: CollapseToolbarIcon,
+    category: "navigation",
+    locations: "MapToolbar: свернуть панель инструментов",
+  },
+  {
+    name: "ExpandToolbarIcon",
+    original: "ChevronsRight",
+    icon: ExpandToolbarIcon,
+    category: "navigation",
+    locations: "MapToolbar: развернуть панель инструментов",
+  },
+  {
+    name: "CollapseCharacterRailIcon",
+    original: "PanelLeftClose",
+    icon: CollapseCharacterRailIcon,
+    category: "navigation",
+    locations: "CharacterWorkspace: свернуть колонку персонажей",
+  },
+  {
+    name: "ExpandCharacterRailIcon",
+    original: "PanelLeftOpen",
+    icon: ExpandCharacterRailIcon,
+    category: "navigation",
+    locations: "CharacterWorkspace: развернуть колонку персонажей",
+  },
+  {
+    name: "SessionMenuIcon",
+    original: "Menu",
+    icon: SessionMenuIcon,
+    category: "navigation",
+    locations: "App header: главное меню сессии",
+  },
+  {
+    name: "ScenePickerIcon",
+    original: "ChevronDown",
+    icon: ScenePickerIcon,
+    category: "navigation",
+    locations: "App header: выбор активной сцены",
+  },
+  {
+    name: "CollapseSectionIcon",
+    original: "ChevronDown",
+    icon: CollapseSectionIcon,
+    category: "navigation",
+    locations: "Аккордеоны и списки: свернуть секцию",
+  },
+  {
+    name: "ExpandSectionIcon",
+    original: "ChevronRight",
+    icon: ExpandSectionIcon,
+    category: "navigation",
+    locations: "Аккордеоны и списки: развернуть секцию",
+  },
+  {
+    name: "DuplicateIcon",
+    original: "Copy",
+    icon: DuplicateIcon,
+    category: "navigation",
+    locations: "ObjectList / Сцены: дублировать объект",
+  },
+  {
+    name: "PublishSceneIcon",
+    original: "ScreenShare",
+    icon: PublishSceneIcon,
+    category: "navigation",
+    locations: "Scene list: опубликовать сцену игрокам",
+  },
+  {
+    name: "PublishedSceneIcon",
+    original: "Cast",
+    icon: PublishedSceneIcon,
+    category: "navigation",
+    locations: "Scene list: сцена транслируется игрокам",
+  },
+  {
+    name: "PreviousPageIcon",
+    original: "ArrowLeft",
+    icon: PreviousPageIcon,
+    category: "navigation",
+    locations: "CharacterMediaGallery: страница назад",
+  },
+  {
+    name: "NextPageIcon",
+    original: "ArrowRight",
+    icon: NextPageIcon,
+    category: "navigation",
+    locations: "CharacterMediaGallery: страница вперед",
+  },
+  {
+    name: "MoveSelectionIcon",
+    original: "ArrowRight",
+    icon: MoveSelectionIcon,
+    category: "navigation",
+    locations: "SelectionActions: переместить выбранные элементы",
+  },
+  {
+    name: "SettingsIcon",
+    original: "Settings",
+    icon: SettingsIcon,
+    category: "navigation",
+    locations: "GravityFoundationPreview / Настройки",
+  },
 
   // Статусы и маркеры
-  { name: "OnlineStatusIcon", original: "CircleDot", icon: OnlineStatusIcon, category: "status", locations: "SetupPanel: участник в сети (Online)" },
-  { name: "OfflineStatusIcon", original: "Circle", icon: OfflineStatusIcon, category: "status", locations: "SetupPanel: участник не в сети (Offline)" },
-  { name: "WorldLocationIcon", original: "MapPin", icon: WorldLocationIcon, category: "status", locations: "WorldMaps: метка точки интереса / локации" },
-  { name: "PartyLocationIcon", original: "UsersRound", icon: PartyLocationIcon, category: "status", locations: "WorldMaps: маркер отряда приключенцев" },
-  { name: "SelectedOptionIcon", original: "Check", icon: SelectedOptionIcon, category: "status", locations: "TokenConditionMenu: выбранный статус токена" },
-  { name: "MoveUpIcon", original: "ArrowUp", icon: MoveUpIcon, category: "status", locations: "WorldContent / Галерея: поднять в списке" },
-  { name: "MoveDownIcon", original: "ArrowDown", icon: MoveDownIcon, category: "status", locations: "WorldContent / Галерея: опустить в списке" },
+  {
+    name: "OnlineStatusIcon",
+    original: "CircleDot",
+    icon: OnlineStatusIcon,
+    category: "status",
+    locations: "SetupPanel: участник в сети (Online)",
+  },
+  {
+    name: "OfflineStatusIcon",
+    original: "Circle",
+    icon: OfflineStatusIcon,
+    category: "status",
+    locations: "SetupPanel: участник не в сети (Offline)",
+  },
+  {
+    name: "WorldLocationIcon",
+    original: "MapPin",
+    icon: WorldLocationIcon,
+    category: "status",
+    locations: "WorldMaps: метка точки интереса / локации",
+  },
+  {
+    name: "PartyLocationIcon",
+    original: "UsersRound",
+    icon: PartyLocationIcon,
+    category: "status",
+    locations: "WorldMaps: маркер отряда приключенцев",
+  },
+  {
+    name: "SelectedOptionIcon",
+    original: "Check",
+    icon: SelectedOptionIcon,
+    category: "status",
+    locations: "TokenConditionMenu: выбранный статус токена",
+  },
+  {
+    name: "MoveUpIcon",
+    original: "ArrowUp",
+    icon: MoveUpIcon,
+    category: "status",
+    locations: "WorldContent / Галерея: поднять в списке",
+  },
+  {
+    name: "MoveDownIcon",
+    original: "ArrowDown",
+    icon: MoveDownIcon,
+    category: "status",
+    locations: "WorldContent / Галерея: опустить в списке",
+  },
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -221,23 +559,69 @@ export function IconGalleryStand() {
         }}
       >
         {/* Заголовок и цели стенда */}
-        <header style={{ marginBottom: "var(--space-xl)", borderBottom: "1px solid var(--color-border)", paddingBottom: "var(--space-md)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "var(--space-md)" }}>
+        <header
+          style={{
+            marginBottom: "var(--space-xl)",
+            borderBottom: "1px solid var(--color-border)",
+            paddingBottom: "var(--space-md)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+              gap: "var(--space-md)",
+            }}
+          >
             <div>
-              <span style={{ fontSize: "var(--font-size-caption, 12px)", color: "var(--color-accent)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+              <span
+                style={{
+                  fontSize: "var(--font-size-caption, 12px)",
+                  color: "var(--color-accent)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  fontWeight: 600,
+                }}
+              >
                 UIX-645 · Human Visual QA Stand
               </span>
-              <h1 style={{ margin: "4px 0", fontSize: "var(--font-size-heading-lg, 24px)" }}>
+              <h1
+                style={{
+                  margin: "4px 0",
+                  fontSize: "var(--font-size-heading-lg, 24px)",
+                }}
+              >
                 Приёмочный стенд иконок Lucide
               </h1>
-              <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "var(--font-size-body, 14px)", maxWidth: 700 }}>
-                Стенд для проверки четкости контуров, отсутствия замыливания (16/20/24px), контраста во всех темах и поведения в интерактивных кнопках (hover/focus/disabled).
+              <p
+                style={{
+                  margin: 0,
+                  color: "var(--color-text-muted)",
+                  fontSize: "var(--font-size-body, 14px)",
+                  maxWidth: 700,
+                }}
+              >
+                Стенд для проверки четкости контуров, отсутствия замыливания
+                (16/20/24px), контраста во всех темах и поведения в
+                интерактивных кнопках (hover/focus/disabled).
               </p>
             </div>
 
             {/* Селектор темы */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 200 }}>
-              <label htmlFor={themeSelectId} style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                minWidth: 200,
+              }}
+            >
+              <label
+                htmlFor={themeSelectId}
+                style={{ fontSize: "12px", color: "var(--color-text-muted)" }}
+              >
                 Тема оформления:
               </label>
               <FormSelect
@@ -246,7 +630,9 @@ export function IconGalleryStand() {
                 value={themeId}
                 onChange={(event) =>
                   setThemeId(
-                    resolvePlayerThemeId({ selectedThemeId: event.target.value }),
+                    resolvePlayerThemeId({
+                      selectedThemeId: event.target.value,
+                    }),
                   )
                 }
               >
@@ -261,9 +647,21 @@ export function IconGalleryStand() {
           </div>
 
           {/* Панель фильтров и размеров */}
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", marginTop: "var(--space-lg)", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-md)",
+              marginTop: "var(--space-lg)",
+              flexWrap: "wrap",
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>Размер:</span>
+              <span
+                style={{ fontSize: "13px", color: "var(--color-text-muted)" }}
+              >
+                Размер:
+              </span>
               {([16, 20, 24] as const).map((s) => (
                 <button
                   key={s}
@@ -272,8 +670,14 @@ export function IconGalleryStand() {
                   style={{
                     padding: "4px 10px",
                     borderRadius: "var(--radius-sm)",
-                    border: size === s ? "2px solid var(--color-accent)" : "1px solid var(--color-border)",
-                    background: size === s ? "var(--color-surface-raised)" : "var(--color-surface)",
+                    border:
+                      size === s
+                        ? "2px solid var(--color-accent)"
+                        : "1px solid var(--color-border)",
+                    background:
+                      size === s
+                        ? "var(--color-surface-raised)"
+                        : "var(--color-surface)",
                     color: "var(--color-text)",
                     cursor: "pointer",
                     fontWeight: size === s ? 600 : 400,
@@ -284,7 +688,15 @@ export function IconGalleryStand() {
               ))}
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 200 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                flex: 1,
+                minWidth: 200,
+              }}
+            >
               <input
                 type="text"
                 value={query}
@@ -304,7 +716,14 @@ export function IconGalleryStand() {
           </div>
 
           {/* Категории */}
-          <div style={{ display: "flex", gap: 6, marginTop: "var(--space-md)", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              marginTop: "var(--space-md)",
+              flexWrap: "wrap",
+            }}
+          >
             {Object.entries(CATEGORY_LABELS).map(([catKey, catLabel]) => (
               <button
                 key={catKey}
@@ -315,9 +734,14 @@ export function IconGalleryStand() {
                   fontSize: "12px",
                   borderRadius: "var(--radius-sm)",
                   border: "1px solid",
-                  borderColor: category === catKey ? "var(--color-accent)" : "var(--color-border)",
-                  background: category === catKey ? "var(--color-accent)" : "transparent",
-                  color: category === catKey ? "#ffffff" : "var(--color-text-muted)",
+                  borderColor:
+                    category === catKey
+                      ? "var(--color-accent)"
+                      : "var(--color-border)",
+                  background:
+                    category === catKey ? "var(--color-accent)" : "transparent",
+                  color:
+                    category === catKey ? "#ffffff" : "var(--color-text-muted)",
                   cursor: "pointer",
                 }}
               >
@@ -350,7 +774,13 @@ export function IconGalleryStand() {
               }}
             >
               {/* Превью иконки и действия */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <div
                   style={{
                     display: "flex",
@@ -368,13 +798,26 @@ export function IconGalleryStand() {
 
                 {/* Интерактивные кнопки с этой иконкой */}
                 <div style={{ display: "flex", gap: 4 }}>
-                  <Button view="normal" size="s" aria-label={`Тест ${item.name}`}>
+                  <Button
+                    view="normal"
+                    size="s"
+                    aria-label={`Тест ${item.name}`}
+                  >
                     <AppIcon icon={item.icon} size={16} />
                   </Button>
-                  <Button view="action" size="s" aria-label={`Акцент ${item.name}`}>
+                  <Button
+                    view="action"
+                    size="s"
+                    aria-label={`Акцент ${item.name}`}
+                  >
                     <AppIcon icon={item.icon} size={16} />
                   </Button>
-                  <Button view="normal" size="s" disabled aria-label={`Disabled ${item.name}`}>
+                  <Button
+                    view="normal"
+                    size="s"
+                    disabled
+                    aria-label={`Disabled ${item.name}`}
+                  >
                     <AppIcon icon={item.icon} size={16} />
                   </Button>
                 </div>
@@ -382,10 +825,22 @@ export function IconGalleryStand() {
 
               {/* Имена и Lucide связка */}
               <div>
-                <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--color-text)" }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    fontSize: "14px",
+                    color: "var(--color-text)",
+                  }}
+                >
                   {item.name}
                 </div>
-                <div style={{ fontSize: "12px", color: "var(--color-text-faint)", fontFamily: "var(--font-mono, monospace)" }}>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--color-text-faint)",
+                    fontFamily: "var(--font-mono, monospace)",
+                  }}
+                >
                   Lucide: {item.original}
                 </div>
               </div>
@@ -409,7 +864,13 @@ export function IconGalleryStand() {
         </section>
 
         {filteredIcons.length === 0 && (
-          <div style={{ textAlign: "center", padding: "var(--space-2xl)", color: "var(--color-text-muted)" }}>
+          <div
+            style={{
+              textAlign: "center",
+              padding: "var(--space-2xl)",
+              color: "var(--color-text-muted)",
+            }}
+          >
             Иконки не найдены по запросу "{query}"
           </div>
         )}
@@ -424,12 +885,38 @@ export function IconGalleryStand() {
             borderRadius: "var(--radius-md)",
           }}
         >
-          <h2 style={{ fontSize: "16px", marginTop: 0 }}>Чеклист визуальной приёмки UIX-645</h2>
-          <ul style={{ margin: 0, paddingLeft: 20, fontSize: "13px", lineHeight: 1.8, color: "var(--color-text-muted)" }}>
-            <li><b>Четкость на пиксельной сетке:</b> иконка не размыта и центрирована при 16px, 20px и 24px.</li>
-            <li><b>Контраст тем:</b> проверьте переключение на "Светлая", "Classic v1", "Пергамент" — цвет наследуется через <code>currentColor</code> и контрастен фону.</li>
-            <li><b>Различимость пар:</b> проверьте, что <code>FogPolygonIcon (Pentagon)</code> и <code>CoverPolygonIcon (Hexagon)</code> визуально различимы даже без текста.</li>
-            <li><b>Интерактивные состояния:</b> крайние правые кнопки показывают иконку в обычной кнопке, акцентной кнопке и в состоянии <code>disabled</code> (полупрозрачная).</li>
+          <h2 style={{ fontSize: "16px", marginTop: 0 }}>
+            Чеклист визуальной приёмки UIX-645
+          </h2>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: 20,
+              fontSize: "13px",
+              lineHeight: 1.8,
+              color: "var(--color-text-muted)",
+            }}
+          >
+            <li>
+              <b>Четкость на пиксельной сетке:</b> иконка не размыта и
+              центрирована при 16px, 20px и 24px.
+            </li>
+            <li>
+              <b>Контраст тем:</b> проверьте переключение на "Светлая", "Classic
+              v1", "Пергамент" — цвет наследуется через{" "}
+              <code>currentColor</code> и контрастен фону.
+            </li>
+            <li>
+              <b>Различимость пар:</b> проверьте, что{" "}
+              <code>FogPolygonIcon (Pentagon)</code> и{" "}
+              <code>CoverPolygonIcon (Hexagon)</code> визуально различимы даже
+              без текста.
+            </li>
+            <li>
+              <b>Интерактивные состояния:</b> крайние правые кнопки показывают
+              иконку в обычной кнопке, акцентной кнопке и в состоянии{" "}
+              <code>disabled</code> (полупрозрачная).
+            </li>
           </ul>
         </footer>
       </div>

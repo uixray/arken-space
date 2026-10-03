@@ -114,3 +114,9 @@
 **Исправление связным пулом после CI:** адресно устранены все lint errors в `App.tsx`, `CompactMenuSurface.tsx`, компонентных primitives/stories, `CharacterWorkspace.tsx`, `DiceTrayPanel.tsx`, `SkillCards.tsx`, новых тестах и beta-auth тесте. Условный `useMemo` roleBadge перенесён перед early return; React Compiler-sensitive callback в App получил стабильные локальные зависимости. Workers проверили ESLint на назначенных файлах без ошибок, web/server typecheck PASS и узкие 27 Vitest tests PASS; Prettier исправлен для восьми затронутых файлов, `git diff --check` PASS. Предупреждения lint остаются, но не являются errors. Полный lint/format/Vitest на следующем SHA ещё должен пройти в CI.
 
 **Следующее:** закоммитить только этот lint pool, push в уже одобренную ветку; дождаться exact-SHA checks/e2e/multiplayer. Затем browser/ручная приёмка и release-host gates. Не мержить и не публиковать.
+
+## Второй CI gate: форматирование — 03.10.2026
+
+**Ревизия:** lint-пул закоммичен как `b08aa78c12b1817ed0b746db4c1d1e5c225ee29a` и отправлен в draft PR #86. `checks` [run 37106110154](https://github.com/uixray/arken-space/actions/runs/37106110154) прошёл до `pnpm format:check` и FAIL на 36 файлах (главным образом новые design-system CSS/stories/docs, plus plans/DB/test). Тем самым lint на exact SHA прошёл; full Vitest в этом run ещё не достигнут. `e2e` и `multiplayer` для b08 выполнялись на момент проверки, их результат не переносить на следующий SHA.
+
+**Исправление:** ровно 36 путей из CI лога отформатированы Prettier без ручных логических правок. Адресный `prettier --check` 36/36 PASS и `git diff --check` PASS. Следующее — отдельный commit формат-пула, push в уже разрешённую ветку и ожидание полной CI матрицы на новом SHA. Merge/deploy запрещены.

@@ -152,7 +152,10 @@ export function InitiativePanel({
               className={`initiative-panel__row ${isActive ? "initiative-panel__row--active" : ""}`}
             >
               {isActive && (
-                <span className="initiative-panel__current-badge" aria-label="Текущий ход">
+                <span
+                  className="initiative-panel__current-badge"
+                  aria-label="Текущий ход"
+                >
                   Ход
                 </span>
               )}

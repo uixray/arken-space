@@ -36,7 +36,10 @@
   max-width: 560px;
   max-height: calc(100vh - 32px);
   margin: auto;
-  background-color: var(--color-surface-raised, var(--palette-ink-800, #20201d));
+  background-color: var(
+    --color-surface-raised,
+    var(--palette-ink-800, #20201d)
+  );
   border: 1px solid var(--color-border, var(--palette-ink-500, #47443b));
   border-radius: var(--radius-lg, 8px);
   box-shadow:
@@ -109,7 +112,8 @@
 }
 
 .arken-dialog__close:focus-visible {
-  outline: var(--focus-ring-width, 2px) solid var(--color-focus, var(--palette-clay-500, #c46f49));
+  outline: var(--focus-ring-width, 2px) solid
+    var(--color-focus, var(--palette-clay-500, #c46f49));
   outline-offset: var(--focus-ring-offset, 2px);
 }
 

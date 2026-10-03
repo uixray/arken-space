@@ -80,12 +80,8 @@ export const ScenePicker = memo(function ScenePicker({
               aria-selected={scene.id === activeScene?.id}
               onClick={(event) => {
                 onSelectScene(scene.id);
-                event.currentTarget
-                  .closest("details")
-                  ?.removeAttribute("open");
-                scenePickerRef.current
-                  ?.querySelector("summary")
-                  ?.focus();
+                event.currentTarget.closest("details")?.removeAttribute("open");
+                scenePickerRef.current?.querySelector("summary")?.focus();
               }}
             >
               {background ? (

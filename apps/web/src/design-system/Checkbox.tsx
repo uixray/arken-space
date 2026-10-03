@@ -10,7 +10,10 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { SelectedOptionIcon as Check, DecreaseIcon as Minus } from "../ui/icons";
+import {
+  SelectedOptionIcon as Check,
+  DecreaseIcon as Minus,
+} from "../ui/icons";
 import "./Checkbox.css";
 
 export type CheckboxSize = "s" | "m" | "l";

@@ -63,12 +63,16 @@
 /* --------------------------------------------------------------------------
    Interactive States (Hover, Focus, Disabled, Invalid)
    -------------------------------------------------------------------------- */
-.arken-text-input:hover:not(.arken-text-input--disabled):not(.g-text-input_disabled),
+.arken-text-input:hover:not(.arken-text-input--disabled):not(
+    .g-text-input_disabled
+  ),
 .g-text-input:hover:not(.g-text-input_disabled) {
   border-color: var(--color-border-hover, #696356);
 }
 
-.arken-text-input:focus-within:not(.arken-text-input--disabled):not(.g-text-input_disabled),
+.arken-text-input:focus-within:not(.arken-text-input--disabled):not(
+    .g-text-input_disabled
+  ),
 .g-text-input:focus-within:not(.g-text-input_disabled) {
   border-color: var(--color-accent, #c46f49);
   outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
@@ -195,7 +199,18 @@
 }
 
 /* Pins */
-.g-text-input_pin_brick-brick { border-radius: 0; }
-.g-text-input_pin_round-brick { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.g-text-input_pin_brick-round { border-top-left-radius: 0; border-bottom-left-radius: 0; }
-.g-text-input_pin_clear-clear { border-radius: 0; border-color: transparent; }
+.g-text-input_pin_brick-brick {
+  border-radius: 0;
+}
+.g-text-input_pin_round-brick {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.g-text-input_pin_brick-round {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.g-text-input_pin_clear-clear {
+  border-radius: 0;
+  border-color: transparent;
+}

@@ -7,11 +7,7 @@ export interface LoaderProps extends HTMLAttributes<HTMLSpanElement> {
   size?: LoaderSize;
 }
 
-export function Loader({
-  size = "m",
-  className,
-  ...props
-}: LoaderProps) {
+export function Loader({ size = "m", className, ...props }: LoaderProps) {
   return (
     <span
       role="status"

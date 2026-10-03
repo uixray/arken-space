@@ -67,20 +67,46 @@ export const PhilosophyShowcase: Story = {
             backdropFilter: "blur(14px)",
             borderRadius: "var(--radius-lg, 8px)",
             border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))",
-            boxShadow: "var(--shadow-elevation-card, 0 8px 24px rgba(0,0,0,0.4))",
+            boxShadow:
+              "var(--shadow-elevation-card, 0 8px 24px rgba(0,0,0,0.4))",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 8,
+            }}
+          >
             <Badge theme="info">Манифест v1.0</Badge>
-            <span style={{ fontSize: 12, color: "var(--color-text-muted, #aaa598)" }}>
+            <span
+              style={{
+                fontSize: 12,
+                color: "var(--color-text-muted, #aaa598)",
+              }}
+            >
               Октябрь 2026
             </span>
           </div>
           <h1 style={{ margin: "0 0 10px 0", fontSize: 26, fontWeight: 700 }}>
             «Живой цифровой театр и тактильная летопись»
           </h1>
-          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "var(--color-text-muted, #aaa598)" }}>
-            Философия Arken Space исходит из главного: <strong>создавать у игроков глубокое кинематографичное погружение, не мешая мастеру вести игру.</strong> Мы ушли от сухих бухгалтерских таблиц и отрицания нейродизайна к аутентичному, тактильному и адаптивному виртуальному столу.
+          <p
+            style={{
+              margin: 0,
+              fontSize: 14,
+              lineHeight: 1.6,
+              color: "var(--color-text-muted, #aaa598)",
+            }}
+          >
+            Философия Arken Space исходит из главного:{" "}
+            <strong>
+              создавать у игроков глубокое кинематографичное погружение, не
+              мешая мастеру вести игру.
+            </strong>{" "}
+            Мы ушли от сухих бухгалтерских таблиц и отрицания нейродизайна к
+            аутентичному, тактильному и адаптивному виртуальному столу.
           </p>
 
           {/* Interactive Controls Bar */}
@@ -88,7 +114,8 @@ export const PhilosophyShowcase: Story = {
             style={{
               marginTop: 20,
               paddingTop: 16,
-              borderTop: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))",
+              borderTop:
+                "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))",
               display: "flex",
               flexWrap: "wrap",
               gap: 16,
@@ -97,7 +124,14 @@ export const PhilosophyShowcase: Story = {
             }}
           >
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted, #aaa598)", marginBottom: 6 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--color-text-muted, #aaa598)",
+                  marginBottom: 6,
+                }}
+              >
                 ИНДИВИДУАЛЬНАЯ ПАЛИТРА ИГРОКА:
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -107,9 +141,16 @@ export const PhilosophyShowcase: Story = {
                     type="button"
                     onClick={() => setSelectedTheme(t.id)}
                     style={{
-                      background: selectedTheme === t.id ? t.color : "rgba(255, 255, 255, 0.05)",
-                      color: selectedTheme === t.id ? "#fff" : "var(--color-text, #e8e4da)",
-                      border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))",
+                      background:
+                        selectedTheme === t.id
+                          ? t.color
+                          : "rgba(255, 255, 255, 0.05)",
+                      color:
+                        selectedTheme === t.id
+                          ? "#fff"
+                          : "var(--color-text, #e8e4da)",
+                      border:
+                        "1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))",
                       borderRadius: 4,
                       padding: "4px 10px",
                       fontSize: 12,
@@ -136,7 +177,14 @@ export const PhilosophyShowcase: Story = {
 
             <div style={{ display: "flex", gap: 12 }}>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted, #aaa598)", marginBottom: 6 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--color-text-muted, #aaa598)",
+                    marginBottom: 6,
+                  }}
+                >
                   ПЛОТНОСТЬ ИНТЕРФЕЙСА:
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
@@ -162,7 +210,9 @@ export const PhilosophyShowcase: Story = {
 
         {/* The 6 Pillars */}
         <div>
-          <h2 style={{ fontSize: 18, marginBottom: 16 }}>Шесть столпов визуального языка Arken</h2>
+          <h2 style={{ fontSize: 18, marginBottom: 16 }}>
+            Шесть столпов визуального языка Arken
+          </h2>
           <div
             style={{
               display: "grid",
@@ -172,7 +222,12 @@ export const PhilosophyShowcase: Story = {
           >
             {[
               {
-                icon: <Clapperboard size={20} color="var(--color-accent, #c46f49)" />,
+                icon: (
+                  <Clapperboard
+                    size={20}
+                    color="var(--color-accent, #c46f49)"
+                  />
+                ),
                 title: "1. Кинематографичный театр",
                 desc: "Виртуальный стол как живая сцена (Alchemy RPG). Интерфейс — незаметный режиссерский пульт с откликом 60 FPS, не закрывающий драму приключения.",
               },
@@ -187,7 +242,9 @@ export const PhilosophyShowcase: Story = {
                 desc: "Отказ от сеток из тяжелых рамок. Разделение за счет глубины слоев, световых фасок и полупрозрачных тонких граней без визуального шума.",
               },
               {
-                icon: <Palette size={20} color="var(--color-accent, #c46f49)" />,
+                icon: (
+                  <Palette size={20} color="var(--color-accent, #c46f49)" />
+                ),
                 title: "4. Персональные темы игроков",
                 desc: "7 уникальных цветовых миров. Каждый игрок сам настраивает свои способности, навыки и инвентарь без ожидания мастера.",
               },
@@ -197,7 +254,9 @@ export const PhilosophyShowcase: Story = {
                 desc: "Автоматический учет ресурсов, кошелька, спасбросков и модификаторов снимает рутинную головную боль с мастера и ускоряет партию.",
               },
               {
-                icon: <Smartphone size={20} color="var(--color-accent, #c46f49)" />,
+                icon: (
+                  <Smartphone size={20} color="var(--color-accent, #c46f49)" />
+                ),
                 title: "6. Адаптивность и Split-Screen",
                 desc: "Полная поддержка планшетов, смартфонов и режима пол-экрана рядом с Discord или заметками. Гибкая плотность под задачи.",
               },
@@ -206,11 +265,14 @@ export const PhilosophyShowcase: Story = {
                 key={i}
                 style={{
                   padding: density === "compact" ? "14px 16px" : "20px 22px",
-                  background: "var(--surface-panel-floating, rgba(32, 32, 29, 0.7))",
+                  background:
+                    "var(--surface-panel-floating, rgba(32, 32, 29, 0.7))",
                   backdropFilter: "blur(12px)",
                   borderRadius: "var(--radius-lg, 8px)",
-                  border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))",
-                  boxShadow: "var(--shadow-elevation-card, 0 4px 16px rgba(0,0,0,0.3))",
+                  border:
+                    "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))",
+                  boxShadow:
+                    "var(--shadow-elevation-card, 0 4px 16px rgba(0,0,0,0.3))",
                   display: "flex",
                   flexDirection: "column",
                   gap: 8,
@@ -220,7 +282,13 @@ export const PhilosophyShowcase: Story = {
                   {p.icon}
                   <div style={{ fontWeight: 600, fontSize: 15 }}>{p.title}</div>
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--color-text-muted, #aaa598)" }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: "var(--color-text-muted, #aaa598)",
+                  }}
+                >
                   {p.desc}
                 </div>
               </div>
@@ -237,13 +305,26 @@ export const PhilosophyShowcase: Story = {
             border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
             <div>
               <h3 style={{ margin: "0 0 4px 0", fontSize: 16 }}>
                 Принцип De-Bordering: Сравнение подходов к верстке
               </h3>
-              <div style={{ fontSize: 13, color: "var(--color-text-muted, #aaa598)" }}>
-                Сравните традиционный утилитарный интерфейс с «сотнями рамок» и глубину Arken.
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "var(--color-text-muted, #aaa598)",
+                }}
+              >
+                Сравните традиционный утилитарный интерфейс с «сотнями рамок» и
+                глубину Arken.
               </div>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
@@ -283,26 +364,83 @@ export const PhilosophyShowcase: Story = {
                 opacity: compareMode === "old" ? 1 : 0.6,
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#f87171", marginBottom: 12 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#f87171",
+                  marginBottom: 12,
+                }}
+              >
                 ❌ Утилитарная сетка (Тяжелые рамки, шум)
               </div>
-              <div style={{ border: "1px solid #444", padding: 12, marginBottom: 8, background: "#111" }}>
-                <div style={{ borderBottom: "1px solid #444", paddingBottom: 6, marginBottom: 6, fontWeight: 600 }}>
+              <div
+                style={{
+                  border: "1px solid #444",
+                  padding: 12,
+                  marginBottom: 8,
+                  background: "#111",
+                }}
+              >
+                <div
+                  style={{
+                    borderBottom: "1px solid #444",
+                    paddingBottom: 6,
+                    marginBottom: 6,
+                    fontWeight: 600,
+                  }}
+                >
                   Воин Торин
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ border: "1px solid #444", padding: 6, flex: 1, textAlign: "center" }}>
+                  <div
+                    style={{
+                      border: "1px solid #444",
+                      padding: 6,
+                      flex: 1,
+                      textAlign: "center",
+                    }}
+                  >
                     HP: 24/24
                   </div>
-                  <div style={{ border: "1px solid #444", padding: 6, flex: 1, textAlign: "center" }}>
+                  <div
+                    style={{
+                      border: "1px solid #444",
+                      padding: 6,
+                      flex: 1,
+                      textAlign: "center",
+                    }}
+                  >
                     AC: 16
                   </div>
-                  <div style={{ border: "1px solid #444", padding: 6, flex: 1, textAlign: "center" }}>
+                  <div
+                    style={{
+                      border: "1px solid #444",
+                      padding: 6,
+                      flex: 1,
+                      textAlign: "center",
+                    }}
+                  >
                     Init: +2
                   </div>
                 </div>
-                <div style={{ border: "1px solid #444", marginTop: 8, padding: 6, textAlign: "center" }}>
-                  <button style={{ border: "1px solid #666", background: "#333", color: "#eee", width: "100%", padding: 6 }}>
+                <div
+                  style={{
+                    border: "1px solid #444",
+                    marginTop: 8,
+                    padding: 6,
+                    textAlign: "center",
+                  }}
+                >
+                  <button
+                    style={{
+                      border: "1px solid #666",
+                      background: "#333",
+                      color: "#eee",
+                      width: "100%",
+                      padding: 6,
+                    }}
+                  >
                     Бросок атаки
                   </button>
                 </div>
@@ -313,15 +451,25 @@ export const PhilosophyShowcase: Story = {
             <div
               style={{
                 padding: 18,
-                background: "var(--surface-panel-floating, rgba(32, 32, 29, 0.9))",
+                background:
+                  "var(--surface-panel-floating, rgba(32, 32, 29, 0.9))",
                 backdropFilter: "blur(14px)",
-                border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))",
-                boxShadow: "var(--shadow-elevation-card, 0 8px 24px rgba(0, 0, 0, 0.45)), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                border:
+                  "1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))",
+                boxShadow:
+                  "var(--shadow-elevation-card, 0 8px 24px rgba(0, 0, 0, 0.45)), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
                 borderRadius: 8,
                 opacity: compareMode === "modern" ? 1 : 0.6,
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-accent, #48bb78)", marginBottom: 12 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--color-accent, #48bb78)",
+                  marginBottom: 12,
+                }}
+              >
                 ✨ Arken Visual Depth (Слои, свет, микро-фаски)
               </div>
               <div
@@ -329,11 +477,21 @@ export const PhilosophyShowcase: Story = {
                   background: "var(--surface-raised, rgba(41, 40, 36, 0.75))",
                   padding: 14,
                   borderRadius: 6,
-                  border: "1px solid var(--border-delicate, rgba(255, 255, 255, 0.04))",
+                  border:
+                    "1px solid var(--border-delicate, rgba(255, 255, 255, 0.04))",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                  >
                     <div
                       style={{
                         width: 36,
@@ -352,14 +510,30 @@ export const PhilosophyShowcase: Story = {
                       Т
                     </div>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>Торин Камнелом</div>
-                      <div style={{ fontSize: 11, color: "var(--color-text-muted, #aaa598)" }}>Дворф • Воин 3 ур.</div>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>
+                        Торин Камнелом
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--color-text-muted, #aaa598)",
+                        }}
+                      >
+                        Дворф • Воин 3 ур.
+                      </div>
                     </div>
                   </div>
                   <Badge theme="info">Ваш герой</Badge>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 8,
+                    marginBottom: 12,
+                  }}
+                >
                   <div
                     style={{
                       background: "rgba(0,0,0,0.25)",
@@ -368,8 +542,26 @@ export const PhilosophyShowcase: Story = {
                       textAlign: "center",
                     }}
                   >
-                    <div style={{ fontSize: 10, color: "var(--color-text-muted, #aaa598)", textTransform: "uppercase" }}>Здоровье</div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "#4ade80", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--color-text-muted, #aaa598)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Здоровье
+                    </div>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 14,
+                        color: "#4ade80",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                      }}
+                    >
                       <Heart size={12} /> 24 / 24
                     </div>
                   </div>
@@ -381,8 +573,25 @@ export const PhilosophyShowcase: Story = {
                       textAlign: "center",
                     }}
                   >
-                    <div style={{ fontSize: 10, color: "var(--color-text-muted, #aaa598)", textTransform: "uppercase" }}>Броня (КД)</div>
-                    <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--color-text-muted, #aaa598)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Броня (КД)
+                    </div>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 14,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                      }}
+                    >
                       <Shield size={12} /> 16
                     </div>
                   </div>
@@ -394,8 +603,26 @@ export const PhilosophyShowcase: Story = {
                       textAlign: "center",
                     }}
                   >
-                    <div style={{ fontSize: 10, color: "var(--color-text-muted, #aaa598)", textTransform: "uppercase" }}>Казна</div>
-                    <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, color: "#facc15" }}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--color-text-muted, #aaa598)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Казна
+                    </div>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 14,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                        color: "#facc15",
+                      }}
+                    >
                       <Coins size={12} /> 45 зм
                     </div>
                   </div>
@@ -435,8 +662,16 @@ export const PhilosophyShowcase: Story = {
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
               Автономия игроков за столом
             </div>
-            <div style={{ fontSize: 13, color: "var(--color-text-muted, #aaa598)", maxWidth: 640 }}>
-              Игроки больше не скованы ожиданием мастера: каждый участник партии имеет полный доступ к созданию и настройке собственного листа героя, выбору навыков, управлению ячейками способностей и казне.
+            <div
+              style={{
+                fontSize: 13,
+                color: "var(--color-text-muted, #aaa598)",
+                maxWidth: 640,
+              }}
+            >
+              Игроки больше не скованы ожиданием мастера: каждый участник партии
+              имеет полный доступ к созданию и настройке собственного листа
+              героя, выбору навыков, управлению ячейками способностей и казне.
             </div>
           </div>
           <Badge theme="success">ACL Self-Management Enabled</Badge>
