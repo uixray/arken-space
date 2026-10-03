@@ -287,29 +287,25 @@
       "status": "PASS",
       "revision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
       "artifact": "selection-closure-2026-09-18/ci-e67bacc-summary.json",
-      "workflowRuns": ["35412873275", "35412873288", "35412873306"],
+      "workflowRuns": [
+        "35412873275",
+        "35412873288",
+        "35412873306"
+      ],
       "scope": "Exact checks, four-shard Chrome/Firefox E2E and multiplayer SUCCESS. E2E1063 PASS/29 existing SKIP/0 FAIL/0 FLAKY; includes both real-server personal-theme persistence cases. Individual component pending/error/CAS coverage is also included in exact checks. Not full UIX-644 or production acceptance."
     }
   },
   "sites": [
     {
-      "file": "apps/web/src/App.tsx",
-      "kind": "role:listbox",
+      "file": "apps/web/src/AppHeader.tsx",
+      "kind": "tag:details",
       "count": 1,
       "status": "PASS",
       "classification": "reachable",
-      "scope": "Scene picker in shell; GM interaction, PLAYER read-only, compact hidden path.",
-      "evidence": ["scenePicker"],
-      "next": "Real multiplayer persistence and physical devices remain separate gates."
-    },
-    {
-      "file": "apps/web/src/App.tsx",
-      "kind": "tag:details",
-      "count": 3,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Three source buckets with limited caller evidence: scene picker8, token tray8 plus geometry4, compact GM/PLAYER session foreign/own Escape and pointer layer from details cases.",
-      "evidence": ["scenePicker", "tokenTray", "remainingMenus"],
+      "scope": "Session menu details element in topbar.",
+      "evidence": [
+        "remainingMenus"
+      ],
       "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
     },
     {
@@ -319,7 +315,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Seven conditional controls in edit/picker/setup callers; catalog tests12/58.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -329,7 +327,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "One feedback category selector, GM/PLAYER, 1280→390→360 short→1280; keyboard/pointer/Escape/outside and visible close focus.",
-      "evidence": ["feedback"],
+      "evidence": [
+        "feedback"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -339,7 +339,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Size mode selection/Done and overflow display toggles: keyboard/focus on1280 and360x480. No resize dragging/persistence claim.",
-      "evidence": ["toolbar"],
+      "evidence": [
+        "toolbar"
+      ],
       "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
     },
     {
@@ -349,7 +351,11 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target. Track SELECT now also returns visible focus; conflict ACK notifications verified by four existing cases.",
-      "evidence": ["musicOwner", "musicCommand", "menuFollowup"],
+      "evidence": [
+        "musicOwner",
+        "musicCommand",
+        "menuFollowup"
+      ],
       "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch."
     },
     {
@@ -373,8 +379,35 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Six native controls through existing PLAYER compact draft/submit and GM filter/reopen: current production web bundle with real isolated API/PG, four Chrome/Firefox cases. Native values/keys, not OS popup visuals.",
-      "evidence": ["requestsCurrent", "requestsBuilt"],
+      "evidence": [
+        "requestsCurrent",
+        "requestsBuilt"
+      ],
       "next": "Native OS popup visual/physical-device matrix, CI PostgreSQL17 and production bundle remain separate; no full menu acceptance claim."
+    },
+    {
+      "file": "apps/web/src/ScenePicker.tsx",
+      "kind": "role:listbox",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Scene picker in shell; GM interaction, PLAYER read-only, compact hidden path.",
+      "evidence": [
+        "scenePicker"
+      ],
+      "next": "Real multiplayer persistence and physical devices remain separate gates."
+    },
+    {
+      "file": "apps/web/src/ScenePicker.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Scene picker dropdown details element in topbar.",
+      "evidence": [
+        "scenePicker"
+      ],
+      "next": "Real multiplayer persistence and physical devices remain separate gates."
     },
     {
       "file": "apps/web/src/StickerPicker.tsx",
@@ -383,7 +416,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
-      "evidence": ["remainingMenus"],
+      "evidence": [
+        "remainingMenus"
+      ],
       "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
     },
     {
@@ -393,7 +428,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
-      "evidence": ["remainingMenus"],
+      "evidence": [
+        "remainingMenus"
+      ],
       "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
     },
     {
@@ -403,8 +440,23 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "One native source selector; desktop/narrow four cases. OS picker UI not inspected.",
-      "evidence": ["built", "exactMainCceMenuRegression"],
+      "evidence": [
+        "built",
+        "exactMainCceMenuRegression"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/TokenTray.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Token tray details element.",
+      "evidence": [
+        "tokenTray"
+      ],
+      "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
     },
     {
       "file": "apps/web/src/WorkspaceNav.tsx",
@@ -413,7 +465,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "GM1024 More destination opening/closing and visible return focus, twice, Chrome/Firefox.",
-      "evidence": ["navigation"],
+      "evidence": [
+        "navigation"
+      ],
       "next": "Other destinations and responsive owner changes remain outside this scoped result."
     },
     {
@@ -423,7 +477,10 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both inline callers: entity cover and gallery attachment, independent selected assets and exact request payloads.",
-      "evidence": ["worldImages", "menuFollowup"],
+      "evidence": [
+        "worldImages",
+        "menuFollowup"
+      ],
       "next": "Real persistence/authorization, request-failure recovery and physical-device checks remain outside this scoped acceptance."
     },
     {
@@ -433,7 +490,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Four filters/link/create controls in world dropdown tests; 4 combined editor/reader cases.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -443,7 +502,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Reader filter in world dropdown tests; current navigation GM-only, no invented PLAYER route.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -453,8 +514,20 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Seven native map/draft selectors; 8 world-map cases incl PLAYER navigation exclusion. Not OS popup visuals.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/design-system/Dialog.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "design-system-isolated",
+      "scope": "Design System isolated primitive",
+      "evidence": [],
+      "next": "Covered via Storybook and unit tests, not product overlay flow"
     },
     {
       "file": "apps/web/src/design-system/MemberDefaultThemeField.tsx",
@@ -492,13 +565,35 @@
       "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes."
     },
     {
+      "file": "apps/web/src/design-system/Popup.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "design-system-isolated",
+      "scope": "Design System isolated primitive",
+      "evidence": [],
+      "next": "Covered via Storybook and unit tests, not product overlay flow"
+    },
+    {
+      "file": "apps/web/src/design-system/Select.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "design-system-isolated",
+      "scope": "Design System isolated primitive",
+      "evidence": [],
+      "next": "Covered via Storybook and unit tests, not product overlay flow"
+    },
+    {
       "file": "apps/web/src/renderers/GridSettings.tsx",
       "kind": "tag:details",
       "count": 1,
       "status": "PASS",
       "classification": "reachable",
       "scope": "Cancel draft reset/no save, explicit save/reopen value/focus, rejected draft retained, outside delayed-save focus. Mocked backend; preview pixels and full in-flight session races not accepted.",
-      "evidence": ["toolbar"],
+      "evidence": [
+        "toolbar"
+      ],
       "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
     },
     {
@@ -508,7 +603,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Token menu live permissions/focus lifecycle; previous geometry/actions in inventory checkpoints. Not object-list/drawing-color controls.",
-      "evidence": ["token"],
+      "evidence": [
+        "token"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -518,7 +615,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Four attach/edit controls GM/PLAYER; ten gallery cases including sheet Escape.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -528,7 +627,10 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both actual character-sheet callers: portrait and additional resource image; GM and PLAYER owner on desktop/compact.",
-      "evidence": ["characterImages", "menuFollowup"],
+      "evidence": [
+        "characterImages",
+        "menuFollowup"
+      ],
       "next": "Non-owner/controller restrictions, live payload persistence and rejection/realtime recovery remain outside this scoped evidence."
     },
     {
@@ -538,7 +640,10 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Template modal PASS four current cases; second showCharacterPicker source occurrence inactive, not silently counted as runtime PASS.",
-      "evidence": ["built", "workspaceCurrent"],
+      "evidence": [
+        "built",
+        "workspaceCurrent"
+      ],
       "next": "Retain explicit inactive exclusion; no new UI route for coverage.",
       "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
       "applicability": {
@@ -549,7 +654,10 @@
             "count": 1,
             "applicability": "SUPPORTED_REACHABLE",
             "runtimeStatus": "PASS",
-            "evidence": ["built", "workspaceCurrent"]
+            "evidence": [
+              "built",
+              "workspaceCurrent"
+            ]
           },
           {
             "label": "showCharacterPicker FormSelect",
@@ -570,7 +678,9 @@
       "status": "PASS",
       "classification": "in-flow",
       "scope": "PLAYER compact backstory native Enter/Space/pointer close/reopen and pending draft retention; ordinary in-flow disclosure, not floating popup.",
-      "evidence": ["disclosureCurrent"],
+      "evidence": [
+        "disclosureCurrent"
+      ],
       "next": "GM/non-owner and full viewport matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
     },
     {
@@ -580,7 +690,9 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Activity list current8 cases passed. Second ChatPanel list excluded from current production navigation: allowed feeds only ACTIVITY/STORY, handled by ActivityPanel/StoryChannel. Source applicability audit records chain.",
-      "evidence": ["remainingMenus"],
+      "evidence": [
+        "remainingMenus"
+      ],
       "next": "Retain two static occurrences; revisit second only if feed policy changes. Do not activate dead route for coverage; full shared lifecycle gate still separate.",
       "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
       "applicability": {
@@ -591,7 +703,9 @@
             "count": 1,
             "applicability": "SUPPORTED_REACHABLE",
             "runtimeStatus": "PASS",
-            "evidence": ["remainingMenus"]
+            "evidence": [
+              "remainingMenus"
+            ]
           },
           {
             "label": "chat-slash-suggestions",
@@ -612,7 +726,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "GM selection changes available skill buttons, pointer hit/bounds, keyboard reset/Escape/focus; PLAYER selector absent, own skill only. Actual dice request target not tested.",
-      "evidence": ["activity"],
+      "evidence": [
+        "activity"
+      ],
       "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
     },
     {
@@ -622,7 +738,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "All3 filter checkboxes keyboard off/pointer on, accessible hidden-summary, Escape/outside focus and unsent draft preserved. REFERENCE event disappearance/restoration verified; ROLLS/STORY timeline fixtures absent.",
-      "evidence": ["activity"],
+      "evidence": [
+        "activity"
+      ],
       "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
     },
     {
@@ -682,7 +800,9 @@
       "status": "PASS",
       "classification": "in-flow",
       "scope": "PLAYER desktop resources native Enter/Space/pointer toggles preserve pending value and do not create additional writes; ordinary in-flow disclosure.",
-      "evidence": ["disclosureCurrent"],
+      "evidence": [
+        "disclosureCurrent"
+      ],
       "next": "GM/non-owner and compact full matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
     },
     {
@@ -692,7 +812,10 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Three live controls PASS four current cases; three legacy hidden occurrences explicitly excluded, never reactivate for tests.",
-      "evidence": ["built", "workspaceCurrent"],
+      "evidence": [
+        "built",
+        "workspaceCurrent"
+      ],
       "next": "Keep active/hidden split explicit at next combined gate.",
       "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
       "applicability": {
@@ -703,7 +826,10 @@
             "count": 3,
             "applicability": "SUPPORTED_REACHABLE",
             "runtimeStatus": "PASS",
-            "evidence": ["built", "workspaceCurrent"]
+            "evidence": [
+              "built",
+              "workspaceCurrent"
+            ]
           },
           {
             "label": "catalogKind plus two legacy scene selects",
@@ -724,7 +850,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Inline image picker in four actual token-modal cases. Shared owner error separately remains open.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -749,7 +877,11 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Named-dialog/keyboard-owner gate repaired by stable WorkspaceNav subscription; all8 cursor cases now PASS within connected16. Historical red evidence retained. PLAYER remains a direct toggle, not another popup.",
-      "evidence": ["cursor", "cursorOwnerNaming", "cursorStableObserver"],
+      "evidence": [
+        "cursor",
+        "cursorOwnerNaming",
+        "cursorStableObserver"
+      ],
       "next": "Retain scoped cursor/owner acceptance; original TokenPalette observer failure, full registry and physical-device acceptance remain separate."
     },
     {
@@ -784,7 +916,11 @@
       "status": "FAIL",
       "classification": "shared-implementation",
       "scope": "Shared implementation, not another caller. Built tests and true zoom passed, unresolved original RO still prevents complete acceptance.",
-      "evidence": ["built", "ro", "exactMainCceMenuRegression"],
+      "evidence": [
+        "built",
+        "ro",
+        "exactMainCceMenuRegression"
+      ],
       "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence."
     },
     {
@@ -844,7 +980,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Scene editor map selector under workspace→modal, keyboard/pointer and draft ownership through compact short-height resize.",
-      "evidence": ["sceneEditorMap"],
+      "evidence": [
+        "sceneEditorMap"
+      ],
       "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect."
     }
   ],
@@ -855,7 +993,9 @@
       "status": "PASS",
       "scope": "Supplemental custom object-list lifecycle tested for token rows and local selection, both roles/viewport modes.",
       "next": "Mixed drawing/region rows, clone/delete action flows, live permission updates and real server behavior remain separate from this scoped menu protocol.",
-      "evidence": ["objectList"]
+      "evidence": [
+        "objectList"
+      ]
     },
     {
       "id": "drawing-color-panel",
@@ -863,7 +1003,9 @@
       "status": "PASS",
       "scope": "DOM drawing palette settings/lifecycle including short-map containment. Native color input type/value only; OS chooser excluded.",
       "next": "Actual stroke payload/pixels, editing existing strokes, OS color chooser and physical touch sizing remain separate gates.",
-      "evidence": ["drawingPalette"]
+      "evidence": [
+        "drawingPalette"
+      ]
     },
     {
       "id": "compact-navigation",
@@ -871,7 +1013,10 @@
       "status": "PASS",
       "scope": "GM Scenes and PLAYER Tokens390: destination owns focus then Escape returns to Map. New Sections resize gate verifies all visible destination hit targets, desktop closes sheet without revival on compact return, Journal remains clickable, reopen/Escape/focus; both roles and browsers.",
       "next": "Other destination workspace internals and physical devices remain separate. This does not resolve original Select RO or whole-registry acceptance.",
-      "evidence": ["navigation", "compactSectionsBreakpoint"]
+      "evidence": [
+        "navigation",
+        "compactSectionsBreakpoint"
+      ]
     }
   ],
   "applicabilityAudit": {

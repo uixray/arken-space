@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Select, TextArea, TextInput } from "@gravity-ui/uikit";
+import { Select } from "../design-system/Select";
+import { Input as TextInput } from "../design-system/Input";
+import { TextArea } from "../design-system/TextArea";
 import { Button } from "../design-system/Button";
 import { ArkenDialog } from "./ArkenDialog";
 import { ImageUploadField } from "./ImageUploadField";

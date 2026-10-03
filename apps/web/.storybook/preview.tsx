@@ -9,8 +9,10 @@ import type { Preview } from "@storybook/react-vite";
 import "@gravity-ui/uikit/styles/fonts.css";
 import "@gravity-ui/uikit/styles/styles.css";
 import "../src/design-system/tokens.generated.css";
+import "../src/design-system/foundations.css";
 import "../src/ui/gravity-foundation.css";
 import "../src/styles.css";
+import "./storybook.css";
 
 const preview: Preview = {
   parameters: {

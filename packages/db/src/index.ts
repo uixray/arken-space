@@ -24,4 +24,5 @@ export function createDatabase(connectionString: string, onQuery?: () => void) {
   };
 }
 
+export * from "./pglite.js";
 export * from "./schema.js";

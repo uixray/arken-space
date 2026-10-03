@@ -1,0 +1,201 @@
+/* ==========================================================================
+   Arken Space Standalone TextInput Component
+   Tokens: --color-surface, --color-border, --color-accent, --color-text, etc.
+   ========================================================================== */
+
+.arken-text-input,
+.g-text-input {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--color-border, #47443b);
+  border-radius: var(--radius-md, 6px);
+  background-color: var(--color-surface, #20201d);
+  color: var(--color-text, #e8e4da);
+  font-family: var(--font-family-sans);
+  line-height: 1;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+  vertical-align: middle;
+}
+
+/* --------------------------------------------------------------------------
+   Sizes
+   -------------------------------------------------------------------------- */
+.g-text-input_size_s,
+.arken-text-input--s {
+  height: 28px;
+  font-size: var(--font-size-label, 11px);
+}
+
+.g-text-input_size_m,
+.arken-text-input--m {
+  height: var(--size-control-height, 32px);
+  font-size: var(--font-size-body, 12px);
+}
+
+.g-text-input_size_l,
+.arken-text-input--l {
+  height: 36px;
+  font-size: var(--font-size-heading-sm, 14px);
+}
+
+/* --------------------------------------------------------------------------
+   Views
+   -------------------------------------------------------------------------- */
+.g-text-input_view_normal,
+.arken-text-input--normal {
+  background-color: var(--color-surface, #20201d);
+  border-color: var(--color-border, #47443b);
+}
+
+.g-text-input_view_clear,
+.arken-text-input--clear {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Interactive States (Hover, Focus, Disabled, Invalid)
+   -------------------------------------------------------------------------- */
+.arken-text-input:hover:not(.arken-text-input--disabled):not(.g-text-input_disabled),
+.g-text-input:hover:not(.g-text-input_disabled) {
+  border-color: var(--color-border-hover, #696356);
+}
+
+.arken-text-input:focus-within:not(.arken-text-input--disabled):not(.g-text-input_disabled),
+.g-text-input:focus-within:not(.g-text-input_disabled) {
+  border-color: var(--color-accent, #c46f49);
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
+  outline-offset: var(--focus-ring-offset, 1px);
+  box-shadow: 0 0 0 1px var(--color-accent, #c46f49);
+}
+
+/* Invalid / Error */
+.arken-text-input[data-invalid="true"],
+.g-text-input[data-invalid="true"],
+.g-text-input_state_error,
+.g-text-input_invalid {
+  border-color: var(--color-danger, #da6b61) !important;
+}
+
+.arken-text-input[data-invalid="true"]:focus-within,
+.g-text-input[data-invalid="true"]:focus-within {
+  outline-color: var(--color-danger, #da6b61) !important;
+  box-shadow: 0 0 0 1px var(--color-danger, #da6b61) !important;
+}
+
+/* Disabled */
+.arken-text-input--disabled,
+.g-text-input:has(> .g-text-input__content > input:disabled),
+.g-text-input_disabled {
+  opacity: 0.45;
+  background-color: var(--palette-ink-900, #181816);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Internal Content & Input Element
+   -------------------------------------------------------------------------- */
+.arken-text-input__content,
+.g-text-input__content {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0 var(--space-sm, 8px);
+}
+
+.arken-text-input__control,
+.g-text-input__control {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 400;
+  line-height: 1.2;
+  outline: none;
+  caret-color: var(--color-accent, #c46f49);
+}
+
+.arken-text-input__control::placeholder,
+.g-text-input__control::placeholder {
+  color: var(--color-text-faint, #777267);
+  opacity: 1;
+}
+
+/* Label */
+.arken-text-input__label,
+.g-text-input__label {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-inline-end: var(--space-xs, 6px);
+  color: var(--color-text-muted, #aaa598);
+  font-size: var(--font-size-label, 11px);
+  user-select: none;
+}
+
+/* Slots / Icons */
+.arken-text-input__slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-muted, #aaa598);
+}
+
+.arken-text-input__slot--start {
+  margin-inline-end: var(--space-xs, 4px);
+}
+
+.arken-text-input__slot--end {
+  margin-inline-start: var(--space-xs, 4px);
+}
+
+/* Clear button */
+.arken-text-input__clear {
+  border: none;
+  background: transparent;
+  color: var(--color-text-faint, #777267);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 3px);
+  margin-inline-start: var(--space-xs, 4px);
+  flex-shrink: 0;
+}
+
+.arken-text-input__clear:hover {
+  color: var(--color-text, #e8e4da);
+  background-color: var(--color-surface-hover, #34322c);
+}
+
+/* Number spin buttons adjustment */
+.arken-text-input__control[type="number"]::-webkit-inner-spin-button,
+.arken-text-input__control[type="number"]::-webkit-outer-spin-button {
+  opacity: 0.6;
+}
+
+/* Pins */
+.g-text-input_pin_brick-brick { border-radius: 0; }
+.g-text-input_pin_round-brick { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.g-text-input_pin_brick-round { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.g-text-input_pin_clear-clear { border-radius: 0; border-color: transparent; }

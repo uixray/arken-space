@@ -8,7 +8,7 @@ import type {
   ClientToServerEvents,
   ServerToClientEvents,
 } from "@arken/contracts";
-import { createDatabase } from "@arken/db";
+import { createDatabase, createPgliteDatabase } from "@arken/db";
 import { env } from "./env.js";
 import { countQuery, SNAPSHOT_METRICS_ENABLED } from "./snapshot-metrics.js";
 import { registerRealtime } from "./realtime.js";
@@ -44,12 +44,37 @@ app.addHook("onRequest", async (request, reply) => {
     return reply.code(403).send({ error: "ORIGIN_FORBIDDEN" });
 });
 
-const { client, db } = createDatabase(
-  env.DATABASE_URL,
-  // UIX-408/409, этап 0. При выключенной оснастке хук не передаётся вовсе.
-  SNAPSHOT_METRICS_ENABLED ? countQuery : undefined,
-);
-await ensureSeed(db);
+let client: { end: () => Promise<void> };
+let db: Parameters<typeof registerRoutes>[1];
+
+if (env.DEV_DATABASE_DRIVER === "pglite") {
+  const result = await createPgliteDatabase();
+  client = result.client;
+  db = result.db as Parameters<typeof registerRoutes>[1];
+  app.log.info("database.pglite_connected");
+} else {
+  const result = createDatabase(
+    env.DATABASE_URL,
+    // UIX-408/409, этап 0. При выключенной оснастке хук не передаётся вовсе.
+    SNAPSHOT_METRICS_ENABLED ? countQuery : undefined,
+  );
+  try {
+    await result.client`SELECT 1`;
+  } catch {
+    await result.client.end().catch(() => undefined);
+    throw new Error("Не удалось подключиться к PostgreSQL при запуске сервера");
+  }
+  client = result.client;
+  db = result.db as Parameters<typeof registerRoutes>[1];
+  app.log.info("database.postgres_connected");
+}
+
+try {
+  await ensureSeed(db);
+} catch {
+  await client.end().catch(() => undefined);
+  throw new Error("Не удалось подготовить базу данных при запуске сервера");
+}
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
   cors: { origin: env.WEB_ORIGIN, credentials: true },

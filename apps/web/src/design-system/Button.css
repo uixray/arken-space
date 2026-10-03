@@ -1,11 +1,250 @@
+/* ==========================================================================
+   Arken Space Standalone Button Component
+   Tokens: --color-surface, --color-border, --color-accent, --color-text, etc.
+   ========================================================================== */
+
+.g-button,
+.arken-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 6px);
+  font-family: var(--font-family-sans);
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  text-align: center;
+  vertical-align: middle;
+  user-select: none;
+  cursor: pointer;
+  white-space: nowrap;
+  outline: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Sizes (Compact Desktop & Touch Friendly)
+   -------------------------------------------------------------------------- */
+.g-button_size_xs,
+.arken-button--xs {
+  height: 24px;
+  padding: 0 var(--space-sm, 8px);
+  font-size: var(--font-size-caption, 10px);
+  gap: var(--space-xs, 4px);
+}
+
+.g-button_size_s,
+.arken-button--s {
+  height: 28px;
+  padding: 0 var(--space-sm, 8px);
+  font-size: var(--font-size-label, 11px);
+  gap: var(--space-xs, 4px);
+}
+
+.g-button_size_m,
+.arken-button--m {
+  height: var(--size-control-height, 32px);
+  padding: 0 var(--space-md, 12px);
+  font-size: var(--font-size-body, 12px);
+  gap: var(--space-sm, 8px);
+}
+
+.g-button_size_l,
+.arken-button--l {
+  height: 36px;
+  padding: 0 var(--space-lg, 16px);
+  font-size: var(--font-size-heading-sm, 14px);
+  gap: var(--space-sm, 8px);
+}
+
+.g-button_size_xl,
+.arken-button--xl {
+  height: 44px;
+  padding: 0 var(--space-xl, 24px);
+  font-size: 15px;
+  gap: var(--space-md, 12px);
+}
+
+/* --------------------------------------------------------------------------
+   Width modifiers
+   -------------------------------------------------------------------------- */
+.g-button_width_max,
+.arken-button--width-max {
+  width: 100%;
+}
+
+.g-button_width_auto,
+.arken-button--width-auto {
+  width: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Views / Variants (Warm Ink & Terracotta Clay Palette)
+   -------------------------------------------------------------------------- */
+
+/* Normal (Subtle Surface Card) */
+.g-button_view_normal,
+.arken-button--normal {
+  background-color: var(--color-surface-raised, #292824);
+  border-color: var(--color-border, #47443b);
+  color: var(--color-text, #e8e4da);
+}
+.g-button_view_normal:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--normal:hover:not(:disabled) {
+  background-color: var(--color-surface-hover, #34322c);
+  border-color: var(--color-border-hover, #696356);
+}
+.g-button_view_normal:active:not(:disabled):not(.g-button_disabled),
+.arken-button--normal:active:not(:disabled) {
+  background-color: var(--color-surface-active, #34322c);
+}
+
+/* Action (Primary Terracotta Clay Accent) */
+.g-button_view_action,
+.arken-button--action {
+  background-color: var(--color-accent, #c46f49);
+  border-color: var(--color-accent, #c46f49);
+  color: #ffffff;
+  font-weight: 600;
+}
+.g-button_view_action:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--action:hover:not(:disabled) {
+  background-color: var(--color-accent-hover, #d57d55);
+  border-color: var(--color-accent-hover, #d57d55);
+}
+.g-button_view_action:active:not(:disabled):not(.g-button_disabled),
+.arken-button--action:active:not(:disabled) {
+  background-color: var(--color-accent-active, #d57d55);
+}
+
+/* Flat / Ghost (Toolbar & Icons) */
+.g-button_view_flat,
+.g-button_view_flat-secondary,
+.arken-button--flat {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--color-text-muted, #aaa598);
+}
+.g-button_view_flat:hover:not(:disabled):not(.g-button_disabled),
+.g-button_view_flat-secondary:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--flat:hover:not(:disabled) {
+  background-color: var(--color-surface-hover, #34322c);
+  color: var(--color-text, #e8e4da);
+}
+.g-button_view_flat:active:not(:disabled):not(.g-button_disabled),
+.arken-button--flat:active:not(:disabled) {
+  background-color: var(--color-surface-active, #34322c);
+}
+
+/* Outlined */
+.g-button_view_outlined,
+.arken-button--outlined {
+  background-color: transparent;
+  border-color: var(--color-border, #47443b);
+  color: var(--color-text, #e8e4da);
+}
+.g-button_view_outlined:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--outlined:hover:not(:disabled) {
+  background-color: var(--color-surface-hover, #34322c);
+  border-color: var(--color-border-hover, #696356);
+}
+
+/* Raised */
+.g-button_view_raised,
+.arken-button--raised {
+  background-color: var(--color-surface-raised, #292824);
+  border-color: var(--color-border, #47443b);
+  color: var(--color-text, #e8e4da);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.g-button_view_raised:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--raised:hover:not(:disabled) {
+  background-color: var(--color-surface-hover, #34322c);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* Danger */
+.g-button_view_flat-danger,
+.g-button_view_outlined-danger,
+.arken-button--danger {
+  color: var(--color-danger, #da6b61);
+}
+.g-button_view_flat-danger {
+  background-color: transparent;
+  border-color: transparent;
+}
+.g-button_view_flat-danger:hover:not(:disabled):not(.g-button_disabled) {
+  background-color: rgba(218, 107, 97, 0.12);
+  color: #ff8278;
+}
+.g-button_view_outlined-danger {
+  background-color: transparent;
+  border-color: var(--color-danger, #da6b61);
+}
+.g-button_view_outlined-danger:hover:not(:disabled):not(.g-button_disabled) {
+  background-color: rgba(218, 107, 97, 0.12);
+}
+
+/* Success */
+.g-button_view_flat-success,
+.g-button_view_outlined-success {
+  color: var(--color-success, #7ba77a);
+}
+
+/* Selected state */
+.g-button_selected,
+.arken-button--selected {
+  background-color: var(--color-surface-active, #34322c);
+  border-color: var(--color-accent, #c46f49);
+  color: var(--color-text-accent, #e8e4da);
+}
+
+/* --------------------------------------------------------------------------
+   Focus Visibility (WCAG 2.1 AA)
+   -------------------------------------------------------------------------- */
+.g-button:focus-visible,
+.arken-button:focus-visible {
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
+  outline-offset: var(--focus-ring-offset, 1px);
+}
+
+/* --------------------------------------------------------------------------
+   Disabled state
+   -------------------------------------------------------------------------- */
+.g-button:disabled,
+.g-button_disabled,
+.arken-button:disabled,
+.arken-button--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Loading state
+   -------------------------------------------------------------------------- */
+.g-button_loading,
+.arken-button--loading {
+  cursor: wait;
+}
+
 .arken-button__spinner {
   box-sizing: border-box;
-  inline-size: 1em;
-  block-size: 1em;
+  inline-size: 1.1em;
+  block-size: 1.1em;
   border: 2px solid currentColor;
   border-block-start-color: transparent;
   border-radius: 50%;
-  animation: arken-button-spin 0.7s linear infinite;
+  animation: arken-button-spin 0.65s linear infinite;
 }
 
 @keyframes arken-button-spin {
@@ -17,5 +256,32 @@
 @media (prefers-reduced-motion: reduce) {
   .arken-button__spinner {
     animation: none;
+    border-style: dotted;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Internal layout: Text, Icons, Pins
+   -------------------------------------------------------------------------- */
+.g-button__text {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Pins (border-radius combos) */
+.g-button_pin_brick-brick { border-radius: 0; }
+.g-button_pin_circle-circle { border-radius: var(--radius-pill, 999px); }
+.g-button_pin_round-brick { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.g-button_pin_brick-round { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.g-button_pin_clear-clear { border-radius: 0; border-color: transparent; }

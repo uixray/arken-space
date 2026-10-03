@@ -843,8 +843,8 @@ export function TokenDefinitionEditor({
           </div>
         )}
         <div className="dialog-actions">
-          <Button type="submit" view="action" loading={saving}>
-            Сохранить
+          <Button type="button" view="flat" onClick={cancelEditor}>
+            Отмена
           </Button>
           {!definition && activeScene ? (
             <Button
@@ -852,12 +852,13 @@ export function TokenDefinitionEditor({
               name="token-submit-mode"
               value="create-and-place"
               loading={saving}
+              view="outlined"
             >
               Создать и поставить
             </Button>
           ) : null}
-          <Button type="button" onClick={cancelEditor}>
-            Отмена
+          <Button type="submit" view="action" loading={saving}>
+            Сохранить
           </Button>
         </div>
       </form>

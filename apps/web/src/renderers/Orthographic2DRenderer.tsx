@@ -1,5 +1,6 @@
 import { mapDeleteScope, type MapDeleteRequest } from "./map-delete";
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -26,6 +27,7 @@ import type { SceneRendererProps } from "./SceneRenderer";
 import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
+import { useFogPattern } from "./useFogPattern";
 import { fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -35,6 +37,7 @@ import {
   DecreaseIcon,
   DeleteIcon,
   DuplicateIcon,
+  FitMapIcon,
   SelectedOptionIcon,
 } from "../ui/icons";
 import {
@@ -121,7 +124,112 @@ const DRAWING_COLOR_PRESETS = [
   { value: "#a855f7", name: "Фиолетовый" },
 ] as const;
 
-const DRAWING_STROKE_WIDTH_PRESETS = [1, 3, 5, 8, 12, 16, 24] as const;
+function AnimatedPing({
+  ping,
+  scale,
+}: {
+  ping: {
+    membershipId: string;
+    displayName: string;
+    x: number;
+    y: number;
+    createdAt: string | number;
+  };
+  scale: number;
+}) {
+  const pingTime =
+    typeof ping.createdAt === "number"
+      ? ping.createdAt
+      : new Date(ping.createdAt).getTime();
+
+  const [elapsed, setElapsed] = useState(() =>
+    Math.max(0, Date.now() - (Number.isNaN(pingTime) ? Date.now() : pingTime)),
+  );
+
+  useEffect(() => {
+    let animId: number;
+    const base = Number.isNaN(pingTime) ? Date.now() : pingTime;
+    const tick = () => {
+      const current = Date.now() - base;
+      setElapsed(current);
+      if (current < 3500) {
+        animId = requestAnimationFrame(tick);
+      }
+    };
+    animId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animId);
+  }, [pingTime]);
+
+  const totalProgress = Math.min(1, Math.max(0, elapsed / 3500));
+  const fadeOut = Math.max(0, 1 - totalProgress);
+
+  // Expanding radiating ripple waves
+  const waveCycle = 1100;
+  const w1 = (elapsed % waveCycle) / waveCycle;
+  const w2 = ((elapsed + 360) % waveCycle) / waveCycle;
+  const w3 = ((elapsed + 720) % waveCycle) / waveCycle;
+
+  const r1 = (6 + w1 * 40) / scale;
+  const r2 = (6 + w2 * 40) / scale;
+  const r3 = (6 + w3 * 40) / scale;
+
+  const op1 = Math.max(0, (1 - w1) * fadeOut * 0.85);
+  const op2 = Math.max(0, (1 - w2) * fadeOut * 0.7);
+  const op3 = Math.max(0, (1 - w3) * fadeOut * 0.55);
+
+  const coreRadius = (6 + Math.sin(elapsed / 160) * 1.5) / scale;
+  const coreOpacity = Math.max(0, fadeOut * 0.95);
+
+  return (
+    <Group x={ping.x} y={ping.y}>
+      <Circle
+        radius={r1}
+        stroke="#f59e0b"
+        strokeWidth={2.5 / scale}
+        opacity={op1}
+        listening={false}
+      />
+      <Circle
+        radius={r2}
+        stroke="#fbbf24"
+        strokeWidth={2 / scale}
+        opacity={op2}
+        listening={false}
+      />
+      <Circle
+        radius={r3}
+        stroke="#fcd34d"
+        strokeWidth={1.5 / scale}
+        opacity={op3}
+        listening={false}
+      />
+      <Circle
+        radius={coreRadius * 1.6}
+        fill="#f59e0b"
+        opacity={coreOpacity * 0.4}
+        listening={false}
+      />
+      <Circle
+        radius={coreRadius}
+        fill="#fbbf24"
+        stroke="#78350f"
+        strokeWidth={1.5 / scale}
+        opacity={coreOpacity}
+        listening={false}
+      />
+      <Text
+        x={22 / scale}
+        y={-7 / scale}
+        text={ping.displayName}
+        fill="#fef3c7"
+        fontSize={13 / scale}
+        fontStyle="bold"
+        opacity={coreOpacity}
+        listening={false}
+      />
+    </Group>
+  );
+}
 
 function Grid({
   width,
@@ -215,7 +323,8 @@ function TokenImage({
   return <Image image={imageState.displayedImage ?? undefined} {...props} />;
 }
 
-export function Orthographic2DRenderer(props: SceneRendererProps) {
+function Orthographic2DRendererComponent(props: SceneRendererProps) {
+  const fogPatternImage = useFogPattern();
   const {
     canvasEditMode,
     onCanvasEditCancel,
@@ -235,6 +344,10 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     undefined,
     createInitialMapInteractionState,
   );
+  const isObjectListOpen =
+    props.externalObjectListOpen !== undefined
+      ? props.externalObjectListOpen
+      : interaction.objectListOpen;
   const [moveRecoveryEpoch, setMoveRecoveryEpoch] = useState(0);
   const moveQueue = useMemo(
     () =>
@@ -354,6 +467,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     stageX: number;
     stageY: number;
   } | null>(null);
+  const panRafRef = useRef<number | null>(null);
+  const pendingPanPositionRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    return () => {
+      if (panRafRef.current !== null) {
+        cancelAnimationFrame(panRafRef.current);
+      }
+    };
+  }, []);
   // UIX-392: ephemeral cursor presence. The batcher collapses rapid
   // pointermove-driven queue() calls to at most one `cursor:move` emit per
   // animation frame; the inactivity timer emits an explicit `cursor:gone`
@@ -603,16 +725,28 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     };
   }, [tokenMenu, closeTokenMenu]);
   useEffect(() => {
-    if (!interaction.objectListOpen) return;
+    const isOpen =
+      props.externalObjectListOpen !== undefined
+        ? props.externalObjectListOpen
+        : interaction.objectListOpen;
+    if (!isOpen) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
       const list = objectListRef.current;
-      if (list && !list.contains(event.target as Node))
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".map-object-list-trigger")) return;
+      if (list && !list.contains(event.target as Node)) {
         dispatchInteraction({ type: "close-object-list" });
+        props.onObjectListClose?.();
+      }
     };
     window.addEventListener("pointerdown", closeOnOutsidePointer);
     return () =>
       window.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [interaction.objectListOpen]);
+  }, [
+    interaction.objectListOpen,
+    props.externalObjectListOpen,
+    props.onObjectListClose,
+  ]);
   // UIX-392: (re)create the rAF batcher whenever the socket or active scene
   // changes, so a stale closure never emits into the wrong scene/socket.
   useEffect(() => {
@@ -799,7 +933,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       pixelRatio: 1,
     });
     mask.getLayer()?.batchDraw();
-  }, [orderedFogReveals, worldDraft.width, worldDraft.height]);
+  }, [fogPatternImage, orderedFogReveals, worldDraft.width, worldDraft.height]);
 
   const pointerInWorld = () => {
     const pointer = stageRef.current?.getPointerPosition();
@@ -1180,7 +1314,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     });
     const escapeIntent = resolveMapEscapeIntent({
       key: event.key,
-      objectListOpen: interaction.objectListOpen,
+      objectListOpen: isObjectListOpen,
       tokenMenuOpen: Boolean(tokenMenu),
     });
     if (tokenMove) {
@@ -1193,6 +1327,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       // layer; clearing the renderer's parallel selection arrays here would
       // make the first Escape skip straight through to the selected object.
       dispatchInteraction({ type: "escape" });
+      props.onObjectListClose?.();
     } else if (escapeIntent === "clear-map-state") {
       dispatchInteraction({ type: "escape" });
       // Do not let the later pointerup commit a cancelled rectangle.
@@ -1660,17 +1795,21 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     }
     if (panStartRef.current) {
       const pointer = stageRef.current?.getPointerPosition();
-      if (pointer)
-        setPosition({
-          x:
-            panStartRef.current.stageX +
-            pointer.x -
-            panStartRef.current.pointerX,
-          y:
-            panStartRef.current.stageY +
-            pointer.y -
-            panStartRef.current.pointerY,
-        });
+      if (pointer) {
+        const nextX =
+          panStartRef.current.stageX + pointer.x - panStartRef.current.pointerX;
+        const nextY =
+          panStartRef.current.stageY + pointer.y - panStartRef.current.pointerY;
+        pendingPanPositionRef.current = { x: nextX, y: nextY };
+        if (panRafRef.current === null) {
+          panRafRef.current = requestAnimationFrame(() => {
+            panRafRef.current = null;
+            if (pendingPanPositionRef.current) {
+              setPosition(pendingPanPositionRef.current);
+            }
+          });
+        }
+      }
       return;
     }
     if (marquee) {
@@ -1722,6 +1861,13 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
 
   const handlePointerUp = async () => {
     panStartRef.current = null;
+    if (panRafRef.current !== null) {
+      cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = null;
+      if (pendingPanPositionRef.current) {
+        setPosition(pendingPanPositionRef.current);
+      }
+    }
     if (marquee) {
       setSelectedTokenIds(
         selectableObjects.tokens
@@ -1887,7 +2033,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         <Rect
           width={worldDraft.width}
           height={worldDraft.height}
-          fill={visual.color.fog}
+          fill={fogPatternImage ? undefined : visual.color.fog}
+          fillPatternImage={fogPatternImage || undefined}
+          fillPatternRepeat="repeat"
         />
         {orderedFogReveals.map((fog) => {
           const compositeOperation =
@@ -1908,7 +2056,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 y={rect.y}
                 width={rect.width}
                 height={rect.height}
-                fill={visual.color.fogCover}
+                fill={fogPatternImage ? undefined : visual.color.fogCover}
+                fillPatternImage={fogPatternImage || undefined}
+                fillPatternRepeat="repeat"
                 globalCompositeOperation={compositeOperation}
               />
             );
@@ -1920,7 +2070,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 x={geometry.center.x}
                 y={geometry.center.y}
                 radius={geometry.radius}
-                fill={visual.color.fogCover}
+                fill={fogPatternImage ? undefined : visual.color.fogCover}
+                fillPatternImage={fogPatternImage || undefined}
+                fillPatternRepeat="repeat"
                 globalCompositeOperation={compositeOperation}
               />
             );
@@ -1930,7 +2082,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 key={fog.id}
                 points={geometry.points.flatMap((point) => [point.x, point.y])}
                 closed
-                fill={visual.color.fogCover}
+                fill={fogPatternImage ? undefined : visual.color.fogCover}
+                fillPatternImage={fogPatternImage || undefined}
+                fillPatternRepeat="repeat"
                 globalCompositeOperation={compositeOperation}
               />
             );
@@ -1944,7 +2098,9 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 x={geometry.points[0]!.x}
                 y={geometry.points[0]!.y}
                 radius={geometry.radius}
-                fill={visual.color.fogCover}
+                fill={fogPatternImage ? undefined : visual.color.fogCover}
+                fillPatternImage={fogPatternImage || undefined}
+                fillPatternRepeat="repeat"
                 globalCompositeOperation={compositeOperation}
               />
             );
@@ -2055,26 +2211,50 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
   });
   // UIX-426: the same list the single token layer used to render. Split out
   // so it can be drawn in two passes with the fog layer between them.
-  const tokensOnStage = props.tokens
-    .filter((token) => token.layer !== "MAP")
-    .filter(
-      (token) => token.layer !== "GM" || (props.role === "GM" && showGmLayer),
-    )
-    .filter((token) => token.visible || props.role === "GM")
-    .filter(
-      (token) =>
-        props.role === "GM" ||
-        (token.x + token.width > 0 &&
-          token.y + token.height > 0 &&
-          token.x < worldDraft.width &&
-          token.y < worldDraft.height),
-    )
-    .filter((token) => !hiddenTokenIds.has(token.id))
-    .sort((a, b) => (a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0));
+  const tokensOnStage = useMemo(() => {
+    return props.tokens
+      .filter((token) => token.layer !== "MAP")
+      .filter(
+        (token) => token.layer !== "GM" || (props.role === "GM" && showGmLayer),
+      )
+      .filter((token) => token.visible || props.role === "GM")
+      .filter(
+        (token) =>
+          props.role === "GM" ||
+          (token.x + token.width > 0 &&
+            token.y + token.height > 0 &&
+            token.x < worldDraft.width &&
+            token.y < worldDraft.height),
+      )
+      .filter((token) => !hiddenTokenIds.has(token.id))
+      .sort((a, b) =>
+        a.layer === "PLAYER" ? -1 : b.layer === "PLAYER" ? 1 : 0,
+      );
+  }, [
+    props.tokens,
+    props.role,
+    showGmLayer,
+    worldDraft.width,
+    worldDraft.height,
+    hiddenTokenIds,
+  ]);
 
   /** A player always sees their own token, even deep in unexplored fog. */
-  const ownsToken = (token: (typeof tokensOnStage)[number]) =>
-    token.controllerMembershipIds.includes(props.membershipId);
+  const ownsToken = useCallback(
+    (token: (typeof tokensOnStage)[number]) =>
+      token.controllerMembershipIds.includes(props.membershipId),
+    [props.membershipId],
+  );
+
+  const ownTokensOnStage = useMemo(
+    () => tokensOnStage.filter(ownsToken),
+    [tokensOnStage, ownsToken],
+  );
+
+  const otherTokensOnStage = useMemo(
+    () => tokensOnStage.filter((token) => !ownsToken(token)),
+    [tokensOnStage, ownsToken],
+  );
 
   const renderTokenNode = (sourceToken: (typeof tokensOnStage)[number]) => {
     const token = resizeDrafts[sourceToken.id]
@@ -2367,20 +2547,34 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
               </Group>
             );
           })()}
-        <Text
-          x={-16}
-          y={token.height + 5}
-          width={token.width + 32}
-          align="center"
-          text={`${token.name}${isStackRepresentative ? ` +${tokenStack!.count - 1}` : ""}`}
-          fill={visual.color.tokenName}
-          fontSize={13 / scale}
-          wrap="none"
-          listening={false}
-          visible={
-            hoveredTokenId === token.id || canMove || isStackRepresentative
-          }
-        />
+        {(() => {
+          const nameText = `${token.name}${isStackRepresentative ? ` +${tokenStack!.count - 1}` : ""}`;
+          // LOCAL-6504: When zoomed out, fontSize (13 / scale) scales up in world units so that
+          // it stays readable on screen. The text container width and position must scale proportionally
+          // with (1 / scale) to prevent text clipping/truncation.
+          const nameWidth = Math.max(
+            (token.width * scale + 32) / scale,
+            (nameText.length * 8.5 + 24) / scale,
+          );
+          const nameX = (token.width - nameWidth) / 2;
+          const nameY = token.height + 5 / scale;
+          return (
+            <Text
+              x={nameX}
+              y={nameY}
+              width={nameWidth}
+              align="center"
+              text={nameText}
+              fill={visual.color.tokenName}
+              fontSize={13 / scale}
+              wrap="none"
+              listening={false}
+              visible={
+                hoveredTokenId === token.id || canMove || isStackRepresentative
+              }
+            />
+          );
+        })()}
         {hoveredTokenId === token.id && token.conditions.length > 0 && (
           <Text
             x={(token.width - 160 / scale) / 2}
@@ -2529,28 +2723,31 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
       }}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <button
-        ref={objectListTriggerRef}
-        type="button"
-        className="map-object-list-trigger"
-        aria-expanded={interaction.objectListOpen}
-        onClick={() => dispatchInteraction({ type: "open-object-list" })}
-        onKeyDown={(event) => {
-          if (
-            resolveMapEscapeIntent({
-              key: event.key,
-              objectListOpen: interaction.objectListOpen,
-            }) !== "close-object-list"
-          )
-            return;
-          dispatchInteraction({ type: "close-object-list" });
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-      >
-        Объекты карты
-      </button>
-      {interaction.objectListOpen && (
+      {props.externalObjectListOpen === undefined && (
+        <button
+          ref={objectListTriggerRef}
+          type="button"
+          className="map-object-list-trigger"
+          aria-expanded={isObjectListOpen}
+          onClick={() => dispatchInteraction({ type: "open-object-list" })}
+          onKeyDown={(event) => {
+            if (
+              resolveMapEscapeIntent({
+                key: event.key,
+                objectListOpen: isObjectListOpen,
+              }) !== "close-object-list"
+            )
+              return;
+            dispatchInteraction({ type: "close-object-list" });
+            props.onObjectListClose?.();
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          Объекты карты
+        </button>
+      )}
+      {isObjectListOpen && (
         <div
           ref={objectListRef}
           className="map-object-list-popover"
@@ -2566,6 +2763,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             )
               return;
             dispatchInteraction({ type: "close-object-list" });
+            props.onObjectListClose?.();
             event.preventDefault();
             event.stopPropagation();
             objectListTriggerRef.current?.focus();
@@ -3024,38 +3222,20 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
         <Layer {...playerClip}>
           {props.drawings.map((drawing) => {
             const currentStrokeWidth = drawing.strokeWidth ?? 3;
+            const listening =
+              (props.role === "GM" ||
+                (Boolean(props.membershipId) &&
+                  drawing.authorMembershipId === props.membershipId)) &&
+              (props.role === "GM" || revealedDrawingIds.has(drawing.id));
+            const draggable = props.tool === "PAN" && listening;
+
             return (
-              <Line
+              <Group
                 key={drawing.id}
-                points={drawing.points}
                 x={drawing.x}
                 y={drawing.y}
-                stroke={drawing.color}
-                strokeWidth={currentStrokeWidth / scale}
-                lineCap="round"
-                lineJoin="round"
-                listening={
-                  (props.role === "GM" ||
-                    (Boolean(props.membershipId) &&
-                      drawing.authorMembershipId === props.membershipId)) &&
-                  (props.role === "GM" || revealedDrawingIds.has(drawing.id))
-                }
-                draggable={
-                  props.tool === "PAN" &&
-                  (props.role === "GM" ||
-                    (Boolean(props.membershipId) &&
-                      drawing.authorMembershipId === props.membershipId)) &&
-                  (props.role === "GM" || revealedDrawingIds.has(drawing.id))
-                }
-                hitStrokeWidth={Math.max(14, currentStrokeWidth) / scale}
-                shadowColor={
-                  selectedDrawingIds.includes(drawing.id)
-                    ? visual.color.selection
-                    : undefined
-                }
-                shadowBlur={
-                  selectedDrawingIds.includes(drawing.id) ? 10 / scale : 0
-                }
+                listening={listening}
+                draggable={draggable}
                 onClick={(event) => {
                   selectObject(
                     {
@@ -3066,6 +3246,7 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     event.evt.shiftKey,
                   );
                 }}
+
                 onDragEnd={(event) => {
                   if (
                     selectedDrawingIds.includes(drawing.id) &&
@@ -3083,7 +3264,37 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                     y: event.target.y(),
                   });
                 }}
-              />
+              >
+                <Line
+                  points={drawing.points}
+                  stroke={visual.color.selectionOutline}
+                  strokeWidth={(currentStrokeWidth + 3) / scale}
+                  lineCap="round"
+                  lineJoin="round"
+                  listening={false}
+                  opacity={0.6}
+                />
+                <Line
+                  points={drawing.points}
+                  stroke={drawing.color}
+                  strokeWidth={currentStrokeWidth / scale}
+                  lineCap="round"
+                  lineJoin="round"
+                  // The foreground stroke supplies the group's hit graph. Keep
+                  // only the decorative outline non-listening so persisted
+                  // drawings remain selectable and draggable.
+                  listening
+                  hitStrokeWidth={Math.max(14, currentStrokeWidth) / scale}
+                  shadowColor={
+                    selectedDrawingIds.includes(drawing.id)
+                      ? visual.color.selection
+                      : undefined
+                  }
+                  shadowBlur={
+                    selectedDrawingIds.includes(drawing.id) ? 10 / scale : 0
+                  }
+                />
+              </Group>
             );
           })}
           {pendingDrawings
@@ -3178,13 +3389,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             {/* UIX-426: fog must occlude what it covers, so everyone else's
                 tokens are drawn under it and only the emerged part shows. */}
             <Layer {...playerClip}>
-              {tokensOnStage
-                .filter((token) => !ownsToken(token))
-                .map(renderTokenNode)}
+              {otherTokensOnStage.map(renderTokenNode)}
             </Layer>
             {renderFog()}
             <Layer {...playerClip}>
-              {tokensOnStage.filter(ownsToken).map(renderTokenNode)}
+              {ownTokensOnStage.map(renderTokenNode)}
             </Layer>
           </>
         )}
@@ -3219,16 +3428,36 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             return (
               <Group key={ruler.membershipId}>
                 {points.length > 2 && (
-                  <Line
-                    points={points
-                      .slice(0, -1)
-                      .flatMap((point) => [point.x, point.y])}
-                    stroke={visual.color.selection}
-                    strokeWidth={2.5 / scale}
-                    dash={[6 / scale, 4 / scale]}
-                    lineJoin="round"
-                  />
+                  <>
+                    <Line
+                      points={points
+                        .slice(0, -1)
+                        .flatMap((point) => [point.x, point.y])}
+                      stroke={visual.color.selectionOutline}
+                      strokeWidth={5.5 / scale}
+                      lineJoin="round"
+                      opacity={0.6}
+                    />
+                    <Line
+                      points={points
+                        .slice(0, -1)
+                        .flatMap((point) => [point.x, point.y])}
+                      stroke={visual.color.selection}
+                      strokeWidth={2.5 / scale}
+                      dash={[6 / scale, 4 / scale]}
+                      lineJoin="round"
+                    />
+                  </>
                 )}
+                <Arrow
+                  points={[beforeLast.x, beforeLast.y, last.x, last.y]}
+                  stroke={visual.color.selectionOutline}
+                  fill={visual.color.selectionOutline}
+                  strokeWidth={5.5 / scale}
+                  pointerLength={13 / scale}
+                  pointerWidth={13 / scale}
+                  opacity={0.6}
+                />
                 <Arrow
                   points={[beforeLast.x, beforeLast.y, last.x, last.y]}
                   stroke={visual.color.selection}
@@ -3274,22 +3503,11 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
             );
           })}
           {props.pings.map((ping) => (
-            <Group key={`${ping.membershipId}-${ping.createdAt}`}>
-              <Circle
-                x={ping.x}
-                y={ping.y}
-                radius={22 / scale}
-                stroke={visual.color.edit}
-                strokeWidth={3 / scale}
-              />
-              <Text
-                x={ping.x + 28 / scale}
-                y={ping.y - 8 / scale}
-                text={ping.displayName}
-                fill={visual.color.edit}
-                fontSize={14 / scale}
-              />
-            </Group>
+            <AnimatedPing
+              key={`${ping.membershipId}-${ping.createdAt}`}
+              ping={ping}
+              scale={scale}
+            />
           ))}
           {props.cursors.map((cursor) => {
             const color = cursorColorForMembership(cursor.membershipId);
@@ -3629,28 +3847,6 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
                 <label className="drawing-control-label">
                   Толщина: <strong>{activeWidth}px</strong>
                 </label>
-                <span
-                  className="drawing-width-presets"
-                  role="group"
-                  aria-label="Быстрый выбор толщины"
-                >
-                  {DRAWING_STROKE_WIDTH_PRESETS.map((width) => (
-                    <button
-                      key={width}
-                      type="button"
-                      className="drawing-width-preset-btn"
-                      aria-label={`Толщина ${width}px`}
-                      aria-pressed={activeWidth === width}
-                      onClick={() => updateWidth(width)}
-                    >
-                      <span
-                        className="drawing-width-preview"
-                        style={{ height: Math.min(width, 14) }}
-                      />
-                      <span className="drawing-width-label">{width}</span>
-                    </button>
-                  ))}
-                </span>
                 <label className="drawing-stroke-width-picker">
                   <input
                     type="range"
@@ -3717,7 +3913,15 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
           >
             <AppIcon icon={DecreaseIcon} />
           </button>
-          {Math.round(scale * 100)}%<button onClick={fitMap}>Вписать</button>
+          <span className="map-scale-percent">{Math.round(scale * 100)}%</span>
+          <button
+            type="button"
+            aria-label="Вписать карту"
+            title="Вписать карту в экран"
+            onClick={fitMap}
+          >
+            <AppIcon icon={FitMapIcon} />
+          </button>
           {props.role === "GM" && (
             <label>
               <input
@@ -3743,3 +3947,5 @@ export function Orthographic2DRenderer(props: SceneRendererProps) {
     </div>
   );
 }
+
+export const Orthographic2DRenderer = memo(Orthographic2DRendererComponent);

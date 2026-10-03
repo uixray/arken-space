@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { TextInput } from "@gravity-ui/uikit";
+import { Input as TextInput } from "../design-system/Input";
 import { ArkenDialog } from "./ArkenDialog";
 import { ApiError } from "../api";
 import { EntityConflictError, useEntityForm } from "./useEntityForm";

@@ -26,6 +26,7 @@ export const env = z
       .string()
       .min(1)
       .default("postgres://arken:arken@localhost:5432/arken"),
+    DEV_DATABASE_DRIVER: z.enum(["postgres", "pglite"]).default("postgres"),
     SESSION_COOKIE_NAME: z.string().default("arken_session"),
     SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
     RATE_LIMIT_MAX: z.coerce.number().int().min(60).max(10_000).default(600),
@@ -57,6 +58,15 @@ export const env = z
    * конфигурации, а не повод угадывать.
    */
   .superRefine((value, ctx) => {
+    if (
+      value.DEV_DATABASE_DRIVER === "pglite" &&
+      value.NODE_ENV !== "development"
+    )
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["DEV_DATABASE_DRIVER"],
+        message: "DEV_DATABASE_DRIVER=pglite разрешён только в development",
+      });
     if (value.NODE_ENV !== "production") return;
     for (const key of ["DATABASE_URL", "GM_ACCESS_TOKEN"] as const)
       if (!process.env[key]?.trim())

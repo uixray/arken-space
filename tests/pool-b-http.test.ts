@@ -1,4 +1,4 @@
-﻿import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
@@ -1402,10 +1402,24 @@ describe("Pool B HTTP boundaries", () => {
     expect(duplicateAssignment.json()).toMatchObject({
       error: "CATALOG_ALREADY_ASSIGNED",
     });
+    const unrelatedPlayerId = crypto.randomUUID();
+    const unrelatedSecret = "u".repeat(40);
+    await db.insert(schema.memberships).values({
+      id: unrelatedPlayerId,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Unrelated player",
+    });
+    await db.insert(schema.sessions).values({
+      membershipId: unrelatedPlayerId,
+      tokenHash: hashToken(unrelatedSecret),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
     const playerEdit = await app.inject({
       method: "PATCH",
       url: `/api/characters/${ids.character}/catalog/${entry.id}`,
-      headers: headers(secrets.player),
+      headers: headers(unrelatedSecret),
       payload: { actionId: crypto.randomUUID(), name: "Hack" },
     });
     expect(playerEdit.statusCode).toBe(403);
@@ -1518,10 +1532,24 @@ describe("Pool B HTTP boundaries", () => {
       }),
     );
 
+    const unrelatedPlayerId = crypto.randomUUID();
+    const unrelatedSecret = "u".repeat(40);
+    await db.insert(schema.memberships).values({
+      id: unrelatedPlayerId,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Unrelated player",
+    });
+    await db.insert(schema.sessions).values({
+      membershipId: unrelatedPlayerId,
+      tokenHash: hashToken(unrelatedSecret),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
     const playerEntryDelete = await app.inject({
       method: "DELETE",
       url: `/api/characters/${ids.character}/catalog/${entry.id}`,
-      headers: headers(secrets.player),
+      headers: headers(unrelatedSecret),
       payload: { actionId: crypto.randomUUID(), revision: entry.revision },
     });
     expect(playerEntryDelete.statusCode).toBe(403);

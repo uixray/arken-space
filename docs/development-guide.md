@@ -1,8 +1,9 @@
 # Разработка и onboarding
 
 Этот документ — короткий путь от свежего клона до безопасного изменения кода.
-Общее устройство системы описано в [architecture.md](./architecture.md), а
-production-процедуры — в [operations.md](./operations.md).
+Общее устройство системы описано в [architecture.md](./architecture.md),
+архитектурные стандарты и правила против монолита — в [CODING_GUIDELINES.md](./CODING_GUIDELINES.md),
+а production-процедуры — в [operations.md](./operations.md).
 
 **Проверено 2026-09-18:** команды и настройки ниже сверены с текущим source
 tree/release-кандидатом `cce56397a6b1e91fcf2fc6951e506d64b62647cb` (локальный
@@ -86,6 +87,15 @@ production применили бы миграции к боевой. Сообщ�
 дефолты из схемы существуют только для разработки и тестов, и при
 `NODE_ENV=production` сервер не стартует на них.
 
+Server всегда использует PostgreSQL по умолчанию, включая development и test;
+ошибка соединения завершает запуск и не переключает приложение на другую БД.
+Для изолированной локальной разработки можно явно включить встроенный PGlite:
+перед запуском `pnpm dev` задайте `DEV_DATABASE_DRIVER=pglite` в окружении
+процесса. Этот режим допустим только при `NODE_ENV=development` и не подходит
+для production или тестов. Не подключайте одновременно PGlite-режим и реальные
+пользовательские/production-данные; если нужен PostgreSQL, оставьте драйвер по
+умолчанию и задайте адрес локальной БД в `DATABASE_URL`.
+
 `pnpm build` после свежего клона важен: workspace-пакеты `@arken/contracts`,
 `@arken/db` и `@arken/system` экспортируют файлы из `dist`. Без первой сборки
 часть Vitest/server imports не разрешится.
@@ -125,25 +135,27 @@ Vite проксирует `/api`, `/healthz` и `/socket.io` с `5173` на serv
 
 ## Команды проекта
 
-| Команда                              | Назначение                                                    |
-| ------------------------------------ | ------------------------------------------------------------- |
-| `pnpm dev`                           | server + web в watch mode                                     |
-| `pnpm dev:db`                        | поднять только PostgreSQL через Compose                       |
-| `pnpm db:migrate`                    | применить migrations `packages/db/drizzle`                    |
-| `pnpm db:generate`                   | сгенерировать новую Drizzle migration после изменения schema  |
-| `pnpm db:studio`                     | открыть Drizzle Studio                                        |
-| `pnpm build`                         | последовательно собрать все workspace packages/apps           |
-| `pnpm typecheck`                     | strict TypeScript без emit, включая `tests/e2e/tsconfig.json` |
-| `pnpm lint`                          | ESLint для всего монорепозитория                              |
-| `pnpm format`                        | применить Prettier ко всему дереву; сначала проверить scope   |
-| `pnpm format:check`                  | проверить Prettier без изменения файлов                       |
-| `pnpm test`                          | Vitest unit/integration suite                                 |
-| `pnpm test:watch`                    | Vitest watch mode                                             |
-| `pnpm test:e2e`                      | Playwright UI suite, в основном с mocked API                  |
-| `pnpm test:multiplayer`              | isolated Docker story: GM + 6 игроков                         |
-| `pnpm restore:rehearse`              | guarded restore в отдельный Compose project                   |
-| `pnpm gameplay:reset:safe`           | destructive operator workflow с несколькими gates             |
-| `pnpm incident:bundle -- --since 2h` | bounded/redacted diagnostic bundle                            |
+| Команда                                    | Назначение                                                    |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| `pnpm dev`                                 | server + web в watch mode                                     |
+| `pnpm dev:db`                              | поднять только PostgreSQL через Compose                       |
+| `pnpm db:migrate`                          | применить migrations `packages/db/drizzle`                    |
+| `pnpm db:generate`                         | сгенерировать новую Drizzle migration после изменения schema  |
+| `pnpm db:studio`                           | открыть Drizzle Studio                                        |
+| `pnpm build`                               | последовательно собрать все workspace packages/apps           |
+| `pnpm typecheck`                           | strict TypeScript без emit, включая `tests/e2e/tsconfig.json` |
+| `pnpm lint`                                | ESLint для всего монорепозитория                              |
+| `pnpm format`                              | применить Prettier ко всему дереву; сначала проверить scope   |
+| `pnpm format:check`                        | проверить Prettier без изменения файлов                       |
+| `pnpm test`                                | Vitest unit/integration suite                                 |
+| `pnpm test:watch`                          | Vitest watch mode                                             |
+| `pnpm test:e2e`                            | Playwright UI suite, в основном с mocked API                  |
+| `pnpm test:multiplayer`                    | isolated Docker story: GM + 6 игроков                         |
+| `pnpm restore:rehearse`                    | guarded restore в отдельный Compose project                   |
+| `pnpm gameplay:reset:safe`                 | destructive operator workflow с несколькими gates             |
+| `pnpm incident:bundle -- --since 2h`       | bounded/redacted diagnostic bundle                            |
+| `pnpm --filter @arken/web storybook`       | запуск локального Storybook-стенда компонентов (порт 6006)    |
+| `pnpm --filter @arken/web build-storybook` | сборка статичного публичного стенда дизайн-системы            |
 
 `build`, deploy и Docker build не запускают автоматически lint, typecheck и
 tests. Выполняйте quality gate явно.

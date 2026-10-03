@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
-import { Popup, Switch } from "@gravity-ui/uikit";
+import { Popup } from "../design-system/Popup";
+import { Switch } from "../design-system/Switch";
 import type { CursorPreference } from "../cursor-preference";
 import { AppIcon } from "./AppIcon";
 import { CursorPresenceIcon } from "./icons";

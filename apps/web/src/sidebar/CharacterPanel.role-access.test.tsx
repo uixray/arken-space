@@ -291,7 +291,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
+function renderPanel(
+  snapshot: GameSnapshot,
+  character: CharacterDto,
+  overrides?: {
+    onDeleteCharacterEntry?: CampaignActions["catalog"]["onDeleteCharacterEntry"];
+    onUpdateCharacterEntry?: CampaignActions["catalog"]["onUpdateCharacterEntry"];
+    onAssignCatalogEntry?: CampaignActions["catalog"]["onAssignCatalogEntry"];
+  },
+) {
   const onPatch = vi.fn<PanelProps["onPatch"]>().mockResolvedValue(undefined);
   const onUpdateCounters =
     vi.fn<PanelProps["onUpdateCounters"]>(unexpectedAction);
@@ -301,6 +309,21 @@ function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
   const uploadAsset = vi
     .fn<CampaignActions["asset"]["uploadAsset"]>()
     .mockResolvedValue(portraitAsset);
+  const onDeleteCharacterEntry =
+    overrides?.onDeleteCharacterEntry ??
+    vi
+      .fn<CampaignActions["catalog"]["onDeleteCharacterEntry"]>()
+      .mockResolvedValue(undefined);
+  const onUpdateCharacterEntry =
+    overrides?.onUpdateCharacterEntry ??
+    vi
+      .fn<CampaignActions["catalog"]["onUpdateCharacterEntry"]>()
+      .mockResolvedValue(undefined as any);
+  const onAssignCatalogEntry =
+    overrides?.onAssignCatalogEntry ??
+    vi
+      .fn<CampaignActions["catalog"]["onAssignCatalogEntry"]>()
+      .mockResolvedValue(undefined as any);
   const decoy = makeCharacter({
     id: "another-character",
     name: "Не редактируется",
@@ -311,6 +334,12 @@ function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
       value={{
         ...actions,
         asset: { ...actions.asset, uploadAsset },
+        catalog: {
+          ...actions.catalog,
+          onDeleteCharacterEntry,
+          onUpdateCharacterEntry,
+          onAssignCatalogEntry,
+        },
       }}
     >
       <CharacterPanel
@@ -337,6 +366,9 @@ function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
     onReplaceControllers,
     onRoll,
     uploadAsset,
+    onDeleteCharacterEntry,
+    onUpdateCharacterEntry,
+    onAssignCatalogEntry,
     rerender: rendered.rerender,
     rerenderPanel: (nextSnapshot: GameSnapshot, nextCharacter: CharacterDto) =>
       rendered.rerender(panel(nextSnapshot, nextCharacter)),
@@ -736,5 +768,106 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       calls.onPatch,
       "UIX414_PORTRAIT_PENDING_ACTOR_CHANGE_PATCH_0",
     ).not.toHaveBeenCalled();
+  });
+
+  it("lets an owning PLAYER see add/edit/delete buttons for skills and abilities and delete an entry", async () => {
+    const snapshot = playerSnapshot();
+    const entry: CharacterDto["entries"][number] = {
+      id: "entry-skill-1",
+      sourceCatalogEntryId: null,
+      kind: "SKILL",
+      name: "Акробатика",
+      description: "Тестовый навык",
+      data: { formula: "1d20" },
+      revision: 3,
+    };
+    const character = makeCharacter({
+      ownerMembershipId: snapshot.me.id,
+      controllerMembershipIds: [],
+      entries: [entry],
+    });
+    const calls = renderPanel(snapshot, character);
+    const user = userEvent.setup();
+
+    expect(
+      screen.getByRole("button", { name: "+ Добавить навык…" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ Добавить способность…" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Редактировать" }),
+    ).toBeInTheDocument();
+
+    const deleteBtn = screen.getByRole("button", { name: "Удалить" });
+    expect(deleteBtn).toBeInTheDocument();
+    await user.click(deleteBtn);
+    expect(calls.onDeleteCharacterEntry).toHaveBeenCalledWith(
+      character.id,
+      entry.id,
+      entry.revision,
+    );
+  });
+
+  it("lets a delegated PLAYER see add/edit/delete buttons for skills and abilities", async () => {
+    const snapshot = playerSnapshot();
+    const entry: CharacterDto["entries"][number] = {
+      id: "entry-ability-1",
+      sourceCatalogEntryId: null,
+      kind: "ABILITY",
+      name: "Огненный шар",
+      description: "Тестовая способность",
+      data: { formula: "8d6" },
+      revision: 2,
+    };
+    const character = makeCharacter({
+      ownerMembershipId: "other-player",
+      controllerMembershipIds: [snapshot.me.id],
+      entries: [entry],
+    });
+    renderPanel(snapshot, character);
+
+    expect(
+      screen.getByRole("button", { name: "+ Добавить навык…" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ Добавить способность…" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Редактировать" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Удалить" })).toBeInTheDocument();
+  });
+
+  it("hides add/edit/delete buttons for skills and abilities for an unrelated player", async () => {
+    const snapshot = playerSnapshot();
+    const entry: CharacterDto["entries"][number] = {
+      id: "entry-skill-1",
+      sourceCatalogEntryId: null,
+      kind: "SKILL",
+      name: "Акробатика",
+      description: "Тестовый навык",
+      data: { formula: "1d20" },
+      revision: 1,
+    };
+    const character = makeCharacter({
+      ownerMembershipId: "other-player",
+      controllerMembershipIds: [],
+      entries: [entry],
+    });
+    renderPanel(snapshot, character);
+
+    expect(
+      screen.queryByRole("button", { name: "+ Добавить навык…" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "+ Добавить способность…" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Редактировать" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Удалить" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -28,6 +28,7 @@ import {
   ExpandToolbarIcon,
   FogBrushIcon,
   FogPolygonIcon,
+  MapObjectsIcon,
   MoreToolsIcon,
   PanIcon,
   PingIcon,
@@ -38,6 +39,9 @@ import {
 
 export interface MapToolbarProps {
   pauseControl?: ReactNode;
+  tokenTrayControl?: ReactNode;
+  objectListOpen?: boolean;
+  onToggleObjectList?: () => void;
   tool: MapTool;
   onToolSelect: (tool: MapTool) => void;
   snapshot: GameSnapshot;
@@ -63,6 +67,9 @@ export interface MapToolbarProps {
 
 export function MapToolbar({
   pauseControl,
+  tokenTrayControl,
+  objectListOpen,
+  onToggleObjectList,
   tool,
   onToolSelect,
   snapshot,
@@ -336,6 +343,24 @@ export function MapToolbar({
           <AppIcon icon={DrawIcon} />
           <span className="map-tool__label">Рисовать</span>
         </button>
+
+        {onToggleObjectList && (
+          <button
+            type="button"
+            aria-label="Объекты карты"
+            title="Список объектов и токенов на карте"
+            className="map-tool map-object-list-trigger"
+            data-tool="MAP_OBJECTS"
+            aria-pressed={objectListOpen}
+            aria-expanded={objectListOpen}
+            onClick={onToggleObjectList}
+          >
+            <AppIcon icon={MapObjectsIcon} />
+            <span className="map-tool__label">Объекты</span>
+          </button>
+        )}
+
+        {tokenTrayControl}
 
         {(previewSnapshot || snapshot.me.role !== "GM") && (
           <>

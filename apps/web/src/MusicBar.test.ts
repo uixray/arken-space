@@ -248,6 +248,54 @@ describe("personal music volume", () => {
 });
 
 describe("music playback recovery", () => {
+  it("keeps one audio element and local volume while controls move between slots", () => {
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const firstSlot = document.createElement("div");
+    const nextSlot = document.createElement("div");
+    document.body.append(firstSlot, nextSlot);
+    const view = renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+        controlsTarget: firstSlot,
+      }),
+    );
+    const audio = view.container.querySelector("audio");
+    expect(audio).not.toBeNull();
+    expect(firstSlot.querySelector('[aria-label="Музыка"]')).not.toBeNull();
+    fireEvent.change(
+      firstSlot.querySelector<HTMLInputElement>(
+        '[aria-label="Личная громкость"]',
+      )!,
+      { target: { value: "0.7" } },
+    );
+
+    view.rerender(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+        controlsTarget: nextSlot,
+      }),
+    );
+
+    expect(view.container.querySelector("audio")).toBe(audio);
+    expect(firstSlot.querySelector('[aria-label="Музыка"]')).toBeNull();
+    expect(nextSlot.querySelector('[aria-label="Музыка"]')).not.toBeNull();
+    expect(
+      nextSlot.querySelector<HTMLInputElement>(
+        '[aria-label="Личная громкость"]',
+      )!.value,
+    ).toBe("0.7");
+    firstSlot.remove();
+    nextSlot.remove();
+  });
+
   it("treats browser consent failures as actionable", () => {
     expect(
       isAudioConsentError(new DOMException("blocked", "NotAllowedError")),
@@ -393,5 +441,86 @@ describe("topbar popovers dismiss like every other details popover", () => {
     expect(play.querySelectorAll("svg.arken-icon")).toHaveLength(1);
     expect(play.querySelector("svg.arken-icon")?.innerHTML).not.toBe(pauseIcon);
     expect(play.textContent).not.toContain("▶");
+  });
+});
+
+describe("LOCAL-9802: audio continuity across unrelated snapshot updates and looping", () => {
+  it("does not re-seek or restart audio when receiving an unrelated snapshot with the same revision", () => {
+    localStorage.setItem("arken.audio.enabled", "true");
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+
+    const view = renderComponent(
+      createElement(MusicBar, {
+        audio: {
+          ...playingAudio,
+          revision: 42,
+          startedAt: new Date(Date.now() - 30000).toISOString(),
+        },
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+
+    const audio = view.container.querySelector("audio");
+    expect(audio).not.toBeNull();
+    // Simulate player advancing locally to 30.5 seconds
+    audio!.currentTime = 30.5;
+    expect(play).toHaveBeenCalledTimes(1);
+
+    // Simulate an unrelated snapshot arriving (e.g. token deleted on canvas)
+    // with a new object reference but identical audio revision and parameters
+    view.rerender(
+      createElement(MusicBar, {
+        audio: {
+          ...playingAudio,
+          revision: 42,
+          startedAt: new Date(Date.now() - 30000).toISOString(),
+        },
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+
+    // currentTime must NOT be re-seeked, and play() must NOT be called again
+    expect(audio!.currentTime).toBe(30.5);
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps expected position around duration for looping audio", () => {
+    localStorage.setItem("arken.audio.enabled", "true");
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+
+    // Audio duration is 120s (from audioAsset.durationSeconds).
+    // Started 250s ago. 250 % 120 = 10s.
+    const startedAt = new Date(Date.now() - 250000).toISOString();
+    const view = renderComponent(
+      createElement(MusicBar, {
+        audio: {
+          ...playingAudio,
+          loop: true,
+          startedAt,
+          positionSeconds: 0,
+          revision: 10,
+        },
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+
+    const audio = view.container.querySelector("audio");
+    expect(audio).not.toBeNull();
+    // Instead of seeking to 250 (which exceeds 120s duration), it must wrap around to ~10s
+    expect(audio!.currentTime).toBeGreaterThanOrEqual(9.5);
+    expect(audio!.currentTime).toBeLessThanOrEqual(11.5);
   });
 });

@@ -1,0 +1,312 @@
+/* ==========================================================================
+   Arken Space Standalone Select Component
+   Tokens: --color-surface, --color-border, --color-accent, --color-text, etc.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Trigger
+   -------------------------------------------------------------------------- */
+.arken-select,
+.g-select {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs, 6px);
+  position: relative;
+  width: auto;
+  border: 1px solid var(--color-border, #47443b);
+  border-radius: var(--radius-md, 6px);
+  background-color: var(--color-surface, #20201d);
+  color: var(--color-text, #e8e4da);
+  font-family: var(--font-family-sans, system-ui, sans-serif);
+  font-weight: var(--font-weight-regular, 400);
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+  vertical-align: middle;
+}
+
+/* --------------------------------------------------------------------------
+   Sizes
+   -------------------------------------------------------------------------- */
+.arken-select--xs,
+.g-select_size_xs {
+  height: var(--control-height-xs, 24px);
+  font-size: var(--font-size-2xs, 10px);
+  padding: 0 6px;
+  border-radius: var(--radius-xs, 2px);
+}
+
+.arken-select--s,
+.g-select_size_s {
+  height: var(--control-height-s, 28px);
+  font-size: var(--font-size-label, 11px);
+  padding: 0 8px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.arken-select--m,
+.g-select_size_m {
+  height: var(--size-control-height, var(--control-height-m, 32px));
+  font-size: var(--font-size-body, 12px);
+  padding: 0 10px;
+  border-radius: var(--radius-md, 6px);
+}
+
+.arken-select--l,
+.g-select_size_l {
+  height: var(--control-height-l, 36px);
+  font-size: var(--font-size-heading-sm, 14px);
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+}
+
+.arken-select--xl,
+.g-select_size_xl {
+  height: var(--control-height-xl, 44px);
+  font-size: var(--font-size-md, 16px);
+  padding: 0 14px;
+  border-radius: var(--radius-lg, 8px);
+}
+
+/* --------------------------------------------------------------------------
+   Width
+   -------------------------------------------------------------------------- */
+.arken-select--width-max,
+.g-select_width_max {
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Views
+   -------------------------------------------------------------------------- */
+.arken-select--normal,
+.g-select_view_normal {
+  background-color: var(--color-surface, #20201d);
+  border-color: var(--color-border, #47443b);
+}
+
+.arken-select--clear,
+.g-select_view_clear {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Addon Label & Value & Icon
+   -------------------------------------------------------------------------- */
+.arken-select__label {
+  color: var(--color-text-muted, #9e9a8f);
+  font-weight: var(--font-weight-medium, 500);
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.arken-select__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arken-select__value--placeholder {
+  color: var(--color-text-muted, #9e9a8f);
+}
+
+.arken-select__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted, #9e9a8f);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.arken-select[data-popup-open] .arken-select__icon,
+.arken-select[aria-expanded="true"] .arken-select__icon,
+.g-select[aria-expanded="true"] .arken-select__icon {
+  transform: rotate(180deg);
+}
+
+/* --------------------------------------------------------------------------
+   Interactive States (Hover, Focus, Invalid, Disabled)
+   -------------------------------------------------------------------------- */
+.arken-select:hover:not(.arken-select--disabled):not(.g-select_disabled):not(
+    :disabled
+  ),
+.g-select:hover:not(.g-select_disabled):not(:disabled) {
+  border-color: var(--color-border-hover, #696356);
+}
+
+.arken-select:focus-visible:not(.arken-select--disabled):not(
+    .g-select_disabled
+  ):not(:disabled),
+.arken-select[data-focused]:not(.arken-select--disabled):not(:disabled),
+.arken-select[data-popup-open]:not(.arken-select--disabled):not(:disabled),
+.g-select:focus-visible:not(.g-select_disabled):not(:disabled),
+.g-select[aria-expanded="true"]:not(.g-select_disabled):not(:disabled) {
+  border-color: var(--color-accent, #c46f49);
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
+  outline-offset: var(--focus-ring-offset, 1px);
+  box-shadow: 0 0 0 1px var(--color-accent, #c46f49);
+}
+
+/* Invalid / Error */
+.arken-select[data-invalid="true"],
+.arken-select[aria-invalid="true"],
+.g-select[data-invalid="true"],
+.g-select[aria-invalid="true"] {
+  border-color: var(--color-danger, #da6b61) !important;
+}
+
+.arken-select[data-invalid="true"]:focus-visible,
+.arken-select[aria-invalid="true"]:focus-visible,
+.g-select[data-invalid="true"]:focus-visible,
+.g-select[aria-invalid="true"]:focus-visible {
+  outline-color: var(--color-danger, #da6b61) !important;
+  box-shadow: 0 0 0 1px var(--color-danger, #da6b61) !important;
+}
+
+/* Disabled */
+.arken-select--disabled,
+.arken-select:disabled,
+.g-select_disabled,
+.g-select:disabled {
+  opacity: 0.45;
+  background-color: var(--palette-ink-900, #181816);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Popup & Positioner
+   -------------------------------------------------------------------------- */
+.arken-select__positioner {
+  z-index: var(--arken-layer-popup, 1000);
+}
+
+/* Owner classes are passed to Base UI's Positioner itself (not its Popup),
+   so keep these overrides on that same element. */
+.arken-select__positioner.arken-select-popup--workspace {
+  z-index: var(--arken-layer-workspace-popup, 1999);
+}
+
+.arken-select__positioner.arken-select-popup--modal {
+  z-index: calc(var(--arken-layer-dialog, 2000) + 1);
+}
+
+.arken-select__popup {
+  box-sizing: border-box;
+  background-color: var(--color-surface, #20201d);
+  border: 1px solid var(--color-border, #47443b);
+  border-radius: var(--radius-md, 6px);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  padding: 4px;
+  font-family: var(--font-family-sans, system-ui, sans-serif);
+  outline: none;
+}
+
+.arken-select__popup-inner,
+.arken-form-select-popup__content {
+  box-sizing: border-box;
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Items
+   -------------------------------------------------------------------------- */
+.arken-select__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.arken-select__item,
+.g-select__item {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--font-size-sm, 12px);
+  line-height: 1.3;
+  color: var(--color-text, #e8e4da);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease;
+}
+
+.arken-select__item:hover,
+.arken-select__item[data-highlighted],
+.g-select__item:hover,
+.g-select__item[data-highlighted] {
+  background-color: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--color-text, #e8e4da);
+}
+
+.arken-select__item[data-selected],
+.g-select__item[data-selected] {
+  color: var(--color-accent, #c46f49);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.arken-select__item--create {
+  color: var(--color-accent, #c46f49) !important;
+  border-top: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.08));
+  margin-top: 4px;
+  padding-top: 8px;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.arken-select__item--disabled,
+.arken-select__item[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.arken-select__item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arken-select__item-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent, #c46f49);
+  flex-shrink: 0;
+}
+
+.arken-select__empty {
+  padding: 12px 16px;
+  text-align: center;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--color-text-muted, #9e9a8f);
+}

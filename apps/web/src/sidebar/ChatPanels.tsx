@@ -1,6 +1,7 @@
 import { useComposerSuggestions } from "../ui/use-composer-suggestions";
 import { RollVisibilityContext } from "../roll-visibility-context";
 import {
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -52,6 +53,7 @@ import { createRollCharacterNameSource } from "../roll-character-name";
 import { buildChatTimeline } from "../chat-date";
 import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
+import { OutcomeFrame } from "./OutcomeFrame";
 import { parseSkillCard, SkillChatCard } from "../SkillCards";
 import { StickerPicker } from "../StickerPicker";
 import { StoryPost } from "../StoryChannel";
@@ -168,13 +170,15 @@ function useHistoryScrollHandler(input: {
   );
 }
 
-export function ChatMessageBody({
+function ChatMessageBodyComponent({
+  isActive,
   message,
   catalogEntryIds,
   playerRequests,
   onOpenPlayerRequests,
   avatar,
 }: {
+  isActive?: boolean;
   message: GameSnapshot["messages"][number];
   catalogEntryIds?: ReadonlySet<string>;
   playerRequests?: GameSnapshot["playerRequests"];
@@ -219,6 +223,23 @@ export function ChatMessageBody({
       <SkillChatCard
         card={skillCard}
         critical={critical}
+        outcomeFrame={
+          <OutcomeFrame
+            frame={
+              dice?.frame ??
+              (critical
+                ? {
+                    setKey: "ARKEN_CRITICAL_V1",
+                    frameKey:
+                      critical.kind === "success"
+                        ? "critical-success"
+                        : "critical-failure",
+                  }
+                : null)
+            }
+            active={isActive ?? false}
+          />
+        }
         sourceRemoved={
           skillCard.entry.sourceRemoved ||
           Boolean(
@@ -279,14 +300,30 @@ export function ChatMessageBody({
         )}
         <small>{formatDiceBreakdown(dice)}</small>
       </div>
-      {/* Итог справа: глаз ищет число на краю строки, а не в середине, и в
-       * ленте из десятка бросков они выстраиваются в столбец. */}
+      {/* Итог справа: рамка исхода центрируется вокруг самого числа */}
       <strong className="roll-total" aria-label="Итог броска">
+        <OutcomeFrame
+          frame={
+            dice?.frame ??
+            (critical
+              ? {
+                  setKey: "ARKEN_CRITICAL_V1",
+                  frameKey:
+                    critical.kind === "success"
+                      ? "critical-success"
+                      : "critical-failure",
+                }
+              : null)
+          }
+          active={isActive ?? false}
+        />
         {dice.total}
       </strong>
     </div>
   );
 }
+
+export const ChatMessageBody = memo(ChatMessageBodyComponent);
 
 export function ActivityPanel({
   snapshot,
@@ -313,7 +350,7 @@ export function ActivityPanel({
   onOpenPlayerRequestCreate: () => void;
   /** UIX-424, шаг 8: счётчики выносливости и маны правят те же `resources`. */
   onUpdateCounters: Props["onUpdateCounters"];
-  /** UIX-431: выделенные рамкой токены — из них пополняется очередь ходов. */
+  /** Сохранённая панель инициативы остаётся вне этого feed; данные/API сохранены. */
   selectedTokenIds: readonly string[];
   onUpdateInitiative: (
     participants: InitiativeParticipantDto[],
@@ -330,7 +367,6 @@ export function ActivityPanel({
     revision: number,
     isGm: boolean,
   ) => Promise<void>;
-  /** UIX-466 п. 3: подтянуть в очередь тех, кто в зоне боя. */
   onRecruitFromBattleZone?: () => void;
 }) {
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
@@ -782,33 +818,6 @@ export function ActivityPanel({
           </fieldset>
         </details>
       </div>
-      {historyPresentation.showControl && (
-        <div className="activity-log-history-control">
-          {historyPresentation.truncatedLabel && (
-            <span className="activity-log-truncated-note">
-              {historyPresentation.truncatedLabel}
-            </span>
-          )}
-          <button
-            type="button"
-            className="activity-log-toggle"
-            aria-expanded={!rollLogCollapsed}
-            aria-controls="activity-message-list"
-            title={
-              rollLogCollapsed
-                ? "Показать всю ленту событий"
-                : "Показать только последние записи"
-            }
-            onClick={() => {
-              const next = !rollLogCollapsed;
-              setRollLogCollapsed(next);
-              writeRollLogCollapsed(window.localStorage, snapshot.me.id, next);
-            }}
-          >
-            {historyPresentation.actionLabel}
-          </button>
-        </div>
-      )}
       {/* UIX-532: лента прокручивается, значит должна доставаться и с
           клавиатуры. Без `tabIndex` до неё нельзя добраться табом, и человек
           без мыши не может пролистать журнал вовсе — прокрутка есть, а
@@ -824,6 +833,37 @@ export function ActivityPanel({
         ref={listRef}
         onScroll={onScroll}
       >
+        {historyPresentation.showControl && (
+          <div className="activity-log-history-control">
+            {historyPresentation.truncatedLabel && (
+              <span className="activity-log-truncated-note">
+                {historyPresentation.truncatedLabel}
+              </span>
+            )}
+            <button
+              type="button"
+              className="activity-log-toggle"
+              aria-expanded={!rollLogCollapsed}
+              aria-controls="activity-message-list"
+              title={
+                rollLogCollapsed
+                  ? "Показать всю ленту событий"
+                  : "Показать только последние записи"
+              }
+              onClick={() => {
+                const next = !rollLogCollapsed;
+                setRollLogCollapsed(next);
+                writeRollLogCollapsed(
+                  window.localStorage,
+                  snapshot.me.id,
+                  next,
+                );
+              }}
+            >
+              {historyPresentation.actionLabel}
+            </button>
+          </div>
+        )}
         {timeline.length === 0 && (
           <p className="chat-empty">
             {
@@ -872,6 +912,7 @@ export function ActivityPanel({
                 {message.visibility === "GM_ONLY" && <span>{"мастеру"}</span>}
               </header>
               <ChatMessageBody
+                isActive={item === visibleTimeline.at(-1)}
                 message={message}
                 catalogEntryIds={
                   snapshot.me.role === "GM" ? catalogEntryIds : undefined
@@ -1217,6 +1258,8 @@ export function DirectChatPanel({
     }
   }
 
+  const timeline = buildChatTimeline(messages);
+
   return (
     <section
       className="chat-panel direct-chat-panel"
@@ -1239,7 +1282,7 @@ export function DirectChatPanel({
             return (
               <option key={contact.membershipId} value={contact.membershipId}>
                 {contact.displayName}
-                {unread ? ` ? ${unread}` : ""}
+                {unread ? ` • ${unread}` : ""}
               </option>
             );
           })}
@@ -1277,7 +1320,7 @@ export function DirectChatPanel({
             нет сообщений.
           </p>
         )}
-        {buildChatTimeline(messages).map((item) =>
+        {timeline.map((item) =>
           item.type === "DATE" ? (
             <div className="chat-date-divider" key={`direct-date-${item.key}`}>
               <span>{item.label}</span>
@@ -1297,7 +1340,10 @@ export function DirectChatPanel({
                   })}
                 </time>
               </header>
-              <ChatMessageBody message={item.message} />
+              <ChatMessageBody
+                isActive={item === timeline.at(-1)}
+                message={item.message}
+              />
             </article>
           ),
         )}
@@ -1626,6 +1672,7 @@ export function ChatPanel({
                 {item.message.visibility === "GM_ONLY" && <span>мастеру</span>}
               </header>
               <ChatMessageBody
+                isActive={item === timeline.at(-1)}
                 message={item.message}
                 catalogEntryIds={
                   snapshot.me.role === "GM" ? catalogEntryIds : undefined

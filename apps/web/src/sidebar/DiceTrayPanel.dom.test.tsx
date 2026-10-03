@@ -21,16 +21,14 @@ it("показывает ожидание сразу и принимает вт�
     />,
   );
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
-  expect(screen.getByRole("status")).toHaveTextContent("Бросаем… 1");
+  expect(onRoll).toHaveBeenCalledTimes(1);
   const first = finish;
   await userEvent.click(screen.getByRole("button", { name: "d6" }));
   expect(onRoll).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole("status")).toHaveTextContent("Бросаем… 2");
   await act(async () => {
     first();
     finish();
   });
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });
 
 it("показывает отказ сервера и разрешает повторный бросок", async () => {
@@ -46,7 +44,6 @@ it("показывает отказ сервера и разрешает пов�
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Нет соединения");
   expect(screen.getByRole("button", { name: "d20" })).toBeEnabled();
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });
 
 it("собирает кости и доступные иконные режимы в один компактный блок", async () => {

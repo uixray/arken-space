@@ -1,0 +1,91 @@
+/*
+ * Storybook environment overrides.
+ * `styles.css` defines root rules for the fullscreen tabletop canvas
+ * (`html, body { overflow: hidden; min-width: 960px; }`), which break Storybook's
+ * responsive docs container, causing content to clip and text to overflow horizontally.
+ */
+
+html,
+body {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+#storybook-root {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Storybook Docs container fixes */
+.sbdocs,
+.sbdocs-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+.sbdocs-wrapper {
+  padding: 24px 20px !important;
+}
+
+.sbdocs-content {
+  max-width: 1040px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+/* Ensure markdown text and lists wrap nicely without overflowing */
+.sbdocs p,
+.sbdocs li,
+.sbdocs blockquote,
+.sbdocs h1,
+.sbdocs h2,
+.sbdocs h3,
+.sbdocs h4,
+.sbdocs h5,
+.sbdocs h6 {
+  max-width: 100% !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+/* Tables inside Storybook docs: display block + overflow-x auto prevents table from blowing out container width */
+.sbdocs table {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  border-collapse: collapse !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  margin: 16px 0 !important;
+}
+
+.sbdocs table th,
+.sbdocs table td {
+  overflow-wrap: break-word !important;
+  white-space: normal !important;
+}
+
+/* Code blocks and syntax highlighters */
+.sbdocs pre,
+.docblock-source,
+.sbdocs code {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
+}
+
+.sbdocs pre {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+}

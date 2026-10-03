@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { CharacterCatalogEntryDto } from "@arken/contracts";
 import type { DiceCritical } from "./dice-critical";
 import { humanizeFormula } from "./formula-display";
@@ -150,10 +150,16 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
   };
 }
 
-function actionFormula(action: RollAction) {
-  return action.modifiers.length
-    ? `${action.dice} + модификаторы`
-    : action.dice;
+function actionFormula(action: {
+  dice?: string;
+  modifiers?: readonly unknown[];
+  formula?: string;
+}) {
+  if (action.formula) return action.formula;
+  if (Array.isArray(action.modifiers) && action.modifiers.length > 0) {
+    return `${action.dice ?? ""} + модификаторы`.trim();
+  }
+  return action.dice ?? "—";
 }
 
 export function CharacterActionCard({
@@ -175,9 +181,28 @@ export function CharacterActionCard({
   const detailsId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
   const actions = [...(entry.data.rollActions ?? [])].sort(
-    (a, b) => a.order - b.order,
+    (a, b) =>
+      ((a as { order?: number }).order ?? 0) -
+      ((b as { order?: number }).order ?? 0),
   );
-  const uses = entry.data.uses;
+  const rawUses = entry.data.uses as
+    | {
+        current?: number;
+        max?: number;
+        maximum?: number;
+        recharge?: string;
+        rechargeRate?: string;
+        progressText?: string;
+      }
+    | undefined;
+  const uses = rawUses
+    ? {
+        current: rawUses.current ?? 0,
+        max: rawUses.max ?? rawUses.maximum ?? 0,
+        recharge: rawUses.recharge ?? rawUses.rechargeRate ?? "",
+        progressText: rawUses.progressText ?? "",
+      }
+    : undefined;
   const exhausted = Boolean(uses && uses.current < 1);
 
   async function submit(mode: "EXECUTE" | "SHARE", rollActionId?: string) {
@@ -292,10 +317,12 @@ export function SkillChatCard({
   card,
   sourceRemoved = false,
   critical = null,
+  outcomeFrame = null,
 }: {
   card: SkillCard;
   sourceRemoved?: boolean;
   critical?: DiceCritical | null;
+  outcomeFrame?: ReactNode;
 }) {
   const statLabels = useCampaignStatLabels();
   const [expanded, setExpanded] = useState(false);
@@ -327,7 +354,10 @@ export function SkillChatCard({
       ) : (
         <div className="skill-chat-card__result">
           {card.result && (
-            <strong aria-label="Итог броска">{card.result.total}</strong>
+            <div className="roll-total-wrap">
+              {outcomeFrame}
+              <strong aria-label="Итог броска">{card.result.total}</strong>
+            </div>
           )}
           <span>
             <b>{card.action?.label}</b>

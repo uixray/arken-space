@@ -1,0 +1,39 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const rendererSource = readFileSync(
+  new URL("./Orthographic2DRenderer.tsx", import.meta.url),
+  "utf8",
+);
+
+describe("Orthographic2DRenderer persisted drawing interactions", () => {
+  it("keeps the ACL-gated drawing group hittable through its foreground stroke", () => {
+    const drawingBlock = rendererSource.slice(
+      rendererSource.indexOf("{props.drawings.map((drawing) => {"),
+      rendererSource.indexOf(
+        "{pendingDrawings",
+        rendererSource.indexOf("{props.drawings.map((drawing) => {"),
+      ),
+    );
+
+    expect(drawingBlock).toMatch(
+      /const listening\s*=\s*[\s\S]*?drawing\.authorMembershipId/,
+    );
+    expect(drawingBlock).toMatch(
+      /<Group[\s\S]*?listening=\{listening\}[\s\S]*?<\/Group>/,
+    );
+    expect(drawingBlock).toMatch(
+      /stroke=\{visual\.color\.selectionOutline\}[\s\S]*?listening=\{false\}/,
+    );
+    expect(drawingBlock).toMatch(/stroke=\{drawing\.color\}[\s\S]*?listening/);
+    expect(drawingBlock).toMatch(
+      /stroke=\{drawing\.color\}[\s\S]*?hitStrokeWidth=/,
+    );
+  });
+
+  it("rebuilds cached fog when the asynchronously loaded pattern image changes", () => {
+    expect(rendererSource).toMatch(
+      /mask\.cache\([\s\S]*?\n\s*\}, \[fogPatternImage, orderedFogReveals, worldDraft\.width, worldDraft\.height\]\);/,
+    );
+  });
+});

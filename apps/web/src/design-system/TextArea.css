@@ -1,0 +1,91 @@
+/* ==========================================================================
+   Arken Space Standalone TextArea Component
+   Tokens: --color-surface, --color-border, --color-accent, --color-text, etc.
+   ========================================================================== */
+
+.arken-text-area,
+.g-text-area {
+  box-sizing: border-box;
+  display: inline-flex;
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--color-border, #47443b);
+  border-radius: var(--radius-md, 6px);
+  background-color: var(--color-surface, #20201d);
+  color: var(--color-text, #e8e4da);
+  font-family: var(--font-family-sans);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+  vertical-align: middle;
+}
+
+.arken-text-area:hover:not(.arken-text-area--disabled):not(.g-text-area_disabled),
+.g-text-area:hover:not(.g-text-area_disabled) {
+  border-color: var(--color-border-hover, #696356);
+}
+
+.arken-text-area:focus-within:not(.arken-text-area--disabled):not(.g-text-area_disabled),
+.g-text-area:focus-within:not(.g-text-area_disabled) {
+  border-color: var(--color-accent, #c46f49);
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
+  outline-offset: var(--focus-ring-offset, 1px);
+  box-shadow: 0 0 0 1px var(--color-accent, #c46f49);
+}
+
+/* Invalid / Error */
+.arken-text-area[data-invalid="true"],
+.g-text-area[data-invalid="true"],
+.g-text-area_invalid {
+  border-color: var(--color-danger, #da6b61) !important;
+}
+
+.arken-text-area[data-invalid="true"]:focus-within,
+.g-text-area[data-invalid="true"]:focus-within {
+  outline-color: var(--color-danger, #da6b61) !important;
+  box-shadow: 0 0 0 1px var(--color-danger, #da6b61) !important;
+}
+
+/* Disabled */
+.arken-text-area--disabled,
+.g-text-area_disabled {
+  opacity: 0.45;
+  background-color: var(--palette-ink-900, #181816);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Content & Inner Control */
+.arken-text-area__content,
+.g-text-area__content {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-sm, 8px) var(--space-md, 12px);
+}
+
+.arken-text-area__control,
+.g-text-area__control {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 64px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--font-size-body, 12px);
+  line-height: 1.45;
+  outline: none;
+  resize: vertical;
+  caret-color: var(--color-accent, #c46f49);
+}
+
+.arken-text-area__control::placeholder,
+.g-text-area__control::placeholder {
+  color: var(--color-text-faint, #777267);
+  opacity: 1;
+}

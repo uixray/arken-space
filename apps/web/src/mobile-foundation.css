@@ -35,6 +35,20 @@
     overflow: hidden;
   }
 
+  .app-shell--compact[data-compact-surface="map"],
+  .app-shell--compact[data-compact-surface="menu"] {
+    grid-template-rows: minmax(0, 1fr) var(--compact-nav-height);
+  }
+
+  .app-shell--compact[data-compact-surface="map"] .topbar,
+  .app-shell--compact[data-compact-surface="menu"] .topbar {
+    display: none !important;
+  }
+
+  .app-shell--compact .compact-sections-button {
+    display: none !important;
+  }
+
   /* Native hidden must win over legacy grid/flex declarations. Hidden views
    * remain mounted, but never occupy a track or receive a pointer. */
   .app-shell--compact [hidden],
@@ -153,31 +167,95 @@
     position: relative;
     z-index: var(--arken-layer-popup, 1000);
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: start;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: center;
     gap: 4px;
     min-width: 0;
-    padding: 6px max(8px, env(safe-area-inset-right, 0px))
-      calc(6px + env(safe-area-inset-bottom, 0px))
+    height: var(--compact-nav-height, 56px);
+    box-sizing: border-box;
+    padding: 4px max(8px, env(safe-area-inset-right, 0px))
+      calc(4px + env(safe-area-inset-bottom, 0px))
       max(8px, env(safe-area-inset-left, 0px));
-    border-top: 1px solid var(--line);
-    background: var(--surface);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(18, 22, 28, 0.94);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
   }
 
-  .compact-navigation button {
+  .compact-navigation button,
+  .compact-nav-btn {
     min-width: 0;
-    min-height: 44px;
-    padding: 4px;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    min-height: 40px;
+    height: 100%;
+    padding: 6px 4px;
+    border-radius: var(--radius-sm, 6px);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted, #94a3b8);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease-out;
+    text-decoration: none;
+    overflow: hidden;
+  }
+
+  .compact-nav-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    transition: transform 0.15s ease-out, color 0.15s ease-out;
+  }
+
+  .compact-nav-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .compact-nav-btn:hover {
+    color: var(--foreground, #f8fafc);
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .compact-navigation button[aria-current="page"],
-  .compact-navigation button[aria-pressed="true"] {
-    border-color: var(--accent);
-    background: var(--surface-2);
-    color: var(--text);
-    box-shadow: inset 0 -2px var(--accent);
+  .compact-navigation button[aria-pressed="true"],
+  .compact-nav-btn.is-active,
+  .compact-nav-btn[aria-pressed="true"] {
+    color: var(--accent, #f59e0b);
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.25);
+    font-weight: 600;
+    box-shadow: inset 0 -2px var(--accent, #f59e0b);
+  }
+
+  .compact-nav-btn.is-active .compact-nav-icon,
+  .compact-nav-btn[aria-pressed="true"] .compact-nav-icon {
+    color: var(--accent, #f59e0b);
+    transform: scale(1.05);
+  }
+
+  /* Tablets (768px to 1023px): Icons to the LEFT of labels */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .compact-nav-btn {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+  }
+
+  /* Mobile (<768px): Icons to the RIGHT of labels */
+  @media (max-width: 767px) {
+    .compact-nav-btn {
+      display: flex;
+      flex-direction: row-reverse;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
   }
 
   .app-shell--compact .workbench,
@@ -188,12 +266,269 @@
     overflow: hidden;
   }
 
-  .app-shell--compact :is(#main-content, #activity-sidebar) {
+  .app-shell--compact :is(#main-content, #activity-sidebar, #compact-menu-view) {
     width: 100%;
     min-width: 0;
     min-height: 0;
     max-width: 100%;
     grid-area: 1 / 1;
+  }
+
+  /* Full width dice tray on mobile */
+  @media (max-width: 767px) {
+    .app-shell--compact .map-dice-tray {
+      left: 8px;
+      right: 8px;
+      width: auto;
+      max-width: none;
+      bottom: 8px;
+    }
+    .app-shell--compact .map-dice-tray .dice-tray-panel {
+      width: 100%;
+    }
+    .app-shell--compact .map-dice-tray .dice-tray-panel__toolbar {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+  }
+
+  .app-shell--compact .map-scale-anchor {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 20;
+  }
+
+  /* Compact Menu Surface */
+  .compact-menu-surface {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 16px max(16px, env(safe-area-inset-right, 0px))
+      calc(24px + env(safe-area-inset-bottom, 0px))
+      max(16px, env(safe-area-inset-left, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--surface-1, #13171f);
+    color: var(--foreground, #f8fafc);
+  }
+
+  .compact-menu-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .compact-menu-campaign {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .compact-menu-eyebrow {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent, #f59e0b);
+    font-weight: 600;
+  }
+
+  .compact-menu-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--foreground, #f8fafc);
+  }
+
+  .compact-menu-user-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md, 8px);
+  }
+
+  .compact-menu-user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .compact-menu-user-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--foreground, #f8fafc);
+  }
+
+  .compact-menu-user-role {
+    font-size: 0.75rem;
+    color: var(--muted, #94a3b8);
+  }
+
+  .compact-menu-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .compact-menu-status--online {
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.12);
+  }
+
+  .compact-menu-status--offline {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.12);
+  }
+
+  .compact-menu-status-icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  .compact-menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .compact-menu-section-title {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted, #94a3b8);
+  }
+
+  .compact-menu-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  @media (min-width: 768px) {
+    .compact-menu-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  .compact-menu-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: var(--radius-md, 8px);
+    color: var(--foreground, #f8fafc);
+    cursor: pointer;
+    transition: all 0.15s ease-out;
+    text-align: left;
+  }
+
+  .compact-menu-tile:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(245, 158, 11, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .compact-menu-tile:active {
+    transform: translateY(0);
+  }
+
+  .compact-menu-tile-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--accent, #f59e0b);
+  }
+
+  .compact-menu-tile-icon .arken-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .compact-menu-tile-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  .compact-menu-audio-card {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: var(--radius-md, 8px);
+  }
+
+  .compact-menu-audio-card .music-bar {
+    width: 100%;
+  }
+
+  .compact-menu-actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .compact-menu-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--foreground, #f8fafc);
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease-out;
+    text-align: left;
+  }
+
+  .compact-menu-action-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .compact-menu-action-btn .arken-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--muted, #94a3b8);
+  }
+
+  .compact-menu-action-btn--danger {
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .compact-menu-action-btn--danger .arken-icon {
+    color: #f87171;
+  }
+
+  .compact-menu-action-btn--danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.4);
   }
 
   .app-shell--compact #activity-sidebar {
@@ -271,12 +606,12 @@
   }
 
   .app-shell--compact #activity-sidebar .panel-resize-handle {
-    height: 44px;
-    min-height: 44px;
+    height: 6px;
+    min-height: 6px;
   }
 
   .app-shell--compact #activity-sidebar .panel-resize-handle::after {
-    inset: 0;
+    inset: -14px 0;
   }
 
   .app-shell--compact

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -342,11 +343,12 @@ describe("dice presentation boundary (UIX-289)", () => {
         { ...validDice, frame: { setKey: "PRIVATE", frameKey: "unpublished" } },
         skill,
       );
-      expect(markup).toMatch(
-        /<strong[^>]*aria-label="Итог броска"[^>]*>25<\/strong>/,
-      );
-      expect(markup).toContain("Критический успех");
-      expect(markup).not.toContain("Критический провал");
+      const document = new DOMParser().parseFromString(markup, "text/html");
+      const total = document.querySelector('strong[aria-label="Итог броска"]');
+      expect(total?.textContent).toBe("25");
+      expect(document.body.textContent).toContain("Критический успех");
+      expect(document.body.textContent).not.toContain("Критический провал");
+      expect(markup).not.toContain("/assets/frames/unpublished.png");
     },
   );
 
@@ -376,10 +378,10 @@ describe("dice presentation boundary (UIX-289)", () => {
         },
         skill,
       );
-      expect(markup).toMatch(
-        /<strong[^>]*aria-label="Итог броска"[^>]*>25<\/strong>/,
-      );
-      expect(markup).not.toContain("roll-critical-label");
+      const document = new DOMParser().parseFromString(markup, "text/html");
+      const total = document.querySelector('strong[aria-label="Итог броска"]');
+      expect(total?.textContent).toBe("25");
+      expect(document.querySelector(".roll-critical-label")).toBeNull();
     },
   );
 });

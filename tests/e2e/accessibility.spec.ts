@@ -72,7 +72,7 @@ test("страница входа доступна", async ({ page }) => {
     .getByRole("button", { name: "Показать все клавиши и команды" })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Туман войны" }),
+    page.getByRole("heading", { name: "Туман войны", exact: true }),
   ).toBeVisible();
   await expectAccessible(page, "страница входа");
 });

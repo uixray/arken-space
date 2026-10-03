@@ -1,0 +1,83 @@
+/* ==========================================================================
+   Arken Space Standalone NumberStepper Component
+   ========================================================================== */
+
+.arken-number-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs, 4px);
+  width: 100%;
+}
+
+.arken-number-stepper__label {
+  font-size: var(--font-size-label, 11px);
+  color: var(--color-text-muted, #aaa598);
+  font-weight: 500;
+  user-select: none;
+}
+
+.arken-number-stepper__controls {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-border, #47443b);
+  border-radius: var(--radius-md, 6px);
+  background-color: var(--color-surface, #20201d);
+  height: 36px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.arken-number-stepper__controls:focus-within {
+  border-color: var(--color-accent, #c46f49);
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
+  outline-offset: 1px;
+}
+
+.arken-number-stepper__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #aaa598);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.arken-number-stepper__btn:hover:not(:disabled) {
+  background-color: var(--color-surface-hover, #34322c);
+  color: var(--color-text, #e8e4da);
+}
+
+.arken-number-stepper__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.arken-number-stepper__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-text, #e8e4da);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-body, 12px);
+  text-align: center;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.arken-number-stepper__input::-webkit-inner-spin-button,
+.arken-number-stepper__input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.arken-number-stepper__note {
+  font-size: var(--font-size-caption, 10px);
+  color: var(--color-text-faint, #777267);
+}

@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useRef,
@@ -184,13 +185,15 @@ export type Props = {
   ) => void;
 };
 
-export function Sidebar(props: Props) {
+function SidebarComponent(props: Props) {
   return (
     <CampaignStatLabelsProvider layout={props.snapshot.campaign.statLayout}>
       <SidebarContent {...props} />
     </CampaignStatLabelsProvider>
   );
 }
+
+export const Sidebar = memo(SidebarComponent);
 
 function SidebarContent(props: Props) {
   // UIX-398 step B: scene commands arrive by context rather than as six props

@@ -12,7 +12,10 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { Checkbox, Select, TextArea, TextInput } from "@gravity-ui/uikit";
+import { Checkbox } from "../design-system/Checkbox";
+import { Input } from "../design-system/Input";
+import { TextArea } from "../design-system/TextArea";
+import { Select } from "../design-system/Select";
 
 import {
   buildFormSelectUtilityOptions,
@@ -90,7 +93,7 @@ export function FormInput({
       ["number", "search", "url", "email", "password", "tel", "text"] as const
     ).find((candidate) => candidate === type) ?? "text";
   return (
-    <TextInput
+    <Input
       {...props}
       controlRef={controlRef}
       // Native constraints and ARIA descriptions are not top-level uikit props.
@@ -240,10 +243,6 @@ export function FormSelect({
       const control = controlRef.current;
       if (!control) return;
       const active = document.activeElement;
-      // A real browser can leave focus on the fading option (and then body)
-      // when a controlled update removes that option. Restore only while this
-      // Select still owns focus; never override a dialog/input focused by the
-      // consumer's onChange handler.
       if (
         !active ||
         active === document.body ||

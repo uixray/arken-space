@@ -59,7 +59,7 @@ describe("UIX-645 icon source policy", () => {
         "apps/web/src/styles.css",
       ]),
     );
-    expect(closure.files).not.toContain(
+    expect(closure.files).toContain(
       "apps/web/src/sidebar/InitiativePanel.tsx",
     );
     expect(scanProtectedSources()).toEqual([]);

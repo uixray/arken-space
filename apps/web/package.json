@@ -35,14 +35,13 @@
     "vite": "8.2.1",
     "storybook": "^10.5.10",
     "@storybook/react-vite": "^10.5.10",
-    "@chromatic-com/storybook": "latest",
+    "@chromatic-com/storybook": "5.3.0",
     "@storybook/addon-vitest": "^10.5.10",
     "@storybook/addon-a11y": "^10.5.10",
     "@storybook/addon-docs": "^10.5.10",
-    "@storybook/addon-mcp": "latest",
     "eslint-plugin-storybook": "^10.5.10",
     "@vitest/browser-playwright": "4.1.10",
     "@vitest/coverage-v8": "4.1.10",
-    "playwright": "latest"
+    "playwright": "1.62.1"
   }
 }

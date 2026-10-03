@@ -49,6 +49,12 @@ describe("appendChatMessage", () => {
     expect(result.snapshotVersion).toBe(20);
   });
 
+  it("LOCAL-505: never inflates snapshotVersion from chat sequence", () => {
+    const result = appendChatMessage(snapshot, message, 9999);
+    expect(result.messages).toEqual([message]);
+    expect(result.snapshotVersion).toBe(20);
+  });
+
   it("deduplicates messages by id", () => {
     const once = appendChatMessage(snapshot, message, 21);
     expect(appendChatMessage(once, message, 22)).toBe(once);

@@ -1,37 +1,20 @@
 import { Button } from "./design-system/Button";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { api } from "./api";
 import { betaPlayerByHandle, betaPlayers } from "@arken/contracts";
 import { FormInput, FormTextArea } from "./ui/GravityFormControls";
 import { LandingGuide } from "./LandingGuide";
+import { capabilities, changelog, roadmapSections } from "./landing-data";
 
 type FeedbackStatus = "idle" | "sending" | "sent";
-
-const capabilities = [
-  {
-    title: "Общий игровой стол",
-    text: "Карты, сцены, сетка, туман войны, три слоя видимости, токены, рисунки, пинги и линейка.",
-  },
-  {
-    title: "Персонажи и броски",
-    text: "Карточки персонажей, характеристики, навыки, способности, ресурсы, инвентарь, кошелёк и история бросков.",
-  },
-  {
-    title: "Игра в реальном времени",
-    text: "Общий чат, управление музыкой и синхронизация действий мастера и игроков во время сессии.",
-  },
-];
-
-const roadmap = [
-  "Провести первые игровые сессии и устранить найденные помехи",
-  "Доработать интерфейс по обратной связи мастеров и игроков",
-  "Расширить подготовку кампаний, правила и развитие персонажей",
-];
+const isDevelopment = (import.meta as ImportMeta & { env: { DEV: boolean } })
+  .env.DEV;
 
 export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const playerLoginPending = useRef(false);
   const [feedbackStatus, setFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [feedbackError, setFeedbackError] = useState("");
   const parts = window.location.pathname.split("/").filter(Boolean);
@@ -39,6 +22,29 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const token = parts[1] ?? "";
   const betaPlayer = mode === "play" ? betaPlayerByHandle(token) : undefined;
   const hasInvitation = mode === "gm" || mode === "join" || Boolean(betaPlayer);
+
+  const loginAsPlayer = async (handle: string) => {
+    // State updates are asynchronous: two clicks in the same event turn can
+    // otherwise dispatch duplicate login requests before `busy` rerenders.
+    if (playerLoginPending.current) return;
+    playerLoginPending.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/auth/player/${encodeURIComponent(handle)}`, {
+        method: "POST",
+      });
+      window.history.replaceState({}, "", "/");
+      onAuthenticated();
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Не удалось войти в игру",
+      );
+    } finally {
+      playerLoginPending.current = false;
+      setBusy(false);
+    }
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -99,29 +105,58 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   return (
     <main className="landing-shell">
       <header className="landing-header">
-        <a className="wordmark" href="/" aria-label="Arken Space — на главную">
-          arken-space
-        </a>
-        <span className="landing-badge">Ранний доступ</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <a
+            className="wordmark"
+            href="/"
+            aria-label="Arken Space — на главную"
+          >
+            arken-space
+          </a>
+          <span className="landing-badge">Ранний доступ</span>
+        </div>
+        {isDevelopment && (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <a
+              href="http://localhost:6006"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Открыть интерактивную витрину компонентов Storybook"
+              style={{
+                fontSize: "0.82rem",
+                fontWeight: 600,
+                color: "var(--palette-clay-400, #d57d55)",
+                textDecoration: "none",
+                padding: "6px 12px",
+                border: "1px solid var(--palette-ink-600, #34322c)",
+                borderRadius: "4px",
+                background: "var(--palette-ink-800, #20201d)",
+              }}
+            >
+              Витрина Storybook ↗
+            </a>
+          </div>
+        )}
       </header>
 
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-intro">
           <p className="landing-kicker">
-            Виртуальный стол для домашних настольных ролевых игр
+            Виртуальный стол для настольных ролевых игр
           </p>
           <h1 id="landing-title">
-            Всё необходимое для игры — в одном пространстве
+            Всё необходимое для игры — в едином пространстве
           </h1>
           <p>
-            Arken Space помогает мастеру вести кампанию, а игрокам — видеть
-            карту, управлять персонажами и бросать кубики, не отвлекаясь на
-            несколько сервисов.
+            Arken Space объединяет тактильность физической настольной игры с
+            плавным 60 FPS мультиплеером. Интерактивная карта, динамический
+            туман войны, листы персонажей, броски кубиков и инициатива — всё
+            работает в чистом интерфейсе без визуального шума.
           </p>
           <p className="landing-note">
-            Сейчас проект готовится к первым игровым тестам. Некоторые
-            возможности и детали интерфейса ещё будут меняться по результатам
-            реальных сессий.
+            Arken спроектирован как живой кинематографичный театр: интерфейс не
+            заслоняет карту, снимает рутину с мастера и адаптирует визуальный
+            стиль под каждого игрока за столом.
           </p>
         </div>
 
@@ -145,13 +180,14 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           </div>
           <p>
             {mode === "gm"
-              ? "После входа ссылка будет заменена безопасной сессией в этом браузере."
+              ? "После входа ссылка будет заменена безопасной сессией мастера в этом браузере."
               : mode === "join"
                 ? "Укажите имя, которое увидят другие участники игры."
                 : betaPlayer
                   ? `Публичный бета-аккаунт @${betaPlayer.handle}.`
-                  : "На время закрытого бета-теста выберите свой аккаунт."}
+                  : "Нажмите на своего игрока для быстрого входа в игровое лобби."}
           </p>
+
           {mode === "join" && (
             <label>
               Имя
@@ -166,26 +202,88 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               />
             </label>
           )}
+
           {error && (
             <div className="error-box" role="alert">
               {error}
             </div>
           )}
-          {hasInvitation && (
-            <Button
-              type="submit"
-              view="action"
-              size="l"
-              disabled={busy}
-              loading={busy}
+
+          {hasInvitation ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {betaPlayer && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 14px",
+                    background: "var(--palette-ink-900, #181816)",
+                    border: "1px solid var(--palette-clay-500, #c46f49)",
+                    borderRadius: "6px",
+                  }}
+                >
+                  <div>
+                    <strong
+                      style={{ color: "var(--palette-ink-100, #e8e4da)" }}
+                    >
+                      {betaPlayer.name}
+                    </strong>
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--palette-clay-400, #d57d55)",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      @{betaPlayer.handle}
+                    </div>
+                  </div>
+                  <span className="landing-badge">Готов к игре</span>
+                </div>
+              )}
+              <Button
+                type="submit"
+                view="action"
+                size="l"
+                disabled={busy}
+                loading={busy}
+              >
+                Войти в игру
+              </Button>
+              {betaPlayer && (
+                <a
+                  href="/"
+                  style={{
+                    textAlign: "center",
+                    fontSize: "0.85rem",
+                    color: "var(--palette-ink-300, #777267)",
+                    textDecoration: "underline",
+                  }}
+                >
+                  Выбрать другого игрока
+                </a>
+              )}
+            </div>
+          ) : (
+            <nav
+              className="beta-player-list"
+              aria-label="Постоянные игроки"
+              aria-busy={busy}
             >
-              Войти
-            </Button>
-          )}
-          {!hasInvitation && (
-            <nav className="beta-player-list" aria-label="Постоянные игроки">
               {betaPlayers.map((player) => (
-                <a key={player.handle} href={`/play/${player.handle}`}>
+                <a
+                  key={player.handle}
+                  href={`/play/${player.handle}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (busy) return;
+                    void loginAsPlayer(player.handle);
+                  }}
+                  aria-disabled={busy || undefined}
+                  tabIndex={busy ? -1 : undefined}
+                  title={`Войти в игру как ${player.name} (@${player.handle})`}
+                >
                   <strong>{player.name}</strong>
                   <span>@{player.handle}</span>
                 </a>
@@ -201,8 +299,16 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
         <div className="capability-grid">
           {capabilities.map((item) => (
             <article className="capability-card" key={item.title}>
+              <div className="capability-card__header">
+                <span className="capability-card__badge">{item.badge}</span>
+              </div>
               <h3>{item.title}</h3>
-              <p>{item.text}</p>
+              <p>{item.description}</p>
+              <ul className="capability-card__highlights">
+                {item.highlights.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
             </article>
           ))}
         </div>
@@ -210,19 +316,64 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
 
       <LandingGuide />
 
-      <section
-        className="landing-section landing-roadmap"
-        aria-labelledby="roadmap-title"
-      >
-        <div>
-          <p className="landing-kicker">Что дальше</p>
-          <h2 id="roadmap-title">Ближайшие планы</h2>
-        </div>
-        <ol>
-          {roadmap.map((item) => (
-            <li key={item}>{item}</li>
+      <section className="landing-section" aria-labelledby="roadmap-title">
+        <p className="landing-kicker">Что дальше</p>
+        <h2 id="roadmap-title">В разработке и в планах</h2>
+        <div className="roadmap-grid">
+          {roadmapSections.map((section) => (
+            <div className="roadmap-column" key={section.title}>
+              <div className="roadmap-column__header">
+                <h3>{section.title}</h3>
+                <span
+                  className={
+                    section.status === "in-progress"
+                      ? "roadmap-column__badge roadmap-column__badge--active"
+                      : "roadmap-column__badge roadmap-column__badge--planned"
+                  }
+                >
+                  {section.badge}
+                </span>
+              </div>
+              <div className="roadmap-item-list">
+                {section.items.map((item) => (
+                  <div className="roadmap-item" key={item.title}>
+                    <div className="roadmap-item__header">
+                      {item.code && (
+                        <span className="roadmap-item__code">{item.code}</span>
+                      )}
+                      <h4>{item.title}</h4>
+                    </div>
+                    <p>{item.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           ))}
-        </ol>
+        </div>
+      </section>
+
+      <section className="landing-section" aria-labelledby="changelog-title">
+        <p className="landing-kicker">История развития</p>
+        <h2 id="changelog-title">Журнал обновлений сервиса</h2>
+        <div className="changelog-timeline">
+          {changelog.map((release) => (
+            <article className="changelog-card" key={release.version}>
+              <div className="changelog-card__header">
+                <div className="changelog-card__version-group">
+                  <h3 className="changelog-card__version">{release.version}</h3>
+                  <span className="changelog-card__tag">{release.tag}</span>
+                </div>
+                <span className="changelog-card__date">{release.date}</span>
+              </div>
+              <p className="changelog-card__summary">{release.summary}</p>
+              <ul className="changelog-card__list">
+                {release.changes.map((change, idx) => (
+                  <li key={idx}>{change}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section
@@ -233,15 +384,15 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           <p className="landing-kicker">Помогите сделать лучше</p>
           <h2 id="feedback-title">Есть идея или пожелание?</h2>
           <p>
-            Оставьте предложение в любое время. Для ошибки внутри игры удобнее
-            использовать кнопку «Сообщить о проблеме» — она приложит технический
-            контекст.
+            Оставьте предложение в любое время. Для сообщения об ошибке внутри
+            игры удобнее использовать кнопку «Сообщить о проблеме» в меню — она
+            автоматически приложит технический лог и контекст.
           </p>
         </div>
         {feedbackStatus === "sent" ? (
           <div className="feedback-success" role="status">
             <h3>Спасибо, предложение отправлено</h3>
-            <p>Оно попадёт в общий список обратной связи.</p>
+            <p>Оно попадёт в общий журнал обратной связи оператора.</p>
             <Button view="outlined" onClick={() => setFeedbackStatus("idle")}>
               Отправить ещё
             </Button>
@@ -296,7 +447,22 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
 
       <footer className="landing-footer">
         <span>Arken Space</span>
-        <span>Проект находится в раннем доступе</span>
+        <div style={{ display: "flex", gap: 16 }}>
+          {isDevelopment && (
+            <a
+              href="http://localhost:6006"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: "var(--palette-clay-400, #d57d55)",
+                textDecoration: "none",
+              }}
+            >
+              Витрина Storybook ↗
+            </a>
+          )}
+          <span>Проект находится в раннем доступе</span>
+        </div>
       </footer>
     </main>
   );

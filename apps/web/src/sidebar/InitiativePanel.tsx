@@ -1,7 +1,16 @@
 import { useState } from "react";
 import type { InitiativeParticipantDto } from "@arken/contracts";
-import { TextInput } from "@gravity-ui/uikit";
+import { Input as TextInput } from "../design-system/Input";
 import { Button } from "../design-system/Button";
+import { AppIcon } from "../ui/AppIcon";
+import {
+  BattleIcon,
+  CloseIcon,
+  DiceTrayIcon,
+  MoveDownIcon,
+  MoveUpIcon,
+  PinIcon,
+} from "../ui/icons";
 
 /**
  * UIX-431 — очередь ходов боя.
@@ -117,7 +126,10 @@ export function InitiativePanel({
     // занимает верх колонки списком, который уже ничего не решает.
     <details className="initiative-panel" open>
       <summary className="initiative-panel__summary">
-        <span>Очередь ходов</span>
+        <span className="initiative-panel__summary-title">
+          <AppIcon icon={BattleIcon} />
+          <span>Очередь ходов</span>
+        </span>
         {participants.length > 0 && (
           <span className="initiative-panel__summary-count">
             {participants.length}
@@ -132,128 +144,147 @@ export function InitiativePanel({
         </p>
       )}
       <ol className="initiative-panel__list">
-        {participants.map((participant, index) => (
-          <li key={participant.id} className="initiative-panel__row">
-            <span className="initiative-panel__position">{index + 1}</span>
-            <span className="initiative-panel__name">{participant.name}</span>
-            {/* Бонус рядом с именем: мастер прибавляет к нему результат
-                физического куба, брошенного за столом. */}
-            {participant.initiativeBonus !== null && (
-              <span
-                className="initiative-panel__bonus"
-                title={`Бонус к инициативе: ${participant.initiativeBonus}`}
-              >
-                {participant.initiativeBonus >= 0 ? "+" : ""}
-                {participant.initiativeBonus}
-              </span>
-            )}
-            {participant.canEdit ? (
-              /* `key` по значению: поле неуправляемое, и без пересоздания оно
-               * бы не показало число, приехавшее чужой правкой — а теперь ещё
-               * и новый порядок после пересортировки. */
-              <TextInput
-                key={`${participant.id}-${participant.initiative ?? ""}`}
-                className="initiative-panel__value"
-                type="number"
-                defaultValue={participant.initiative?.toString() ?? ""}
-                placeholder="—"
-                disabled={pending}
-                aria-label={`Инициатива «${participant.name}»`}
-                onBlur={(event) => {
-                  const raw = event.target.value.trim();
-                  const value = raw === "" ? null : Number(raw);
-                  if (value !== null && !Number.isFinite(value)) return;
-                  if (value === participant.initiative) return;
-                  setInitiative(participant.id, value);
-                }}
-              />
-            ) : (
-              <span className="initiative-panel__value-read">
-                {participant.initiative ?? "—"}
-              </span>
-            )}
-            <div className="initiative-panel__actions">
-              {/* Булавка только у закреплённых: у остальных ей нечего снимать,
-                  а ряд одинаковых серых кнопок мешал бы найти нужную. Игрок её
-                  видит, но не нажимает — это объяснение, а не ручка. */}
-              {participant.pinned &&
-                (isGm ? (
+        {participants.map((participant, index) => {
+          const isActive = index === 0;
+          return (
+            <li
+              key={participant.id}
+              className={`initiative-panel__row ${isActive ? "initiative-panel__row--active" : ""}`}
+            >
+              {isActive && (
+                <span className="initiative-panel__current-badge" aria-label="Текущий ход">
+                  Ход
+                </span>
+              )}
+              <span className="initiative-panel__position">{index + 1}</span>
+              <span className="initiative-panel__name">{participant.name}</span>
+              {/* Бонус рядом с именем: мастер прибавляет к нему результат
+                  физического куба, брошенного за столом. */}
+              {participant.initiativeBonus !== null && (
+                <span
+                  className="initiative-panel__bonus"
+                  title={`Бонус к инициативе: ${participant.initiativeBonus}`}
+                >
+                  {participant.initiativeBonus >= 0 ? "+" : ""}
+                  {participant.initiativeBonus}
+                </span>
+              )}
+              {participant.canEdit ? (
+                /* `key` по значению: поле неуправляемое, и без пересоздания оно
+                 * бы не показало число, приехавшее чужой правкой — а теперь ещё
+                 * и новый порядок после пересортировки. */
+                <TextInput
+                  key={`${participant.id}-${participant.initiative ?? ""}`}
+                  className="initiative-panel__value"
+                  size="s"
+                  type="number"
+                  defaultValue={participant.initiative?.toString() ?? ""}
+                  placeholder="—"
+                  disabled={pending}
+                  aria-label={`Инициатива «${participant.name}»`}
+                  onBlur={(event) => {
+                    const raw = event.target.value.trim();
+                    const value = raw === "" ? null : Number(raw);
+                    if (value !== null && !Number.isFinite(value)) return;
+                    if (value === participant.initiative) return;
+                    setInitiative(participant.id, value);
+                  }}
+                />
+              ) : (
+                <span className="initiative-panel__value-read">
+                  {participant.initiative ?? "—"}
+                </span>
+              )}
+              <div className="initiative-panel__actions">
+                {/* Булавка только у закреплённых: у остальных ей нечего снимать,
+                    а ряд одинаковых серых кнопок мешал бы найти нужную. Игрок её
+                    видит, но не нажимает — это объяснение, а не ручка. */}
+                {participant.pinned &&
+                  (isGm ? (
+                    <Button
+                      view="flat"
+                      size="s"
+                      disabled={pending}
+                      onClick={() => unpin(participant.id)}
+                      title="Открепить: строка снова встанет по броску"
+                      aria-label={`Открепить «${participant.name}»`}
+                    >
+                      <AppIcon icon={PinIcon} />
+                    </Button>
+                  ) : (
+                    <span
+                      className="initiative-panel__pinned"
+                      title="Место задано мастером"
+                      aria-label={`«${participant.name}» — место задано мастером`}
+                    >
+                      <AppIcon icon={PinIcon} />
+                    </span>
+                  ))}
+                {isGm && (
+                  <>
+                    <Button
+                      view="flat"
+                      size="s"
+                      disabled={pending || index === 0}
+                      onClick={() => swap(index, -1)}
+                      title="Поставить выше и закрепить"
+                      aria-label={`Переместить «${participant.name}» выше`}
+                    >
+                      <AppIcon icon={MoveUpIcon} />
+                    </Button>
+                    <Button
+                      view="flat"
+                      size="s"
+                      disabled={pending || index === participants.length - 1}
+                      onClick={() => swap(index, 1)}
+                      title="Поставить ниже и закрепить"
+                      aria-label={`Переместить «${participant.name}» ниже`}
+                    >
+                      <AppIcon icon={MoveDownIcon} />
+                    </Button>
+                  </>
+                )}
+                {/* Бросок доступен по тому же праву, что и ввод значения: игрок
+                    бросает за себя, мастер — за любого. Кубик и перенос числа
+                    руками были двумя действиями там, где смысл один. */}
+                {onRoll && participant.tokenId && participant.canEdit && (
                   <Button
                     view="flat"
+                    size="s"
                     disabled={pending}
-                    onClick={() => unpin(participant.id)}
-                    title="Открепить: строка снова встанет по броску"
-                    aria-label={`Открепить «${participant.name}»`}
+                    onClick={() => onRoll(participant)}
+                    title="Бросить инициативу и записать в строку"
+                    aria-label={`Бросить инициативу за «${participant.name}»`}
                   >
-                    <span aria-hidden="true">📌</span>
+                    <AppIcon icon={DiceTrayIcon} />
                   </Button>
-                ) : (
-                  <span
-                    className="initiative-panel__pinned"
-                    title="Место задано мастером"
-                    aria-label={`«${participant.name}» — место задано мастером`}
-                  >
-                    <span aria-hidden="true">📌</span>
-                  </span>
-                ))}
-              {isGm && (
-                <>
+                )}
+                {isGm && (
                   <Button
-                    view="flat"
-                    disabled={pending || index === 0}
-                    onClick={() => swap(index, -1)}
-                    title="Поставить выше и закрепить"
-                    aria-label={`Переместить «${participant.name}» выше`}
+                    view="flat-danger"
+                    size="s"
+                    disabled={pending}
+                    onClick={() =>
+                      onUpdate(
+                        participants.filter((row) => row.id !== participant.id),
+                      )
+                    }
+                    aria-label={`Вывести «${participant.name}» из боя`}
+                    title="Вывести из боя"
                   >
-                    <span aria-hidden="true">↑</span>
+                    <AppIcon icon={CloseIcon} />
                   </Button>
-                  <Button
-                    view="flat"
-                    disabled={pending || index === participants.length - 1}
-                    onClick={() => swap(index, 1)}
-                    title="Поставить ниже и закрепить"
-                    aria-label={`Переместить «${participant.name}» ниже`}
-                  >
-                    <span aria-hidden="true">↓</span>
-                  </Button>
-                </>
-              )}
-              {/* Бросок доступен по тому же праву, что и ввод значения: игрок
-                  бросает за себя, мастер — за любого. Кубик и перенос числа
-                  руками были двумя действиями там, где смысл один. */}
-              {onRoll && participant.tokenId && participant.canEdit && (
-                <Button
-                  view="flat"
-                  disabled={pending}
-                  onClick={() => onRoll(participant)}
-                  title="Бросить инициативу и записать в строку"
-                  aria-label={`Бросить инициативу за «${participant.name}»`}
-                >
-                  <span aria-hidden="true">🎲</span>
-                </Button>
-              )}
-              {isGm && (
-                <Button
-                  view="flat"
-                  disabled={pending}
-                  onClick={() =>
-                    onUpdate(
-                      participants.filter((row) => row.id !== participant.id),
-                    )
-                  }
-                  aria-label={`Вывести «${participant.name}» из боя`}
-                  title="Вывести из боя"
-                >
-                  <span aria-hidden="true">×</span>
-                </Button>
-              )}
-            </div>
-          </li>
-        ))}
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ol>
       {isGm && (
         <div className="initiative-panel__controls">
           <Button
+            view="action"
+            size="s"
             disabled={pending || addable.length === 0}
             onClick={() =>
               onUpdate([
@@ -281,6 +312,8 @@ export function InitiativePanel({
               вместо выделения. Показывается только когда зона задана. */}
           {onRecruitFromZone && (
             <Button
+              view="outlined"
+              size="s"
               disabled={pending}
               onClick={onRecruitFromZone}
               title="Добавить всех, кто сейчас в зоне боя; уже введённых не тронет"
@@ -292,6 +325,7 @@ export function InitiativePanel({
            * физическим кубом за столом. */}
           <div className="initiative-panel__add-row">
             <TextInput
+              size="s"
               value={newName}
               placeholder="Кто-то вне карты"
               disabled={pending}
@@ -299,6 +333,8 @@ export function InitiativePanel({
               onUpdate={setNewName}
             />
             <Button
+              view="outlined"
+              size="s"
               disabled={pending || newName.trim() === ""}
               onClick={() => {
                 onUpdate([

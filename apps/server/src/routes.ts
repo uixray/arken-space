@@ -1443,8 +1443,6 @@ export function registerRoutes(
   app.post("/api/characters", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    if (auth.role !== "GM")
-      return reply.code(403).send({ error: "GM_REQUIRED" });
     const body = createCharacterSchema.parse(request.body);
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) return reply.code(200).send({ duplicate: true });
@@ -1454,11 +1452,13 @@ export function registerRoutes(
     // the moment it is created — never a live-linked clone of its source.
     const starter = createStarterCharacter();
     const template = body.template ?? {};
+    const ownerMembershipId = auth.role === "PLAYER" ? auth.membershipId : null;
     const character = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(characters)
         .values({
           campaignId: auth.campaignId,
+          ownerMembershipId,
           name: body.name,
           stats: { ...starter.stats, ...template.stats },
           skills: template.skills ?? starter.skills,
@@ -1605,6 +1605,9 @@ export function registerRoutes(
             "inventory",
             "notes",
             "resources",
+            "skills",
+            "spells",
+            "wallet",
           ].includes(key),
       )
     )
@@ -2119,24 +2122,12 @@ export function registerRoutes(
   app.post("/api/characters/:id/catalog", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    if (auth.role !== "GM")
-      return reply.code(403).send({ error: "GM_REQUIRED" });
     const characterId = z
       .object({ id: z.string().uuid() })
       .parse(request.params).id;
     const body = assignCatalogEntrySchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
-    const [source] = await db
-      .select()
-      .from(catalogEntries)
-      .where(
-        and(
-          eq(catalogEntries.id, body.catalogEntryId),
-          eq(catalogEntries.campaignId, auth.campaignId),
-        ),
-      )
-      .limit(1);
     const [character] = await db
       .select()
       .from(characters)
@@ -2147,7 +2138,21 @@ export function registerRoutes(
         ),
       )
       .limit(1);
-    if (!source || !character)
+    if (!character)
+      return reply.code(404).send({ error: "ASSIGNMENT_SOURCE_NOT_FOUND" });
+    if (!(await canAccessCharacter(db, auth, character)))
+      return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+    const [source] = await db
+      .select()
+      .from(catalogEntries)
+      .where(
+        and(
+          eq(catalogEntries.id, body.catalogEntryId),
+          eq(catalogEntries.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!source)
       return reply.code(404).send({ error: "ASSIGNMENT_SOURCE_NOT_FOUND" });
     const [existingAssignment] = await db
       .select({ id: characterCatalogEntries.id })
@@ -2206,8 +2211,6 @@ export function registerRoutes(
     async (request, reply) => {
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
-      if (auth.role !== "GM")
-        return reply.code(403).send({ error: "GM_REQUIRED" });
       const params = z
         .object({ characterId: z.string().uuid(), id: z.string().uuid() })
         .parse(request.params);
@@ -2217,7 +2220,7 @@ export function registerRoutes(
       if (await findAction(db, auth.campaignId, body.actionId))
         return reply.code(200).send({ duplicate: true });
       const [current] = await db
-        .select({ entry: characterCatalogEntries })
+        .select({ entry: characterCatalogEntries, character: characters })
         .from(characterCatalogEntries)
         .innerJoin(
           characters,
@@ -2233,6 +2236,8 @@ export function registerRoutes(
         .limit(1);
       if (!current)
         return reply.code(404).send({ error: "CHARACTER_ENTRY_NOT_FOUND" });
+      if (!(await canAccessCharacter(db, auth, current.character)))
+        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
       if (
         body.revision !== undefined &&
         body.revision !== current.entry.revision
@@ -2278,8 +2283,6 @@ export function registerRoutes(
     async (request, reply) => {
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
-      if (auth.role !== "GM")
-        return reply.code(403).send({ error: "GM_REQUIRED" });
       const params = z
         .object({ characterId: z.string().uuid(), id: z.string().uuid() })
         .parse(request.params);
@@ -2287,7 +2290,7 @@ export function registerRoutes(
       if (await findAction(db, auth.campaignId, body.actionId))
         return reply.code(200).send({ ok: true, duplicate: true });
       const [current] = await db
-        .select({ entry: characterCatalogEntries })
+        .select({ entry: characterCatalogEntries, character: characters })
         .from(characterCatalogEntries)
         .innerJoin(
           characters,
@@ -2303,6 +2306,8 @@ export function registerRoutes(
         .limit(1);
       if (!current)
         return reply.code(404).send({ error: "CHARACTER_ENTRY_NOT_FOUND" });
+      if (!(await canAccessCharacter(db, auth, current.character)))
+        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
       if (current.entry.revision !== body.revision)
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
       const deleted = await db.transaction(async (tx) => {

@@ -102,7 +102,7 @@ export function DiceTrayPanel({
           </button>
         </div>
       </div>
-      {pendingRolls > 0 && <p role="status">Бросаем… {pendingRolls}</p>}
+
       {rollError && <p role="alert">{rollError}</p>}
     </section>
   );

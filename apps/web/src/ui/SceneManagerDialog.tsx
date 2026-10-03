@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
-import { Label } from "@gravity-ui/uikit";
+import { Label } from "../design-system/Badge";
 import { Button } from "../design-system/Button";
 import { ArkenDialog } from "./ArkenDialog";
 import { ImageUploadField } from "./ImageUploadField";
@@ -477,6 +477,9 @@ function SceneEditor({
           </p>
         )}
         <div className="dialog-actions">
+          <Button type="button" view="flat" onClick={onCancel}>
+            Отмена
+          </Button>
           <Button
             type="submit"
             view="action"
@@ -487,9 +490,6 @@ function SceneEditor({
             }
           >
             Сохранить
-          </Button>
-          <Button type="button" onClick={onCancel}>
-            Отмена
           </Button>
         </div>
       </form>

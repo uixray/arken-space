@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { StickerPackDto } from "@arken/contracts";
-import { Popup } from "@gravity-ui/uikit";
+import { Popup } from "./design-system/Popup";
 import { Button } from "./design-system/Button";
 import { api } from "./api";
 import { filterStickerPacks } from "./sticker-picker-state";

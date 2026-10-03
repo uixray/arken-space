@@ -169,6 +169,8 @@ export interface SceneRendererProps {
     world?: { width: number; height: number };
     backgroundFrame?: { x: number; y: number; width: number; height: number };
   }) => Promise<void>;
+  externalObjectListOpen?: boolean;
+  onObjectListClose?: () => void;
 }
 
 export type SceneRendererComponent = React.ComponentType<SceneRendererProps>;

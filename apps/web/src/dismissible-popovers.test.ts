@@ -21,8 +21,11 @@ const sourceOf = (relative: string) =>
 
 const SOURCES = [
   "./App.tsx",
+  "./AppHeader.tsx",
   "./MapToolbar.tsx",
   "./MusicBar.tsx",
+  "./ScenePicker.tsx",
+  "./TokenTray.tsx",
   "./WorkspaceNav.tsx",
   "./renderers/GridSettings.tsx",
   "./sidebar/ChatPanels.tsx",

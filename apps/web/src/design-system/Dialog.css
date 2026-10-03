@@ -1,0 +1,178 @@
+/**
+ * Standalone Dialog styling for Arken Design System.
+ * Warm Ink & Terracotta Clay, tactile modal with generous breathing room.
+ * Built with standard 24px/16px padding and clear visual hierarchy.
+ */
+
+/* Backdrop overlay */
+.arken-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--arken-layer-dialog, 2000);
+  background-color: rgba(12, 12, 10, 0.72);
+  transition: opacity 160ms ease;
+}
+
+/* Viewport center wrapper */
+.arken-dialog__viewport {
+  position: fixed;
+  inset: 0;
+  z-index: var(--arken-layer-dialog, 2000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg, 16px);
+  overflow-y: auto;
+  pointer-events: none;
+}
+
+/* Modal Popup Window */
+.arken-dialog__popup {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  margin: auto;
+  background-color: var(--color-surface-raised, var(--palette-ink-800, #20201d));
+  border: 1px solid var(--color-border, var(--palette-ink-500, #47443b));
+  border-radius: var(--radius-lg, 8px);
+  box-shadow:
+    0 16px 40px -8px rgba(0, 0, 0, 0.65),
+    0 4px 16px rgba(0, 0, 0, 0.4);
+  color: var(--color-text, var(--palette-ink-100, #e8e4da));
+  outline: none;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Sizes */
+.arken-dialog--s {
+  max-width: 420px;
+}
+.arken-dialog--m {
+  max-width: 560px;
+}
+.arken-dialog--l {
+  max-width: 720px;
+}
+.arken-dialog--xl {
+  max-width: 900px;
+}
+
+/* Header */
+.arken-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md, 12px);
+  padding: var(--space-lg, 16px) var(--space-xl, 24px);
+  border-bottom: 1px solid var(--color-border, var(--palette-ink-600, #34322c));
+  flex-shrink: 0;
+}
+
+.arken-dialog__title {
+  margin: 0;
+  font-family: var(--font-family-sans, inherit);
+  font-size: var(--font-size-heading-lg, 20px);
+  line-height: var(--font-line-height-heading-lg, 1.25);
+  font-weight: 700;
+  color: var(--color-text, var(--palette-ink-100, #e8e4da));
+  overflow-wrap: anywhere;
+}
+
+.arken-dialog__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted, var(--palette-ink-300, #777267));
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.arken-dialog__close:hover:not(:disabled) {
+  background-color: var(--color-surface-hover, var(--palette-ink-600, #34322c));
+  color: var(--color-text, var(--palette-ink-100, #e8e4da));
+  border-color: var(--color-border, var(--palette-ink-500, #47443b));
+}
+
+.arken-dialog__close:focus-visible {
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus, var(--palette-clay-500, #c46f49));
+  outline-offset: var(--focus-ring-offset, 2px);
+}
+
+/* Body */
+.arken-dialog__body {
+  padding: var(--space-xl, 24px);
+  overflow-y: auto;
+  flex-grow: 1;
+  font-size: var(--font-size-body, 12px);
+  line-height: 1.5;
+  color: var(--color-text, var(--palette-ink-100, #e8e4da));
+}
+
+/* Footer */
+.arken-dialog__footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm, 8px);
+  padding: var(--space-md, 12px) var(--space-xl, 24px) var(--space-lg, 16px);
+  border-top: 1px solid var(--color-border, var(--palette-ink-600, #34322c));
+  background-color: var(--color-surface, var(--palette-ink-800, #20201d));
+  flex-shrink: 0;
+}
+
+.arken-dialog__footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm, 8px);
+}
+
+.arken-dialog__error {
+  font-size: var(--font-size-caption, 11px);
+  color: var(--color-danger, var(--palette-signal-danger, #da6b61));
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .arken-dialog__viewport {
+    padding: var(--space-xs, 4px);
+  }
+  .arken-dialog__popup {
+    max-height: calc(100dvh - 8px);
+  }
+  .arken-dialog__header {
+    padding: var(--space-md, 12px) var(--space-lg, 16px);
+  }
+  .arken-dialog__body {
+    padding: var(--space-lg, 16px);
+  }
+  .arken-dialog__footer {
+    padding: var(--space-md, 12px) var(--space-lg, 16px);
+  }
+  .arken-dialog__footer-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .arken-dialog__footer-actions > button,
+  .arken-dialog__footer-actions > .arken-button {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+}

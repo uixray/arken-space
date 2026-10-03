@@ -1,0 +1,55 @@
+/* ==========================================================================
+   Arken Space Standalone Loader Component
+   Tokens: --color-surface, --color-border, --color-accent, etc.
+   ========================================================================== */
+
+.arken-loader,
+.g-loader {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+.arken-loader__spinner {
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--color-border, #47443b);
+  border-top-color: var(--color-accent, #c46f49);
+  animation: arken-loader-spin 0.75s linear infinite;
+}
+
+.g-loader_size_s .arken-loader__spinner,
+.arken-loader--s .arken-loader__spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.g-loader_size_m .arken-loader__spinner,
+.arken-loader--m .arken-loader__spinner {
+  width: 24px;
+  height: 24px;
+  border-width: 2.5px;
+}
+
+.g-loader_size_l .arken-loader__spinner,
+.arken-loader--l .arken-loader__spinner {
+  width: 36px;
+  height: 36px;
+  border-width: 3px;
+}
+
+@keyframes arken-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arken-loader__spinner {
+    animation: none;
+    border-style: dotted;
+  }
+}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AssetDto, AudioStateDto, Role } from "@arken/contracts";
-import { Checkbox, Loader } from "@gravity-ui/uikit";
+import { Checkbox } from "./design-system/Checkbox";
+import { Loader } from "./design-system/Loader";
 import { Button } from "./design-system/Button";
 import type { GameSocket } from "./realtime";
 import { ArkenDialog } from "./ui/ArkenDialog";
@@ -12,6 +13,7 @@ import { resolvePlaybackAction } from "./music-playback";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
 import { MoreIcon, PauseIcon, PlayIcon, VolumeIcon } from "./ui/icons";
+import { createPortal } from "react-dom";
 
 const ENABLED_KEY = "arken.audio.enabled";
 const VOLUME_KEY = "arken.audio.volume";
@@ -46,12 +48,14 @@ export function MusicBar({
   role,
   socket,
   onUpload,
+  controlsTarget,
 }: {
   audio: AudioStateDto;
   assets: AssetDto[];
   role: Role;
   socket: GameSocket | null;
   onUpload: (file: File, kind: "AUDIO") => Promise<AssetDto>;
+  controlsTarget?: HTMLElement | null;
 }) {
   const element = useRef<HTMLAudioElement>(null);
   // Both topbar popovers are absolutely positioned over the sidebar, so an
@@ -92,15 +96,68 @@ export function MusicBar({
     localStorage.setItem(VOLUME_KEY, String(volume));
     if (element.current) element.current.volume = volumeSliderToGain(volume);
   }, [volume]);
+
+  const lastSyncRef = useRef<{
+    revision: number;
+    assetId: string | null;
+    playing: boolean;
+    loop: boolean;
+    enabled: boolean;
+    hasCurrent: boolean;
+  }>({
+    revision: -1,
+    assetId: null,
+    playing: false,
+    loop: false,
+    enabled: false,
+    hasCurrent: false,
+  });
+
   useEffect(() => {
     const player = element.current;
     if (!player) return;
     player.loop = audio.loop;
+
+    const trackDuration =
+      (Number.isFinite(player.duration) && player.duration > 0
+        ? player.duration
+        : current?.durationSeconds) || 0;
+
     const elapsed =
       audio.playing && audio.startedAt
         ? (Date.now() - new Date(audio.startedAt).getTime()) / 1000
         : 0;
-    const expected = audio.positionSeconds + Math.max(0, elapsed);
+    const rawExpected = audio.positionSeconds + Math.max(0, elapsed);
+    const expected =
+      audio.loop && trackDuration > 0
+        ? ((rawExpected % trackDuration) + trackDuration) % trackDuration
+        : rawExpected;
+
+    const hasCurrent = Boolean(current);
+    const lastSync = lastSyncRef.current;
+    const isUnrelatedUpdate =
+      lastSync.revision === audio.revision &&
+      lastSync.assetId === audio.assetId &&
+      lastSync.playing === audio.playing &&
+      lastSync.loop === audio.loop &&
+      lastSync.enabled === enabled &&
+      lastSync.hasCurrent === hasCurrent;
+
+    if (isUnrelatedUpdate) {
+      // LOCAL-9802: Unrelated snapshot updates (e.g. token deletion or moving objects)
+      // must not disturb ongoing playback, re-seek, or overwrite continuous playback.
+      return;
+    }
+
+    lastSyncRef.current = {
+      revision: audio.revision,
+      assetId: audio.assetId,
+      playing: audio.playing,
+      loop: audio.loop,
+      enabled,
+      hasCurrent,
+    };
+
     setPosition(expected);
     if (!enabled || !current) {
       player.pause();
@@ -183,6 +240,102 @@ export function MusicBar({
   const togglePlayback = () =>
     sendCommand({ command: audio.playing ? "PAUSE" : "PLAY" });
 
+  const controls = (
+    <section className="music-topbar" aria-label="Музыка">
+      <strong className="music-topbar__title">Музыка</strong>
+      <button
+        type="button"
+        className="music-icon-button"
+        aria-label={audio.playing ? "Пауза" : "Играть"}
+        title={audio.playing ? "Пауза" : "Играть"}
+        disabled={role !== "GM" || !current}
+        onClick={togglePlayback}
+      >
+        <AppIcon icon={audio.playing ? PauseIcon : PlayIcon} />
+      </button>
+      <details className="music-volume-control" ref={volumeRef}>
+        <summary aria-label="Громкость" title="Громкость">
+          <AppIcon icon={VolumeIcon} />
+        </summary>
+        <div className="music-volume-popover">
+          <label>
+            <span>Громкость</span>
+            <input
+              aria-label="Личная громкость"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={volume}
+              onChange={(event) => setVolume(Number(event.target.value))}
+            />
+          </label>
+          {enabled ? (
+            <button type="button" onClick={() => setEnabled(false)}>
+              Выключить звук
+            </button>
+          ) : (
+            <button type="button" onClick={() => setEnabled(true)}>
+              Включить звук
+            </button>
+          )}
+        </div>
+      </details>
+      {role === "GM" ? (
+        <details className="music-overflow" ref={overflowRef}>
+          <summary aria-label="Меню музыки" title="Меню музыки">
+            <AppIcon icon={MoreIcon} />
+          </summary>
+          <div className="music-overflow__menu">
+            <span className="music-overflow__now-playing">
+              {current?.name ?? "Трек не выбран"}
+            </span>
+            {tracks.length ? (
+              tracks.map((track) => (
+                <button
+                  key={track.id}
+                  type="button"
+                  className={
+                    track.id === current?.id ? "is-selected" : undefined
+                  }
+                  onClick={() => {
+                    sendCommand({ command: "SELECT", assetId: track.id });
+                    if (overflowRef.current) {
+                      overflowRef.current.open = false;
+                      overflowRef.current
+                        .querySelector<HTMLElement>("summary")
+                        ?.focus();
+                    }
+                  }}
+                >
+                  {track.name}
+                </button>
+              ))
+            ) : (
+              <span className="music-overflow__empty">
+                Нет доступных треков
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (overflowRef.current) {
+                  overflowRef.current.open = false;
+                  overflowRef.current
+                    .querySelector<HTMLElement>("summary")
+                    ?.focus();
+                }
+                setLibraryOpen(true);
+              }}
+            >
+              Открыть библиотеку
+            </button>
+          </div>
+        </details>
+      ) : null}
+    </section>
+  );
+
   return (
     <>
       <audio
@@ -195,101 +348,7 @@ export function MusicBar({
           if (role === "GM" && !audio.loop) sendCommand({ command: "END" });
         }}
       />
-      <section className="music-topbar" aria-label="Музыка">
-        <strong className="music-topbar__title">Музыка</strong>
-        <button
-          type="button"
-          className="music-icon-button"
-          aria-label={audio.playing ? "Пауза" : "Играть"}
-          title={audio.playing ? "Пауза" : "Играть"}
-          disabled={role !== "GM" || !current}
-          onClick={togglePlayback}
-        >
-          <AppIcon icon={audio.playing ? PauseIcon : PlayIcon} />
-        </button>
-        <details className="music-volume-control" ref={volumeRef}>
-          <summary aria-label="Громкость" title="Громкость">
-            <AppIcon icon={VolumeIcon} />
-          </summary>
-          <div className="music-volume-popover">
-            <label>
-              <span>Громкость</span>
-              <input
-                aria-label="Личная громкость"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={volume}
-                onChange={(event) => setVolume(Number(event.target.value))}
-              />
-            </label>
-            {enabled ? (
-              <button type="button" onClick={() => setEnabled(false)}>
-                Выключить звук
-              </button>
-            ) : (
-              <button type="button" onClick={() => setEnabled(true)}>
-                Включить звук
-              </button>
-            )}
-          </div>
-        </details>
-        {role === "GM" ? (
-          <details className="music-overflow" ref={overflowRef}>
-            <summary aria-label="Меню музыки" title="Меню музыки">
-              <AppIcon icon={MoreIcon} />
-            </summary>
-            <div className="music-overflow__menu">
-              <span className="music-overflow__now-playing">
-                {current?.name ?? "Трек не выбран"}
-              </span>
-              {tracks.length ? (
-                tracks.map((track) => (
-                  <button
-                    key={track.id}
-                    type="button"
-                    className={
-                      track.id === current?.id ? "is-selected" : undefined
-                    }
-                    onClick={() => {
-                      sendCommand({ command: "SELECT", assetId: track.id });
-                      if (overflowRef.current) {
-                        overflowRef.current.open = false;
-                        overflowRef.current
-                          .querySelector<HTMLElement>("summary")
-                          ?.focus();
-                      }
-                    }}
-                  >
-                    {track.name}
-                  </button>
-                ))
-              ) : (
-                <span className="music-overflow__empty">
-                  Нет доступных треков
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  // Capture a visible return target before the dialog mounts.
-                  // The library item becomes hidden when its details closes.
-                  if (overflowRef.current) {
-                    overflowRef.current.open = false;
-                    overflowRef.current
-                      .querySelector<HTMLElement>("summary")
-                      ?.focus();
-                  }
-                  setLibraryOpen(true);
-                }}
-              >
-                Открыть библиотеку
-              </button>
-            </div>
-          </details>
-        ) : null}
-      </section>
+      {controlsTarget ? createPortal(controls, controlsTarget) : controls}
       {role === "GM" ? (
         <ArkenDialog
           open={libraryOpen}
