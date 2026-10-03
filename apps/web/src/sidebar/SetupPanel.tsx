@@ -501,6 +501,7 @@ export function SetupPanel(props: Props) {
                   onClick={async () => {
                     const result = await accessActions.onRotatePlayerAccess(
                       grant.id,
+                      grant.revision,
                     );
                     setInviteUrl(result.url ?? "");
                     await refreshPlayerAccess();

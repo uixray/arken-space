@@ -22,7 +22,10 @@ export interface AccessActions {
     label: string,
   ) => Promise<PlayerAccessSecretDto>;
   onListPlayerAccess: () => Promise<PlayerAccessDto[]>;
-  onRotatePlayerAccess: (id: string) => Promise<PlayerAccessSecretDto>;
+  onRotatePlayerAccess: (
+    id: string,
+    revision: number,
+  ) => Promise<PlayerAccessSecretDto>;
   onRevokePlayerAccess: (id: string) => Promise<void>;
   onRenameMembership: (
     membershipId: string,
@@ -51,10 +54,10 @@ export function useAccessActions(dependencies: {
 
       onListPlayerAccess: () => api<PlayerAccessDto[]>("/api/player-access"),
 
-      onRotatePlayerAccess: (id) =>
+      onRotatePlayerAccess: (id, revision) =>
         api<PlayerAccessSecretDto>(`/api/player-access/${id}/rotate`, {
           method: "POST",
-          body: withAction(),
+          body: withAction({ revision }),
         }),
 
       onRevokePlayerAccess: (id) =>

@@ -67,6 +67,7 @@ import {
   gmLoginSchema,
   inviteClaimSchema,
   rotatePlayerAccessSchema,
+  revokePlayerAccessSchema,
   rotateGmAccessSchema,
   replaceTokenControllersSchema,
   replaceCharacterControllersSchema,
@@ -723,6 +724,7 @@ function playerAccessDto(
     membershipId: grant.membershipId,
     characterId,
     label: grant.label,
+    revision: grant.revision,
     revokedAt: grant.revokedAt?.toISOString() ?? null,
     createdAt: grant.createdAt.toISOString(),
     updatedAt: grant.updatedAt.toISOString(),
@@ -773,10 +775,18 @@ async function createPlayerAccess(
               tokenHash: hashToken(token),
               revokedAt: null,
               updatedAt: new Date(),
+              revision: sql`${playerAccessGrants.revision} + 1`,
             })
-            .where(eq(playerAccessGrants.id, existing.id))
+            .where(
+              and(
+                eq(playerAccessGrants.id, existing.id),
+                eq(playerAccessGrants.campaignId, campaignId),
+                eq(playerAccessGrants.revision, existing.revision),
+                sql`${playerAccessGrants.revokedAt} is not null`,
+              ),
+            )
             .returning();
-          if (!reactivated) throw new Error("ACCESS_GRANT_CREATE_FAILED");
+          if (!reactivated) throw new Error("PLAYER_ACCESS_CONFLICT");
           await tx
             .delete(sessions)
             .where(eq(sessions.membershipId, existing.membershipId));
@@ -2362,6 +2372,8 @@ export function registerRoutes(
     } catch (error) {
       if (errorMessage(error).includes("CHARACTER_NOT_FOUND"))
         return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+      if (errorMessage(error).includes("PLAYER_ACCESS_CONFLICT"))
+        return reply.code(409).send({ error: "PLAYER_ACCESS_CONFLICT" });
       throw error;
     }
     return reply.code(access.created ? 201 : 200).send({
@@ -2398,7 +2410,7 @@ export function registerRoutes(
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
-    const body = rotatePlayerAccessSchema.parse(request.body);
+    const body = revokePlayerAccessSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
     const [grant] = await db
@@ -2414,10 +2426,14 @@ export function registerRoutes(
       .limit(1);
     if (!grant)
       return reply.code(404).send({ error: "PLAYER_ACCESS_NOT_FOUND" });
-    await db.transaction(async (tx) => {
+    const revoked = await db.transaction(async (tx) => {
       const [revoked] = await tx
         .update(playerAccessGrants)
-        .set({ revokedAt: new Date(), updatedAt: new Date() })
+        .set({
+          revokedAt: new Date(),
+          updatedAt: new Date(),
+          revision: sql`${playerAccessGrants.revision} + 1`,
+        })
         .where(
           and(
             eq(playerAccessGrants.id, grant.id),
@@ -2426,7 +2442,7 @@ export function registerRoutes(
           ),
         )
         .returning();
-      if (!revoked) throw new Error("PLAYER_ACCESS_CONFLICT");
+      if (!revoked) return false;
       await tx
         .delete(sessions)
         .where(eq(sessions.membershipId, grant.membershipId));
@@ -2438,7 +2454,10 @@ export function registerRoutes(
         entityType: "player_access",
         entityId: grant.id,
       });
+      return true;
     });
+    if (!revoked)
+      return reply.code(409).send({ error: "PLAYER_ACCESS_CONFLICT" });
     io.in(memberRoom(grant.membershipId)).disconnectSockets(true);
     return { ok: true };
   });
@@ -2466,19 +2485,24 @@ export function registerRoutes(
     if (!grant)
       return reply.code(404).send({ error: "PLAYER_ACCESS_NOT_FOUND" });
     const token = randomToken();
-    await db.transaction(async (tx) => {
+    const rotated = await db.transaction(async (tx) => {
       const [rotated] = await tx
         .update(playerAccessGrants)
-        .set({ tokenHash: hashToken(token), updatedAt: new Date() })
+        .set({
+          tokenHash: hashToken(token),
+          updatedAt: new Date(),
+          revision: sql`${playerAccessGrants.revision} + 1`,
+        })
         .where(
           and(
             eq(playerAccessGrants.id, grant.id),
+            eq(playerAccessGrants.campaignId, auth.campaignId),
+            eq(playerAccessGrants.revision, body.revision),
             isNull(playerAccessGrants.revokedAt),
-            eq(playerAccessGrants.tokenHash, grant.tokenHash),
           ),
         )
         .returning();
-      if (!rotated) throw new Error("PLAYER_ACCESS_CONFLICT");
+      if (!rotated) return null;
       await tx
         .delete(sessions)
         .where(eq(sessions.membershipId, grant.membershipId));
@@ -2490,13 +2514,13 @@ export function registerRoutes(
         entityType: "player_access",
         entityId: grant.id,
       });
+      return rotated;
     });
+    if (!rotated)
+      return reply.code(409).send({ error: "PLAYER_ACCESS_CONFLICT" });
     io.in(memberRoom(grant.membershipId)).disconnectSockets(true);
     return {
-      grant: playerAccessDto(
-        { ...grant, tokenHash: hashToken(token), updatedAt: new Date() },
-        null,
-      ),
+      grant: playerAccessDto(rotated, null),
       created: false,
       url: `${env.PUBLIC_URL}/join/${token}`,
     };

@@ -128,3 +128,13 @@
 **Решения/исправление:** два `ui-icon-policy.test.ts` ожидали устаревшую достижимость InitiativePanel (UIX-621 намеренно убрал боевой UI) и dead AddIcon anchor, ранее удалённый как lint error. Тест теперь проверяет, что InitiativePanel **не** достижим, и негативную замену реального `SidebarExpandIcon` в App, сохраняя защиту reachable UI. `architecture.test.ts` выявил App 2286 > лимита 2250. По плану Astra sidebar resize state/handlers извлечены в новый `use-sidebar-resize.ts` без ослабления лимита и без изменения pointer/storage контракта; App теперь 2222 строки.
 
 **Адресная проверка:** `architecture.test.ts` + Icon Policy 26/26 PASS, web typecheck PASS, Prettier по трём файлам PASS, `git diff --check` PASS. Следующее — commit/push этого пула, повторный exact-SHA CI; E2E и ручная/визуальная приёмка остаются открыты. Прод не обновлять.
+
+## Четвёртый CI gate: гонка ротации player access — 03.10.2026
+
+**Ревизия/решение:** на `e58dc11` exact-SHA `checks` [37107471263](https://github.com/uixray/arken-space/actions/runs/37107471263) PASS, но `multiplayer` [37107471209](https://github.com/uixray/arken-space/actions/runs/37107471209) FAIL: два параллельных rotate оба получили 200. Astra выявила, что сравнение tokenHash не защищает запросы, начавшиеся после первого коммита; введён явный optimistic-lock `revision` для grant. Старый revision должен получать 409 без удаления sessions и без события. Это не разрешает merge/deploy.
+
+**Файлы:** `packages/db/src/schema.ts`, новая миграция `packages/db/drizzle/0045_player_access_grant_revision.sql` и `meta/_journal.json`; `packages/contracts/src/index.ts`; `apps/server/src/routes.ts`, новый `player-access-rotation.integration.test.ts`; `apps/web/src/use-access-actions.ts`, `sidebar/SetupPanel.tsx`; `tests/multiplayer/game-session.spec.ts`. Rotate требует revision из выданного DTO и атомарно увеличивает его; revoke/reactivate также увеличивают revision, конфликт CAS возвращает 409. UI отправляет актуальную ревизию, multiplayer проверяет ровно одного победителя.
+
+**Проверка до коммита:** локально пересобраны `@arken/db` и `@arken/contracts`; web/server typecheck PASS; адресный интеграционный тест stale revision 1/1 PASS; ESLint изменённых TS/TSX PASS; Prettier и `git diff --check` PASS. Полный Vitest/E2E и PostgreSQL multiplayer для нового SHA ещё не выполнены. На предыдущем SHA E2E четыре shard jobs оставались в работе на момент checkpoint; результат нельзя переносить на будущий SHA.
+
+**Следующее:** заморозить commit этого узкого fix, push в уже разрешённый draft PR #86 и дождаться exact-SHA CI (особенно multiplayer и E2E). Затем browser/manual GM+PLAYER QA, host preflight/backup/rollback gates и отдельное решение о production release. Прод не обновлять.

@@ -1003,7 +1003,11 @@ export const createInviteSchema = z.object({
   label: z.string().trim().min(1).max(80),
   expiresInHours: z.number().int().min(1).max(720).default(168),
 });
-export const rotatePlayerAccessSchema = z.object({ actionId: actionIdSchema });
+export const rotatePlayerAccessSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+});
+export const revokePlayerAccessSchema = z.object({ actionId: actionIdSchema });
 export const rotateGmAccessSchema = z.object({
   actionId: actionIdSchema,
   token: z.string().min(32).max(512),
@@ -1041,6 +1045,7 @@ export interface PlayerAccessDto {
   membershipId: string;
   characterId: string | null;
   label: string;
+  revision: number;
   revokedAt: string | null;
   createdAt: string;
   updatedAt: string;

@@ -1421,6 +1421,7 @@ export const playerAccessGrants = pgTable(
       .references(() => memberships.id, { onDelete: "cascade" }),
     label: text("label").notNull(),
     tokenHash: text("token_hash").notNull(),
+    revision: integer("revision").notNull().default(0),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

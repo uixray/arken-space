@@ -485,6 +485,7 @@ test("GM and six isolated players recover authoritative state without security l
       membershipId: string;
       characterId: string | null;
       label: string;
+      revision: number;
       tokenHash?: string;
     }>;
     const grants = allGrants.filter((grant) =>
@@ -1748,21 +1749,22 @@ test("GM and six isolated players recover authoritative state without security l
       (grant) => grant.characterId === characters[5].id,
     );
     if (!sixthGrant) throw new Error("Sixth player access grant not found");
+    const rotateRevision = sixthGrant.revision;
     const rotatedSocketDisconnected = new Promise<void>((resolve) =>
       connections[6]!.socket.once("disconnect", () => resolve()),
     );
     const rotateResponses = await Promise.all([
       gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
-        data: { actionId: actionId() },
+        data: { actionId: actionId(), revision: rotateRevision },
       }),
       gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
-        data: { actionId: actionId() },
+        data: { actionId: actionId(), revision: rotateRevision },
       }),
     ]);
     expect(rotateResponses.filter((response) => response.ok())).toHaveLength(1);
-    expect(rotateResponses.filter((response) => !response.ok())).toHaveLength(
-      1,
-    );
+    const rotateLosers = rotateResponses.filter((response) => !response.ok());
+    expect(rotateLosers).toHaveLength(1);
+    expect(rotateLosers[0]!.status()).toBe(409);
     const rotateResponse = await expectOk(
       rotateResponses.find((response) => response.ok())!,
     );
@@ -1812,7 +1814,7 @@ test("GM and six isolated players recover authoritative state without security l
     const reactivated = (await reactivatedResponse.json()) as {
       created: boolean;
       url: string;
-      grant: { id: string; membershipId: string };
+      grant: { id: string; membershipId: string; revision: number };
     };
     expect(reactivated).toMatchObject({
       created: true,
@@ -1822,13 +1824,26 @@ test("GM and six isolated players recover authoritative state without security l
       },
     });
     expect(reactivated.url).toContain("/join/");
+    const reactivatedGrant = (
+      (await (
+        await expectOk(await gm.request.get(baseUrl + "/api/player-access"))
+      ).json()) as typeof grants
+    ).find((grant) => grant.id === sixthGrant.id);
+    if (!reactivatedGrant)
+      throw new Error("Reactivated player access grant not found");
     const sameRotateAction = actionId();
     const sameRotateResponses = await Promise.all([
       gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
-        data: { actionId: sameRotateAction },
+        data: {
+          actionId: sameRotateAction,
+          revision: reactivatedGrant.revision,
+        },
       }),
       gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
-        data: { actionId: sameRotateAction },
+        data: {
+          actionId: sameRotateAction,
+          revision: reactivatedGrant.revision,
+        },
       }),
     ]);
     expect(
