@@ -138,3 +138,13 @@
 **Проверка до коммита:** локально пересобраны `@arken/db` и `@arken/contracts`; web/server typecheck PASS; адресный интеграционный тест stale revision 1/1 PASS; ESLint изменённых TS/TSX PASS; Prettier и `git diff --check` PASS. Полный Vitest/E2E и PostgreSQL multiplayer для нового SHA ещё не выполнены. На предыдущем SHA E2E четыре shard jobs оставались в работе на момент checkpoint; результат нельзя переносить на будущий SHA.
 
 **Следующее:** заморозить commit этого узкого fix, push в уже разрешённый draft PR #86 и дождаться exact-SHA CI (особенно multiplayer и E2E). Затем browser/manual GM+PLAYER QA, host preflight/backup/rollback gates и отдельное решение о production release. Прод не обновлять.
+
+## Пятый CI gate: миграционный snapshot и контрактный тест — 03.10.2026
+
+**Ревизия:** на `629b223` multiplayer PASS, но `checks` FAIL: 6 тестов в трёх файлах. E2E достигли 45-минутного лимита и были отменены, агрегирующий job FAIL; это не E2E acceptance. Причины `checks`: foreign rotate fixture без обязательного revision (500 вместо 404), документация диапазона миграций ещё 0044, отсутствует `0045_snapshot.json`.
+
+**Исправление/файлы:** `tests/campaign-isolation-core.integration.test.ts` передаёт revision: 0 только в rotate; `docs/architecture.md` указывает 0000–0045; новый `packages/db/drizzle/meta/0045_snapshot.json` продолжает цепь 0044 и фиксирует колонку revision. Runtime-код не менялся. Параллельный UI-пул UIX-670 отдельный и не входит в этот fix.
+
+**Адресная проверка:** три ранее упавших test files 66/66 PASS; Prettier по ним PASS, `git diff --check` PASS. Полный exact-SHA CI ещё не запускался. Локальный GM QA запущен на отдельной development PGlite базе; это не проверка production и не восстановление релизного gate.
+
+**Следующее:** commit/push только CI-fix и checkpoint; затем дождаться нового checks/multiplayer/E2E, параллельно проводить UIX-670 отдельно. Не мержить и не публиковать.

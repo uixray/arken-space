@@ -433,7 +433,7 @@ Drizzle schema содержит **55** прикладных таблиц.
   удалении меняйте content version и не считайте browser cache persistence;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0044` (45 SQL files) применяются при старте server-контейнера
+Миграции `0000`–`0045` (46 SQL files) применяются при старте server-контейнера
 до запуска Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 
