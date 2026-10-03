@@ -120,3 +120,11 @@
 **Ревизия:** lint-пул закоммичен как `b08aa78c12b1817ed0b746db4c1d1e5c225ee29a` и отправлен в draft PR #86. `checks` [run 37106110154](https://github.com/uixray/arken-space/actions/runs/37106110154) прошёл до `pnpm format:check` и FAIL на 36 файлах (главным образом новые design-system CSS/stories/docs, plus plans/DB/test). Тем самым lint на exact SHA прошёл; full Vitest в этом run ещё не достигнут. `e2e` и `multiplayer` для b08 выполнялись на момент проверки, их результат не переносить на следующий SHA.
 
 **Исправление:** ровно 36 путей из CI лога отформатированы Prettier без ручных логических правок. Адресный `prettier --check` 36/36 PASS и `git diff --check` PASS. Следующее — отдельный commit формат-пула, push в уже разрешённую ветку и ожидание полной CI матрицы на новом SHA. Merge/deploy запрещены.
+
+## Третий CI gate: полный Vitest — 03.10.2026
+
+**Ревизия:** формат-пул закоммичен как `ba9c2bee92b73726f06cdeb47658833249cc2668` и отправлен в draft PR #86. `checks` [run 37106429867](https://github.com/uixray/arken-space/actions/runs/37106429867): frozen install, tokens, deploy shell syntax, build, typecheck, lint и format **PASS**; полный Vitest **FAIL**: 294/296 test files, 2496/2499 tests PASS, три отказа в двух файлах. `multiplayer` [run 37106429872](https://github.com/uixray/arken-space/actions/runs/37106429872) PASS. E2E четыре shard jobs ещё выполнялись на момент проверки; не считать их PASS.
+
+**Решения/исправление:** два `ui-icon-policy.test.ts` ожидали устаревшую достижимость InitiativePanel (UIX-621 намеренно убрал боевой UI) и dead AddIcon anchor, ранее удалённый как lint error. Тест теперь проверяет, что InitiativePanel **не** достижим, и негативную замену реального `SidebarExpandIcon` в App, сохраняя защиту reachable UI. `architecture.test.ts` выявил App 2286 > лимита 2250. По плану Astra sidebar resize state/handlers извлечены в новый `use-sidebar-resize.ts` без ослабления лимита и без изменения pointer/storage контракта; App теперь 2222 строки.
+
+**Адресная проверка:** `architecture.test.ts` + Icon Policy 26/26 PASS, web typecheck PASS, Prettier по трём файлам PASS, `git diff --check` PASS. Следующее — commit/push этого пула, повторный exact-SHA CI; E2E и ручная/визуальная приёмка остаются открыты. Прод не обновлять.

@@ -11,7 +11,6 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
   GameSnapshot,
@@ -94,11 +93,7 @@ import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
 } from "./sidebar-preference";
-import {
-  clampSidebarWidth,
-  readSidebarWidth,
-  writeSidebarWidth,
-} from "./sidebar-width-preference";
+import { useSidebarResize } from "./use-sidebar-resize";
 import type { CursorPresence } from "./renderers/cursor-presence";
 import {
   CURSOR_PREFERENCE_DEFAULT,
@@ -239,17 +234,6 @@ export function App() {
   const [mapRollVisibility, setMapRollVisibility] =
     useState<import("@arken/contracts").MessageVisibility>("PUBLIC");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // UIX-372: drag-resized sidebar width in px; null keeps the CSS default
-  // (--sidebar-width fallback) until the GM/player has customized it.
-  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
-  const sidebarWidthRef = useRef<number | null>(null);
-  useEffect(() => {
-    sidebarWidthRef.current = sidebarWidth;
-  }, [sidebarWidth]);
-  const sidebarResizeDragRef = useRef<{
-    pointerId: number;
-    anchorRight: number;
-  } | null>(null);
   const [storyPosts, setStoryPosts] = useState<
     Array<StoryPostDto | StoryPostAdminDto>
   >([]);
@@ -438,6 +422,12 @@ export function App() {
   }, []);
   const sidebarCampaignId = snapshot?.campaign.id;
   const sidebarMembershipId = snapshot?.me.id;
+  const {
+    sidebarWidth,
+    handleSidebarResizeStart,
+    handleSidebarResizeMove,
+    handleSidebarResizeEnd,
+  } = useSidebarResize(sidebarCampaignId, sidebarMembershipId);
   useEffect(() => {
     if (!sidebarCampaignId || !sidebarMembershipId) return;
     setSidebarCollapsed(
@@ -458,59 +448,6 @@ export function App() {
         snapshot.me.id,
         collapsed,
       );
-    },
-    [snapshot],
-  );
-  useEffect(() => {
-    if (!sidebarCampaignId || !sidebarMembershipId) return;
-    setSidebarWidth(
-      readSidebarWidth(
-        window.localStorage,
-        sidebarCampaignId,
-        sidebarMembershipId,
-      ),
-    );
-  }, [sidebarCampaignId, sidebarMembershipId]);
-  const handleSidebarResizeStart = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      if (event.button !== 0) return;
-      const aside = event.currentTarget.closest<HTMLElement>(".sidebar");
-      const rect = aside?.getBoundingClientRect();
-      if (!rect) return;
-      sidebarResizeDragRef.current = {
-        pointerId: event.pointerId,
-        anchorRight: rect.right,
-      };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      event.preventDefault();
-    },
-    [],
-  );
-  const handleSidebarResizeMove = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      const drag = sidebarResizeDragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      setSidebarWidth(clampSidebarWidth(drag.anchorRight - event.clientX));
-      event.preventDefault();
-    },
-    [],
-  );
-  const handleSidebarResizeEnd = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      const drag = sidebarResizeDragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      sidebarResizeDragRef.current = null;
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      if (snapshot && sidebarWidthRef.current != null) {
-        writeSidebarWidth(
-          window.localStorage,
-          snapshot.campaign.id,
-          snapshot.me.id,
-          sidebarWidthRef.current,
-        );
-      }
     },
     [snapshot],
   );
