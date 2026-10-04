@@ -12,6 +12,7 @@ import { ArkenDialog } from "../ui/ArkenDialog";
 import { AppIcon } from "../ui/AppIcon";
 import {
   AddIcon,
+  DecreaseIcon,
   DeleteIcon,
   MoveDownIcon,
   MoveUpIcon,
@@ -87,7 +88,7 @@ function StatValueField({
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => step(-1)}
       >
-        −
+        <AppIcon icon={DecreaseIcon} />
       </Button>
       <FormInput
         id={id}
@@ -106,7 +107,7 @@ function StatValueField({
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => step(1)}
       >
-        +
+        <AppIcon icon={AddIcon} />
       </Button>
     </div>
   );

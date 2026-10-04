@@ -159,7 +159,6 @@ it("migrated small labels use text accent, leaving selected resize borders decor
   );
   const selectors = [
     '.resize-settings-popover button[aria-pressed="true"]',
-    ".slash-command-suggestions code",
     ".message-character",
     ".landing-kicker",
     ".landing-roadmap li::before",

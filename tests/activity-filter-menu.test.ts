@@ -45,9 +45,9 @@ describe("UIX-467 — свёрнутые фильтры ленты", () => {
   });
 });
 
-describe("UIX-467 — вкладка «Сюжет» скрыта у игрока", () => {
-  it("мастер видит «События» и «Сюжет»", () => {
-    expect(chatFeedOrder(true)).toEqual(["ACTIVITY", "STORY"]);
+describe("UIX-467 — единственная лента без лишних вкладок", () => {
+  it("мастеру остаётся только единая лента событий", () => {
+    expect(chatFeedOrder(true)).toEqual(["ACTIVITY"]);
   });
 
   it("игроку остаются только «События»", () => {
@@ -67,7 +67,7 @@ describe("UIX-467 — вкладка «Сюжет» скрыта у игрока
     expect(allowedSidebarFeed("STORY", false)).toBe("ACTIVITY");
   });
 
-  it("мастера на «Сюжете» не трогает", () => {
-    expect(allowedSidebarFeed("STORY", true)).toBe("STORY");
+  it("мастера на скрытом «Сюжете» возвращает к событиям", () => {
+    expect(allowedSidebarFeed("STORY", true)).toBe("ACTIVITY");
   });
 });
