@@ -1668,16 +1668,19 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   await expect(contextMenu).toHaveCount(0);
   await expect(map).toBeFocused();
 
-  // Outside-pointer dismissal must not steal focus from the clicked control.
+  // Outside-pointer dismissal must hand focus to the opened object list,
+  // whose Escape action returns it to the clicked toolbar control.
   await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
   await expect(contextMenu).toBeVisible();
   await trigger.click();
   await expect(contextMenu).toHaveCount(0);
-  await expect(trigger).toBeFocused();
-  await trigger.press("Escape");
+  const focusedObject = map.locator(".map-object-list button").first();
+  await expect(focusedObject).toBeFocused();
+  await focusedObject.press("Escape");
   await expect(
     map.getByRole("region", { name: "Объекты карты", exact: true }),
   ).toHaveCount(0);
+  await expect(trigger).toBeFocused();
   await expect(
     page.getByRole("button", { name: "Удалить выбранное" }),
   ).toBeVisible();
