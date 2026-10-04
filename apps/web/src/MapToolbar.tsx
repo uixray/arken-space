@@ -206,7 +206,6 @@ export function MapToolbar({
       </button>
 
       <div className="toolbar-group">
-        {pauseControl}
         <button
           aria-label="Перемещение"
           title={`Перемещение по карте (средняя кнопка мыши) · ${shortcutLabel("PAN")}`}
@@ -476,6 +475,7 @@ export function MapToolbar({
           onChange={onCursorPreferenceChange}
         />
       </div>
+      {pauseControl && <div className="map-toolbar__pause">{pauseControl}</div>}
     </div>
   );
 }

@@ -611,7 +611,13 @@ code {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.map-toolbar > :is(.toolbar-history, .toolbar-overflow, .toolbar-shortcuts) {
+.map-toolbar
+  > :is(
+    .toolbar-history,
+    .toolbar-overflow,
+    .toolbar-shortcuts,
+    .map-toolbar__pause
+  ) {
   flex: 0 0 auto;
 }
 .map-toolbar > .toolbar-shortcuts {
@@ -859,6 +865,10 @@ code {
 .map-scale button:hover {
   background: var(--surface-hover, rgba(255, 255, 255, 0.1));
   border-color: var(--accent);
+}
+.map-scale button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--surface-hover, rgba(255, 255, 255, 0.1));
 }
 .map-scale-percent {
   font-size: 10px;
@@ -1188,8 +1198,9 @@ code {
   border-left: 1px solid var(--line);
   background: var(--surface);
 }
-.sidebar.player-sidebar {
-  /* Player has no chat-stream tab row: its sole content must fill the grid. */
+.sidebar.player-sidebar,
+.sidebar.sidebar--single-feed {
+  /* No chat-stream tab row: the sole feed must fill the grid. */
   grid-template-rows: minmax(0, 1fr);
 }
 .tabs {
@@ -1419,6 +1430,7 @@ code {
   display: none;
 }
 .resource-counters__list {
+  width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 4px;
@@ -1430,6 +1442,7 @@ code {
   }
 }
 .resource-counters__item {
+  width: 100%;
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 145px) minmax(0, 1fr);
@@ -1483,11 +1496,8 @@ code {
   width: 100%;
 }
 .activity-character-picker {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-  align-items: center;
-  gap: 10px;
-  padding: 10px var(--space-md);
+  display: block;
+  padding: 8px var(--space-md);
   border-bottom: 1px solid var(--line);
 }
 .activity-character-picker label,
@@ -1499,6 +1509,8 @@ code {
   letter-spacing: 0.06em;
 }
 .activity-character-picker select {
+  display: block;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
 }
@@ -5416,6 +5428,9 @@ body:has(.landing-shell) {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
+.quick-roll-panel__physical-dice {
+  align-self: flex-start;
+}
 .activity-roll-controls__heading {
   display: flex;
   flex-wrap: wrap;
@@ -5624,7 +5639,7 @@ body:has(.landing-shell) {
   margin-top: 12px;
 }
 .quick-roll-panel__group h3 {
-  margin: 0 0 6px;
+  margin: 0 0 2px;
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 700;

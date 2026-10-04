@@ -723,9 +723,12 @@ export function ActivityPanel({
   return (
     <section
       className="chat-panel activity-feed"
-      role="tabpanel"
+      role={snapshot.me.role === "GM" ? "region" : "tabpanel"}
       id="chat-panel-activity"
-      aria-labelledby="chat-tab-activity"
+      aria-label={snapshot.me.role === "GM" ? "События" : undefined}
+      aria-labelledby={
+        snapshot.me.role === "GM" ? undefined : "chat-tab-activity"
+      }
     >
       <div
         className="activity-feed__controls"
@@ -735,9 +738,6 @@ export function ActivityPanel({
       >
         {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
           <div className="activity-character-picker">
-            <label htmlFor="activity-roll-character">
-              Персонаж для действия
-            </label>
             <FormSelect
               id="activity-roll-character"
               aria-label="Персонаж для броска"
@@ -780,28 +780,6 @@ export function ActivityPanel({
           </p>
         )}
         <section className="activity-roll-controls" aria-label="Быстрые броски">
-          <div className="activity-roll-controls__heading">
-            <strong>Быстрые броски</strong>
-            {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
-                подписывала — uikit рисует свой `<label>` внутри, а вложенные не
-                связываются: программа чтения с экрана называла поле «флажок». */}
-            <FormInput
-              className="compact-check"
-              type="checkbox"
-              checked={physicalDice}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setPhysicalDice(enabled);
-                window.localStorage.setItem(
-                  physicalDiceStorageKey(snapshot.me.id),
-                  String(enabled),
-                );
-              }}
-            >
-              Физические кубы
-            </FormInput>
-          </div>
-
           {rollCharacter ? (
             <QuickRollPanel
               rollCharacter={rollCharacter}
@@ -816,6 +794,23 @@ export function ActivityPanel({
               )}
               quickRollPending={pendingQuickRoll !== null}
               gmOnly={rollVisibility === "GM_ONLY"}
+              physicalDiceControl={
+                <FormInput
+                  className="compact-check quick-roll-panel__physical-dice"
+                  type="checkbox"
+                  checked={physicalDice}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setPhysicalDice(enabled);
+                    window.localStorage.setItem(
+                      physicalDiceStorageKey(snapshot.me.id),
+                      String(enabled),
+                    );
+                  }}
+                >
+                  Физические кубы
+                </FormInput>
+              }
               onEntryAction={(entry, mode, rollActionId) =>
                 catalogActions.onRollEntry(rollCharacter.id, entry.id, {
                   mode,

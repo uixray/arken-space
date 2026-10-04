@@ -40,6 +40,7 @@ import {
   DeleteIcon,
   DuplicateIcon,
   FitMapIcon,
+  MapObjectsIcon,
   SelectedOptionIcon,
 } from "../ui/icons";
 import {
@@ -2622,7 +2623,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               wrap="none"
               listening={false}
               visible={
-                hoveredTokenId === token.id || canMove || isStackRepresentative
+                hoveredTokenId === token.id ||
+                selectedTokenIds.includes(token.id)
               }
             />
           );
@@ -3986,16 +3988,15 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             <AppIcon icon={FitMapIcon} />
           </button>
           {props.role === "GM" && (
-            <label>
-              <input
-                aria-label="Показывать скрытый слой мастера"
-                title="Показывать скрытый слой мастера"
-                type="checkbox"
-                checked={showGmLayer}
-                onChange={(event) => setShowGmLayer(event.target.checked)}
-              />
-              Мастер
-            </label>
+            <button
+              type="button"
+              aria-label="Показывать скрытый слой мастера"
+              title="Показывать скрытый слой мастера"
+              aria-pressed={showGmLayer}
+              onClick={() => setShowGmLayer((visible) => !visible)}
+            >
+              <AppIcon icon={MapObjectsIcon} />
+            </button>
           )}
         </div>
         {selectedTokenIds.length + selectedDrawingIds.length > 1 && (

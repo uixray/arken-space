@@ -350,7 +350,7 @@ function SidebarContent(props: Props) {
       id="activity-sidebar"
       tabIndex={-1}
       aria-label="Журнал"
-      className={`sidebar ${!isGm ? "player-sidebar" : ""}`}
+      className={`sidebar ${!isGm ? "player-sidebar" : "sidebar--single-feed"}`}
       hidden={!chatVisible}
       inert={!chatVisible}
       aria-hidden={!chatVisible}
@@ -376,7 +376,7 @@ function SidebarContent(props: Props) {
       >
         <AppIcon icon={SidebarCollapseIcon} />
       </button>
-      {isGm && (
+      {isGm && chatFeedOrder(isGm).length > 1 && (
         <nav
           className="tabs chat-stream-tabs"
           aria-label="Потоки чата"

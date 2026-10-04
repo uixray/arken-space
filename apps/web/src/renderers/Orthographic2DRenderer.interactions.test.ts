@@ -7,6 +7,29 @@ const rendererSource = readFileSync(
 );
 
 describe("Orthographic2DRenderer persisted drawing interactions", () => {
+  it("shows token names only while hovered or selected, not just movable", () => {
+    const nameBlock = rendererSource.slice(
+      rendererSource.indexOf("const nameText ="),
+      rendererSource.indexOf(
+        "{hoveredTokenId === token.id && token.conditions",
+      ),
+    );
+    expect(nameBlock).toMatch(
+      /visible=\{\s*hoveredTokenId === token.id \|\|\s*selectedTokenIds.includes\(token.id\)/,
+    );
+    expect(nameBlock).not.toMatch(/\|\| canMove|\|\| isStackRepresentative/);
+  });
+
+  it("retains hidden GM layer as an accessible pressed icon control", () => {
+    const scaleBlock = rendererSource.slice(
+      rendererSource.indexOf('<div className="map-scale">'),
+    );
+    expect(scaleBlock).toContain("aria-pressed={showGmLayer}");
+    expect(scaleBlock).toContain("setShowGmLayer((visible) => !visible)");
+    expect(scaleBlock).toContain("<AppIcon icon={MapObjectsIcon} />");
+    expect(scaleBlock).not.toContain("checked={showGmLayer}");
+  });
+
   it("keeps the ACL-gated drawing group hittable through its foreground stroke", () => {
     const drawingBlock = rendererSource.slice(
       rendererSource.indexOf("{props.drawings.map((drawing) => {"),

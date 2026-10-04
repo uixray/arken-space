@@ -112,6 +112,19 @@ describe("MapToolbar — панель инструментов карты (UIX-4
   beforeEach(() => {
     writeToolbarCollapsed(window.localStorage, "m1", false);
   });
+  it("keeps pause below shortcuts, outside scrolling tools", () => {
+    const { container } = renderComponent(
+      <MapToolbar
+        {...createDefaultProps({ pauseControl: <button>Pause</button> })}
+      />,
+    );
+    const toolbar = container.querySelector(".map-toolbar")!;
+    expect(toolbar.lastElementChild).toHaveClass("map-toolbar__pause");
+    expect(toolbar.lastElementChild).toContainElement(
+      screen.getByRole("button", { name: "Pause" }),
+    );
+  });
+
   it("рендерит инструменты для роли PLAYER: без тумана и боевой зоны", () => {
     const playerSnapshot = createMockSnapshot("PLAYER");
     const props = createDefaultProps({

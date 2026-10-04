@@ -1,5 +1,5 @@
 import "./roll-controls.css";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import type { CharacterCatalogEntryDto, CharacterDto } from "@arken/contracts";
 import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "../design-system/Button";
@@ -32,6 +32,7 @@ export function QuickRollPanel({
   rows,
   quickRollPending,
   gmOnly,
+  physicalDiceControl,
   onQuickRoll,
   onEntryAction,
 }: {
@@ -51,6 +52,7 @@ export function QuickRollPanel({
    * way to tell from here that a stat roll is about to go only to the GM.
    */
   gmOnly: boolean;
+  physicalDiceControl?: ReactNode;
   onQuickRoll: (
     formula: string,
     label: string,
@@ -107,7 +109,13 @@ export function QuickRollPanel({
     setEntryPending(entry.id);
     setEntryError("");
     try {
-      await onEntryAction(entry, mode, rollActionId);
+      // Description-only entries have no executable roll. Match the character
+      // card: post their description without consuming uses or resources.
+      await onEntryAction(
+        entry,
+        mode === "EXECUTE" && !rollActionId ? "SHARE" : mode,
+        rollActionId,
+      );
     } catch (reason) {
       setEntryError(
         reason instanceof Error
@@ -161,6 +169,7 @@ export function QuickRollPanel({
       {/* Прокручивается содержимое, а не панель целиком: иначе ручка уезжает
        * из виду ровно тогда, когда до неё хотят дотянуться. */}
       <div className="quick-roll-panel__body" hidden={collapsed}>
+        {physicalDiceControl}
         {gmOnly && (
           <p className="quick-roll-panel__gm-only" role="status">
             <AppIcon icon={SecretRollIcon} /> Броски уйдут только мастеру
