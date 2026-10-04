@@ -2108,7 +2108,24 @@ for (const width of [1280, 390]) {
     // accidentally hitting its duplicate/delete row.
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
-    await page.mouse.click(box.x + 20, box.y + box.height - 30);
+    const outsideMapPoint = await map.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      for (const y of [0.7, 0.5, 0.3])
+        for (const x of [0.7, 0.5, 0.3]) {
+          const point = {
+            x: rect.x + rect.width * x,
+            y: rect.y + rect.height * y,
+          };
+          if (
+            document
+              .elementFromPoint(point.x, point.y)
+              ?.closest(".konvajs-content")
+          )
+            return point;
+        }
+      throw new Error("No exposed map point outside transient controls");
+    });
+    await page.mouse.click(outsideMapPoint.x, outsideMapPoint.y);
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await plus.click();
     await expect(slider).toHaveValue("1.2");
