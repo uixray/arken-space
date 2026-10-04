@@ -596,28 +596,23 @@ test("GM and six isolated players recover authoritative state without security l
     await expect(
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
     ).toHaveCount(0);
-    // Local audio consent is deliberately per-browser and must survive a
-    // reload without changing shared playback state.
+    // Local volume is per-browser and must survive a reload without changing
+    // shared playback state. Zero volume is the local mute control.
     const playerMusic = pages[0]!.getByRole("region", { name: "Музыка" });
     await expect(playerMusic).toBeVisible();
     await playerMusic.getByLabel("Громкость", { exact: true }).click();
-    const volumePopover = playerMusic.locator(".music-volume-popover");
-    // Consent now defaults on. Exercise an explicit local opt-out and opt-in.
-    await volumePopover.getByRole("button", { name: "Выключить звук" }).click();
-    await volumePopover.getByRole("button", { name: "Включить звук" }).click();
-    await expect(
-      playerMusic.getByRole("slider", { name: "Личная громкость" }),
-    ).toBeVisible();
+    const localVolume = playerMusic.getByRole("slider", {
+      name: "Личная громкость",
+    });
+    await expect(localVolume).toBeVisible();
+    await localVolume.focus();
+    await localVolume.press("Home");
+    await expect(localVolume).toHaveValue("0");
     await pages[0]!.reload();
     await pages[0]!.getByLabel("Громкость", { exact: true }).click();
     await expect(
-      pages[0]!
-        .locator(".music-volume-popover")
-        .getByRole("button", { name: "Выключить звук" }),
-    ).toBeVisible();
-    await expect(
       pages[0]!.getByRole("slider", { name: "Личная громкость" }),
-    ).toBeVisible();
+    ).toHaveValue("0");
 
     const gmConnection = await connectSocket(gm);
     connections.push(gmConnection);
