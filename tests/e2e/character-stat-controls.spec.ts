@@ -74,7 +74,7 @@ for (const role of ["GM", "PLAYER"] as const)
       const card = sheet.locator(".character-card--stats");
       const row = card.locator(".stat-field").first();
       const label = (await row
-        .locator(":scope > span:first-child")
+        .locator(".stat-field__roll-name")
         .textContent())!.trim();
       await row.scrollIntoViewIfNeeded();
       await expect(row.locator("input")).toHaveAccessibleName(label);

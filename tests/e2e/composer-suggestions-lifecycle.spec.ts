@@ -324,7 +324,12 @@ for (const role of ["GM", "PLAYER"] as const) {
       await composer.fill("/");
       await expect(popup).toBeVisible();
       const outside = panel.locator("#activity-message-list");
-      await panel.locator(".activity-roll-controls__heading strong").click();
+      if (role === "GM")
+        await panel.getByRole("button", { name: "Быстрые броски" }).click();
+      else
+        await panel
+          .getByText("Нет доступного персонажа для броска.", { exact: true })
+          .click();
       await expect(popup).toHaveCount(0);
       await expect(composer).toHaveValue("/");
       await commands.click();
