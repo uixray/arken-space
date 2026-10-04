@@ -479,8 +479,8 @@ for (const role of ["GM", "PLAYER"] as const) {
           await postLog(page, 30, "Мобильный журнал");
           await switchSurface(page, "journal");
           await assertSurface(page, "journal", false);
-          // The player journal is the only activity view and has no tab.
-          if (role === "GM") await page.locator("#chat-tab-activity").click();
+          // The journal is the only activity view for both roles and has no tab.
+          await expect(page.locator("#chat-panel-activity")).toBeVisible();
           const list = page.locator(listSelector);
           await expect(list.getByText(/^Мобильный журнал 29 —/)).toHaveCount(1);
           await expect

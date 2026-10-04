@@ -109,7 +109,7 @@ for (const role of ["GM", "PLAYER"] as const)
         await page.setViewportSize({ width, height: 850 });
         await page.goto("/");
         if (width === 360) await page.locator("#compact-nav-journal").click();
-        if (role === "GM") await page.locator("#chat-tab-activity").click();
+        await expect(page.locator("#chat-panel-activity")).toBeVisible();
 
         const composer = page.getByRole("textbox", {
           name: "Сообщение или бросок",
@@ -139,13 +139,9 @@ for (const role of ["GM", "PLAYER"] as const)
         const focusTrail: string[] = [];
         // Start before all sampled controls, not after the filter. Browser chrome
         // does not guarantee a cyclic Tab route back into the document.
-        if (role === "GM") {
-          await page.locator("#chat-tab-activity").focus();
-        } else {
-          // Players have only the activity surface, without a tab trigger.
-          await filter.focus();
-          await page.keyboard.press("Shift+Tab");
-        }
+        // Both roles have only the activity surface, without a tab trigger.
+        await filter.focus();
+        await page.keyboard.press("Shift+Tab");
         for (let n = 0; n < 100 && pendingFocus.size; n++) {
           await page.keyboard.press("Tab");
           const focused = page.locator(":focus");

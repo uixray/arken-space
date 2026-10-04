@@ -171,7 +171,13 @@ export function StickerPicker({
       </Button>
       <Popup
         open={open && !disabled}
-        anchorElement={anchor}
+        // Anchor above the entire composer, not its bottom-aligned icon:
+        // otherwise the panel can cover the textarea and block outside clicks.
+        anchorElement={
+          iconOnly
+            ? (anchor?.closest<HTMLElement>(".chat-compose") ?? anchor)
+            : anchor
+        }
         className={popupClassName}
         placement={["top-end", "bottom-end"]}
         strategy="fixed"
