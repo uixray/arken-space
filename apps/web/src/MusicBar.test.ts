@@ -167,7 +167,7 @@ describe("personal music volume", () => {
     expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
   });
 
-  it("ignores the obsolete enable gate on later visits", () => {
+  it("respects an explicit personal opt-out on later visits", () => {
     localStorage.setItem("arken.audio.enabled", "false");
     const play = vi
       .spyOn(HTMLMediaElement.prototype, "play")
@@ -182,11 +182,11 @@ describe("personal music volume", () => {
         onUpload: vi.fn(),
       }),
     );
-    expect(play).toHaveBeenCalledTimes(1);
+    expect(play).not.toHaveBeenCalled();
     expect(localStorage.getItem("arken.audio.enabled")).toBe("false");
   });
 
-  it("uses zero personal volume for mute without an extra enable button", () => {
+  it("keeps zero personal volume alongside the explicit opt-out", () => {
     localStorage.setItem("arken.audio.enabled", "false");
     const play = vi
       .spyOn(HTMLMediaElement.prototype, "play")
@@ -206,8 +206,8 @@ describe("personal music volume", () => {
       target: { value: "0" },
     });
     expect(container.querySelector("audio")!.volume).toBe(0);
-    expect(screen.queryByRole("button", { name: "Включить звук" })).toBeNull();
-    expect(play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Включить звук" })).toBeTruthy();
+    expect(play).not.toHaveBeenCalled();
   });
 
   it("retries after autoplay denial through an ordinary gesture", async () => {
@@ -225,10 +225,18 @@ describe("personal music volume", () => {
         onUpload: vi.fn(),
       }),
     );
-    await vi.waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Включить звук" }),
+      ).toBeTruthy(),
+    );
     expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
     fireEvent.pointerDown(document.body);
-    await vi.waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Включить звук" }),
+      ).toBeNull(),
+    );
     expect(play).toHaveBeenCalledTimes(2);
     expect(notify).not.toHaveBeenCalled();
   });
@@ -247,7 +255,11 @@ describe("personal music volume", () => {
         onUpload: vi.fn(),
       }),
     );
-    await vi.waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Включить звук" }),
+      ).toBeTruthy(),
+    );
     fireEvent.pointerDown(container);
     await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(2));
     expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
@@ -266,7 +278,11 @@ describe("personal music volume", () => {
         onUpload: vi.fn(),
       }),
     );
-    await vi.waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Включить звук" }),
+      ).toBeTruthy(),
+    );
     expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
   });
   it("keeps the first slider step quiet instead of jumping to 5% gain", () => {
