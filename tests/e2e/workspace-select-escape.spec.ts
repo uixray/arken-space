@@ -177,13 +177,16 @@ for (const width of [1280, 360]) {
     });
     const name = dialog.getByRole("textbox", { name: "Имя персонажа" });
     await name.fill("Новый страж");
-    const trigger = dialog.getByRole("combobox", { name: /Шаблон/ });
+    const trigger = dialog.getByRole("combobox", { name: /шаблон/i });
     await name.press("Tab");
     await expect(trigger).toBeFocused();
     await trigger.press("Shift+Tab");
     await expect(name).toBeFocused();
-    await expect(name.locator("..")).toHaveCSS("outline-style", "solid");
-    await expect(name.locator("..")).toHaveCSS("outline-width", "2px");
+    const inputShell = name.locator(
+      "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' arken-text-input ')][1]",
+    );
+    await expect(inputShell).toHaveCSS("outline-style", "solid");
+    await expect(inputShell).toHaveCSS("outline-width", "2px");
     const popup = page.locator(".arken-form-select-popup");
     await trigger.click();
     const template = popup.getByRole("option", {
@@ -226,7 +229,7 @@ for (const width of [1280, 360]) {
     await expect(trigger).toContainText("На основе «Страж образец»");
     await trigger.press("ArrowDown");
     await expect(popup).toBeVisible();
-    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await expect(trigger).toContainText("Без шаблона (пустой лист)");
     await expect(popup).toBeHidden();
@@ -259,7 +262,7 @@ for (const width of [1280, 360]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/");
     await openWorkspaceSection(page, "Подготовка");
-    const popup = page.locator(".arken-form-select-popup");
+    const popup = page.locator(".arken-form-select-popup:visible");
     const tabs = page.getByRole("navigation", { name: "Разделы подготовки" });
     async function expectHiddenSectionsInert() {
       expect(
@@ -386,7 +389,7 @@ test("UIX-317 reduced motion preserves actual character dialog and popup lifecyc
   });
   const name = dialog.getByRole("textbox", { name: "Имя персонажа" });
   await name.pressSequentially("Страж без анимации");
-  const trigger = dialog.getByRole("combobox", { name: /Шаблон/ });
+  const trigger = dialog.getByRole("combobox", { name: /шаблон/i });
   await name.press("Tab");
   await expect(trigger).toBeFocused();
   await trigger.press("ArrowDown");
@@ -427,7 +430,8 @@ test("UIX-317 reduced motion preserves actual character dialog and popup lifecyc
     });
   };
   await sample("reduced-at-open");
-  await page.keyboard.press("End");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await expect(trigger).toContainText("На основе «Страж образец»");
   await expect(popup).toBeHidden();
@@ -466,7 +470,11 @@ test("UIX-317 reduced motion preserves actual character dialog and popup lifecyc
   await expect(name).toHaveValue("Страж без анимации");
   await trigger.press("Shift+Tab");
   await expect(name).toBeFocused();
-  await expect(name.locator("..")).toHaveCSS("outline-width", "2px");
+  await expect(
+    name.locator(
+      "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' arken-text-input ')][1]",
+    ),
+  ).toHaveCSS("outline-width", "2px");
   await info.attach("reduced-compact-dialog", {
     body: await page.screenshot(),
     contentType: "image/png",

@@ -43,7 +43,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.3",
     "eslint-plugin-storybook": "^10.5.10",
-    "fastify": "5.12.0",
+    "fastify": "5.12.5",
     "prettier": "3.9.6",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
@@ -65,7 +65,10 @@
       "find-my-way": ">=9.7.0",
       "socket.io-parser": ">=4.2.7",
       "esbuild": ">=0.28.1",
-      "fast-uri": ">=4.1.2",
+      "fast-uri": ">=4.1.5",
+      "ip-address": ">=10.7.1",
+      "engine.io": ">=6.6.10",
+      "@fastify/busboy": ">=3.2.1",
       "brace-expansion": ">=5.0.9"
     }
   }

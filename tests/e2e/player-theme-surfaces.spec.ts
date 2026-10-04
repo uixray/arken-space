@@ -303,21 +303,18 @@ for (const role of ["GM", "PLAYER"] as const) {
         });
 
         const dialog = await openThemeDialog(page);
-        const select = dialog.getByRole("combobox", {
-          name: "Тема",
-          exact: true,
-        });
-        await select.click();
         const visibleName =
           theme.id === "classic-v1" ? "Прежнее оформление" : theme.name;
-        // The controlled option appends “сейчас” / “по умолчанию” markers.
-        const option = page.getByRole("option", {
+        // The theme chooser is now a visible radio list, not a portal select.
+        // The selected row still appends “сейчас” / “по умолчанию” markers.
+        const option = dialog.getByRole("radio", {
           name: new RegExp(
             `^${visibleName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?: —|$)`,
           ),
         });
         await expect(option).toBeVisible();
-        const hit = await option.evaluate((node) => {
+        await expect(option).toBeChecked();
+        const hit = await option.locator("..").evaluate((node) => {
           const box = node.getBoundingClientRect();
           const target = document.elementFromPoint(
             box.left + box.width / 2,
@@ -326,23 +323,12 @@ for (const role of ["GM", "PLAYER"] as const) {
           return target === node || node.contains(target);
         });
         expect(hit).toBe(true);
-        const popup = page.locator(
-          ".arken-select__positioner.arken-form-select-popup",
-        );
-        // Layer values live on the actual portal wrappers, not the semantic
-        // content nodes (whose computed z-index is correctly "auto").
-        const [dialogZ, popupZ] = await Promise.all([
-          dialog.evaluate((node) => {
-            const wrapper = node.closest(".g-modal");
-            if (!wrapper) throw new Error("Missing modal layer wrapper");
-            return Number(getComputedStyle(wrapper).zIndex);
-          }),
-          popup.evaluate((node) => Number(getComputedStyle(node).zIndex)),
-        ]);
+        const dialogZ = await dialog.evaluate((node) => {
+          const wrapper = node.closest(".g-modal");
+          if (!wrapper) throw new Error("Missing modal layer wrapper");
+          return Number(getComputedStyle(wrapper).zIndex);
+        });
         expect(dialogZ).toBeGreaterThan(0);
-        expect(popupZ).toBeGreaterThan(dialogZ);
-        await page.keyboard.press("Escape");
-        await expect(select).toBeFocused();
         await info.attach(`theme-surfaces-${role}-${width}-${theme.id}`, {
           body: await page.screenshot({ fullPage: true }),
           contentType: "image/png",

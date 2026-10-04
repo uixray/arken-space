@@ -4,6 +4,8 @@ import { isSystemRegenStatKey, STAT_VALUE_RANGE } from "@arken/system";
 import { ApiError, formatApiError } from "../api";
 import { FormInput } from "../ui/GravityFormControls";
 import { useRemoteFieldValue } from "../ui/remote-field-value";
+import { rollModeFromEvent } from "../roll-modifier-keys";
+import type { RollMode } from "../roll-mode";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
 import { ArkenDialog } from "../ui/ArkenDialog";
 import { AppIcon } from "../ui/AppIcon";
@@ -114,7 +116,7 @@ export function StatLayoutCard({
   rollPending: boolean;
   canEditLayout: boolean;
   onChangeValue: (key: string, value: number) => void;
-  onRoll: (formula: string, label: string) => void;
+  onRoll: (formula: string, label: string, mode: RollMode) => void;
   onRenameRow: (key: string, label: string) => Promise<void>;
   onAddRow: (label: string) => Promise<void>;
   onDeleteRow: (key: string) => Promise<void>;
@@ -191,7 +193,13 @@ export function StatLayoutCard({
             <div className="stat-field__actions">
               <Button
                 disabled={!editable || rollPending}
-                onClick={() => onRoll(`1d20 + ${row.key}`, row.label)}
+                onClick={(event) =>
+                  onRoll(
+                    `1d20 + ${row.key}`,
+                    row.label,
+                    rollModeFromEvent(event.nativeEvent),
+                  )
+                }
               >
                 Бросок
               </Button>

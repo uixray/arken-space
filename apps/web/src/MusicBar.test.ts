@@ -150,6 +150,138 @@ describe("UIX-417 audio acknowledgement copy", () => {
 });
 
 describe("personal music volume", () => {
+  it("tries shared playback on a fresh profile without saving consent as a mute", () => {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue();
+    renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
+  });
+
+  it("respects an explicit personal mute on later visits", () => {
+    localStorage.setItem("arken.audio.enabled", "false");
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+    expect(play).not.toHaveBeenCalled();
+    expect(localStorage.getItem("arken.audio.enabled")).toBe("false");
+  });
+
+  it("re-enables an explicit mute directly from the volume control", () => {
+    localStorage.setItem("arken.audio.enabled", "false");
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const { container } = renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+    fireEvent.click(container.querySelector(".music-volume-control summary")!);
+    fireEvent.click(screen.getByRole("button", { name: "Включить звук" }));
+    expect(localStorage.getItem("arken.audio.enabled")).toBe("true");
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a direct retry after autoplay denial without persisting a mute", async () => {
+    vi.mocked(notify).mockClear();
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockRejectedValueOnce(new DOMException("blocked", "NotAllowedError"))
+      .mockResolvedValue();
+    renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Включить звук" }),
+      ).toBeTruthy(),
+    );
+    expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Включить звук" }));
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Включить звук" }),
+      ).toBeNull(),
+    );
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("unlocks blocked playback on the next ordinary pointer gesture", async () => {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockRejectedValueOnce(new DOMException("blocked", "NotAllowedError"))
+      .mockResolvedValue();
+    const { container } = renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Включить звук" }),
+      ).toBeTruthy(),
+    );
+    fireEvent.pointerDown(container);
+    await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(2));
+    expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
+  });
+
+  it("treats a synchronous media-policy throw like a rejected play promise", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => {
+      throw new DOMException("blocked", "NotAllowedError");
+    });
+    renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset],
+        role: "PLAYER",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Включить звук" }),
+      ).toBeTruthy(),
+    );
+    expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
+  });
   it("keeps the first slider step quiet instead of jumping to 5% gain", () => {
     expect(volumeSliderToGain(0)).toBe(0);
     expect(volumeSliderToGain(0.05)).toBeCloseTo(0.0025);

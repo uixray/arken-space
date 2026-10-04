@@ -389,6 +389,11 @@ async function openBackstory(user: ReturnType<typeof userEvent.setup>) {
   return within(details).getByRole("textbox");
 }
 
+async function openPortraitEditor(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /^Изменить портрет:/ }));
+  return screen.getByRole("dialog", { name: /^Портрет:/ });
+}
+
 async function expectAllowedBackstory(
   snapshot: GameSnapshot,
   character: CharacterDto,
@@ -493,6 +498,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
         });
       });
 
+      await openPortraitEditor(user);
       await user.click(
         screen.getByRole("button", { name: portraitAsset.name }),
       );
@@ -537,19 +543,14 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const calls = renderPanel(playerSnapshot(), makeCharacter());
     const user = userEvent.setup();
     const rename = screen.getByRole("button", { name: "Переименовать" });
-    const picker = screen.getByRole("button", { name: portraitAsset.name });
-    const upload = screen.getByLabelText("Upload portrait file");
-    expect(rename, "UIX414_IDENTITY_RENAME_DISABLED").toBeDisabled();
-    expect(picker, "UIX414_IDENTITY_PICK_DISABLED").toBeDisabled();
-    expect(upload, "UIX414_IDENTITY_UPLOAD_DISABLED").toBeDisabled();
-    await user.click(rename);
-    await user.click(picker);
-    await user.upload(upload, new File(["portrait"], "portrait.png"));
-    const assign = screen.getByRole("button", {
-      name: "Загрузить и назначить",
+    const portraitTrigger = screen.getByRole("button", {
+      name: /^Изменить портрет:/,
     });
-    expect(assign).toBeDisabled();
-    await user.click(assign);
+    expect(rename, "UIX414_IDENTITY_RENAME_DISABLED").toBeDisabled();
+    expect(portraitTrigger, "UIX414_IDENTITY_PICK_DISABLED").toBeDisabled();
+    await user.click(rename);
+    await user.click(portraitTrigger);
+    expect(screen.queryByRole("dialog", { name: /^Портрет:/ })).toBeNull();
     expect(
       calls.onPatch,
       "UIX414_IDENTITY_UNRELATED_PATCH_0",
@@ -601,6 +602,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const character = makeCharacter({ ownerMembershipId: snapshot.me.id });
     const calls = renderPanel(snapshot, character);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     await user.upload(
       screen.getByLabelText("Upload portrait file"),
       new File(["portrait"], "portrait.png", { type: "image/png" }),
@@ -610,14 +612,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       ...character,
       ownerMembershipId: "someone-else",
     });
-    const assign = screen.getByRole("button", {
-      name: "Загрузить и назначить",
-    });
-    expect(
-      assign,
-      "UIX414_PORTRAIT_SELECTED_REVOKED_ASSIGN_DISABLED",
-    ).toBeDisabled();
-    await user.click(assign);
+    expect(screen.queryByRole("dialog", { name: /^Портрет:/ })).toBeNull();
     expect(
       calls.uploadAsset,
       "UIX414_PORTRAIT_SELECTED_REVOKED_UPLOAD_0",
@@ -631,6 +626,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const upload = deferred<AssetDto>();
     calls.uploadAsset.mockReturnValueOnce(upload.promise);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     const file = new File(["portrait"], "portrait.png", {
       type: "image/png",
     });
@@ -666,6 +662,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const upload = deferred<AssetDto>();
     calls.uploadAsset.mockReturnValueOnce(upload.promise);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     await user.upload(
       screen.getByLabelText("Upload portrait file"),
       new File(["portrait"], "portrait.png", { type: "image/png" }),
@@ -698,6 +695,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const upload = deferred<AssetDto>();
     calls.uploadAsset.mockReturnValueOnce(upload.promise);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     await user.upload(
       screen.getByLabelText("Upload portrait file"),
       new File(["portrait"], "portrait.png", { type: "image/png" }),
@@ -735,6 +733,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const upload = deferred<AssetDto>();
     calls.uploadAsset.mockReturnValueOnce(upload.promise);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     await user.upload(
       screen.getByLabelText("Upload portrait file"),
       new File(["portrait"], "portrait.png", { type: "image/png" }),

@@ -33,12 +33,12 @@ import {
   rollableStatRows,
   statLabelsFromLayout,
   statResourceRowsFromLayout,
-  statRowsFromLayout,
 } from "../stat-keys";
+import { useCampaignActions } from "../campaign-actions-context";
 
 import { useDismissibleDetails } from "../ui/dismissible-details";
 import { AppIcon } from "../ui/AppIcon";
-import { MoreIcon, SendIcon } from "../ui/icons";
+import { SendIcon, SettingsIcon } from "../ui/icons";
 import {
   ACTIVITY_FILTERS,
   ACTIVITY_FILTER_LABEL,
@@ -79,6 +79,7 @@ import {
   filterActivityEvents,
   physicalDiceStorageKey,
   physicalRollBonus,
+  physicalRollPresentation,
   physicalRollChatRequest,
   readRollLogCollapsed,
   rollLogHistoryPresentation,
@@ -259,19 +260,35 @@ function ChatMessageBodyComponent({
      * На месте итога стоит бонус: результата система не знает и не должна
      * делать вид, что знает.
      */
-    if (physicalBonus)
+    if (physicalBonus) {
+      const presentation = physicalRollPresentation(message.body);
       return (
         <div className="roll-result roll-result--physical">
           {avatar}
           <div className="roll-details">
-            <div>{message.body}</div>
-            <small>Бросьте кубик и прибавьте бонус</small>
+            <div className="roll-details__heading">
+              <span>
+                Физический бросок · {presentation?.label ?? message.body}
+              </span>
+              {presentation?.mode !== "NORMAL" && presentation && (
+                <span className="roll-mode-badge">
+                  {presentation.mode === "ADVANTAGE"
+                    ? "Преимущество"
+                    : "Помеха"}
+                </span>
+              )}
+            </div>
+            <small>
+              {!presentation || presentation.mode === "NORMAL" ? "d20" : "2d20"}{" "}
+              · {physicalBonus} к броску
+            </small>
           </div>
           <strong className="roll-total" aria-label="Бонус к броску">
             {physicalBonus}
           </strong>
         </div>
       );
+    }
     return (
       <>
         <p>{message.body}</p>
@@ -294,31 +311,57 @@ function ChatMessageBodyComponent({
     >
       {avatar}
       <div className="roll-details">
-        <div>{message.body}</div>
-        {critical && (
-          <span className="roll-critical-label">{critical.label}</span>
-        )}
+        <div className="roll-details__heading">
+          <span>{message.body}</span>
+          {critical && (
+            <span className="roll-critical-label">{critical.label}</span>
+          )}
+        </div>
         <small>{formatDiceBreakdown(dice)}</small>
       </div>
-      {/* Итог справа: рамка исхода центрируется вокруг самого числа */}
-      <strong className="roll-total" aria-label="Итог броска">
-        <OutcomeFrame
-          frame={
-            dice?.frame ??
-            (critical
-              ? {
-                  setKey: "ARKEN_CRITICAL_V1",
-                  frameKey:
-                    critical.kind === "success"
-                      ? "critical-success"
-                      : "critical-failure",
-                }
-              : null)
-          }
-          active={isActive ?? false}
-        />
-        {dice.total}
-      </strong>
+      <div className="roll-result__numbers">
+        {/* Итог справа: рамка исхода центрируется вокруг самого числа */}
+        <strong className="roll-total" aria-label="Итог броска">
+          <OutcomeFrame
+            frame={
+              dice?.frame ??
+              (critical
+                ? {
+                    setKey: "ARKEN_CRITICAL_V1",
+                    frameKey:
+                      critical.kind === "success"
+                        ? "critical-success"
+                        : "critical-failure",
+                  }
+                : null)
+            }
+            active={isActive ?? false}
+          />
+          {dice.total}
+        </strong>
+        {dice.terms.length === 1 && dice.terms[0]?.rolls.length === 1 && (
+          <span
+            className="roll-result__die"
+            aria-label={`Кубик: ${dice.terms[0].rolls[0]}`}
+          >
+            {dice.terms[0].rolls[0]}
+          </span>
+        )}
+        {dice.modifiers.some((modifier) => modifier.value !== 0) && (
+          <span
+            className="roll-result__bonus"
+            aria-label={`Бонус: ${dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0)}`}
+          >
+            {dice.modifiers.reduce(
+              (sum, modifier) => sum + modifier.value,
+              0,
+            ) >= 0
+              ? "+"
+              : ""}
+            {dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0)}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -369,6 +412,7 @@ export function ActivityPanel({
   ) => Promise<void>;
   onRecruitFromBattleZone?: () => void;
 }) {
+  const { catalog: catalogActions } = useCampaignActions();
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
   const characterNameFor = useMemo(
     () => createRollCharacterNameSource(snapshot),
@@ -686,27 +730,55 @@ export function ActivityPanel({
         aria-label="Быстрые броски и ресурсы"
         tabIndex={0}
       >
+        {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
+          <div className="activity-character-picker">
+            <label htmlFor="activity-roll-character">
+              Персонаж для действия
+            </label>
+            <FormSelect
+              id="activity-roll-character"
+              aria-label="Персонаж для броска"
+              value={rollCharacter?.id ?? ""}
+              onChange={(event) => setRollCharacterId(event.target.value)}
+            >
+              {availableRollCharacters.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name}
+                </option>
+              ))}
+            </FormSelect>
+          </div>
+        )}
+        {snapshot.me.role === "PLAYER" && rollCharacter && (
+          <div className="activity-character-picker activity-character-picker--player">
+            <strong>{rollCharacter.name}</strong>
+          </div>
+        )}
+        {rollCharacter && (
+          <ResourceCounters
+            scopeKey={rollCharacter.id}
+            rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
+            resources={rollCharacter.resources}
+            stats={rollCharacter.stats}
+            editable={canSpendResources}
+            onSpend={(intent) =>
+              spendResource(
+                rollCharacter.id,
+                rollCharacter.name,
+                rollCharacter.revision,
+                intent,
+              )
+            }
+          />
+        )}
+        {resourceError && (
+          <p className="composer-error" role="alert">
+            {resourceError}
+          </p>
+        )}
         <section className="activity-roll-controls" aria-label="Быстрые броски">
           <div className="activity-roll-controls__heading">
-            <strong>
-              {snapshot.me.role === "PLAYER" && rollCharacter
-                ? `Броски и ресурсы · ${rollCharacter.name}`
-                : "Быстрые броски"}
-            </strong>
-            {snapshot.me.role === "GM" &&
-              availableRollCharacters.length > 0 && (
-                <FormSelect
-                  aria-label="Персонаж для броска"
-                  value={rollCharacter?.id ?? ""}
-                  onChange={(event) => setRollCharacterId(event.target.value)}
-                >
-                  {availableRollCharacters.map((character) => (
-                    <option key={character.id} value={character.id}>
-                      {character.name}
-                    </option>
-                  ))}
-                </FormSelect>
-              )}
+            <strong>Быстрые броски</strong>
             {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
                 подписывала — uikit рисует свой `<label>` внутри, а вложенные не
                 связываются: программа чтения с экрана называла поле «флажок». */}
@@ -733,10 +805,21 @@ export function ActivityPanel({
               campaignId={snapshot.campaign.id}
               membershipId={snapshot.me.id}
               rows={rollableStatRows(
-                statRowsFromLayout(snapshot.campaign.statLayout),
+                snapshot.campaign.statLayout.flatMap((group) =>
+                  group.rows
+                    .filter((row) => row.source !== "RESOURCE")
+                    .map(({ key, label }) => ({ key, label, group: group.id })),
+                ),
               )}
               quickRollPending={pendingQuickRoll !== null}
               gmOnly={rollVisibility === "GM_ONLY"}
+              onEntryAction={(entry, mode, rollActionId) =>
+                catalogActions.onRollEntry(rollCharacter.id, entry.id, {
+                  mode,
+                  rollActionId,
+                  entryRevision: entry.revision,
+                })
+              }
               onQuickRoll={(formula, label, bonus, mode) =>
                 void submitQuickRoll(formula, label, bonus, mode)
               }
@@ -756,28 +839,6 @@ export function ActivityPanel({
             </p>
           )}
         </section>
-        {rollCharacter && (
-          <ResourceCounters
-            scopeKey={rollCharacter.id}
-            rows={statResourceRowsFromLayout(snapshot.campaign.statLayout)}
-            resources={rollCharacter.resources}
-            stats={rollCharacter.stats}
-            editable={canSpendResources}
-            onSpend={(intent) =>
-              spendResource(
-                rollCharacter.id,
-                rollCharacter.name,
-                rollCharacter.revision,
-                intent,
-              )
-            }
-          />
-        )}
-        {resourceError && (
-          <p className="composer-error" role="alert">
-            {resourceError}
-          </p>
-        )}
       </div>
       <div className="activity-log-toolbar">
         <span className="eyebrow">Журнал</span>
@@ -789,8 +850,7 @@ export function ActivityPanel({
             aria-label={activityFilterSummaryTitle(activityFilters)}
             title={activityFilterSummaryTitle(activityFilters)}
           >
-            <AppIcon icon={MoreIcon} />
-            <span className="activity-filters-summary__label">Показывать</span>
+            <AppIcon icon={SettingsIcon} />
             {hiddenActivityStreamCount(activityFilters) > 0 && (
               <span className="activity-filters-badge" aria-hidden="true">
                 {hiddenActivityStreamCount(activityFilters)}

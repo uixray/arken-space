@@ -13,6 +13,8 @@ export default tseslint.config(
       "**/coverage/**",
       "**/drizzle/meta/**",
       "**/test-results/**",
+      "**/storybook-static/**",
+      "**/.tmp-*",
       ".worktrees/**",
       ".agent/**",
       ".agents/**",

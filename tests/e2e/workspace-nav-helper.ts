@@ -24,11 +24,15 @@ export async function openWorkspaceSection(
   if (
     await page.getByRole("navigation", { name: "Основные области" }).isVisible()
   ) {
-    await page.getByRole("button", { name: "Разделы", exact: true }).click();
-    const sections = page.getByRole("dialog", { name: "Разделы", exact: true });
-    await expect(sections).toBeVisible();
-    await sections.getByRole("button", { name, exact: true }).click();
-    await expect(sections).toBeHidden();
+    if (name === "Персонажи") {
+      await page.locator("#compact-nav-character").click();
+      return;
+    }
+    await page.locator("#compact-nav-menu").click();
+    const menu = page.getByRole("region", { name: "Меню кампании" });
+    await expect(menu).toBeVisible();
+    await menu.getByRole("button", { name, exact: true }).click();
+    await expect(menu).toBeHidden();
     return;
   }
 

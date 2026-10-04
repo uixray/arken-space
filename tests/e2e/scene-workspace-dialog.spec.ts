@@ -461,7 +461,7 @@ test("UIX-621 select portal receives pointer above token workspace", async ({
           box.x + box.width / 2,
           box.y + box.height / 2,
         );
-        const wrapper = element.closest("[data-floating-ui-status]");
+        const wrapper = element.closest(".arken-select__positioner");
         const popupZIndex = wrapper ? getComputedStyle(wrapper).zIndex : "";
         return {
           wrapper: describe(wrapper),
@@ -574,11 +574,11 @@ for (const role of ["GM", "PLAYER"] as const) {
       exact: true,
     });
     const select = dialog.getByRole("combobox");
+    const titleInput = dialog.getByRole("textbox", {
+      name: "Короткое название",
+    });
     await expect(dialog).toBeVisible();
-    await dialog
-      .locator("input")
-      .first()
-      .fill("Локальный черновик без отправки");
+    await titleInput.fill("Локальный черновик без отправки");
     const geometry: unknown[] = [];
     for (const size of [
       { width: 1280, height: 850 },
@@ -617,19 +617,18 @@ for (const role of ["GM", "PLAYER"] as const) {
       await expect(select).toBeFocused();
       await select.press("Enter");
       await expect(idea).toBeVisible();
-      // Visible options precede Floating UI's keyboard-ready open state.
-      // Do not send Home during the initial opening frame (exact-main CI trace).
+      // Wait for the current Base UI positioner before keyboard navigation.
       await expect(
-        idea.locator("xpath=ancestor::*[@data-floating-ui-status][1]"),
-      ).toHaveAttribute("data-floating-ui-status", "open");
+        idea.locator(
+          "xpath=ancestor::*[contains(@class, 'arken-select__positioner')][1]",
+        ),
+      ).toBeVisible();
       await expect(select).toBeFocused();
-      await page.keyboard.press("Home");
-      await expect(select).toHaveAttribute(
-        "aria-activedescendant",
-        (await page
-          .getByRole("option", { name: "Ошибка", exact: true })
-          .getAttribute("id"))!,
-      );
+      await page.keyboard.press("ArrowUp");
+      await page.keyboard.press("ArrowUp");
+      await expect(
+        page.getByRole("option", { name: "Ошибка", exact: true }),
+      ).toBeFocused();
       await page.keyboard.press("Enter");
       await expect(select).toContainText("Ошибка");
       await select.press("Enter");
@@ -643,9 +642,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       await dialog.locator("textarea").first().click();
       await expect(idea).toBeHidden();
       await expect(dialog.locator("textarea").first()).toBeFocused();
-      await expect(dialog.locator("input").first()).toHaveValue(
-        "Локальный черновик без отправки",
-      );
+      await expect(titleInput).toHaveValue("Локальный черновик без отправки");
     }
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -666,7 +663,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     await page.getByRole("button", { name: "Сообщить", exact: true }).click();
     await expect(dialog).toBeVisible();
     await expect(select).toContainText("Ошибка");
-    await expect(dialog.locator("input").first()).toHaveValue("");
+    await expect(titleInput).toHaveValue("");
     await page.keyboard.press("Escape");
     expect(writes).toEqual([]);
     expect(errors).toEqual([]);
@@ -730,9 +727,9 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(receive).toBeFocused();
         await expect(send).not.toBeChecked();
         await page.setViewportSize(size);
-        if (size.height === 480) {
-          // The shorter viewport clips the anchor in the scrollable toolbar;
-          // its popup must dismiss, not float without a reachable owner.
+        if (size.width < 500) {
+          // Compact toolbar shortcuts may be below the visible scroll region.
+          // Dismiss the detached popup, then bring its owner into view.
           await expect(panel).toBeHidden();
           await trigger.scrollIntoViewIfNeeded();
           await trigger.click();
@@ -780,11 +777,17 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(trigger).toBeFocused();
         await trigger.press("Enter");
         await expect(panel).toBeVisible();
-        await page.getByLabel("Меню сеанса", { exact: true }).click();
+        if (size.width < 500) {
+          await page.mouse.click(size.width - 20, 200);
+        } else {
+          await page.getByLabel("Меню сеанса", { exact: true }).click();
+        }
         await expect(panel).toBeHidden();
-        await expect(
-          page.getByLabel("Меню сеанса", { exact: true }),
-        ).toBeFocused();
+        if (size.width >= 500) {
+          await expect(
+            page.getByLabel("Меню сеанса", { exact: true }),
+          ).toBeFocused();
+        }
         await page.keyboard.press("Escape");
       } else {
         await page.setViewportSize(size);

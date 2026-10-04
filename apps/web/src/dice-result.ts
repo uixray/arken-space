@@ -85,7 +85,7 @@ export function formatDiceBreakdown(value: unknown) {
       modifier.value > 0 ? `+${modifier.value}` : String(modifier.value),
     );
   const pool = dice.poolTotals
-    ? `Выпало: ${dice.poolTotals.join(" и ")} \u2192 выбран ${dice.poolTotals[dice.selectedPool ?? 0]}`
+    ? `Итоги попыток: ${dice.poolTotals.join(" и ")} \u2192 выбран ${dice.poolTotals[dice.selectedPool ?? 0]}`
     : "";
   return [...terms, ...modifiers, pool].filter(Boolean).join(" \u00b7 ");
 }

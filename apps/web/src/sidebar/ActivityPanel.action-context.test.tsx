@@ -17,6 +17,7 @@ import {
 } from "../test-support/game-snapshot-fixtures";
 import { RESOURCE_ADJUST_DELAY_MS } from "../resource-regen";
 import { RollVisibilityContext } from "../roll-visibility-context";
+import { CampaignActionsContext } from "../campaign-actions-context";
 import { ApiError } from "../api";
 import { ActivityPanel } from "./ChatPanels";
 
@@ -96,9 +97,15 @@ function renderActivity(
   const rendered = renderComponent(<ActivityPanel {...props} />, {
     wrapper: ({ children }: { children: ReactNode }) => (
       <ThemeProvider theme="dark" lang="ru">
-        <RollVisibilityContext.Provider value="GM_ONLY">
-          {children}
-        </RollVisibilityContext.Provider>
+        <CampaignActionsContext.Provider
+          value={
+            { catalog: { onRollEntry: vi.fn(async () => undefined) } } as never
+          }
+        >
+          <RollVisibilityContext.Provider value="GM_ONLY">
+            {children}
+          </RollVisibilityContext.Provider>
+        </CampaignActionsContext.Provider>
       </ThemeProvider>
     ),
   });
@@ -147,7 +154,7 @@ afterEach(() => {
 describe("ActivityPanel action context (UIX-621)", () => {
   it("follows snapshot.me.characterId B for rolls and resources when several owned rows begin with A", async () => {
     const { props } = renderActivity();
-    expect(screen.getByText("Броски и ресурсы · Бета")).toBeVisible();
+    expect(screen.getByText("Бета", { exact: true })).toBeVisible();
     expect(
       screen.queryByLabelText("Персонаж для броска"),
     ).not.toBeInTheDocument();
@@ -233,7 +240,7 @@ describe("ActivityPanel action context (UIX-621)", () => {
       "status",
     );
     rerender(snapshot(b.id));
-    expect(screen.getByText("Броски и ресурсы · Бета")).toBeVisible();
+    expect(screen.getByText("Бета", { exact: true })).toBeVisible();
     expect(resourceInput()).toHaveValue(7);
     expect(rollButton()).toBeDisabled();
     fireEvent.click(rollButton());

@@ -6,6 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import type {
   ChatStream,
   CharacterDto,
@@ -149,6 +150,8 @@ export type Props = {
   compact?: boolean;
   chatVisible?: boolean;
   keepCharacterWorkspaceMounted?: boolean;
+  /** Width of the journal column, forwarded to body-portalled workspaces. */
+  workspaceSidebarWidth?: number | null;
   onCollapsedChange: (collapsed: boolean) => void;
   /** UIX-372: pointer handlers driving the sidebar's drag-to-resize width
    * handle. Left to the caller (App.tsx) since it owns the persisted width
@@ -194,6 +197,21 @@ function SidebarComponent(props: Props) {
 }
 
 export const Sidebar = memo(SidebarComponent);
+
+function TokenPaletteWorkspacePortal({ props }: { props: Props }) {
+  return createPortal(
+    <ArkenDialog
+      open
+      footer={false}
+      title="Токены"
+      variant="workspace"
+      onClose={() => props.onWorkspaceChange(null)}
+    >
+      <PalettePanel {...props} />
+    </ArkenDialog>,
+    document.body,
+  );
+}
 
 function SidebarContent(props: Props) {
   // UIX-398 step B: scene commands arrive by context rather than as six props
@@ -358,68 +376,70 @@ function SidebarContent(props: Props) {
       >
         <AppIcon icon={SidebarCollapseIcon} />
       </button>
-      <nav
-        className="tabs chat-stream-tabs"
-        aria-label="Потоки чата"
-        role="tablist"
-        onKeyDown={(event) => {
-          const nextFeed = nextChatFeed(activeFeed, event.key, isGm);
-          if (!nextFeed) return;
-          event.preventDefault();
-          setActiveFeed(nextFeed);
-          requestAnimationFrame(() =>
-            document
-              .getElementById(`chat-tab-${nextFeed.toLowerCase()}`)
-              ?.focus(),
-          );
-        }}
-      >
-        <Button
-          view="flat"
-          role="tab"
-          id="chat-tab-activity"
-          aria-controls="chat-panel-activity"
-          aria-selected={!directMode && activeFeed === "ACTIVITY"}
-          tabIndex={!directMode && activeFeed === "ACTIVITY" ? 0 : -1}
-          onClick={() => {
-            setDirectMode(false);
-            setActiveFeed("ACTIVITY");
+      {isGm && (
+        <nav
+          className="tabs chat-stream-tabs"
+          aria-label="Потоки чата"
+          role="tablist"
+          onKeyDown={(event) => {
+            const nextFeed = nextChatFeed(activeFeed, event.key, isGm);
+            if (!nextFeed) return;
+            event.preventDefault();
+            setActiveFeed(nextFeed);
+            requestAnimationFrame(() =>
+              document
+                .getElementById(`chat-tab-${nextFeed.toLowerCase()}`)
+                ?.focus(),
+            );
           }}
         >
-          {"События"}
-        </Button>
-        {chatFeedOrder(isGm)
-          .filter((feed): feed is ChatStream => feed !== "ACTIVITY")
-          .map((stream) => {
-            const unread = unreadCountForStream(props.snapshot, stream);
-            return (
-              <Button
-                key={stream}
-                view="flat"
-                role="tab"
-                id={`chat-tab-${stream.toLowerCase()}`}
-                aria-controls={`chat-panel-${stream.toLowerCase()}`}
-                aria-selected={!directMode && activeFeed === stream}
-                tabIndex={!directMode && activeFeed === stream ? 0 : -1}
-                onClick={() => {
-                  setDirectMode(false);
-                  setActiveFeed(stream);
-                }}
-              >
-                {CHAT_STREAM_LABEL[stream]}
-                {unread > 0 && (
-                  <span
-                    className="chat-unread-badge"
-                    aria-label={`${unread} непрочитанных`}
-                  >
-                    {unread}
-                  </span>
-                )}
-              </Button>
-            );
-          })}
-        {/* UIX-365: direct-message tab hidden pending a dedicated redesign of the mechanic. */}
-      </nav>
+          <Button
+            view="flat"
+            role="tab"
+            id="chat-tab-activity"
+            aria-controls="chat-panel-activity"
+            aria-selected={!directMode && activeFeed === "ACTIVITY"}
+            tabIndex={!directMode && activeFeed === "ACTIVITY" ? 0 : -1}
+            onClick={() => {
+              setDirectMode(false);
+              setActiveFeed("ACTIVITY");
+            }}
+          >
+            {"События"}
+          </Button>
+          {chatFeedOrder(isGm)
+            .filter((feed): feed is ChatStream => feed !== "ACTIVITY")
+            .map((stream) => {
+              const unread = unreadCountForStream(props.snapshot, stream);
+              return (
+                <Button
+                  key={stream}
+                  view="flat"
+                  role="tab"
+                  id={`chat-tab-${stream.toLowerCase()}`}
+                  aria-controls={`chat-panel-${stream.toLowerCase()}`}
+                  aria-selected={!directMode && activeFeed === stream}
+                  tabIndex={!directMode && activeFeed === stream ? 0 : -1}
+                  onClick={() => {
+                    setDirectMode(false);
+                    setActiveFeed(stream);
+                  }}
+                >
+                  {CHAT_STREAM_LABEL[stream]}
+                  {unread > 0 && (
+                    <span
+                      className="chat-unread-badge"
+                      aria-label={`${unread} непрочитанных`}
+                    >
+                      {unread}
+                    </span>
+                  )}
+                </Button>
+              );
+            })}
+          {/* UIX-365: direct-message tab hidden pending a dedicated redesign of the mechanic. */}
+        </nav>
+      )}
       <div className="panel-scroll chat-scroll">
         {directMode ? (
           <DirectChatPanel
@@ -498,15 +518,7 @@ function SidebarContent(props: Props) {
           />
         )}
         {props.workspace === "tokens" && (
-          <ArkenDialog
-            open
-            footer={false}
-            title="Токены"
-            variant="workspace"
-            onClose={() => props.onWorkspaceChange(null)}
-          >
-            <PalettePanel {...props} />
-          </ArkenDialog>
+          <TokenPaletteWorkspacePortal props={props} />
         )}
         {props.workspace === "setup" && isGm && (
           <ArkenDialog

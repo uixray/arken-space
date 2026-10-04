@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   applyWalletDelta,
   changeWalletValue,
+  canSpendWalletCoin,
   EMPTY_WALLET,
   mergeWalletDelta,
   normalizeWallet,
   normalizeWalletValue,
+  spendWalletCoin,
   WALLET_KEYS,
   WALLET_LABELS,
   walletDeltaIsEmpty,
@@ -64,5 +66,24 @@ describe("wallet numeric input", () => {
     const cancelled = mergeWalletDelta(added, "sp", -1);
 
     expect(walletDeltaIsEmpty(cancelled)).toBe(true);
+  });
+
+  it("breaks a higher denomination in one wallet state change", () => {
+    const wallet = { gold: 10, silver: 0, copper: 0, sp: 0 };
+    expect(canSpendWalletCoin(wallet, "silver")).toBe(true);
+    expect(spendWalletCoin(wallet, "silver")).toEqual({
+      gold: 9,
+      silver: 9,
+      copper: 0,
+      sp: 0,
+    });
+    expect(spendWalletCoin(wallet, "copper")).toEqual({
+      gold: 9,
+      silver: 9,
+      copper: 9,
+      sp: 0,
+    });
+    expect(wallet).toEqual({ gold: 10, silver: 0, copper: 0, sp: 0 });
+    expect(canSpendWalletCoin(EMPTY_WALLET, "silver")).toBe(false);
   });
 });

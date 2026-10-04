@@ -105,7 +105,11 @@ for (const role of ["GM", "PLAYER"] as const)
         name: "Лист персонажа Хранитель",
         exact: true,
       });
-      const portrait = sheet.getByRole("group", {
+      const portraitDialog = page.getByRole("dialog", {
+        name: "Портрет: Хранитель",
+        exact: true,
+      });
+      const portrait = portraitDialog.getByRole("group", {
         name: "Портрет персонажа",
         exact: true,
       });
@@ -130,6 +134,13 @@ for (const role of ["GM", "PLAYER"] as const)
           .toBe(true);
         await tile.click();
       }
+      async function openPortrait() {
+        await sheet
+          .getByRole("button", { name: "Изменить портрет: Хранитель" })
+          .click();
+        await expect(portraitDialog).toBeVisible();
+      }
+      await openPortrait();
       await expect(
         portrait.getByRole("button", { name: "Знак зари", exact: true }),
       ).toHaveCount(0);
@@ -144,6 +155,8 @@ for (const role of ["GM", "PLAYER"] as const)
         path: `/api/characters/${id}`,
         body: { revision: 1, portraitAssetId: snapshot.assets[0].id },
       });
+      await page.keyboard.press("Escape");
+      await expect(portraitDialog).toBeHidden();
       await expect(
         resource.getByRole("button", { name: "Без изображения", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
@@ -168,8 +181,11 @@ for (const role of ["GM", "PLAYER"] as const)
           },
         },
       });
+      await openPortrait();
       await expect(portraitTile).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Escape");
       // Arrow navigation changes focus only; Enter commits removal of the resource image.
+      await icon.focus();
       await page.keyboard.press("ArrowRight");
       const none = resource.getByRole("button", {
         name: "Без изображения",
@@ -195,7 +211,9 @@ for (const role of ["GM", "PLAYER"] as const)
       });
       await page.reload();
       await openWorkspaceSection(page, "Персонажи");
+      await openPortrait();
       await expect(portraitTile).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Escape");
       await expect(none).toHaveAttribute("aria-pressed", "true");
       expect(character.resources.Заря).toMatchObject({
         current: 3,

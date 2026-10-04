@@ -43,6 +43,7 @@ export function ArkenDialog({
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(open);
   const {
     setWindowElement,
     position,
@@ -59,6 +60,23 @@ export function ArkenDialog({
     previousFocus.current = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
     return () => previousFocus.current?.focus();
+  }, [open, variant]);
+
+  useEffect(() => {
+    const justClosed = wasOpen.current && !open;
+    wasOpen.current = open;
+    if (!justClosed || variant !== "modal") return;
+    const frame = requestAnimationFrame(() => {
+      const modals = document.querySelectorAll<HTMLElement>(".g-modal_open");
+      const owner = modals[modals.length - 1];
+      if (!owner || owner.contains(document.activeElement)) return;
+      owner
+        .querySelector<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [tabindex="0"]',
+        )
+        ?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [open, variant]);
 
   if (variant === "workspace") {

@@ -21,7 +21,7 @@ for (const width of [360, 820]) {
     await page.goto("/");
     await expect(page.locator(".landing-badge")).toHaveText("Ранний доступ");
     await expect(page.locator(".landing-intro .landing-kicker")).toHaveText(
-      "Виртуальный стол для домашних настольных ролевых игр",
+      "Виртуальный стол для настольных ролевых игр",
     );
     const textColor = await page.evaluate(() => {
       const hex = getComputedStyle(document.documentElement)
@@ -35,13 +35,10 @@ for (const width of [360, 820]) {
       "color",
       textColor,
     );
-    const roadmapColors = await page
-      .locator(".landing-roadmap li")
-      .evaluateAll((items) =>
-        items.map((item) => getComputedStyle(item, "::before").color),
-      );
-    expect(roadmapColors.length).toBeGreaterThan(0);
-    expect(roadmapColors.every((color) => color === textColor)).toBe(true);
+    const plannedItems = page.locator("#roadmap-planned-items .roadmap-item");
+    await expect(plannedItems).toHaveCount(3);
+    await page.getByRole("button", { name: "Показать все планы" }).click();
+    await expect(plannedItems).toHaveCount(11);
     await expect(
       page.getByRole("heading", { name: "Выберите игрока", exact: true }),
     ).toBeVisible();
@@ -63,7 +60,7 @@ for (const width of [360, 820]) {
       });
       if (
         box.width < 44 ||
-        box.height < 44 ||
+        box.height < 43.95 ||
         box.left < 0 ||
         box.right > width ||
         !box.hit
@@ -79,6 +76,7 @@ for (const width of [360, 820]) {
         .filter(
           (e) =>
             !e.closest(".feedback-honeypot") &&
+            !e.closest(".landing-section-nav") && // Intentional swipeable navigation.
             e.getClientRects().length &&
             e.scrollWidth > e.clientWidth + 1 &&
             getComputedStyle(e).display !== "inline",

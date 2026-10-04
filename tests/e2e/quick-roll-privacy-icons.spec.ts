@@ -94,7 +94,7 @@ for (const role of ["GM", "PLAYER"] as const)
         "true",
       );
       const disclosure = quick.getByRole("button", {
-        name: "Броски характеристик",
+        name: "Быстрые броски",
         exact: true,
       });
       await disclosure.focus();

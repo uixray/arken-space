@@ -6,7 +6,8 @@ import { normalizeLegacyEntryData } from "./entry-data.js";
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-type RechargeTrigger = "ADVANCE_DAY" | "LONG_REST" | "END_BATTLE";
+type RechargeTrigger =
+  "ADVANCE_DAY" | "LONG_REST" | "SHORT_REST" | "END_BATTLE";
 
 export async function campaignRechargeAnchorsNeedReset(
   db: Database,
@@ -40,6 +41,8 @@ export async function rechargeCampaignCatalogEntries(
     trigger: RechargeTrigger;
     day: number;
     battleCounter: number;
+    /** A character-sheet rest affects only that character, not the campaign. */
+    characterId?: string;
   },
 ) {
   const entryRows = await tx
@@ -49,7 +52,14 @@ export async function rechargeCampaignCatalogEntries(
       characters,
       eq(characterCatalogEntries.characterId, characters.id),
     )
-    .where(eq(characters.campaignId, campaignId));
+    .where(
+      and(
+        eq(characters.campaignId, campaignId),
+        input.characterId
+          ? eq(characterCatalogEntries.characterId, input.characterId)
+          : undefined,
+      ),
+    );
 
   const advancesDay =
     input.trigger === "ADVANCE_DAY" || input.trigger === "LONG_REST";
@@ -62,6 +72,8 @@ export async function rechargeCampaignCatalogEntries(
     const uses = parsed.data.uses;
     const due =
       (advancesDay && uses.recharge === "DAY") ||
+      ((input.trigger === "SHORT_REST" || input.trigger === "LONG_REST") &&
+        uses.recharge === "SHORT_REST") ||
       (input.trigger === "END_BATTLE" && uses.recharge === "BATTLE") ||
       (advancesDay &&
         uses.recharge === "WEEK" &&

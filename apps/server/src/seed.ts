@@ -170,8 +170,13 @@ export async function seedDevelopmentDemoContent(
         rollActions: [
           {
             id: "ranged-shot",
+            kind: "HIT" as const,
             label: "Бросок выстрела",
-            formula: "1d20 + ranged",
+            dice: "1d20",
+            modifiers: [{ type: "CHARACTERISTIC" as const, key: "ranged" }],
+            order: 0,
+            advantage: false,
+            consumeUse: false,
           },
         ],
       },
@@ -185,11 +190,18 @@ export async function seedDevelopmentDemoContent(
         rollActions: [
           {
             id: "fire-bolt-roll",
+            kind: "DAMAGE" as const,
             label: "Урон огнем",
-            formula: "2d6 + intelligence",
+            dice: "2d6",
+            modifiers: [
+              { type: "CHARACTERISTIC" as const, key: "intelligence" },
+            ],
+            order: 0,
+            advantage: false,
+            consumeUse: true,
           },
         ],
-        uses: { current: 3, maximum: 3, rechargeRate: "LONG_REST" },
+        uses: { current: 3, max: 3, recharge: "DAY" },
       },
     },
     {
@@ -201,11 +213,16 @@ export async function seedDevelopmentDemoContent(
         rollActions: [
           {
             id: "heal-roll",
+            kind: "DAMAGE" as const,
             label: "Объем исцеления",
-            formula: "1d8 + willpower",
+            dice: "1d8",
+            modifiers: [{ type: "CHARACTERISTIC" as const, key: "willpower" }],
+            order: 0,
+            advantage: false,
+            consumeUse: true,
           },
         ],
-        uses: { current: 2, maximum: 2, rechargeRate: "SHORT_REST" },
+        uses: { current: 2, max: 2, recharge: "SHORT_REST" },
       },
     },
     {
@@ -214,7 +231,7 @@ export async function seedDevelopmentDemoContent(
       description:
         "Мгновенное растворение в сумерках и перемещение на расстояние до 30 футов.",
       data: {
-        uses: { current: 2, maximum: 2, rechargeRate: "SHORT_REST" },
+        uses: { current: 2, max: 2, recharge: "SHORT_REST" },
       },
     },
     {
@@ -224,9 +241,18 @@ export async function seedDevelopmentDemoContent(
         "Слово поддержки или вдохновляющий аккорд, дарующий союзнику кость вдохновения.",
       data: {
         rollActions: [
-          { id: "inspire-roll", label: "Бонус вдохновения", formula: "1d6" },
+          {
+            id: "inspire-roll",
+            kind: "CUSTOM" as const,
+            label: "Бонус вдохновения",
+            dice: "1d6",
+            modifiers: [],
+            order: 0,
+            advantage: false,
+            consumeUse: true,
+          },
         ],
-        uses: { current: 3, maximum: 3, rechargeRate: "SHORT_REST" },
+        uses: { current: 3, max: 3, recharge: "SHORT_REST" },
       },
     },
   ];

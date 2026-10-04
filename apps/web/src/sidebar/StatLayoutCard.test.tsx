@@ -236,7 +236,24 @@ describe("карточка группы характеристик", () => {
     await userEvent.click(
       screen.getAllByRole("button", { name: "Бросок" })[0]!,
     );
-    expect(props.onRoll).toHaveBeenCalledWith("1d20 + strength", "Сила");
+    expect(props.onRoll).toHaveBeenCalledWith(
+      "1d20 + strength",
+      "Сила",
+      "NORMAL",
+    );
+  });
+
+  it("передаёт модификатор одного броска из клавиши", async () => {
+    const props = renderCard();
+    const user = userEvent.setup();
+    await user.keyboard("{Control>}");
+    await user.click(screen.getAllByRole("button", { name: "Бросок" })[0]!);
+    await user.keyboard("{/Control}");
+    expect(props.onRoll).toHaveBeenCalledWith(
+      "1d20 + strength",
+      "Сила",
+      "ADVANTAGE",
+    );
   });
 
   it("добавляет строку с введённой подписью", async () => {

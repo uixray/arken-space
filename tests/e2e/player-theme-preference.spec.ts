@@ -106,8 +106,13 @@ async function preferenceFixture(page: Page, role: "GM" | "PLAYER") {
 }
 
 async function openSettings(page: Page) {
-  await page.locator(".account-menu > summary").click();
-  await page.getByRole("button", { name: "Оформление", exact: true }).click();
+  if (await page.locator("#compact-nav-menu").isVisible()) {
+    await page.locator("#compact-nav-menu").click();
+    await page.getByRole("button", { name: "Оформление и тема" }).click();
+  } else {
+    await page.locator(".account-menu > summary").click();
+    await page.getByRole("button", { name: "Оформление", exact: true }).click();
+  }
   const dialog = page.getByRole("dialog", { name: "Оформление", exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -141,7 +146,7 @@ for (const width of [1280, 390]) {
       name: "Тема игрока по умолчанию",
       exact: true,
     });
-    const popup = page.locator(".arken-form-select-popup");
+    const popup = page.locator(".arken-form-select-popup:visible");
     await trigger.click();
     await expect(popup).toBeVisible();
     await page.keyboard.press("Escape");
@@ -193,11 +198,9 @@ for (const width of [1280, 390]) {
 
 async function chooseTheme(page: Page, name: RegExp) {
   const dialog = page.getByRole("dialog", { name: "Оформление", exact: true });
-  await dialog.getByRole("combobox", { name: "Тема", exact: true }).click();
-  const option = page.getByRole("option", { name });
+  const option = dialog.getByRole("radio", { name });
   await expect(option).toBeVisible();
-  // A real portal option click, never selectOption/DOM mutation/force.
-  await option.click();
+  await option.check();
 }
 
 for (const role of ["GM", "PLAYER"] as const) {

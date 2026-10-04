@@ -2794,3 +2794,27 @@ export const worldContentInstanceActions = pgTable(
     ),
   ],
 );
+
+/** Anonymous public roadmap votes. Voter identity is a server-minted cookie UUID. */
+export const publicRoadmapVotes = pgTable(
+  "public_roadmap_votes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    itemId: text("item_id").notNull(),
+    voterId: uuid("voter_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("public_roadmap_votes_item_voter_idx").on(
+      table.itemId,
+      table.voterId,
+    ),
+    index("public_roadmap_votes_item_idx").on(table.itemId),
+    check(
+      "public_roadmap_votes_item_id_check",
+      sql`${table.itemId} in ('floating-ui','service-routine','bestiary-encounters','uix-526','uix-245','uix-382','uix-512','uix-588','uix-625','uix-264','uix-379')`,
+    ),
+  ],
+);

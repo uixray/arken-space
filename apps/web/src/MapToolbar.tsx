@@ -344,24 +344,6 @@ export function MapToolbar({
           <span className="map-tool__label">Рисовать</span>
         </button>
 
-        {onToggleObjectList && (
-          <button
-            type="button"
-            aria-label="Объекты карты"
-            title="Список объектов и токенов на карте"
-            className="map-tool map-object-list-trigger"
-            data-tool="MAP_OBJECTS"
-            aria-pressed={objectListOpen}
-            aria-expanded={objectListOpen}
-            onClick={onToggleObjectList}
-          >
-            <AppIcon icon={MapObjectsIcon} />
-            <span className="map-tool__label">Объекты</span>
-          </button>
-        )}
-
-        {tokenTrayControl}
-
         {(previewSnapshot || snapshot.me.role !== "GM") && (
           <>
             <button
@@ -388,12 +370,6 @@ export function MapToolbar({
             </button>
           </>
         )}
-
-        <CursorPresenceMenu
-          preference={cursorPreference}
-          role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
-          onChange={onCursorPreferenceChange}
-        />
 
         {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
           <>
@@ -460,7 +436,6 @@ export function MapToolbar({
           />
         </div>
       )}
-
       {!previewSnapshot && overflowTools && (
         <details className="toolbar-overflow" ref={toolbarOverflowRef}>
           <summary
@@ -472,6 +447,35 @@ export function MapToolbar({
           <div className="toolbar-overflow-menu">{overflowTools}</div>
         </details>
       )}
+      <div className="toolbar-shortcuts" aria-label="Быстрый доступ к панелям">
+        {onToggleObjectList && (
+          <button
+            type="button"
+            aria-label="Объекты карты"
+            title="Список объектов и токенов на карте"
+            className="map-tool map-object-list-trigger"
+            data-tool="MAP_OBJECTS"
+            aria-pressed={objectListOpen}
+            aria-expanded={objectListOpen}
+            onClick={onToggleObjectList}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || !objectListOpen) return;
+              onToggleObjectList();
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+          >
+            <AppIcon icon={MapObjectsIcon} />
+            <span className="map-tool__label">Объекты</span>
+          </button>
+        )}
+        {tokenTrayControl}
+        <CursorPresenceMenu
+          preference={cursorPreference}
+          role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
+          onChange={onCursorPreferenceChange}
+        />
+      </div>
     </div>
   );
 }

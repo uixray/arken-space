@@ -24,7 +24,10 @@ for (const width of [1280, 360]) {
     await page.goto("/join/rate-limit-test");
     const name = page.getByLabel("Имя", { exact: true });
     await name.fill("Игрок с черновиком");
-    const enter = page.getByRole("button", { name: "Войти", exact: true });
+    const enter = page.getByRole("button", {
+      name: "Войти в игру",
+      exact: true,
+    });
     await enter.click();
     const alert = page.getByRole("alert");
     await expect(alert).toHaveText(

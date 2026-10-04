@@ -577,7 +577,12 @@ export const rollActionSchema = z.object({
   consumeUse: z.boolean().default(false),
   cost: resourceCostSchema.optional(),
 });
-export const rechargePeriodSchema = z.enum(["DAY", "BATTLE", "WEEK"]);
+export const rechargePeriodSchema = z.enum([
+  "DAY",
+  "BATTLE",
+  "WEEK",
+  "SHORT_REST",
+]);
 export const abilityUsesSchema = z
   .object({
     current: z.number().int().nonnegative(),
@@ -2735,7 +2740,7 @@ export interface SkillCardSnapshot {
     before: number;
     after: number;
     max: number;
-    recharge: "DAY" | "BATTLE" | "WEEK";
+    recharge: "DAY" | "BATTLE" | "WEEK" | "SHORT_REST";
   } | null;
   visibility: MessageVisibility;
 }

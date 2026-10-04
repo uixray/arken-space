@@ -43,16 +43,29 @@ corepack pnpm lint
 corepack pnpm typecheck
 corepack pnpm build
 corepack pnpm test
-corepack pnpm test:e2e
 corepack pnpm test:multiplayer
 ```
+
+Browser coverage is split by runtime, not by product scope. With the exact
+candidate's disposable PostgreSQL/server/web stack running, set
+`E2E_BASE_URL` to its loopback edge URL and run
+`corepack pnpm exec playwright test --config=playwright.release.config.ts`.
+That config requires an explicit URL and never starts a Vite fallback. Run the
+four Vite-only `/tests/fixtures/` specs separately with
+`corepack pnpm exec playwright test --config=playwright.fixtures.config.ts`
+on a dedicated local `E2E_PORT`/`E2E_BASE_URL`. Both projects (Chromium and
+Firefox) must pass. If sharded, record the candidate SHA, image IDs, test
+inventory and all shard reports; the union must equal the complete suite, with
+no missing or duplicate cases.
 
 GitHub `checks` дополнительно запускает `sh -n` для `release.sh`,
 `build-and-start.sh` и `smoke-auth.sh`; structural unit-тесты не заменяют parser
 POSIX shell.
 
 `pnpm typecheck` includes `tests/e2e/tsconfig.json`; Playwright remains at
-`workers: 1` because the specs share one campaign/database. Preserve the exit
+`workers: 1` mainly to avoid CPU contention in geometry-sensitive browser
+checks. Live-backend tests isolate campaigns, so worker count is not a shared
+campaign correctness requirement. Preserve the exit
 code of each command. In particular, do not pipe Playwright into a trailing
 `grep`: without `pipefail` a failed browser run can look green. `format:check`
 is the read-only gate; running the writing `pnpm format` is not equivalent

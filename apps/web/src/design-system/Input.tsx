@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useId,
   type ChangeEvent,
   type InputHTMLAttributes,
   type ReactNode,
@@ -80,6 +81,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   ref,
 ) {
   const combinedRef = mergeRefs(ref, controlRef);
+  const labelId = useId();
 
   const isInvalid =
     validationState === "invalid" ||
@@ -126,7 +128,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     >
       <span className="arken-text-input__content g-text-input__content">
         {label && (
-          <span className="arken-text-input__label g-text-input__label">
+          <span
+            id={labelId}
+            className="arken-text-input__label g-text-input__label"
+          >
             {label}
           </span>
         )}
@@ -148,6 +153,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             "g-text-input__control",
             mergedControlProps.className,
           )}
+          aria-labelledby={
+            mergedControlProps["aria-labelledby"] ??
+            (label && !mergedControlProps["aria-label"] ? labelId : undefined)
+          }
           aria-invalid={isInvalid ? "true" : undefined}
         />
         {showClear && (

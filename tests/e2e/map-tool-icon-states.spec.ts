@@ -109,6 +109,88 @@ for (const role of ["GM", "PLAYER"] as const)
       await page.goto("/");
       await expect(page.locator(".map-viewport")).toBeVisible();
       const toolbar = page.getByRole("toolbar", { name: "Инструменты карты" });
+      const shortcutLayout = await toolbar
+        .locator(".toolbar-shortcuts")
+        .evaluate((node) => {
+          const modes = node.parentElement?.querySelector(".toolbar-group");
+          if (!modes) throw new Error("Missing active map tools");
+          return {
+            modesBottom: modes.getBoundingClientRect().bottom,
+            shortcutsTop: node.getBoundingClientRect().top,
+            divider: getComputedStyle(node).borderTopStyle,
+            objectInShortcuts: Boolean(
+              node.querySelector('[data-tool="MAP_OBJECTS"]'),
+            ),
+          };
+        });
+      expect(shortcutLayout.shortcutsTop).toBeGreaterThanOrEqual(
+        shortcutLayout.modesBottom,
+      );
+      expect(shortcutLayout.divider).toBe("solid");
+      expect(shortcutLayout.objectInShortcuts).toBe(true);
+      expect(
+        await toolbar
+          .locator(".toolbar-shortcuts")
+          .evaluate((node) =>
+            [...node.children].map((child) =>
+              child.matches(".token-tray")
+                ? "TOKENS"
+                : child.getAttribute("data-tool"),
+            ),
+          ),
+      ).toEqual(["MAP_OBJECTS", "TOKENS", "CURSOR_PRESENCE"]);
+      const tokenShortcut = toolbar.locator(
+        ".toolbar-shortcuts .token-tray > summary.map-tool",
+      );
+      await expect(tokenShortcut).toHaveAccessibleName(/^Токены · \d+$/);
+      const tokenShortcutStyle = await tokenShortcut.evaluate((node) => {
+        const bounds = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return {
+          width: bounds.width,
+          height: bounds.height,
+          paddingLeft: parseFloat(style.paddingLeft),
+          paddingRight: parseFloat(style.paddingRight),
+          background: style.backgroundColor,
+        };
+      });
+      expect(tokenShortcutStyle.width).toBeGreaterThanOrEqual(30);
+      expect(tokenShortcutStyle.height).toBeGreaterThanOrEqual(30);
+      expect(tokenShortcutStyle.paddingLeft).toBeGreaterThan(0);
+      expect(tokenShortcutStyle.paddingRight).toBeGreaterThan(0);
+      expect(tokenShortcutStyle.background).not.toBe("rgba(0, 0, 0, 0)");
+      await page.setViewportSize({ width, height: 480 });
+      const compactToolLayout = await toolbar.evaluate((node) => {
+        const group = node.querySelector<HTMLElement>(".toolbar-group");
+        const shortcuts = node.querySelector<HTMLElement>(".toolbar-shortcuts");
+        if (!group || !shortcuts) throw new Error("Incomplete map toolbar");
+        return {
+          bottom: node.getBoundingClientRect().bottom,
+          shortcutsBottom: shortcuts.getBoundingClientRect().bottom,
+          groupScrolls: group.scrollHeight > group.clientHeight,
+          viewportBottom: window.innerHeight,
+        };
+      });
+      expect(compactToolLayout.bottom).toBeLessThanOrEqual(
+        compactToolLayout.viewportBottom - (width === 360 ? 56 : 8),
+      );
+      expect(compactToolLayout.shortcutsBottom).toBeLessThanOrEqual(
+        compactToolLayout.bottom,
+      );
+      if (role === "GM") expect(compactToolLayout.groupScrolls).toBe(true);
+      await toolbar
+        .locator('button[data-tool="RULER"]')
+        .scrollIntoViewIfNeeded();
+      await expect(toolbar.locator('button[data-tool="RULER"]')).toBeVisible();
+      await page.setViewportSize({ width, height: 850 });
+      await tokenShortcut.click();
+      await expect(
+        toolbar.locator(".toolbar-shortcuts .token-tray"),
+      ).toHaveAttribute("open", "");
+      await tokenShortcut.click();
+      await expect(
+        toolbar.locator(".toolbar-shortcuts .token-tray"),
+      ).not.toHaveAttribute("open", "");
       const collapse = toolbar.locator(".map-toolbar__collapse");
       const expected = [
         "PAN",
@@ -146,8 +228,10 @@ for (const role of ["GM", "PLAYER"] as const)
             )
           ).innerHTML(),
         );
+        // Shortcuts also expose a pressed state for their own panels; only
+        // buttons in the mode group select an active map tool.
         const modeTools = toolbar.locator(
-          'button.map-tool[data-tool][aria-pressed]:not([data-tool="CURSOR_PRESENCE"])',
+          ".toolbar-group button.map-tool[data-tool][aria-pressed]",
         );
         expect(
           await modeTools.evaluateAll((ns) =>

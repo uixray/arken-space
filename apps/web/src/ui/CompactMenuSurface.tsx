@@ -47,7 +47,8 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
   onLogout,
   onMusicControlsTarget,
 }: CompactMenuSurfaceProps) {
-  const isGm = snapshot.me.role === "GM";
+  // Preview must expose the viewed player's navigation, not GM-only sections.
+  const isGm = viewSnapshot.me.role === "GM";
   const navItems = workspaceNavItems({ isGm, operatorFeedbackAllowed });
 
   const getSectionIcon = (id: WorkspaceId) => {

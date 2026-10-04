@@ -54,7 +54,6 @@ function props(
 }
 
 it("shows only the supplied catalogue plus a distinct system baseline", async () => {
-  const user = userEvent.setup();
   renderComponent(
     <PlayerThemeSettings
       {...props({
@@ -71,18 +70,18 @@ it("shows only the supplied catalogue plus a distinct system baseline", async ()
     />,
   );
 
-  const select = screen.getByRole("combobox", { name: "Тема" });
-  expect(select).toHaveTextContent("Лес — сейчас, по умолчанию");
-  await user.click(select);
+  expect(screen.getByRole("group", { name: "Тема" })).toBeInTheDocument();
   expect(
-    screen.getByRole("option", { name: "Системное оформление" }),
+    screen.getByRole("radio", { name: "Лес — сейчас, по умолчанию" }),
+  ).toBeChecked();
+  expect(
+    screen.getByRole("radio", { name: "Системное оформление" }),
   ).toBeInTheDocument();
-  expect(screen.getByRole("option", { name: /Лес/ })).toBeInTheDocument();
   expect(
-    screen.queryByRole("option", { name: "Драконы" }),
+    screen.queryByRole("radio", { name: "Драконы" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("option", { name: "Неподдерживаемая" }),
+    screen.queryByRole("radio", { name: "Неподдерживаемая" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText(/не означает сброс/)).toBeInTheDocument();
 });
@@ -116,13 +115,11 @@ it("returns the draft to the controlled appearance after a successful reset with
   }
 
   renderComponent(<ControlledHost />);
-  const select = screen.getByRole("combobox", { name: "Тема" });
-  await user.click(select);
-  await user.click(screen.getByRole("option", { name: "Драконы" }));
+  await user.click(screen.getByRole("radio", { name: "Драконы" }));
   expect(
     screen.getByRole("status", { name: "Применённая тема" }),
   ).toHaveTextContent("dragons");
-  expect(select).toHaveTextContent("Драконы");
+  expect(screen.getByRole("radio", { name: /Драконы/ })).toBeChecked();
 
   await user.click(
     screen.getByRole("button", { name: "Сбросить к моей теме" }),
@@ -130,7 +127,7 @@ it("returns the draft to the controlled appearance after a successful reset with
   expect(
     screen.getByRole("status", { name: "Применённая тема" }),
   ).toHaveTextContent("forest");
-  expect(select).toHaveTextContent("Лес");
+  expect(screen.getByRole("radio", { name: /Лес/ })).toBeChecked();
 });
 
 it("previews without saving, then applies the draft or cancels through explicit callbacks", async () => {
@@ -142,9 +139,7 @@ it("previews without saving, then applies the draft or cancels through explicit 
     <PlayerThemeSettings {...props({ onPreview, onApply, onCancel })} />,
   );
 
-  const select = screen.getByRole("combobox", { name: "Тема" });
-  await user.click(select);
-  await user.click(screen.getByRole("option", { name: "Драконы" }));
+  await user.click(screen.getByRole("radio", { name: "Драконы" }));
   expect(onPreview).toHaveBeenCalledWith("dragons");
   expect(onApply).not.toHaveBeenCalled();
 
@@ -160,26 +155,20 @@ it("keeps a rejected draft, resets through the null-override callback, and drops
   const initial = props({ onReset, savedOverrideThemeId: "gold" });
   const { rerender } = renderComponent(<PlayerThemeSettings {...initial} />);
 
-  const select = screen.getByRole("combobox", { name: "Тема" });
-  await user.click(select);
-  await user.click(screen.getByRole("option", { name: "Драконы" }));
+  await user.click(screen.getByRole("radio", { name: "Драконы" }));
   rerender(
     <PlayerThemeSettings {...initial} error="Не удалось сохранить тему." />,
   );
-  expect(screen.getByRole("combobox", { name: "Тема" })).toHaveTextContent(
-    "Драконы",
-  );
+  expect(screen.getByRole("radio", { name: "Драконы" })).toBeChecked();
   expect(
-    screen.getByRole("combobox", { name: "Тема" }),
+    screen.getByRole("group", { name: "Тема" }),
   ).toHaveAccessibleDescription(/Не удалось сохранить тему/);
 
   await user.click(
     screen.getByRole("button", { name: "Сбросить к моей теме" }),
   );
   expect(onReset).toHaveBeenCalledOnce();
-  expect(screen.getByRole("combobox", { name: "Тема" })).toHaveTextContent(
-    "Драконы",
-  );
+  expect(screen.getByRole("radio", { name: "Драконы" })).toBeChecked();
 
   // The owner confirms reset by changing the persisted override to null.
   rerender(
@@ -189,9 +178,7 @@ it("keeps a rejected draft, resets through the null-override callback, and drops
       savedOverrideThemeId={null}
     />,
   );
-  expect(screen.getByRole("combobox", { name: "Тема" })).toHaveTextContent(
-    "Лес",
-  );
+  expect(screen.getByRole("radio", { name: /Лес/ })).toBeChecked();
 
   rerender(
     <PlayerThemeSettings
@@ -201,9 +188,7 @@ it("keeps a rejected draft, resets through the null-override callback, and drops
       savedOverrideThemeId="gold"
     />,
   );
-  expect(screen.getByRole("combobox", { name: "Тема" })).toHaveTextContent(
-    "Золото",
-  );
+  expect(screen.getByRole("radio", { name: "Золото" })).toBeChecked();
 });
 
 it("offers explicit system and classic choices and never applies a removed catalogue item", async () => {
@@ -213,35 +198,28 @@ it("offers explicit system and classic choices and never applies a removed catal
   const initial = props({ onPreview, onApply });
   const { rerender } = renderComponent(<PlayerThemeSettings {...initial} />);
 
-  const select = screen.getByRole("combobox", { name: "Тема" });
-  await user.click(select);
-  await user.click(screen.getByRole("option", { name: "Прежнее оформление" }));
+  await user.click(screen.getByRole("radio", { name: "Прежнее оформление" }));
   expect(onPreview).toHaveBeenLastCalledWith("classic-v1");
 
-  await user.click(select);
-  await user.click(
-    screen.getByRole("option", { name: "Системное оформление" }),
-  );
+  await user.click(screen.getByRole("radio", { name: "Системное оформление" }));
   expect(onPreview).toHaveBeenLastCalledWith("system");
 
-  await user.click(select);
-  await user.click(screen.getByRole("option", { name: "Драконы" }));
+  await user.click(screen.getByRole("radio", { name: "Драконы" }));
   rerender(
     <PlayerThemeSettings
       {...initial}
       publishedThemes={PLAYER_THEMES.filter(({ id }) => id !== "dragons")}
     />,
   );
-  expect(screen.getByRole("combobox", { name: "Тема" })).toHaveTextContent(
-    "Лес",
-  );
+  expect(screen.getByRole("radio", { name: /Лес/ })).toBeChecked();
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
   expect(onApply).toHaveBeenLastCalledWith("forest");
 });
 
 it("disables every mutating action while a request is pending", () => {
   renderComponent(<PlayerThemeSettings {...props({ pending: true })} />);
-  expect(screen.getByRole("combobox", { name: "Тема" })).toBeDisabled();
+  for (const radio of screen.getAllByRole("radio"))
+    expect(radio).toBeDisabled();
   expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Отмена" })).toBeDisabled();
   expect(

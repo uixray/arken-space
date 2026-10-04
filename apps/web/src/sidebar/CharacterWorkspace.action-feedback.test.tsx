@@ -273,6 +273,9 @@ async function galleryLoaded() {
 function selectPortrait(
   file = new File(["portrait"], "portrait.png", { type: "image/png" }),
 ) {
+  if (!screen.queryByLabelText("Загрузить портрет для персонажа")) {
+    fireEvent.click(screen.getByRole("button", { name: /^Изменить портрет:/ }));
+  }
   fireEvent.change(screen.getByLabelText("Загрузить портрет для персонажа"), {
     target: { files: [file] },
   });
@@ -398,6 +401,9 @@ describe("character action feedback", () => {
   it("describes portrait selection and removal on the upload button", async () => {
     renderComponent(view(snapshot()));
     await galleryLoaded();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Изменить портрет: Персонаж A" }),
+    );
     const button = screen.getByRole("button", {
       name: "Загрузить и назначить",
     });
@@ -545,35 +551,68 @@ describe("character action feedback", () => {
     await galleryLoaded();
     const first = within(screen.getByRole("article", { name: "Персонаж A" }));
     const second = within(screen.getByRole("article", { name: "Персонаж B" }));
-    const firstUpload = first.getByRole("button", {
+    const firstAccessDescription = first
+      .getByRole("button", { name: "Сохранить доступ" })
+      .getAttribute("aria-describedby");
+    const secondAccessDescription = second
+      .getByRole("button", { name: "Сохранить доступ" })
+      .getAttribute("aria-describedby");
+    fireEvent.click(
+      first.getByRole("button", { name: "Изменить портрет: Персонаж A" }),
+    );
+    const firstPortrait = within(
+      screen.getByRole("dialog", { name: "Портрет: Персонаж A" }),
+    );
+    const firstUpload = firstPortrait.getByRole("button", {
       name: "Загрузить и назначить",
     });
-    const secondUpload = second.getByRole("button", {
+    const firstDescription = firstUpload.getAttribute("aria-describedby");
+    const firstFile = new File(["a"], "a.png", { type: "image/png" });
+    const secondFile = new File(["b"], "b.png", { type: "image/png" });
+    fireEvent.change(
+      firstPortrait.getByLabelText("Загрузить портрет для персонажа"),
+      {
+        target: { files: [firstFile] },
+      },
+    );
+    fireEvent.click(firstUpload);
+    fireEvent.click(
+      firstPortrait.getByRole("button", { name: /закрыть|close/i }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Портрет: Персонаж A" }),
+      ).not.toBeInTheDocument(),
+    );
+    fireEvent.click(
+      second.getByRole("button", { name: "Изменить портрет: Персонаж B" }),
+    );
+    const secondPortrait = within(
+      screen.getByRole("dialog", { name: "Портрет: Персонаж B" }),
+    );
+    const secondUpload = secondPortrait.getByRole("button", {
       name: "Загрузить и назначить",
     });
     const descriptions = [
-      firstUpload,
-      secondUpload,
-      first.getByRole("button", { name: "Сохранить доступ" }),
-      second.getByRole("button", { name: "Сохранить доступ" }),
-    ].map((button) => button.getAttribute("aria-describedby"));
+      firstDescription,
+      secondUpload.getAttribute("aria-describedby"),
+      firstAccessDescription,
+      secondAccessDescription,
+    ];
     expect(descriptions.every(Boolean)).toBe(true);
     expect(new Set(descriptions).size).toBe(4);
-    const firstFile = new File(["a"], "a.png", { type: "image/png" });
-    const secondFile = new File(["b"], "b.png", { type: "image/png" });
-    fireEvent.change(first.getByLabelText("Загрузить портрет для персонажа"), {
-      target: { files: [firstFile] },
-    });
-    fireEvent.click(firstUpload);
     expect(secondUpload).toHaveAccessibleDescription(
       "Сначала выберите изображение портрета.",
     );
     expect(
-      second.getByLabelText("Загрузить портрет для персонажа"),
+      secondPortrait.getByLabelText("Загрузить портрет для персонажа"),
     ).toBeEnabled();
-    fireEvent.change(second.getByLabelText("Загрузить портрет для персонажа"), {
-      target: { files: [secondFile] },
-    });
+    fireEvent.change(
+      secondPortrait.getByLabelText("Загрузить портрет для персонажа"),
+      {
+        target: { files: [secondFile] },
+      },
+    );
     expect(secondUpload).toBeEnabled();
     await act(async () => uploading.resolve(portrait));
     expect(upload).toHaveBeenCalledExactlyOnceWith(firstFile, "PORTRAIT");
@@ -581,12 +620,10 @@ describe("character action feedback", () => {
       portraitAssetId: "portrait-new",
       revision: 7,
     });
-    expect(firstUpload).toBeDisabled();
-    expect(firstUpload).toHaveAccessibleDescription(
-      "Сначала выберите изображение портрета.",
-    );
     expect(secondUpload).toBeEnabled();
-    expect(second.getByRole("button", { name: "Удалить b.png" })).toBeEnabled();
+    expect(
+      secondPortrait.getByRole("button", { name: "Удалить b.png" }),
+    ).toBeEnabled();
     expect(secondUpload).toHaveAccessibleDescription(
       "Файл выбран. Загрузите его, чтобы назначить портрет.",
     );

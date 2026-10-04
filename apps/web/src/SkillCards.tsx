@@ -171,6 +171,7 @@ export function CharacterActionCard({
     entryRevision: number;
   }) => Promise<void>;
 }) {
+  const statLabels = useCampaignStatLabels();
   const [expanded, setExpanded] = useState(false);
   const [pending, setPending] = useState<"EXECUTE" | "SHARE" | null>(null);
   const [error, setError] = useState("");
@@ -244,7 +245,7 @@ export function CharacterActionCard({
         <div className="character-action-card__action" key={action.id}>
           <span>
             <b>{action.label}</b>
-            <code>{actionFormula(action)}</code>
+            <code>{humanizeFormula(actionFormula(action), statLabels)}</code>
           </span>
           <button
             type="button"
@@ -321,6 +322,17 @@ export function SkillChatCard({
   outcomeFrame?: ReactNode;
 }) {
   const statLabels = useCampaignStatLabels();
+  const actionFormula = card.action?.formula ?? "";
+  const hasInternalModifier = /\bmodifier_\d+\b/.test(actionFormula);
+  const visibleFormula = humanizeFormula(
+    hasInternalModifier
+      ? card.result?.breakdown &&
+        !/\bmodifier_\d+\b/.test(card.result.breakdown)
+        ? card.result.breakdown
+        : actionFormula.replace(/\bmodifier_\d+\b/g, "модификатор")
+      : actionFormula,
+    statLabels,
+  );
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -357,11 +369,7 @@ export function SkillChatCard({
           )}
           <span>
             <b>{card.action?.label}</b>
-            <code>
-              {card.action?.formula
-                ? humanizeFormula(card.action.formula, statLabels)
-                : ""}
-            </code>
+            <code>{visibleFormula}</code>
             {critical && (
               <span className="roll-critical-label">{critical.label}</span>
             )}

@@ -104,6 +104,11 @@ export function characterWorkspaceReducer(
     case "SYNC": {
       const ids = new Set(action.ids);
       const openIds = state.openIds.filter((id) => ids.has(id));
+      // A lone character has no rail to reopen a sheet after an authoritative
+      // removal/restoration, so keep its sheet reachable.
+      if (action.ids.length === 1 && openIds.length === 0) {
+        openIds.push(action.ids[0]!);
+      }
       const collapsedIds = state.collapsedIds.filter((id) =>
         openIds.includes(id),
       );

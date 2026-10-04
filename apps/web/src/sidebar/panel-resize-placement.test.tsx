@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { CharacterDto } from "@arken/contracts";
-import { renderComponent, screen } from "../test-support/render";
+import { fireEvent, renderComponent, screen } from "../test-support/render";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 import { QuickRollPanel } from "./QuickRollPanel";
 
@@ -110,4 +110,50 @@ describe("ручка изменения высоты", () => {
       panel?.lastElementChild?.classList.contains("panel-resize-handle"),
     ).toBe(true);
   });
+});
+
+it("groups quick rolls and shares an ability without executing it", () => {
+  const onEntryAction = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={{
+        ...character,
+        entries: [
+          {
+            id: "fire",
+            kind: "ABILITY",
+            name: "Огненная стрела",
+            description: "Пламя",
+            data: { rollActions: [] },
+            revision: 1,
+            sourceCatalogEntryId: null,
+          },
+        ],
+      }}
+      campaignId="camp"
+      membershipId="grouped-mem"
+      rows={[
+        { key: "strength", label: "Сила", group: "characteristics" },
+        { key: "initiative", label: "Инициатива", group: "combat" },
+      ]}
+      quickRollPending={false}
+      gmOnly={false}
+      onQuickRoll={() => {}}
+      onEntryAction={onEntryAction}
+    />,
+  );
+  expect(screen.getByRole("heading", { name: "Обычные" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Боевые" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Навыки" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Способности" })).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Показать без выполнения: Огненная стрела",
+    }),
+  );
+  expect(onEntryAction).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "fire" }),
+    "SHARE",
+    undefined,
+  );
 });

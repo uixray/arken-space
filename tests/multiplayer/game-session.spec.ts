@@ -586,7 +586,8 @@ test("GM and six isolated players recover authoritative state without security l
       )
       .toBe(placementsBefore + 1);
     await openWorkspaceSection(pages[0]!, "Персонажи");
-    await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(1);
+    // A single accessible character opens directly; its redundant rail is hidden.
+    await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(0);
     await expect(pages[0]!.locator(".character-sheet-card")).toHaveCount(1);
     await expect(
       pages[0]!.getByTitle("Управление временем кампании"),
@@ -600,12 +601,20 @@ test("GM and six isolated players recover authoritative state without security l
     const playerMusic = pages[0]!.getByRole("region", { name: "Музыка" });
     await expect(playerMusic).toBeVisible();
     await playerMusic.getByLabel("Громкость", { exact: true }).click();
-    await playerMusic.getByRole("button", { name: "Включить звук" }).click();
+    const volumePopover = playerMusic.locator(".music-volume-popover");
+    // Consent now defaults on. Exercise an explicit local opt-out and opt-in.
+    await volumePopover.getByRole("button", { name: "Выключить звук" }).click();
+    await volumePopover.getByRole("button", { name: "Включить звук" }).click();
     await expect(
       playerMusic.getByRole("slider", { name: "Личная громкость" }),
     ).toBeVisible();
     await pages[0]!.reload();
     await pages[0]!.getByLabel("Громкость", { exact: true }).click();
+    await expect(
+      pages[0]!
+        .locator(".music-volume-popover")
+        .getByRole("button", { name: "Выключить звук" }),
+    ).toBeVisible();
     await expect(
       pages[0]!.getByRole("slider", { name: "Личная громкость" }),
     ).toBeVisible();
@@ -1431,8 +1440,8 @@ test("GM and six isolated players recover authoritative state without security l
       .getByRole("dialog", { name: "Токены" })
       .getByRole("button", { name: "Закрыть окно" })
       .click();
-    // Rolls and table events now share the unified activity feed.
-    await pages[0]!.locator("#chat-tab-activity").click();
+    // Players have one persistent activity feed, without a redundant tab.
+    await expect(pages[0]!.locator("#chat-panel-activity")).toBeVisible();
     await expect(
       pages[0]!.locator(".message", { hasText: publicMarkers[1] }),
     ).toBeVisible();

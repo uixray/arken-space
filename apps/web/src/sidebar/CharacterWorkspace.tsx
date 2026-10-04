@@ -6,6 +6,7 @@ import {
   useReducer,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import {
   statKeyFromLabel,
@@ -41,8 +42,9 @@ import {
 } from "../character-workspace-state";
 import { CharacterMediaGallery } from "./CharacterMediaGallery";
 import { CharacterActionCard } from "../SkillCards";
-import { RollModeControl, type RollMode } from "../RollModeControl";
 import { humanizeFormula } from "../formula-display";
+import { rollModeFromEvent } from "../roll-modifier-keys";
+import type { RollMode } from "../roll-mode";
 import { RollButton } from "./RollButton";
 import { CatalogEntryPicker } from "./CatalogEntryPicker";
 import { StatLayoutCard } from "./StatLayoutCard";
@@ -57,6 +59,8 @@ import {
   WALLET_KEYS,
   WALLET_LABELS,
   walletDeltaIsEmpty,
+  spendWalletCoin,
+  canSpendWalletCoin,
   type Wallet,
   type WalletDelta,
 } from "../wallet";
@@ -196,6 +200,7 @@ export function CharacterWorkspace({
 
   const openCount = state.openIds.length;
   const sheetLimitReached = openCount >= MAX_OPEN_CHARACTER_SHEETS;
+  const singleCharacter = characters.length === 1;
   return createPortal(
     <main
       ref={workspaceRef}
@@ -207,6 +212,13 @@ export function CharacterWorkspace({
       aria-hidden={!active}
       className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}`}
       aria-labelledby="character-workspace-title"
+      style={
+        props.workspaceSidebarWidth != null
+          ? ({
+              "--sidebar-width": `${props.workspaceSidebarWidth}px`,
+            } as CSSProperties)
+          : undefined
+      }
     >
       <header className="character-workspace__header">
         <div>
@@ -229,30 +241,49 @@ export function CharacterWorkspace({
         )}
         <button
           type="button"
-          className="character-rail-toggle"
-          aria-label={
-            railCollapsed
-              ? "Развернуть список персонажей"
-              : "Свернуть список персонажей"
-          }
-          aria-pressed={railCollapsed}
-          title={
-            railCollapsed
-              ? "Развернуть список персонажей"
-              : "Свернуть список персонажей"
-          }
-          onClick={() => setRailCollapsed((current) => !current)}
+          className="character-workspace__create"
+          onClick={() => setCreateCharacterOpen(true)}
         >
-          <AppIcon
-            icon={
-              railCollapsed
-                ? ExpandCharacterRailIcon
-                : CollapseCharacterRailIcon
-            }
-          />
+          <AppIcon icon={AddIcon} /> Создать персонажа
         </button>
+        {props.snapshot.me.role === "GM" && (
+          <button
+            type="button"
+            className="character-workspace__restore-archived"
+            onClick={() => setRestoreDialogOpen(true)}
+          >
+            <AppIcon icon={CharacterArchiveIcon} /> Архив персонажей
+          </button>
+        )}
+        {!singleCharacter && (
+          <button
+            type="button"
+            className="character-rail-toggle"
+            aria-label={
+              railCollapsed
+                ? "Развернуть список персонажей"
+                : "Свернуть список персонажей"
+            }
+            aria-pressed={railCollapsed}
+            title={
+              railCollapsed
+                ? "Развернуть список персонажей"
+                : "Свернуть список персонажей"
+            }
+            onClick={() => setRailCollapsed((current) => !current)}
+          >
+            <AppIcon
+              icon={
+                railCollapsed
+                  ? ExpandCharacterRailIcon
+                  : CollapseCharacterRailIcon
+              }
+            />
+          </button>
+        )}
         <button
           type="button"
+          className="character-workspace__close"
           aria-label="Закрыть персонажей"
           title="Закрыть рабочее пространство персонажей"
           onClick={onClose}
@@ -261,106 +292,93 @@ export function CharacterWorkspace({
         </button>
       </header>
       <div
-        className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}
+        className={`character-workspace__body${singleCharacter ? " is-single-character" : railCollapsed ? " is-rail-collapsed" : ""}`}
       >
-        <nav className="character-rail" aria-label="Персонажи кампании">
-          <button
-            type="button"
-            className="character-rail__create"
-            onClick={() => setCreateCharacterOpen(true)}
-          >
-            <AppIcon icon={AddIcon} />
-            Создать персонажа
-          </button>
-          {props.snapshot.me.role === "GM" && (
-            <button
-              type="button"
-              className="character-rail__restore-archived"
-              onClick={() => setRestoreDialogOpen(true)}
-            >
-              <AppIcon icon={CharacterArchiveIcon} />
-              Архив персонажей
-            </button>
-          )}
-          {sheetLimitReached && (
-            <p className="muted" id={sheetLimitDescriptionId}>
-              Закройте один из открытых листов, чтобы открыть другой.
-            </p>
-          )}
-          {characters.length === 0 ? (
-            <p className="muted">Нет доступных персонажей.</p>
-          ) : (
-            characters.map((character) => {
-              const isOpen = state.openIds.includes(character.id);
-              const isCollapsed = state.collapsedIds.includes(character.id);
-              const full = !isOpen && sheetLimitReached;
-              return (
-                <div className="character-rail__item" key={character.id}>
-                  <button
-                    type="button"
-                    className={
-                      state.activeId === character.id ? "is-active" : undefined
-                    }
-                    aria-pressed={state.activeId === character.id}
-                    disabled={full}
-                    aria-describedby={
-                      full ? sheetLimitDescriptionId : undefined
-                    }
-                    title={
-                      full
-                        ? "Закройте один из открытых листов, чтобы открыть другой."
-                        : isOpen
-                          ? `Перейти к персонажу ${character.name}`
-                          : `Открыть персонажа ${character.name}`
-                    }
-                    onClick={() => {
-                      if (isOpen) dispatch({ type: "FOCUS", id: character.id });
-                      else dispatch({ type: "OPEN", id: character.id });
-                    }}
-                  >
-                    <span
-                      className="character-rail__initial"
-                      aria-hidden="true"
-                    >
-                      {character.name.slice(0, 1).toLocaleUpperCase()}
-                    </span>
-                    <strong>{character.name}</strong>
-                    <span className="character-rail__status">
-                      {isCollapsed ? "свернут" : isOpen ? "открыт" : ""}
-                    </span>
-                  </button>
-                  {isOpen && (
+        {!singleCharacter && (
+          <nav className="character-rail" aria-label="Персонажи кампании">
+            {sheetLimitReached && (
+              <p className="muted" id={sheetLimitDescriptionId}>
+                Закройте один из открытых листов, чтобы открыть другой.
+              </p>
+            )}
+            {characters.length === 0 ? (
+              <p className="muted">Нет доступных персонажей.</p>
+            ) : (
+              characters.map((character) => {
+                const isOpen = state.openIds.includes(character.id);
+                const isCollapsed = state.collapsedIds.includes(character.id);
+                const full = !isOpen && sheetLimitReached;
+                return (
+                  <div className="character-rail__item" key={character.id}>
                     <button
                       type="button"
-                      className="character-rail__close"
-                      aria-label={`Закрыть лист ${character.name}`}
-                      title={`Закрыть лист ${character.name}`}
-                      onClick={() =>
-                        dispatch({ type: "CLOSE", id: character.id })
+                      className={
+                        state.activeId === character.id
+                          ? "is-active"
+                          : undefined
                       }
+                      aria-pressed={state.activeId === character.id}
+                      disabled={full}
+                      aria-describedby={
+                        full ? sheetLimitDescriptionId : undefined
+                      }
+                      title={
+                        full
+                          ? "Закройте один из открытых листов, чтобы открыть другой."
+                          : isOpen
+                            ? `Перейти к персонажу ${character.name}`
+                            : `Открыть персонажа ${character.name}`
+                      }
+                      onClick={() => {
+                        if (isOpen)
+                          dispatch({ type: "FOCUS", id: character.id });
+                        else dispatch({ type: "OPEN", id: character.id });
+                      }}
                     >
-                      <AppIcon icon={CloseIcon} />
-                    </button>
-                  )}
-                  {props.snapshot.me.role === "GM" && (
-                    <button
-                      type="button"
-                      className="character-rail__archive danger-link"
-                      aria-label={`Архивировать персонажа ${character.name}`}
-                      title="Архивировать персонажа"
-                      onClick={() => setArchiveTarget(character)}
-                    >
-                      <span className="character-rail__archive-icon">
-                        <AppIcon icon={CharacterArchiveIcon} />
+                      <span
+                        className="character-rail__initial"
+                        aria-hidden="true"
+                      >
+                        {character.name.slice(0, 1).toLocaleUpperCase()}
                       </span>
-                      Архивировать
+                      <strong>{character.name}</strong>
+                      <span className="character-rail__status">
+                        {isCollapsed ? "свернут" : isOpen ? "открыт" : ""}
+                      </span>
                     </button>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </nav>
+                    {isOpen && (
+                      <button
+                        type="button"
+                        className="character-rail__close"
+                        aria-label={`Закрыть лист ${character.name}`}
+                        title={`Закрыть лист ${character.name}`}
+                        onClick={() =>
+                          dispatch({ type: "CLOSE", id: character.id })
+                        }
+                      >
+                        <AppIcon icon={CloseIcon} />
+                      </button>
+                    )}
+                    {props.snapshot.me.role === "GM" && (
+                      <button
+                        type="button"
+                        className="character-rail__archive danger-link"
+                        aria-label={`Архивировать персонажа ${character.name}`}
+                        title="Архивировать персонажа"
+                        onClick={() => setArchiveTarget(character)}
+                      >
+                        <span className="character-rail__archive-icon">
+                          <AppIcon icon={CharacterArchiveIcon} />
+                        </span>
+                        Архивировать
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </nav>
+        )}
         <div
           className="character-sheet-deck"
           aria-label="Открытые листы персонажей"
@@ -407,7 +425,11 @@ export function CharacterWorkspace({
                     <button
                       type="button"
                       aria-label={`Закрыть лист ${character.name}`}
-                      onClick={() => dispatch({ type: "CLOSE", id })}
+                      onClick={() =>
+                        singleCharacter
+                          ? onClose()
+                          : dispatch({ type: "CLOSE", id })
+                      }
                     >
                       Закрыть
                     </button>
@@ -926,7 +948,6 @@ export function CharacterPanel({
   const [countersPending, setCountersPending] = useState(0);
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
-  const [rollMode, setRollMode] = useState<RollMode>();
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
   const [characterMutationError, setCharacterMutationError] = useState("");
@@ -1048,6 +1069,7 @@ export function CharacterPanel({
     "SKILL" | "ABILITY" | null
   >(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [portraitEditorOpen, setPortraitEditorOpen] = useState(false);
   const [portraitUpload, setPortraitUpload] = useState<File>();
   const [portraitUploadPending, setPortraitUploadPending] = useState(false);
   const portraitUploadPendingRef = useRef(false);
@@ -1106,6 +1128,7 @@ export function CharacterPanel({
   useLayoutEffect(() => {
     portraitUploadPendingRef.current = false;
     setPortraitUploadPending(false);
+    setPortraitEditorOpen(false);
   }, [snapshot.me.id, snapshot.me.role, character?.id, editable]);
 
   useLayoutEffect(() => {
@@ -1162,11 +1185,15 @@ export function CharacterPanel({
       : resourcesDraft[newResourceKey]
         ? `Ресурс «${newResourceKey}» уже существует.`
         : undefined;
-  const submitCharacterRoll = async (formula: string, label: string) => {
+  const submitCharacterRoll = async (
+    formula: string,
+    label: string,
+    mode: RollMode = "NORMAL",
+  ) => {
     setRollPending(true);
     setRollError("");
     try {
-      await onRoll(formula, label, "PUBLIC", character.id, rollMode);
+      await onRoll(formula, label, "PUBLIC", character.id, mode);
     } catch (reason) {
       setRollError(
         reason instanceof Error
@@ -1313,17 +1340,38 @@ export function CharacterPanel({
   };
   const changeWallet = (key: keyof CharacterDto["wallet"], delta: number) => {
     const current = normalizeWallet(walletDraftRef.current);
-    const next = changeWalletValue(current, key, delta);
+    const next =
+      delta === -1
+        ? spendWalletCoin(current, key)
+        : changeWalletValue(current, key, delta);
     const nextValue = next[key];
     const appliedDelta = nextValue - current[key];
-    if (appliedDelta === 0) return;
+    if (
+      Object.keys(current).every(
+        (walletKey) =>
+          next[walletKey as keyof Wallet] ===
+          current[walletKey as keyof Wallet],
+      )
+    )
+      return;
     walletDraftRef.current = next;
     setWalletDraft(next);
     setCountersError("");
 
     const running = walletBatchRef.current;
     if (running) clearTimeout(running.timer);
-    const absolute = walletInputDirtyRef.current || running?.delta === null;
+    // A denomination break changes two or three fields in one PATCH. Do not
+    // replay its numeric delta after a conflict: that could mint coins if a
+    // concurrent edit spent the higher coin first.
+    const denominationBreak = Object.keys(current).some(
+      (walletKey) =>
+        walletKey !== key &&
+        next[walletKey as keyof Wallet] !== current[walletKey as keyof Wallet],
+    );
+    const absolute =
+      walletInputDirtyRef.current ||
+      running?.delta === null ||
+      denominationBreak;
     const combinedDelta = absolute
       ? null
       : mergeWalletDelta(running?.delta ?? {}, key, appliedDelta);
@@ -1387,7 +1435,14 @@ export function CharacterPanel({
       {/* Hero Header: выразительная шапка персонажа */}
       <header className="character-hero">
         <div className="character-hero__main">
-          <div className="character-hero__avatar">
+          <button
+            type="button"
+            className="character-hero__avatar"
+            disabled={!editable}
+            aria-label={`Изменить портрет: ${character.name}`}
+            title={editable ? "Изменить портрет" : editPermissionReason}
+            onClick={() => setPortraitEditorOpen(true)}
+          >
             {portrait ? (
               <img
                 className="character-hero__avatar-img"
@@ -1402,7 +1457,7 @@ export function CharacterPanel({
                 {character.name.slice(0, 1).toLocaleUpperCase()}
               </div>
             )}
-          </div>
+          </button>
           <div className="character-hero__info">
             <div className="character-hero__meta">
               <span className="eyebrow">Карточка</span>
@@ -1410,6 +1465,31 @@ export function CharacterPanel({
               <span className="revision">rev {character.revision}</span>
             </div>
             <h2 className="character-hero__name">{character.name}</h2>
+            <details className="character-hero__backstory">
+              <summary>Предыстория</summary>
+              <FormTextArea
+                aria-label="Предыстория"
+                aria-describedby={
+                  !editable ? backstoryDescriptionId : undefined
+                }
+                defaultValue={character.backstory}
+                disabled={!editable}
+                rows={6}
+                onBlur={(event) =>
+                  void runCharacterMutation(() =>
+                    onPatch(character.id, {
+                      backstory: event.target.value,
+                      revision: character.revision,
+                    }),
+                  )
+                }
+              />
+              {!editable && (
+                <p className="muted" id={backstoryDescriptionId}>
+                  {editPermissionReason}
+                </p>
+              )}
+            </details>
             <div className="inline-fields">
               <Button disabled={!editable} onClick={() => setRenameOpen(true)}>
                 Переименовать
@@ -1419,19 +1499,11 @@ export function CharacterPanel({
         </div>
 
         <div className="character-hero__actions">
-          <div className="character-hero__roll-controls">
-            <RollModeControl
-              value={rollMode}
-              onChange={setRollMode}
-              disabled={rollPending}
-              label={"Режим броска"}
-            />
-            {rollError && (
-              <p className="field-error" role="alert">
-                {rollError}
-              </p>
-            )}
-          </div>
+          {rollError && (
+            <p className="field-error" role="alert">
+              {rollError}
+            </p>
+          )}
           <Button
             view="outlined"
             disabled={!editable || countersPending > 0}
@@ -1446,7 +1518,7 @@ export function CharacterPanel({
       {/* Vital Stats Bar: ключевые показатели прямо под шапкой */}
       <div className="character-vitals" aria-label="Ключевые показатели">
         <div className="character-vital-chip character-vital-chip--wallet">
-          <span className="character-vital-chip__label">Казна</span>
+          <span className="character-vital-chip__label">Кошелёк</span>
           <span className="character-vital-chip__value">
             <AppIcon icon={CoinsIcon} /> {walletDraft.gold ?? 0} зм ·{" "}
             {walletDraft.silver ?? 0} см · {walletDraft.copper ?? 0} мм
@@ -1461,45 +1533,92 @@ export function CharacterPanel({
               key={key}
             >
               <span className="character-vital-chip__label">{label}</span>
-              <span className="character-vital-chip__value">
-                {res.current} / {max}
+              <span className="character-vital-chip__value character-vital-chip__resource-values">
+                <FormInput
+                  type="number"
+                  min={0}
+                  aria-label={`${label}: текущее`}
+                  value={res.current}
+                  disabled={!editable}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: {
+                        ...res,
+                        current: Math.max(0, Number(event.target.value)),
+                      },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+                <span aria-hidden="true">/</span>
+                <FormInput
+                  type="number"
+                  min={0}
+                  aria-label={`${label}: максимум`}
+                  value={max}
+                  disabled={!editable}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: {
+                        ...res,
+                        maximum: Math.max(0, Number(event.target.value)),
+                        recoverable: true,
+                      },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+              </span>
+              <span className="character-vital-chip__track" aria-hidden="true">
+                <span
+                  style={{
+                    width: `${max > 0 ? Math.min(100, (res.current / max) * 100) : 0}%`,
+                  }}
+                />
+                {max > 0 && res.current > max && (
+                  <span
+                    className="character-vital-chip__excess"
+                    style={{
+                      width: `${Math.min(100, (((res.current - max) % max || max) / max) * 100)}%`,
+                    }}
+                  />
+                )}
               </span>
             </div>
           );
         })}
-        {combatRows.slice(0, 3).map((row) => {
+        {combatRows.slice(0, 2).map((row) => {
           const val = character.stats[row.key];
           if (val === undefined) return null;
           return (
-            <div
+            <button
+              type="button"
               className="character-vital-chip character-vital-chip--combat"
               key={row.key}
+              disabled={rollPending || !editable}
+              title={`Бросить ${row.label}`}
+              onClick={(event) =>
+                void submitCharacterRoll(
+                  `1d20 + ${row.key}`,
+                  row.label,
+                  rollModeFromEvent(event.nativeEvent),
+                )
+              }
             >
               <span className="character-vital-chip__label">{row.label}</span>
               <span className="character-vital-chip__value">
                 {val > 0 ? `+${val}` : val}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
 
       {/* Секция 1: Характеристики и боевые параметры */}
       <div className="character-section character-section--stats">
-        <h3 className="character-block-heading">Характеристики</h3>
         <div className="character-card-row">
-          <div className="character-card character-card--portrait">
-            <h3 className="character-card__header">Портрет</h3>
-            {portrait ? (
-              <img
-                className="character-portrait"
-                src={portrait.url}
-                alt={`Портрет ${character.name}`}
-              />
-            ) : (
-              <p className="muted">Портрет не назначен.</p>
-            )}
-          </div>
           <StatLayoutCard
             title="Характеристики"
             modifier="stats"
@@ -1511,8 +1630,8 @@ export function CharacterPanel({
             onChangeValue={(key, value) =>
               changeStatValue(character, key, value)
             }
-            onRoll={(formula, label) =>
-              void submitCharacterRoll(formula, label)
+            onRoll={(formula, label, mode) =>
+              void submitCharacterRoll(formula, label, mode)
             }
             onRenameRow={renameStatRow}
             onAddRow={(label) => addStatRow("characteristics", label)}
@@ -1530,8 +1649,8 @@ export function CharacterPanel({
             onChangeValue={(key, value) =>
               changeStatValue(character, key, value)
             }
-            onRoll={(formula, label) =>
-              void submitCharacterRoll(formula, label)
+            onRoll={(formula, label, mode) =>
+              void submitCharacterRoll(formula, label, mode)
             }
             onRenameRow={renameStatRow}
             onAddRow={(label) => addStatRow("combat", label)}
@@ -1548,8 +1667,12 @@ export function CharacterPanel({
                     name={skill.name}
                     formula={skill.formula}
                     disabled={rollPending}
-                    onClick={() =>
-                      void submitCharacterRoll(skill.formula, skill.name)
+                    onClick={(event) =>
+                      void submitCharacterRoll(
+                        skill.formula,
+                        skill.name,
+                        rollModeFromEvent(event.nativeEvent),
+                      )
                     }
                   />
                 ))}
@@ -1562,7 +1685,6 @@ export function CharacterPanel({
                       onAction={(input) =>
                         catalogActions.onRollEntry(character.id, entry.id, {
                           ...input,
-                          ...(rollMode ? { rollMode } : {}),
                         })
                       }
                     />
@@ -1624,8 +1746,12 @@ export function CharacterPanel({
                     {spell.formula && (
                       <Button
                         disabled={rollPending}
-                        onClick={() =>
-                          void submitCharacterRoll(spell.formula!, spell.name)
+                        onClick={(event) =>
+                          void submitCharacterRoll(
+                            spell.formula!,
+                            spell.name,
+                            rollModeFromEvent(event.nativeEvent),
+                          )
                         }
                       >
                         Бросить {humanizeFormula(spell.formula, statLabels)}
@@ -1642,7 +1768,6 @@ export function CharacterPanel({
                       onAction={(input) =>
                         catalogActions.onRollEntry(character.id, entry.id, {
                           ...input,
-                          ...(rollMode ? { rollMode } : {}),
                         })
                       }
                     />
@@ -1746,75 +1871,6 @@ export function CharacterPanel({
       {/* Секция 2: Ресурсы и кошелёк */}
       <div className="character-section character-section--resources">
         <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
-        <div className="character-power-controls">
-          {resourceRows.map(({ key, label }) => {
-            const resource = resourcesDraft[key] ?? { current: 0, maximum: 0 };
-            const maximum = resource.maximum ?? resource.current;
-            return (
-              <fieldset
-                className="resource-card"
-                key={key}
-                disabled={!editable}
-              >
-                <legend>{label}</legend>
-                <div className="resource-card__inputs">
-                  <label className="field">
-                    <span>Текущее</span>
-                    <FormInput
-                      type="number"
-                      min={0}
-                      value={resource.current}
-                      onChange={(event) =>
-                        setResourcesDraft((current) => ({
-                          ...current,
-                          [key]: {
-                            ...resource,
-                            current: Math.max(0, Number(event.target.value)),
-                          },
-                        }))
-                      }
-                      onBlur={() => void saveResources(resourcesDraft)}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Максимум</span>
-                    <FormInput
-                      type="number"
-                      min={0}
-                      value={maximum}
-                      onChange={(event) => {
-                        const nextMaximum = Math.max(
-                          0,
-                          Number(event.target.value),
-                        );
-                        setResourcesDraft((current) => ({
-                          ...current,
-                          [key]: {
-                            ...resource,
-                            maximum: nextMaximum,
-                            current: Math.min(resource.current, nextMaximum),
-                            recoverable: true,
-                          },
-                        }));
-                      }}
-                      onBlur={() => void saveResources(resourcesDraft)}
-                    />
-                  </label>
-                </div>
-              </fieldset>
-            );
-          })}
-          <div className="inline-fields character-rest-controls">
-            <Button
-              disabled={!editable || countersPending > 0}
-              title="Половина регена выносливости и маны, округление вниз"
-              onClick={() => void runRest("SHORT")}
-            >
-              Короткий отдых
-            </Button>
-          </div>
-        </div>
-
         <div className="subsection character-resource-editor">
           <h3>Дополнительные ресурсы</h3>
           {Object.entries(resourcesDraft)
@@ -1898,7 +1954,7 @@ export function CharacterPanel({
                             [key]: {
                               ...resource,
                               maximum: maximum,
-                              current: Math.min(resource.current, maximum),
+                              current: resource.current,
                             },
                           }));
                         }}
@@ -2007,7 +2063,9 @@ export function CharacterPanel({
                 <span className="inline-fields character-wallet__row" key={key}>
                   <b>{WALLET_LABELS[key]}</b>
                   <Button
-                    disabled={!editable || walletDraft[key] === 0}
+                    disabled={
+                      !editable || !canSpendWalletCoin(walletDraft, key)
+                    }
                     aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
                     onPointerDown={(event) => event.preventDefault()}
                     onClick={() => changeWallet(key, -1)}
@@ -2094,7 +2152,7 @@ export function CharacterPanel({
 
       {/* Секция 4: Личность, медиа и доступ */}
       <div className="character-section character-section--bio">
-        <h3 className="character-block-heading">Личность и портрет</h3>
+        <h3 className="character-block-heading">Личность и галерея</h3>
         {snapshot.me.role === "GM" && (
           <CharacterControllerAccess
             character={character}
@@ -2102,86 +2160,96 @@ export function CharacterPanel({
             onSave={onReplaceControllers}
           />
         )}
-        <div className="character-portrait-manager">
-          <label className="field">
-            Портрет
-            <AssetPicker
-              aria-label="Портрет персонажа"
-              value={character.portraitAssetId ?? null}
-              noneLabel="Без портрета"
-              disabled={!editable}
-              assets={snapshot.assets.filter(
-                (asset) => asset.kind === "PORTRAIT",
-              )}
-              onChange={(assetId) => {
-                if (!editable) return;
-                void runCharacterMutation(() =>
-                  onPatch(character.id, {
-                    portraitAssetId: assetId,
-                    revision: character.revision,
-                  }),
-                );
+        <ArkenDialog
+          open={portraitEditorOpen}
+          title={`Портрет: ${character.name}`}
+          footer={false}
+          onClose={() => setPortraitEditorOpen(false)}
+        >
+          <div className="character-portrait-manager">
+            <label className="field">
+              Портрет
+              <AssetPicker
+                aria-label="Портрет персонажа"
+                value={character.portraitAssetId ?? null}
+                noneLabel="Без портрета"
+                disabled={!editable}
+                assets={snapshot.assets.filter(
+                  (asset) => asset.kind === "PORTRAIT",
+                )}
+                onChange={(assetId) => {
+                  if (!editable) return;
+                  void runCharacterMutation(() =>
+                    onPatch(character.id, {
+                      portraitAssetId: assetId,
+                      revision: character.revision,
+                    }),
+                  );
+                }}
+              />
+            </label>
+            <ImageUploadField
+              label="Загрузить портрет для персонажа"
+              value={portraitUpload}
+              disabled={!editable || portraitUploadPending}
+              onUpdate={(file) => {
+                if (!editable || portraitUploadPendingRef.current) return;
+                setPortraitUpload(file);
               }}
             />
-          </label>
-          <ImageUploadField
-            label="Загрузить портрет для персонажа"
-            value={portraitUpload}
-            disabled={!editable || portraitUploadPending}
-            onUpdate={(file) => {
-              if (!editable || portraitUploadPendingRef.current) return;
-              setPortraitUpload(file);
-            }}
-          />
-          <p id={portraitUploadDescriptionId} className="muted" role="status">
-            {portraitUploadPending
-              ? "Загружаем и назначаем портрет…"
-              : !editable
-                ? "Портрет доступен только для чтения."
-                : portraitUpload
-                  ? "Файл выбран. Загрузите его, чтобы назначить портрет."
-                  : "Сначала выберите изображение портрета."}
-          </p>
-          <Button
-            disabled={!editable || !portraitUpload || portraitUploadPending}
-            aria-describedby={portraitUploadDescriptionId}
-            aria-busy={portraitUploadPending}
-            onClick={() => {
-              if (
-                !editable ||
-                !portraitUpload ||
-                portraitUploadPendingRef.current
-              )
-                return;
-              const uploadEpoch = portraitUploadEpochRef.current;
-              const file = portraitUpload;
-              const targetId = character.id;
-              const targetRevision = character.revision;
-              portraitUploadPendingRef.current = true;
-              setPortraitUploadPending(true);
-              void runCharacterMutation(async () => {
-                const asset = await assetActions.uploadAsset(file, "PORTRAIT");
-                if (portraitUploadEpochRef.current !== uploadEpoch) return;
-                await onPatch(targetId, {
-                  portraitAssetId: asset.id,
-                  revision: targetRevision,
+            <p id={portraitUploadDescriptionId} className="muted" role="status">
+              {portraitUploadPending
+                ? "Загружаем и назначаем портрет…"
+                : !editable
+                  ? "Портрет доступен только для чтения."
+                  : portraitUpload
+                    ? "Файл выбран. Загрузите его, чтобы назначить портрет."
+                    : "Сначала выберите изображение портрета."}
+            </p>
+            <Button
+              disabled={!editable || !portraitUpload || portraitUploadPending}
+              aria-describedby={portraitUploadDescriptionId}
+              aria-busy={portraitUploadPending}
+              onClick={() => {
+                if (
+                  !editable ||
+                  !portraitUpload ||
+                  portraitUploadPendingRef.current
+                )
+                  return;
+                const uploadEpoch = portraitUploadEpochRef.current;
+                const file = portraitUpload;
+                const targetId = character.id;
+                const targetRevision = character.revision;
+                portraitUploadPendingRef.current = true;
+                setPortraitUploadPending(true);
+                void runCharacterMutation(async () => {
+                  const asset = await assetActions.uploadAsset(
+                    file,
+                    "PORTRAIT",
+                  );
+                  if (portraitUploadEpochRef.current !== uploadEpoch) return;
+                  await onPatch(targetId, {
+                    portraitAssetId: asset.id,
+                    revision: targetRevision,
+                  });
+                  if (portraitUploadEpochRef.current === uploadEpoch) {
+                    portraitUploadPendingRef.current = false;
+                    setPortraitUploadPending(false);
+                    setPortraitUpload(undefined);
+                  }
+                }).finally(() => {
+                  if (portraitUploadEpochRef.current === uploadEpoch) {
+                    portraitUploadPendingRef.current = false;
+                    setPortraitUploadPending(false);
+                  }
                 });
-                if (portraitUploadEpochRef.current === uploadEpoch) {
-                  portraitUploadPendingRef.current = false;
-                  setPortraitUploadPending(false);
-                  setPortraitUpload(undefined);
-                }
-              }).finally(() => {
-                if (portraitUploadEpochRef.current === uploadEpoch) {
-                  portraitUploadPendingRef.current = false;
-                  setPortraitUploadPending(false);
-                }
-              });
-            }}
-          >
-            {portraitUploadPending ? "Загрузка…" : "Загрузить и назначить"}
-          </Button>
-        </div>
+              }}
+            >
+              {portraitUploadPending ? "Загрузка…" : "Загрузить и назначить"}
+            </Button>
+          </div>
+        </ArkenDialog>
         <h3 className="character-block-heading">Галерея</h3>
         <CharacterMediaGallery
           characterId={character.id}
@@ -2191,29 +2259,6 @@ export function CharacterPanel({
           isGm={snapshot.me.role === "GM"}
           onUpload={assetActions.uploadAsset}
         />
-        <details className="subsection">
-          <summary>Предыстория</summary>
-          <FormTextArea
-            aria-label="Предыстория"
-            aria-describedby={!editable ? backstoryDescriptionId : undefined}
-            defaultValue={character.backstory}
-            disabled={!editable}
-            rows={8}
-            onBlur={(event) =>
-              void runCharacterMutation(() =>
-                onPatch(character.id, {
-                  backstory: event.target.value,
-                  revision: character.revision,
-                }),
-              )
-            }
-          />
-          {!editable && (
-            <p className="muted" id={backstoryDescriptionId}>
-              {editPermissionReason}
-            </p>
-          )}
-        </details>
       </div>
 
       <TextPromptDialog

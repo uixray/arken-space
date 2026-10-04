@@ -186,7 +186,7 @@ test("UIX-644 short viewport scrolls options without dismissing and keeps focus 
 });
 
 for (const role of ["GM", "PLAYER"] as const) {
-  test(`UIX-644 compact Sections breakpoint lifecycle ${role}`, async ({
+  test(`UIX-644 compact menu breakpoint lifecycle ${role}`, async ({
     page,
   }, info) => {
     await page.setViewportSize({ width: 390, height: 800 });
@@ -204,12 +204,12 @@ for (const role of ["GM", "PLAYER"] as const) {
         writes.push(`${request.method()} ${path}`);
     });
     await page.goto("/");
-    const trigger = page.getByRole("button", { name: "Разделы", exact: true });
-    const sheet = page.getByRole("dialog", { name: "Разделы", exact: true });
+    const trigger = page.locator("#compact-nav-menu");
+    const menu = page.getByRole("region", { name: "Меню кампании" });
     await trigger.click();
-    await expect(sheet).toBeVisible();
+    await expect(menu).toBeVisible();
     await page.setViewportSize({ width: 360, height: 480 });
-    const destinations = sheet.locator(".compact-sections-list button");
+    const destinations = menu.locator(".compact-menu-grid button");
     const labels = await destinations.allTextContents();
     expect(labels.length).toBeGreaterThanOrEqual(3);
     for (const option of await destinations.all()) {
@@ -217,28 +217,27 @@ for (const role of ["GM", "PLAYER"] as const) {
       await assertHitTarget(option);
     }
     await page.setViewportSize({ width: 1280, height: 850 });
-    await expect(sheet).toBeHidden();
+    await expect(menu).toBeHidden();
     await expect(trigger).toBeHidden();
     await assertHitTarget(
-      page.getByRole("button", { name: "Вписать", exact: true }),
+      page.getByRole("button", { name: "Вписать карту", exact: true }),
     );
     await page.setViewportSize({ width: 390, height: 800 });
     await expect(trigger).toBeVisible();
-    await expect(sheet).toBeHidden();
+    await expect(menu).toBeVisible();
     await assertHitTarget(page.locator("#compact-nav-journal"));
     await page.locator("#compact-nav-journal").click();
     await expect(page.locator("#compact-nav-journal")).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+    await expect(menu).toBeHidden();
     await trigger.click();
-    await expect(sheet).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(sheet).toBeHidden();
-    await expect(trigger).toBeFocused();
+    await expect(menu).toBeVisible();
+    await expect(trigger).toHaveAttribute("aria-pressed", "true");
     expect(errors).toEqual([]);
     expect(writes).toEqual([]);
-    await info.attach("compact-sections-breakpoint", {
+    await info.attach("compact-menu-breakpoint", {
       body: JSON.stringify({ role, labels, errors, writes }),
       contentType: "application/json",
     });

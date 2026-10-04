@@ -56,6 +56,29 @@ export function physicalRollBonus(message: string): string | null {
   return message.match(/·\s*бонус\s+([+-]\d+)\./u)?.[1] ?? null;
 }
 
+/** A compact journal view of the existing stored physical-roll sentence. */
+export function physicalRollPresentation(message: string): {
+  label: string;
+  bonus: string;
+  mode: RollMode;
+} | null {
+  const bonus = physicalRollBonus(message);
+  const match = message.match(
+    /^Физический бросок · (.+?)(?: · (с преимуществом|с помехой))? · бонус [+-]\d+\./u,
+  );
+  if (!bonus || !match) return null;
+  return {
+    label: match[1]!,
+    bonus,
+    mode:
+      match[2] === "с преимуществом"
+        ? "ADVANTAGE"
+        : match[2] === "с помехой"
+          ? "DISADVANTAGE"
+          : "NORMAL",
+  };
+}
+
 export function physicalDiceStorageKey(membershipId: string): string {
   return `arken:physical-dice:${membershipId}`;
 }

@@ -131,6 +131,82 @@ afterEach(async () => {
 });
 
 describe("Character catalog ACL and player ability management", () => {
+  it("recharges only this character's short-rest abilities even when resources are full", async () => {
+    const otherCharacterId = id();
+    await db.insert(schema.characters).values({
+      id: otherCharacterId,
+      campaignId: ids.campaign,
+      name: "Other hero",
+      ownerMembershipId: ids.owner,
+    });
+    const entryIds = { target: id(), other: id(), day: id() };
+    for (const [entryId, characterId, recharge] of [
+      [entryIds.target, ids.character, "SHORT_REST"],
+      [entryIds.other, otherCharacterId, "SHORT_REST"],
+      [entryIds.day, ids.character, "DAY"],
+    ] as const) {
+      await db.insert(schema.characterCatalogEntries).values({
+        id: entryId,
+        characterId,
+        kind: "ABILITY",
+        name: recharge,
+        data: { uses: { current: 0, max: 2, recharge } },
+      });
+    }
+    const [character] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.owner),
+      payload: { actionId: id(), revision: character!.revision, rest: "SHORT" },
+    });
+    expect(response.statusCode).toBe(200);
+    const rows = await db.select().from(schema.characterCatalogEntries);
+    const uses = (entryId: string) =>
+      (
+        rows.find((row) => row.id === entryId)?.data as {
+          uses: { current: number };
+        }
+      ).uses.current;
+    expect(uses(entryIds.target)).toBe(2);
+    expect(uses(entryIds.other)).toBe(0);
+    expect(uses(entryIds.day)).toBe(0);
+
+    await db
+      .update(schema.characterCatalogEntries)
+      .set({ data: { uses: { current: 0, max: 2, recharge: "SHORT_REST" } } })
+      .where(eq(schema.characterCatalogEntries.id, entryIds.target));
+    const [restedCharacter] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    const longRest = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.owner),
+      payload: {
+        actionId: id(),
+        revision: restedCharacter!.revision,
+        rest: "LONG",
+      },
+    });
+    expect(longRest.statusCode).toBe(200);
+    const afterLongRest = await db
+      .select()
+      .from(schema.characterCatalogEntries);
+    const usesAfterLongRest = (entryId: string) =>
+      (
+        afterLongRest.find((row) => row.id === entryId)?.data as {
+          uses: { current: number };
+        }
+      ).uses.current;
+    expect(usesAfterLongRest(entryIds.target)).toBe(2);
+    expect(usesAfterLongRest(entryIds.day)).toBe(2);
+    expect(usesAfterLongRest(entryIds.other)).toBe(0);
+  });
   it("creates a player character with self-ownership and hides foreign campaigns", async () => {
     const created = await app.inject({
       method: "POST",

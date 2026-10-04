@@ -1949,6 +1949,39 @@ describe("Pool B HTTP boundaries", () => {
     ).toHaveLength(1);
   });
 
+  it("persists manually entered resource points above maximum", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        resources: {
+          physicalPower: { current: 17, maximum: 8 },
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().resources.physicalPower).toMatchObject({
+      current: 17,
+      maximum: 8,
+    });
+
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    expect(snapshot.statusCode).toBe(200);
+    expect(snapshot.json().characters[0].resources.physicalPower).toMatchObject(
+      {
+        current: 17,
+        maximum: 8,
+      },
+    );
+  });
+
   it("uses default and renamed resource labels with a key fallback", async () => {
     await db
       .update(schema.characters)

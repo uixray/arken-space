@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CharacterDto } from "@arken/contracts";
+import type { CharacterCatalogEntryDto, CharacterDto } from "@arken/contracts";
 import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "../design-system/Button";
 import { formulaBonus } from "../activity-roll-controls";
@@ -32,6 +32,7 @@ export function QuickRollPanel({
   quickRollPending,
   gmOnly,
   onQuickRoll,
+  onEntryAction,
 }: {
   rollCharacter: CharacterDto;
   campaignId: string;
@@ -41,7 +42,7 @@ export function QuickRollPanel({
    * из `arkenSystem.stats`, и характеристика, добавленная мастером, кнопки не
    * получала: карточка её показывала, панель — нет.
    */
-  rows: readonly { key: string; label: string }[];
+  rows: readonly { key: string; label: string; group?: string }[];
   quickRollPending: boolean;
   /**
    * Mirrors the dice tray's shared GM-only toggle (see `ActivityPanel`). The
@@ -55,6 +56,11 @@ export function QuickRollPanel({
     bonus: number,
     mode: RollMode,
   ) => void;
+  onEntryAction?: (
+    entry: CharacterCatalogEntryDto,
+    mode: "EXECUTE" | "SHARE",
+    rollActionId?: string,
+  ) => Promise<void>;
 }) {
   /**
    * UIX-455: ручка высоты живёт здесь, а не у костей. Кнопок тут столько,
@@ -79,6 +85,54 @@ export function QuickRollPanel({
   const [collapsed, setCollapsed] = useState(() =>
     readQuickRollsCollapsed(window.localStorage, membershipId),
   );
+  const [entryPending, setEntryPending] = useState<string | null>(null);
+  const [entryError, setEntryError] = useState("");
+  const entries = rollCharacter.entries ?? [];
+  const ordinaryRows = rows.filter(
+    (row) => !row.group || row.group === "characteristics",
+  );
+  const combatRows = rows.filter((row) => row.group === "combat");
+  const otherRows = rows.filter(
+    (row) => row.group && !["characteristics", "combat"].includes(row.group),
+  );
+  const submitEntry = async (
+    entry: CharacterCatalogEntryDto,
+    mode: "EXECUTE" | "SHARE",
+    rollActionId?: string,
+  ) => {
+    if (!onEntryAction || entryPending) return;
+    setEntryPending(entry.id);
+    setEntryError("");
+    try {
+      await onEntryAction(entry, mode, rollActionId);
+    } catch (reason) {
+      setEntryError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось отправить действие.",
+      );
+    } finally {
+      setEntryPending(null);
+    }
+  };
+  const statButtons = (groupRows: typeof rows) =>
+    groupRows.map((stat) => (
+      <Button
+        key={stat.key}
+        disabled={quickRollPending}
+        title={`${stat.label} · ${ROLL_MODIFIER_HINT}`}
+        onClick={(event) =>
+          onQuickRoll(
+            `1d20 + ${stat.key}`,
+            stat.label,
+            rollCharacter.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue,
+            rollModeFromEvent(event.nativeEvent),
+          )
+        }
+      >
+        {stat.label}
+      </Button>
+    ));
 
   return (
     <section
@@ -99,7 +153,7 @@ export function QuickRollPanel({
         }}
       >
         <AppIcon icon={collapsed ? ExpandSectionIcon : CollapseSectionIcon} />
-        Броски характеристик
+        Быстрые броски
       </button>
       {/* Прокручивается содержимое, а не панель целиком: иначе ручка уезжает
        * из виду ровно тогда, когда до неё хотят дотянуться. */}
@@ -109,47 +163,113 @@ export function QuickRollPanel({
             <AppIcon icon={SecretRollIcon} /> Броски уйдут только мастеру
           </p>
         )}
-        <div className="activity-quick-rolls" aria-busy={quickRollPending}>
-          {/* UIX-424: «Инициатива» больше не отдельная кнопка поверх броска на
-           * ловкость — это настоящая характеристика раскладки, и кнопка на неё
-           * приходит из списка ниже. Оставить обе значило бы дать две кнопки с
-           * одной подписью и разными числами. */}
-          {rows.map((stat) => (
-            <Button
-              key={stat.key}
-              disabled={quickRollPending}
-              title={`${stat.label} · ${ROLL_MODIFIER_HINT}`}
-              onClick={(event) =>
-                onQuickRoll(
-                  `1d20 + ${stat.key}`,
-                  stat.label,
-                  rollCharacter.stats[stat.key] ??
-                    STAT_VALUE_RANGE.defaultValue,
-                  rollModeFromEvent(event.nativeEvent),
-                )
-              }
-            >
-              {stat.label}
-            </Button>
+        {[
+          { label: "Обычные", rows: ordinaryRows },
+          { label: "Боевые", rows: combatRows },
+          { label: "Другие характеристики", rows: otherRows },
+        ]
+          .filter((group) => group.rows.length)
+          .map((group) => (
+            <div className="quick-roll-panel__group" key={group.label}>
+              <h3>{group.label}</h3>
+              <div
+                className="activity-quick-rolls"
+                aria-busy={quickRollPending}
+              >
+                {statButtons(group.rows)}
+              </div>
+            </div>
           ))}
-          {rollCharacter.skills.map((skill) => (
-            <Button
-              key={skill.key}
-              disabled={quickRollPending}
-              title={`${skill.name} · ${ROLL_MODIFIER_HINT}`}
-              onClick={(event) =>
-                onQuickRoll(
-                  skill.formula,
-                  skill.name,
-                  formulaBonus(skill.formula, rollCharacter.stats),
-                  rollModeFromEvent(event.nativeEvent),
-                )
-              }
+        {(rollCharacter.skills.length > 0 ||
+          entries.some((entry) => entry.kind === "SKILL")) && (
+          <div className="quick-roll-panel__group">
+            <h3>Навыки</h3>
+            <div className="activity-quick-rolls" aria-busy={quickRollPending}>
+              {rollCharacter.skills.map((skill) => (
+                <Button
+                  key={skill.key}
+                  disabled={quickRollPending}
+                  title={`${skill.name} · ${ROLL_MODIFIER_HINT}`}
+                  onClick={(event) =>
+                    onQuickRoll(
+                      skill.formula,
+                      skill.name,
+                      formulaBonus(skill.formula, rollCharacter.stats),
+                      rollModeFromEvent(event.nativeEvent),
+                    )
+                  }
+                >
+                  {skill.name}
+                </Button>
+              ))}
+              {entries
+                .filter((entry) => entry.kind === "SKILL")
+                .map((entry) => (
+                  <div className="quick-roll-panel__entry" key={entry.id}>
+                    <Button
+                      disabled={entryPending !== null || !onEntryAction}
+                      onClick={() =>
+                        void submitEntry(
+                          entry,
+                          "EXECUTE",
+                          entry.data.rollActions?.[0]?.id,
+                        )
+                      }
+                    >
+                      {entry.name}
+                    </Button>
+                    <button
+                      type="button"
+                      disabled={entryPending !== null || !onEntryAction}
+                      aria-label={`Показать без выполнения: ${entry.name}`}
+                      title="Показать описание без выполнения и расхода"
+                      onClick={() => void submitEntry(entry, "SHARE")}
+                    >
+                      i
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+        {entries.some((entry) => entry.kind === "ABILITY") && (
+          <div className="quick-roll-panel__group">
+            <h3>Способности</h3>
+            <div
+              className="activity-quick-rolls"
+              aria-busy={entryPending !== null}
             >
-              {skill.name}
-            </Button>
-          ))}
-        </div>
+              {entries
+                .filter((entry) => entry.kind === "ABILITY")
+                .map((entry) => (
+                  <div className="quick-roll-panel__entry" key={entry.id}>
+                    <Button
+                      disabled={entryPending !== null || !onEntryAction}
+                      onClick={() =>
+                        void submitEntry(
+                          entry,
+                          "EXECUTE",
+                          entry.data.rollActions?.[0]?.id,
+                        )
+                      }
+                    >
+                      {entry.name}
+                    </Button>
+                    <button
+                      type="button"
+                      disabled={entryPending !== null || !onEntryAction}
+                      aria-label={`Показать без выполнения: ${entry.name}`}
+                      title="Показать описание без выполнения и расхода"
+                      onClick={() => void submitEntry(entry, "SHARE")}
+                    >
+                      i
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+        {entryError && <p role="alert">{entryError}</p>}
       </div>
       {!collapsed && (
         <button

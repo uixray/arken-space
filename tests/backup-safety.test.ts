@@ -96,7 +96,7 @@ describe("backup and restore safety", () => {
     expect(describeDatabaseCountCoverage(oldManifest)).toMatchObject({
       mode: "sampled",
       countedTables: 11,
-      knownPersistedTables: 55,
+      knownPersistedTables: applicationCountTableNames.length,
     });
   });
 

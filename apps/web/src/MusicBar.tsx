@@ -66,8 +66,10 @@ export function MusicBar({
   const overflowRef = useRef<HTMLDetailsElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [enabled, setEnabled] = useState(
-    () => localStorage.getItem(ENABLED_KEY) === "true",
+    () => localStorage.getItem(ENABLED_KEY) !== "false",
   );
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  const playbackBlockedRef = useRef(false);
   const [volume, setVolume] = useState(() => {
     const stored = localStorage.getItem(VOLUME_KEY);
     if (stored === null) return 0.5;
@@ -100,6 +102,7 @@ export function MusicBar({
   const lastSyncRef = useRef<{
     revision: number;
     assetId: string | null;
+    sourceUrl: string | null;
     playing: boolean;
     loop: boolean;
     enabled: boolean;
@@ -107,11 +110,37 @@ export function MusicBar({
   }>({
     revision: -1,
     assetId: null,
+    sourceUrl: null,
     playing: false,
     loop: false,
     enabled: false,
     hasCurrent: false,
   });
+  const playAttemptInFlightRef = useRef(false);
+  const attemptPlayback = (player: HTMLAudioElement) => {
+    if (playAttemptInFlightRef.current) return;
+    playAttemptInFlightRef.current = true;
+    const onFailure = (reason: unknown) => {
+      playAttemptInFlightRef.current = false;
+      // A scene/snapshot change may abort a pending play request; only
+      // consent failures require a new user gesture.
+      if (!isAudioConsentError(reason)) return;
+      playbackBlockedRef.current = true;
+      setPlaybackBlocked(true);
+    };
+    let pending: Promise<void> | undefined;
+    try {
+      pending = player.play();
+    } catch (reason) {
+      onFailure(reason);
+      return;
+    }
+    void Promise.resolve(pending).then(() => {
+      playAttemptInFlightRef.current = false;
+      playbackBlockedRef.current = false;
+      setPlaybackBlocked(false);
+    }, onFailure);
+  };
 
   useEffect(() => {
     const player = element.current;
@@ -138,6 +167,7 @@ export function MusicBar({
     const isUnrelatedUpdate =
       lastSync.revision === audio.revision &&
       lastSync.assetId === audio.assetId &&
+      lastSync.sourceUrl === (current?.url ?? null) &&
       lastSync.playing === audio.playing &&
       lastSync.loop === audio.loop &&
       lastSync.enabled === enabled &&
@@ -152,6 +182,7 @@ export function MusicBar({
     lastSyncRef.current = {
       revision: audio.revision,
       assetId: audio.assetId,
+      sourceUrl: current?.url ?? null,
       playing: audio.playing,
       loop: audio.loop,
       enabled,
@@ -166,25 +197,50 @@ export function MusicBar({
     if (Math.abs(player.currentTime - expected) > 0.75)
       player.currentTime = expected;
     const action = resolvePlaybackAction(audio.playing, player.paused);
-    if (action === "play")
-      void player.play().catch((reason: unknown) => {
-        // Snapshot refreshes (including scene activation) can race with
-        // media loading and reject play() with AbortError. That is
-        // transient and must not revoke the user's local audio consent.
-        if (!isAudioConsentError(reason)) return;
-        setEnabled(false);
-        notify({
-          title: "Браузер заблокировал звук",
-          message: "Включите звук вручную в верхней панели.",
-          tone: "warning",
-        });
-      });
+    if (action === "play" && !playbackBlockedRef.current)
+      attemptPlayback(player);
     else if (action === "pause") player.pause();
   }, [audio, current, enabled]);
-  useEffect(
-    () => localStorage.setItem(ENABLED_KEY, String(enabled)),
-    [enabled],
-  );
+  // A blocked autoplay attempt is not an explicit mute. Retry in the next
+  // user gesture instead of forcing an extra consent click in the popover.
+  const retryPlayback = (force = false) => {
+    const player = element.current;
+    if ((!enabled && !force) || !audio.playing || !current || !player) return;
+    playbackBlockedRef.current = false;
+    attemptPlayback(player);
+  };
+  useEffect(() => {
+    if (!playbackBlocked || !enabled || !audio.playing || !current) return;
+    const onGesture = (event: Event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".music-volume-control, .music-enable-button")
+      )
+        return;
+      if (!playbackBlockedRef.current) return;
+      const player = element.current;
+      if (!player) return;
+      playbackBlockedRef.current = false;
+      attemptPlayback(player);
+    };
+    document.addEventListener("pointerdown", onGesture, true);
+    document.addEventListener("keydown", onGesture, true);
+    return () => {
+      document.removeEventListener("pointerdown", onGesture, true);
+      document.removeEventListener("keydown", onGesture, true);
+    };
+  }, [playbackBlocked, enabled, audio.playing, current]);
+
+  const setAudioEnabled = (next: boolean) => {
+    localStorage.setItem(ENABLED_KEY, String(next));
+    setEnabled(next);
+    if (next) retryPlayback(true);
+    else {
+      playbackBlockedRef.current = false;
+      setPlaybackBlocked(false);
+      element.current?.pause();
+    }
+  };
 
   useDismissibleDetails(volumeRef);
   useDismissibleDetails(overflowRef);
@@ -242,7 +298,21 @@ export function MusicBar({
 
   const controls = (
     <section className="music-topbar" aria-label="Музыка">
-      <strong className="music-topbar__title">Музыка</strong>
+      <strong
+        className="music-topbar__title"
+        title={current?.name ?? "Композиция 4'33"}
+      >
+        {current?.name ?? "Композиция 4'33"}
+      </strong>
+      {playbackBlocked && enabled && audio.playing && current ? (
+        <button
+          type="button"
+          className="music-enable-button"
+          onClick={() => retryPlayback()}
+        >
+          Включить звук
+        </button>
+      ) : null}
       <button
         type="button"
         className="music-icon-button"
@@ -271,11 +341,11 @@ export function MusicBar({
             />
           </label>
           {enabled ? (
-            <button type="button" onClick={() => setEnabled(false)}>
+            <button type="button" onClick={() => setAudioEnabled(false)}>
               Выключить звук
             </button>
           ) : (
-            <button type="button" onClick={() => setEnabled(true)}>
+            <button type="button" onClick={() => setAudioEnabled(true)}>
               Включить звук
             </button>
           )}

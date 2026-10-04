@@ -1,14 +1,20 @@
 import { Button } from "./design-system/Button";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "./api";
 import { betaPlayerByHandle, betaPlayers } from "@arken/contracts";
 import { FormInput, FormTextArea } from "./ui/GravityFormControls";
 import { LandingGuide } from "./LandingGuide";
 import { capabilities, changelog, roadmapSections } from "./landing-data";
+import "./landing-public.css";
 
 type FeedbackStatus = "idle" | "sending" | "sent";
+type RoadmapVote = { id: string; count: number; voted: boolean };
+type RoadmapVoteResponse = { items: RoadmapVote[] };
 const isDevelopment = (import.meta as ImportMeta & { env: { DEV: boolean } })
   .env.DEV;
+const plannedRoadmap = roadmapSections.find(
+  (section) => section.status === "planned",
+);
 
 export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [name, setName] = useState("");
@@ -17,11 +23,54 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const playerLoginPending = useRef(false);
   const [feedbackStatus, setFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [feedbackError, setFeedbackError] = useState("");
+  const [allPlansVisible, setAllPlansVisible] = useState(false);
+  const [votes, setVotes] = useState<Record<string, RoadmapVote>>({});
+  const [votesLoading, setVotesLoading] = useState(true);
+  const [votePending, setVotePending] = useState<string | null>(null);
+  const [voteError, setVoteError] = useState("");
   const parts = window.location.pathname.split("/").filter(Boolean);
   const mode = parts[0];
   const token = parts[1] ?? "";
   const betaPlayer = mode === "play" ? betaPlayerByHandle(token) : undefined;
   const hasInvitation = mode === "gm" || mode === "join" || Boolean(betaPlayer);
+
+  useEffect(() => {
+    let active = true;
+    api<RoadmapVoteResponse>("/api/public/roadmap-votes")
+      .then(({ items }) => {
+        if (active)
+          setVotes(Object.fromEntries(items.map((item) => [item.id, item])));
+      })
+      .catch(() => {
+        if (active)
+          setVoteError(
+            "Не удалось загрузить голоса. Попробуйте обновить страницу.",
+          );
+      })
+      .finally(() => {
+        if (active) setVotesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleRoadmapVote = async (id: string) => {
+    if (votePending || votesLoading) return;
+    setVotePending(id);
+    setVoteError("");
+    try {
+      const item = await api<RoadmapVote>(
+        `/api/public/roadmap-votes/${encodeURIComponent(id)}`,
+        { method: "POST" },
+      );
+      setVotes((current) => ({ ...current, [id]: item }));
+    } catch {
+      setVoteError("Не удалось сохранить голос. Попробуйте ещё раз.");
+    } finally {
+      setVotePending(null);
+    }
+  };
 
   const loginAsPlayer = async (handle: string) => {
     // State updates are asynchronous: two clicks in the same event turn can
@@ -115,6 +164,13 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           </a>
           <span className="landing-badge">Ранний доступ</span>
         </div>
+        <nav className="landing-section-nav" aria-label="Разделы страницы">
+          <a href="#capabilities-title">Возможности</a>
+          <a href="#guide-title">Как играть</a>
+          <a href="#roadmap-title">Планы</a>
+          <a href="#changelog-title">Обновления</a>
+          <a href="#feedback-title">Обратная связь</a>
+        </nav>
         {isDevelopment && (
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <a
@@ -334,9 +390,19 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
                   {section.badge}
                 </span>
               </div>
-              <div className="roadmap-item-list">
-                {section.items.map((item) => (
-                  <div className="roadmap-item" key={item.title}>
+              <div
+                className="roadmap-item-list"
+                id={
+                  section.status === "planned"
+                    ? "roadmap-planned-items"
+                    : undefined
+                }
+              >
+                {(section.status === "planned" && !allPlansVisible
+                  ? section.items.slice(0, 3)
+                  : section.items
+                ).map((item) => (
+                  <div className="roadmap-item" key={item.id ?? item.title}>
                     <div className="roadmap-item__header">
                       {item.code && (
                         <span className="roadmap-item__code">{item.code}</span>
@@ -344,12 +410,52 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
                       <h4>{item.title}</h4>
                     </div>
                     <p>{item.description}</p>
+                    {section.status === "planned" && item.id && (
+                      <button
+                        type="button"
+                        className={`roadmap-vote-button${votes[item.id]?.voted ? " is-voted" : ""}`}
+                        aria-pressed={votes[item.id]?.voted ?? false}
+                        disabled={
+                          votesLoading ||
+                          votePending !== null ||
+                          !votes[item.id]
+                        }
+                        onClick={() => void toggleRoadmapVote(item.id!)}
+                      >
+                        {votes[item.id]?.voted ? "Голос отдан" : "Голосовать"}
+                        <span
+                          aria-label={`${votes[item.id]?.count ?? 0} голосов`}
+                        >
+                          {votes[item.id]?.count ?? "—"}
+                        </span>
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           ))}
         </div>
+        {voteError && (
+          <p className="roadmap-vote-error" role="alert">
+            {voteError}
+          </p>
+        )}
+        <p className="roadmap-vote-note">
+          Один голос на план в этом браузере. Голос можно отозвать; после
+          удаления cookie ограничение сбросится.
+        </p>
+        {plannedRoadmap && plannedRoadmap.items.length > 3 && (
+          <button
+            type="button"
+            className="roadmap-expand-button"
+            aria-expanded={allPlansVisible}
+            aria-controls="roadmap-planned-items"
+            onClick={() => setAllPlansVisible((visible) => !visible)}
+          >
+            {allPlansVisible ? "Свернуть планы" : "Показать все планы"}
+          </button>
+        )}
       </section>
 
       <section className="landing-section" aria-labelledby="changelog-title">

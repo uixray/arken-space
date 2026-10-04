@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 import { canonicalizeFogGeometry, FogGeometryError } from "./fog-geometry.js";
+import { registerPublicRoadmapVoteRoutes } from "./roadmap-votes.js";
 import {
   activateSceneSchema,
   actionIdSchema,
@@ -534,7 +535,11 @@ function applyCharacterRest(
         key,
         {
           ...resource,
-          current: Math.min(maximum, resource.current + gain),
+          // Temporary points above maximum are not reduced by a rest.
+          current: Math.max(
+            resource.current,
+            Math.min(maximum, resource.current + gain),
+          ),
           maximum,
         },
       ];
@@ -912,6 +917,7 @@ export function registerRoutes(
   db: Database,
   io: RealtimeServer,
 ) {
+  registerPublicRoadmapVoteRoutes(app, db);
   const canvasTx = (campaignId: string) =>
     campaignCanvasDatabase(db, campaignId);
   registerWorldMapRoutes(app, db, (campaignId) =>
@@ -7853,111 +7859,147 @@ export function registerRoutes(
     ]
       .filter(Boolean)
       .join("; ");
-    if (!changes) return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
+    if (!changes && !body.rest)
+      return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
+    const changeDescription =
+      changes || (body.rest === "SHORT" ? "короткий отдых" : "долгий отдых");
     const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
     const walletOnly = Boolean(body.wallet) && !nextResources && !body.rest;
     const walletBefore = normalizeCharacterWallet(character!.wallet);
-    const result = await db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(characters)
-        .set({
-          ...(body.wallet ? { wallet: body.wallet } : {}),
-          ...(nextResources ? { resources: nextResources } : {}),
-          revision: character!.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(characters.id, id),
-            eq(characters.revision, character!.revision),
-          ),
-        )
-        .returning();
-      if (!updated) return null;
-      const now = new Date();
-      const walletData: WalletAuditSystemData | null =
-        walletOnly && body.wallet
-          ? {
-              type: "WALLET_AUDIT",
-              before: walletBefore,
-              after: body.wallet,
-              lastAt: now.toISOString(),
-              operationCount: 1,
-            }
-          : null;
-      const [latestMessage] = walletData
-        ? await tx
-            .select()
-            .from(chatMessages)
-            .where(eq(chatMessages.threadId, tableThread.id))
-            .orderBy(desc(chatMessages.sequence))
-            .limit(1)
-            .for("update")
-        : [];
-      const latestWalletData = latestMessage?.systemData;
-      const lastAt = isWalletAuditSystemData(latestWalletData)
-        ? Date.parse(latestWalletData.lastAt)
-        : Number.NaN;
-      const elapsed = now.getTime() - lastAt;
-      const canAggregate =
-        latestMessage?.kind === "SYSTEM" &&
-        latestMessage.visibility === "PUBLIC" &&
-        latestMessage.membershipId === auth.membershipId &&
-        latestMessage.characterId === id &&
-        isWalletAuditSystemData(latestWalletData) &&
-        elapsed >= 0 &&
-        elapsed <= WALLET_AUDIT_BURST_MS;
-      const aggregateData: WalletAuditSystemData | null =
-        canAggregate && body.wallet
-          ? {
-              ...latestWalletData,
-              after: body.wallet,
-              lastAt: now.toISOString(),
-              operationCount: latestWalletData.operationCount + 1,
-            }
-          : null;
-      const [message] =
-        aggregateData && latestMessage
+    const result = await db
+      .transaction(async (tx) => {
+        const [updated] = await tx
+          .update(characters)
+          .set({
+            ...(body.wallet ? { wallet: body.wallet } : {}),
+            ...(nextResources ? { resources: nextResources } : {}),
+            revision: character!.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(characters.id, id),
+              eq(characters.revision, character!.revision),
+            ),
+          )
+          .returning();
+        if (!updated) return null;
+        if (body.rest) {
+          const [clock] = await tx
+            .select({
+              day: campaigns.day,
+              battleCounter: campaigns.battleCounter,
+            })
+            .from(campaigns)
+            .where(eq(campaigns.id, auth.campaignId))
+            .limit(1);
+          if (!clock) throw new Error("CAMPAIGN_NOT_FOUND");
+          const recharged = await rechargeCampaignCatalogEntries(
+            tx,
+            auth.campaignId,
+            {
+              trigger: body.rest === "SHORT" ? "SHORT_REST" : "LONG_REST",
+              day: clock.day,
+              battleCounter: clock.battleCounter,
+              characterId: id,
+            },
+          );
+          // A rest with neither resource recovery nor a recharged ability is a
+          // no-op. Abort the transaction so it cannot bump revision or journal it.
+          if (!changes && recharged === 0)
+            throw new Error("NO_COUNTER_CHANGES");
+        }
+        const now = new Date();
+        const walletData: WalletAuditSystemData | null =
+          walletOnly && body.wallet
+            ? {
+                type: "WALLET_AUDIT",
+                before: walletBefore,
+                after: body.wallet,
+                lastAt: now.toISOString(),
+                operationCount: 1,
+              }
+            : null;
+        const [latestMessage] = walletData
           ? await tx
-              .update(chatMessages)
-              .set({
-                body: `${character!.name} \u2014 ${formatWalletChanges(
-                  aggregateData.before,
-                  aggregateData.after,
-                )}`,
-                systemData: aggregateData,
-              })
-              .where(eq(chatMessages.id, latestMessage.id))
-              .returning()
-          : await tx
-              .insert(chatMessages)
-              .values({
-                campaignId: auth.campaignId,
-                membershipId: auth.membershipId,
-                characterId: id,
-                kind: "SYSTEM",
-                threadId: tableThread.id,
-                visibility: "PUBLIC",
-                body: `${character!.name} \u2014 ${changes}`,
-                systemData: walletData,
-              })
-              .returning();
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "character.counters",
-        entityType: "character",
-        entityId: id,
-        entityRevision: updated.revision,
-        payload: {
-          wallet: body.wallet,
-          resources: nextResources,
-          rest: body.rest,
-        },
+              .select()
+              .from(chatMessages)
+              .where(eq(chatMessages.threadId, tableThread.id))
+              .orderBy(desc(chatMessages.sequence))
+              .limit(1)
+              .for("update")
+          : [];
+        const latestWalletData = latestMessage?.systemData;
+        const lastAt = isWalletAuditSystemData(latestWalletData)
+          ? Date.parse(latestWalletData.lastAt)
+          : Number.NaN;
+        const elapsed = now.getTime() - lastAt;
+        const canAggregate =
+          latestMessage?.kind === "SYSTEM" &&
+          latestMessage.visibility === "PUBLIC" &&
+          latestMessage.membershipId === auth.membershipId &&
+          latestMessage.characterId === id &&
+          isWalletAuditSystemData(latestWalletData) &&
+          elapsed >= 0 &&
+          elapsed <= WALLET_AUDIT_BURST_MS;
+        const aggregateData: WalletAuditSystemData | null =
+          canAggregate && body.wallet
+            ? {
+                ...latestWalletData,
+                after: body.wallet,
+                lastAt: now.toISOString(),
+                operationCount: latestWalletData.operationCount + 1,
+              }
+            : null;
+        const [message] =
+          aggregateData && latestMessage
+            ? await tx
+                .update(chatMessages)
+                .set({
+                  body: `${character!.name} \u2014 ${formatWalletChanges(
+                    aggregateData.before,
+                    aggregateData.after,
+                  )}`,
+                  systemData: aggregateData,
+                })
+                .where(eq(chatMessages.id, latestMessage.id))
+                .returning()
+            : await tx
+                .insert(chatMessages)
+                .values({
+                  campaignId: auth.campaignId,
+                  membershipId: auth.membershipId,
+                  characterId: id,
+                  kind: "SYSTEM",
+                  threadId: tableThread.id,
+                  visibility: "PUBLIC",
+                  body: `${character!.name} \u2014 ${changeDescription}`,
+                  systemData: walletData,
+                })
+                .returning();
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "character.counters",
+          entityType: "character",
+          entityId: id,
+          entityRevision: updated.revision,
+          payload: {
+            wallet: body.wallet,
+            resources: nextResources,
+            rest: body.rest,
+          },
+        });
+        return { updated, message };
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message === "NO_COUNTER_CHANGES")
+          return "NO_COUNTER_CHANGES" as const;
+        throw error;
       });
-      return { updated, message };
-    });
+    if (result === "NO_COUNTER_CHANGES")
+      return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
     if (!result) {
       const racedAction = await findAction(db, auth.campaignId, body.actionId);
       if (racedAction) return sendReplay(racedAction);

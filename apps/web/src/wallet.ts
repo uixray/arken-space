@@ -50,6 +50,30 @@ export function changeWalletValue(
   return { ...current, [key]: normalizeWalletValue(current[key] + delta) };
 }
 
+/** Spend one coin, breaking a higher denomination when this field is empty. */
+export function spendWalletCoin(wallet: Wallet, key: WalletKey): Wallet {
+  const current = normalizeWallet(wallet);
+  if (current[key] > 0) return { ...current, [key]: current[key] - 1 };
+  if (key === "silver" && current.gold > 0)
+    return { ...current, gold: current.gold - 1, silver: 9 };
+  if (key === "copper") {
+    if (current.silver > 0)
+      return { ...current, silver: current.silver - 1, copper: 9 };
+    if (current.gold > 0)
+      return { ...current, gold: current.gold - 1, silver: 9, copper: 9 };
+  }
+  return current;
+}
+
+export function canSpendWalletCoin(wallet: Wallet, key: WalletKey): boolean {
+  const current = normalizeWallet(wallet);
+  return (
+    current[key] > 0 ||
+    (key === "silver" && current.gold > 0) ||
+    (key === "copper" && (current.silver > 0 || current.gold > 0))
+  );
+}
+
 /** Adds one actual UI step and drops keys whose accumulated intent cancels out. */
 export function mergeWalletDelta(
   current: WalletDelta,

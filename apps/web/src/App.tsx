@@ -751,7 +751,10 @@ export function App() {
           ),
       }),
   );
-  useSyncExternalStore(tokenMutations.subscribe, tokenMutations.getVersion);
+  const tokenMutationVersion = useSyncExternalStore(
+    tokenMutations.subscribe,
+    tokenMutations.getVersion,
+  );
   useEffect(() => {
     tokenMutations.reset();
     return () => tokenMutations.reset();
@@ -1144,6 +1147,8 @@ export function App() {
   );
 
   const viewSnapshot = useMemo(() => {
+    // Reproject optimistic tokens whenever the external mutation store changes.
+    void tokenMutationVersion;
     if (previewSnapshot) return previewSnapshot;
     if (!snapshot) return null;
     return {
@@ -1159,7 +1164,13 @@ export function App() {
         bulkMoveIntents,
       ) as GameSnapshot["drawings"],
     };
-  }, [previewSnapshot, snapshot, tokenMutations, bulkMoveIntents]);
+  }, [
+    previewSnapshot,
+    snapshot,
+    tokenMutations,
+    tokenMutationVersion,
+    bulkMoveIntents,
+  ]);
 
   const broadcastScene = viewSnapshot
     ? (viewSnapshot.scenes.find((scene) => scene.active) ??
@@ -2004,6 +2015,9 @@ export function App() {
                     key={`${activeScene.id}:${snapshot.campaign.paused}`}
                     paused={snapshot.campaign.paused}
                     externalObjectListOpen={mapObjectsOpen}
+                    onObjectListToggle={() =>
+                      setMapObjectsOpen((open) => !open)
+                    }
                     onObjectListClose={() => setMapObjectsOpen(false)}
                     scene={
                       gridPreview
@@ -2163,6 +2177,7 @@ export function App() {
                 onResizeHandleDown={handleSidebarResizeStart}
                 onResizeHandleMove={handleSidebarResizeMove}
                 onResizeHandleUp={handleSidebarResizeEnd}
+                workspaceSidebarWidth={sidebarWidth}
                 workspace={workspace}
                 operatorFeedbackAllowed={operatorFeedbackAllowed}
                 onWorkspaceChange={handleWorkspaceChange}

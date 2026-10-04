@@ -40,7 +40,7 @@ describe("queued character counter mutations", () => {
     });
   });
 
-  it("rebases DELTA, applies SET, and clamps both to the resource bounds", () => {
+  it("rebases DELTA, applies SET, prevents negatives and retains temporary excess", () => {
     const rebased = {
       ...character,
       resources: {
@@ -60,7 +60,7 @@ describe("queued character counter mutations", () => {
           resource: { key: "physicalPower", kind: "DELTA", delta: 5 },
         },
       ).resources?.physicalPower?.current,
-    ).toBe(10);
+    ).toBe(14);
     expect(
       buildCharacterCounterPatch(
         character,
@@ -78,7 +78,7 @@ describe("queued character counter mutations", () => {
           resource: { key: "magicPower", kind: "SET", value: 99 },
         },
       ).resources?.magicPower?.current,
-    ).toBe(6);
+    ).toBe(99);
   });
 
   it("rebases metadata-only resource-map edits without restoring stale currents", () => {
@@ -169,7 +169,7 @@ describe("queued character counter mutations", () => {
     });
   });
 
-  it("clamps a queued current when the sheet lowers its maximum", () => {
+  it("preserves overfill when the sheet lowers maximum or edits current", () => {
     const latest = {
       ...character,
       resources: {
@@ -202,10 +202,24 @@ describe("queued character counter mutations", () => {
         },
       ).resources,
     ).toMatchObject({
-      physicalPower: { current: 9, maximum: 9 },
-      focus: { current: 4, maximum: 4 },
+      physicalPower: { current: 10, maximum: 9 },
+      focus: { current: 8, maximum: 4 },
       fractional: { current: 2.5, maximum: 4 },
     });
+  });
+
+  it("preserves overfill when the sheet adds a custom resource", () => {
+    const desired = {
+      ...character.resources,
+      focus: { current: 7.5, maximum: 4 },
+    };
+    expect(
+      buildCharacterCounterPatch(
+        character,
+        { resources: desired },
+        { resourceMapPatch: { base: character.resources, desired } },
+      ).resources?.focus,
+    ).toEqual({ current: 7.5, maximum: 4 });
   });
 
   it("recognizes a rebased SET that canonical state already satisfies as a no-op", () => {
@@ -242,6 +256,20 @@ describe("queued character counter mutations", () => {
     expect(isCharacterCounterPatchNoop(canonical, { rest: "SHORT" })).toBe(
       false,
     );
+  });
+
+  it("preserves temporary resource points above maximum in an intent patch", () => {
+    const patch = buildCharacterCounterPatch(
+      character,
+      {},
+      {
+        resource: { key: "physicalPower", kind: "SET", value: 17 },
+      },
+    );
+    expect(patch.resources?.physicalPower).toMatchObject({
+      current: 17,
+      maximum: character.resources.physicalPower?.maximum,
+    });
   });
 
   it("retries only relative conflicts", () => {

@@ -269,6 +269,14 @@ function skillMessage(
 }
 
 async function mockApp(page: Page, getSnapshot: () => GameSnapshot) {
+  // Never let an unmocked request reach the developer's running backend:
+  // a stale auth cookie can otherwise produce a real 401 toast after reload.
+  await page.route("**/api/**", (route) =>
+    route.fulfill({
+      status: route.request().method() === "GET" ? 200 : 405,
+      json: route.request().method() === "GET" ? [] : { error: "UNMOCKED" },
+    }),
+  );
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
@@ -296,6 +304,41 @@ async function mockApp(page: Page, getSnapshot: () => GameSnapshot) {
 async function openCharacterWorkspace(page: Page) {
   await openWorkspaceSection(page, "Персонажи");
   await expect(page.locator(".character-action-card")).toBeVisible();
+}
+
+async function openJournal(page: Page) {
+  const compactButton = page.locator("#compact-nav-journal");
+  if (await compactButton.isVisible()) await compactButton.click();
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
+}
+
+for (const width of [1280, 360]) {
+  test(`ability card displays a localized stat formula at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 360 ? 640 : 900 });
+    const ability = entry("Огненная стрела");
+    ability.data.rollActions[0]!.dice = "2d6 + intelligence";
+    ability.data.rollActions[0]!.modifiers = [];
+    const snapshot = snapshotFor(ability);
+    snapshot.campaign.statLayout = [
+      {
+        id: "characteristics",
+        label: "Характеристики",
+        rows: [{ key: "intelligence", label: "Интеллект", source: "STAT" }],
+      },
+    ];
+    await mockApp(page, () => snapshot);
+
+    await page.goto("/");
+    await openCharacterWorkspace(page);
+    await expect(
+      page.locator(".character-action-card__action code"),
+    ).toHaveText("2d6 + Интеллект");
+    await expect(page.locator(".character-action-card")).not.toContainText(
+      "intelligence",
+    );
+  });
 }
 
 for (const width of [1280, 360]) {
@@ -337,8 +380,7 @@ for (const width of [1280, 360]) {
     );
 
     await page.getByRole("button", { name: "Закрыть персонажей" }).click();
-    if (width === 360) await page.locator("#compact-nav-journal").click();
-    await page.locator("#chat-tab-activity").click();
+    await openJournal(page);
     const card = page
       .locator(".skill-chat-card")
       .filter({ hasText: "Arcane Shot" });
@@ -349,13 +391,10 @@ for (const width of [1280, 360]) {
     await expect(card.locator(".skill-chat-card__uses")).toContainText(
       /2.*1\/2/,
     );
-    await expect(card.locator(".skill-chat-card__result > strong")).toHaveText(
-      "16",
-    );
+    await expect(card.getByLabel("Итог броска")).toHaveText("16");
 
     await page.reload();
-    if (width === 360) await page.locator("#compact-nav-journal").click();
-    await page.locator("#chat-tab-activity").click();
+    await openJournal(page);
     await expect(
       page.locator(".skill-chat-card").filter({ hasText: "Arcane Shot" }),
     ).toHaveCount(1);
@@ -408,8 +447,7 @@ for (const width of [960, 360]) {
     );
 
     await page.getByRole("button", { name: "Закрыть персонажей" }).click();
-    await page.locator("#compact-nav-journal").click();
-    await page.locator("#chat-tab-activity").click();
+    await openJournal(page);
     const card = page
       .locator(".skill-chat-card")
       .filter({ hasText: "Quiet Veil" });
@@ -515,10 +553,14 @@ for (const owner of ["edit", "picker", "setup"] as const) {
       });
       if (owner !== "edit") {
         await form
-          .getByRole("checkbox", {
+          .locator("label.arken-checkbox")
+          .filter({ hasText: "Ограничить количество использований" })
+          .click();
+        await expect(
+          form.getByRole("checkbox", {
             name: "Ограничить количество использований",
-          })
-          .check();
+          }),
+        ).toBeChecked();
         await form
           .getByRole("button", { name: "Добавить бросок", exact: true })
           .click();

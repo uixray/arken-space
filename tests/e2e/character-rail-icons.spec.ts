@@ -29,7 +29,14 @@ for (const role of ["GM", "PLAYER"] as const)
         archivedAt: null,
         archivedByMembershipId: null,
       };
-      snapshot.characters = [character];
+      snapshot.characters = [
+        character,
+        {
+          ...character,
+          id: "69500000-0000-4000-8000-000000000002",
+          name: "Следопыт",
+        },
+      ];
       snapshot.me.characterId = character.id;
       snapshot.members = snapshot.members.map((m) =>
         m.id === snapshot.me.id ? { ...m, characterId: character.id } : m,

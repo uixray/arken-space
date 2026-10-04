@@ -169,7 +169,7 @@ describe("UIX-645 icon source policy", () => {
     ["apps/web/src/ui/SelectionActions.tsx", "CloseIcon", "×"],
     ["apps/web/src/ui/ImageUploadField.tsx", "DeleteIcon", "×"],
     ["apps/web/src/StickerPicker.tsx", "StickerPickerIcon", "☺"],
-    ["apps/web/src/sidebar/ChatPanels.tsx", "MoreIcon", "⋯"],
+    ["apps/web/src/sidebar/ChatPanels.tsx", "SettingsIcon", "⚙"],
   ])("detects a glyph restored in %s", (file, icon, glyph) => {
     const source = readFileSync(path.join(process.cwd(), file), "utf8");
     const anchor = `<AppIcon icon={${icon}} />`;

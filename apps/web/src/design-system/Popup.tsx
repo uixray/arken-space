@@ -3,6 +3,8 @@ import type { ReactNode, RefObject } from "react";
 import "./Popup.css";
 
 export interface PopupProps {
+  id?: string;
+  ariaLabel?: string;
   open: boolean;
   onOpenChange?: (open: boolean) => void;
   anchorElement?: HTMLElement | null;
@@ -15,6 +17,8 @@ export interface PopupProps {
 }
 
 export function Popup({
+  id,
+  ariaLabel,
   open,
   onOpenChange,
   anchorElement,
@@ -50,7 +54,11 @@ export function Popup({
             .filter(Boolean)
             .join(" ")}
         >
-          <Popover.Popup className="arken-popup__content">
+          <Popover.Popup
+            id={id}
+            aria-label={ariaLabel}
+            className="arken-popup__content"
+          >
             {children}
           </Popover.Popup>
         </Popover.Positioner>

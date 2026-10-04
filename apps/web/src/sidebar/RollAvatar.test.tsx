@@ -137,7 +137,11 @@ describe("строка броска", () => {
         }
       />,
     );
-    expect(order()).toEqual(["roll-avatar", "roll-details", "roll-total"]);
+    expect(order()).toEqual([
+      "roll-avatar",
+      "roll-details",
+      "roll-result__numbers",
+    ]);
     expect(screen.getByLabelText("Итог броска").textContent).toBe("17");
   });
 

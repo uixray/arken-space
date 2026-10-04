@@ -434,8 +434,9 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(select).toBeFocused();
         await select.press("Enter");
         await expect(option).toBeVisible();
-        await page.keyboard.press("Home");
-        await page.keyboard.press("Enter");
+        await page
+          .getByRole("option", { name: "Картограф", exact: true })
+          .click();
         await expect(select).toContainText("Картограф");
         await expect(
           panel.getByRole("button", { name: "Наблюдение", exact: true }),

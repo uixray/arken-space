@@ -112,9 +112,7 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
         await page.evaluate(() => document.documentElement.scrollWidth),
       ).toBeLessThanOrEqual(size.width);
     }
-    const disclosure = sheet
-      .locator("details.subsection")
-      .filter({ has: page.locator("summary", { hasText: /^Предыстория$/ }) });
+    const disclosure = sheet.locator("details.character-hero__backstory");
     const summary = disclosure.locator("summary");
     await summary.focus();
     await summary.press("Enter");
@@ -129,8 +127,9 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
     });
     await summary.press("Tab");
     await expect(story).toBeFocused();
-    await expect(story.locator("..")).toHaveCSS("outline-style", "solid");
-    await expect(story.locator("..")).toHaveCSS("outline-width", "2px");
+    const storyFrame = story.locator("xpath=../..");
+    await expect(storyFrame).toHaveCSS("outline-style", "solid");
+    await expect(storyFrame).toHaveCSS("outline-width", "2px");
     const draft =
       "Арина ищет пропавших путников. Этот текст ещё ожидает сохранения.";
     await story.fill(draft);

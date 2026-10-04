@@ -43,7 +43,22 @@ export function CursorPresenceMenu({
       { threshold: 0 },
     );
     observer.observe(anchor);
-    return () => observer.disconnect();
+    const closeIfAnchorLeavesViewport = () => {
+      const rect = anchor.getBoundingClientRect();
+      if (
+        rect.bottom <= 0 ||
+        rect.top >= window.innerHeight ||
+        rect.right <= 0 ||
+        rect.left >= window.innerWidth
+      ) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("resize", closeIfAnchorLeavesViewport);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", closeIfAnchorLeavesViewport);
+    };
   }, [open, anchor]);
 
   if (role !== "GM")
@@ -93,6 +108,8 @@ export function CursorPresenceMenu({
         <span className="map-tool__label">Курсоры</span>
       </button>
       <Popup
+        id={dialogId}
+        ariaLabel="Видимость курсоров"
         open={open}
         onOpenChange={setOpen}
         anchorElement={anchor}
@@ -100,14 +117,7 @@ export function CursorPresenceMenu({
         strategy="fixed"
         initialFocus={0}
       >
-        {/* Popup places its role and labeling props on different elements.
-            Keep the dialog semantics together on the actual content owner. */}
-        <div
-          id={dialogId}
-          className="cursor-presence-menu"
-          role="dialog"
-          aria-label="Видимость курсоров"
-        >
+        <div className="cursor-presence-menu">
           <Switch
             checked={preference.receiveEnabled}
             onUpdate={(receiveEnabled) =>

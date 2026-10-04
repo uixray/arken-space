@@ -755,8 +755,8 @@ for (const viewport of [
     }
     for (const item of [guidance, create]) {
       await expect(item).toBeVisible();
-      // Full DOM text and a clickable centre do not prove the action is
-      // readable: a narrow trigger used to force ellipsis on every option.
+      // Full DOM text alone does not prove readability: a narrow trigger
+      // used to force ellipsis on every option.
       await expect
         .poll(() =>
           item.evaluate(
@@ -764,19 +764,21 @@ for (const viewport of [
           ),
         )
         .toBe(true);
-      await expect
-        .poll(() =>
-          item.evaluate((element) => {
-            const box = element.getBoundingClientRect();
-            const hit = document.elementFromPoint(
-              box.x + box.width / 2,
-              box.y + box.height / 2,
-            );
-            return element.contains(hit);
-          }),
-        )
-        .toBe(true);
     }
+    // The guidance option is disabled and intentionally not hit-testable;
+    // only the create action must receive pointer input at its centre.
+    await expect
+      .poll(() =>
+        create.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          );
+          return element.contains(hit);
+        }),
+      )
+      .toBe(true);
     const menuBox = await menu.boundingBox();
     expect(menuBox).not.toBeNull();
     expect(menuBox!.x).toBeGreaterThanOrEqual(0);
@@ -807,8 +809,7 @@ for (const viewport of [
     await expect(editor).toBeVisible();
 
     await trigger.click();
-    await page.keyboard.press("ArrowDown");
-    await page.keyboard.press("Enter");
+    await create.click();
     await expect(menu).toBeHidden();
     // This is a workspace transition after the editor closes, not nesting.
     const workspaceDialog = page.getByRole("dialog", { name: "Подготовка" });

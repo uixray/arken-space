@@ -505,23 +505,6 @@
       "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes."
     },
     {
-      "file": "apps/web/src/design-system/PlayerThemeSettings.tsx",
-      "kind": "tag:FormSelect",
-      "count": 1,
-      "status": "PASS",
-      "classification": "reachable-scoped-evidence",
-      "baseRevision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
-      "freezeRevision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
-      "scope": "Reachable personal appearance Select for the campaign membership: System and published themes, preview/apply/reset/cancel, pending/error and persisted selection. Scoped GM/PLAYER desktop/compact lifecycle and real-server persistence evidence applies; it is not a blanket menu-registry acceptance.",
-      "evidence": [
-        "themeV5Lifecycle",
-        "themePersistence4f3",
-        "designCandidateE67ThemeSurface",
-        "e67ExactCI"
-      ],
-      "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes."
-    },
-    {
       "file": "apps/web/src/design-system/Popup.tsx",
       "kind": "tag:Popup",
       "count": 1,

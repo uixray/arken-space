@@ -16,6 +16,38 @@
 .player-theme-settings__field {
   display: grid;
   gap: var(--space-sm);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.player-theme-settings__field legend {
+  margin-bottom: var(--space-sm);
+  padding: 0;
+}
+
+.player-theme-settings__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.player-theme-settings__option:has(input:checked) {
+  background: var(--accent-soft);
+}
+
+.player-theme-settings__option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.player-theme-settings__option input {
+  accent-color: var(--accent);
 }
 
 .player-theme-settings__error {

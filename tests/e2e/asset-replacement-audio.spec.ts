@@ -229,6 +229,13 @@ for (const role of ["GM", "PLAYER"] as const) {
   test(`UIX-293 mounted audio replacement retains local consent and gain ${role}`, async ({
     page,
   }, info) => {
+    // Exercise an explicit personal opt-out. The app now defaults to enabled
+    // and may autoplay in browsers that permit it, so paused is not a valid
+    // baseline unless this preference is set before the app mounts.
+    await page.addInitScript(() => {
+      localStorage.setItem("arken.audio.enabled", "false");
+      localStorage.setItem("arken.audio.volume", "0");
+    });
     const bytes = await readFile(
       new URL("../multiplayer/uix642-synthetic-tone.ogg", import.meta.url),
     );

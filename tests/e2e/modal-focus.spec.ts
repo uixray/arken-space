@@ -16,13 +16,10 @@ for (const width of [360, 820]) {
       });
     });
     await page.goto("/");
-    await page.getByLabel("Меню сеанса", { exact: true }).click();
+    await page.locator("#compact-nav-menu").click();
     await page
-      .locator(".account-menu")
-      .getByRole("button", {
-        name: "Сменить игрока",
-        exact: true,
-      })
+      .getByRole("region", { name: "Меню кампании" })
+      .getByRole("button", { name: "Сменить персонажа / игрока" })
       .click();
     const dialog = page.getByRole("dialog", {
       name: "Сменить игрока?",

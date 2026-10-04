@@ -23,10 +23,10 @@ export function resourceRegenAmount(
   return regen > 0 ? regen : 0;
 }
 
-/** Держит значение в границах ресурса; дробное и текстовое приводит к целому. */
-export function clampResourceValue(value: number, maximum: number): number {
+/** Ресурс может содержать временные очки сверх максимума; запрещён только минус. */
+export function clampResourceValue(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.min(maximum, Math.max(0, Math.round(value)));
+  return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.round(value)));
 }
 
 /**

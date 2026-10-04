@@ -1326,7 +1326,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       // The list is the top-most map layer. Let the reducer close only that
       // layer; clearing the renderer's parallel selection arrays here would
       // make the first Escape skip straight through to the selected object.
-      dispatchInteraction({ type: "escape" });
+      dispatchInteraction({ type: "close-object-list" });
       props.onObjectListClose?.();
     } else if (escapeIntent === "clear-map-state") {
       dispatchInteraction({ type: "escape" });
@@ -1398,9 +1398,11 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         type: "select-tool",
         tool: resolveMapToolShortcut(event.key, event.shiftKey, props.role)!,
       });
-    else if (event.key.toLowerCase() === "o")
-      dispatchInteraction({ type: "toggle-object-list" });
-    else if (
+    else if (event.key.toLowerCase() === "o") {
+      if (props.externalObjectListOpen === undefined)
+        dispatchInteraction({ type: "toggle-object-list" });
+      else props.onObjectListToggle?.();
+    } else if (
       event.key === "ContextMenu" ||
       (event.shiftKey && event.key === "F10")
     )

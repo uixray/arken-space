@@ -109,7 +109,7 @@ for (const role of ["GM", "PLAYER"] as const)
         await page.setViewportSize({ width, height: 850 });
         await page.goto("/");
         if (width === 360) await page.locator("#compact-nav-journal").click();
-        await page.locator("#chat-tab-activity").click();
+        if (role === "GM") await page.locator("#chat-tab-activity").click();
 
         const composer = page.getByRole("textbox", {
           name: "Сообщение или бросок",
@@ -139,7 +139,13 @@ for (const role of ["GM", "PLAYER"] as const)
         const focusTrail: string[] = [];
         // Start before all sampled controls, not after the filter. Browser chrome
         // does not guarantee a cyclic Tab route back into the document.
-        await page.locator("#chat-tab-activity").focus();
+        if (role === "GM") {
+          await page.locator("#chat-tab-activity").focus();
+        } else {
+          // Players have only the activity surface, without a tab trigger.
+          await filter.focus();
+          await page.keyboard.press("Shift+Tab");
+        }
         for (let n = 0; n < 100 && pendingFocus.size; n++) {
           await page.keyboard.press("Tab");
           const focused = page.locator(":focus");
@@ -178,7 +184,8 @@ for (const role of ["GM", "PLAYER"] as const)
         const rolls = page
           .locator(".activity-filters-menu")
           .getByRole("checkbox", { name: "Броски", exact: true });
-        await rolls.uncheck();
+        // The native checkbox is visually hidden; click its visible label.
+        await rolls.locator("xpath=..").click();
         await rolls.press("Escape");
         await expect(filter).toBeFocused();
         await expect(filter).toHaveAccessibleName("Показывать. Скрыто: Броски");

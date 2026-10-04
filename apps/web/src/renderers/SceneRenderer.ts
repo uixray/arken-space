@@ -170,6 +170,7 @@ export interface SceneRendererProps {
     backgroundFrame?: { x: number; y: number; width: number; height: number };
   }) => Promise<void>;
   externalObjectListOpen?: boolean;
+  onObjectListToggle?: () => void;
   onObjectListClose?: () => void;
 }
 

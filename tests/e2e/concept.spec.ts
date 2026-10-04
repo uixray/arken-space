@@ -916,13 +916,8 @@ for (const role of ["GM", "PLAYER"] as const) {
         ).toHaveCount(1);
         let navigation: Locator;
         if (viewport.width < 1024) {
-          await page
-            .getByRole("button", { name: "Разделы", exact: true })
-            .click();
-          navigation = page.getByRole("dialog", {
-            name: "Разделы",
-            exact: true,
-          });
+          await page.locator("#compact-nav-menu").click();
+          navigation = page.getByRole("region", { name: "Меню кампании" });
         } else {
           navigation = page.locator(".workspace-nav");
           const more = navigation.getByLabel("Ещё разделы", { exact: true });
@@ -1267,12 +1262,6 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
   const secondSheet = workspace.getByRole("article", {
     name: "Лист персонажа Второй персонаж",
   });
-  const secondSheetAdvantage = secondSheet
-    .locator(".roll-mode-control")
-    .getByRole("radio", {
-      name: "\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e",
-    });
-  await secondSheetAdvantage.click();
   await workspace
     .getByRole("button", {
       name: "Свернуть лист Второй персонаж",
@@ -1288,7 +1277,7 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
       name: "Развернуть лист Второй персонаж",
     })
     .click();
-  await expect(secondSheetAdvantage).toHaveAttribute("aria-checked", "true");
+  await expect(secondSheet).toBeVisible();
   await workspace
     .getByRole("article", {
       name: "Лист персонажа Второй персонаж",
@@ -1958,9 +1947,11 @@ test("activity quick rolls reserve space above the scrollable event history", as
     expect(toolbarBox!.y + toolbarBox!.height).toBeLessThanOrEqual(
       historyControlBox!.y + 1,
     );
+    // The collapse control is now the first item inside the scrollable log.
+    expect(historyControlBox!.y).toBeGreaterThanOrEqual(historyBox!.y - 1);
     expect(
       historyControlBox!.y + historyControlBox!.height,
-    ).toBeLessThanOrEqual(historyBox!.y + 1);
+    ).toBeLessThanOrEqual(historyBox!.y + historyBox!.height + 1);
     expect(historyBox!.height).toBeGreaterThan(0);
     expect(historyControlBox!.x).toBeGreaterThanOrEqual(historyBox!.x - 1);
     expect(historyControlBox!.x + historyControlBox!.width).toBeLessThanOrEqual(
@@ -2358,9 +2349,6 @@ for (const trayCase of [
     const quickRolls = page.locator(
       compact ? ".map-dice-tray" : ".activity-roll-controls",
     );
-    const collapsedSummaryBox = await summary.boundingBox();
-    expect(collapsedSummaryBox).not.toBeNull();
-
     await summary.focus();
     await page.keyboard.press("Enter");
     await expect(tray).toHaveAttribute("open", "");
@@ -2375,11 +2363,12 @@ for (const trayCase of [
     expect(trayBox).not.toBeNull();
     expect(summaryBox).not.toBeNull();
     expect(rollBox).not.toBeNull();
-    expect(summaryBox!.y + summaryBox!.height).toBeCloseTo(
-      collapsedSummaryBox!.y + collapsedSummaryBox!.height,
-      0,
+    // The picker now lives in the toolbar below the map shell, so it must
+    // remain in the viewport rather than within the canvas bounds.
+    expect(summaryBox!.y).toBeGreaterThanOrEqual(0);
+    expect(summaryBox!.y + summaryBox!.height).toBeLessThanOrEqual(
+      trayCase.viewport.height + 1,
     );
-    expect(trayBox!.height).toBeLessThanOrEqual((mapBox!.height - 38) / 2 + 1);
     if (compact) {
       expect(
         trayBox!.x + trayBox!.width <= rollBox!.x ||
@@ -2720,7 +2709,6 @@ test("player opens the character workspace while chat remains visible", async ({
     }),
   );
   await page.goto("/");
-  await page.locator("#chat-tab-activity").click();
   await expect(page.locator(".chat-compose")).toBeVisible();
   await openWorkspaceSection(page, "Персонажи");
   await expect(page.locator(".character-workspace")).toBeVisible();
@@ -2771,7 +2759,7 @@ test("unassigned player character workspace exposes no sheets", async ({
   await expect(page.locator(".character-controller-access")).toHaveCount(0);
 });
 
-test("character card submits normal, advantage and disadvantage rolls for GM and player", async ({
+test("character card submits normal and modifier-key rolls for GM and player", async ({
   page,
 }) => {
   const playerSnapshot = structuredClone(snapshot);
@@ -2826,37 +2814,19 @@ test("character card submits normal, advantage and disadvantage rolls for GM and
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
 
-  const mode = page.locator(".character-roll-controls .roll-mode-control");
-  const normalMode = mode.getByRole("radio", {
-    name: "\u041e\u0431\u044b\u0447\u043d\u043e",
-  });
-  const advantageMode = mode.getByRole("radio", {
-    name: "\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e",
-  });
-  const disadvantageMode = mode.getByRole("radio", {
-    name: "\u041f\u043e\u043c\u0435\u0445\u0430",
-  });
   const roll = page
     .locator(".character-card--stats .stat-field")
     .first()
     .getByRole("button", { name: "Бросок", exact: true });
-  // An untouched card deliberately keeps the mode unset so catalog actions
-  // can preserve their own legacy preference. Direct stat rolls still fall
-  // back to NORMAL, with that neutral action serving as the keyboard tab stop.
-  await expect(normalMode).toHaveAttribute("aria-checked", "false");
-  await expect(normalMode).toHaveAttribute("tabindex", "0");
   holdNext = true;
   await roll.click();
   await expect.poll(() => requests.length).toBe(1);
   await expect(roll).toBeDisabled();
-  await expect(advantageMode).toBeDisabled();
   releaseHeldRoll?.();
   await expect(roll).toBeEnabled();
-  await advantageMode.click();
-  await roll.click();
+  await roll.click({ modifiers: ["Control"] });
   rejectNext = true;
-  await disadvantageMode.click();
-  await roll.click();
+  await roll.click({ modifiers: ["Alt"] });
 
   await expect.poll(() => requests.length).toBe(3);
   expect(requests.map((request) => request.rollMode)).toEqual([
@@ -2878,16 +2848,10 @@ test("character card submits normal, advantage and disadvantage rolls for GM and
   await page.reload();
   await openWorkspaceSection(page, "Персонажи");
   await page
-    .locator(".character-roll-controls .roll-mode-control")
-    .getByRole("radio", {
-      name: "\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e",
-    })
-    .click();
-  await page
     .locator(".character-card--stats .stat-field")
     .first()
     .getByRole("button", { name: "Бросок", exact: true })
-    .click();
+    .click({ modifiers: ["Control"] });
   await expect.poll(() => requests.length).toBe(4);
   expect(requests[3]).toMatchObject({
     characterId: snapshot.characters[0]!.id,
@@ -3162,11 +3126,11 @@ test("UIX-468 resource counters batch, rebase and roll back conflicts", async ({
   await expect(quickRolls).toBeVisible();
   await expect(counters).toBeVisible();
   await expect(quickRolls.locator(".resource-counters")).toHaveCount(0);
-  expect(
-    await quickRolls.evaluate((element) =>
-      element.nextElementSibling?.matches("details.resource-counters"),
+  await expect(
+    activityPanel.locator(
+      ".activity-feed__controls > details.resource-counters",
     ),
-  ).toBe(true);
+  ).toHaveCount(1);
   await expect(
     quickRolls.getByRole("button", {
       name: "Реген Выносливости",
@@ -3402,7 +3366,9 @@ test("UIX-621 activity actions follow snapshot character B and keep failures at 
   const composer = activityPanel.getByRole("textbox", {
     name: "Сообщение или бросок",
   });
-  await expect(quickRolls.getByText("Броски и ресурсы · Бета")).toBeVisible();
+  await expect(
+    activityPanel.locator(".activity-character-picker--player strong"),
+  ).toHaveText("Бета");
   await expect(quickRolls.getByLabel("Персонаж для броска")).toHaveCount(0);
   await expect(physicalInput).toHaveValue("7");
   try {
@@ -3423,10 +3389,9 @@ test("UIX-621 activity actions follow snapshot character B and keep failures at 
       },
     ]);
     await expect(quickRoll).toBeDisabled();
-    await expect(quickRolls.locator(".activity-quick-rolls")).toHaveAttribute(
-      "aria-busy",
-      "true",
-    );
+    await expect(
+      quickRolls.locator(".activity-quick-rolls").first(),
+    ).toHaveAttribute("aria-busy", "true");
     await expect(quickRolls.getByRole("status")).toHaveText(
       "Бросаем… Бета · Ловкость",
     );
@@ -3561,10 +3526,10 @@ test("structured resources persist and short rest uses the authoritative counter
 
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
-  const physical = page
-    .locator(".character-power-controls .resource-card")
-    .filter({ hasText: "Выносливость" });
-  await physical.getByLabel("Текущее").fill("3");
+  const physical = page.getByRole("spinbutton", {
+    name: "Выносливость: текущее",
+  });
+  await physical.fill("3");
   await page.locator(".character-workspace__header h2").click();
   await expect.poll(() => payloads.length).toBe(1);
   expect(payloads[0]?.resources?.physicalPower.current).toBe(3);
@@ -3582,7 +3547,7 @@ test("structured resources persist and short rest uses the authoritative counter
     .getByRole("button", { name: "Короткий отдых", exact: true })
     .click();
   await expect.poll(() => payloads.at(-1)?.rest).toBe("SHORT");
-  await expect(physical.getByLabel("Текущее")).toHaveValue("6");
+  await expect(physical).toHaveValue("6");
 });
 
 test("resource conflict replaces the structured draft with canonical bootstrap data", async ({
@@ -3795,9 +3760,11 @@ test("player fog clips partial foreign tokens while controlled tokens remain vis
   expect(revealedHalf.equals(emptyRevealedHalf)).toBe(false);
   expect(coveredHalf.equals(emptyRightPhase)).toBe(true);
   expect(controlledCell.equals(emptyCell)).toBe(false);
-  expect(coveredCell.equals(emptyCell)).toBe(true);
 
-  await map.getByRole("button", { name: "Объекты карты" }).click();
+  await page
+    .getByRole("toolbar", { name: "Инструменты карты" })
+    .getByRole("button", { name: "Объекты карты" })
+    .click();
   const objectList = page.getByRole("region", { name: "Объекты карты" });
   await expect(
     objectList.getByRole("button", { name: "Controlled token", exact: true }),
@@ -3808,6 +3775,19 @@ test("player fog clips partial foreign tokens while controlled tokens remain vis
       exact: true,
     }),
   ).toHaveCount(0);
+
+  // The fog texture is world-positioned rather than uniform. Compare the
+  // covered cell to the exact same coordinates after removing only that token,
+  // not to another fog cell with a different texture phase.
+  servedSnapshot = {
+    ...playerSnapshot,
+    tokens: playerSnapshot.tokens.filter(
+      (token) => token.name !== "Covered foreign token",
+    ),
+  };
+  await page.reload();
+  await expect(map).toBeVisible();
+  expect(coveredCell.equals(await captureRegion(384, 64))).toBe(true);
 
   // GM visibility stays unchanged: a token hidden from the player remains
   // visible to the GM. Reuse the same fixture to isolate the role boundary.
@@ -4321,20 +4301,16 @@ test("UIX-498 PLAYER keeps Story and ROLLS in Activity without private tabs", as
     });
   });
   await page.goto("/");
-  const activity = page.locator("#chat-tab-activity");
-  await expect(
-    page.getByRole("tablist", { name: "Потоки чата" }).getByRole("tab"),
-  ).toHaveCount(1);
-  await expect(activity).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Потоки чата" })).toHaveCount(
+    0,
+  );
   await expect(page.locator("#chat-tab-story")).toHaveCount(0);
   await expect(page.locator("#chat-tab-direct")).toHaveCount(0);
   await expect(page.getByText("PLAYER_STORY_MARKER")).toBeVisible();
   await expect(page.getByText("PLAYER_ROLL_MARKER")).toBeVisible();
   await expect(page.locator(".story-composer")).toHaveCount(0);
   await expect(page.locator(".chat-compose textarea")).toBeVisible();
-  await activity.press("ArrowRight");
-  await expect(activity).toBeFocused();
-  await expect(activity).toHaveAttribute("aria-selected", "true");
   await openWorkspaceSection(page, "Мои заявки");
   await expect(page.getByRole("dialog", { name: "Мои заявки" })).toBeVisible();
 });
@@ -5077,7 +5053,7 @@ test("sidebar collapse persists and hidden-chat rolls surface their authoritativ
   await expect(page.locator(`#chat-message-${rollId}`)).toBeFocused();
 });
 
-test("map controls float in opposite top corners without covering canvas UI", async ({
+test("map shortcuts and object panel stay reachable without covering canvas UI", async ({
   page,
 }) => {
   for (const scenario of [
@@ -5117,7 +5093,7 @@ test("map controls float in opposite top corners without covering canvas UI", as
 
     const viewport = page.locator(".map-viewport");
     const toolbar = page.locator(".map-toolbar");
-    const objects = viewport.locator(".map-object-list-trigger");
+    const objects = toolbar.getByRole("button", { name: "Объекты карты" });
     await expect(viewport).toBeVisible();
     await expect(toolbar).toBeVisible();
     await expect(objects).toBeVisible();
@@ -5133,13 +5109,11 @@ test("map controls float in opposite top corners without covering canvas UI", as
     expect(objectsBox).not.toBeNull();
     expect(toolbarBox!.x).toBeGreaterThanOrEqual(viewportBox!.x + 7);
     expect(toolbarBox!.y).toBeGreaterThanOrEqual(viewportBox!.y + 7);
+    expect(objectsBox!.x).toBeGreaterThanOrEqual(toolbarBox!.x);
     expect(objectsBox!.x + objectsBox!.width).toBeLessThanOrEqual(
-      viewportBox!.x + viewportBox!.width - 7,
+      toolbarBox!.x + toolbarBox!.width + 1,
     );
-    expect(objectsBox!.y).toBeGreaterThanOrEqual(viewportBox!.y + 7);
-    expect(toolbarBox!.x + toolbarBox!.width).toBeLessThanOrEqual(
-      objectsBox!.x,
-    );
+    expect(objectsBox!.y).toBeGreaterThanOrEqual(toolbarBox!.y);
 
     const fogTool = toolbar.locator('.map-tool[data-tool="FOG"]');
     if (scenario.role === "GM") {

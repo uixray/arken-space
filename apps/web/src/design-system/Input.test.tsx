@@ -8,6 +8,13 @@ import { Input } from "./Input";
 afterEach(cleanup);
 
 describe("Input", () => {
+  it("uses its visible label as the accessible input name", () => {
+    render(<Input label="Короткое название" />);
+    expect(
+      screen.getByRole("textbox", { name: "Короткое название" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders a native input with proper classes and forwards ref", () => {
     const ref = createRef<HTMLInputElement>();
     render(

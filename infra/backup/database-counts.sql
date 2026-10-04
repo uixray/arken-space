@@ -41,6 +41,7 @@ FROM (
     ('player_access_grants'),
     ('player_likeness_consents'),
     ('player_requests'),
+    ('public_roadmap_votes'),
     ('scenes'),
     ('sessions'),
     ('spell_pack_versions'),
