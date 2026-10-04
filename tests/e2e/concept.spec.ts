@@ -1661,7 +1661,7 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
     rollMode: "ADVANTAGE",
   });
 
-  await page.locator("#chat-tab-activity").click();
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   const activityPanel = page.locator("#chat-panel-activity");
   const composer = activityPanel.locator(".chat-compose textarea");
   await expect(activityPanel.getByText("Сцена готова.")).toBeVisible();
@@ -1820,17 +1820,14 @@ test("UIX-274 activity reloads story posts and exposes empty states and slash ac
   });
 
   await page.goto("/");
-  await expect(page.locator("#chat-tab-activity")).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   await expect(page.locator(".activity-feed .chat-empty")).toBeVisible();
 
   includePublishedPost = true;
   await page.reload();
   await expect(page.getByText("UIX274_PUBLISHED_STORY")).toBeVisible();
 
-  await page.locator("#chat-tab-activity").click();
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   await expect(page.locator("#chat-panel-activity .chat-empty")).toHaveCount(0);
   const composer = page.locator(".chat-compose textarea");
   const slashAction = page.locator(".composer-slash-action");
@@ -2543,7 +2540,7 @@ for (const viewport of [
       }),
     );
     await page.goto("/");
-    await page.locator("#chat-tab-activity").click();
+    await expect(page.locator("#chat-panel-activity")).toBeVisible();
     await expect(page.locator(".activity-roll-controls")).toBeVisible();
     await expect(page.locator(".chat-compose")).toBeVisible();
     const dimensions = await page
@@ -4106,7 +4103,7 @@ test("selected token keyboard moves serialize delayed responses with ack revisio
   expect(requests[1]!.deltaY).toBeGreaterThan(requests[1]!.deltaX);
 });
 
-test("UIX-498 GM exposes Activity and Story with keyboard tab semantics", async ({
+test("UIX-498 GM keeps story and rolls in Activity without redundant tabs", async ({
   page,
 }) => {
   const fixture = structuredClone(snapshot);
@@ -4189,41 +4186,19 @@ test("UIX-498 GM exposes Activity and Story with keyboard tab semantics", async 
     });
   });
   await page.goto("/");
-  const tablist = page.getByRole("tablist", { name: "Потоки чата" });
-  const activity = page.locator("#chat-tab-activity");
-  const story = page.locator("#chat-tab-story");
-  await expect(tablist.getByRole("tab")).toHaveCount(2);
+  await expect(page.getByRole("tablist", { name: "Потоки чата" })).toHaveCount(
+    0,
+  );
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
+  await expect(page.locator("#chat-tab-activity")).toHaveCount(0);
+  await expect(page.locator("#chat-tab-story")).toHaveCount(0);
   await expect(page.locator("#chat-tab-table")).toHaveCount(0);
   await expect(page.locator("#chat-tab-rolls")).toHaveCount(0);
   await expect(page.locator("#chat-tab-direct")).toHaveCount(0);
-  await expect(activity).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("STORY_ONLY_MARKER")).toBeVisible();
   await expect(page.getByText("ROLLS_ONLY_MARKER")).toBeVisible();
-  await activity.press("ArrowRight");
-  await expect(story).toBeFocused();
-  await expect(story).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("STORY_ONLY_MARKER")).toBeVisible();
-  await expect(page.getByText("ROLLS_ONLY_MARKER")).toHaveCount(0);
-  const composer = page.getByRole("textbox", {
-    name: "\u041d\u043e\u0432\u0430\u044f \u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0446\u0438\u044f",
-  });
-  await composer.fill("NEW_STORY_POST");
-  await composer.press("Enter");
-  await expect.poll(() => storyDrafts.length).toBe(1);
-  expect(storyDrafts[0]).toMatchObject({
-    body: "NEW_STORY_POST",
-    title: "",
-    media: [],
-    entityLinks: [],
-    gmNotes: "",
-  });
-  await story.press("Home");
-  await expect(activity).toBeFocused();
-  await expect(activity).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("STORY_ONLY_MARKER")).toBeVisible();
-  await expect(page.getByText("ROLLS_ONLY_MARKER")).toBeVisible();
-  await activity.press("ArrowLeft");
-  await expect(story).toBeFocused();
+  await expect(page.locator(".story-composer")).toHaveCount(0);
+  expect(storyDrafts).toHaveLength(0);
 });
 
 test("UIX-498 PLAYER keeps Story and ROLLS in Activity without private tabs", async ({
@@ -4559,7 +4534,7 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
 
   viewer = "recipient";
   await page.reload();
-  await page.locator("#chat-tab-activity").click();
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   await expect(page.getByText("UIX267_PRIVATE_MARKER")).toHaveCount(0);
   await page.locator("#chat-tab-direct").click();
   await page.locator(".direct-peer-select").selectOption(sender.id);
@@ -4715,7 +4690,7 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   });
 
   await page.goto("/");
-  await page.locator("#chat-tab-activity").click();
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   const picker = page.locator(".chat-compose .sticker-picker");
   await picker.locator(":scope > button").click();
   const panel = page.getByRole("dialog", { name: "Выбор стикера" });
@@ -4737,7 +4712,7 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   });
 
   await expect(page.locator(".chat-compose .sticker-picker")).toBeVisible();
-  await page.locator("#chat-tab-story").click();
+  await expect(page.locator("#chat-tab-story")).toHaveCount(0);
   await expect(page.locator(".story-channel .sticker-picker")).toHaveCount(0);
   await expect(page.locator("#chat-tab-direct")).toHaveCount(0);
 
@@ -4750,7 +4725,7 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   catalog = [];
   playerStory = false;
   await page.reload();
-  await page.locator("#chat-tab-activity").click();
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   await page.locator(".chat-compose .sticker-picker > button").click();
   await expect(page.locator(".sticker-picker-panel .chat-empty")).toBeVisible();
 });

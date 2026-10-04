@@ -149,7 +149,11 @@ async function assertCompactBudget(
     .toBeLessThanOrEqual(1);
   for (const target of [
     page.locator(".resource-counters__summary"),
-    page.locator(".activity-quick-rolls .g-button").last(),
+    page
+      .locator(
+        '.quick-roll-panel [role="tabpanel"]:not([hidden]) .activity-quick-rolls .g-button',
+      )
+      .last(),
   ]) {
     await target.scrollIntoViewIfNeeded();
     await expect(target).toBeVisible();

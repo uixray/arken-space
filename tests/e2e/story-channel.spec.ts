@@ -207,6 +207,10 @@ async function openStory(page: Page) {
 test("GM drafts, publishes, corrects and archives a story post through refreshed channel data", async ({
   page,
 }) => {
+  test.skip(
+    true,
+    "GM Story UI is intentionally hidden until the owner re-enables it",
+  );
   await page.setViewportSize({ width: 960, height: 900 });
   let posts: StoryPostAdminDto[] = [];
   let refreshes = 0;
@@ -362,10 +366,7 @@ test("player sees only safe published story cards in the unified activity feed",
 
   await page.goto("/");
   await expect(page.locator("#chat-tab-story")).toHaveCount(0);
-  await expect(page.locator("#chat-tab-activity")).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   await expect(page.locator(".story-post")).toHaveCount(1);
   await expect(page.locator(".story-post")).toContainText(
     "A public chronicle entry.",
@@ -379,6 +380,10 @@ test("player sees only safe published story cards in the unified activity feed",
 test("STORY tab loads older pages, exposes a tabpanel and marks legacy history read", async ({
   page,
 }) => {
+  test.skip(
+    true,
+    "GM Story UI is intentionally hidden until the owner re-enables it",
+  );
   const snapshot = snapshotFor("GM");
   snapshot.messages = [
     {
