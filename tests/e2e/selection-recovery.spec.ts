@@ -166,7 +166,10 @@ async function boundary(page: Page) {
 }
 async function selectMixed(page: Page) {
   const map = page.locator(".map-viewport");
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = page.getByRole("button", {
+    name: "Объекты карты",
+    exact: true,
+  });
   await trigger.click();
   await map
     .getByRole("button", { name: "Выбранный токен", exact: true })
@@ -312,7 +315,10 @@ for (const origin of ["token", "drawing"] as const) {
         .poll(async () => (await redCenter(map)).x)
         .toBeCloseTo(before.x + 32 * scale, 0);
       await page.keyboard.press("Escape");
-      const trigger = map.locator(".map-object-list-trigger");
+      const trigger = page.getByRole("button", {
+        name: "Объекты карты",
+        exact: true,
+      });
       await trigger.click();
       await map
         .getByRole("button", { name: "Выбранный токен", exact: true })

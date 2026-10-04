@@ -61,23 +61,36 @@ for (const role of ["GM", "PLAYER"] as const)
       await page.goto("/");
       await expect(page.locator(".map-viewport")).toBeVisible();
       if (role === "GM") {
-        const toggle = page.getByRole("checkbox", {
+        const toggle = page.getByRole("button", {
           name: "Показывать скрытый слой мастера",
         });
         await expect(toggle).toBeVisible();
-        const label = toggle.locator("..");
-        await expect(label).toHaveText("Мастер");
-        const labelBox = await label.boundingBox();
-        expect(labelBox!.x).toBeGreaterThanOrEqual(0);
-        expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(width);
+        await expect(toggle).toHaveAttribute("aria-pressed", "true");
+        await toggle.click();
+        await expect(toggle).toHaveAttribute("aria-pressed", "false");
+        await toggle.click();
+        const box = await toggle.boundingBox();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(width);
       }
-      const session = page.locator(".account-menu");
-      await session.locator("summary").click();
-      const identity = session.locator(".account-menu__identity");
-      await expect(identity).toHaveText(
-        role === "GM" ? "GM Smith · Мастер" : "Вы играете как: Player One",
-      );
-      await expect(identity).toBeVisible();
+      if (width === 360) {
+        await page.locator("#compact-nav-menu").click();
+        const menu = page.getByRole("region", { name: "Меню кампании" });
+        await expect(menu.locator(".compact-menu-user-name")).toHaveText(
+          snapshot.me.displayName,
+        );
+        await expect(menu.locator(".compact-menu-user-role")).toHaveText(
+          role === "GM" ? "Гейммастер (GM)" : "Игрок",
+        );
+      } else {
+        const session = page.locator(".account-menu");
+        await session.locator("summary").click();
+        const identity = session.locator(".account-menu__identity");
+        await expect(identity).toHaveText(
+          role === "GM" ? "GM Smith · Мастер" : "Вы играете как: Player One",
+        );
+        await expect(identity).toBeVisible();
+      }
       await page.screenshot({
         path: testInfo.outputPath(`session-role-${role}-${width}.png`),
       });
