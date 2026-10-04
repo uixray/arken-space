@@ -128,6 +128,29 @@ describe("строка броска", () => {
       (node) => node.className.split(" ")[0],
     );
 
+  it.each([
+    { modifiers: [] },
+    { modifiers: [{ source: "zero", value: 0 }] },
+    {
+      modifiers: [
+        { source: "a", value: 4 },
+        { source: "b", value: -4 },
+      ],
+    },
+  ])("shows just the total when the net bonus is zero: %j", ({ modifiers }) => {
+    renderComponent(
+      <ChatMessageBody
+        message={{
+          ...diceMessage,
+          dice: { ...diceMessage.dice!, modifiers, total: 13 },
+        }}
+      />,
+    );
+    expect(document.querySelector(".roll-total")?.textContent).toBe("13");
+    expect(document.querySelector(".roll-result__die")).toBeNull();
+    expect(document.querySelector(".roll-result__bonus")).toBeNull();
+  });
+
   it("ставит аватар слева, а итог справа", () => {
     renderComponent(
       <ChatMessageBody

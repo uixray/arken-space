@@ -69,11 +69,16 @@ export async function visibleButtons(page: Page) {
       );
       return false;
     }).length;
-    // Прокрутка ищется по всей панели: она может завестись и у вложенного
-    // списка, а не только у тела — именно так и выглядела ошибка.
-    const scrolls = [body, ...body.querySelectorAll("*")].some(
-      (element) => element.scrollHeight > element.clientHeight + 1,
-    );
+    // Прокрутка может появиться у вложенного списка, но разница высот сама
+    // по себе её не доказывает: Gravity скрывает 2px переполнения у текстовых
+    // span внутри кнопок. Учитываем лишь реально прокручиваемые контейнеры.
+    const scrolls = [body, ...body.querySelectorAll("*")].some((element) => {
+      const overflowY = getComputedStyle(element).overflowY;
+      return (
+        (overflowY === "auto" || overflowY === "scroll") &&
+        element.scrollHeight > element.clientHeight + 1
+      );
+    });
     return {
       fits,
       total: buttons.length,

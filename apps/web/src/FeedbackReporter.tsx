@@ -161,7 +161,7 @@ export function FeedbackReporter(props: Props) {
     <>
       <Button
         size="s"
-        view="flat"
+        view="normal"
         onClick={() => {
           props.onOpen?.();
           setOpen(true);

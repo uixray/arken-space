@@ -15,7 +15,6 @@ import { AppIcon } from "./ui/AppIcon";
 import { MoreIcon, PauseIcon, PlayIcon, VolumeIcon } from "./ui/icons";
 import { createPortal } from "react-dom";
 
-const ENABLED_KEY = "arken.audio.enabled";
 const VOLUME_KEY = "arken.audio.volume";
 // ACK reasons are protocol strings, not display text. Map only known reasons;
 // an unknown value (including an object-prototype key) gets a safe fallback.
@@ -65,9 +64,7 @@ export function MusicBar({
   const volumeRef = useRef<HTMLDetailsElement>(null);
   const overflowRef = useRef<HTMLDetailsElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [enabled, setEnabled] = useState(
-    () => localStorage.getItem(ENABLED_KEY) !== "false",
-  );
+  const enabled = true;
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const playbackBlockedRef = useRef(false);
   const [volume, setVolume] = useState(() => {
@@ -203,18 +200,12 @@ export function MusicBar({
   }, [audio, current, enabled]);
   // A blocked autoplay attempt is not an explicit mute. Retry in the next
   // user gesture instead of forcing an extra consent click in the popover.
-  const retryPlayback = (force = false) => {
-    const player = element.current;
-    if ((!enabled && !force) || !audio.playing || !current || !player) return;
-    playbackBlockedRef.current = false;
-    attemptPlayback(player);
-  };
   useEffect(() => {
     if (!playbackBlocked || !enabled || !audio.playing || !current) return;
     const onGesture = (event: Event) => {
       if (
         event.target instanceof Element &&
-        event.target.closest(".music-volume-control, .music-enable-button")
+        event.target.closest(".music-volume-control")
       )
         return;
       if (!playbackBlockedRef.current) return;
@@ -230,17 +221,6 @@ export function MusicBar({
       document.removeEventListener("keydown", onGesture, true);
     };
   }, [playbackBlocked, enabled, audio.playing, current]);
-
-  const setAudioEnabled = (next: boolean) => {
-    localStorage.setItem(ENABLED_KEY, String(next));
-    setEnabled(next);
-    if (next) retryPlayback(true);
-    else {
-      playbackBlockedRef.current = false;
-      setPlaybackBlocked(false);
-      element.current?.pause();
-    }
-  };
 
   useDismissibleDetails(volumeRef);
   useDismissibleDetails(overflowRef);
@@ -305,13 +285,7 @@ export function MusicBar({
         {current?.name ?? "Композиция 4'33"}
       </strong>
       {playbackBlocked && enabled && audio.playing && current ? (
-        <button
-          type="button"
-          className="music-enable-button"
-          onClick={() => retryPlayback()}
-        >
-          Включить звук
-        </button>
+        <small role="status">Звук начнётся после нажатия в приложении.</small>
       ) : null}
       <button
         type="button"
@@ -340,15 +314,6 @@ export function MusicBar({
               onChange={(event) => setVolume(Number(event.target.value))}
             />
           </label>
-          {enabled ? (
-            <button type="button" onClick={() => setAudioEnabled(false)}>
-              Выключить звук
-            </button>
-          ) : (
-            <button type="button" onClick={() => setAudioEnabled(true)}>
-              Включить звук
-            </button>
-          )}
         </div>
       </details>
       {role === "GM" ? (

@@ -16,6 +16,11 @@ const portraitUrl = `/api/assets/${assetId}/content`;
 const stackAlphaId = "75f46186-2ebc-4cf8-bce7-870097305a6b";
 const stackBetaId = "85f46186-2ebc-4cf8-bce7-870097305a6b";
 
+// The object-list trigger is a map-toolbar shortcut; the list it controls
+// remains inside the map viewport. Keep these two locator scopes distinct.
+const objectListTrigger = (page: Page) =>
+  page.getByRole("button", { name: "Объекты карты", exact: true });
+
 const snapshot = {
   campaign: {
     id: "b4c34840-cb11-4a07-884d-680ae85c48db",
@@ -455,7 +460,7 @@ test("UIX-471 GM changes condition sets through the token menu and keeps server 
   const openMenu = async () => {
     if (await page.getByRole("group", { name: "Состояния токена" }).isVisible())
       return;
-    const trigger = map.locator(".map-object-list-trigger");
+    const trigger = objectListTrigger(page);
     await trigger.click();
     await map
       .locator(".map-object-list")
@@ -508,7 +513,7 @@ async function selectTokenAndResizeFromObservableHandle(
   delta = 48,
 ) {
   const map = page.locator(".map-viewport");
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map
     .locator(".map-object-list")
@@ -742,7 +747,7 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
 
   await page.goto("/");
   const map = page.locator(".map-viewport");
-  await map.locator(".map-object-list-trigger").click();
+  await objectListTrigger(page).click();
   const objectList = map.locator(".map-object-list");
   await expect(
     objectList.getByRole("button", {
@@ -771,7 +776,7 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
     targets: [{ targetType: "TOKEN", targetId: stackAlphaId, revision: 0 }],
   });
   await page.reload();
-  await map.locator(".map-object-list-trigger").click();
+  await objectListTrigger(page).click();
   await expect(
     objectList.getByRole("button", { name: "Alpha", exact: true }),
   ).toBeVisible();
@@ -805,7 +810,7 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
   expect(deleteRequests[0].body.actionId).toMatch(/^[0-9a-f-]{36}$/i);
 
   await page.reload();
-  await map.locator(".map-object-list-trigger").click();
+  await objectListTrigger(page).click();
   await expect(
     objectList.getByRole("button", { name: "Beta", exact: true }),
   ).toBeVisible();
@@ -853,7 +858,7 @@ test("a loaded portrait stays available through authoritative keyboard movement"
       attributeFilter: ["data-token-image-states"],
     });
   });
-  await map.locator(".map-object-list-trigger").click();
+  await objectListTrigger(page).click();
   await page
     .getByRole("button", { name: "Selected token", exact: true })
     .click();
@@ -1270,7 +1275,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       await expect.poll(percentage).toBe(initialPercentage);
       const baseline = await zoomBounds(page);
       await expectStableSelectionChrome(page, baseline);
-      const trigger = map.locator(".map-object-list-trigger");
+      const trigger = objectListTrigger(page);
       const objectList = map.getByRole("region", {
         name: "Объекты карты",
         exact: true,
@@ -1541,7 +1546,7 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   await page.goto("/");
   const map = page.locator(".map-viewport");
   const zoomBaseline = await zoomBounds(page);
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map
     .getByRole("button", { name: "Selected token", exact: true })
@@ -1920,7 +1925,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
   });
   await page.goto("/");
   const map = page.locator(".map-viewport");
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map.getByRole("button", { name: "Owned token", exact: true }).click();
   await trigger.click();
@@ -2045,7 +2050,7 @@ for (const width of [1280, 390]) {
     for (let step = 0; step < 15; step += 1)
       await page.keyboard.press("ArrowUp");
     await expect(slider).toHaveValue("1");
-    const trigger = map.locator(".map-object-list-trigger");
+    const trigger = objectListTrigger(page);
     await trigger.click();
     await map
       .getByRole("button", { name: "Selected token", exact: true })
@@ -2276,7 +2281,7 @@ test("UIX-621 rapid conditions render before delayed server confirmation and sta
   });
   await page.goto("/");
   const map = page.locator(".map-viewport");
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map
     .getByRole("button", { name: "Selected token", exact: true })
@@ -2352,15 +2357,11 @@ for (const tool of ["PAN", "DRAW"] as const) {
     });
     await page.goto("/");
     const map = page.locator(".map-viewport");
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     await map
       .getByRole("button", { name: "Selected token", exact: true })
       .click();
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     const bounds = (await map.boundingBox())!;
     const scale = Number(
       await map.getByRole("slider", { name: "Масштаб карты" }).inputValue(),
@@ -2489,7 +2490,8 @@ for (const shifted of [true, false]) {
       for (const [index, mode] of ["enter", "double", "jitter"].entries()) {
         const double = mode !== "enter";
         await vertices(double, mode === "jitter");
-        if (!double) await map.press("Enter");
+        // Real users finish from canvas focus, without programmatically focusing the map.
+        if (!double) await page.keyboard.press("Enter");
         await expect.poll(() => writes.length).toBe(index + 1);
         const write = writes.at(-1)!;
         expect(write).toMatchObject({
@@ -2846,9 +2848,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     await expect(
       page.getByRole("button", { name: "Удалить выбранное" }),
     ).toHaveCount(0);
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     await expect(
       page
         .getByRole("region", { name: "Объекты карты", exact: true })
@@ -2889,10 +2889,7 @@ test("UIX-644 token menu remains reachable across viewport resize", async ({
   });
   await page.goto("/");
   const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-  const trigger = map.getByRole("button", {
-    name: "Объекты карты",
-    exact: true,
-  });
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map
     .getByRole("button", { name: "Selected token", exact: true })
@@ -3048,9 +3045,7 @@ for (const width of [1280, 390]) {
     });
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     await map
       .getByRole("button", { name: "Selected token", exact: true })
       .click();
@@ -3217,10 +3212,7 @@ for (const width of [1280, 390]) {
     });
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    const trigger = map.getByRole("button", {
-      name: "Объекты карты",
-      exact: true,
-    });
+    const trigger = objectListTrigger(page);
     const menu = map.getByRole("menu");
     const dialog = page.getByRole("dialog", {
       name: "Убрать токен с карты?",
@@ -3321,9 +3313,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       const map = page.getByRole("region", {
         name: "Интерактивная карта сцены",
       });
-      await map
-        .getByRole("button", { name: "Объекты карты", exact: true })
-        .click();
+      await objectListTrigger(page).click();
       await map
         .getByRole("button", { name: "Selected token", exact: true })
         .click();
@@ -3442,10 +3432,7 @@ for (const change of ["revision", "locked", "revoked", "removed"] as const) {
     await page.goto("/");
     await expect.poll(() => Boolean(publish)).toBe(true);
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    const trigger = map.getByRole("button", {
-      name: "Объекты карты",
-      exact: true,
-    });
+    const trigger = objectListTrigger(page);
     const select = async (name: string) => {
       await trigger.click();
       await map.getByRole("button", { name, exact: true }).click();
@@ -3743,9 +3730,7 @@ for (const width of [1280, 390]) {
     await page.goto("/");
     await expect.poll(() => Boolean(publish)).toBe(true);
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     await map
       .getByRole("button", { name: "Selected token", exact: true })
       .click();
@@ -3858,9 +3843,7 @@ for (const width of [1280, 390]) {
       const map = page.getByRole("region", {
         name: "Интерактивная карта сцены",
       });
-      await map
-        .getByRole("button", { name: "Объекты карты", exact: true })
-        .click();
+      await objectListTrigger(page).click();
       await map
         .getByRole("button", { name: "Selected token", exact: true })
         .click();
@@ -3987,9 +3970,7 @@ for (const scenario of [
     });
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     const selected = map.getByRole("button", {
       name: "Selected token",
       exact: true,

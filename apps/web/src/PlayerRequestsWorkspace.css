@@ -33,6 +33,9 @@
   border-radius: 8px;
   font: inherit;
 }
+.player-requests select {
+  padding-right: 30px;
+}
 .player-requests__grid,
 .player-requests__filters {
   display: grid;

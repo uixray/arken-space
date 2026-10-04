@@ -1,3 +1,4 @@
+import "./roll-controls.css";
 import { useId, useState } from "react";
 import { Button } from "../design-system/Button";
 import { isSystemRegenStatKey, STAT_VALUE_RANGE } from "@arken/system";
@@ -57,27 +58,57 @@ function refusalOf(
  */
 function StatValueField({
   id,
+  label,
   value,
   editable,
   onCommit,
 }: {
   id: string;
+  label: string;
   value: number;
   editable: boolean;
   onCommit: (value: number) => void;
 }) {
   const controlRef = useRemoteFieldValue<HTMLInputElement>(String(value));
+  const step = (delta: number) => {
+    const current = Number(controlRef.current?.value ?? value);
+    const next = Math.min(
+      STAT_VALUE_RANGE.max,
+      Math.max(STAT_VALUE_RANGE.min, current + delta),
+    );
+    if (controlRef.current) controlRef.current.value = String(next);
+    onCommit(next);
+  };
   return (
-    <FormInput
-      id={id}
-      controlRef={controlRef}
-      type="number"
-      defaultValue={value}
-      disabled={!editable}
-      min={STAT_VALUE_RANGE.min}
-      max={STAT_VALUE_RANGE.max}
-      onBlur={(event) => onCommit(Number(event.target.value))}
-    />
+    <div className="stat-field__value">
+      <Button
+        disabled={!editable}
+        aria-label={`Уменьшить ${label}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => step(-1)}
+      >
+        −
+      </Button>
+      <FormInput
+        id={id}
+        aria-label={label}
+        controlRef={controlRef}
+        type="number"
+        defaultValue={value}
+        disabled={!editable}
+        min={STAT_VALUE_RANGE.min}
+        max={STAT_VALUE_RANGE.max}
+        onBlur={(event) => onCommit(Number(event.target.value))}
+      />
+      <Button
+        disabled={!editable}
+        aria-label={`Увеличить ${label}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => step(1)}
+      >
+        +
+      </Button>
+    </div>
   );
 }
 
@@ -175,34 +206,29 @@ export function StatLayoutCard({
       <div className="character-card__body">
         {rows.map((row, index) => (
           <div key={row.key} className="stat-field">
-            <span>
-              <label
-                htmlFor={`${fieldIdPrefix}-${encodeURIComponent(row.key)}`}
-              >
-                {row.label}
-              </label>
-            </span>
+            <Button
+              className="stat-field__roll-name"
+              view="flat"
+              disabled={!editable || rollPending}
+              title={`Бросить ${row.label}`}
+              onClick={(event) =>
+                onRoll(
+                  `1d20 + ${row.key}`,
+                  row.label,
+                  rollModeFromEvent(event.nativeEvent),
+                )
+              }
+            >
+              {row.label}
+            </Button>
             <StatValueField
               id={`${fieldIdPrefix}-${encodeURIComponent(row.key)}`}
+              label={row.label}
               value={values[row.key] ?? STAT_VALUE_RANGE.defaultValue}
               editable={editable}
               onCommit={(value: number) => onChangeValue(row.key, value)}
             />
-            {/* Кнопки в одной полосе, а не одна под другой: строк в карточке
-             * десяток, и второй ряд на каждой удвоил бы её высоту. */}
             <div className="stat-field__actions">
-              <Button
-                disabled={!editable || rollPending}
-                onClick={(event) =>
-                  onRoll(
-                    `1d20 + ${row.key}`,
-                    row.label,
-                    rollModeFromEvent(event.nativeEvent),
-                  )
-                }
-              >
-                Бросок
-              </Button>
               {canEditLayout && (
                 <>
                   <Button

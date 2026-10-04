@@ -192,10 +192,16 @@
   background-color: var(--color-surface-hover, #34322c);
 }
 
-/* Number spin buttons adjustment */
+/* Numeric edits use explicit controls; native steppers steal value width. */
+.arken-text-input__control[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
 .arken-text-input__control[type="number"]::-webkit-inner-spin-button,
 .arken-text-input__control[type="number"]::-webkit-outer-spin-button {
-  opacity: 0.6;
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
 }
 
 /* Pins */

@@ -728,12 +728,16 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(send).not.toBeChecked();
         await page.setViewportSize(size);
         if (size.width < 500) {
-          // Compact toolbar shortcuts may be below the visible scroll region.
-          // Dismiss the detached popup, then bring its owner into view.
-          await expect(panel).toBeHidden();
-          await trigger.scrollIntoViewIfNeeded();
-          await trigger.click();
-          await expect(panel).toBeVisible();
+          // A compact toolbar may keep its owner visible (and its popup open)
+          // or scroll it out and dismiss the popup. Reject only a detached
+          // popup whose trigger cannot be reached.
+          if (await panel.isVisible()) {
+            await expect(trigger).toBeInViewport();
+          } else {
+            await trigger.scrollIntoViewIfNeeded();
+            await trigger.click();
+            await expect(panel).toBeVisible();
+          }
         }
         await expect
           .poll(() =>

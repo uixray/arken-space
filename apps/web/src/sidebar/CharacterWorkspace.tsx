@@ -367,10 +367,7 @@ export function CharacterWorkspace({
                         title="Архивировать персонажа"
                         onClick={() => setArchiveTarget(character)}
                       >
-                        <span className="character-rail__archive-icon">
-                          <AppIcon icon={CharacterArchiveIcon} />
-                        </span>
-                        Архивировать
+                        <AppIcon icon={CharacterArchiveIcon} />
                       </button>
                     )}
                   </div>
@@ -1465,31 +1462,6 @@ export function CharacterPanel({
               <span className="revision">rev {character.revision}</span>
             </div>
             <h2 className="character-hero__name">{character.name}</h2>
-            <details className="character-hero__backstory">
-              <summary>Предыстория</summary>
-              <FormTextArea
-                aria-label="Предыстория"
-                aria-describedby={
-                  !editable ? backstoryDescriptionId : undefined
-                }
-                defaultValue={character.backstory}
-                disabled={!editable}
-                rows={6}
-                onBlur={(event) =>
-                  void runCharacterMutation(() =>
-                    onPatch(character.id, {
-                      backstory: event.target.value,
-                      revision: character.revision,
-                    }),
-                  )
-                }
-              />
-              {!editable && (
-                <p className="muted" id={backstoryDescriptionId}>
-                  {editPermissionReason}
-                </p>
-              )}
-            </details>
             <div className="inline-fields">
               <Button disabled={!editable} onClick={() => setRenameOpen(true)}>
                 Переименовать
@@ -1513,15 +1485,66 @@ export function CharacterPanel({
             Короткий отдых
           </Button>
         </div>
+        <details className="character-hero__backstory">
+          <summary>Предыстория</summary>
+          <FormTextArea
+            aria-label="Предыстория"
+            aria-describedby={!editable ? backstoryDescriptionId : undefined}
+            defaultValue={character.backstory}
+            disabled={!editable}
+            rows={6}
+            onBlur={(event) =>
+              void runCharacterMutation(() =>
+                onPatch(character.id, {
+                  backstory: event.target.value,
+                  revision: character.revision,
+                }),
+              )
+            }
+          />
+          {!editable && (
+            <p className="muted" id={backstoryDescriptionId}>
+              {editPermissionReason}
+            </p>
+          )}
+        </details>
       </header>
 
       {/* Vital Stats Bar: ключевые показатели прямо под шапкой */}
       <div className="character-vitals" aria-label="Ключевые показатели">
         <div className="character-vital-chip character-vital-chip--wallet">
           <span className="character-vital-chip__label">Кошелёк</span>
-          <span className="character-vital-chip__value">
-            <AppIcon icon={CoinsIcon} /> {walletDraft.gold ?? 0} зм ·{" "}
-            {walletDraft.silver ?? 0} см · {walletDraft.copper ?? 0} мм
+          <span className="character-vital-chip__value character-vital-chip__wallet-values">
+            <AppIcon icon={CoinsIcon} />
+            {(["gold", "silver", "copper"] as const).map((key) => (
+              <label className="character-wallet__coin" key={key}>
+                <FormInput
+                  type="number"
+                  min={0}
+                  step={1}
+                  aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
+                  value={walletDraft[key]}
+                  disabled={!editable}
+                  onChange={(event) => {
+                    cancelWalletBatch(false);
+                    const next = {
+                      ...walletDraftRef.current,
+                      [key]: normalizeWalletValue(event.target.value),
+                    };
+                    walletDraftRef.current = next;
+                    walletInputDirtyRef.current = true;
+                    setWalletDraft(next);
+                  }}
+                  onBlur={() => void saveWallet(walletDraftRef.current)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+                <span>
+                  {key === "gold" ? "зм" : key === "silver" ? "см" : "мм"}
+                </span>
+              </label>
+            ))}
           </span>
         </div>
         {resourceRows.map(({ key, label }) => {

@@ -283,6 +283,52 @@ function selectPortrait(
 }
 
 describe("character action feedback", () => {
+  it("edits coins in the vital wallet and saves on blur or Enter", async () => {
+    const update = vi.fn(async () => undefined);
+    const state = snapshot([
+      character({ wallet: { gold: 2, silver: 3, copper: 4, sp: 5 } }),
+    ]);
+    const rendered = renderComponent(view(state, { onUpdateCounters: update }));
+    await galleryLoaded();
+    const gold = screen.getByRole("spinbutton", { name: "Кошелёк: золото" });
+    const silver = screen.getByRole("spinbutton", { name: "Кошелёк: серебро" });
+    const copper = screen.getByRole("spinbutton", { name: "Кошелёк: медь" });
+    expect(gold).toHaveValue(2);
+    expect(silver).toHaveValue(3);
+    expect(copper).toHaveValue(4);
+    fireEvent.change(gold, { target: { value: "25" } });
+    fireEvent.blur(gold);
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        state.characters[0]!.id,
+        state.characters[0]!.revision,
+        { wallet: { gold: 25, silver: 3, copper: 4, sp: 5 } },
+        undefined,
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Сохраняем…")).not.toBeInTheDocument(),
+    );
+    const savedState = snapshot([
+      character({
+        revision: 8,
+        wallet: { gold: 25, silver: 3, copper: 4, sp: 5 },
+      }),
+    ]);
+    rendered.rerender(view(savedState, { onUpdateCounters: update }));
+    copper.focus();
+    fireEvent.change(copper, { target: { value: "-1" } });
+    fireEvent.keyDown(copper, { key: "Enter" });
+    await waitFor(() =>
+      expect(update).toHaveBeenLastCalledWith(
+        savedState.characters[0]!.id,
+        savedState.characters[0]!.revision,
+        { wallet: { gold: 25, silver: 3, copper: 0, sp: 5 } },
+        undefined,
+      ),
+    );
+  });
+
   it("explains empty players and unchanged access", async () => {
     renderComponent(view(gmSnapshot({ characters: [character()] })));
     await galleryLoaded();

@@ -733,12 +733,19 @@ code {
   cursor: pointer;
   list-style: none;
 }
+.grid-settings > summary {
+  anchor-name: --grid-settings-trigger;
+}
+.resize-settings > summary {
+  anchor-name: --resize-settings-trigger;
+}
 .grid-settings-popover,
 .resize-settings-popover {
-  position: absolute;
+  position: fixed;
   z-index: 32;
-  top: 0;
-  left: calc(100% + 6px);
+  top: anchor(bottom);
+  left: anchor(right);
+  position-try-fallbacks: flip-block;
   display: grid;
   gap: 8px;
   min-width: 220px;
@@ -746,6 +753,12 @@ code {
   border: 1px solid var(--line);
   background: var(--surface);
   box-shadow: 0 10px 28px #0009;
+}
+.grid-settings-popover {
+  position-anchor: --grid-settings-trigger;
+}
+.resize-settings-popover {
+  position-anchor: --resize-settings-trigger;
 }
 .grid-settings-popover label {
   display: grid;
@@ -1104,16 +1117,21 @@ code {
   display: none;
 }
 .map-toolbar .token-tray[open] .token-tray-list {
-  position: absolute;
+  position: fixed;
+  position-anchor: --token-tray-trigger;
+  top: anchor(top);
+  left: anchor(right);
+  position-try-fallbacks: flip-block;
   z-index: 32;
-  top: 0;
-  left: calc(100% + 6px);
   min-width: 240px;
-  max-height: 360px;
+  max-height: min(360px, calc(100dvh - 24px));
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md, 8px);
   box-shadow: 0 10px 28px #0009;
+}
+.map-toolbar .token-tray > summary {
+  anchor-name: --token-tray-trigger;
 }
 .token-tray summary {
   flex: 0 0 auto;
@@ -1151,6 +1169,8 @@ code {
   object-fit: cover;
   display: grid;
   place-items: center;
+  text-align: center;
+  line-height: 1;
   border-radius: 50%;
   background: var(--surface-3);
 }
@@ -1295,8 +1315,11 @@ code {
 }
 .stat-field .g-text-input {
   /* Gravity's TextInput wrapper defaults to width: 100%, which would
-   * otherwise fight the fixed 3.75rem grid track above. */
+   * otherwise fight the fixed numeric grid track above. Its default 8px
+   * inline padding on each side leaves only 33px for a three-character
+   * value such as -20, even at a wide viewport. */
   width: 100%;
+  padding-inline: 0;
 }
 /* UIX-489: селектор с классом контрола, а не просто `input`.
 
@@ -1444,6 +1467,7 @@ code {
 }
 .resource-counters__controls .resource-bar {
   min-width: 0;
+  align-self: center;
 }
 .resource-counters__controls > .resource-counters__btn:first-child {
   grid-column: 1;
@@ -1973,8 +1997,8 @@ code {
 .roll-result__numbers {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding-right: 8px;
+  gap: 10px;
+  padding: 8px 12px;
   white-space: nowrap;
 }
 .roll-result__die {
@@ -2045,6 +2069,10 @@ code {
    двух классов uikit. */
 .chat-composer-input textarea.g-text-area__control {
   padding-right: 108px;
+}
+.chat-composer-input textarea.g-text-area__control:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 .chat-composer-actions {
   position: absolute;
@@ -2147,7 +2175,8 @@ code {
 .slash-command-suggestions button {
   display: grid;
   width: 100%;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   gap: 3px 10px;
   padding: 10px 12px;
   border: 0;
@@ -2167,8 +2196,7 @@ code {
 }
 
 .slash-command-suggestions code {
-  grid-column: 1 / -1;
-  color: var(--color-text-accent);
+  display: none;
 }
 .chat-compose {
   display: grid;
@@ -2360,11 +2388,19 @@ code {
   padding-inline: 0;
   justify-items: center;
 }
-.character-rail__archive-icon {
-  display: none;
-}
-.character-workspace__body.is-rail-collapsed .character-rail__archive-icon {
+.character-rail__archive {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 0;
+}
+.character-rail__archive svg {
+  width: 16px;
+  height: 16px;
 }
 .character-workspace__body.is-rail-collapsed .character-rail__item strong,
 .character-workspace__body.is-rail-collapsed .character-rail__status,
@@ -2559,9 +2595,10 @@ code {
   margin-bottom: var(--space-xs);
 }
 .character-hero {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md);
@@ -2571,9 +2608,11 @@ code {
 }
 .character-hero__main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-md);
   min-width: 0;
+  width: 100%;
+  padding-right: 148px;
 }
 .character-hero__avatar {
   flex-shrink: 0;
@@ -2613,6 +2652,7 @@ code {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  flex: 1;
 }
 .character-hero__meta {
   display: flex;
@@ -2631,7 +2671,9 @@ code {
   white-space: nowrap;
 }
 .character-hero__backstory {
-  max-width: min(520px, 100%);
+  flex: 0 0 100%;
+  width: 100%;
+  max-width: 100%;
   color: var(--muted);
   font-size: 0.82rem;
 }
@@ -2647,6 +2689,20 @@ code {
   align-items: center;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  z-index: 1;
+}
+@media (max-width: 560px) {
+  .character-hero__main {
+    padding-right: 0;
+  }
+  .character-hero__actions {
+    position: static;
+    justify-content: flex-end;
+    width: 100%;
+  }
 }
 .character-hero__roll-controls {
   display: flex;
@@ -2692,10 +2748,27 @@ code {
 .character-vital-chip--wallet {
   background: color-mix(in srgb, #d4a373 12%, var(--surface-2));
 }
+.character-vital-chip__wallet-values {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+.character-wallet__coin {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.character-wallet__coin input {
+  width: 64px;
+  min-width: 0;
+}
 .character-vital-chip--resource {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   min-width: 210px;
+  flex: 1 1 0;
 }
 .character-vital-chip__resource-values {
   display: flex;
@@ -2827,6 +2900,8 @@ code {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   gap: var(--space-xs);
+  justify-items: start;
+  justify-content: start;
 }
 .character-controller-access__players label {
   display: flex;
@@ -5289,9 +5364,12 @@ body:has(.landing-shell) {
   white-space: normal;
 }
 .roll-mode-segments button.is-active {
+  border: 1px solid var(--color-accent);
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent),
+    0 1px 3px rgb(0 0 0 / 20%);
 }
 
 /* Full-canvas workspaces replace the scene while the sidebar remains available. */
@@ -6170,7 +6248,7 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
 }
 .character-rail__archive {
   min-width: 32px;
-  padding: 0 var(--space-sm, 8px);
+  padding: 0;
 }
 .arken-dialog-consequence-list {
   margin: var(--space-sm, 8px) 0 0;

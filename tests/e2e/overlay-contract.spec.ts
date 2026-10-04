@@ -468,11 +468,20 @@ for (const role of ["GM", "PLAYER"] as const)
       await last.scrollIntoViewIfNeeded();
       await assertHitTarget(last);
       await expect(tray).toHaveAttribute("open", "");
-      await page.getByLabel("Меню сеанса", { exact: true }).click();
-      await expect(tray).not.toHaveAttribute("open", "");
-      await expect(
-        page.getByLabel("Меню сеанса", { exact: true }),
-      ).toBeFocused();
+      if (width === 390) {
+        // Compact layout hides the desktop session menu. Moving to the
+        // journal is the reachable outside-owner action on this surface.
+        const journal = page.locator("#compact-nav-journal");
+        await journal.click();
+        await expect(tray).not.toHaveAttribute("open", "");
+        await expect(journal).toHaveAttribute("aria-pressed", "true");
+        await page.locator("#compact-nav-map").click();
+      } else {
+        const session = page.getByLabel("Меню сеанса", { exact: true });
+        await session.click();
+        await expect(tray).not.toHaveAttribute("open", "");
+        await expect(session).toBeFocused();
+      }
       await page.keyboard.press("Escape");
       await summary.click();
       await expect(tray).toHaveAttribute("open", "");

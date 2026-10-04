@@ -144,6 +144,13 @@ it("groups quick rolls and shares an ability without executing it", () => {
   );
   expect(screen.getByRole("heading", { name: "Обычные" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Боевые" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Навыки" })).toBeNull();
+  expect(screen.getByRole("tab", { name: "Характеристики" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  expect(screen.queryByRole("heading", { name: "Обычные" })).toBeNull();
   expect(screen.getByRole("heading", { name: "Навыки" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Способности" })).toBeTruthy();
   fireEvent.click(

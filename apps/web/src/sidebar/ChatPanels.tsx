@@ -320,11 +320,36 @@ function ChatMessageBodyComponent({
         <small>{formatDiceBreakdown(dice)}</small>
       </div>
       <div className="roll-result__numbers">
-        {/* Итог справа: рамка исхода центрируется вокруг самого числа */}
+        {dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0) !==
+          0 &&
+          dice.terms.length === 1 &&
+          dice.terms[0]?.rolls.length === 1 && (
+            <span
+              className="roll-result__die"
+              aria-label={`Кубик: ${dice.terms[0].rolls[0]}`}
+            >
+              {dice.terms[0].rolls[0]}
+            </span>
+          )}
+        {dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0) !==
+          0 && (
+          <span
+            className="roll-result__bonus"
+            aria-label={`Бонус: ${dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0)}`}
+          >
+            {dice.modifiers.reduce(
+              (sum, modifier) => sum + modifier.value,
+              0,
+            ) >= 0
+              ? "+"
+              : ""}
+            {dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0)}
+          </span>
+        )}
         <strong className="roll-total" aria-label="Итог броска">
           <OutcomeFrame
             frame={
-              dice?.frame ??
+              dice.frame ??
               (critical
                 ? {
                     setKey: "ARKEN_CRITICAL_V1",
@@ -339,28 +364,6 @@ function ChatMessageBodyComponent({
           />
           {dice.total}
         </strong>
-        {dice.terms.length === 1 && dice.terms[0]?.rolls.length === 1 && (
-          <span
-            className="roll-result__die"
-            aria-label={`Кубик: ${dice.terms[0].rolls[0]}`}
-          >
-            {dice.terms[0].rolls[0]}
-          </span>
-        )}
-        {dice.modifiers.some((modifier) => modifier.value !== 0) && (
-          <span
-            className="roll-result__bonus"
-            aria-label={`Бонус: ${dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0)}`}
-          >
-            {dice.modifiers.reduce(
-              (sum, modifier) => sum + modifier.value,
-              0,
-            ) >= 0
-              ? "+"
-              : ""}
-            {dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0)}
-          </span>
-        )}
       </div>
     </div>
   );

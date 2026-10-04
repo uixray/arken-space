@@ -18,6 +18,7 @@ import {
   Line,
   Rect,
   Stage,
+  Shape,
   Text,
 } from "react-konva";
 import useImage from "use-image";
@@ -28,6 +29,7 @@ import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { useFogPattern } from "./useFogPattern";
+import { paintFogBrushStroke } from "./fog-brush-stroke";
 import { fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -747,6 +749,50 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     props.externalObjectListOpen,
     props.onObjectListClose,
   ]);
+  useLayoutEffect(() => {
+    if (!isObjectListOpen || props.externalObjectListOpen === undefined) return;
+    const container = containerRef.current;
+    const list = objectListRef.current;
+    const trigger = document.querySelector<HTMLButtonElement>(
+      ".map-toolbar .map-object-list-trigger",
+    );
+    if (!container || !list || !trigger) return;
+
+    const position = () => {
+      const viewport = container.getBoundingClientRect();
+      const anchor = trigger.getBoundingClientRect();
+      const below = viewport.bottom - anchor.top - 8;
+      const above = anchor.bottom - viewport.top - 8;
+      const placeBelow = below >= 180 || below >= above;
+      list.style.maxHeight = `${Math.max(80, placeBelow ? below : above)}px`;
+      const popover = list.getBoundingClientRect();
+      const left = Math.min(
+        Math.max(8, anchor.right - viewport.left + 8),
+        Math.max(8, viewport.width - popover.width - 8),
+      );
+      const top = Math.min(
+        Math.max(
+          8,
+          placeBelow
+            ? anchor.top - viewport.top
+            : anchor.bottom - viewport.top - popover.height,
+        ),
+        Math.max(8, viewport.height - popover.height - 8),
+      );
+      list.style.left = `${left}px`;
+      list.style.top = `${top}px`;
+      list.style.right = "auto";
+    };
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(container);
+    observer.observe(list);
+    window.addEventListener("resize", position);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", position);
+    };
+  }, [isObjectListOpen, props.externalObjectListOpen]);
   // UIX-392: (re)create the rAF batcher whenever the socket or active scene
   // changes, so a stale closure never emits into the wrong scene/socket.
   useEffect(() => {
@@ -2107,13 +2153,17 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               />
             );
           return (
-            <Line
+            <Shape
               key={fog.id}
-              points={geometry.points.flatMap((point) => [point.x, point.y])}
-              stroke={visual.color.fogCover}
-              strokeWidth={geometry.radius * 2}
-              lineCap="round"
-              lineJoin="round"
+              sceneFunc={(context) =>
+                paintFogBrushStroke(
+                  context,
+                  geometry.points,
+                  geometry.radius,
+                  fogPatternImage,
+                  visual.color.fogCover,
+                )
+              }
               globalCompositeOperation={compositeOperation}
             />
           );
@@ -2672,6 +2722,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       aria-label="Интерактивная карта сцены"
       aria-keyshortcuts={mapViewportAriaKeyShortcuts(props.role)}
       onPointerDownCapture={(event) => {
+        // Canvas does not take native focus; Enter/Escape must belong to the map.
+        if (event.target instanceof HTMLCanvasElement)
+          event.currentTarget.focus({ preventScroll: true });
         if (
           props.tool !== "DRAW" ||
           drawingActiveRef.current ||
@@ -2768,7 +2821,15 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             props.onObjectListClose?.();
             event.preventDefault();
             event.stopPropagation();
-            objectListTriggerRef.current?.focus();
+            // The list trigger lives in MapToolbar when the parent controls
+            // this popover; the renderer-local ref exists only in standalone
+            // mode. Return keyboard focus to whichever trigger opened it.
+            const trigger =
+              objectListTriggerRef.current ??
+              document.querySelector<HTMLButtonElement>(
+                ".map-toolbar .map-object-list-trigger",
+              );
+            trigger?.focus();
           }}
         >
           <ul className="map-object-list">

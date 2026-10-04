@@ -113,7 +113,7 @@ export function CursorPresenceMenu({
         open={open}
         onOpenChange={setOpen}
         anchorElement={anchor}
-        placement={["bottom-start", "top-start"]}
+        placement={["right-start", "left-start"]}
         strategy="fixed"
         initialFocus={0}
       >

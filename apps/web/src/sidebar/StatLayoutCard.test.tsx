@@ -108,7 +108,6 @@ vi.mock("@gravity-ui/uikit", () => {
     ),
   };
 });
-
 const rows = [
   { key: "strength", label: "Сила" },
   { key: "agility", label: "Ловкость" },
@@ -171,7 +170,7 @@ describe("карточка группы характеристик", () => {
         name: "Сила",
       });
       await userEvent.click(screen.getByText("Сила", { exact: true }));
-      expect(input).toHaveFocus();
+      expect(input).not.toHaveFocus();
       expect(
         input.closest(".stat-field")?.querySelector("label button"),
       ).toBeNull();
@@ -188,8 +187,24 @@ describe("карточка группы характеристик", () => {
     const labels = screen.getAllByText("Сила", { exact: true });
     for (const [index, label] of labels.entries()) {
       await userEvent.click(label);
-      expect(inputs[index]).toHaveFocus();
+      expect(inputs[index]).not.toHaveFocus();
     }
+  });
+
+  it("changes the value with flanking step controls and has no separate roll action", async () => {
+    const props = renderCard();
+    expect(
+      screen.queryByRole("button", { name: "Бросок" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Увеличить Сила" }),
+    );
+    expect(props.onChangeValue).toHaveBeenLastCalledWith("strength", 5);
+    expect(screen.getByRole("spinbutton", { name: "Сила" })).toHaveValue(5);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Уменьшить Сила" }),
+    );
+    expect(props.onChangeValue).toHaveBeenLastCalledWith("strength", 4);
   });
 
   it("не предлагает игроку править раскладку", () => {
@@ -233,9 +248,7 @@ describe("карточка группы характеристик", () => {
 
   it("бросок идёт по ключу строки, а подпись — в сообщение", async () => {
     const props = renderCard();
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Бросок" })[0]!,
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Сила" }));
     expect(props.onRoll).toHaveBeenCalledWith(
       "1d20 + strength",
       "Сила",
@@ -247,7 +260,7 @@ describe("карточка группы характеристик", () => {
     const props = renderCard();
     const user = userEvent.setup();
     await user.keyboard("{Control>}");
-    await user.click(screen.getAllByRole("button", { name: "Бросок" })[0]!);
+    await user.click(screen.getByRole("button", { name: "Сила" }));
     await user.keyboard("{/Control}");
     expect(props.onRoll).toHaveBeenCalledWith(
       "1d20 + strength",
