@@ -15,6 +15,7 @@ import { AppIcon } from "./ui/AppIcon";
 import { MoreIcon, PauseIcon, PlayIcon, VolumeIcon } from "./ui/icons";
 import { createPortal } from "react-dom";
 
+const ENABLED_KEY = "arken.audio.enabled";
 const VOLUME_KEY = "arken.audio.volume";
 // ACK reasons are protocol strings, not display text. Map only known reasons;
 // an unknown value (including an object-prototype key) gets a safe fallback.
@@ -64,7 +65,9 @@ export function MusicBar({
   const volumeRef = useRef<HTMLDetailsElement>(null);
   const overflowRef = useRef<HTMLDetailsElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const enabled = true;
+  const [enabled, setEnabled] = useState(
+    () => localStorage.getItem(ENABLED_KEY) !== "false",
+  );
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const playbackBlockedRef = useRef(false);
   const [volume, setVolume] = useState(() => {
@@ -205,7 +208,7 @@ export function MusicBar({
     const onGesture = (event: Event) => {
       if (
         event.target instanceof Element &&
-        event.target.closest(".music-volume-control")
+        event.target.closest(".music-volume-control, .music-enable-button")
       )
         return;
       if (!playbackBlockedRef.current) return;
@@ -221,6 +224,22 @@ export function MusicBar({
       document.removeEventListener("keydown", onGesture, true);
     };
   }, [playbackBlocked, enabled, audio.playing, current]);
+
+  const retryPlayback = () => {
+    const player = element.current;
+    if (!enabled || !audio.playing || !current || !player) return;
+    playbackBlockedRef.current = false;
+    attemptPlayback(player);
+  };
+  const setAudioEnabled = (next: boolean) => {
+    localStorage.setItem(ENABLED_KEY, String(next));
+    setEnabled(next);
+    playbackBlockedRef.current = false;
+    setPlaybackBlocked(false);
+    if (next && audio.playing && current && element.current)
+      attemptPlayback(element.current);
+    else if (!next) element.current?.pause();
+  };
 
   useDismissibleDetails(volumeRef);
   useDismissibleDetails(overflowRef);
@@ -285,7 +304,13 @@ export function MusicBar({
         {current?.name ?? "Композиция 4'33"}
       </strong>
       {playbackBlocked && enabled && audio.playing && current ? (
-        <small role="status">Звук начнётся после нажатия в приложении.</small>
+        <button
+          type="button"
+          className="music-enable-button"
+          onClick={retryPlayback}
+        >
+          Включить звук
+        </button>
       ) : null}
       <button
         type="button"
@@ -314,6 +339,15 @@ export function MusicBar({
               onChange={(event) => setVolume(Number(event.target.value))}
             />
           </label>
+          {enabled ? (
+            <button type="button" onClick={() => setAudioEnabled(false)}>
+              Выключить звук
+            </button>
+          ) : (
+            <button type="button" onClick={() => setAudioEnabled(true)}>
+              Включить звук
+            </button>
+          )}
         </div>
       </details>
       {role === "GM" ? (

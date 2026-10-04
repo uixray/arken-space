@@ -596,11 +596,19 @@ test("GM and six isolated players recover authoritative state without security l
     await expect(
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
     ).toHaveCount(0);
-    // Local volume is per-browser and must survive a reload without changing
-    // shared playback state. Zero volume is the local mute control.
+    // Explicit local mute and volume are per-browser and must survive a reload
+    // without changing shared playback state.
     const playerMusic = pages[0]!.getByRole("region", { name: "Музыка" });
     await expect(playerMusic).toBeVisible();
     await playerMusic.getByLabel("Громкость", { exact: true }).click();
+    const volumePopover = playerMusic.locator(".music-volume-popover");
+    await volumePopover.getByRole("button", { name: "Выключить звук" }).click();
+    await pages[0]!.reload();
+    await pages[0]!.getByLabel("Громкость", { exact: true }).click();
+    await volumePopover.getByRole("button", { name: "Включить звук" }).click();
+    await expect(
+      volumePopover.getByRole("button", { name: "Выключить звук" }),
+    ).toBeVisible();
     const localVolume = playerMusic.getByRole("slider", {
       name: "Личная громкость",
     });
