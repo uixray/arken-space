@@ -3996,6 +3996,7 @@ body:has(.landing-shell) {
 
 .map-object-list-popover {
   position: absolute;
+  box-sizing: border-box;
   z-index: 25;
   top: 44px;
   right: 8px;

@@ -110,7 +110,7 @@ test("public landing explains the service and accepts a suggestion", async ({
 
   await expect(
     page.getByRole("heading", {
-      name: "Всё необходимое для игры — в одном пространстве",
+      name: "Всё необходимое для игры — в едином пространстве",
     }),
   ).toBeVisible();
   await expect(

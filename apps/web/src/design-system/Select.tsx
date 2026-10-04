@@ -474,6 +474,16 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               handleOpenChange(true);
             }
           }}
+          onKeyDown={(event) => {
+            if (!isOpen || event.key !== "Home") return;
+            const first = popupRef.current?.querySelector<HTMLElement>(
+              '[role="option"]:not([aria-disabled="true"])',
+            );
+            if (!first) return;
+            event.preventDefault();
+            event.stopPropagation();
+            first.focus();
+          }}
         >
           {label && <span className="arken-select__label">{label}</span>}
           <BaseSelect.Value

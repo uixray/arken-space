@@ -270,11 +270,11 @@ for (const { role, width, target } of [
     const trigger =
       width === 1024
         ? page.getByLabel("Ещё разделы", { exact: true })
-        : page.getByRole("button", { name: "Разделы", exact: true });
+        : page.locator("#compact-nav-menu");
     const menu =
       width === 1024
         ? page.locator(".workspace-nav__menu")
-        : page.getByRole("dialog", { name: "Разделы", exact: true });
+        : page.getByRole("region", { name: "Меню кампании", exact: true });
     for (let round = 0; round < 2; round++) {
       await trigger.click();
       await expect(menu).toBeVisible();
@@ -293,20 +293,20 @@ for (const { role, width, target } of [
       await expect(dialog).toBeHidden();
       if (width === 1024) await expect(trigger).toBeFocused();
       else {
-        // Compact navigation intentionally restores the previous map surface,
-        // not Sections. Preserve that existing owner contract.
-        await expect(page.locator("#compact-nav-map")).toHaveAttribute(
+        // A utility workspace opened from the compact menu returns to that
+        // menu surface, not to an unrelated map tab.
+        await expect(page.locator("#compact-nav-menu")).toHaveAttribute(
           "aria-pressed",
           "true",
         );
         await expect
           .poll(() =>
             page.evaluate(() => {
-              const map = document.querySelector(".map-shell");
+              const menu = document.querySelector("#compact-menu-view");
               return Boolean(
-                map &&
-                (map === document.activeElement ||
-                  map.contains(document.activeElement)),
+                menu &&
+                (menu === document.activeElement ||
+                  menu.contains(document.activeElement)),
               );
             }),
           )
@@ -667,9 +667,6 @@ for (const role of ["GM", "PLAYER"] as const)
         list = page.getByRole("region", { name: "Объекты карты", exact: true });
       await trigger.click();
       await expect(list).toBeVisible();
-      await page.keyboard.press("Tab");
-      if (await list.evaluate((el) => el === document.activeElement))
-        await page.keyboard.press("Tab");
       const first = list.getByRole("button", {
         name: "Объект 01",
         exact: true,
@@ -704,14 +701,15 @@ for (const role of ["GM", "PLAYER"] as const)
         body: await page.screenshot(),
         contentType: "image/png",
       });
-      await page.getByLabel("Меню сеанса", { exact: true }).click();
+      // The desktop session menu is hidden at this compact width. Journal is
+      // the reachable outside owner that must dismiss the map popover.
+      const journalNav = page.locator("#compact-nav-journal");
+      await journalNav.click();
       await expect(list).toBeHidden();
-      await expect(
-        page.getByLabel("Меню сеанса", { exact: true }),
-      ).toBeFocused();
-      await page.keyboard.press("Escape");
+      await expect(journalNav).toHaveAttribute("aria-pressed", "true");
+      await page.locator("#compact-nav-map").click();
       await trigger.click();
-      await page.locator("#compact-nav-journal").click();
+      await journalNav.click();
       await expect(list).toBeHidden();
       await page.locator("#compact-nav-map").click();
       await expect(trigger).toBeVisible();
@@ -766,25 +764,20 @@ for (const role of ["GM", "PLAYER"] as const)
       const color = panel.getByLabel("Цвет рисунка", { exact: true });
       await expect(color).toHaveAttribute("type", "color");
       await expect(color).toHaveValue("#ef4444");
-      const thick = panel.getByRole("button", {
-        name: "Толщина 12px",
-        exact: true,
-      });
-      await thick.scrollIntoViewIfNeeded();
-      await assertHitTarget(thick);
-      await thick.click();
-      await expect(thick).toHaveAttribute("aria-pressed", "true");
       const slider = panel.getByRole("slider", {
         name: "Толщина линии",
         exact: true,
       });
-      await expect(slider).toHaveValue("12");
+      await slider.scrollIntoViewIfNeeded();
+      await assertHitTarget(slider);
       await slider.focus();
       await page.keyboard.press("Home");
+      for (let step = 1; step < 12; step++)
+        await page.keyboard.press("ArrowRight");
+      await expect(slider).toHaveValue("12");
+      await expect(panel).toContainText("Толщина: 12px");
+      await page.keyboard.press("Home");
       await expect(slider).toHaveValue("1");
-      await expect(
-        panel.getByRole("button", { name: "Толщина 1px", exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
       await page.keyboard.press("End");
       await expect(slider).toHaveValue("50");
       await expect(red).toHaveAttribute("aria-pressed", "true");

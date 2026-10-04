@@ -765,7 +765,10 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       const below = viewport.bottom - anchor.top - 8;
       const above = anchor.bottom - viewport.top - 8;
       const placeBelow = below >= 180 || below >= above;
-      list.style.maxHeight = `${Math.max(80, placeBelow ? below : above)}px`;
+      // A scrolled toolbar can leave its anchor outside the map viewport.
+      // Clamp the flyout to the visible map instead of using that offscreen
+      // anchor to produce an oversized panel on compact screens.
+      list.style.maxHeight = `${Math.max(80, Math.min(placeBelow ? below : above, viewport.height - 16))}px`;
       const popover = list.getBoundingClientRect();
       const left = Math.min(
         Math.max(8, anchor.right - viewport.left + 8),
@@ -785,6 +788,12 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       list.style.right = "auto";
     };
     position();
+    // The trigger is in the toolbar while the list is rendered in the map.
+    // Without an explicit handoff, Tab moves to the next toolbar shortcut
+    // instead of entering the open list.
+    list
+      .querySelector<HTMLButtonElement>(".map-object-list button")
+      ?.focus({ preventScroll: true });
     const observer = new ResizeObserver(position);
     observer.observe(container);
     observer.observe(list);

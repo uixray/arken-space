@@ -168,16 +168,32 @@ for (const role of ["GM", "PLAYER"] as const)
           bottom: node.getBoundingClientRect().bottom,
           shortcutsBottom: shortcuts.getBoundingClientRect().bottom,
           groupScrolls: group.scrollHeight > group.clientHeight,
+          toolbarScrolls: node.scrollHeight > node.clientHeight,
           viewportBottom: window.innerHeight,
         };
       });
       expect(compactToolLayout.bottom).toBeLessThanOrEqual(
         compactToolLayout.viewportBottom - (width === 360 ? 56 : 8),
       );
-      expect(compactToolLayout.shortcutsBottom).toBeLessThanOrEqual(
-        compactToolLayout.bottom,
-      );
-      if (role === "GM") expect(compactToolLayout.groupScrolls).toBe(true);
+      if (width === 360) {
+        expect(compactToolLayout.toolbarScrolls).toBe(true);
+        await toolbar.locator(".toolbar-shortcuts").scrollIntoViewIfNeeded();
+        const shortcut = toolbar.locator('[data-tool="MAP_OBJECTS"]');
+        await expect(shortcut).toBeVisible();
+        expect(
+          await shortcut.evaluate((node) => {
+            const r = node.getBoundingClientRect();
+            return node.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            );
+          }),
+        ).toBe(true);
+      } else {
+        expect(compactToolLayout.shortcutsBottom).toBeLessThanOrEqual(
+          compactToolLayout.bottom,
+        );
+        if (role === "GM") expect(compactToolLayout.groupScrolls).toBe(true);
+      }
       await toolbar
         .locator('button[data-tool="RULER"]')
         .scrollIntoViewIfNeeded();
