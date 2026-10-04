@@ -282,6 +282,7 @@ test("concept shell keeps the map primary and exposes core tools", async ({
 
   await openWorkspaceSection(page, "Персонажи");
   await expect(page.getByRole("heading", { name: "Картограф" })).toBeVisible();
+  await page.getByRole("tab", { name: "Способности" }).click();
   await expect(
     page.getByRole("button", { name: "Наблюдение", exact: true }),
   ).toBeVisible();
@@ -2111,8 +2112,8 @@ test("GM shell keeps essential controls accessible across desktop widths", async
       ).toBeVisible();
     }
     await expect(
-      page.getByRole("tablist", { name: "Потоки чата" }).getByRole("tab"),
-    ).toHaveCount(2);
+      page.getByRole("tablist", { name: "Потоки чата" }),
+    ).toHaveCount(0);
     // UIX-472: раздел доступен либо кнопкой в строке, либо под «Ещё» —
     // что именно куда попадёт, решает ширина окна, и закреплять это в тесте
     // значит ломать его от любой правки подписей.
@@ -2711,6 +2712,7 @@ test("player opens the character workspace while chat remains visible", async ({
   await expect(page.locator(".character-workspace")).toBeVisible();
   await expect(page.locator(".character-controller-access")).toHaveCount(0);
   await expect(page.locator(".chat-compose")).toBeVisible();
+  await page.getByRole("tab", { name: "Способности" }).click();
   await expect(
     page.getByRole("button", {
       name: "\u041d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435",
@@ -2814,7 +2816,7 @@ test("character card submits normal and modifier-key rolls for GM and player", a
   const roll = page
     .locator(".character-card--stats .stat-field")
     .first()
-    .getByRole("button", { name: "Бросок", exact: true });
+    .locator(".stat-field__roll-name");
   holdNext = true;
   await roll.click();
   await expect.poll(() => requests.length).toBe(1);
@@ -2847,7 +2849,7 @@ test("character card submits normal and modifier-key rolls for GM and player", a
   await page
     .locator(".character-card--stats .stat-field")
     .first()
-    .getByRole("button", { name: "Бросок", exact: true })
+    .locator(".stat-field__roll-name")
     .click({ modifiers: ["Control"] });
   await expect.poll(() => requests.length).toBe(4);
   expect(requests[3]).toMatchObject({

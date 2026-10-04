@@ -403,6 +403,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         name: "Персонаж для броска",
         exact: true,
       });
+      await panel.getByRole("tab", { name: "Способности" }).click();
       if (role === "GM") {
         await select.click();
         const option = page.getByRole("option", {
