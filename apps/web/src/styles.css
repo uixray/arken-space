@@ -1487,6 +1487,7 @@ code {
 }
 .resource-counters__controls > .resource-bar {
   grid-column: 2;
+  grid-row: 1;
 }
 .resource-counters__controls > .resource-counters__btn:nth-child(2) {
   grid-column: 3;
@@ -5229,11 +5230,19 @@ body:has(.landing-shell) {
 }
 
 /* UIX-475: свёрнутый блок бросков характеристик. */
+.quick-roll-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  min-width: 0;
+}
 .quick-roll-panel__toggle {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 24px;
   padding: 0 var(--space-xs);
   border: 0;
@@ -5430,7 +5439,8 @@ body:has(.landing-shell) {
   background: var(--surface);
 }
 .quick-roll-panel__physical-dice {
-  align-self: flex-start;
+  flex: 0 0 auto;
+  align-self: center;
 }
 .activity-roll-controls__heading {
   display: flex;

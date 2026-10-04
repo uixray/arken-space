@@ -152,24 +152,26 @@ export function QuickRollPanel({
       // Свёрнутому блоку заданная высота не нужна: он занимает свою строку.
       style={height != null && !collapsed ? { height } : undefined}
     >
-      <button
-        type="button"
-        className="quick-roll-panel__toggle"
-        aria-expanded={!collapsed}
-        title={collapsed ? "Развернуть броски" : "Свернуть броски"}
-        onClick={() => {
-          const next = !collapsed;
-          setCollapsed(next);
-          writeQuickRollsCollapsed(window.localStorage, membershipId, next);
-        }}
-      >
-        <AppIcon icon={collapsed ? ExpandSectionIcon : CollapseSectionIcon} />
-        Быстрые броски
-      </button>
+      <div className="quick-roll-panel__header">
+        <button
+          type="button"
+          className="quick-roll-panel__toggle"
+          aria-expanded={!collapsed}
+          title={collapsed ? "Развернуть броски" : "Свернуть броски"}
+          onClick={() => {
+            const next = !collapsed;
+            setCollapsed(next);
+            writeQuickRollsCollapsed(window.localStorage, membershipId, next);
+          }}
+        >
+          <AppIcon icon={collapsed ? ExpandSectionIcon : CollapseSectionIcon} />
+          Быстрые броски
+        </button>
+        {physicalDiceControl}
+      </div>
       {/* Прокручивается содержимое, а не панель целиком: иначе ручка уезжает
        * из виду ровно тогда, когда до неё хотят дотянуться. */}
       <div className="quick-roll-panel__body" hidden={collapsed}>
-        {physicalDiceControl}
         {gmOnly && (
           <p className="quick-roll-panel__gm-only" role="status">
             <AppIcon icon={SecretRollIcon} /> Броски уйдут только мастеру
