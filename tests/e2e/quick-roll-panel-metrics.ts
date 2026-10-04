@@ -32,7 +32,11 @@ export async function visibleButtons(page: Page) {
     const body = panel?.querySelector(".quick-roll-panel__body");
     if (!panel || !body)
       throw new Error("Панель быстрых бросков не отрисована");
-    const buttons = [...body.querySelectorAll("button")];
+    // Inactive ability tabs stay mounted with hidden panels. They are not
+    // candidates for the visible-height contract at any panel height.
+    const buttons = [...body.querySelectorAll("button")].filter(
+      (button) => !button.closest("[hidden]"),
+    );
     const buttonsHost = buttons[0] ?? body;
     /* Невидимые кнопки описываются поимённо, а не считаются числом.
        Причина конкретная: в CI одна кнопка не появлялась НИ ПРИ КАКОЙ высоте
@@ -97,7 +101,9 @@ export async function heightThatFitsAllButtons(page: Page): Promise<number> {
     if (!panel || !body)
       throw new Error("Панель быстрых бросков не отрисована");
 
-    const buttons = [...body.querySelectorAll("button")];
+    const buttons = [...body.querySelectorAll("button")].filter(
+      (button) => !button.closest("[hidden]"),
+    );
     const last = buttons.at(-1);
     if (!last) throw new Error("В панели нет кнопок быстрых бросков");
 

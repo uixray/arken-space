@@ -538,7 +538,8 @@
     padding-inline: env(safe-area-inset-left, 0px)
       env(safe-area-inset-right, 0px);
   }
-  .app-shell--compact #activity-sidebar.player-sidebar {
+  .app-shell--compact #activity-sidebar.player-sidebar,
+  .app-shell--compact #activity-sidebar.sidebar--single-feed {
     grid-template-rows: minmax(0, 1fr);
   }
 

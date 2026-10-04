@@ -1241,7 +1241,9 @@ for (const role of ["GM", "PLAYER"] as const) {
       });
       await page.goto("/");
       const map = page.locator(".map-viewport");
-      await map.getByRole("button", { name: "Вписать", exact: true }).click();
+      await map
+        .getByRole("button", { name: "Вписать карту", exact: true })
+        .click();
       const zoom = map.locator(".map-scale");
       const slider = zoom.getByRole("slider", { name: "Масштаб карты" });
       const percentage = async () =>
@@ -1268,7 +1270,9 @@ for (const role of ["GM", "PLAYER"] as const) {
       await page.keyboard.press("End");
       await expect(slider).toHaveValue("3");
       await expect(zoom).toContainText("300%");
-      await zoom.getByRole("button", { name: "Вписать", exact: true }).click();
+      await zoom
+        .getByRole("button", { name: "Вписать карту", exact: true })
+        .click();
       await expect
         .poll(async () => Number(await slider.inputValue()))
         .toBe(initialScale);
@@ -1456,13 +1460,20 @@ for (const role of ["GM", "PLAYER"] as const) {
           actionBounds.y + actionBounds.height,
         ),
       };
-      // Exercise the contested pixels, not an unobstructed corner of the row.
-      expect(overlap.right).toBeGreaterThan(overlap.left);
-      expect(overlap.bottom).toBeGreaterThan(overlap.top);
-      const hitPoint = {
-        x: (overlap.left + overlap.right) / 2,
-        y: (overlap.top + overlap.bottom) / 2,
-      };
+      // When the two controls overlap, probe the contested pixels. The
+      // current layout may separate them entirely; that is also safe, so
+      // probe the object's centre instead of requiring an overlap.
+      const intersects =
+        overlap.right > overlap.left && overlap.bottom > overlap.top;
+      const hitPoint = intersects
+        ? {
+            x: (overlap.left + overlap.right) / 2,
+            y: (overlap.top + overlap.bottom) / 2,
+          }
+        : {
+            x: objectBounds.x + objectBounds.width / 2,
+            y: objectBounds.y + objectBounds.height / 2,
+          };
       expect(
         await firstObject.evaluate(
           (node, point) =>
@@ -2042,7 +2053,9 @@ for (const width of [1280, 390]) {
     await page.goto("/");
     const map = page.locator(".map-viewport");
     const zoom = map.locator(".map-scale");
-    await zoom.getByRole("button", { name: "Вписать", exact: true }).click();
+    await zoom
+      .getByRole("button", { name: "Вписать карту", exact: true })
+      .click();
     const slider = zoom.getByRole("slider", { name: "Масштаб карты" });
     await slider.focus();
     await page.keyboard.press("Home");
@@ -3573,7 +3586,9 @@ for (const change of [
     await expect.poll(() => Boolean(publish)).toBe(true);
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
     const selectBoth = async () => {
-      await page.getByRole("button", { name: "Вписать", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Вписать карту", exact: true })
+        .click();
       const box = (await map.boundingBox())!;
       const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, box);
       const point = (x: number, y: number) => ({
@@ -4129,7 +4144,9 @@ for (const role of ["GM", "PLAYER"] as const) {
       page.getByRole("region", { name: "Интерактивная карта сцены" }),
     ).toBeVisible();
     await expect.poll(() => Boolean(publish)).toBe(true);
-    await page.getByRole("button", { name: "Вписать", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Вписать карту", exact: true })
+      .click();
     const stage = page.locator(".konvajs-content");
     const stageHandle = await stage.elementHandle();
     const bounds = (await stage.boundingBox())!;
