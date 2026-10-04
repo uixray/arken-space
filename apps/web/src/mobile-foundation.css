@@ -1065,6 +1065,20 @@
 }
 
 @media (max-width: 1023px) and (max-height: 480px) {
+  /* The fixed collapse/history/shortcut rows otherwise consume the entire
+   * toolbar height and collapse its tool scroller to 0px in landscape. Scroll
+   * the complete rail so every tool remains reachable. */
+  .app-shell--compact .map-toolbar {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+  .app-shell--compact .map-toolbar > .toolbar-group {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+  .app-shell--compact .map-toolbar > .toolbar-shortcuts {
+    margin-top: 0;
+  }
   /* A vertical zoom slider cannot fit between header and navigation in landscape. */
   .app-shell--compact .map-scale-anchor {
     width: min(420px, calc(100% - var(--map-toolbar-width, 48px) - 32px));
