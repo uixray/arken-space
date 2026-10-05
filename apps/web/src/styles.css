@@ -3006,21 +3006,33 @@ code {
   gap: var(--space-sm);
   margin-top: var(--space-xs);
 }
-.character-wallet__row {
-  display: flex;
+.inline-fields.character-wallet__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px minmax(40px, 60px) 32px;
   align-items: center;
-  gap: var(--space-xs);
+  gap: 4px;
+  min-width: 0;
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
 .character-wallet__row b {
-  min-width: 60px;
+  min-width: 0;
   font-size: 0.82rem;
 }
+.character-wallet__row .g-button {
+  min-width: 0;
+  width: 32px;
+  padding: 0;
+}
+.character-wallet__row .g-text-input {
+  min-width: 0;
+  width: 100%;
+}
 .character-wallet__row input {
-  width: 60px;
+  min-width: 0;
+  width: 100%;
   text-align: center;
 }
 
@@ -5496,7 +5508,11 @@ body:has(.landing-shell) {
   display: block;
   width: 100%;
   min-width: 0;
+  margin: 0;
   accent-color: var(--accent);
+}
+.player-presence-button .g-button__text {
+  gap: 6px;
 }
 .music-volume-popover button,
 .music-overflow__menu button {

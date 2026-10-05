@@ -118,7 +118,11 @@ export function SetupPanel(props: Props) {
                 (item) => item.membershipId === member.id,
               )?.online;
               return (
-                <Button key={member.id} onClick={() => setRenameMember(member)}>
+                <Button
+                  key={member.id}
+                  className="player-presence-button"
+                  onClick={() => setRenameMember(member)}
+                >
                   <AppIcon
                     icon={online ? OnlineStatusIcon : OfflineStatusIcon}
                   />
