@@ -130,56 +130,60 @@ export function SceneManagerDialog({
       variant={variant}
       onClose={onClose}
     >
-      <div className="scene-manager-heading">
-        <p>Подготавливайте сцену локально, не переключая игроков.</p>
-        <Button view="action" onClick={() => setEditing("NEW")}>
-          Создать сцену
-        </Button>
-      </div>
-      <div className="scene-manager-list">
-        {snapshot.scenes.length === 0 && (
-          <p className="empty">
-            Сцен пока нет. Создайте сцену для подготовки игры.
-          </p>
-        )}
-        {snapshot.scenes.map((scene) => {
-          const viewed =
-            scene.id === viewedSceneId || (!viewedSceneId && scene.active);
-          return (
-            <article className="scene-manager-card" key={scene.id}>
-              <div>
-                <strong>{scene.name}</strong>
-                <div className="scene-manager-meta">
-                  <span>{placementCount(scene.id)} токенов на сцене</span>
-                  <div className="scene-manager-statuses">
-                    {viewed && (
-                      <Label theme="info">Просматривается мастером</Label>
-                    )}
-                    {scene.active && (
-                      <Label theme="success">Показана игрокам</Label>
-                    )}
+      {!editing && (
+        <div className="scene-manager-heading">
+          <p>Подготавливайте сцену локально, не переключая игроков.</p>
+          <Button view="action" onClick={() => setEditing("NEW")}>
+            Создать сцену
+          </Button>
+        </div>
+      )}
+      {!editing && (
+        <div className="scene-manager-list">
+          {snapshot.scenes.length === 0 && (
+            <p className="empty">
+              Сцен пока нет. Создайте сцену для подготовки игры.
+            </p>
+          )}
+          {snapshot.scenes.map((scene) => {
+            const viewed =
+              scene.id === viewedSceneId || (!viewedSceneId && scene.active);
+            return (
+              <article className="scene-manager-card" key={scene.id}>
+                <div>
+                  <strong>{scene.name}</strong>
+                  <div className="scene-manager-meta">
+                    <span>{placementCount(scene.id)} токенов на сцене</span>
+                    <div className="scene-manager-statuses">
+                      {viewed && (
+                        <Label theme="info">Просматривается мастером</Label>
+                      )}
+                      {scene.active && (
+                        <Label theme="success">Показана игрокам</Label>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="dialog-actions">
-                <Button
-                  view="action"
-                  onClick={() => onView(scene.id)}
-                  disabled={viewed}
-                >
-                  Открыть для мастера
-                </Button>
-                {!scene.active && (
-                  <Button onClick={() => void onPublish(scene.id)}>
-                    Показать игрокам
+                <div className="dialog-actions">
+                  <Button
+                    view="action"
+                    onClick={() => onView(scene.id)}
+                    disabled={viewed}
+                  >
+                    Открыть для мастера
                   </Button>
-                )}
-                <Button onClick={() => setEditing(scene)}>Настроить</Button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
+                  {!scene.active && (
+                    <Button onClick={() => void onPublish(scene.id)}>
+                      Показать игрокам
+                    </Button>
+                  )}
+                  <Button onClick={() => setEditing(scene)}>Настроить</Button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
       {editing && (
         <SceneEditor
           key={editing === "NEW" ? "new" : `${editing.id}:${editing.revision}`}

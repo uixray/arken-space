@@ -944,6 +944,23 @@ describe("character action feedback", () => {
     );
     await galleryLoaded();
 
+    const characterNav = screen.getByRole("navigation", {
+      name: "Персонажи кампании",
+    });
+    const navActions = characterNav.querySelector(".character-rail__actions");
+    expect(navActions).toBe(characterNav.lastElementChild);
+    expect(
+      within(characterNav).getByRole("button", { name: "Создать персонажа" }),
+    ).toBeVisible();
+    expect(
+      within(characterNav).getByRole("button", { name: "Архив персонажей" }),
+    ).toBeVisible();
+    expect(
+      document.querySelector(
+        ".character-workspace__header .character-workspace__create",
+      ),
+    ).toBeNull();
+
     const railToggle = screen.getByRole("button", {
       name: "Свернуть список персонажей",
     });

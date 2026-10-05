@@ -9,7 +9,7 @@ import {
 import { DiceTrayPanel } from "./DiceTrayPanel";
 
 describe("UIX645 dice controls", () => {
-  it("keeps distinct decorative mode icons and selected radio semantics", () => {
+  it("keeps distinct decorative one-shot mode icons and pressed semantics", () => {
     renderComponent(
       <DiceTrayPanel
         characterId="character-icons"
@@ -18,8 +18,8 @@ describe("UIX645 dice controls", () => {
         onRoll={vi.fn().mockResolvedValue(undefined)}
       />,
     );
-    const modes = ["Помеха", "Обычно", "Преимущество"].map((name) =>
-      screen.getByRole("radio", { name }),
+    const modes = ["Помеха", "Преимущество"].map((name) =>
+      screen.getByRole("button", { name }),
     );
     const shapes = modes.map((mode) => {
       const svg = mode.querySelector("svg.arken-icon");
@@ -30,11 +30,11 @@ describe("UIX645 dice controls", () => {
       expect(svg).toHaveAttribute("focusable", "false");
       return svg?.innerHTML;
     });
-    expect(new Set(shapes).size).toBe(3);
-    expect(modes[1]).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(modes[2]!);
-    expect(modes[2]).toHaveAttribute("aria-checked", "true");
-    expect(modes[1]).toHaveAttribute("aria-checked", "false");
+    expect(new Set(shapes).size).toBe(2);
+    expect(modes[1]).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(modes[1]!);
+    expect(modes[1]).toHaveAttribute("aria-pressed", "true");
+    expect(modes[0]).toHaveAttribute("aria-pressed", "false");
   });
 
   it("keeps secret-roll naming, state and submitted arguments", async () => {
@@ -58,7 +58,7 @@ describe("UIX645 dice controls", () => {
     expect(onVisibilityChange).toHaveBeenCalledWith("GM_ONLY");
     rerender(<DiceTrayPanel {...props} visibility="GM_ONLY" />);
     expect(secret).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("radio", { name: "Преимущество" }));
+    fireEvent.click(screen.getByRole("button", { name: "Преимущество" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "d20" }));
     });

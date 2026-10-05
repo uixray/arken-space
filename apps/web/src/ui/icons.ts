@@ -39,6 +39,7 @@ export {
   PanelRightClose as SidebarCollapseIcon,
   PanelRightOpen as SidebarExpandIcon,
   Pin as PinIcon,
+  ListMusic as PlaylistIcon,
   Dices as DiceTrayIcon,
   Swords as BattleIcon,
   Pause as PauseIcon,

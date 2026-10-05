@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { MessageVisibility } from "@arken/contracts";
 import { RollModeControl, type RollMode } from "../RollModeControl";
 import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
@@ -36,6 +36,11 @@ export function DiceTrayPanel({
   ) => Promise<void>;
 }) {
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
+  const rollModeRef = useRef<RollMode>("NORMAL");
+  const selectRollMode = (next: RollMode) => {
+    rollModeRef.current = next;
+    setRollMode(next);
+  };
   const [pendingRolls, setPendingRolls] = useState(0);
   const [rollError, setRollError] = useState("");
   const sendRoll: typeof onRoll = async (...args) => {
@@ -68,7 +73,14 @@ export function DiceTrayPanel({
               key={sides}
               type="button"
               title={`Бросить d${sides} · ${ROLL_MODIFIER_HINT}`}
-              onClick={(event) =>
+              onClick={(event) => {
+                const mode = rollModeFromEvent(
+                  event.nativeEvent,
+                  rollModeRef.current,
+                );
+                // The mode is a one-shot modifier. Consume it at dispatch, not
+                // after the asynchronous response (rapid clicks must not reuse it).
+                selectRollMode("NORMAL");
                 void sendRoll(
                   `1d${sides}`,
                   `d${sides}`,
@@ -76,9 +88,9 @@ export function DiceTrayPanel({
                   characterId,
                   // UIX-456: зажатая клавиша перекрывает переключатель на
                   // один бросок и не трогает выставленный режим.
-                  rollModeFromEvent(event.nativeEvent, rollMode),
-                )
-              }
+                  mode,
+                );
+              }}
             >
               d{sides}
             </button>
@@ -86,7 +98,7 @@ export function DiceTrayPanel({
 
           <RollModeControl
             value={rollMode}
-            onChange={setRollMode}
+            onChange={selectRollMode}
             label="Режим броска"
             iconOnly
           />

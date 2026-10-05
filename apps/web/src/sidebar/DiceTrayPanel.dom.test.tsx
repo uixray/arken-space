@@ -60,10 +60,13 @@ it("собирает кости и доступные иконные режим�
   expect(
     screen.queryByRole("button", { name: "Формула" }),
   ).not.toBeInTheDocument();
-  const advantage = screen.getByRole("radio", { name: "Преимущество" });
+  const advantage = screen.getByRole("button", { name: "Преимущество" });
   expect(advantage).toHaveAttribute("title", "Преимущество");
-  const icons = ["Преимущество", "Обычно", "Помеха"].map((name) => {
-    const control = screen.getByRole("radio", { name });
+  expect(
+    screen.queryByRole("button", { name: "Обычно" }),
+  ).not.toBeInTheDocument();
+  const icons = ["Преимущество", "Помеха"].map((name) => {
+    const control = screen.getByRole("button", { name });
     expect(control.textContent).toBe("");
     expect(control.querySelectorAll("svg.arken-icon")).toHaveLength(1);
     const icon = control.querySelector("svg")!;
@@ -72,9 +75,9 @@ it("собирает кости и доступные иконные режим�
     expect(icon.innerHTML.length).toBeGreaterThan(0);
     return icon.innerHTML;
   });
-  expect(new Set(icons).size).toBe(3);
+  expect(new Set(icons).size).toBe(2);
   await userEvent.click(advantage);
-  expect(advantage).toHaveAttribute("aria-checked", "true");
+  expect(advantage).toHaveAttribute("aria-pressed", "true");
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
   expect(onRoll).toHaveBeenCalledWith(
     "1d20",
@@ -82,6 +85,15 @@ it("собирает кости и доступные иконные режим�
     "PUBLIC",
     "hero",
     "ADVANTAGE",
+  );
+  expect(advantage).toHaveAttribute("aria-pressed", "false");
+  await userEvent.click(screen.getByRole("button", { name: "d6" }));
+  expect(onRoll).toHaveBeenLastCalledWith(
+    "1d6",
+    "d6",
+    "PUBLIC",
+    "hero",
+    "NORMAL",
   );
   const visibility = screen.getByRole("button", { name: "Только мастеру" });
   expect(visibility).toHaveAttribute("aria-pressed", "false");

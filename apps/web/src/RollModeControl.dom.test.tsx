@@ -24,15 +24,15 @@ it("does not steal focus after an arrow selection followed by leaving the group"
     return frames.length;
   });
   renderComponent(<Harness />);
-  const normal = screen.getByRole("radio", { name: "Обычно" });
-  normal.focus();
-  fireEvent.keyDown(normal, { key: "ArrowRight" });
+  const disadvantage = screen.getByRole("button", { name: "Помеха" });
+  disadvantage.focus();
+  fireEvent.keyDown(disadvantage, { key: "ArrowRight" });
   const outside = screen.getByRole("button", { name: "Следующее действие" });
   outside.focus();
   for (const frame of frames) frame(16);
   expect(outside).toHaveFocus();
-  expect(screen.getByRole("radio", { name: "Преимущество" })).toHaveAttribute(
-    "aria-checked",
+  expect(screen.getByRole("button", { name: "Преимущество" })).toHaveAttribute(
+    "aria-pressed",
     "true",
   );
 });
@@ -40,18 +40,18 @@ it("does not steal focus after an arrow selection followed by leaving the group"
 it.each([
   ["ArrowRight", "Преимущество"],
   ["ArrowLeft", "Помеха"],
-  ["ArrowDown", "Преимущество"],
-  ["ArrowUp", "Помеха"],
+  ["ArrowDown", "Помеха"],
+  ["ArrowUp", "Преимущество"],
   ["Home", "Помеха"],
   ["End", "Преимущество"],
 ])("moves focus and selected state together for %s", (key, name) => {
   vi.stubGlobal("requestAnimationFrame", vi.fn());
   renderComponent(<Harness />);
-  const normal = screen.getByRole("radio", { name: "Обычно" });
-  normal.focus();
-  fireEvent.keyDown(normal, { key });
-  const selected = screen.getByRole("radio", { name });
+  const disadvantage = screen.getByRole("button", { name: "Помеха" });
+  disadvantage.focus();
+  fireEvent.keyDown(disadvantage, { key });
+  const selected = screen.getByRole("button", { name });
   expect(selected).toHaveFocus();
-  expect(selected).toHaveAttribute("aria-checked", "true");
+  expect(selected).toHaveAttribute("aria-pressed", "true");
   expect(selected).toHaveAttribute("tabindex", "0");
 });

@@ -37,7 +37,12 @@ import { useCampaignActions } from "../campaign-actions-context";
 
 import { useDismissibleDetails } from "../ui/dismissible-details";
 import { AppIcon } from "../ui/AppIcon";
-import { SendIcon, SettingsIcon } from "../ui/icons";
+import {
+  DecreaseIcon,
+  SelectedOptionIcon,
+  SendIcon,
+  SettingsIcon,
+} from "../ui/icons";
 import {
   ACTIVITY_FILTERS,
   ACTIVITY_FILTER_LABEL,
@@ -129,13 +134,13 @@ function compactDiceDetails(
   const selected = dice.poolTotals
     ? dice.poolTotals[dice.selectedPool ?? 0]
     : dice.terms.reduce((sum, term) => sum + term.subtotal, 0);
-  const modifier = dice.modifiers.reduce((sum, item) => sum + item.value, 0);
+  const modifier = dice.modifiers
+    .filter((item) => item.value !== 0)
+    .map((item) => `${item.value > 0 ? "+" : ""}${item.value}`)
+    .join("");
   return {
     diceLabel,
-    calculation:
-      modifier === 0
-        ? String(selected)
-        : `${selected}${modifier > 0 ? "+" : ""}${modifier}`,
+    calculation: modifier ? `${selected}${modifier}` : null,
   };
 }
 
@@ -166,7 +171,7 @@ function SystemMessageCard({ body }: { body: string }) {
                 <div className="roll-details__math">
                   <small>
                     {before}
-                    {delta < 0 ? "−" : "+"}
+                    {delta < 0 ? <AppIcon icon={DecreaseIcon} /> : "+"}
                     {Math.abs(delta)}
                   </small>
                   {maximumText && <small>Max {maximumText}</small>}
@@ -194,7 +199,7 @@ function SystemMessageCard({ body }: { body: string }) {
         {details.length > 0 && <small>{details.join(". ")}</small>}
       </div>
       <span className="roll-result__system-mark" aria-hidden="true">
-        ✓
+        <AppIcon icon={SelectedOptionIcon} />
       </span>
     </div>
   );
@@ -381,6 +386,7 @@ function ChatMessageBodyComponent({
       </>
     );
   }
+  const details = compactDiceDetails(dice);
   return (
     <div
       className={`roll-result${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
@@ -388,15 +394,19 @@ function ChatMessageBodyComponent({
       <div className="roll-details">
         <div className="roll-details__heading">
           <span>{message.body}</span>
-          {critical && (
-            <span className="roll-critical-label">
-              {critical.kind === "success" ? "Крит. успех" : "Крит. провал"}
-            </span>
-          )}
         </div>
         <div className="roll-details__math">
-          <small>{compactDiceDetails(dice).diceLabel}</small>
-          <small>{compactDiceDetails(dice).calculation}</small>
+          <small>{details.diceLabel}</small>
+          {(critical || details.calculation) && (
+            <span className="roll-details__math-right">
+              {critical && (
+                <span className="roll-critical-label">
+                  {critical.kind === "success" ? "Крит. успех" : "Крит. провал"}
+                </span>
+              )}
+              {details.calculation && <small>{details.calculation}</small>}
+            </span>
+          )}
         </div>
       </div>
       <div className="roll-result__numbers">

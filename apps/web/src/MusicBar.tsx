@@ -13,7 +13,7 @@ import { resolvePlaybackAction } from "./music-playback";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
 import {
-  MoreIcon,
+  PlaylistIcon,
   MutedVolumeIcon,
   PauseIcon,
   PlayIcon,
@@ -357,8 +357,8 @@ export function MusicBar({
       </details>
       {role === "GM" ? (
         <details className="music-overflow" ref={overflowRef}>
-          <summary aria-label="Меню музыки" title="Меню музыки">
-            <AppIcon icon={MoreIcon} />
+          <summary aria-label="Плейлист" title="Плейлист">
+            <AppIcon icon={PlaylistIcon} />
           </summary>
           <div className="music-overflow__menu">
             <span className="music-overflow__now-playing">

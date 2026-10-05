@@ -201,7 +201,6 @@ export function CharacterWorkspace({
 
   const openCount = state.openIds.length;
   const sheetLimitReached = openCount >= MAX_OPEN_CHARACTER_SHEETS;
-  const singleCharacter = characters.length === 1;
   return createPortal(
     <main
       ref={workspaceRef}
@@ -222,32 +221,30 @@ export function CharacterWorkspace({
       }
     >
       <header className="character-workspace__header">
-        {!singleCharacter && (
-          <button
-            type="button"
-            className="character-rail-toggle"
-            aria-label={
+        <button
+          type="button"
+          className="character-rail-toggle"
+          aria-label={
+            railCollapsed
+              ? "Развернуть список персонажей"
+              : "Свернуть список персонажей"
+          }
+          aria-pressed={railCollapsed}
+          title={
+            railCollapsed
+              ? "Развернуть список персонажей"
+              : "Свернуть список персонажей"
+          }
+          onClick={() => setRailCollapsed((current) => !current)}
+        >
+          <AppIcon
+            icon={
               railCollapsed
-                ? "Развернуть список персонажей"
-                : "Свернуть список персонажей"
+                ? ExpandCharacterRailIcon
+                : CollapseCharacterRailIcon
             }
-            aria-pressed={railCollapsed}
-            title={
-              railCollapsed
-                ? "Развернуть список персонажей"
-                : "Свернуть список персонажей"
-            }
-            onClick={() => setRailCollapsed((current) => !current)}
-          >
-            <AppIcon
-              icon={
-                railCollapsed
-                  ? ExpandCharacterRailIcon
-                  : CollapseCharacterRailIcon
-              }
-            />
-          </button>
-        )}
+          />
+        </button>
         <div>
           <span className="eyebrow">Рабочее пространство</span>
           <h2 ref={titleRef} id="character-workspace-title" tabIndex={-1}>
@@ -298,22 +295,6 @@ export function CharacterWorkspace({
         )}
         <button
           type="button"
-          className="character-workspace__create"
-          onClick={() => setCreateCharacterOpen(true)}
-        >
-          <AppIcon icon={AddIcon} /> Создать персонажа
-        </button>
-        {props.snapshot.me.role === "GM" && (
-          <button
-            type="button"
-            className="character-workspace__restore-archived"
-            onClick={() => setRestoreDialogOpen(true)}
-          >
-            <AppIcon icon={CharacterArchiveIcon} /> Архив персонажей
-          </button>
-        )}
-        <button
-          type="button"
           className="character-workspace__close"
           aria-label="Закрыть персонажей"
           title="Закрыть рабочее пространство персонажей"
@@ -323,78 +304,91 @@ export function CharacterWorkspace({
         </button>
       </header>
       <div
-        className={`character-workspace__body${singleCharacter ? " is-single-character" : railCollapsed ? " is-rail-collapsed" : ""}`}
+        className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}
       >
-        {!singleCharacter && (
-          <nav className="character-rail" aria-label="Персонажи кампании">
-            {sheetLimitReached && (
-              <p className="muted" id={sheetLimitDescriptionId}>
-                Закройте один из открытых листов, чтобы открыть другой.
-              </p>
-            )}
-            {characters.length === 0 ? (
-              <p className="muted">Нет доступных персонажей.</p>
-            ) : (
-              characters.map((character) => {
-                const isOpen = state.openIds.includes(character.id);
-                const full = !isOpen && sheetLimitReached;
-                return (
-                  <div className="character-rail__item" key={character.id}>
+        <nav className="character-rail" aria-label="Персонажи кампании">
+          {sheetLimitReached && (
+            <p className="muted" id={sheetLimitDescriptionId}>
+              Закройте один из открытых листов, чтобы открыть другой.
+            </p>
+          )}
+          {characters.length === 0 ? (
+            <p className="muted">Нет доступных персонажей.</p>
+          ) : (
+            characters.map((character) => {
+              const isOpen = state.openIds.includes(character.id);
+              const full = !isOpen && sheetLimitReached;
+              return (
+                <div className="character-rail__item" key={character.id}>
+                  <button
+                    type="button"
+                    className={
+                      state.activeId === character.id ? "is-active" : undefined
+                    }
+                    aria-pressed={state.activeId === character.id}
+                    disabled={full}
+                    aria-describedby={
+                      full ? sheetLimitDescriptionId : undefined
+                    }
+                    title={
+                      full
+                        ? "Закройте один из открытых листов, чтобы открыть другой."
+                        : isOpen
+                          ? `Перейти к персонажу ${character.name}`
+                          : `Открыть персонажа ${character.name}`
+                    }
+                    onClick={() => {
+                      if (isOpen) dispatch({ type: "FOCUS", id: character.id });
+                      else dispatch({ type: "OPEN", id: character.id });
+                    }}
+                  >
+                    <span
+                      className="character-rail__initial"
+                      aria-hidden="true"
+                    >
+                      {character.name.slice(0, 1).toLocaleUpperCase()}
+                    </span>
+                    <strong>{character.name}</strong>
+                    <span className="character-rail__status">
+                      {isOpen ? "открыт" : ""}
+                    </span>
+                  </button>
+                  {isOpen && (
                     <button
                       type="button"
-                      className={
-                        state.activeId === character.id
-                          ? "is-active"
-                          : undefined
+                      className="character-rail__close"
+                      aria-label={`Закрыть лист ${character.name}`}
+                      title={`Закрыть лист ${character.name}`}
+                      onClick={() =>
+                        dispatch({ type: "CLOSE", id: character.id })
                       }
-                      aria-pressed={state.activeId === character.id}
-                      disabled={full}
-                      aria-describedby={
-                        full ? sheetLimitDescriptionId : undefined
-                      }
-                      title={
-                        full
-                          ? "Закройте один из открытых листов, чтобы открыть другой."
-                          : isOpen
-                            ? `Перейти к персонажу ${character.name}`
-                            : `Открыть персонажа ${character.name}`
-                      }
-                      onClick={() => {
-                        if (isOpen)
-                          dispatch({ type: "FOCUS", id: character.id });
-                        else dispatch({ type: "OPEN", id: character.id });
-                      }}
                     >
-                      <span
-                        className="character-rail__initial"
-                        aria-hidden="true"
-                      >
-                        {character.name.slice(0, 1).toLocaleUpperCase()}
-                      </span>
-                      <strong>{character.name}</strong>
-                      <span className="character-rail__status">
-                        {isOpen ? "открыт" : ""}
-                      </span>
+                      <AppIcon icon={CloseIcon} />
                     </button>
-                    {isOpen && (
-                      <button
-                        type="button"
-                        className="character-rail__close"
-                        aria-label={`Закрыть лист ${character.name}`}
-                        title={`Закрыть лист ${character.name}`}
-                        onClick={() =>
-                          dispatch({ type: "CLOSE", id: character.id })
-                        }
-                      >
-                        <AppIcon icon={CloseIcon} />
-                      </button>
-                    )}
-                  </div>
-                );
-              })
+                  )}
+                </div>
+              );
+            })
+          )}
+          <div className="character-rail__actions">
+            <button
+              type="button"
+              className="character-rail__create"
+              onClick={() => setCreateCharacterOpen(true)}
+            >
+              <AppIcon icon={AddIcon} /> Создать персонажа
+            </button>
+            {props.snapshot.me.role === "GM" && (
+              <button
+                type="button"
+                className="character-rail__restore-archived"
+                onClick={() => setRestoreDialogOpen(true)}
+              >
+                <AppIcon icon={CharacterArchiveIcon} /> Архив персонажей
+              </button>
             )}
-          </nav>
-        )}
+          </div>
+        </nav>
         <div
           className="character-sheet-deck"
           aria-label="Открытые листы персонажей"
@@ -428,11 +422,7 @@ export function CharacterWorkspace({
                     <button
                       type="button"
                       aria-label={`Закрыть лист ${character.name}`}
-                      onClick={() =>
-                        singleCharacter
-                          ? onClose()
-                          : dispatch({ type: "CLOSE", id })
-                      }
+                      onClick={() => dispatch({ type: "CLOSE", id })}
                     >
                       Закрыть
                     </button>
@@ -1729,7 +1719,7 @@ export function CharacterPanel({
                       })
                     }
                   >
-                    +{regen}
+                    <AppIcon icon={AddIcon} /> {regen}
                   </Button>
                 )}
               </div>

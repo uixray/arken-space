@@ -2148,6 +2148,17 @@ code {
   justify-content: space-between;
   gap: var(--space-xs);
 }
+.roll-details__math-right {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  margin-left: auto;
+  text-align: right;
+}
+.roll-details__math-right small {
+  padding-left: 0;
+}
 .roll-details__math small:last-child {
   margin-left: auto;
   text-align: right;
@@ -2523,20 +2534,13 @@ code {
   padding: var(--space-sm) var(--space-lg);
   border-bottom: 1px solid var(--line);
   background: var(--surface);
+  min-width: 0;
+}
+.character-workspace__header > div {
+  min-width: 0;
 }
 .character-workspace__header .muted {
   margin-left: auto;
-}
-.character-workspace__header
-  > :is(.character-workspace__create, .character-workspace__restore-archived) {
-  flex: 0 0 auto;
-  min-height: 34px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
 }
 .character-workspace__body {
   display: grid;
@@ -2547,14 +2551,38 @@ code {
   grid-template-columns: minmax(0, 1fr);
 }
 .character-rail {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-xs);
   min-width: 0;
   padding: var(--space-sm);
   overflow-y: auto;
   border-right: 1px solid var(--line);
   background: var(--surface);
+}
+.character-rail__actions {
+  display: grid;
+  gap: var(--space-xs);
+  margin-top: auto;
+  padding-top: var(--space-md);
+}
+.character-rail__actions > button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.character-rail__actions > button:hover {
+  background: var(--surface-hover);
 }
 .character-workspace__body.is-rail-collapsed {
   grid-template-columns: 56px minmax(0, 1fr);
@@ -6205,8 +6233,30 @@ body:has(.landing-shell) {
   color: var(--text);
 }
 .quick-roll-panel .quick-roll-button {
+  position: relative;
   border: 0 !important;
   box-shadow: none;
+}
+.quick-roll-button[data-roll-tooltip]:hover::after,
+.quick-roll-button[data-roll-tooltip]:focus-visible::after {
+  content: attr(data-roll-tooltip);
+  position: absolute;
+  z-index: 100;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  width: max-content;
+  max-width: min(240px, 70vw);
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: left;
+  transform: translateX(-50%);
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
 }
 .quick-roll-panel .quick-roll-button--skill {
   background-color: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
@@ -6255,8 +6305,13 @@ body:has(.landing-shell) {
   align-items: center;
   gap: var(--space-xs);
   width: fit-content;
+  border: 0;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   list-style: none;
+}
+.activity-filters-summary:hover {
+  background: var(--surface-2);
 }
 .activity-filters-summary::-webkit-details-marker {
   display: none;
@@ -6540,7 +6595,7 @@ body:has(.landing-shell) {
   margin-inline: 0;
 }
 .character-workspace__header > .character-workspace__close {
-  margin-left: 4px;
+  margin-left: auto;
 }
 .character-workspace.is-sidebar-collapsed
   .character-workspace__header
@@ -7049,9 +7104,20 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
   min-height: 32px;
   padding: 3px 4px;
 }
+.dice-tray-panel__toolbar .roll-mode-segments {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 0;
+  background: transparent;
+}
+.dice-tray-panel__toolbar .roll-mode-segments button.is-active {
+  border: 0;
+  background: var(--color-accent);
+  color: var(--surface);
+  box-shadow: none;
+}
 .dice-tray-panel__toolbar [aria-checked="true"],
 .dice-tray-panel__toolbar [aria-pressed="true"] {
-  box-shadow: inset 0 0 0 2px currentColor;
+  box-shadow: none;
 }
 
 /* UIX-406: кости постоянно рядом с картой, не зависят от вкладки чата. */

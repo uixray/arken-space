@@ -336,6 +336,35 @@ describe("dice presentation boundary (UIX-289)", () => {
     return renderToStaticMarkup(<ChatMessageBody message={message} />);
   }
 
+  it("omits a duplicate unmodified result and puts critical status on the math row", () => {
+    const markup = renderDiceBody(
+      {
+        ...validDice,
+        formula: "1d20",
+        resolvedFormula: "1d20",
+        modifiers: [],
+        total: 20,
+      },
+      false,
+    );
+    const document = new DOMParser().parseFromString(markup, "text/html");
+    const math = document.querySelector(".roll-details__math");
+    expect(math?.textContent).toBe("1d20Крит. успех");
+    expect(math?.querySelectorAll("small")).toHaveLength(1);
+    expect(
+      document.querySelector(".roll-details__heading .roll-critical-label"),
+    ).toBeNull();
+    expect(document.querySelector(".roll-total")?.textContent).toBe("20");
+  });
+
+  it("shows actual arithmetic after the critical status when a modifier exists", () => {
+    const markup = renderDiceBody(validDice, false);
+    const document = new DOMParser().parseFromString(markup, "text/html");
+    const right = document.querySelector(".roll-details__math-right");
+    expect(right?.textContent).toBe("Крит. успех20+5");
+    expect(document.querySelector(".roll-total")?.textContent).toBe("25");
+  });
+
   it.each([false, true])(
     "keeps total and critical label when decorative frame is invalid (skill=%s)",
     (skill) => {

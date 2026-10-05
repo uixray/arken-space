@@ -18,6 +18,9 @@ import {
   SecretRollIcon,
 } from "../ui/icons";
 
+const signedBonus = (bonus: number) =>
+  new Intl.NumberFormat("en-US", { signDisplay: "always" }).format(bonus);
+
 /**
  * Plain, non-draggable character-stat quick-roll panel (UIX-387). Previously
  * (UIX-363) this was made a floating/draggable window via
@@ -135,7 +138,7 @@ export function QuickRollPanel({
         key={stat.key}
         className={`quick-roll-button quick-roll-button--${variant}`}
         disabled={quickRollPending}
-        title={`${stat.label} · ${ROLL_MODIFIER_HINT}`}
+        data-roll-tooltip={`${stat.label}: 1d20${signedBonus(rollCharacter.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue)}. ${ROLL_MODIFIER_HINT}`}
         onClick={(event) =>
           onQuickRoll(
             `1d20 + ${stat.key}`,
@@ -248,7 +251,7 @@ export function QuickRollPanel({
                   key={skill.key}
                   className="quick-roll-button quick-roll-button--skill"
                   disabled={quickRollPending}
-                  title={`${skill.name} · ${ROLL_MODIFIER_HINT}`}
+                  data-roll-tooltip={`${skill.name}: ${skill.formula} (бонус ${signedBonus(formulaBonus(skill.formula, rollCharacter.stats))}). ${ROLL_MODIFIER_HINT}`}
                   onClick={(event) =>
                     onQuickRoll(
                       skill.formula,
