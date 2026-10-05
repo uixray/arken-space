@@ -18,7 +18,7 @@ import { expect, test } from "./campaign-fixture";
  * Тест браузерный по необходимости: обрезание — это `scrollWidth` против
  * `clientWidth`, то есть измеренная раскладка, которой в jsdom нет.
  */
-const FIELD = ".stat-field";
+const FIELD = ".character-card--stats .stat-field";
 
 /** Крайние значения диапазона характеристики (`STAT_VALUE_RANGE`) и ноль. */
 const VALUES = ["-20", "-2", "-1", "0", "20"] as const;

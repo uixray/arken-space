@@ -325,7 +325,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       await expect(popup).toBeVisible();
       const outside = panel.locator("#activity-message-list");
       if (role === "GM")
-        await panel.getByRole("button", { name: "Быстрые броски" }).click();
+        await panel.getByRole("button", { name: "Статы и скилы" }).click();
       else
         await panel
           .getByText("Нет доступного персонажа для броска.", { exact: true })
@@ -473,7 +473,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         if (name !== labels[2]) await page.keyboard.press("Tab");
       }
       await expect(
-        panel.getByText("Сцена готова.", { exact: true }),
+        panel.getByText("Сцена готова", { exact: true }),
       ).toHaveCount(0);
       await page.keyboard.press("Escape");
       await expect(trigger).toBeFocused();
@@ -502,7 +502,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         ).toBeChecked();
       }
       await expect(
-        panel.getByText("Сцена готова.", { exact: true }),
+        panel.getByText("Сцена готова", { exact: true }),
       ).toBeVisible();
       await composer.click();
       await expect(filters).not.toHaveAttribute("open", "");

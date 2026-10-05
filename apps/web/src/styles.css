@@ -1748,6 +1748,10 @@ code {
   --character-card-accent: var(--color-card-stats);
   flex-basis: 300px;
 }
+html[data-player-theme="light"] .character-card--stats {
+  /* The default stats blue is too light on the raised light-theme card. */
+  --character-card-accent: #215b94;
+}
 .character-card--combat {
   --character-card-accent: var(--color-card-combat);
   flex-basis: 300px;

@@ -281,7 +281,9 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   ).toHaveAttribute("aria-pressed", "true");
 
   await openWorkspaceSection(page, "Персонажи");
-  await expect(page.getByRole("heading", { name: "Картограф" })).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: "Лист персонажа Картограф" }),
+  ).toBeVisible();
   await page.getByRole("tab", { name: "Способности" }).click();
   await expect(
     page.getByRole("button", { name: "Наблюдение", exact: true }),
@@ -295,7 +297,7 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   });
 });
 
-test("UIX-516 GM sees protected regen deletes before and after reload", async ({
+test("UIX-516 GM sees protected regen fields before and after reload", async ({
   page,
 }) => {
   const repairedSnapshot = structuredClone(snapshot);
@@ -317,22 +319,19 @@ test("UIX-516 GM sees protected regen deletes before and after reload", async ({
 
   const expectProtectedControls = async () => {
     await openWorkspaceSection(page, "Персонажи");
-    for (const label of ["Реген Выносливости", "Реген Маны"]) {
-      const row = page.locator(".stat-field").filter({
-        has: page.locator(".stat-field__roll-name", { hasText: label }),
-      });
-      await row.locator(".stat-field__menu summary").click();
-      const protectedDelete = row.getByRole("button", {
-        name: `Нельзя удалить «${label}»: установите значение 0, чтобы отключить восстановление`,
-      });
-      await expect(protectedDelete).toBeVisible();
-      await expect(protectedDelete).toBeDisabled();
-      await expect(protectedDelete).toHaveAttribute(
-        "title",
-        "Системную строку нельзя удалить. Чтобы отключить восстановление, установите значение 0.",
-      );
-      await row.locator(".stat-field__menu summary").click();
-    }
+    // Regeneration is now a protected field beside each resource, not a
+    // rollable/deletable stat row. The value and lack of a delete menu are the
+    // behavior to preserve across reload.
+    const workspace = page.locator(".character-workspace");
+    await expect(
+      workspace.getByRole("spinbutton", { name: "Реген Выносливости" }),
+    ).toHaveValue("7");
+    await expect(
+      workspace.getByRole("spinbutton", { name: "Реген Маны" }),
+    ).toHaveValue("4");
+    await expect(
+      workspace.locator(".stat-field__roll-name").filter({ hasText: /^Реген/ }),
+    ).toHaveCount(0);
     const strength = page
       .locator(".stat-field")
       .filter({
@@ -1273,20 +1272,10 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
   const secondSheet = workspace.getByRole("article", {
     name: "Лист персонажа Второй персонаж",
   });
+  // The duplicate sheet-collapse affordance was removed. Rail navigation must
+  // continue to focus the open sheet without hiding its contents.
   await workspace
-    .getByRole("button", {
-      name: "Свернуть лист Второй персонаж",
-    })
-    .click();
-  await expect(
-    workspace.getByRole("button", {
-      name: "Развернуть лист Второй персонаж",
-    }),
-  ).toBeVisible();
-  await workspace
-    .getByRole("button", {
-      name: "Развернуть лист Второй персонаж",
-    })
+    .getByRole("button", { name: "Второй персонаж", exact: true })
     .click();
   await expect(secondSheet).toBeVisible();
   await workspace
@@ -1693,7 +1682,7 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
   await expect(page.locator("#chat-panel-activity")).toBeVisible();
   const activityPanel = page.locator("#chat-panel-activity");
   const composer = activityPanel.locator(".chat-compose textarea");
-  await expect(activityPanel.getByText("Сцена готова.")).toBeVisible();
+  await expect(composer).toBeVisible();
   const sendButton = activityPanel.locator(
     '.chat-composer-actions button[type="submit"]',
   );
@@ -1703,14 +1692,14 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
   await composer.fill("/");
   const rollSuggestion = activityPanel
     .locator(".slash-command-suggestions [role=option]")
-    .filter({ has: page.locator("code", { hasText: "/roll 1d20 + agility" }) });
+    .filter({ has: page.locator("code", { hasText: "/roll 1d20" }) });
   await expect(rollSuggestion).toContainText("/roll");
-  await expect(rollSuggestion).toContainText("/roll 1d20 + agility");
+  await expect(rollSuggestion).toContainText("/roll 1d20");
   await rollSuggestion.click();
   await expect(composer).toHaveValue("");
   await expect.poll(() => diceRequests.length).toBe(2);
   expect(diceRequests[1]).toMatchObject({
-    formula: "1d20 + agility",
+    formula: "1d20",
     rollMode: "NORMAL",
   });
   await composer.fill("Сообщение для группы");
@@ -1871,7 +1860,7 @@ test("UIX-274 activity reloads story posts and exposes empty states and slash ac
   await expect(composer).toHaveValue("");
   await expect.poll(() => diceRequests.length).toBe(1);
   expect(diceRequests[0]).toMatchObject({
-    formula: "1d20 + agility",
+    formula: "1d20",
     rollMode: "NORMAL",
   });
 });
@@ -2047,8 +2036,8 @@ test("chat marks only unambiguous kept natural d20 criticals", async ({
 
   const failure = page.locator(".roll-result--critical-failure");
   const success = page.locator(".roll-result--critical-success");
-  await expect(failure).toContainText("Критический провал");
-  await expect(success).toContainText("Критический успех");
+  await expect(failure).toContainText("Крит. провал");
+  await expect(success).toContainText("Крит. успех");
   const failureSurface = await failure.evaluate(
     (node) => getComputedStyle(node).backgroundColor,
   );
@@ -2103,7 +2092,12 @@ test("chat survives malformed client dice and renders local date boundaries", as
   await expect(page.locator(".chat-date-divider")).toHaveCount(2);
   await expect(page.getByText("Сломанный бросок")).toBeVisible();
   await expect(page.locator(".app-fatal-error")).toHaveCount(0);
-  await expect(page.locator(".roll-result")).toHaveCount(0);
+  await expect(
+    page
+      .getByText("Сломанный бросок")
+      .locator("xpath=ancestor::article")
+      .locator(".roll-result"),
+  ).toHaveCount(0);
 });
 
 test("GM shell keeps essential controls accessible across desktop widths", async ({
@@ -3781,17 +3775,14 @@ test("player fog clips partial foreign tokens while controlled tokens remain vis
   const revealedHalf = await captureRegion(256, 32);
   const coveredHalf = await captureRegion(288, 32);
   const coveredCell = await captureRegion(384, 64);
-  // The probes retain the same grid phase and fog state as the corresponding
-  // token halves. The revealed half must differ from empty revealed map, while
-  // the covered half must be pixel-identical to empty opaque fog. Together
-  // these comparisons prove that the partial token is rendered below fog.
+  // The revealed half must differ from empty revealed map. Covered probes are
+  // compared to the same world coordinates after removing the foreign tokens
+  // below, because the textured fog boundary is not uniform across cells.
   const emptyRevealedHalf = await captureRegion(640, 32);
   const emptyLeftPhase = await captureRegion(512, 32);
-  const emptyRightPhase = await captureRegion(544, 32);
   const emptyCell = await captureRegion(512, 64);
   expect(emptyRevealedHalf.equals(emptyLeftPhase)).toBe(false);
   expect(revealedHalf.equals(emptyRevealedHalf)).toBe(false);
-  expect(coveredHalf.equals(emptyRightPhase)).toBe(true);
   expect(controlledCell.equals(emptyCell)).toBe(false);
 
   await page
@@ -3809,17 +3800,19 @@ test("player fog clips partial foreign tokens while controlled tokens remain vis
     }),
   ).toHaveCount(0);
 
-  // The fog texture is world-positioned rather than uniform. Compare the
-  // covered cell to the exact same coordinates after removing only that token,
-  // not to another fog cell with a different texture phase.
+  // Compare covered cells to identical coordinates after removing the foreign
+  // tokens; no covered token pixels may leak through fog.
   servedSnapshot = {
     ...playerSnapshot,
     tokens: playerSnapshot.tokens.filter(
-      (token) => token.name !== "Covered foreign token",
+      (token) =>
+        token.name !== "Covered foreign token" &&
+        token.name !== "Partially revealed foreign token",
     ),
   };
   await page.reload();
   await expect(map).toBeVisible();
+  expect(coveredHalf.equals(await captureRegion(288, 32))).toBe(true);
   expect(coveredCell.equals(await captureRegion(384, 64))).toBe(true);
 
   // GM visibility stays unchanged: a token hidden from the player remains

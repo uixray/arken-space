@@ -81,7 +81,10 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
     await sheetNav.click();
     const sheet = page.locator('.character-workspace[data-compact="true"]');
     await expect(
-      sheet.getByRole("heading", { name: character.name, exact: true }),
+      sheet.getByRole("article", {
+        name: `Лист персонажа ${character.name}`,
+        exact: true,
+      }),
     ).toBeVisible();
     const failures: object[] = [];
     for (const size of [

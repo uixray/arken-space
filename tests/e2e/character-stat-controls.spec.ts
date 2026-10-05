@@ -78,8 +78,6 @@ for (const role of ["GM", "PLAYER"] as const)
         .textContent())!.trim();
       await row.scrollIntoViewIfNeeded();
       await expect(row.locator("input")).toHaveAccessibleName(label);
-      if (role === "GM")
-        await row.locator(".stat-field__menu > summary").click();
       const measurements: object[] = [];
       for (const button of await row.getByRole("button").all()) {
         await expect(button).toHaveAccessibleName(/\S/);
@@ -113,6 +111,7 @@ for (const role of ["GM", "PLAYER"] as const)
         }
       }
       if (role === "GM") {
+        await row.locator(".stat-field__menu > summary").click();
         const rename = row.getByRole("button", {
           name: `Переименовать «${label}»`,
           exact: true,

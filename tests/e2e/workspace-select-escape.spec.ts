@@ -185,8 +185,8 @@ for (const width of [1280, 360]) {
     const inputShell = name.locator(
       "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' arken-text-input ')][1]",
     );
-    await expect(inputShell).toHaveCSS("outline-style", "solid");
-    await expect(inputShell).toHaveCSS("outline-width", "2px");
+    await expect(inputShell).toHaveCSS("border-style", "solid");
+    await expect(inputShell).toHaveCSS("border-width", "2px");
     const popup = page.locator(".arken-form-select-popup");
     await trigger.click();
     const template = popup.getByRole("option", {
@@ -474,7 +474,7 @@ test("UIX-317 reduced motion preserves actual character dialog and popup lifecyc
     name.locator(
       "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' arken-text-input ')][1]",
     ),
-  ).toHaveCSS("outline-width", "2px");
+  ).toHaveCSS("border-width", "2px");
   await info.attach("reduced-compact-dialog", {
     body: await page.screenshot(),
     contentType: "image/png",

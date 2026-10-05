@@ -41,3 +41,12 @@
 - **Verification:** integrated format check, typecheck, production-mode local web Docker build, 82/82 focused tests including `ui-icon-policy`, diff check, and browser QA on `127.0.0.1:15180` passed. Browser showed the close button within the header, bottom rail actions, direct `Настройка: Первая сцена` dialog, no Normal tray button, playlist icon, and the revised critical/result layout. Only the local QA web container was recreated; existing API, DB, and media containers were preserved.
 - **Blockers:** old E2E run is terminal red in both browsers; root causes need a bounded repair pool before the next remote candidate. PR remains draft/unreviewed; origin/main, host rehearsal, human GM+6, and explicit production approval remain open.
 - **Next action:** commit this verified local pool, classify and repair E2E failures without weakening valid contracts, then push once and run one exact-revision CI. No production deploy.
+
+## E2E expectation and contrast repair pool — 2026-10-05
+
+- **Decision:** classify the terminal `21d4ba2` E2E failures against the current UI before running another full CI. Preserve behavior and security assertions: update obsolete labels/structure only, reorder a stat hit-target measurement before opening an occluding menu, compare fog cells at equivalent world coordinates, and repair an actual light-theme contrast defect in product CSS.
+- **Revision:** based on local `73fdd01`; E2E/CSS repair is uncommitted at this checkpoint.
+- **Changed files:** `styles.css` and 11 E2E specs: canvas token regressions, character queue recovery/stat controls/compact sheet/field focus/value fit/workspace lifecycle, composer suggestions, concept, player-theme surfaces, and quick-roll privacy.
+- **Verification:** agents passed E2E TypeScript, targeted Prettier, and diff check. Light-theme stats header now uses `#215b94` on `#f7f3ea` (computed contrast 6.34:1), rather than the failing 3.05:1 default blue. Full browser E2E on this exact revision is not yet run; shared manual QA database was not used for write-heavy tests.
+- **Blockers:** exact-revision full CI remains required, and its result may expose additional issues. Draft PR review, origin/main merge, host backup/restore/media rehearsal, GM+6 human acceptance, and explicit production approval remain open.
+- **Next action:** commit this bounded repair, push the two local commits together once, run a single exact-revision CI, inspect failures if any. No production deploy.

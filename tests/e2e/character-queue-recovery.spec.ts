@@ -99,11 +99,14 @@ test("canonical removal rejects queued character edit without phantom PATCH and 
   try {
     await page.goto("/");
     await openWorkspaceSection(page, "Персонажи");
-    const heading = page.getByRole("heading", {
-      name: character.name,
+    const sheet = page.getByRole("article", {
+      name: `Лист персонажа ${character.name}`,
       exact: true,
     });
-    await expect(heading).toBeVisible();
+    await expect(sheet).toBeVisible();
+    await expect(
+      sheet.getByRole("button", { name: character.name, exact: true }),
+    ).toBeVisible();
     const strength = page
       .locator(".character-card--stats .stat-field")
       .filter({ has: page.locator("span").filter({ hasText: /^Сила$/ }) })
@@ -128,7 +131,7 @@ test("canonical removal rejects queued character edit without phantom PATCH and 
         })
         .first(),
     ).toBeVisible();
-    await expect(heading).toHaveCount(0);
+    await expect(sheet).toHaveCount(0);
     // Restoration is an authoritative realtime snapshot, not React/DOM injection.
     canonical = {
       ...canonical,
@@ -138,11 +141,12 @@ test("canonical removal rejects queued character edit without phantom PATCH and 
     await expect.poll(() => sockets.size).toBeGreaterThan(0);
     for (const socket of sockets)
       socket.send(`42${JSON.stringify(["game:snapshot", canonical])}`);
-    // A single restored character opens directly, without a redundant rail.
+    // A single restored character opens directly; the rail still holds Create
+    // and Archive actions at its end.
     await expect(
       page.getByRole("navigation", { name: "Персонажи кампании" }),
-    ).toHaveCount(0);
-    await expect(heading).toBeVisible();
+    ).toBeVisible();
+    await expect(sheet).toBeVisible();
     await expect(strength).toHaveValue("1");
     await strength.fill("9");
     await strength.press("Tab");

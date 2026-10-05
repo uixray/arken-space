@@ -228,8 +228,8 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(tableMessage).not.toHaveCSS("color", "rgba(0, 0, 0, 0)");
         const failure = page.locator(".roll-result--critical-failure");
         const success = page.locator(".roll-result--critical-success");
-        await expect(failure).toContainText("Критический провал");
-        await expect(success).toContainText("Критический успех");
+        await expect(failure).toContainText("Крит. провал");
+        await expect(success).toContainText("Крит. успех");
         await expect(failure.locator(".roll-critical-label")).toBeVisible();
         await expect(success.locator(".roll-critical-label")).toBeVisible();
         if (theme.id === "light") {

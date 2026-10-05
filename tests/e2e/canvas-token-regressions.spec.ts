@@ -245,6 +245,17 @@ for (const role of ["GM", "PLAYER"] as const) {
         ).toBeLessThanOrEqual(1);
         await select.focus();
         const glyphs: string[] = [];
+        if (label === tokenName) {
+          // Tokens now expose a dedicated focus-on-map action between the
+          // selection row and duplicate/delete actions.
+          const locate = list.getByRole("button", {
+            name: `Показать на карте: ${label}`,
+            exact: true,
+          });
+          await page.keyboard.press("Tab");
+          await expect(locate).toBeFocused();
+          await expect(locate).toBeEnabled();
+        }
         for (const action of ["Дублировать", "Удалить"]) {
           const control = list.getByRole("button", {
             name: `${action}: ${label}`,
