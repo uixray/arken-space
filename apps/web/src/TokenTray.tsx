@@ -1,3 +1,4 @@
+import { ToolbarSummary } from "./ui/ToolbarTooltip";
 import { memo, useRef } from "react";
 import type { GameSnapshot } from "@arken/contracts";
 import { useDismissibleDetails } from "./ui/dismissible-details";
@@ -24,7 +25,7 @@ export const TokenTray = memo(function TokenTray({
 
   return (
     <details className="token-tray toolbar-detail" ref={tokenTrayRef}>
-      <summary
+      <ToolbarSummary
         className="map-tool"
         aria-label={`Токены · ${definitions.length}`}
         title={`Токены · ${definitions.length}`}
@@ -32,7 +33,7 @@ export const TokenTray = memo(function TokenTray({
       >
         <AppIcon icon={TokenTrayIcon} />
         <span className="map-tool__label">Токены</span>
-      </summary>
+      </ToolbarSummary>
       <div className="token-tray-list">
         {definitions.length === 0 && (
           <p className="muted">

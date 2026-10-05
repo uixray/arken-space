@@ -1,3 +1,4 @@
+import { ToolbarButton, ToolbarSummary } from "../ui/ToolbarTooltip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SceneDto } from "@arken/contracts";
 import { useDismissibleDetails } from "../ui/dismissible-details";
@@ -53,7 +54,7 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
 
   return (
     <details className="grid-settings" ref={settingsRef}>
-      <summary
+      <ToolbarSummary
         aria-label="Настройки сетки"
         title="Настройки сетки"
         className="toolbar-detail-trigger"
@@ -61,7 +62,7 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
       >
         <AppIcon icon={GridSettingsIcon} />
         <span className="map-tool__label">Сетка</span>
-      </summary>
+      </ToolbarSummary>
       <div className="grid-settings-popover">
         <label>
           Шаг
@@ -102,10 +103,10 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
           />
         </label>
         <div className="inline-fields">
-          <button type="button" onClick={resetGrid}>
+          <ToolbarButton type="button" onClick={resetGrid}>
             {"Сбросить"}
-          </button>
-          <button
+          </ToolbarButton>
+          <ToolbarButton
             type="button"
             disabled={saving}
             onClick={async () => {
@@ -129,8 +130,8 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
             }}
           >
             Сохранить
-          </button>
-          <button
+          </ToolbarButton>
+          <ToolbarButton
             type="button"
             onClick={() => {
               setDraft(scene.grid);
@@ -139,7 +140,7 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
             }}
           >
             Отмена
-          </button>
+          </ToolbarButton>
         </div>
       </div>
     </details>

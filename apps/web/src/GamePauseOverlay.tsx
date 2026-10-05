@@ -1,3 +1,4 @@
+import { ToolbarButton } from "./ui/ToolbarTooltip";
 import { useLayoutEffect, useRef, useState } from "react";
 import pauseArtwork from "./assets/game-pause-rest.webp";
 import { AppIcon } from "./ui/AppIcon";
@@ -57,7 +58,7 @@ export function GamePauseOverlay({
         </>
       )}
       {isGm && (
-        <button
+        <ToolbarButton
           type="button"
           aria-label={paused ? "Продолжить игру" : "Начать перерыв"}
           title={paused ? "Продолжить игру" : "Начать перерыв"}
@@ -70,7 +71,7 @@ export function GamePauseOverlay({
           <span className="game-pause-control__label">
             {paused ? "Продолжить игру" : "Начать перерыв"}
           </span>
-        </button>
+        </ToolbarButton>
       )}
       {error && <p role="alert">{error}</p>}
     </div>

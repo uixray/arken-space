@@ -283,6 +283,36 @@ function selectPortrait(
 }
 
 describe("character action feedback", () => {
+  it("shows custom resources beside the vital wallet from character data", async () => {
+    const save = vi.fn(async () => {});
+    renderComponent(
+      view(
+        snapshot([
+          character({ resources: { Ярость: { current: 3, maximum: 5 } } }),
+        ]),
+        { onUpdateCounters: save },
+      ),
+    );
+    await galleryLoaded();
+    const vitals = within(screen.getByLabelText("Ключевые показатели"));
+    const input = vitals.getByRole("spinbutton", { name: "Ярость: текущее" });
+    expect(input).toHaveValue(3);
+    fireEvent.change(input, { target: { value: "4" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(save).toHaveBeenCalled());
+  });
+  it("navigates to sections in its own character sheet", async () => {
+    renderComponent(view(snapshot()));
+    await galleryLoaded();
+    const nav = within(
+      screen.getByRole("navigation", { name: "Разделы персонажа Персонаж A" }),
+    );
+    fireEvent.click(nav.getByRole("button", { name: "Инвентарь" }));
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
   it("edits coins in the vital wallet and saves on blur or Enter", async () => {
     const update = vi.fn(async () => undefined);
     const state = snapshot([
@@ -826,7 +856,7 @@ describe("character action feedback", () => {
       onRollInitiative: unexpectedAction,
       onPreviewPlayer: unexpectedAction,
       onUpdateCounters: unexpectedAction,
-      onCampaignClock: unexpectedAction,
+      onCampaignClock: vi.fn(async () => {}),
       requestedChatMessageId: null,
       onRequestedChatMessageHandled: unexpectedAction,
       onChatVisibilityChange: unexpectedAction,
@@ -848,6 +878,35 @@ describe("character action feedback", () => {
     );
     await galleryLoaded();
 
+    const railToggle = screen.getByRole("button", {
+      name: "Свернуть список персонажей",
+    });
+    expect(railToggle.closest("header")?.querySelector("button")).toBe(
+      railToggle,
+    );
+    fireEvent.click(railToggle);
+    expect(
+      screen.queryAllByRole("button", { name: /^Архивировать персонажа/ }),
+    ).toHaveLength(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Развернуть список персонажей" }),
+    );
+    const day = screen.getByRole("button", {
+      name: `День ${state.campaign.day}`,
+    });
+    fireEvent.click(day);
+    await waitFor(() =>
+      expect(workspaceProps.onCampaignClock).toHaveBeenCalledExactlyOnceWith(
+        "ADVANCE_DAY",
+        state.campaign.revision,
+      ),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Следующий день" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Время кампании" }),
+    ).not.toBeInTheDocument();
     const rail = screen.getByRole("navigation", {
       name: "Персонажи кампании",
     });

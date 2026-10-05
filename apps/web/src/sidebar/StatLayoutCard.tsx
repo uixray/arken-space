@@ -139,7 +139,10 @@ export function StatLayoutCard({
   onAddRow,
   onDeleteRow,
   onMoveRow,
+  onReorderRow,
+  layoutOnly = false,
 }: {
+  layoutOnly?: boolean;
   title: string;
   modifier: string;
   rows: readonly { key: string; label: string }[];
@@ -160,8 +163,10 @@ export function StatLayoutCard({
    * окажется нужнее.
    */
   onMoveRow: (key: string, direction: "up" | "down") => Promise<void>;
+  onReorderRow?: (key: string, targetKey: string) => Promise<void>;
 }) {
   const fieldIdPrefix = useId();
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
   // `null` — окно закрыто; `{ key: undefined }` — добавление новой строки.
   const [editing, setEditing] = useState<{ key?: string } | null>(null);
   const renamed = editing?.key
@@ -206,92 +211,160 @@ export function StatLayoutCard({
       <h3 className="character-card__header">{title}</h3>
       <div className="character-card__body">
         {rows.map((row, index) => (
-          <div key={row.key} className="stat-field">
-            <Button
-              className="stat-field__roll-name"
-              view="flat"
-              disabled={!editable || rollPending}
-              title={`Бросить ${row.label}`}
-              onClick={(event) =>
-                onRoll(
-                  `1d20 + ${row.key}`,
-                  row.label,
-                  rollModeFromEvent(event.nativeEvent),
-                )
-              }
-            >
-              {row.label}
-            </Button>
-            <StatValueField
-              id={`${fieldIdPrefix}-${encodeURIComponent(row.key)}`}
-              label={row.label}
-              value={values[row.key] ?? STAT_VALUE_RANGE.defaultValue}
-              editable={editable}
-              onCommit={(value: number) => onChangeValue(row.key, value)}
-            />
+          <div
+            key={row.key}
+            className="stat-field"
+            onDragOver={(event) => {
+              if (canEditLayout && draggedKey && draggedKey !== row.key)
+                event.preventDefault();
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (draggedKey && draggedKey !== row.key && onReorderRow)
+                void onReorderRow(draggedKey, row.key);
+              setDraggedKey(null);
+            }}
+          >
+            {canEditLayout && (
+              <button
+                type="button"
+                className="stat-field__drag-handle"
+                draggable={Boolean(onReorderRow)}
+                aria-label={`Переместить «${row.label}»`}
+                title="Перетащите строку или используйте стрелки вверх и вниз"
+                onDragStart={(event) => {
+                  setDraggedKey(row.key);
+                  event.dataTransfer.setData("text/plain", row.key);
+                  event.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => setDraggedKey(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                    event.preventDefault();
+                    void onMoveRow(
+                      row.key,
+                      event.key === "ArrowUp" ? "up" : "down",
+                    );
+                  }
+                }}
+              >
+                <svg
+                  className="arken-icon"
+                  width="16"
+                  height="20"
+                  viewBox="0 0 16 20"
+                  aria-hidden="true"
+                >
+                  {[5, 10, 15].flatMap((cy) =>
+                    [5, 11].map((cx) => (
+                      <circle
+                        key={`${cx}-${cy}`}
+                        cx={cx}
+                        cy={cy}
+                        r="1.5"
+                        fill="currentColor"
+                      />
+                    )),
+                  )}
+                </svg>
+              </button>
+            )}
+            {layoutOnly ? (
+              <span className="stat-field__roll-name">{row.label}</span>
+            ) : (
+              <Button
+                className="stat-field__roll-name"
+                view="flat"
+                disabled={!editable || rollPending}
+                title={`Бросить ${row.label}`}
+                onClick={(event) =>
+                  onRoll(
+                    `1d20 + ${row.key}`,
+                    row.label,
+                    rollModeFromEvent(event.nativeEvent),
+                  )
+                }
+              >
+                {row.label}
+              </Button>
+            )}
+            {!layoutOnly && (
+              <StatValueField
+                id={`${fieldIdPrefix}-${encodeURIComponent(row.key)}`}
+                label={row.label}
+                value={values[row.key] ?? STAT_VALUE_RANGE.defaultValue}
+                editable={editable}
+                onCommit={(value: number) => onChangeValue(row.key, value)}
+              />
+            )}
             <div className="stat-field__actions">
               {canEditLayout && (
-                <>
-                  <Button
-                    view="flat"
-                    className="stat-field__rename"
-                    disabled={index === 0}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      void onMoveRow(row.key, "up");
-                    }}
-                    aria-label={`Переместить «${row.label}» выше`}
-                    title="Переместить выше"
-                  >
-                    <AppIcon icon={MoveUpIcon} />
-                  </Button>
-                  <Button
-                    view="flat"
-                    className="stat-field__rename"
-                    disabled={index === rows.length - 1}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      void onMoveRow(row.key, "down");
-                    }}
-                    aria-label={`Переместить «${row.label}» ниже`}
-                    title="Переместить ниже"
-                  >
-                    <AppIcon icon={MoveDownIcon} />
-                  </Button>
-                  <Button
-                    view="flat"
-                    className="stat-field__rename"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      setEditing({ key: row.key });
-                    }}
-                    aria-label={`Переименовать «${row.label}»`}
-                    title="Переименовать строку"
-                  >
-                    <AppIcon icon={RenameIcon} />
-                  </Button>
-                  <Button
-                    view="flat"
-                    className="stat-field__rename"
-                    disabled={isSystemRegenStatKey(row.key)}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      askToDelete(row);
-                    }}
-                    aria-label={
-                      isSystemRegenStatKey(row.key)
-                        ? `Нельзя удалить «${row.label}»: установите значение 0, чтобы отключить восстановление`
-                        : `Удалить «${row.label}»`
-                    }
-                    title={
-                      isSystemRegenStatKey(row.key)
-                        ? "Системную строку нельзя удалить. Чтобы отключить восстановление, установите значение 0."
-                        : "Удалить строку"
-                    }
-                  >
-                    <AppIcon icon={DeleteIcon} />
-                  </Button>
-                </>
+                <details className="stat-field__menu">
+                  <summary aria-label={`Действия строки «${row.label}»`}>
+                    …
+                  </summary>
+                  <div className="stat-field__menu-items">
+                    <Button
+                      view="flat"
+                      className="stat-field__rename"
+                      disabled={index === 0}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void onMoveRow(row.key, "up");
+                      }}
+                      aria-label={`Переместить «${row.label}» выше`}
+                      title="Переместить выше"
+                    >
+                      <AppIcon icon={MoveUpIcon} />
+                    </Button>
+                    <Button
+                      view="flat"
+                      className="stat-field__rename"
+                      disabled={index === rows.length - 1}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void onMoveRow(row.key, "down");
+                      }}
+                      aria-label={`Переместить «${row.label}» ниже`}
+                      title="Переместить ниже"
+                    >
+                      <AppIcon icon={MoveDownIcon} />
+                    </Button>
+                    <Button
+                      view="flat"
+                      className="stat-field__rename"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setEditing({ key: row.key });
+                      }}
+                      aria-label={`Переименовать «${row.label}»`}
+                      title="Переименовать строку"
+                    >
+                      <AppIcon icon={RenameIcon} />
+                    </Button>
+                    <Button
+                      view="flat"
+                      className="stat-field__rename"
+                      disabled={isSystemRegenStatKey(row.key)}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        askToDelete(row);
+                      }}
+                      aria-label={
+                        isSystemRegenStatKey(row.key)
+                          ? `Нельзя удалить «${row.label}»: установите значение 0, чтобы отключить восстановление`
+                          : `Удалить «${row.label}»`
+                      }
+                      title={
+                        isSystemRegenStatKey(row.key)
+                          ? "Системную строку нельзя удалить. Чтобы отключить восстановление, установите значение 0."
+                          : "Удалить строку"
+                      }
+                    >
+                      <AppIcon icon={DeleteIcon} />
+                    </Button>
+                  </div>
+                </details>
               )}
             </div>
           </div>

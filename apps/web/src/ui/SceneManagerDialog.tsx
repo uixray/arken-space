@@ -90,6 +90,8 @@ export function SceneManagerDialog({
   open,
   snapshot,
   viewedSceneId,
+  initialEditSceneId,
+  editRequest = 0,
   onClose,
   onView,
   onPublish,
@@ -100,6 +102,8 @@ export function SceneManagerDialog({
   open: boolean;
   snapshot: GameSnapshot;
   viewedSceneId: string | null;
+  initialEditSceneId?: string | null;
+  editRequest?: number;
   onClose: () => void;
   onView: (sceneId: string) => void;
   onPublish: (sceneId: string) => Promise<void>;
@@ -108,6 +112,13 @@ export function SceneManagerDialog({
   variant?: "modal" | "workspace";
 }) {
   const [editing, setEditing] = useState<SceneDto | "NEW" | null>(null);
+  useEffect(() => {
+    if (!open || !initialEditSceneId) return;
+    const scene = snapshot.scenes.find(
+      (item) => item.id === initialEditSceneId,
+    );
+    if (scene) setEditing(scene);
+  }, [open, initialEditSceneId, editRequest]);
   const placementCount = (sceneId: string) =>
     snapshot.tokens.filter((token) => token.sceneId === sceneId).length;
 
@@ -138,13 +149,17 @@ export function SceneManagerDialog({
             <article className="scene-manager-card" key={scene.id}>
               <div>
                 <strong>{scene.name}</strong>
-                <span>{placementCount(scene.id)} токенов на сцене</span>
-              </div>
-              <div className="scene-manager-statuses">
-                {viewed && <Label theme="info">Просматривается мастером</Label>}
-                {scene.active && (
-                  <Label theme="success">Показана игрокам</Label>
-                )}
+                <div className="scene-manager-meta">
+                  <span>{placementCount(scene.id)} токенов на сцене</span>
+                  <div className="scene-manager-statuses">
+                    {viewed && (
+                      <Label theme="info">Просматривается мастером</Label>
+                    )}
+                    {scene.active && (
+                      <Label theme="success">Показана игрокам</Label>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="dialog-actions">
                 <Button
@@ -284,7 +299,7 @@ function SceneEditor({
     const { label, ...constraints } = numericFields[key];
     const id = `${fieldPrefix}-${key}`;
     return (
-      <label key={key} htmlFor={id}>
+      <label key={key} htmlFor={id} className="scene-form-field">
         <span>{label}</span>
         <FormInput
           id={id}
@@ -302,7 +317,9 @@ function SceneEditor({
           aria-invalid={Boolean(errors[key])}
           onChange={(e) => number(key, e.target.value)}
         />
-        <small id={`${id}-hint`}>{numericHint(key)}</small>
+        <small className="scene-form-field__hint" id={`${id}-hint`}>
+          {numericHint(key)}
+        </small>
         {errors[key] && (
           <span className="field-error" id={`${id}-error`}>
             {errors[key]}
@@ -419,8 +436,8 @@ function SceneEditor({
             {numericField("gridSize")}
             {numericField("gridOffsetX")}
             {numericField("gridOffsetY")}
-            <label>
-              Цвет сетки
+            <label className="scene-form-field">
+              <span>Цвет сетки</span>
               <FormInput
                 type="color"
                 value={form.state.draft.gridColor}

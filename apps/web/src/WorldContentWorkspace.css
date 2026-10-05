@@ -9,6 +9,25 @@
   height: 100%;
   overflow: hidden;
 }
+.world-content-workspace__grid:has(
+  .world-content-workspace__detail-pane > p.muted
+) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.world-content-workspace__grid:has(
+    .world-content-workspace__detail-pane > p.muted
+  )
+  .world-content-workspace__list-pane {
+  flex: 0 1 auto;
+}
+.world-content-workspace__grid:has(
+    .world-content-workspace__detail-pane > p.muted
+  )
+  .world-content-workspace__detail-pane {
+  flex: 0 0 auto;
+}
 .world-content-workspace__list-pane,
 .world-content-workspace__detail-pane {
   overflow: auto;

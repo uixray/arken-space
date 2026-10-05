@@ -113,6 +113,7 @@ const Orthographic2DRenderer = lazy(() =>
 
 type WorkspaceDestination =
   | "characters"
+  | "story"
   | "tokens"
   | "scenes"
   | "setup"
@@ -296,6 +297,9 @@ export function App() {
   );
   const [error, setError] = useState("");
   const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
+  const [requestedSceneEditId, setRequestedSceneEditId] = useState<
+    string | null
+  >(null);
   const [campaignRenameOpen, setCampaignRenameOpen] = useState(false);
   const [playerHandoffOpen, setPlayerHandoffOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -1715,7 +1719,12 @@ export function App() {
   );
 
   const handlePublishActiveScene = useCallback(() => {
-    if (!activeScene) return;
+    if (
+      !activeScene ||
+      activeScene.id === broadcastScene?.id ||
+      activeScene.id === recentlyPublishedSceneId
+    )
+      return;
     void run(async () => {
       await api("/api/scenes/activate", {
         method: "POST",
@@ -1731,7 +1740,7 @@ export function App() {
         tone: "success",
       });
     });
-  }, [activeScene, notify, run]);
+  }, [activeScene, broadcastScene?.id, recentlyPublishedSceneId, notify, run]);
 
   const handlePlaceTokenFromTray = useCallback(
     (definitionId: string) => {
@@ -1838,10 +1847,15 @@ export function App() {
             onMusicControlsTarget={setHeaderMusicTarget}
             onOpenCompactSections={() => setCompactSectionsOpen(true)}
             onSelectScene={setViewedSceneId}
+            onRequestEditScene={(sceneId) => {
+              setRequestedSceneEditId(sceneId);
+              setSceneDialogRequest((value) => value + 1);
+            }}
             onPublishScene={handlePublishActiveScene}
-            onRequestCreateScene={() =>
-              setSceneDialogRequest((value) => value + 1)
-            }
+            onRequestCreateScene={() => {
+              setRequestedSceneEditId(null);
+              setSceneDialogRequest((value) => value + 1);
+            }}
             onSelectWorkspace={handleWorkspaceChange}
             onResync={handleResync}
             onOpenCampaignRename={() => setCampaignRenameOpen(true)}
@@ -2188,6 +2202,7 @@ export function App() {
                 onRoll={submitRoll}
                 onCreateCharacter={handleCreateCharacter}
                 sceneDialogRequest={sceneDialogRequest}
+                requestedSceneEditId={requestedSceneEditId}
                 viewedSceneId={activeScene?.id ?? null}
                 onPreviewPlayer={handlePreviewPlayer}
                 onUpdateCounters={updateCharacterCounters}

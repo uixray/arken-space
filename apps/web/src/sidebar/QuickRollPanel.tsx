@@ -126,10 +126,14 @@ export function QuickRollPanel({
       setEntryPending(null);
     }
   };
-  const statButtons = (groupRows: typeof rows) =>
+  const statButtons = (
+    groupRows: typeof rows,
+    variant: "ordinary" | "combat" | "skill" = "ordinary",
+  ) =>
     groupRows.map((stat) => (
       <Button
         key={stat.key}
+        className={`quick-roll-button quick-roll-button--${variant}`}
         disabled={quickRollPending}
         title={`${stat.label} · ${ROLL_MODIFIER_HINT}`}
         onClick={(event) =>
@@ -224,23 +228,11 @@ export function QuickRollPanel({
           aria-labelledby={`${tabsId}-stats`}
           hidden={activeTab !== "stats"}
         >
-          {[
-            { label: "Обычные", rows: ordinaryRows },
-            { label: "Боевые", rows: combatRows },
-            { label: "Другие характеристики", rows: otherRows },
-          ]
-            .filter((group) => group.rows.length)
-            .map((group) => (
-              <div className="quick-roll-panel__group" key={group.label}>
-                <h3>{group.label}</h3>
-                <div
-                  className="activity-quick-rolls"
-                  aria-busy={quickRollPending}
-                >
-                  {statButtons(group.rows)}
-                </div>
-              </div>
-            ))}
+          <div className="activity-quick-rolls" aria-busy={quickRollPending}>
+            {statButtons(ordinaryRows, "ordinary")}
+            {statButtons(combatRows, "combat")}
+            {statButtons(otherRows, "ordinary")}
+          </div>
         </div>
         <div
           role="tabpanel"
@@ -250,94 +242,86 @@ export function QuickRollPanel({
         >
           {(rollCharacter.skills.length > 0 ||
             entries.some((entry) => entry.kind === "SKILL")) && (
-            <div className="quick-roll-panel__group">
-              <h3>Навыки</h3>
-              <div
-                className="activity-quick-rolls"
-                aria-busy={quickRollPending}
-              >
-                {rollCharacter.skills.map((skill) => (
-                  <Button
-                    key={skill.key}
-                    disabled={quickRollPending}
-                    title={`${skill.name} · ${ROLL_MODIFIER_HINT}`}
-                    onClick={(event) =>
-                      onQuickRoll(
-                        skill.formula,
-                        skill.name,
-                        formulaBonus(skill.formula, rollCharacter.stats),
-                        rollModeFromEvent(event.nativeEvent),
-                      )
-                    }
-                  >
-                    {skill.name}
-                  </Button>
+            <div className="activity-quick-rolls" aria-busy={quickRollPending}>
+              {rollCharacter.skills.map((skill) => (
+                <Button
+                  key={skill.key}
+                  className="quick-roll-button quick-roll-button--skill"
+                  disabled={quickRollPending}
+                  title={`${skill.name} · ${ROLL_MODIFIER_HINT}`}
+                  onClick={(event) =>
+                    onQuickRoll(
+                      skill.formula,
+                      skill.name,
+                      formulaBonus(skill.formula, rollCharacter.stats),
+                      rollModeFromEvent(event.nativeEvent),
+                    )
+                  }
+                >
+                  {skill.name}
+                </Button>
+              ))}
+              {entries
+                .filter((entry) => entry.kind === "SKILL")
+                .map((entry) => (
+                  <div className="quick-roll-panel__entry" key={entry.id}>
+                    <Button
+                      disabled={entryPending !== null || !onEntryAction}
+                      onClick={() =>
+                        void submitEntry(
+                          entry,
+                          "EXECUTE",
+                          entry.data.rollActions?.[0]?.id,
+                        )
+                      }
+                    >
+                      {entry.name}
+                    </Button>
+                    <button
+                      type="button"
+                      disabled={entryPending !== null || !onEntryAction}
+                      aria-label={`Показать без выполнения: ${entry.name}`}
+                      title="Показать описание без выполнения и расхода"
+                      onClick={() => void submitEntry(entry, "SHARE")}
+                    >
+                      i
+                    </button>
+                  </div>
                 ))}
-                {entries
-                  .filter((entry) => entry.kind === "SKILL")
-                  .map((entry) => (
-                    <div className="quick-roll-panel__entry" key={entry.id}>
-                      <Button
-                        disabled={entryPending !== null || !onEntryAction}
-                        onClick={() =>
-                          void submitEntry(
-                            entry,
-                            "EXECUTE",
-                            entry.data.rollActions?.[0]?.id,
-                          )
-                        }
-                      >
-                        {entry.name}
-                      </Button>
-                      <button
-                        type="button"
-                        disabled={entryPending !== null || !onEntryAction}
-                        aria-label={`Показать без выполнения: ${entry.name}`}
-                        title="Показать описание без выполнения и расхода"
-                        onClick={() => void submitEntry(entry, "SHARE")}
-                      >
-                        i
-                      </button>
-                    </div>
-                  ))}
-              </div>
             </div>
           )}
           {entries.some((entry) => entry.kind === "ABILITY") && (
-            <div className="quick-roll-panel__group">
-              <h3>Способности</h3>
-              <div
-                className="activity-quick-rolls"
-                aria-busy={entryPending !== null}
-              >
-                {entries
-                  .filter((entry) => entry.kind === "ABILITY")
-                  .map((entry) => (
-                    <div className="quick-roll-panel__entry" key={entry.id}>
-                      <Button
-                        disabled={entryPending !== null || !onEntryAction}
-                        onClick={() =>
-                          void submitEntry(
-                            entry,
-                            "EXECUTE",
-                            entry.data.rollActions?.[0]?.id,
-                          )
-                        }
-                      >
-                        {entry.name}
-                      </Button>
-                      <button
-                        type="button"
-                        disabled={entryPending !== null || !onEntryAction}
-                        aria-label={`Показать без выполнения: ${entry.name}`}
-                        title="Показать описание без выполнения и расхода"
-                        onClick={() => void submitEntry(entry, "SHARE")}
-                      >
-                        i
-                      </button>
-                    </div>
-                  ))}
-              </div>
+            <div
+              className="activity-quick-rolls"
+              aria-busy={entryPending !== null}
+            >
+              {entries
+                .filter((entry) => entry.kind === "ABILITY")
+                .map((entry) => (
+                  <div className="quick-roll-panel__entry" key={entry.id}>
+                    <Button
+                      disabled={entryPending !== null || !onEntryAction}
+                      onClick={() =>
+                        void submitEntry(
+                          entry,
+                          "EXECUTE",
+                          entry.data.rollActions?.[0]?.id,
+                        )
+                      }
+                    >
+                      {entry.name}
+                    </Button>
+                    <button
+                      type="button"
+                      disabled={entryPending !== null || !onEntryAction}
+                      aria-label={`Показать без выполнения: ${entry.name}`}
+                      title="Показать описание без выполнения и расхода"
+                      onClick={() => void submitEntry(entry, "SHARE")}
+                    >
+                      i
+                    </button>
+                  </div>
+                ))}
             </div>
           )}
           {rollCharacter.skills.length === 0 &&

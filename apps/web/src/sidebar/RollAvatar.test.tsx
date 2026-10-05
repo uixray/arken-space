@@ -151,35 +151,17 @@ describe("строка броска", () => {
     expect(document.querySelector(".roll-result__bonus")).toBeNull();
   });
 
-  it("ставит аватар слева, а итог справа", () => {
-    renderComponent(
-      <ChatMessageBody
-        message={diceMessage}
-        avatar={
-          <RollAvatar identity={null} fallbackName="Андрей" assetUrl={null} />
-        }
-      />,
-    );
-    expect(order()).toEqual([
-      "roll-avatar",
-      "roll-details",
-      "roll-result__numbers",
-    ]);
+  it("оставляет детали слева, а единый блок результата справа", () => {
+    renderComponent(<ChatMessageBody message={diceMessage} />);
+    expect(order()).toEqual(["roll-details", "roll-result__numbers"]);
     expect(screen.getByLabelText("Итог броска").textContent).toBe("17");
   });
 
   it("рисует физический бросок тем же макетом, но с бонусом вместо итога", () => {
     // Раньше он выпадал в обычный текст и выглядел сообщением другого рода,
     // хотя за столом это тот же бросок — просто кубик настоящий.
-    renderComponent(
-      <ChatMessageBody
-        message={physicalMessage}
-        avatar={
-          <RollAvatar identity={null} fallbackName="Андрей" assetUrl={null} />
-        }
-      />,
-    );
-    expect(order()).toEqual(["roll-avatar", "roll-details", "roll-total"]);
+    renderComponent(<ChatMessageBody message={physicalMessage} />);
+    expect(order()).toEqual(["roll-details", "roll-total"]);
     expect(screen.getByLabelText("Бонус к броску").textContent).toBe("+3");
     // Итога здесь быть не может: результат выпадает на настоящем кубике.
     expect(screen.queryByLabelText("Итог броска")).toBeNull();
@@ -245,12 +227,18 @@ describe("лента бросков", () => {
     /**
      * Ровно та ошибка, которую поймал мастер: аватар был вписан в `ChatPanel`,
      * а лента бросков — это `ActivityPanel`. Компонентный тест этого не увидел
-     * бы, поэтому проверяется исходник: обе ленты обязаны передавать `avatar`.
+     * бы, поэтому проверяется исходник: обе ленты обязаны ставить аватар
+     * в заголовок сообщения рядом с автором.
      */
-    const source = await import("node:fs").then((fs) =>
-      fs.readFileSync("apps/web/src/sidebar/ChatPanels.tsx", "utf8"),
-    );
-    expect(source.split("avatar={").length - 1).toBeGreaterThanOrEqual(2);
+    const source = await import("node:fs").then((fs) => {
+      const rootPath = "apps/web/src/sidebar/ChatPanels.tsx";
+      const webPath = "src/sidebar/ChatPanels.tsx";
+      return fs.readFileSync(
+        fs.existsSync(rootPath) ? rootPath : webPath,
+        "utf8",
+      );
+    });
+    expect(source.split("<RollAvatar").length - 1).toBeGreaterThanOrEqual(2);
     // И ни одна из них не должна снова заводить свой источник картинок.
     expect(source).not.toContain("portraitUrlFor");
   });

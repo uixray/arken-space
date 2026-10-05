@@ -72,5 +72,5 @@ export async function selectViewedScene(
   sceneName: string,
 ): Promise<void> {
   await viewedScenePicker(page).click();
-  await page.getByRole("option", { name: sceneName }).click();
+  await page.getByRole("menuitemradio", { name: sceneName }).click();
 }

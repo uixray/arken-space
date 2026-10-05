@@ -11,7 +11,6 @@ import {
   type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
   type RefObject,
   type UIEvent as ReactUIEvent,
 } from "react";
@@ -177,15 +176,12 @@ function ChatMessageBodyComponent({
   catalogEntryIds,
   playerRequests,
   onOpenPlayerRequests,
-  avatar,
 }: {
   isActive?: boolean;
   message: GameSnapshot["messages"][number];
   catalogEntryIds?: ReadonlySet<string>;
   playerRequests?: GameSnapshot["playerRequests"];
   onOpenPlayerRequests?: () => void;
-  /** UIX-454: портрет бросающего; у не-бросков не показывается. */
-  avatar?: ReactNode;
 }) {
   if (message.playerRequestId)
     return (
@@ -264,7 +260,6 @@ function ChatMessageBodyComponent({
       const presentation = physicalRollPresentation(message.body);
       return (
         <div className="roll-result roll-result--physical">
-          {avatar}
           <div className="roll-details">
             <div className="roll-details__heading">
               <span>
@@ -309,7 +304,6 @@ function ChatMessageBodyComponent({
     <div
       className={`roll-result${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
     >
-      {avatar}
       <div className="roll-details">
         <div className="roll-details__heading">
           <span>{message.body}</span>
@@ -957,6 +951,12 @@ export function ActivityPanel({
               tabIndex={-1}
             >
               <header>
+                {message.kind === "DICE" && (
+                  <RollAvatar
+                    {...avatarFor(message.characterId)}
+                    fallbackName={message.displayName}
+                  />
+                )}
                 <strong>{message.displayName}</strong>
                 <RollCharacterName
                   name={characterNameFor(message.characterId)}
@@ -977,12 +977,6 @@ export function ActivityPanel({
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequestCreate}
-                avatar={
-                  <RollAvatar
-                    {...avatarFor(message.characterId)}
-                    fallbackName={message.displayName}
-                  />
-                }
               />
             </article>
           );
@@ -1717,6 +1711,12 @@ export function ChatPanel({
               tabIndex={-1}
             >
               <header>
+                {item.message.kind === "DICE" && (
+                  <RollAvatar
+                    {...avatarFor(item.message.characterId)}
+                    fallbackName={item.message.displayName}
+                  />
+                )}
                 <strong>{item.message.displayName}</strong>
                 <RollCharacterName
                   name={characterNameFor(item.message.characterId)}
@@ -1737,12 +1737,6 @@ export function ChatPanel({
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequests}
-                avatar={
-                  <RollAvatar
-                    {...avatarFor(item.message.characterId)}
-                    fallbackName={item.message.displayName}
-                  />
-                }
               />
             </article>
           ),

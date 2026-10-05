@@ -2,7 +2,12 @@
 import type { ComponentProps, ReactNode } from "react";
 import type { TextInput } from "@gravity-ui/uikit";
 import { describe, expect, it, vi } from "vitest";
-import { renderComponent, screen, userEvent } from "../test-support/render";
+import {
+  renderComponent,
+  screen,
+  userEvent,
+  fireEvent,
+} from "../test-support/render";
 import { StatLayoutCard } from "./StatLayoutCard";
 import { statKeyFromLabel, uniqueStatKey } from "../stat-keys";
 import { ApiError } from "../api";
@@ -115,6 +120,7 @@ const rows = [
 
 const renderCard = (
   overrides: Partial<Parameters<typeof StatLayoutCard>[0]> = {},
+  openMenus = true,
 ) => {
   const props = {
     title: "Характеристики",
@@ -133,11 +139,51 @@ const renderCard = (
     onMoveRow: vi.fn(async () => {}),
     ...overrides,
   };
-  renderComponent(<StatLayoutCard {...props} />);
+  const rendered = renderComponent(<StatLayoutCard {...props} />);
+  if (openMenus)
+    rendered.container
+      .querySelectorAll("details.stat-field__menu")
+      .forEach((menu) => {
+        (menu as HTMLDetailsElement).open = true;
+      });
   return props;
 };
 
 describe("карточка группы характеристик", () => {
+  it("hides editing actions behind the row menu and exposes a six-dot keyboard handle", async () => {
+    const props = renderCard({}, false);
+    const menu = screen.getByLabelText("Действия строки «Ловкость»");
+    expect(menu.closest("details")).not.toHaveAttribute("open");
+    await userEvent.click(menu);
+    expect(
+      screen.getByRole("button", { name: "Переименовать «Ловкость»" }),
+    ).toBeVisible();
+    const handle = screen.getByRole("button", {
+      name: "Переместить «Ловкость»",
+    });
+    expect(handle.querySelectorAll("circle")).toHaveLength(6);
+    fireEvent.keyDown(handle, { key: "ArrowUp" });
+    expect(props.onMoveRow).toHaveBeenCalledWith("agility", "up");
+  });
+  it("submits the dropped row and target as one persisted reorder", () => {
+    const onReorderRow = vi.fn(async () => {});
+    renderCard({ onReorderRow }, false);
+    const handle = screen.getByRole("button", { name: "Переместить «Сила»" });
+    const dataTransfer = { setData: vi.fn(), effectAllowed: "" };
+    fireEvent.dragStart(handle, { dataTransfer });
+    fireEvent.drop(
+      screen.getByRole("button", { name: "Ловкость" }).closest(".stat-field")!,
+    );
+    expect(onReorderRow).toHaveBeenCalledExactlyOnceWith("strength", "agility");
+  });
+  it("renders the campaign editor without character rolls or values", () => {
+    renderCard({ layoutOnly: true });
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: "Сила" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Сила")).toBeVisible();
+  });
   it("показывает строки со значениями персонажа", () => {
     renderCard();
     expect(screen.getByDisplayValue("4")).toBeInTheDocument();

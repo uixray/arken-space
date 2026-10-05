@@ -40,7 +40,6 @@ import {
   DeleteIcon,
   DuplicateIcon,
   FitMapIcon,
-  MapObjectsIcon,
   SelectedOptionIcon,
 } from "../ui/icons";
 import {
@@ -383,7 +382,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [showGmLayer, setShowGmLayer] = useState(true);
+  const showGmLayer = true;
   const [tokenMenu, setTokenMenu] = useState<{
     token: SceneRendererProps["tokens"][number];
     x: number;
@@ -3996,17 +3995,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           >
             <AppIcon icon={FitMapIcon} />
           </button>
-          {props.role === "GM" && (
-            <button
-              type="button"
-              aria-label="Показывать скрытый слой мастера"
-              title="Показывать скрытый слой мастера"
-              aria-pressed={showGmLayer}
-              onClick={() => setShowGmLayer((visible) => !visible)}
-            >
-              <AppIcon icon={MapObjectsIcon} />
-            </button>
-          )}
         </div>
         {selectedTokenIds.length + selectedDrawingIds.length > 1 && (
           <button

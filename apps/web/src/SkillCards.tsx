@@ -333,19 +333,10 @@ export function SkillChatCard({
       : actionFormula,
     statLabels,
   );
-  const [expanded, setExpanded] = useState(false);
-  const detailsId = useId();
-  const toggleRef = useRef<HTMLButtonElement>(null);
   return (
     <section
       className={`skill-chat-card${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
       aria-label={`${card.entry.kind === "SKILL" ? "Навык" : "Способность"}: ${card.entry.name}`}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || !expanded) return;
-        event.preventDefault();
-        setExpanded(false);
-        requestAnimationFrame(() => toggleRef.current?.focus());
-      }}
     >
       <div className="skill-chat-card__heading">
         <span className="eyebrow">
@@ -382,20 +373,7 @@ export function SkillChatCard({
           {card.uses.recharge ? ` · ${card.uses.recharge}` : ""}
         </p>
       )}
-      <button
-        ref={toggleRef}
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={detailsId}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        {expanded ? "Свернуть детали" : "Детали"}
-      </button>
-      <div
-        id={detailsId}
-        hidden={!expanded}
-        className="skill-chat-card__details"
-      >
+      <div className="skill-chat-card__details">
         {card.entry.description && <p>{card.entry.description}</p>}
         {card.action?.modifiers.length ? (
           <p>Модификаторы: {card.action.modifiers.join(", ")}</p>

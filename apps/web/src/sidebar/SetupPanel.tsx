@@ -18,6 +18,8 @@ import type { Props } from "../Sidebar";
 import { AppIcon } from "../ui/AppIcon";
 import { OfflineStatusIcon, OnlineStatusIcon } from "../ui/icons";
 import { MemberDefaultThemeField } from "../design-system/MemberDefaultThemeField";
+import { CampaignStatLayoutEditor } from "./CampaignStatLayoutEditor";
+import { CampaignClockDialog } from "./CampaignClockDialog";
 
 export function SetupPanel(props: Props) {
   // UIX-398 step B: scene commands come from context, not through Sidebar.
@@ -37,6 +39,7 @@ export function SetupPanel(props: Props) {
     GameSnapshot["members"][number] | null
   >(null);
   const [renameSceneOpen, setRenameSceneOpen] = useState(false);
+  const [campaignClockOpen, setCampaignClockOpen] = useState(false);
   const [catalogEditor, setCatalogEditor] = useState<
     CatalogEntryDto | "NEW" | null
   >(null);
@@ -96,6 +99,16 @@ export function SetupPanel(props: Props) {
         ))}
       </nav>
       <div className="subsection" hidden={activeSetupTab !== "OVERVIEW"}>
+        <h3>Время кампании</h3>
+        <Button onClick={() => setCampaignClockOpen(true)}>
+          Длинный отдых и сброс времени
+        </Button>
+        <CampaignClockDialog
+          open={campaignClockOpen}
+          snapshot={props.snapshot}
+          onCommand={props.onCampaignClock}
+          onClose={() => setCampaignClockOpen(false)}
+        />
         <h3>Игроки</h3>
         <div className="stack-list">
           {props.snapshot.members
@@ -120,36 +133,48 @@ export function SetupPanel(props: Props) {
       </div>
       <div className="subsection" hidden={activeSetupTab !== "CATALOG"}>
         <h3>Общий каталог</h3>
+        <CampaignStatLayoutEditor snapshot={props.snapshot} />
         <Button onClick={() => setCatalogEditor("NEW")}>
           Добавить навык или способность
         </Button>
-        <div className="catalog-entry-list">
-          {props.snapshot.catalogEntries.map((entry) => (
-            <article className="plain-row" key={`v2-${entry.id}`}>
-              <strong>{entry.name}</strong>
-              <span className="eyebrow">
-                {entry.kind === "SKILL" ? "Навык" : "Способность"}
-              </span>
-              {entry.description && <p>{entry.description}</p>}
-              <div className="inline-fields">
-                <Button onClick={() => setCatalogEditor(entry)}>
-                  Редактировать
-                </Button>
-                <Button
-                  className="danger-link"
-                  onClick={() =>
-                    void catalogActions.onDeleteCatalogEntry(
-                      entry.id,
-                      entry.revision,
-                    )
-                  }
-                >
-                  Удалить шаблон
-                </Button>
-              </div>
-            </article>
-          ))}
-        </div>
+        {(["SKILL", "ABILITY"] as const).map((kind) => (
+          <section
+            className="catalog-entry-group"
+            key={kind}
+            aria-label={kind === "SKILL" ? "Навыки" : "Способности"}
+          >
+            <h4>{kind === "SKILL" ? "Навыки" : "Способности"}</h4>
+            <div className="catalog-entry-list">
+              {props.snapshot.catalogEntries
+                .filter((entry) => entry.kind === kind)
+                .map((entry) => (
+                  <article className="plain-row" key={`v2-${entry.id}`}>
+                    <strong>{entry.name}</strong>
+                    <span className="eyebrow">
+                      {entry.kind === "SKILL" ? "Навык" : "Способность"}
+                    </span>
+                    {entry.description && <p>{entry.description}</p>}
+                    <div className="inline-fields">
+                      <Button onClick={() => setCatalogEditor(entry)}>
+                        Редактировать
+                      </Button>
+                      <Button
+                        className="danger-link"
+                        onClick={() =>
+                          void catalogActions.onDeleteCatalogEntry(
+                            entry.id,
+                            entry.revision,
+                          )
+                        }
+                      >
+                        Удалить шаблон
+                      </Button>
+                    </div>
+                  </article>
+                ))}
+            </div>
+          </section>
+        ))}
         {catalogEditor && (
           <ArkenDialog
             open

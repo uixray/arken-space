@@ -1,0 +1,8 @@
+# UIX-674 — consolidated UI feedback checkpoint (2026-10-05)
+
+- **Decision:** apply comments 1–43 as one connected local candidate; no per-edit CI, no production deployment. Keep Story a workspace, not a chat tab. Keep shared characteristic layout in `campaign.statLayout`.
+- **Revision:** base `4f6aceb` on `codex/project-roadmap-2026-09-18`; changes still uncommitted at this checkpoint. Draft PR #86 predates this candidate.
+- **Changed files:** web app header/navigation, character workspace and stat layout, quick rolls/chat/skill cards, scene manager/picker and map toolbar, setup catalog, world editor styles, related focused tests, and `apps/web/public/assets/brand/arkpath-logo.webp`.
+- **Verification:** web typecheck, `git diff --check`, production-mode Docker web build, 72 focused Vitest tests (the six passing files from the aggregate run plus the corrected RollAvatar rerun), local GM/player browser smoke. Observed corrected stat single-row actions and narrow card stacking, scene checkboxes (16 px, left of labels), empty world-editor hint directly below list, quick-roll/story navigation, and no redundant active-scene publish action. QA uses only the local web container; existing server, DB, and media are unchanged.
+- **Blockers:** none found in the focused checks. Full CI and production acceptance have not run; they must not be represented as passed.
+- **Next action:** inspect final diff, run one focused lint pass, commit/push the consolidated candidate once, then request a single final CI/review gate. Do not deploy production without a separate explicit request and completed gate.

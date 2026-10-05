@@ -66,8 +66,8 @@ import {
 } from "../wallet";
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
-import { CampaignClockDialog } from "./CampaignClockDialog";
 import { AppIcon } from "../ui/AppIcon";
+import { notify } from "../ui/notifications";
 import {
   AddIcon,
   CharacterArchiveIcon,
@@ -124,7 +124,8 @@ export function CharacterWorkspace({
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
-  const [campaignClockOpen, setCampaignClockOpen] = useState(false);
+  const [dayPending, setDayPending] = useState(false);
+  const dayPendingRef = useRef(false);
   const sheetLimitDescriptionId = useId();
   const [railCollapsed, setRailCollapsed] = useState(false);
   // UIX-393: GM-only archive/restore. `archiveTarget` drives the confirm
@@ -221,40 +222,6 @@ export function CharacterWorkspace({
       }
     >
       <header className="character-workspace__header">
-        <div>
-          <span className="eyebrow">Рабочее пространство</span>
-          <h2 ref={titleRef} id="character-workspace-title" tabIndex={-1}>
-            Персонажи
-          </h2>
-        </div>
-        <p className="muted">
-          Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
-        </p>
-        {props.snapshot.me.role === "GM" && (
-          <Button
-            view="flat"
-            title="Управление временем кампании"
-            onClick={() => setCampaignClockOpen(true)}
-          >
-            День {props.snapshot.campaign.day}
-          </Button>
-        )}
-        <button
-          type="button"
-          className="character-workspace__create"
-          onClick={() => setCreateCharacterOpen(true)}
-        >
-          <AppIcon icon={AddIcon} /> Создать персонажа
-        </button>
-        {props.snapshot.me.role === "GM" && (
-          <button
-            type="button"
-            className="character-workspace__restore-archived"
-            onClick={() => setRestoreDialogOpen(true)}
-          >
-            <AppIcon icon={CharacterArchiveIcon} /> Архив персонажей
-          </button>
-        )}
         {!singleCharacter && (
           <button
             type="button"
@@ -279,6 +246,70 @@ export function CharacterWorkspace({
                   : CollapseCharacterRailIcon
               }
             />
+          </button>
+        )}
+        <div>
+          <span className="eyebrow">Рабочее пространство</span>
+          <h2 ref={titleRef} id="character-workspace-title" tabIndex={-1}>
+            Персонажи
+          </h2>
+        </div>
+        <p className="muted">
+          Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
+        </p>
+        {props.snapshot.me.role === "GM" && (
+          <Button
+            view="flat"
+            disabled={dayPending}
+            loading={dayPending}
+            title="Перевести календарь на следующий день без восстановления ресурсов"
+            onClick={() => {
+              if (dayPendingRef.current) return;
+              dayPendingRef.current = true;
+              setDayPending(true);
+              void Promise.resolve()
+                .then(() =>
+                  props.onCampaignClock(
+                    "ADVANCE_DAY",
+                    props.snapshot.campaign.revision,
+                  ),
+                )
+                .then(() =>
+                  notify({ title: "Наступил следующий день", tone: "success" }),
+                )
+                .catch((reason) =>
+                  notify({
+                    title: "Не удалось перевести календарь",
+                    message: formatApiError(
+                      reason,
+                      "Не удалось изменить день.",
+                    ),
+                    tone: "danger",
+                  }),
+                )
+                .finally(() => {
+                  dayPendingRef.current = false;
+                  setDayPending(false);
+                });
+            }}
+          >
+            День {props.snapshot.campaign.day}
+          </Button>
+        )}
+        <button
+          type="button"
+          className="character-workspace__create"
+          onClick={() => setCreateCharacterOpen(true)}
+        >
+          <AppIcon icon={AddIcon} /> Создать персонажа
+        </button>
+        {props.snapshot.me.role === "GM" && (
+          <button
+            type="button"
+            className="character-workspace__restore-archived"
+            onClick={() => setRestoreDialogOpen(true)}
+          >
+            <AppIcon icon={CharacterArchiveIcon} /> Архив персонажей
           </button>
         )}
         <button
@@ -359,7 +390,7 @@ export function CharacterWorkspace({
                         <AppIcon icon={CloseIcon} />
                       </button>
                     )}
-                    {props.snapshot.me.role === "GM" && (
+                    {props.snapshot.me.role === "GM" && !railCollapsed && (
                       <button
                         type="button"
                         className="character-rail__archive danger-link"
@@ -475,12 +506,6 @@ export function CharacterWorkspace({
         onLoad={worldMapActions.onLoadArchivedCharacters}
         onRestore={worldMapActions.onRestoreCharacter}
         onClose={() => setRestoreDialogOpen(false)}
-      />
-      <CampaignClockDialog
-        open={campaignClockOpen}
-        snapshot={props.snapshot}
-        onCommand={props.onCampaignClock}
-        onClose={() => setCampaignClockOpen(false)}
       />
     </main>,
     document.body,
@@ -869,13 +894,13 @@ function CharacterControllerAccess({
           {error}
         </p>
       )}
-      <p id={saveDescriptionId} className="muted" role="status">
+      <span id={saveDescriptionId} className="sr-only">
         {pending
           ? "Сохраняем доступ к персонажу…"
           : dirty
             ? "Изменения доступа ещё не сохранены."
             : "Изменений доступа нет."}
-      </p>
+      </span>
       <Button
         disabled={!dirty || pending}
         aria-describedby={saveDescriptionId}
@@ -888,6 +913,7 @@ function CharacterControllerAccess({
           void (async () => {
             try {
               await onSave(character.id, character.revision, draft);
+              notify({ title: "Доступ к персонажу сохранён", tone: "success" });
             } catch {
               setError(
                 "Не удалось сохранить доступ. Данные обновлены — проверьте список и повторите попытку.",
@@ -968,8 +994,20 @@ export function CharacterPanel({
    * не получилось.
    */
   const layout = snapshot.campaign.statLayout;
-  const saveLayout = (next: typeof layout) =>
-    statLayoutActions.onUpdateStatLayout(next, snapshot.campaign.revision);
+  const statLayoutPendingRef = useRef(false);
+  const saveLayout = async (next: typeof layout) => {
+    if (statLayoutPendingRef.current)
+      throw new Error("Дождитесь сохранения предыдущей правки.");
+    statLayoutPendingRef.current = true;
+    try {
+      await statLayoutActions.onUpdateStatLayout(
+        next,
+        snapshot.campaign.revision,
+      );
+    } finally {
+      statLayoutPendingRef.current = false;
+    }
+  };
 
   const renameStatRow = (key: string, label: string) =>
     saveLayout(
@@ -1022,6 +1060,42 @@ export function CharacterPanel({
    * видимые соседи, а не соседи по массиву, — иначе нажатие выглядело бы как
    * «ничего не произошло».
    */
+  const reorderStatRow = async (key: string, targetKey: string) => {
+    const group = layout.find((candidate) =>
+      candidate.rows.some((row) => row.key === key),
+    );
+    if (
+      !group ||
+      key === targetKey ||
+      !group.rows.some((row) => row.key === targetKey)
+    )
+      return;
+    const visible = group.rows.filter((row) => row.source !== "RESOURCE");
+    const from = visible.findIndex((row) => row.key === key);
+    const to = visible.findIndex((row) => row.key === targetKey);
+    if (from < 0 || to < 0) return;
+    visible.splice(to, 0, visible.splice(from, 1)[0]!);
+    let cursor = 0;
+    const next = layout.map((candidate) =>
+      candidate.id === group.id
+        ? {
+            ...candidate,
+            rows: candidate.rows.map((row) =>
+              row.source === "RESOURCE" ? row : visible[cursor++]!,
+            ),
+          }
+        : candidate,
+    );
+    setStatLayoutError("");
+    try {
+      await saveLayout(next);
+    } catch (reason) {
+      setStatLayoutError(
+        formatApiError(reason, "Не удалось сохранить порядок строк."),
+      );
+    }
+  };
+
   const moveStatRowBy = async (key: string, direction: "up" | "down") => {
     const next = moveStatRow(
       layout,
@@ -1403,7 +1477,7 @@ export function CharacterPanel({
   };
   return (
     <section className="panel-section character-sheet-content">
-      {characterMutationError && (
+      {characterMutationError && !portraitEditorOpen && (
         <p className="field-error" role="alert">
           {characterMutationError}
         </p>
@@ -1612,6 +1686,41 @@ export function CharacterPanel({
             </div>
           );
         })}
+        {Object.entries(resourcesDraft)
+          .filter(([key]) => !resourceRows.some((row) => row.key === key))
+          .map(([key, res]) => (
+            <div
+              className="character-vital-chip character-vital-chip--additional-resource"
+              key={key}
+            >
+              <span className="character-vital-chip__label">{key}</span>
+              <span className="character-vital-chip__value character-vital-chip__resource-values">
+                <FormInput
+                  type="number"
+                  min={0}
+                  aria-label={`${key}: текущее`}
+                  value={res.current}
+                  disabled={!editable}
+                  onChange={(event) =>
+                    setResourcesDraft((current) => ({
+                      ...current,
+                      [key]: {
+                        ...res,
+                        current: Math.max(0, Number(event.target.value)),
+                      },
+                    }))
+                  }
+                  onBlur={() => void saveResources(resourcesDraft)}
+                />
+                {res.maximum !== undefined && (
+                  <>
+                    <span aria-hidden="true">/</span>
+                    <span>{res.maximum}</span>
+                  </>
+                )}
+              </span>
+            </div>
+          ))}
         {combatRows.slice(0, 2).map((row) => {
           const val = character.stats[row.key];
           if (val === undefined) return null;
@@ -1639,8 +1748,35 @@ export function CharacterPanel({
         })}
       </div>
 
+      <nav
+        className="character-section-nav"
+        aria-label={`Разделы персонажа ${character.name}`}
+      >
+        {[
+          ["stats", "Характеристики"],
+          ["resources", "Ресурсы"],
+          ["inventory", "Инвентарь"],
+          ["bio", "Личность"],
+        ].map(([section, label]) => (
+          <button
+            type="button"
+            key={section}
+            onClick={(event) => {
+              const target = event.currentTarget
+                .closest(".character-sheet-content")
+                ?.querySelector(`[data-character-section="${section}"]`);
+              target?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
       {/* Секция 1: Характеристики и боевые параметры */}
-      <div className="character-section character-section--stats">
+      <div
+        className="character-section character-section--stats"
+        data-character-section="stats"
+      >
         <div className="character-card-row">
           <StatLayoutCard
             title="Характеристики"
@@ -1660,6 +1796,7 @@ export function CharacterPanel({
             onAddRow={(label) => addStatRow("characteristics", label)}
             onDeleteRow={deleteStatRow}
             onMoveRow={moveStatRowBy}
+            onReorderRow={reorderStatRow}
           />
           <StatLayoutCard
             title="Боевые характеристики"
@@ -1679,6 +1816,7 @@ export function CharacterPanel({
             onAddRow={(label) => addStatRow("combat", label)}
             onDeleteRow={deleteStatRow}
             onMoveRow={moveStatRowBy}
+            onReorderRow={reorderStatRow}
           />
           <div className="character-card character-card--skills">
             <h3 className="character-card__header">Навыки</h3>
@@ -1892,7 +2030,10 @@ export function CharacterPanel({
       )}
 
       {/* Секция 2: Ресурсы и кошелёк */}
-      <div className="character-section character-section--resources">
+      <div
+        className="character-section character-section--resources"
+        data-character-section="resources"
+      >
         <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
         <div className="subsection character-resource-editor">
           <h3>Дополнительные ресурсы</h3>
@@ -2134,7 +2275,10 @@ export function CharacterPanel({
       </div>
 
       {/* Секция 3: Инвентарь и снаряжение */}
-      <div className="character-section character-section--inventory">
+      <div
+        className="character-section character-section--inventory"
+        data-character-section="inventory"
+      >
         <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
         <label className="field">
           Инвентарь (один предмет на строку)
@@ -2174,7 +2318,10 @@ export function CharacterPanel({
       </div>
 
       {/* Секция 4: Личность, медиа и доступ */}
-      <div className="character-section character-section--bio">
+      <div
+        className="character-section character-section--bio"
+        data-character-section="bio"
+      >
         <h3 className="character-block-heading">Личность и галерея</h3>
         {snapshot.me.role === "GM" && (
           <CharacterControllerAccess
@@ -2190,6 +2337,11 @@ export function CharacterPanel({
           onClose={() => setPortraitEditorOpen(false)}
         >
           <div className="character-portrait-manager">
+            {characterMutationError && (
+              <p className="field-error" role="alert">
+                {characterMutationError}
+              </p>
+            )}
             <label className="field">
               Портрет
               <AssetPicker

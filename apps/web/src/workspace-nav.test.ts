@@ -34,3 +34,16 @@ describe("UIX-617 — русское название обратной связ�
     ]);
   });
 });
+
+describe("story workspace navigation", () => {
+  it("offers a dedicated story editor to GM without exposing it to players", () => {
+    expect(
+      workspaceNavItems({ isGm: true, operatorFeedbackAllowed: false }),
+    ).toContainEqual({ id: "story", label: "Сюжет" });
+    expect(
+      workspaceNavItems({ isGm: false, operatorFeedbackAllowed: false }).some(
+        (item) => item.id === "story",
+      ),
+    ).toBe(false);
+  });
+});

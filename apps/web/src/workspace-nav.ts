@@ -7,6 +7,7 @@ export type WorkspaceId =
   | "characters"
   | "tokens"
   | "scenes"
+  | "story"
   | "setup"
   | "media"
   | "world-maps"
@@ -41,6 +42,7 @@ export function workspaceNavItems(context: {
   if (context.isGm)
     items.push(
       { id: "scenes", label: "Сцены" },
+      { id: "story", label: "Сюжет" },
       { id: "setup", label: "Подготовка" },
       { id: "world-encyclopedia", label: WORLD_EDITOR_TITLE },
       { id: "world-maps", label: "Карты мира" },

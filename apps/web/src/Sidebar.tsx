@@ -25,6 +25,7 @@ import { AppIcon } from "./ui/AppIcon";
 import { SidebarCollapseIcon } from "./ui/icons";
 import { SceneManagerDialog } from "./ui/SceneManagerDialog";
 import { StoryChannel } from "./StoryChannel";
+import { useThreadHistory } from "./use-thread-history";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { WorldContentWorkspace } from "./WorldContentWorkspace";
@@ -103,6 +104,7 @@ export type Props = {
   ) => Promise<void>;
   viewedSceneId: string | null;
   sceneDialogRequest: number;
+  requestedSceneEditId?: string | null;
   /** UIX-431: выделение с карты и правка очереди ходов. */
   selectedTokenIds: readonly string[];
   onUpdateInitiative: (
@@ -163,6 +165,7 @@ export type Props = {
     | "characters"
     | "tokens"
     | "scenes"
+    | "story"
     | "setup"
     | "media"
     | "world-maps"
@@ -177,6 +180,7 @@ export type Props = {
       | "characters"
       | "tokens"
       | "scenes"
+      | "story"
       | "setup"
       | "media"
       | "world-maps"
@@ -267,17 +271,32 @@ function SidebarContent(props: Props) {
     () => onWorkspaceChange(null),
     [onWorkspaceChange],
   );
-  const activeThreadId = directMode
-    ? activeDirectThreadId
-    : activeFeed === "ACTIVITY"
-      ? null
-      : (threadForStream(props.snapshot, activeFeed)?.id ?? null);
+  const storyWorkspaceOpen = props.workspace === "story" && isGm;
+  const storyThreadId = threadForStream(props.snapshot, "STORY")?.id ?? null;
+  const storyHistory = useThreadHistory(
+    storyWorkspaceOpen ? props.snapshot : null,
+    storyWorkspaceOpen ? storyThreadId : null,
+    snapshotMessages,
+  );
+  const activeThreadId = storyWorkspaceOpen
+    ? (threadForStream(props.snapshot, "STORY")?.id ?? null)
+    : directMode
+      ? activeDirectThreadId
+      : activeFeed === "ACTIVITY"
+        ? null
+        : (threadForStream(props.snapshot, activeFeed)?.id ?? null);
   useEffect(() => {
-    onActiveChatThreadChange(chatVisible ? activeThreadId : null);
-  }, [activeThreadId, chatVisible, onActiveChatThreadChange]);
+    onActiveChatThreadChange(
+      chatVisible || storyWorkspaceOpen ? activeThreadId : null,
+    );
+  }, [
+    activeThreadId,
+    chatVisible,
+    storyWorkspaceOpen,
+    onActiveChatThreadChange,
+  ]);
   useEffect(() => {
-    if (!chatVisible || directMode || activeFeed !== "STORY" || !activeThreadId)
-      return;
+    if (!storyWorkspaceOpen || !activeThreadId) return;
     const latestSequence = messagesForStream(
       snapshotMessages,
       "STORY",
@@ -299,6 +318,7 @@ function SidebarContent(props: Props) {
     onMarkChatRead,
     snapshotChatThreads,
     snapshotMessages,
+    storyWorkspaceOpen,
   ]);
   useEffect(() => {
     if (!chatVisible || directMode || activeFeed !== "ACTIVITY") return;
@@ -329,6 +349,7 @@ function SidebarContent(props: Props) {
       requestedChatMessageId,
       props.snapshot.chatThreads,
     );
+    if (requestedStream === "STORY" && isGm) onWorkspaceChange("story");
     if (requestedStream) {
       setDirectMode(false);
       setActiveFeed(feedForChatStream(requestedStream));
@@ -337,6 +358,8 @@ function SidebarContent(props: Props) {
     onRequestedChatMessageHandled();
   }, [
     requestedChatMessageId,
+    isGm,
+    onWorkspaceChange,
     onRequestedChatMessageHandled,
     props.snapshot.messages,
     props.snapshot.chatThreads,
@@ -474,25 +497,6 @@ function SidebarContent(props: Props) {
             onRollInitiative={props.onRollInitiative}
             onRecruitFromBattleZone={props.onRecruitFromBattleZone}
           />
-        ) : activeFeed === "STORY" ? (
-          <StoryChannel
-            posts={props.storyPosts}
-            nextCursor={props.storyNextCursor}
-            onLoadMore={storyActions.onLoadMoreStoryPosts}
-            legacyMessages={messagesForStream(
-              props.snapshot.messages,
-              "STORY",
-              props.snapshot.chatThreads,
-            )}
-            isGm={isGm}
-            onCreateDraft={isGm ? storyActions.onCreateStoryDraft : undefined}
-            onPublish={isGm ? storyActions.onPublishStoryPost : undefined}
-            onUpdate={isGm ? storyActions.onUpdateStoryPost : undefined}
-            onArchive={isGm ? storyActions.onArchiveStoryPost : undefined}
-            onUploadImage={
-              isGm ? chatActions.onUploadChatAttachment : undefined
-            }
-          />
         ) : (
           <ChatPanel
             snapshot={props.snapshot}
@@ -517,6 +521,46 @@ function SidebarContent(props: Props) {
             onClose={() => props.onWorkspaceChange(null)}
           />
         )}
+        {props.workspace === "story" && isGm && (
+          <ArkenDialog
+            open
+            footer={false}
+            title="Сюжет"
+            variant="workspace"
+            onClose={closeWorkspace}
+          >
+            {storyHistory.hasMore && (
+              <button
+                type="button"
+                disabled={storyHistory.pending}
+                onClick={() => void storyHistory.loadOlder()}
+              >
+                {storyHistory.pending
+                  ? "Загрузка…"
+                  : "Показать ранние сообщения сюжета"}
+              </button>
+            )}
+            {storyHistory.error && <p role="alert">{storyHistory.error}</p>}
+            <StoryChannel
+              posts={props.storyPosts}
+              nextCursor={props.storyNextCursor}
+              onLoadMore={storyActions.onLoadMoreStoryPosts}
+              legacyMessages={messagesForStream(
+                props.snapshot.messages,
+                "STORY",
+                props.snapshot.chatThreads,
+              )}
+              isGm={isGm}
+              onCreateDraft={isGm ? storyActions.onCreateStoryDraft : undefined}
+              onPublish={isGm ? storyActions.onPublishStoryPost : undefined}
+              onUpdate={isGm ? storyActions.onUpdateStoryPost : undefined}
+              onArchive={isGm ? storyActions.onArchiveStoryPost : undefined}
+              onUploadImage={
+                isGm ? chatActions.onUploadChatAttachment : undefined
+              }
+            />
+          </ArkenDialog>
+        )}
         {props.workspace === "tokens" && (
           <TokenPaletteWorkspacePortal props={props} />
         )}
@@ -539,6 +583,8 @@ function SidebarContent(props: Props) {
             variant="workspace"
             snapshot={props.snapshot}
             viewedSceneId={props.viewedSceneId}
+            initialEditSceneId={props.requestedSceneEditId}
+            editRequest={props.sceneDialogRequest}
             onClose={() => props.onWorkspaceChange(null)}
             onView={sceneActions.onViewScene}
             onPublish={sceneActions.onActivateScene}

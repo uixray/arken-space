@@ -1,3 +1,4 @@
+import { ToolbarButton } from "./ToolbarTooltip";
 import { useEffect, useId, useState } from "react";
 import { Popup } from "../design-system/Popup";
 import { Switch } from "../design-system/Switch";
@@ -63,7 +64,7 @@ export function CursorPresenceMenu({
 
   if (role !== "GM")
     return (
-      <button
+      <ToolbarButton
         type="button"
         aria-label={
           preference.receiveEnabled
@@ -87,12 +88,12 @@ export function CursorPresenceMenu({
       >
         <AppIcon icon={CursorPresenceIcon} />
         <span className="map-tool__label">Курсоры</span>
-      </button>
+      </ToolbarButton>
     );
 
   return (
     <>
-      <button
+      <ToolbarButton
         ref={setAnchor}
         type="button"
         aria-label="Настроить видимость курсоров"
@@ -106,7 +107,7 @@ export function CursorPresenceMenu({
       >
         <AppIcon icon={CursorPresenceIcon} />
         <span className="map-tool__label">Курсоры</span>
-      </button>
+      </ToolbarButton>
       <Popup
         id={dialogId}
         ariaLabel="Видимость курсоров"

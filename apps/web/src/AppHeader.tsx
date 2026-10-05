@@ -30,6 +30,7 @@ export interface AppHeaderProps {
 
   onOpenCompactSections: () => void;
   onSelectScene: (sceneId: string) => void;
+  onRequestEditScene: (sceneId: string) => void;
   onPublishScene: () => void;
   onRequestCreateScene: () => void;
   onSelectWorkspace: (workspace: WorkspaceId) => void;
@@ -58,6 +59,7 @@ export const AppHeader = memo(function AppHeader({
 
   onOpenCompactSections,
   onSelectScene,
+  onRequestEditScene,
   onPublishScene,
   onRequestCreateScene,
   onSelectWorkspace,
@@ -101,7 +103,7 @@ export const AppHeader = memo(function AppHeader({
         </>
       )}
       <div className="brand">
-        <strong>arken-space</strong>
+        <span className="brand__mark" role="img" aria-label="ARKPATH" />
       </div>
       <div className="scene-switcher">
         <ScenePicker
@@ -112,10 +114,15 @@ export const AppHeader = memo(function AppHeader({
           isGm={snapshot.me.role === "GM"}
           isPreview={Boolean(previewSnapshot)}
           onSelectScene={onSelectScene}
+          onEditScene={onRequestEditScene}
         />
         {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
           <button
             className="topbar-icon-button publish-scene"
+            disabled={
+              activeScene.id === broadcastScene?.id ||
+              activeScene.id === recentlyPublishedSceneId
+            }
             aria-label={
               activeScene.id === broadcastScene?.id ||
               activeScene.id === recentlyPublishedSceneId

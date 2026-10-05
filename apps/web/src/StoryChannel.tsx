@@ -536,12 +536,7 @@ export function StoryChannel({
   }
 
   return (
-    <section
-      className="story-channel"
-      role="tabpanel"
-      id="chat-panel-story"
-      aria-labelledby="chat-tab-story"
-    >
+    <section className="story-channel" aria-label="Сюжет кампании">
       <header className="story-channel__header">
         <div>
           <span className="eyebrow">{"Летопись кампании"}</span>

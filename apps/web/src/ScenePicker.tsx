@@ -1,7 +1,7 @@
 import { memo, useRef } from "react";
 import type { GameSnapshot } from "@arken/contracts";
 import { AppIcon } from "./ui/AppIcon";
-import { ScenePickerIcon } from "./ui/icons";
+import { RenameIcon, ScenePickerIcon } from "./ui/icons";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 
 export interface ScenePickerProps {
@@ -12,6 +12,7 @@ export interface ScenePickerProps {
   isGm: boolean;
   isPreview: boolean;
   onSelectScene: (sceneId: string) => void;
+  onEditScene?: (sceneId: string) => void;
 }
 
 export const ScenePicker = memo(function ScenePicker({
@@ -22,10 +23,10 @@ export const ScenePicker = memo(function ScenePicker({
   isGm,
   isPreview,
   onSelectScene,
+  onEditScene,
 }: ScenePickerProps) {
   const scenePickerRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(scenePickerRef, undefined, {
-    listbox: true,
     closeOnViewportChange: true,
   });
 
@@ -48,7 +49,7 @@ export const ScenePicker = memo(function ScenePicker({
     <details ref={scenePickerRef} className="scene-picker">
       <summary
         aria-label="Выбрать просматриваемую сцену"
-        aria-haspopup="listbox"
+        aria-haspopup="menu"
         aria-controls="scene-picker-options"
       >
         {activeAsset ? (
@@ -62,8 +63,29 @@ export const ScenePicker = memo(function ScenePicker({
       <div
         className="scene-picker__menu"
         id="scene-picker-options"
-        role="listbox"
+        role="menu"
         aria-label="Сцены"
+        onKeyDown={(event) => {
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))
+            return;
+          const controls = Array.from(
+            event.currentTarget.querySelectorAll<HTMLButtonElement>("button"),
+          );
+          const index = controls.indexOf(
+            document.activeElement as HTMLButtonElement,
+          );
+          const next =
+            event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? controls.length - 1
+                : (index +
+                    (event.key === "ArrowDown" ? 1 : -1) +
+                    controls.length) %
+                  controls.length;
+          controls[next]?.focus();
+          event.preventDefault();
+        }}
       >
         {scenes.map((scene) => {
           const background = assets.find(
@@ -73,30 +95,53 @@ export const ScenePicker = memo(function ScenePicker({
             (token) => token.sceneId === scene.id,
           ).length;
           return (
-            <button
+            <div
               key={scene.id}
-              type="button"
-              role="option"
-              aria-selected={scene.id === activeScene?.id}
-              onClick={(event) => {
-                onSelectScene(scene.id);
-                event.currentTarget.closest("details")?.removeAttribute("open");
-                scenePickerRef.current?.querySelector("summary")?.focus();
-              }}
+              className="scene-picker__row"
+              role="presentation"
             >
-              {background ? (
-                <img src={background.url} alt="" />
-              ) : (
-                <span
-                  className="scene-picker__placeholder"
-                  aria-hidden="true"
-                />
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={scene.id === activeScene?.id}
+                onClick={(event) => {
+                  onSelectScene(scene.id);
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open");
+                  scenePickerRef.current?.querySelector("summary")?.focus();
+                }}
+              >
+                {background ? (
+                  <img src={background.url} alt="" />
+                ) : (
+                  <span
+                    className="scene-picker__placeholder"
+                    aria-hidden="true"
+                  />
+                )}
+                <span>
+                  <strong>{scene.name}</strong>
+                  <small>{tokenCount} токенов</small>
+                </span>
+              </button>
+              {onEditScene && (
+                <button
+                  type="button"
+                  className="scene-picker__edit"
+                  role="menuitem"
+                  aria-label={`Редактировать сцену «${scene.name}»`}
+                  title="Редактировать сцену"
+                  onClick={() => {
+                    scenePickerRef.current?.removeAttribute("open");
+                    scenePickerRef.current?.querySelector("summary")?.focus();
+                    onEditScene(scene.id);
+                  }}
+                >
+                  <AppIcon icon={RenameIcon} />
+                </button>
               )}
-              <span>
-                <strong>{scene.name}</strong>
-                <small>{tokenCount} токенов</small>
-              </span>
-            </button>
+            </div>
           );
         })}
       </div>
