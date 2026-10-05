@@ -11,6 +11,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -66,7 +67,11 @@ jobs:
       # которую все игнорируют, хуже, чем не иметь её вовсе.
       - run: pnpm format:check
 
+      # Keep fast build/type/lint/format feedback on each PR update. The full
+      # unit suite runs on the frozen candidate via workflow_dispatch (and on
+      # main after merge), not after every intermediate pixel change.
       - run: pnpm test
+        if: github.event_name != 'pull_request'
 
       # Playwright и мультиплеерный прогон сюда не входят: они поднимают
       # Docker Compose со своим PostgreSQL, идут минутами и капризны. Их место

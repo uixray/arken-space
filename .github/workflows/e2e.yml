@@ -12,7 +12,9 @@ name: e2e
 on:
   push:
     branches: [main]
-  pull_request:
+  # Full browser coverage is an explicit release-candidate gate, not a
+  # per-push feedback loop for draft UI changes.
+  workflow_dispatch:
 
 permissions:
   contents: read

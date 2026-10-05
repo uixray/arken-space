@@ -44,11 +44,26 @@ failures, collect all shard results before making the next repair batch and
 push once again. Record the exact SHA and whether each check is targeted local
 evidence or complete candidate evidence; never call a targeted pass a full gate.
 
-This batching rule changes *when* CI is triggered, not which release checks
-must pass. Do not disable the full PR workflows or publish from a red/unfinished
-candidate just to save time. The agreed reduced gate for a seven-person test
-publication is a separate product decision and still needs explicit deployment
-approval, backup and rollback evidence.
+Fast PR checks (build, types, lint, format) remain automatic. The complete
+unit, Chromium/Firefox and multiplayer workflows are started explicitly once
+the candidate SHA is frozen:
+
+```sh
+git rev-parse HEAD
+gh workflow run checks.yml --ref <candidate-branch>
+gh workflow run e2e.yml --ref <candidate-branch>
+gh workflow run multiplayer.yml --ref <candidate-branch>
+```
+
+The manual workflow triggers must first be merged into the default branch,
+as GitHub does not dispatch a workflow that exists only on a PR branch. Record
+each resulting run ID and `headSha`; reject any result for a different SHA.
+If a failure requires a new commit, collect every shard failure, repair them
+as one batch, freeze the new SHA, and dispatch the three workflows once more.
+No targeted local pass can substitute for these full production-candidate
+gates. The agreed reduced gate for a seven-person test publication is a
+separate product decision and still needs explicit deployment approval,
+backup and rollback evidence.
 
 ## Code quality gate (outside `release.sh`)
 

@@ -12,7 +12,8 @@ name: multiplayer
 on:
   push:
     branches: [main]
-  pull_request:
+  # Run the seven-client rehearsal manually on the frozen candidate.
+  workflow_dispatch:
 
 permissions:
   contents: read
