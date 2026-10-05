@@ -1304,6 +1304,10 @@ test("GM and six isolated players recover authoritative state without security l
 
     const playerTwoMap = pages[1]!.locator(".map-viewport");
     const beforePingOverlay = await playerTwoMap.screenshot();
+    // Observe the short-lived overlay concurrently with socket delivery.
+    // Waiting for the socket assertion first can consume its 3.5s lifetime
+    // when seven browser contexts are sharing the CI worker.
+    const pingOverlay = expectPingOverlay(pages[1]!, beforePingOverlay);
     const receivedPing = waitForPing(
       connections[2]!.socket,
       (ping) =>
@@ -1317,11 +1321,13 @@ test("GM and six isolated players recover authoritative state without security l
       x: coveredForeignToken.x + coveredForeignToken.width / 2,
       y: coveredForeignToken.y + coveredForeignToken.height / 2,
     });
-    await expect(receivedPing).resolves.toMatchObject({
-      sceneId: initialScene.id,
-      membershipId: playerOneSnapshot.me.id,
-    });
-    await expectPingOverlay(pages[1]!, beforePingOverlay);
+    await Promise.all([
+      expect(receivedPing).resolves.toMatchObject({
+        sceneId: initialScene.id,
+        membershipId: playerOneSnapshot.me.id,
+      }),
+      pingOverlay,
+    ]);
 
     const mapViewport = pages[0]!.locator(".map-viewport");
     const mapBounds = await mapViewport.boundingBox();
