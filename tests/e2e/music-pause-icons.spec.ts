@@ -67,8 +67,10 @@ async function icon(
   } else await expect(control).toBeDisabled();
   return svg.innerHTML();
 }
-// Valid silent WAV only supplies metadata. Audio consent stays off: no playback claim.
-const wav = Buffer.alloc(44 + 16000);
+// Valid silent WAV only supplies metadata. Keep it long enough that slow
+// accessibility checks cannot naturally end the track before Pause is tested.
+// Audio consent stays off: no playback claim.
+const wav = Buffer.alloc(44 + 16000 * 120);
 wav.write("RIFF");
 wav.writeUInt32LE(wav.length - 8, 4);
 wav.write("WAVEfmt ", 8);
@@ -80,7 +82,7 @@ wav.writeUInt32LE(16000, 28);
 wav.writeUInt16LE(2, 32);
 wav.writeUInt16LE(16, 34);
 wav.write("data", 36);
-wav.writeUInt32LE(16000, 40);
+wav.writeUInt32LE(16000 * 120, 40);
 for (const role of ["GM", "PLAYER"] as const)
   test(`UIX-645 music and pause ${role}`, async ({ page }, info) => {
     const snapshot = buildGameSnapshot(role, { schemaVersion: 2 });
@@ -115,7 +117,7 @@ for (const role of ["GM", "PLAYER"] as const)
         sizeBytes: wav.length,
         width: null,
         height: null,
-        durationSeconds: 1,
+        durationSeconds: 120,
         createdAt: new Date(0).toISOString(),
       },
     ];

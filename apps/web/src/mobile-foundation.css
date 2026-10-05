@@ -949,7 +949,7 @@
   }
 
   .g-modal :is(button, .g-button) {
-    min-height: 44px;
+    min-height: 45px;
   }
 
   .arken-workspace-window,
